@@ -1,4 +1,4 @@
-// ★ SỬA LỖI: PHẢI IMPORT HEADER TRƯỚC KHI VIẾT IMPLEMENTATION ★
+// ★ IMPORT HEADER CHUẨN ARC ★
 #import <Foundation/Foundation.h> // Cung cấp BOOL, nil, YES, NO, NSLog, NSObject
 #import <dispatch/dispatch.h>     // Cung cấp dispatch_queue_t, QOS_CLASS...
 #import "KernelBypass.h"          // ★ DÒNG QUAN TRỌNG NHẤT: Khai báo giao diện class ★
@@ -75,8 +75,9 @@
     
     NSLog(@"[KernelBypass] ✅ Applied UserInteractive QoS Strategy (Safer than Kernel Hack).");
     
-    // Release resources
-    dispatch_release(highPriQueue);
+    // ★ ĐÃ XÓA DÒNG dispatch_release(highPriQueue); ★
+    // Trong môi trường ARC (-fobjc-arc), hệ thống tự động giải phóng memory 
+    // khi biến local đi ra ngoài scope. Gọi release thủ công sẽ gây lỗi compile.
 }
 
 @end
