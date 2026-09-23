@@ -1,0 +1,61 @@
+#!/bin/sh
+# Tối ưu hệ thống sau khi cài đặt
+sysctl -w kern.maxvnodes=60000
+sysctl -w kern.maxproc=2048
+sysctl -w vm.page_free_target=2048
+sysctl -w vm.page_free_min=1024
+sysctl -w vm.page_speculative_percentage=5
+sysctl -w vm.page_free_count=1024
+sysctl -w kern.memorystatus_purge_on_warning=1
+sysctl -w kern.memorystatus_purge_on_urgent=1
+sysctl -w kern.memorystatus_purge_on_critical=1
+sysctl -w vm.compressor_mode=4
+sysctl -w vm.page_background_count=1024
+sysctl -w vm.page_background_target=2048
+sysctl -w vm.pageout_algorithm=1
+sysctl -w vm.page_free_reserved=256
+sysctl -w kern.sched_preempt_threshold=100
+sysctl -w kern.timer_coalescing=0
+sysctl -w kern.timer_coalesce=0
+sysctl -w kern.timer_coalescing_bg=0
+sysctl -w kern.timer_coalescing_fg=0
+sysctl -w kern.timer_coalescing_idle=0
+sysctl -w kern.timer_coalescing_ktrace=0
+sysctl -w kern.timer_coalescing_sys=0
+sysctl -w kern.timer_coalescing_user=0
+sysctl -w kern.timer_coalescing_window=0
+sysctl -w kern.timer_coalescing_window_bg=0
+sysctl -w kern.timer_coalescing_window_fg=0
+sysctl -w kern.timer_coalescing_window_idle=0
+sysctl -w kern.timer_coalescing_window_ktrace=0
+sysctl -w kern.timer_coalescing_window_sys=0
+sysctl -w kern.timer_coalescing_window_user=0
+sysctl -w kern.timer_coalescing_window_window=0
+sysctl -w kern.timer_coalescing_window_window_bg=0
+sysctl -w kern.timer_coalescing_window_window_fg=0
+sysctl -w kern.timer_coalescing_window_window_idle=0
+sysctl -w kern.timer_coalescing_window_window_ktrace=0
+sysctl -w kern.timer_coalescing_window_window_sys=0
+sysctl -w kern.timer_coalescing_window_window_user=0
+sysctl -w kern.timer_coalescing_window_window_window=0
+sysctl -w kern.timer_coalescing_window_window_window_bg=0
+sysctl -w kern.timer_coalescing_window_window_window_fg=0
+sysctl -w kern.timer_coalescing_window_window_window_idle=0
+sysctl -w kern.timer_coalescing_window_window_window_ktrace=0
+sysctl -w kern.timer_coalescing_window_window_window_sys=0
+sysctl -w kern.timer_coalescing_window_window_window_user=0
+sysctl -w kern.timer_coalescing_window_window_window_window=0
+
+# Xóa cache không cần thiết
+rm -rf /var/mobile/Library/Caches/*
+rm -rf /var/mobile/Library/Logs/*
+rm -rf /tmp/*
+rm -rf /var/log/*
+
+# Tối ưu bộ nhớ
+sync
+purge
+
+# Khởi động lại SpringBoard
+killall -9 SpringBoard
+killall -9 backboardd
