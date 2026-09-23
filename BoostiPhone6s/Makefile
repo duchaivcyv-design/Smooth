@@ -12,10 +12,6 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 # Code nguồn cho bundle
 BoostiPhone6sPrefs_FILES = RootListController.m
 
-# ★ QUAN TRỌNG: Chỉ định folder Resources chứa Info.plist, root.plist, icon.png ★
-# Theos sẽ tự động chép mọi thứ trong folder này vào bên trong .bundle khi build.
-BoostiPhone6sPrefs_RESOURCES_DIR = Resources
-
 # Frameworks cần thiết cho UI Settings
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation CoreGraphics
 BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
