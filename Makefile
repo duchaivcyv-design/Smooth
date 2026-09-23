@@ -48,7 +48,7 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 
 # ===================================================================
-# PACKAGING SCRIPT (FIXED TO SHOW IN SETTINGS)
+# PACKAGING SCRIPT (FIXED PATH FOR ENTRY.PLIST)
 # ===================================================================
 before-package::
 	@echo "🛠️ Packaging Files..." && \
@@ -64,6 +64,7 @@ before-package::
 	
 	echo "🔗 Registering with PreferenceLoader..." && \
 	mkdir -p .theos/_/Library/PreferenceLoader/Entries && \
+	# ★ SỬA ĐƯỜNG DẪN Ở ĐÂY: Lấy từ thư mục gốc (/), KHÔNG phải Resources/ ★
 	cp entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist && \
 	
 	echo "✅ Structure Ready:" && \
