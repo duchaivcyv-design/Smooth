@@ -146,7 +146,7 @@ static void blocker_hook_storeReview(id self, SEL _cmd) {
     }
 
     _isActive = YES;
-    NSLog(@"[SystemBlocker] ✅ Active. GPS/iCloud/Ads Blocked.");
+    NSLog(@"[SystemBlocker] Active. GPS/iCloud/Ads Blocked.");
 }
 
 - (void)stopBlockers {
