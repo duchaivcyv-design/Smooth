@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>entry</key>
+	<dict>
+		<key>bundle</key>
+		<string>BoostiPhone6sPrefs</string> <!-- Tên bundle phải khớp chính xác -->
+		<key>cell</key>
+		<string>PSLinkCell</string>
+		<key>detail</key>
+		<string>RootListController</string> <!-- Tên class controller -->
+		<key>icon</key>
+		<string>icon.png</string> <!-- Optional: Icon hiển thị bên cạnh tên tweak -->
+		<key>isController</key>
+		<true/>
+		<key>label</key>
+		<string>Boost iPhone 6s</string> <!-- Tên hiển thị trong Settings -->
+	</dict>
+</dict>
+</plist>
