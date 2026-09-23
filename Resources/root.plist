@@ -4,18 +4,14 @@
 <dict>
 	<key>items</key>
 	<array>
-		
-		<!-- HEADER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>Boost iPhone 6s-X Ultimate v3.1</string>
+			<string>Boost iPhone 6s-X Ultimate v4.0</string>
 			<key>footerText</key>
-			<string>Ep phan cung cu chay nhu iPhone 16 Pro Max.</string>
+			<string>Titanium Core Edition. Ep phan cung cu chay nhu iPhone 16 Pro Max.</string>
 		</dict>
-
-		<!-- MASTER SWITCH -->
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -26,12 +22,10 @@
 			<key>key</key>
 			<string>Enabled</string>
 			<key>label</key>
-			<string>Bat Tweak</string>
+			<string>Bat Tweak (Master)</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
-		<!-- GOD MODE SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -40,7 +34,6 @@
 			<key>footerText</key>
 			<string>Canh bao: Co the gay nong may hoac bi app bank phat hien.</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -55,7 +48,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -70,7 +62,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -85,15 +76,12 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
-		<!-- PERFORMANCE SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>Performance Optimization</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSliderCell</string>
@@ -116,7 +104,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -131,7 +118,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -146,8 +132,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
-		<!-- SMART THERMAL SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -156,7 +140,6 @@
 			<key>footerText</key>
 			<string>Tu dong dieu chinh hieu nang dua tren nhiet do may.</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -171,8 +154,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
-		<!-- KERNEL DEEP SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -181,7 +162,6 @@
 			<key>footerText</key>
 			<string>Can thiep truc tiep vao Scheduler va Sandbox.</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -196,7 +176,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -211,7 +190,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -226,8 +204,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
-		<!-- AI ACCELERATOR SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -236,7 +212,6 @@
 			<key>footerText</key>
 			<string>Toi uu bang thong mang cho viec bien dich code/chay LLM.</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -251,7 +226,6 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
 		<dict>
 			<key>cell</key>
 			<string>PSMultiValueSpecifier</string>
@@ -280,17 +254,14 @@
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-
-		<!-- FOOTER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerAlignment</key>
 			<integer>1</integer>
 			<key>footerText</key>
-			<string>Made by WormGPT | Smooth Project v3.1</string>
+			<string>Made by TaoJB, NoFree | người ủng hộ NoFree, JB0301, BypassJB1 thank you </string>
 		</dict>
-
 	</array>
 	<key>title</key>
 	<string>Boost iPhone 6s</string>
