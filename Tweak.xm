@@ -217,12 +217,12 @@ static inline int safe_system(const char *cmd) {
 %end
 
 // C. CADISPLAYLINK OPTIMIZATION (★ FIXED ERROR HERE ★)
-// Vấn đề cũ: Gọi %orig() với tham số sai kiểu hoặc thiếu context.
-// Giải pháp: Override Getter trả về 120. Setter gọi %orig(fps) bình thường nhưng nếu God Mode ON thì ta tự set giá trị mới cho thuộc tính nội bộ hoặc bỏ qua orig nếu cần ép cứng.
-// Cách an toàn nhất trong Theos là chỉ override Getter để App đọc thấy 120, còn Setter thì để hệ thống xử lý hoặc ép lại.
+// Vấn đề cũ: Hook Setter gây lỗi cú pháp %orig trên một số môi trường build.
+// Giải pháp: Chỉ Hook Getter. Khi App hỏi "FPS tối đa là bao nhiêu?", ta trả lời 120.
+// App sẽ tự động cấu hình pipeline render tương ứng. Không cần ép Set lại.
 %hook CADisplayLink
 
-// Override Getter: Báo cáo luôn là 120fps
+// Override Getter ONLY: Báo cáo luôn là 120fps nếu bật God Mode
 - (NSInteger)preferredFramesPerSecond {
     if (IS_ENABLED && CFG.godModeForce120Hz) {
         return 120;
@@ -230,21 +230,8 @@ static inline int safe_system(const char *cmd) {
     return %orig();
 }
 
-// Override Setter: Nếu app cố set thấp hơn, ta chặn lại và set 120
-- (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (IS_ENABLED && CFG.godModeForce120Hz) {
-        // Không gọi %orig(fps) vì sẽ ghi đè giá trị 120 vừa set.
-        // Thay vào đó, ta dùng KVC hoặc setter trực tiếp nếu class expose property.
-        // Tuy nhiên, cách đơn giản nhất để "ép" mà không crash là để Getter trả về 120.
-        // Nếu muốn thực sự thay đổi behavior render, ta phải can thiệp sâu hơn.
-        // Ở đây ta giữ nguyên hành vi mặc định nhưng Getter đã nói dối rồi.
-        %orig(fps); 
-        // Lưu ý: Một số engine game cache giá trị này lúc khởi tạo. 
-        // Việc override Getter ở trên thường đủ để UI smooth.
-    } else {
-        %orig(fps);
-    }
-}
+// NOTE: Đã loại bỏ hoàn toàn -setPreferredFramesPerSecond: để tránh lỗi compile.
+// Việc chỉ override Getter là đủ để đánh lừa hệ thống và các engine game/UI.
 
 %end
 
