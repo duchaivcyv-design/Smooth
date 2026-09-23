@@ -3,7 +3,7 @@
 
 @implementation CacheCleaner
 
-// Helper an toàn để chạy lệnh shell (tránh lỗi system() unavailable)
+// Helper an toàn để chạy lệnh shell
 static int safe_exec(const char *cmd) {
     typedef int (*sys_func)(const char*);
     static sys_func real_sys = NULL;
@@ -30,24 +30,34 @@ static int safe_exec(const char *cmd) {
         NSString *fullPath = [path stringByAppendingPathComponent:item];
         
         // Bỏ qua các file cấu hình quan trọng nếu cần (tùy chỉnh whitelist)
-        // Ví dụ: Không xóa file .plist cài đặt app
         if ([item.pathExtension isEqualToString:@"plist"]) continue;
         
-        BOOL isDir = NO;
-        [fm attributesOfItemAtPath:fullPath result:nil isDirectory:&isDir];
+        // ★ FIX LỖI COMPILE HERE ★
+        // Sử dụng API chuẩn: attributesOfItemAtPath:error:
+        NSDictionary *attrs = [fm attributesOfItemAtPath:fullPath error:nil];
+        
+        if (!attrs) continue; // Skip nếu không đọc được attribute
+        
+        // Kiểm tra xem là Directory hay File thông qua fileType string
+        NSString *fileType = attrs[NSFileType];
+        BOOL isDir = [fileType isEqualToString:NSFileTypeDirectory];
         
         if (isDir) {
             // Đệ quy xóa thư mục con
-            NSDictionary *attrs = [fm attributesOfItemAtPath:fullPath error:nil];
-            unsigned long long size = [attrs fileSize];
+            // Để tính dung lượng chính xác của folder lớn rất tốn CPU, 
+            // nên ở chế độ "Fast Clean" ta ước lượng hoặc bỏ qua việc cộng dồn chi tiết cho sub-folder.
+            // Ta chỉ cần đảm bảo nó được remove thành công.
             
-            // Xóa cả thư mục và nội dung bên trong
+            // Gọi đệ quy để dọn bên trong trước
+            [self cleanDirectoryAtPath:fullPath]; 
+            
+            // Sau đó xóa cái folder rỗng đó đi
             if ([fm removeItemAtPath:fullPath error:nil]) {
-                freedBytes += size;
+                // Cộng thêm một khoản ước lượng nhỏ cho overhead folder
+                freedBytes += 4096; 
             }
         } else {
             // Xóa file đơn lẻ
-            NSDictionary *attrs = [fm attributesOfItemAtPath:fullPath error:nil];
             unsigned long long size = [attrs fileSize];
             
             if ([fm removeItemAtPath:fullPath error:nil]) {
@@ -56,20 +66,18 @@ static int safe_exec(const char *cmd) {
         }
     }
     
-    NSLog(@"[BoostiPhone6s] 🧹 Cleaned %@ -> Freed %.2f MB", 
+    NSLog(@"[BoostiPhone6s] 🧹 Cleaned %@ -> Estimated Freed: %.2f MB", 
           path.lastPathComponent, freedBytes / 1024.0 / 1024.0);
     
     return freedBytes;
 }
 
 + (void)cleanupTempFiles {
-    // Các đường dẫn cache "bẩn" phổ biến trên iOS 15-16
     NSArray *junkPaths = @[
-        @"/private/var/mobile/Library/Caches/com.apple.Safari",       // Safari WebKit
-        @"/private/var/mobile/Library/Caches/com.spotify.client",     // Spotify Offline songs (cẩn thận!)
-        @"/private/var/mobile/Library/Caches/com.tencent.qqmusic",    // Nhạc QQ/Tencent
-        @"/private/var/tmp",                                          // Temp files chung
-        @"/private/var/mobile/Library/Logs"                           // Log system cũ
+        @"/private/var/mobile/Library/Caches/com.apple.Safari",       
+        @"/private/var/mobile/Library/Caches/com.spotify.client",     
+        @"/private/var/tmp",                                          
+        @"/private/var/mobile/Library/Logs"                           
     ];
     
     for (NSString *p in junkPaths) {
@@ -78,7 +86,6 @@ static int safe_exec(const char *cmd) {
 }
 
 + (void)forceMemoryPurge {
-    // Gọi lệnh purge của Unix để ép Kernel trả RAM về pool trống
     safe_exec("sync && purge");
 }
 
