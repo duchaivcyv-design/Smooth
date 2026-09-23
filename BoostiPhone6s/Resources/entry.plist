@@ -5,17 +5,17 @@
 	<key>entry</key>
 	<dict>
 		<key>bundle</key>
-		<string>BoostiPhone6sPrefs</string> <!-- Phải khớp BUNDLE_NAME trong Makefile -->
+		<string>BoostiPhone6sPrefs</string>
 		<key>cell</key>
 		<string>PSLinkCell</string>
 		<key>detail</key>
-		<string>RootListController</string> <!-- Phải khớp class trong RootListController.m -->
+		<string>RootListController</string>
 		<key>icon</key>
-		<string>icon.png</string> <!-- ★ PHẢI CÓ FILE NÀY TRONG RESOURCES/ ★ -->
+		<string>icon.png</string>
 		<key>isController</key>
 		<true/>
 		<key>label</key>
-		<string>Boost iPhone 6s</string> <!-- Tên hiển thị trong Settings -->
+		<string>Boost iPhone 6s-X</string>
 	</dict>
 </dict>
 </plist>
