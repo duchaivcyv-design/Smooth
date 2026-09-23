@@ -14,17 +14,22 @@ jobs:
 
       - name: Install Tools & Setup Theos
         run: |
-          # 1. Cài đặt tools
-          brew install make ldid dpkg wget coreutils
+          # 1. Cài đặt tools (wget đã có sẵn trên macOS runner, không cần cài lại nếu báo warning)
+          brew install make ldid dpkg coreutils
 
-          # 2. Fix Permission cho /opt (Quan trọng nhất)
+          # 2. QUAN TRỌNG: Xóa sạch thư mục /opt/theos cũ để tránh lỗi "already exists"
+          echo "🧹 Cleaning old Theos installation..."
+          sudo rm -rf /opt/theos
+
+          # 3. Tạo folder và cấp quyền
           sudo mkdir -p /opt/theos/sdks
           sudo chown -R $(whoami):staff /opt/theos
 
-          # 3. Clone Theos (Giờ mới clone được vì đã cấp quyền owner)
+          # 4. Clone Theos mới nhất từ GitHub
+          echo "📥 Cloning fresh Theos..."
           git clone --recursive https://github.com/theos/theos.git /opt/theos
 
-          # 4. Tải SDK iOS 16.5
+          # 5. Tải SDK iOS 16.5
           cd /opt/theos/sdks
           wget -q https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz
           tar xf iPhoneOS16.5.sdk.tar.xz
@@ -34,15 +39,15 @@ jobs:
         env:
           THEOS: /opt/theos
           THEOS_PACKAGE_SCHEME: rootless
-          # Thêm đường dẫn GNU Make vào PATH để Theos dùng đúng phiên bản
-          PATH: /opt/homebrew/opt/make/libexec/gnubin:$PATH 
+          # Đảm bảo dùng GNU Make thay vì BSD Make mặc định của Mac
+          PATH: /opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH 
         run: |
           if [ ! -f Makefile ]; then
             echo "Error: No Makefile found!"
             exit 1
           fi
           
-          # Xóa cache cũ nếu có
+          # Clean cache build cũ trong repo của bạn
           rm -rf packages/ obj/ .theos/
           
           # Bắt đầu build
