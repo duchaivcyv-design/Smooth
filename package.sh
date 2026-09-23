@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🛠️ Starting Packaging Process..."
+echo "Starting Packaging Process..."
 
 # 1. Tạo thư mục DEBIAN
 mkdir -p .theos/_/DEBIAN
@@ -23,5 +23,5 @@ mkdir -p "$BUNDLE_DIR"
 cp Resources/root.plist "$BUNDLE_DIR/root.plist"
 cp Resources/Info.plist "$BUNDLE_DIR/Info.plist"
 
-echo "✅ Structure Ready:"
+echo " Structure Ready:"
 ls -laR .theos/_/Library/PreferenceBundles/
