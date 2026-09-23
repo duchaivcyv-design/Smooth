@@ -55,18 +55,29 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 # PACKAGING SCRIPT
 # ===================================================================
 before-package::
-	@echo "🛠️ Packaging Files..."
-	@mkdir -p .theos/_/DEBIAN
-	@cp control .theos/_/DEBIAN/control
-	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
-	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
+	@echo "Packaging Files..."
 	
+	# 1. Tạo cấu trúc DEBIAN
+	@mkdir -p .theos/_/DEBIAN
+	
+	# 2. Copy control files
+	@cp control .theos/_/DEBIAN/control
+	
+	# ★ SỬA Ở ĐÂY: Đảm bảo postinst VÀ prerm đều có quyền 755 ★
+	@if [ -f postinst ]; then 
+	    cp postinst .theos/_/DEBIAN/postinst; 
+	    chmod 755 .theos/_/DEBIAN/postinst; 
+	fi
+	
+	@if [ -f prerm ]; then 
+	    cp prerm .theos/_/DEBIAN/prerm; 
+	    chmod 755 .theos/_/DEBIAN/prerm;  # <--- DÒNG NÀY CỰC KỲ QUAN TRỌNG
+	fi
+	
+	# 3. Copy Resources vào Bundle
 	@mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 	@cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist
 	@cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist
 	
 	@echo "Structure Ready:"
 	@ls -laR .theos/_/Library/PreferenceBundles/
-
-# after-install::
-# 	install.exec "killall -9 SpringBoard backboardd" # Đã tắt để tránh lỗi dpkg interrupted
