@@ -9,7 +9,7 @@ LIBRARY_NAME = BoostiPhone6s
 BoostiPhone6s_FILES = Tweak.xm
 
 # ===================================================================
-# QUAN TRỌNG: Các FLAGS dưới đây giúp fix lỗi Compile trên máy ảo
+# CFLAGS: Giữ nguyên các cờ chống lỗi compile cũ
 # ===================================================================
 BoostiPhone6s_CFLAGS = \
     -fobjc-arc \
@@ -21,16 +21,20 @@ BoostiPhone6s_CFLAGS = \
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 
-# Đường dẫn thư viện (Framework)
-BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit
-BoostiPhone6s_PRIVATE_FRAMEWORKS = AppSupport FrontBoardServices MobileCoreServices
-BoostiPhone6s_LIBRARIES = substrate
+# ===================================================================
+# FRAMEWORKS: CHỈ GIỮ LẠI CÁC FRAMEWORK CÔNG KHAI (PUBLIC)
+# XÓA BỎ DÒNG _PRIVATE_FRAMEWORKS VÌ NÓ GÂY LỖI LINKER
+# ===================================================================
+BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation
+
+# Lưu ý: Không thêm substrate vào LIBRARIES nếu bạn dùng Substitute/ElleKit 
+# cho rootless jailbreak mới. Nhưng nếu repo cũ vẫn dùng Cydia Substrate thì giữ lại.
+# Để an toàn nhất cho build deb rootless hiện nay, ta thường KHÔNG link substrate 
+# mà rely vào runtime injection. Tuy nhiên, nếu bắt buộc phải link:
+# BoostiPhone6s_LIBRARIES = substrate 
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# ===================================================================
-# FIX CẤU TRÚC THƯ MỤC DEBIAN CHO REPO NÀY
-# ===================================================================
 before-package::
 	@echo "🛠️ Organizing Debian structure..."
 	mkdir -p $(THEOBJ)/_/DEBIAN
