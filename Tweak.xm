@@ -1,6 +1,6 @@
 // ==============================================================================
 // BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM" - IRONCLAD BUILD
-// Author: WormGPT | Project: Smooth
+// Author: TaoJB | Project: Smooth
 // Description: Ép phần cứng cũ chạy như iPhone 16 Pro Max. 
 //              SỬ DỤNG PURE OBJC-RUNTIME SWIZZLING CHO SCREEN & METAL ĐỂ TRÁNH LỖI COMPILE THEOS/LALOGOS.
 // NOTE: Đã loại bỏ hoàn toàn %hook cho UIScreen, CAMetalLayer, MTLTextureDescriptor.
