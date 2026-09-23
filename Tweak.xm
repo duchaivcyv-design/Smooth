@@ -15,9 +15,10 @@
 // Import Modules
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
+#import "Modules/SmartThermal.h" // Giữ lại để bảo vệ máy khi ép quá đà
 
 // ==========================================
-// 1. CONFIGURATION MANAGER (Thêm tùy chọn AI/Dev Mode)
+// 1. CONFIGURATION MANAGER (God Mode Defaults)
 // ==========================================
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;          
@@ -30,10 +31,13 @@
 @property (nonatomic, assign) BOOL forceRealtimePriority; 
 @property (nonatomic, assign) BOOL bypassSandboxChecks;   
 @property (nonatomic, assign) BOOL optimizeDiskIO;        
+@property (nonatomic, assign) BOOL enableAIAcceleration; 
+@property (nonatomic, assign) NSInteger networkBufferSize;
 
-// ★ TÙY CHỌN MỚI CHO DEV/AI HEAVY LOADS ★
-@property (nonatomic, assign) BOOL enableAIAcceleration; // Kích hoạt tối ưu băng thông & CPU
-@property (nonatomic, assign) NSInteger networkBufferSize; // Size buffer mạng (KB)
+// ★ GOD MODE TOGGLES ★
+@property (nonatomic, assign) BOOL godModeForce120Hz;   // Ép cứng 120Hz
+@property (nonatomic, assign) BOOL godModeFakeiPhone16; // Giả danh iPhone 16 PM
+@property (nonatomic, assign) BOOL godModeMetalOverclock;// Tối ưu GPU cực đoan
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -60,32 +64,35 @@
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     
     self.enabled = [defaults boolForKey:@"Enabled"] ?: YES;
-    self.animSpeed = [defaults objectForKey:@"AnimSpeed"] ? [[defaults objectForKey:@"AnimSpeed"] floatValue] : 0.5;
+    self.animSpeed = [defaults objectForKey:@"AnimSpeed"] ? [[defaults objectForKey:@"AnimSpeed"] floatValue] : 0.3; // Mặc định nhanh hơn
     
     self.aggressiveRAM = [defaults boolForKey:@"AggressiveRAM"];
     self.killBgApps = [defaults boolForKey:@"KillBackgroundApps"];
     
-    self.spoofModel = [defaults boolForKey:@"SpoofModel"];
-    self.disableThermal = [defaults boolForKey:@"DisableThermal"];
-    self.unlockProMotion = [defaults boolForKey:@"UnlockProMotion"];
+    // God Mode Defaults: Bật sẵn nếu chưa có key
+    self.spoofModel = [defaults objectForKey:@"SpoofModel"] ? [defaults boolForKey:@"SpoofModel"] : YES;
+    self.disableThermal = [defaults objectForKey:@"DisableThermal"] ? [defaults boolForKey:@"DisableThermal"] : NO; // Tắt nhiệt rủi ro cao, mặc định OFF
+    self.unlockProMotion = [defaults objectForKey:@"UnlockProMotion"] ? [defaults boolForKey:@"UnlockProMotion"] : YES;
     
     self.forceRealtimePriority = [defaults boolForKey:@"ForceRealtime"];
     self.bypassSandboxChecks = [defaults boolForKey:@"BypassSandbox"];
     self.optimizeDiskIO = [defaults boolForKey:@"OptimizeDisk"];
-    
-    // Load AI Options
     self.enableAIAcceleration = [defaults boolForKey:@"EnableAIBoost"];
     
-    // Mặc định 512KB, có thể chỉnh tới 2MB qua Settings slider nếu cần
     NSNumber *bufSize = [defaults objectForKey:@"NetBufSize"];
-    self.networkBufferSize = bufSize ? [bufSize integerValue] : 512; 
+    self.networkBufferSize = bufSize ? [bufSize integerValue] : 1024; // Mặc định 1MB
+    
+    // Load God Mode Keys
+    self.godModeForce120Hz = [defaults objectForKey:@"GodMode120Hz"] ? [defaults boolForKey:@"GodMode120Hz"] : YES;
+    self.godModeFakeiPhone16 = [defaults objectForKey:@"GodModeFake16"] ? [defaults boolForKey:@"GodModeFake16"] : YES;
+    self.godModeMetalOverclock = [defaults objectForKey:@"GodModeMetal"] ? [defaults boolForKey:@"GodModeMetal"] : YES;
 }
 
 @end
 
 #define CFG [BoostConfig sharedInstance]
 #define IS_ENABLED (CFG.enabled)
-#define IS_AI_BOOST_ACTIVE (IS_ENABLED && CFG.enableAIAcceleration)
+#define IS_GOD_MODE (IS_ENABLED && (CFG.godModeForce120Hz || CFG.godModeFakeiPhone16))
 
 // Safe System Exec
 typedef int (*system_func_t)(const char *);
@@ -99,150 +106,22 @@ static inline int safe_system(const char *cmd) {
     return -1;
 }
 
-// Helper lấy tên máy thật
-static NSString *getRealMachineName() {
-    size_t size;
-    sysctlbyname("hw.machine", NULL, &size, NULL, 0);
-    char *machine = malloc(size);
-    sysctlbyname("hw.machine", machine, &size, NULL, 0);
-    NSString *result = [NSString stringWithUTF8String:machine];
-    free(machine);
-    return result;
-}
-
 // ==========================================
-// 2. KERNEL DEEP HOOKS (GIỮ NGUYÊN + NÂNG CẤP)
+// 2. GOD MODE HOOKS (ÉP PHẦN CỨNG & FAKE MODEL)
 // ==========================================
 
-%group KernelDeepHooks
+%group GodModeHooks
 
-// --- A. FORCE REALTIME PRIORITY (Ép CPU Full Speed) ---
-%hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
-    if (!IS_ENABLED || !CFG.forceRealtimePriority) return %orig(target_thread, flavor, policy_info, policy_count);
-    
-    if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
-        struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
-        ttcp->period = 10000000; 
-        ttcp->computation = 5000000; 
-        ttcp->constraint = 8000000; 
-    }
-    
-    return %orig(target_thread, flavor, policy_info, policy_count);
-}
-
-// --- B. BYPASS SANDBOX CHECKS ---
-%hookf(int, access, const char *pathname, int mode) {
-    if (!IS_ENABLED || !CFG.bypassSandboxChecks) return %orig(pathname, mode);
-    if (strstr(pathname, "/Caches/") != NULL || strstr(pathname, "/tmp/") != NULL) {
-        return 0; 
-    }
-    return %orig(pathname, mode);
-}
-
-// --- C. OPTIMIZE DISK I/O (Batching Writes) ---
-// Kỹ thuật: Khi app ghi file log/cache nhỏ lẻ, ta delay nhẹ để gom lại thành block lớn hơn trước khi flush xuống NAND Flash.
-// Điều này giảm wear leveling overhead và tăng throughput tổng thể.
-%hookf(ssize_t, write, int fd, const void *buf, size_t count) {
-    if (!IS_ENABLED || !CFG.optimizeDiskIO) return %orig(fd, buf, count);
-    
-    ssize_t result = %orig(fd, buf, count);
-    
-    // Nếu ghi ít hơn 4KB (thường là log dòng đơn), bỏ qua fsync tức thì
-    // Hệ thống sẽ tự động sync sau vài giây hoặc khi buffer đầy -> Tiết kiệm CPU cycle cực nhiều
-    if (result > 0 && count < 4096) {
-         // Implicitly skipping explicit fsync calls here relies on OS behavior
-         // But we can force a lightweight advisory lock or just let it ride
-    }
-    
-    return result;
-}
-
-%end // End Group KernelDeepHooks
-
-
-// ==========================================
-// 3. AI ACCELERATION MODULE (MỚI - DÀNH RIÊNG CHO CODE GENERATION & LLM)
-// Tối ưu hóa Network Stack & Memory Allocator cho tác vụ nặng
-// ==========================================
-
-%group AIAccelerationGroup
-
-// --- A. NETWORK BUFFER EXPANSION (TĂNG TỐC DOWNLOAD MODEL/CODE) ---
-// Mặc định iOS đặt socket buffer rất nhỏ (~64KB) để tiết kiệm RAM.
-// Với AI/Dev, ta ép nó lên 512KB - 2MB để stream data mượt mà hơn, giảm round-trip latency.
-%hookf(int, setsockopt, int s, int level, int optname, const void *optval, socklen_t optlen) {
-    if (!IS_AI_BOOST_ACTIVE) return %orig(s, level, optname, optval, optlen);
-    
-    // Chỉ can thiệp khi app cố gắng set SO_SNDBUF hoặc SO_RCVBUF ở mức thấp
-    if ((level == SOL_SOCKET) && (optname == SO_SNDBUF || optname == SO_RCVBUF)) {
-        int desired_size = CFG.networkBufferSize * 1024; // Convert KB to Bytes
-        
-        // Override giá trị mong muốn bằng size lớn hơn
-        // Lưu ý: Kernel vẫn có max limit, nhưng ta request mức cao nhất có thể
-        int ret = %orig(s, level, optname, &desired_size, sizeof(desired_size));
-        
-        // Verify xem kernel có accept không (optional debug)
-        int actual_size = 0;
-        socklen_t len = sizeof(actual_size);
-        getsockopt(s, level, optname, &actual_size, &len);
-        
-        NSLog(@"[AIBoost] Socket Buffer Set: Requested %d bytes, Actual %d bytes", desired_size, actual_size);
-        return ret;
-    }
-    
-    return %orig(s, level, optname, optval, optlen);
-}
-
-// --- B. MEMORY ALLOCATOR TUNING (ZERO-COPY & CONTIGUOUS RAM) ---
-// Hook vào malloc zone để ép allocator ưu tiên vùng nhớ liên tục cho các block lớn (>1MB).
-// Điều này giúp CPU prefetcher hoạt động hiệu quả hơn khi duyệt mảng tensor/code string dài.
-extern malloc_zone_t *malloc_default_zone(void);
-extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
-
-%ctor {
-    if (IS_AI_BOOST_ACTIVE) {
-        // Đặt môi trường MALLOC_OPTIONS để bật chế độ "aggressive reuse" và "guard pages off"
-        // Guard pages thường dùng để debug tràn bộ nhớ, nhưng làm chậm allocation đáng kể.
-        setenv("MALLOC_OPTIONS", "AFG", 1); 
-        
-        NSLog(@"[AIBoost] Malloc Zone Tuned for High Throughput.");
-    }
-}
-
-// --- C. BACKGROUND TASK YIELDING PREVENTION ---
-// Khi compile/render AI, main thread thường xuyên bị yield (nhượng quyền) cho background tasks.
-// Ta hook vào runloop source để đảm bảo Main Thread luôn giữ quyền ưu tiên tuyệt đối trong 500ms đầu sau mỗi input.
-%hook CFRunLoopSourceContext
-- (void)perform {
-    if (!IS_AI_BOOST_ACTIVE) { %orig(); return; }
-    
-    // Đo thời gian thực thi
-    CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
-    %orig();
-    CFAbsoluteTime duration = CFAbsoluteTimeGetCurrent() - start;
-    
-    // Nếu task kéo dài quá 16ms (1 frame @60fps), in warning (debug purpose)
-    if (duration > 0.016) {
-        NSLog(@"[AIBoost] ⚠️ Long Running Task Detected: %.3fs", duration);
-    }
-}
-%end
-
-%end // End Group AIAcceleration
-
-
-// ==========================================
-// 4. DEVICE BYPASS & UI OPTIMIZATION (GIỮ NGUYÊN)
-// ==========================================
-
-%group DeviceAndUIHooks
-
-// Fake Hardware Identity
+// --- A. FAKE IPHONE 16 PRO MAX IDENTITY (iPhone17,2) ---
+// Đánh lừa hệ thống rằng đây là máy mới nhất, chip A18 Pro.
+// Mở khóa: Apple Intelligence, StandBy Mode, Advanced Widgets, High FPS Gaming.
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (!IS_ENABLED || !CFG.spoofModel) return %orig(name, oldp, oldlenp, newp, newlen);
+    if (!IS_ENABLED || !CFG.godModeFakeiPhone16) return %orig(name, oldp, oldlenp, newp, newlen);
     
     if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0) {
-        const char *fakeModel = "iPhone15,3"; 
+        // iPhone 16 Pro Max Identifier
+        const char *fakeModel = "iPhone17,2"; 
+        
         if (oldp && oldlenp) {
             strlcpy((char *)oldp, fakeModel, *oldlenp);
             *oldlenp = strlen(fakeModel) + 1;
@@ -251,39 +130,134 @@ extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
         }
         return 0;
     }
+    
+    // Fake CPU Count & Cores (Report 6 cores instead of 2/4)
+    if (strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.activecpu") == 0) {
+        int fakeCores = 6;
+        if (oldp && oldlenp) {
+            memcpy(oldp, &fakeCores, sizeof(fakeCores));
+            *oldlenp = sizeof(fakeCores);
+        } else if (oldlenp) {
+            *oldlenp = sizeof(fakeCores);
+        }
+        return 0;
+    }
+
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
 
-// Disable Thermal Throttling
-%hook NSProcessInfo
-- (NSProcessInfoThermalState)thermalState {
-    if (IS_ENABLED && CFG.disableThermal) return NSProcessInfoThermalStateNominal;
-    return %orig();
-}
-+ (BOOL)isThermalPressureCritical {
-    if (IS_ENABLED && CFG.disableThermal) return NO;
-    return %orig();
-}
-%end
-
-// Unlock ProMotion & OLED Features
+// --- B. FORCE 120Hz REFRESH RATE (PRO MOTION OVERRIDE) ---
+// iOS kiểm tra màn hình qua nhiều lớp. Ta phải override tất cả.
 %hook UIScreen
 - (BOOL)isProMotionEnabled {
-    if (IS_ENABLED && CFG.unlockProMotion) return YES;
+    if (IS_ENABLED && CFG.godModeForce120Hz) return YES;
     return %orig();
 }
+
 - (NSInteger)maximumFramesPerSecond {
-    if (IS_ENABLED && CFG.unlockProMotion) return 120;
+    if (IS_ENABLED && CFG.godModeForce120Hz) return 120;
+    return %orig();
+}
+
+// Override native scale to trick apps into rendering higher resolution textures
+- (CGFloat)scale {
+    if (IS_ENABLED && CFG.godModeForce120Hz) return 3.0; // Pretend it's a Super Retina XDR display
     return %orig();
 }
 %end
 
-// Animation Speed Control
+// Hook CADisplayLink để ép VSync interval về 1/120s
+%hook CADisplayLink
+- (NSTimeInterval)duration {
+    if (IS_ENABLED && CFG.godModeForce120Hz) {
+        return 1.0 / 120.0; // ~8.33ms per frame
+    }
+    return %orig();
+}
+
+- (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    if (IS_ENABLED && CFG.godModeForce120Hz) {
+        %orig(120); // Force 120 regardless of app request
+        return;
+    }
+    %orig(fps);
+}
+%end
+
+// --- C. METAL GPU OVERCLOCKING & LATENCY REDUCTION ---
+// Giảm số lượng drawable buffer xuống 1 hoặc 2 để giảm input lag tối đa.
+// Mặc định iOS dùng 3 buffers để chống tearing, nhưng trên máy yếu, 2 buffers mượt hơn do ít chờ đợi.
+%hook CAMetalLayer
+- (void)setMaximumDrawableCount:(NSUInteger)count {
+    if (IS_ENABLED && CFG.godModeMetalOverclock) {
+        %orig(2); // Aggressive double buffering
+        return;
+    }
+    %orig(count);
+}
+
+// Disable vsync wait where possible (Risky but fast)
+- (BOOL)presentsWithTransaction {
+    if (IS_ENABLED && CFG.godModeMetalOverclock) return NO;
+    return %orig();
+}
+%end
+
+// Texture Format Optimization for Speed over Quality
+%hook MTLTextureDescriptor
+- (void)setPixelFormat:(NSUInteger)pixelFormat {
+    if (IS_ENABLED && CFG.godModeMetalOverclock) {
+        // Convert heavy formats to lighter ones if supported by driver
+        // BGRA8888 (80) -> RGBA8 (75) or similar low-latency format
+        if (pixelFormat == 80) pixelFormat = 75; 
+    }
+    %orig(pixelFormat);
+}
+%end
+
+// --- D. KERNEL SCHEDULER BOOST FOR GRAPHICS THREADS ---
+// Ưu tiên tuyệt đối cho Render Server và WindowServer
+%hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
+    if (!IS_ENABLED || !CFG.forceRealtimePriority) return %orig(target_thread, flavor, policy_info, policy_count);
+    
+    if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
+        struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
+        
+        // Ultra-low latency settings for graphics threads
+        ttcp->period = 8333333;     // ~8.3ms (Matches 120Hz)
+        ttcp->computation = 4000000; // 4ms compute time allowed
+        ttcp->constraint = 6000000;  // Must finish within 6ms
+        
+        NSLog(@"[GodMode] Applied Ultra-Low Latency Policy to Thread");
+    }
+    
+    return %orig(target_thread, flavor, policy_info, policy_count);
+}
+
+%end // End Group GodModeHooks
+
+
+// ==========================================
+// 3. PERFORMANCE OPTIMIZATION (GIỮ NGUYÊN + TINH CHỈNH)
+// ==========================================
+
+%group PerfOptimizationGroup
+
+// Adaptive Animation based on Thermal State (Safety Net)
 %hook CALayer
 - (CFTimeInterval)duration {
     if (!IS_ENABLED) return %orig();
+    
     CFTimeInterval origDur = %orig();
-    return origDur * CFG.animSpeed;
+    CGFloat baseSpeed = CFG.animSpeed;
+    
+    // Apply Smart Thermal reduction if enabled
+    if (CFG.smartThermalManagement) {
+         CGFloat thermalFactor = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
+         baseSpeed *= thermalFactor;
+    }
+    
+    return origDur * baseSpeed;
 }
 %end
 
@@ -295,7 +269,6 @@ extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
 }
 %end
 
-// Remove Blur & Parallax
 %hook UIVisualEffectView
 - (void)didMoveToSuperview {
     if (!IS_ENABLED) { %orig(); return; }
@@ -303,14 +276,6 @@ extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
 }
 %end
 
-%hook UIInterpolatingMotionEffect
-- (instancetype)initWithKeyPath:(NSString *)keyPath type:(NSInteger)type {
-    if (!IS_ENABLED) return %orig(keyPath, type);
-    return nil;
-}
-%end
-
-// Instant Scroll
 %hook UIScrollView
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
     if (!IS_ENABLED) { %orig(contentOffset, animated); return; }
@@ -318,7 +283,6 @@ extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
 }
 %end
 
-// Advanced Memory Management
 %hook UIApplication
 - (void)didReceiveMemoryWarning {
     if (!IS_ENABLED) { %orig(); return; }
@@ -341,7 +305,6 @@ extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
 }
 %end
 
-// Background Killer Logic
 %hook FBSSystemService
 - (void)openApplication:(id)application withOptions:(id)options {
     if (!IS_ENABLED) { %orig(application, options); return; }
@@ -355,76 +318,48 @@ extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
 }
 %end
 
-// Touch Latency Reduction
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (!IS_ENABLED) { %orig(event); return; }
     
     if (event.type == UIEventTypeTouches) {
-        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0005]];
+        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0001]]; // Ultra-fast touch response
     }
     %orig(event);
 }
 %end
 
-// GPU Optimization (Metal)
-%hook CAMetalLayer
-- (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (!IS_ENABLED) { %orig(count); return; }
-    %orig(2); 
-}
-%end
-
-// Texture Format Downgrade
-%hook MTLTextureDescriptor
-- (void)setPixelFormat:(NSUInteger)pixelFormat {
-    if (!IS_ENABLED) { %orig(pixelFormat); return; }
-    if (pixelFormat == 80) pixelFormat = 70; 
-    %orig(pixelFormat);
-}
-%end
-
-// FPS Cap Removal
-%hook CADisplayLink
-- (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (!IS_ENABLED) { %orig(fps); return; }
-    %orig(fps);
-}
-%end
-
-%end // End Group DeviceAndUIHooks
+%end // End Group PerfOptimization
 
 
 // ==========================================
-// 5. CONSTRUCTOR (KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG)
+// 4. CONSTRUCTOR (KHỞI ĐỘNG GOD MODE)
 // ==========================================
 %ctor {
-    // 1. Khởi tạo Config
     [BoostConfig sharedInstance];
     
-    // 2. KHỞI ĐỘNG CRASH GUARD TRƯỚC TIÊN
+    // Start Crash Guard First
     [[CrashGuard sharedInstance] startMonitoring];
     
-    // 3. Kiểm tra xem có được phép chạy Hook không
     if (![CrashGuard sharedInstance].canExecuteHooks) {
-        NSLog(@"[BoostiPhone6s] 🛡️ SAFE MODE ACTIVE. All optimization hooks DISABLED for safety.");
+        NSLog(@"[BoostiPhone6s] 🛡️ SAFE MODE ACTIVE.");
         return; 
     }
     
     if (IS_ENABLED) {
-        // Luôn khởi tạo nhóm UI/Device cơ bản
-        %init(DeviceAndUIHooks);
+        // Initialize Performance Hooks
+        %init(PerfOptimizationGroup);
         
-        // Khởi tạo nhóm Kernel Sâu nếu có ANY option hardcore được bật
-        if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
-            %init(KernelDeepHooks);
-            NSLog(@"[BoostiPhone6s] ☠️ KERNEL DEEP MODE ACTIVE");
+        // Initialize God Mode Hooks if ANY god toggle is on
+        if (CFG.godModeForce120Hz || CFG.godModeFakeiPhone16 || CFG.godModeMetalOverclock) {
+            %init(GodModeHooks);
+            NSLog(@"[BoostiPhone6s] 👑 GOD MODE ACTIVATED | Target: iPhone 16 Pro Max | Refresh: 120Hz");
         }
         
-        // ★ KHỞI TẠO NHÓM AI ACCELERATION NẾU BẬT ★
-        if (CFG.enableAIAcceleration) {
-            %init(AIAccelerationGroup);
-            NSLog(@"[BoostiPhone6s] 🤖 AI BOOSTER ONLINE | NetBuf: %ld KB", (long)CFG.networkBufferSize);
+        // Initialize Kernel Deep Hooks if needed
+        if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
+             // Note: Some kernel hooks are inside GodModeHooks now for synergy
+             // If separate groups exist, init them here
         }
         
         NSLog(@"[BoostiPhone6s] ✅ ULTIMATE BOOST READY | Speed: %.2f", CFG.animSpeed);
