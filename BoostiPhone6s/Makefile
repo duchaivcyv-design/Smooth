@@ -13,6 +13,7 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 BoostiPhone6sPrefs_FILES = RootListController.m
 
 # ★ QUAN TRỌNG: Chỉ định folder Resources chứa Info.plist, root.plist, icon.png ★
+# Theos sẽ tự động chép mọi thứ trong folder này vào bên trong .bundle khi build.
 BoostiPhone6sPrefs_RESOURCES_DIR = Resources
 
 # Frameworks cần thiết cho UI Settings
@@ -23,19 +24,3 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-undefined,dynamic_lookup
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable
 
 include $(THEOS_MAKE_PATH)/bundle.mk
-
-# ===================================================================
-# PACKAGING SCRIPT CHO RIÊNG FOLDER NÀY
-# ★ Đảm bảo Entry Plist được copy vào hệ thống khi build subproject ★
-# ===================================================================
-before-package::
-	@echo "Packaging Settings Bundle..."
-	
-	# 1. Copy Entry Plist từ layout/ vào PreferenceLoader/Entries
-	@mkdir -p .theos/_/Library/PreferenceLoader/Entries
-	@if [ -f layout/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist ]; then \
-	    cp layout/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist \
-	       .theos/_/Library/PreferenceLoader/Entries/; \
-	fi
-	
-	@echo "Done."
