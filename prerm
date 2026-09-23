@@ -1,53 +1,46 @@
-#!/bin/sh
-# Khôi phục cài đặt gốc khi gỡ cài đặt
-sysctl -w kern.maxvnodes=30000
-sysctl -w kern.maxproc=1024
-sysctl -w vm.page_free_target=1024
-sysctl -w vm.page_free_min=512
-sysctl -w vm.page_speculative_percentage=10
-sysctl -w vm.page_free_count=512
-sysctl -w kern.memorystatus_purge_on_warning=0
-sysctl -w kern.memorystatus_purge_on_urgent=0
-sysctl -w kern.memorystatus_purge_on_critical=0
-sysctl -w vm.compressor_mode=1
-sysctl -w vm.page_background_count=512
-sysctl -w vm.page_background_target=1024
-sysctl -w vm.pageout_algorithm=0
-sysctl -w vm.page_free_reserved=128
-sysctl -w kern.sched_preempt_threshold=50
-sysctl -w kern.timer_coalescing=1
-sysctl -w kern.timer_coalesce=1
-sysctl -w kern.timer_coalescing_bg=1
-sysctl -w kern.timer_coalescing_fg=1
-sysctl -w kern.timer_coalescing_idle=1
-sysctl -w kern.timer_coalescing_ktrace=1
-sysctl -w kern.timer_coalescing_sys=1
-sysctl -w kern.timer_coalescing_user=1
-sysctl -w kern.timer_coalescing_window=1
-sysctl -w kern.timer_coalescing_window_bg=1
-sysctl -w kern.timer_coalescing_window_fg=1
-sysctl -w kern.timer_coalescing_window_idle=1
-sysctl -w kern.timer_coalescing_window_ktrace=1
-sysctl -w kern.timer_coalescing_window_sys=1
-sysctl -w kern.timer_coalescing_window_user=1
-sysctl -w kern.timer_coalescing_window_window=1
-sysctl -w kern.timer_coalescing_window_window_bg=1
-sysctl -w kern.timer_coalescing_window_window_fg=1
-sysctl -w kern.timer_coalescing_window_window_idle=1
-sysctl -w kern.timer_coalescing_window_window_ktrace=1
-sysctl -w kern.timer_coalescing_window_window_sys=1
-sysctl -w kern.timer_coalescing_window_window_user=1
-sysctl -w kern.timer_coalescing_window_window_window=1
-sysctl -w kern.timer_coalescing_window_window_window_bg=1
-sysctl -w kern.timer_coalescing_window_window_window_fg=1
-sysctl -w kern.timer_coalescing_window_window_window_idle=1
-sysctl -w kern.timer_coalescing_window_window_window_ktrace=1
-sysctl -w kern.timer_coalescing_window_window_window_sys=1
-sysctl -w kern.timer_coalescing_window_window_window_user=1
-sysctl -w kern.timer_coalescing_window_window_window_window=1
+#!/bin/bash
 
-# Khôi phục cache
-mkdir -p /var/mobile/Library/Caches
-mkdir -p /var/mobile/Library/Logs
-mkdir -p /tmp
-mkdir -p /var/log
+echo "=================================================="
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v4.0"
+echo "   Status: UNINSTALLING..."
+echo "=================================================="
+
+# 1. Khôi phục quyền hạn cho thư mục Cache/Logs (Phòng trường hợp tweak đổi owner/chmod)
+CACHE_DIR="/var/mobile/Library/Caches"
+LOGS_DIR="/var/mobile/Library/Logs"
+TMP_DIR="/private/var/tmp"
+
+if [ -d "$CACHE_DIR" ]; then
+    chown mobile:mobile "$CACHE_DIR" >/dev/null 2>&1 || true
+    chmod 755 "$CACHE_DIR" >/dev/null 2>&1 || true
+fi
+
+if [ -d "$LOGS_DIR" ]; then
+    chown mobile:mobile "$LOGS_DIR" >/dev/null 2>&1 || true
+    chmod 755 "$LOGS_DIR" >/dev/null 2>&1 || true
+fi
+
+if [ -d "$TMP_DIR" ]; then
+    chmod 1777 "$TMP_DIR" >/dev/null 2>&1 || true
+fi
+
+# 2. Xóa cache ứng dụng liên quan đến tweak (nếu có)
+# Lưu ý: Không xóa toàn bộ Caches vì sẽ mất dữ liệu app khác. 
+# Chỉ xóa folder riêng của tweak nếu có.
+TWEAK_CACHE="$CACHE_DIR/com.boostiphone6s.settings"
+if [ -d "$TWEAK_CACHE" ]; then
+    rm -rf "$TWEAK_CACHE" >/dev/null 2>&1 || true
+    echo "[OK] Tweak-specific cache cleared."
+fi
+
+# 3. Reset PreferenceLoader cache (Giúp menu Settings biến mất ngay lập tức)
+killall cfprefsd >/dev/null 2>&1 || true
+
+echo ""
+echo "=================================================="
+echo "   UNINSTALLATION COMPLETE!"
+echo "   Please RESPRING your device to finalize changes."
+echo "=================================================="
+echo ""
+
+exit 0
