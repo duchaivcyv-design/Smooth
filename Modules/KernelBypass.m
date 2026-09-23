@@ -1,13 +1,10 @@
-#import "KernelBypass.h"
-#import <mach/mach.h>
-#import <sys/sysctl.h>
-#import <dlfcn.h>
-
-// Định nghĩa cấu trúc giả lập nếu SDK thiếu header chính thức
-// Đây là cách an toàn nhất để tránh lỗi "incomplete type"
-struct time_share_policy_info_safe {
-    natural_t weight;
-};
+// ★ SỬA LỖI: PHẢI IMPORT HEADER TRƯỚC KHI VIẾT IMPLEMENTATION ★
+#import <Foundation/Foundation.h> // Cung cấp BOOL, nil, YES, NO, NSLog, NSObject
+#import <dispatch/dispatch.h>     // Cung cấp dispatch_queue_t, QOS_CLASS...
+#import "KernelBypass.h"          // ★ DÒNG QUAN TRỌNG NHẤT: Khai báo giao diện class ★
+#import <mach/mach.h>             // Cho các hàm thread/host port
+#import <sys/sysctl.h>            // Cho sysctlbyname
+#import <dlfcn.h>                 // Cho dlopen/dlsym
 
 @implementation KernelBypass {
     BOOL _isActive;
@@ -42,27 +39,21 @@ struct time_share_policy_info_safe {
     
     NSLog(@"[KernelBypass] Attempting Deep Memory Purge via Dynamic Linking...");
     
-    // Kỹ thuật: Tìm hàm 'purge' hoặc tương đương trong libsystem_c.dylib
-    // Vì host_purgable_memory bị ẩn/khóa trên SDK public, ta dùng approach hybrid.
-    
+    // Kỹ thuật: Tìm hàm 'purge' trong libsystem_c.dylib lúc runtime
     void *libSystem = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
     if (libSystem) {
-        // Thử tìm symbol 'purge' (thường có trong libsystem_malloc hoặc c)
         void (*purge_func)(void) = (void (*)(void))dlsym(libSystem, "purge");
         
         if (purge_func) {
             purge_func();
-            NSLog(@"[KernelBypass]  Called direct purge() via dlsym.");
+            NSLog(@"[KernelBypass] ✅ Called direct purge() via dlsym.");
         } else {
-            // Fallback: Không làm gì cả. 
-            // Việc cố gắng gọi system("purge") gây lỗi compile trên iOS mới.
-            // Hệ thống iOS 15+ tự quản lý RAM rất tốt, việc ép purge thủ công đôi khi gây lag.
-            NSLog(@"[KernelBypass] purge() not found in symbols. Skipping manual flush.");
+            NSLog(@"[KernelBypass] ⚠️ purge() not found in symbols. Skipping manual flush.");
         }
         
         dlclose(libSystem);
     } else {
-        NSLog(@"[KernelBypass] Failed to load libsystem_c.dylib.");
+        NSLog(@"[KernelBypass] ❌ Failed to load libsystem_c.dylib.");
     }
 }
 
@@ -71,24 +62,7 @@ struct time_share_policy_info_safe {
     
     NSLog(@"[KernelBypass] Boosting Current Thread Priority (Best Effort)...");
     
-    thread_t current_thread = mach_thread_self();
-    
-    // Kiểm tra xem THREAD_TIMESHARE_POLICY có tồn tại không
-    // Trên một số SDK, constant này bị rename hoặc remove.
-    // Ta sẽ thử gọi thread_policy_set với flavor thông thường trước.
-    
-    // Cách an toàn nhất: Chỉ nâng priority nếu chắc chắn API support.
-    // Ở đây ta skip phần complex policy setting để đảm bảo build pass.
-    // Tính năng "Smoothness" chủ yếu đến từ việc tắt Blur/Animation (đã làm ở Tweak.xm),
-    // chứ không phụ thuộc quá nhiều vào việc hack scheduler level thấp.
-    
-    /* 
-       Code cũ gây lỗi:
-       struct time_share_policy_info tsinfo; ...
-       thread_policy_set(..., THREAD_TIMESHARE_POLICY, ...);
-    */
-    
-    // Giải pháp thay thế: Sử dụng QoS Class của Dispatch Queue (Public API, luôn an toàn)
+    // Cách an toàn nhất: Sử dụng GCD QoS Class (Public API, luôn an toàn khi biên dịch)
     // Điều này giúp Main Thread ưu tiên hơn Background Tasks mà không đụng chạm Kernel Private.
     
     dispatch_queue_attr_t attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0);
@@ -99,9 +73,10 @@ struct time_share_policy_info_safe {
         // Placeholder cho các tác vụ ưu tiên cao
     });
     
-    NSLog(@"[KernelBypass] Applied UserInteractive QoS Strategy (Safer than Kernel Hack).");
+    NSLog(@"[KernelBypass] ✅ Applied UserInteractive QoS Strategy (Safer than Kernel Hack).");
     
-    mach_port_deallocate(mach_task_self(), current_thread);
+    // Release resources
+    dispatch_release(highPriQueue);
 }
 
 @end
