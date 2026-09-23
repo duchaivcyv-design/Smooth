@@ -15,22 +15,19 @@ jobs:
       # --- BƯỚC 1: CÀI ĐẶT TOOL & THIẾT LẬP MÔI TRƯỜNG ---
       - name: Setup Environment Variables
         run: |
-          # Định nghĩa đường dẫn Theos
           THEOS_PATH="$HOME/theos"
           
-          # Ghi vào GITHUB_ENV để các step sau đọc được
           echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          # Cài đặt tools cần thiết
           brew install make ldid dpkg coreutils wget curl git xz unzip
-      
-          # Thêm đường dẫn GNU Make/CoreUtils vào PATH
+          
+          # Thêm GNU Make và CoreUtils vào PATH
           echo "/opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" >> $GITHUB_PATH
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI SDK (FIXED) ---
-      - name: Clone Theos & Install SDK via Tool
+      # --- BƯỚC 2: CLONE THEOS & TẢI SDK (FIXED LOGIC) ---
+      - name: Clone Theos & Install SDK
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           
@@ -38,36 +35,40 @@ jobs:
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
 
-          echo "📦 Installing iOS SDK using Theos built-in tool..."
-          
-          # Cách 1: Dùng lệnh theos -g sdk (Khuyên dùng nhất)
-          # Lệnh này sẽ tự động cập nhật danh sách SDK và tải phiên bản iphoneos mới nhất
-          cd "$TARGET_DIR"
-          ./bin/theos -g sdk iphoneos || {
-              echo "⚠️ Method 1 failed. Trying manual download from latest release..."
-              
-              # Cách 2 (Fallback): Tải trực tiếp từ trang Releases của theos/sdks
-              # Lấy link asset .tar.xz gần nhất
-              SDK_URL=$(curl -s https://api.github.com/repos/theos/sdks/releases/latest \
-                | grep "browser_download_url.*iphoneos.*\.tar\.xz" \
-                | cut -d '"' -f 4 \
-                | head -n 1)
-              
-              if [ -z "$SDK_URL" ]; then
-                  echo "❌ Could not find any SDK URL!"
-                  exit 1
-              fi
-              
-              echo "Downloading from: $SDK_URL"
-              mkdir -p sdks
-              cd sdks
-              wget -q "$SDK_URL" -O sdk.tar.xz
-              tar xf sdk.tar.xz
-              rm sdk.tar.xz
-          }
+          echo "📦 Downloading iOS SDK from theos/sdks repository..."
+          mkdir -p "$TARGET_DIR/sdks"
+          cd "$TARGET_DIR/sdks"
 
-          # Kiểm tra xem SDK đã nằm trong thư mục chưa
-          ls -la "$TARGET_DIR/sdks/"
+          # Logic thông minh: Lấy danh sách file .tar.xz mới nhất từ branch master
+          # Chúng ta lọc tìm file chứa "iPhoneOS" và ".sdk.tar.xz"
+          echo "Querying available SDKs..."
+          
+          # Dùng API GitHub để list files trong thư mục gốc của branch master
+          FILES_JSON=$(curl -s https://api.github.com/repos/theos/sdks/contents/)
+          
+          # Trích xuất tên file đầu tiên khớp điều kiện (thường là bản mới nhất do sắp xếp alphabet/time)
+          # Regex tìm chuỗi kết thúc bằng .sdk.tar.xz và bắt đầu bằng iPhoneOS
+          SDK_FILENAME=$(echo "$FILES_JSON" | grep '"name"' | grep 'iPhoneOS.*\.sdk\.tar\.xz' | head -n 1 | cut -d '"' -f 4)
+
+          if [ -z "$SDK_FILENAME" ]; then
+              echo "❌ Critical Error: Could not find any valid iPhoneOS SDK filename via API."
+              echo "Debug Output:"
+              echo "$FILES_JSON"
+              exit 1
+          fi
+
+          echo "✅ Found latest SDK: $SDK_FILENAME"
+          echo "⬇️ Downloading..."
+          
+          # Tải file vừa tìm được
+          wget -q "https://raw.githubusercontent.com/theos/sdks/master/$SDK_FILENAME" -O sdk.tar.xz
+          
+          echo "📂 Extracting..."
+          tar xf sdk.tar.xz
+          rm sdk.tar.xz
+          
+          # Kiểm tra kết quả
+          ls -la
           echo "✅ SDK Installation Complete."
 
       # --- BƯỚC 3: BUILD PACKAGE ---
@@ -80,14 +81,12 @@ jobs:
             exit 1
           fi
           
-          # Clean cache cũ
           rm -rf packages/ obj/ .theos/
           
-          # Bắt đầu build
+          # Chạy build
           make clean package FINALPACKAGE=1
           
-          # Liệt kê kết quả
-          ls -lh packages/*.deb || echo "No deb generated"
+          ls -lh packages/*.deb || echo "Build finished but no deb found"
 
       # --- BƯỚC 4: UPLOAD ARTIFACT ---
       - name: Upload Artifact
