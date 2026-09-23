@@ -20,8 +20,8 @@
 /**
  * Kiểm tra xem chế độ chặn đang bật hay tắt.
  */
-- (BOOL)isActive; // ★ THÊM DÒNG NÀY ★
+- (BOOL)isActive;
 
 @end
 
-#endif /* SYSTEM_BLOCKER_H */
+#endif
