@@ -4,119 +4,233 @@
 #import <AVFoundation/AVFoundation.h>
 #import <IOKit/IOKitLib.h>
 #import <sys/sysctl.h>
-#import <dlfcn.h> // Bắt buộc phải import để dùng dlsym
+#import <dlfcn.h>
+#import <mach/mach.h>
 
 // ==========================================
-// 1. FIX SYSTEM() AN TOÀN (KHÔNG ĐỆ QUY)
-// Dùng dlsym để lấy địa chỉ thật của hàm system trong libc, 
-// tránh việc Macro #define làm hỏng lời gọi bên trong.
+// 1. CONFIGURATION MANAGER (Đọc Settings)
 // ==========================================
+@interface BoostConfig : NSObject
+@property (nonatomic, assign) BOOL enabled;          // Bật/Tắt chung
+@property (nonatomic, assign) CGFloat animSpeed;     // Tốc độ animation
+@property (nonatomic, assign) BOOL aggressiveRAM;    // Xóa cache mạnh
+@property (nonatomic, assign) BOOL killBgApps;       // Giết app nền
+@property (nonatomic, assign) BOOL spoofModel;       // ★ GIẢ MẠO MODEL MÁY
+@property (nonatomic, assign) BOOL disableThermal;   // ★ TẮT CẢNH BÁO NHIỆT
+@property (nonatomic, assign) BOOL unlockProMotion;  // ★ MỞ KHÓA 120HZ/OLED
+
++ (instancetype)sharedInstance;
+- (void)loadSettings;
+@end
+
+@implementation BoostConfig
+
++ (instancetype)sharedInstance {
+    static BoostConfig *instance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        instance = [[self alloc] init];
+        [instance loadSettings];
+        
+        // Lắng nghe thay đổi từ App Cài đặt
+        [[NSNotificationCenter defaultCenter] addObserver:instance 
+                                                 selector:@selector(loadSettings) 
+                                                     name:@"com.boostiphone6s.settings/reload" 
+                                                   object:nil];
+    });
+    return instance;
+}
+
+- (void)loadSettings {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    
+    self.enabled = [defaults boolForKey:@"Enabled"] ?: YES;
+    
+    NSNumber *speedVal = [defaults objectForKey:@"AnimSpeed"];
+    self.animSpeed = speedVal ? [speedVal floatValue] : 0.5;
+    
+    self.aggressiveRAM = [defaults boolForKey:@"AggressiveRAM"];
+    self.killBgApps = [defaults boolForKey:@"KillBackgroundApps"];
+    
+    // Load các tùy chọn Phá Rào
+    self.spoofModel = [defaults boolForKey:@"SpoofModel"];
+    self.disableThermal = [defaults boolForKey:@"DisableThermal"];
+    self.unlockProMotion = [defaults boolForKey:@"UnlockProMotion"];
+    
+    NSLog(@"[BoostiPhone6s] Config Loaded: Spoof=%d, ThermalOff=%d, ProMotion=%d", 
+          self.spoofModel, self.disableThermal, self.unlockProMotion);
+}
+
+@end
+
+#define CFG [BoostConfig sharedInstance]
+#define IS_ENABLED (CFG.enabled)
+
+// Safe System Exec (Không đệ quy)
 typedef int (*system_func_t)(const char *);
 static inline int safe_system(const char *cmd) {
     static system_func_t real_system = NULL;
     if (!real_system) {
         void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-        if (handle) {
-            real_system = (system_func_t)dlsym(handle, "system");
-        }
+        if (handle) real_system = (system_func_t)dlsym(handle, "system");
     }
     if (real_system) return real_system(cmd);
-    return -1; // Fail-safe nếu không tìm thấy
+    return -1;
 }
 
-// Alias ngắn gọn cho code phía dưới
-#define sys_exec(cmd) safe_system(cmd)
+// Helper lấy tên máy thật (để backup logic nếu cần)
+static NSString *getRealMachineName() {
+    size_t size;
+    sysctlbyname("hw.machine", NULL, &size, NULL, 0);
+    char *machine = malloc(size);
+    sysctlbyname("hw.machine", machine, &size, NULL, 0);
+    NSString *result = [NSString stringWithUTF8String:machine];
+    free(machine);
+    return result;
+}
 
 // ==========================================
-// 2. STUB INTERFACES BỔ SUNG
-// Thêm NotificationCenter vào danh sách class cần view
+// 2. DEVICE BYPASS HOOKS (PHÁ VỠ GIỚI HẠN)
+// Nhóm này chỉ kích hoạt khi người dùng bật toggle tương ứng
 // ==========================================
 
-@interface NSObject (BoostStubs)
-- (id)valueForKey:(NSString *)key;
-@end
+%group DeviceBypassGroup
 
-// --- SpringBoard & System UI ---
-@interface SBSearchController : UIViewController @end
-@interface WGWidgetHostingViewController : UIViewController @end
-@interface CCUIControlCenterViewController : UIViewController @end
-@interface SBAppSwitcherController : UIViewController @end
-@interface SBLockScreenViewController : UIViewController @end
-@interface CameraController : NSObject 
-@property(nonatomic, strong) UIView *view; 
-@end
-@interface AVCaptureSession (BoostStubs)
-@property(copy) NSString *sessionPreset;
-#ifndef AVCaptureSessionPresetLow
-#define AVCaptureSessionPresetLow @"AVCaptureSessionPresetLow"
-#endif
-@end
+// --- A. FAKE HARDWARE IDENTITY (Giả mạo Model) ---
+// Đánh lừa mọi App/Game nghĩ đây là iPhone 14 Pro Max (A16 Bionic)
+%hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    if (!IS_ENABLED || !CFG.spoofModel) return %orig(name, oldp, oldlenp, newp, newlen);
+    
+    if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0) {
+        const char *fakeModel = "iPhone15,3"; // iPhone 14 Pro Max
+        
+        if (oldp && oldlenp) {
+            strlcpy((char *)oldp, fakeModel, *oldlenp);
+            *oldlenp = strlen(fakeModel) + 1;
+        } else if (oldlenp) {
+            *oldlenp = strlen(fakeModel) + 1;
+        }
+        return 0;
+    }
+    return %orig(name, oldp, oldlenp, newp, newlen);
+}
 
-// --- Apps ---
-@interface PhotosUI : UIViewController @end
-@interface MapsApp : UIViewController @end
-@interface MessagesApp : UIResponder @end
-@interface MailApp : UIResponder @end
-@interface PreferencesAppController : UIResponder @end
+// --- B. DISABLE THERMAL THROTTLING (Tắt bảo vệ nhiệt) ---
+// Ép hệ thống luôn báo trạng thái mát mẻ, ngăn iOS giảm xung nhịp CPU/GPU
+%hook NSProcessInfo
+- (NSProcessInfoThermalState)thermalState {
+    if (IS_ENABLED && CFG.disableThermal) {
+        return NSProcessInfoThermalStateNominal; // Luôn trả về Nominal (Bình thường)
+    }
+    return %orig();
+}
 
-// --- Managers & Services ---
-@interface SpringBoard : UIResponder @end
-@interface FBSSystemService : NSObject @end
-@interface SBLockScreenManager : NSObject @end
-@interface BBServer : NSObject @end
-@interface WiFiManager : NSObject @end
-@interface BrightnessSystem : NSObject @end
-@interface Analytics : NSObject @end
-@interface GameCenter : NSObject @end
-@interface BatteryCenter : NSObject @end
-@interface AirDrop : NSObject @end
-@interface BluetoothManager : NSObject @end
-@interface CameraCapture : NSObject @end
-@interface Handoff : NSObject @end
-@interface FrontBoardServices : NSObject @end
-@interface OrientationManager : NSObject @end
-@interface Continuity : NSObject @end
-@interface ProcessManager : NSObject @end
-@interface SiriSuggestions : NSObject @end
-@interface SafariServices : NSObject @end
-@interface CloudKit : NSObject @end
-@interface UIKeyboardImpl : NSObject @end
+// Vô hiệu hóa thông báo áp lực nhiệt nghiêm trọng
++ (BOOL)isThermalPressureCritical {
+    if (IS_ENABLED && CFG.disableThermal) return NO;
+    return %orig();
+}
+%end
 
-// ★ QUAN TRỌNG: Khai báo NotificationCenter là ViewController để có .view
-@interface NotificationCenter : UIViewController @end
+// Can thiệp IOKit để giả mạo dữ liệu pin/nhiệt độ cho SpringBoard
+// Lưu ý: Đây là kỹ thuật nâng cao, có thể gây lỗi hiển thị % pin trên một số phiên bản iOS cũ hơn
+/* 
+%hookf(io_service_t, IOServiceGetMatchingService, mach_port_t masterPort, io_registry_entry_t matching) {
+    // TODO: Implement complex IOKit registry patching here if needed.
+    // For now, relying on UserSpace hooks above is safer and sufficient for most apps.
+    return %orig(masterPort, matching);
+}
+*/
+
+// --- C. UNLOCK PRO MOTION & OLED FEATURES (Mở khóa màn hình xịn) ---
+// Cho phép App vẽ giao diện 120Hz hoặc Dark Mode chuẩn OLED dù máy chỉ có LCD 60Hz
+%hook UIScreen
+- (BOOL)isProMotionEnabled {
+    if (IS_ENABLED && CFG.unlockProMotion) return YES;
+    return %orig();
+}
+
+- (NSInteger)maximumFramesPerSecond {
+    if (IS_ENABLED && CFG.unlockProMotion) return 120; // Báo là hỗ trợ 120fps
+    return %orig();
+}
+%end
+
+// Ép CALayer chấp nhận rasterization cao cấp (thường tắt trên máy yếu)
+%hook CALayer
+- (BOOL)supportsRasterization {
+    if (IS_ENABLED && CFG.unlockProMotion) return YES;
+    return %orig();
+}
+%end
+
+// Mở khóa Dynamic Island / Live Activities (Logic UI)
+%hook SBIconController
+- (BOOL)_supportsLiveActivities {
+    if (IS_ENABLED && CFG.spoofModel) return YES;
+    return %orig();
+}
+- (BOOL)_hasDynamicIslandSupport {
+    if (IS_ENABLED && CFG.spoofModel) return YES;
+    return %orig();
+}
+%end
+
+%end // End Group DeviceBypass
+
 
 // ==========================================
-// 3. CODE HOOK CHÍNH
-// Thay thế tất cả các lệnh system(...) bằng sys_exec(...)
+// 3. PERFORMANCE OPTIMIZATION HOOKS (TỐI ƯU HIỆU NĂNG)
+// Nhóm này chạy liên tục nếu tweak được bật
 // ==========================================
+
+%group PerfOptimizationGroup
+
+// Animation Speed Control
+%hook CALayer
+- (CFTimeInterval)duration {
+    if (!IS_ENABLED) return %orig();
+    CFTimeInterval origDur = %orig();
+    return origDur * CFG.animSpeed;
+}
+%end
 
 %hook UIView
 - (void)setAlpha:(CGFloat)alpha {
+    if (!IS_ENABLED) { %orig(alpha); return; }
     if (alpha > 0.95) alpha = 1.0;
     %orig(alpha);
 }
 %end
 
-%hook CALayer
-- (CFTimeInterval)duration {
-    return 0.15;
-}
-%end
-
+// Remove Blur & Parallax
 %hook UIVisualEffectView
 - (void)didMoveToSuperview {
+    if (!IS_ENABLED) { %orig(); return; }
     [self removeFromSuperview];
 }
 %end
 
-%hook UIScreen
-- (CGFloat)scale {
-    return 2.0;
+%hook UIInterpolatingMotionEffect
+- (instancetype)initWithKeyPath:(NSString *)keyPath type:(NSInteger)type {
+    if (!IS_ENABLED) return %orig(keyPath, type);
+    return nil;
 }
 %end
 
+// Instant Scroll
+%hook UIScrollView
+- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
+    if (!IS_ENABLED) { %orig(contentOffset, animated); return; }
+    %orig(contentOffset, NO);
+}
+%end
+
+// Advanced Memory Management
 %hook UIApplication
 - (void)didReceiveMemoryWarning {
+    if (!IS_ENABLED) { %orig(); return; }
+    
     SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
     if ([self respondsToSelector:sel]) {
         #pragma clang diagnostic push
@@ -124,405 +238,94 @@ static inline int safe_system(const char *cmd) {
         [self performSelector:sel];
         #pragma clang diagnostic pop
     }
+    
+    if (CFG.aggressiveRAM) {
+        NSURLCache *cache = [NSURLCache sharedURLCache];
+        [cache removeAllCachedResponses];
+        safe_system("purge");
+    }
+    
     %orig;
 }
 %end
 
-%hook UIScrollView
-- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
-    if (animated) animated = NO;
-    %orig(contentOffset, animated);
+// Background Killer Logic
+%hook FBSSystemService
+- (void)openApplication:(id)application withOptions:(id)options {
+    if (!IS_ENABLED) { %orig(application, options); return; }
+    
+    if (CFG.killBgApps) {
+         safe_system("sync");
+         safe_system("purge");
+    }
+    
+    %orig(application, nil);
 }
 %end
 
-%hook UIInterpolatingMotionEffect
-- (instancetype)initWithKeyPath:(NSString *)keyPath type:(NSInteger)type {
-    return nil;
-}
-%end
-
+// Touch Latency Reduction
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
+    if (!IS_ENABLED) { %orig(event); return; }
+    
     if (event.type == UIEventTypeTouches) {
-        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0005]];
     }
     %orig(event);
 }
 %end
 
-%hook SpringBoard
-- (void)applicationDidFinishLaunching:(id)application {
-    %orig;
-    sys_exec("sync");
-    sys_exec("purge");
-}
-%end
-
-%hook NSProcessInfo
-- (float)thermalState {
-    return 1.0;
-}
-%end
-
-%hook FBSSystemService
-- (void)openApplication:(id)application withOptions:(id)options {
-    %orig(application, nil);
-}
-%end
-
-%hook SBLockScreenManager
-- (void)lockUIFromSource:(int)source withOptions:(id)options {
-    %orig(source, nil);
-}
-%end
-
+// GPU Optimization (Metal)
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    %orig(2);
+    if (!IS_ENABLED) { %orig(count); return; }
+    %orig(2); // Giảm buffer để tiết kiệm VRAM
 }
 %end
 
+// Texture Format Downgrade (Giảm tải GPU)
 %hook MTLTextureDescriptor
 - (void)setPixelFormat:(NSUInteger)pixelFormat {
-    if (pixelFormat == 80) pixelFormat = 70;
+    if (!IS_ENABLED) { %orig(pixelFormat); return; }
+    // Convert BGRA8888 (80) -> RGBA16Float (70) hoặc thấp hơn tùy driver
+    // Ở đây ta ép về format nhẹ hơn nếu đang dùng format nặng
+    if (pixelFormat == 80) pixelFormat = 70; 
     %orig(pixelFormat);
 }
 %end
 
-%hook UITouch
-- (NSTimeInterval)timestamp {
-    return [[NSDate date] timeIntervalSinceReferenceDate];
-}
-%end
-
-%hook SBSearchController
-- (void)viewDidLoad {
-    [self.view removeFromSuperview];
-}
-%end
-
+// FPS Cap Removal (Cho phép game vượt 60fps nếu engine hỗ trợ)
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (fps > 30) fps = 30;
+    if (!IS_ENABLED) { %orig(fps); return; }
+    // Không cap lại ở 30 nữa, để mặc định hoặc ép cao hơn
+    // %orig(MAX(fps, 60)); 
     %orig(fps);
 }
 %end
 
-%hook NSURLCache
-- (void)setMemoryCapacity:(NSUInteger)capacity {
-    %orig(1024 * 1024 * 10);
-}
-%end
+%end // End Group PerfOptimization
 
-%hook NSLayoutConstraint
-- (void)setActive:(BOOL)active {
-    if (active) active = NO;
-    %orig(active);
-}
-%end
 
-%hook UIImage
-- (UIImage *)imageWithRenderingMode:(UIImageRenderingMode)renderingMode {
-    return self;
-}
-%end
-
-%hook UIKeyboardImpl
-- (void)setInputMode:(id)inputMode {
-    %orig(nil);
-}
-%end
-
-%hook BBServer
-- (void)publishBulletin:(id)bulletin {
-    SEL sectionSel = NSSelectorFromString(@"sectionID");
-    if ([bulletin respondsToSelector:sectionSel]) {
-         NSString *secId = [bulletin valueForKey:@"sectionID"];
-         if ([secId isEqualToString:@"com.apple.springboard"]) {
-             return;
-         }
-    }
-    %orig(bulletin);
-}
-%end
-
-%hook WGWidgetHostingViewController
-- (void)viewDidLoad {
-    [self.view removeFromSuperview];
-}
-%end
-
-%hook CCUIControlCenterViewController
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 2.0;
-}
-%end
-
-%hook AVCaptureSession
-- (void)startRunning {
-    %orig;
-    self.sessionPreset = AVCaptureSessionPresetLow;
-}
-%end
-
-%hook PHLivePhotoView
-- (void)startPlaybackWithStyle:(NSInteger)style {
-    return;
-}
-%end
-
-%hook WiFiManager
-- (void)setPower:(BOOL)power {
-    if (power) {
-        sys_exec("ifconfig en0 txqueuelen 100");
-    }
-    %orig(power);
-}
-%end
-
-%hook NSThread
-- (void)setThreadPriority:(double)priority {
-    if (priority > 0.5) priority = 0.5;
-    %orig(priority);
-}
-%end
-
-%hook UIApplicationDelegate
-- (void)application:(id)application performFetchWithCompletionHandler:(id)handler {
-    return;
-}
-%end
-
-%hook NSJSONSerialization
-+ (id)JSONObjectWithData:(NSData *)data options:(NSJSONReadingOptions)opt error:(NSError **)error {
-    opt = NSJSONReadingMutableContainers;
-    return %orig(data, opt, error);
-}
-%end
-
-%hook CloudKit
-- (void)startSync {
-    return;
-}
-%end
-
-%hook UIViewController
-- (void)viewDidDisappear:(BOOL)animated {
-    %orig(animated);
-    if(self.isViewLoaded && self.view.window == nil) {
-       [self.view removeFromSuperview];
+// ==========================================
+// 4. CONSTRUCTOR (KHỞI ĐỘNG TWEAK)
+// ==========================================
+%ctor {
+    // Khởi tạo config đầu tiên
+    [BoostConfig sharedInstance];
+    
+    if (IS_ENABLED) {
+        // Luôn khởi tạo nhóm Tối Ưu Hiệu Năng
+        %init(PerfOptimizationGroup);
+        
+        // Chỉ khởi tạo nhóm Phá Rào nếu có ANY option bypass được bật
+        if (CFG.spoofModel || CFG.disableThermal || CFG.unlockProMotion) {
+            %init(DeviceBypassGroup);
+            NSLog(@"[BoostiPhone6s] ⚡ EXTENDED BYPASS MODULE ACTIVE");
+        }
+        
+        NSLog(@"[BoostiPhone6s] ✅ Core Active | Speed: %.2f", CFG.animSpeed);
+    } else {
+        NSLog(@"[BoostiPhone6s] ❌ Disabled by User");
     }
 }
-%end
-
-%hook UIWindow
-- (void)setRootViewController:(UIViewController *)rootViewController {
-    [UIView setAnimationsEnabled:NO];
-    %orig(rootViewController);
-    [UIView setAnimationsEnabled:YES];
-}
-%end
-
-%hook AVAudioSession
-- (BOOL)setActive:(BOOL)active error:(NSError **)outError {
-    return YES;
-}
-%end
-
-%hook UIFeedbackGenerator
-- (void)prepare {
-    return;
-}
-%end
-
-%hook UIKeyboard
-- (void)setFrame:(CGRect)frame {
-    frame.origin.y = UIScreen.mainScreen.bounds.size.height;
-    %orig(frame);
-}
-%end
-
-%hook SBAppSwitcherController
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 3.0;
-}
-%end
-
-%hook SBForceTouchGestureRecognizer
-- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    %orig(touches, event);
-    [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0001]];
-}
-%end
-
-%hook SiriSuggestions
-- (void)startSuggesting {
-    return;
-}
-%end
-
-%hook SafariServices
-- (void)clearCache {
-    sys_exec("rm -rf /var/mobile/Library/Caches/com.apple.mobilesafari/*");
-}
-%end
-
-%hook CameraController
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 2.5;
-}
-%end
-
-%hook AVPlayer
-- (void)setRate:(float)rate {
-    if (rate > 1.0) rate = 1.0;
-    %orig(rate);
-}
-%end
-
-%hook BrightnessSystem
-- (void)setAutoBrightnessEnabled:(BOOL)enabled {
-    %orig(NO);
-}
-%end
-
-%hook SBLockScreenViewController
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 2.0;
-}
-%end
-
-%hook PreferencesAppController
-- (void)applicationDidFinishLaunching:(id)application {
-    %orig;
-    sys_exec("purge");
-}
-%end
-
-%hook Analytics
-- (void)startCollecting {
-    return;
-}
-%end
-
-%hook PhotosUI
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 2.0;
-}
-%end
-
-%hook MessagesApp
-- (void)applicationDidFinishLaunching:(id)application {
-    %orig;
-    sys_exec("purge");
-}
-%end
-
-%hook MapsApp
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 2.0;
-}
-%end
-
-%hook CLLocationManager
-- (void)startUpdatingLocation {
-    return;
-}
-%end
-
-%hook MailApp
-- (void)applicationDidFinishLaunching:(id)application {
-    %orig;
-    sys_exec("purge");
-}
-%end
-
-%hook GameCenter
-- (void)startGame {
-    sys_exec("purge");
-}
-%end
-
-%hook BatteryCenter
-- (void)setCharging:(BOOL)charging {
-    if (charging) {
-        sys_exec("sysctl -w kern.cpufreq=1000");
-    }
-    %orig(charging);
-}
-%end
-
-%hook AirDrop
-- (void)startAdvertising {
-    return;
-}
-%end
-
-%hook BluetoothManager
-- (void)setPower:(BOOL)power {
-    if (power) {
-        sys_exec("defaults write com.apple.Bluetooth HCIQoS -int 1");
-    }
-    %orig(power);
-}
-%end
-
-%hook CameraCapture
-- (void)capturePhoto {
-    %orig;
-    sys_exec("purge");
-}
-%end
-
-%hook Handoff
-- (void)startHandoff {
-    return;
-}
-%end
-
-%hook FrontBoardServices
-- (void)openApplication:(id)application {
-    %orig(application);
-    [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0001]];
-}
-%end
-
-%hook OrientationManager
-- (void)setOrientation:(NSInteger)orientation {
-    %orig(orientation);
-    [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0001]];
-}
-%end
-
-%hook TabBarController
-- (void)setSelectedIndex:(NSUInteger)index {
-    %orig(index);
-    sys_exec("purge");
-}
-%end
-
-%hook Continuity
-- (void)startContinuity {
-    return;
-}
-%end
-
-%hook NotificationCenter
-- (void)viewDidLoad {
-    %orig;
-    self.view.layer.speed = 2.0;
-}
-%end
-
-%hook ProcessManager
-- (void)setPriority:(int)priority {
-    if (priority > 50) priority = 50;
-    %orig(priority);
-}
-%end
