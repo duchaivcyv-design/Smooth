@@ -1,10 +1,10 @@
 Package: com.boostiphone6s.boost
-Name: Smooth Iphone 6s-x
-Version: 1.0.0-1a
+Name: Boost iPhone 6s-X Beta
+Version: 1.0.0-2a
 Architecture: iphoneos-arm64
-Description: Tối ưu hiệu năng tối đa cho iPhone 6s đến X trên iOS 15-16.7.16
-Maintainer: nofree,TaoJB
-Author: nofree, TaoJB
+Description: Tối ưu AI, RAM, Nhiệt độ ép màn sử dùng màn 120 nhưng chỉ giống màn 120jz không thể ép được
+Maintainer: NoFree, TaoJN
+Author: NoFree, TaoJB
 Section: Tweaks
-Depends: firmware (>= 15.0), mobilesubstrate | substitute
+Depends: firmware (>= 15.0), coreutils, preferenceloader
 Tags: rootless
