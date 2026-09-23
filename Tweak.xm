@@ -4,29 +4,39 @@
 #import <AVFoundation/AVFoundation.h>
 #import <IOKit/IOKitLib.h>
 #import <sys/sysctl.h>
-#import <dlfcn.h>
+#import <dlfcn.h> // Bắt buộc phải import để dùng dlsym
 
 // ==========================================
-// 1. FIX LỖI SYSTEM() UNAVAILABLE
-// Dùng Macro để ép compiler chấp nhận lệnh shell
+// 1. FIX SYSTEM() AN TOÀN (KHÔNG ĐỆ QUY)
+// Dùng dlsym để lấy địa chỉ thật của hàm system trong libc, 
+// tránh việc Macro #define làm hỏng lời gọi bên trong.
 // ==========================================
-#define system(cmd) _system_wrapper(cmd)
-static inline int _system_wrapper(const char *cmd) {
-    // Gọi trực tiếp libc function, bypass check của SDK
-    extern int system(const char *); 
-    return system(cmd);
+typedef int (*system_func_t)(const char *);
+static inline int safe_system(const char *cmd) {
+    static system_func_t real_system = NULL;
+    if (!real_system) {
+        void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+        if (handle) {
+            real_system = (system_func_t)dlsym(handle, "system");
+        }
+    }
+    if (real_system) return real_system(cmd);
+    return -1; // Fail-safe nếu không tìm thấy
 }
 
+// Alias ngắn gọn cho code phía dưới
+#define sys_exec(cmd) safe_system(cmd)
+
 // ==========================================
-// 2. STUB INTERFACES (CHỈ DÀNH CHO CLASS PRIVATE)
-// KHÔNG khai báo lại UITouch, NSURLCache... vì nó đã có sẵn
+// 2. STUB INTERFACES BỔ SUNG
+// Thêm NotificationCenter vào danh sách class cần view
 // ==========================================
 
 @interface NSObject (BoostStubs)
 - (id)valueForKey:(NSString *)key;
 @end
 
-// Các Class SpringBoard/Private cần stub để hook được
+// --- SpringBoard & System UI ---
 @interface SBSearchController : UIViewController @end
 @interface WGWidgetHostingViewController : UIViewController @end
 @interface CCUIControlCenterViewController : UIViewController @end
@@ -42,14 +52,14 @@ static inline int _system_wrapper(const char *cmd) {
 #endif
 @end
 
-// Các Class App-specific (PhotosUI, MapsApp...) cần view property
+// --- Apps ---
 @interface PhotosUI : UIViewController @end
 @interface MapsApp : UIViewController @end
 @interface MessagesApp : UIResponder @end
 @interface MailApp : UIResponder @end
 @interface PreferencesAppController : UIResponder @end
 
-// Các Manager/System Services
+// --- Managers & Services ---
 @interface SpringBoard : UIResponder @end
 @interface FBSSystemService : NSObject @end
 @interface SBLockScreenManager : NSObject @end
@@ -72,8 +82,12 @@ static inline int _system_wrapper(const char *cmd) {
 @interface CloudKit : NSObject @end
 @interface UIKeyboardImpl : NSObject @end
 
+// ★ QUAN TRỌNG: Khai báo NotificationCenter là ViewController để có .view
+@interface NotificationCenter : UIViewController @end
+
 // ==========================================
 // 3. CODE HOOK CHÍNH
+// Thay thế tất cả các lệnh system(...) bằng sys_exec(...)
 // ==========================================
 
 %hook UIView
@@ -139,8 +153,8 @@ static inline int _system_wrapper(const char *cmd) {
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
-    system("sync");
-    system("purge");
+    sys_exec("sync");
+    sys_exec("purge");
 }
 %end
 
@@ -261,7 +275,7 @@ static inline int _system_wrapper(const char *cmd) {
 %hook WiFiManager
 - (void)setPower:(BOOL)power {
     if (power) {
-        system("ifconfig en0 txqueuelen 100");
+        sys_exec("ifconfig en0 txqueuelen 100");
     }
     %orig(power);
 }
@@ -351,7 +365,7 @@ static inline int _system_wrapper(const char *cmd) {
 
 %hook SafariServices
 - (void)clearCache {
-    system("rm -rf /var/mobile/Library/Caches/com.apple.mobilesafari/*");
+    sys_exec("rm -rf /var/mobile/Library/Caches/com.apple.mobilesafari/*");
 }
 %end
 
@@ -385,7 +399,7 @@ static inline int _system_wrapper(const char *cmd) {
 %hook PreferencesAppController
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
-    system("purge");
+    sys_exec("purge");
 }
 %end
 
@@ -405,7 +419,7 @@ static inline int _system_wrapper(const char *cmd) {
 %hook MessagesApp
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
-    system("purge");
+    sys_exec("purge");
 }
 %end
 
@@ -425,20 +439,20 @@ static inline int _system_wrapper(const char *cmd) {
 %hook MailApp
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
-    system("purge");
+    sys_exec("purge");
 }
 %end
 
 %hook GameCenter
 - (void)startGame {
-    system("purge");
+    sys_exec("purge");
 }
 %end
 
 %hook BatteryCenter
 - (void)setCharging:(BOOL)charging {
     if (charging) {
-        system("sysctl -w kern.cpufreq=1000");
+        sys_exec("sysctl -w kern.cpufreq=1000");
     }
     %orig(charging);
 }
@@ -453,7 +467,7 @@ static inline int _system_wrapper(const char *cmd) {
 %hook BluetoothManager
 - (void)setPower:(BOOL)power {
     if (power) {
-        system("defaults write com.apple.Bluetooth HCIQoS -int 1");
+        sys_exec("defaults write com.apple.Bluetooth HCIQoS -int 1");
     }
     %orig(power);
 }
@@ -462,7 +476,7 @@ static inline int _system_wrapper(const char *cmd) {
 %hook CameraCapture
 - (void)capturePhoto {
     %orig;
-    system("purge");
+    sys_exec("purge");
 }
 %end
 
@@ -489,7 +503,7 @@ static inline int _system_wrapper(const char *cmd) {
 %hook TabBarController
 - (void)setSelectedIndex:(NSUInteger)index {
     %orig(index);
-    system("purge");
+    sys_exec("purge");
 }
 %end
 
