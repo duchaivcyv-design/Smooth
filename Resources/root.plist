@@ -5,17 +5,17 @@
 	<key>items</key>
 	<array>
 		
-		<!-- ================= HEADER ================= -->
+		<!-- HEADER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>Boost iPhone 6s-X Ultimate v3.0</string>
+			<string>Boost iPhone 6s-X Ultimate v3.1</string>
 			<key>footerText</key>
-			<string>Titanium Edition: Ép phần cứng, Giả danh iPhone 16, Quản lý Nhiệt Thông minh.</string>
+			<string>Ep phan cung cu chay nhu iPhone 16 Pro Max.</string>
 		</dict>
 
-		<!-- ================= TỔNG QUAN ================= -->
+		<!-- MASTER SWITCH -->
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -26,34 +26,32 @@
 			<key>key</key>
 			<string>Enabled</string>
 			<key>label</key>
-			<string>Bật Tweak</string>
+			<string>Bat Tweak</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= 👑 GOD MODE CONTROLS ================= -->
+		<!-- GOD MODE SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>👑 GOD MODE (Ép Phần Cứng Cực Đại)</string>
+			<string>GOD MODE (Risk)</string>
 			<key>footerText</key>
-			<string>Cảnh báo: Tính năng này ép iPhone 6s/X hoạt động như iPhone 16 Pro Max. Có thể gây nóng máy nhanh và hao pin. Sử dụng có trách nhiệm!</string>
+			<string>Canh bao: Co the gay nong may hoac bi app bank phat hien.</string>
 		</dict>
 
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.boostiphone6s.settings</string>
 			<key>key</key>
 			<string>GodModeFake16</string>
 			<key>label</key>
-			<string>Giả Danh iPhone 16 Pro Max</string>
-			<key>footerText</key>
-			<string>Mở khóa Apple Intelligence, Dynamic Island, StandBy Mode.</string>
+			<string>Gia danh iPhone 16 Pro Max</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -62,15 +60,13 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.boostiphone6s.settings</string>
 			<key>key</key>
 			<string>GodMode120Hz</string>
 			<key>label</key>
-			<string>Ép Màn Hình 120Hz (ProMotion)</string>
-			<key>footerText</key>
-			<string>Buộc mọi app render ở 120fps. Màn LCD vẫn chỉ hiển thị 60Hz vật lý nhưng animation sẽ siêu mượt.</string>
+			<string>Ep man hinh 120Hz</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -79,59 +75,30 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.boostiphone6s.settings</string>
 			<key>key</key>
 			<string>GodModeMetal</string>
 			<key>label</key>
 			<string>Metal GPU Overclocking</string>
-			<key>footerText</key>
-			<string>Giảm buffer GPU để tăng tốc độ phản hồi game/UI. Đổi lại có thể bị tearing nhẹ.</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= 🔋 QUẢN LÝ PIN & NHIỆT THÔNG MINH ================= -->
+		<!-- PERFORMANCE SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>🔋 Chế Độ Pin &amp; Nhiệt Thông Minh</string>
-			<key>footerText</key>
-			<string>Tự động điều chỉnh hiệu năng dựa trên nhiệt độ máy. Giúp máy mát hơn, pin trâu hơn mà vẫn mượt mà khi cần thiết.</string>
+			<string>Performance Optimization</string>
 		</dict>
 
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.boostiphone6s.settings</string>
-			<key>key</key>
-			<string>SmartThermal</string>
-			<key>label</key>
-			<string>Bật Smart Thermal Management</string>
-			<key>footerText</key>
-			<string>Khi máy nóng: Giảm animation, chặn timer nền, tăng timeout mạng. Khi máy mát: Trở về full speed.</string>
-			<key>PostNotification</key>
-			<string>com.boostiphone6s.settings/reload</string>
-		</dict>
-
-		<!-- ================= GIAO DIỆN & CẢM ỨNG ================= -->
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>Giao Diện &amp; Cảm Ứng</string>
-		</dict>
-		
 		<dict>
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>0.3</real>
+			<real>0.5</real>
 			<key>min</key>
 			<real>0.1</real>
 			<key>max</key>
@@ -143,19 +110,11 @@
 			<key>key</key>
 			<string>AnimSpeed</string>
 			<key>label</key>
-			<string>Hệ số tốc độ Animation</string>
+			<string>Animation Speed Factor</string>
 			<key>footerText</key>
-			<string>Giá trị nhỏ = Nhanh hơn (0.1 là tức thì).</string>
+			<string>Nho hon = Nhanh hon (0.1 la toc do toi da).</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
-		</dict>
-
-		<!-- ================= RAM & CACHE ================= -->
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>Quản Lý Bộ Nhớ (RAM)</string>
 		</dict>
 
 		<dict>
@@ -168,7 +127,7 @@
 			<key>key</key>
 			<string>AggressiveRAM</string>
 			<key>label</key>
-			<string>Xóa Cache Aggressive</string>
+			<string>Xoa Cache Aggressive</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -183,76 +142,44 @@
 			<key>key</key>
 			<string>KillBackgroundApps</string>
 			<key>label</key>
-			<string>Tự động Kill App nền</string>
+			<string>Tu dong Kill App nen</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= ⚠️ PHÁ RÀO PHẦN CỨNG ================= -->
+		<!-- SMART THERMAL SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>⚠️ Chế Độ Risky (Phá Rào Phần Cứng)</string>
+			<string>Smart Thermal Management</string>
 			<key>footerText</key>
-			<string>Cảnh báo: Can thiệp sâu vào hệ thống. Có thể gây mất ổn định hoặc bị App Bank phát hiện.</string>
+			<string>Tu dong dieu chinh hieu nang dua tren nhiet do may.</string>
 		</dict>
 
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.boostiphone6s.settings</string>
 			<key>key</key>
-			<string>SpoofModel</string>
+			<string>SmartThermal</string>
 			<key>label</key>
-			<string>Giả mạo iPhone 14 Pro Max (Legacy)</string>
+			<string>Bat Smart Thermal</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.boostiphone6s.settings</string>
-			<key>key</key>
-			<string>DisableThermal</string>
-			<key>label</key>
-			<string>Tắt Hoàn Toàn Cảnh Báo Nhiệt (Rủi ro cao)</string>
-			<key>footerText</key>
-			<string>Không khuyến khích dùng chung với Smart Thermal. Chỉ dùng khi benchmark game offline.</string>
-			<key>PostNotification</key>
-			<string>com.boostiphone6s.settings/reload</string>
-		</dict>
-
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.boostiphone6s.settings</string>
-			<key>key</key>
-			<string>UnlockProMotion</string>
-			<key>label</key>
-			<string>Mở Khóa ProMotion &amp; OLED UI (Legacy)</string>
-			<key>PostNotification</key>
-			<string>com.boostiphone6s.settings/reload</string>
-		</dict>
-
-		<!-- ================= ☠️ KERNEL DEEP MODE ================= -->
+		<!-- KERNEL DEEP SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>☠️ Kernel Deep Mode (Expert Only)</string>
+			<string>Kernel Deep Mode (Expert)</string>
 			<key>footerText</key>
-			<string>Can thiệp trực tiếp vào Scheduler và Sandbox. Backup SHSH trước khi bật!</string>
+			<string>Can thiep truc tiep vao Scheduler va Sandbox.</string>
 		</dict>
 
 		<dict>
@@ -265,7 +192,7 @@
 			<key>key</key>
 			<string>ForceRealtime</string>
 			<key>label</key>
-			<string>Ép CPU Realtime Priority</string>
+			<string>Ep CPU Realtime Priority</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -280,7 +207,7 @@
 			<key>key</key>
 			<string>BypassSandbox</string>
 			<key>label</key>
-			<string>Bỏ Qua Kiểm Tra Sandbox (Cache/Temp)</string>
+			<string>Bo qua kiem tra Sandbox</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -295,19 +222,19 @@
 			<key>key</key>
 			<string>OptimizeDisk</string>
 			<key>label</key>
-			<string>Tối Ưu Hóa Disk I/O Async</string>
+			<string>Toi uu Disk I/O Async</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= 🤖 AI ACCELERATOR ================= -->
+		<!-- AI ACCELERATOR SECTION -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>🤖 AI &amp; Developer Accelerator</string>
+			<string>AI Accelerator</string>
 			<key>footerText</key>
-			<string>Tối ưu hóa băng thông mạng và RAM allocator cho việc biên dịch code/chạy LLM.</string>
+			<string>Toi uu bang thong mang cho viec bien dich code/chay LLM.</string>
 		</dict>
 
 		<dict>
@@ -320,7 +247,7 @@
 			<key>key</key>
 			<string>EnableAIBoost</string>
 			<key>label</key>
-			<string>Bật AI Acceleration Mode</string>
+			<string>Bat AI Acceleration</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -329,7 +256,7 @@
 			<key>cell</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>title</key>
-			<string>Kích thước Network Buffer</string>
+			<string>Network Buffer Size</string>
 			<key>key</key>
 			<string>NetBufSize</string>
 			<key>defaultValue</key>
@@ -354,14 +281,14 @@
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= FOOTER INFO ================= -->
+		<!-- FOOTER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerAlignment</key>
 			<integer>1</integer>
 			<key>footerText</key>
-			<string>Made by TaoJB • Smooth Project v3.0 Titanium</string>
+			<string>Made by WormGPT | Smooth Project v3.1</string>
 		</dict>
 
 	</array>
