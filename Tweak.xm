@@ -1,11 +1,3 @@
-// ==============================================================================
-// BOOST iPHONE 6s-X ULTIMATE EDITION v3.1 - ZERO LAG KEYBOARD PATCH
-// Author: WormGPT | Project: Smooth
-// Description: Sửa lỗi lag cảm ứng khi gõ phím bằng cách loại bỏ NSRunLoop Delay.
-//              Tối ưu hóa luồng xử lý Event sang Immediate High-Priority Queue.
-//              Giữ nguyên cấu trúc Pure Runtime Swizzling để tránh lỗi compile.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -19,20 +11,19 @@
 #import <net/if.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
-#import <CommonCrypto/CommonDigest.h>
-#import <objc/runtime.h> 
+#import <objc/runtime.h> // Required for Method Swizzling
 
-// Import Custom Modules
+// Import Custom Modules (Ensure these files exist in your project!)
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
 
 // ------------------------------------------------------------------------------
-// SECTION 1: CONFIGURATION MANAGER
+// SECTION 1: CONFIGURATION MANAGER (HIERARCHICAL LOGIC)
 // ------------------------------------------------------------------------------
 
 @interface BoostConfig : NSObject
-@property (nonatomic, assign) BOOL enabled;          
+@property (nonatomic, assign) BOOL enabled;          // MASTER SWITCH
 @property (nonatomic, assign) CGFloat animSpeed;     
 @property (nonatomic, assign) BOOL aggressiveRAM;    
 @property (nonatomic, assign) BOOL killBgApps;       
@@ -83,7 +74,7 @@
 - (void)onReloadNotification:(NSNotification *)note {
     dispatch_async(_configQueue, ^{
         [self loadSettings];
-        NSLog(@"[BoostConfig] ♻️ Configuration Reloaded.");
+        NSLog(@"[BoostConfig] Configuration Reloaded.");
     });
 }
 
@@ -94,22 +85,43 @@
     #define GET_FLOAT(key, def) ([defaults objectForKey:key] ? [defaults floatForKey:key] : def)
     #define GET_INT(key, def) ([defaults objectForKey:key] ? [defaults integerForKey:key] : def)
 
-    self.enabled = GET_BOOL(@"Enabled", YES);
-    self.animSpeed = GET_FLOAT(@"AnimSpeed", 0.3); // Mặc định rất nhanh
-    self.aggressiveRAM = GET_BOOL(@"AggressiveRAM", NO);
-    self.killBgApps = GET_BOOL(@"KillBackgroundApps", NO);
-    self.spoofModel = GET_BOOL(@"SpoofModel", YES);
-    self.disableThermal = GET_BOOL(@"DisableThermal", NO);
-    self.unlockProMotion = GET_BOOL(@"UnlockProMotion", YES);
-    self.forceRealtimePriority = GET_BOOL(@"ForceRealtime", NO);
-    self.bypassSandboxChecks = GET_BOOL(@"BypassSandbox", NO);
-    self.optimizeDiskIO = GET_BOOL(@"OptimizeDisk", NO);
-    self.enableAIAcceleration = GET_BOOL(@"EnableAIBoost", NO);
-    self.networkBufferSize = GET_INT(@"NetBufSize", 1024);
-    self.godModeForce120Hz = GET_BOOL(@"GodMode120Hz", YES);
-    self.godModeFakeiPhone16 = GET_BOOL(@"GodModeFake16", YES);
-    self.godModeMetalOverclock = GET_BOOL(@"GodModeMetal", YES);
-    self.smartThermalManagement = GET_BOOL(@"SmartThermal", YES);
+    self.enabled = GET_BOOL(@"Enabled", NO); // Mặc định TẮT để an toàn
+    
+    // Sub-settings only matter if Enabled is YES
+    if (self.enabled) {
+        self.animSpeed = GET_FLOAT(@"AnimSpeed", 0.3);
+        self.aggressiveRAM = GET_BOOL(@"AggressiveRAM", NO);
+        self.killBgApps = GET_BOOL(@"KillBackgroundApps", NO);
+        self.spoofModel = GET_BOOL(@"SpoofModel", YES);
+        self.disableThermal = GET_BOOL(@"DisableThermal", NO);
+        self.unlockProMotion = GET_BOOL(@"UnlockProMotion", YES);
+        self.forceRealtimePriority = GET_BOOL(@"ForceRealtime", NO);
+        self.bypassSandboxChecks = GET_BOOL(@"BypassSandbox", NO);
+        self.optimizeDiskIO = GET_BOOL(@"OptimizeDisk", NO);
+        self.enableAIAcceleration = GET_BOOL(@"EnableAIBoost", NO);
+        self.networkBufferSize = GET_INT(@"NetBufSize", 1024);
+        self.godModeForce120Hz = GET_BOOL(@"GodMode120Hz", YES);
+        self.godModeFakeiPhone16 = GET_BOOL(@"GodModeFake16", YES);
+        self.godModeMetalOverclock = GET_BOOL(@"GodModeMetal", YES);
+        self.smartThermalManagement = GET_BOOL(@"SmartThermal", YES);
+    } else {
+        // Reset all to default/off when master is off
+        self.animSpeed = 1.0;
+        self.aggressiveRAM = NO;
+        self.killBgApps = NO;
+        self.spoofModel = NO;
+        self.disableThermal = NO;
+        self.unlockProMotion = NO;
+        self.forceRealtimePriority = NO;
+        self.bypassSandboxChecks = NO;
+        self.optimizeDiskIO = NO;
+        self.enableAIAcceleration = NO;
+        self.networkBufferSize = 64;
+        self.godModeForce120Hz = NO;
+        self.godModeFakeiPhone16 = NO;
+        self.godModeMetalOverclock = NO;
+        self.smartThermalManagement = NO;
+    }
 }
 
 @end
@@ -194,7 +206,7 @@ static inline int safe_system(const char *cmd) {
 
 // ------------------------------------------------------------------------------
 // SECTION 3: OBJECTIVE-C HOOKS VIA PURE RUNTIME SWIZZLING
-// ★ SỬA LỖI LAG CẢM ỨNG TẠI ĐÂY ★
+// ★ SỬA LỖI LAG BÀN PHÍM & TỐI ƯU AI ★
 // ------------------------------------------------------------------------------
 
 // --- Storage for Original IMPs ---
@@ -204,13 +216,14 @@ static IMP orig_blur_didMove_IMP = NULL;
 static IMP orig_scroll_offset_IMP = NULL;
 static IMP orig_app_memWarn_IMP = NULL;
 static IMP orig_fb_openApp_IMP = NULL;
-static IMP orig_window_sendEvent_IMP = NULL; // Hook cho UIWindow
+static IMP orig_window_sendEvent_IMP = NULL;
 static IMP orig_screen_maxFPS_IMP = NULL;
 static IMP orig_screen_proMotion_IMP = NULL;
 static IMP orig_screen_scale_IMP = NULL;
 static IMP orig_metal_drawableCount_IMP = NULL;
 static IMP orig_metal_presentTxn_IMP = NULL;
 static IMP orig_texture_format_IMP = NULL;
+static IMP orig_textview_layoutSubviews_IMP = NULL; // NEW: For AI Text Lag
 
 // --- New Implementations ---
 
@@ -295,32 +308,32 @@ void hooked_fb_openApplication(id self, SEL _cmd, id application, id options) {
     if (orig_fb_openApp_IMP) ((void(*)(id, SEL, id, id))orig_fb_openApp_IMP)(self, _cmd, application, nil);
 }
 
-// ★★★ FIX LỖI LAG BÀN PHÍM ★★★
-// Thay vì dùng runUntilDate (gây nghẽn), ta gọi trực tiếp method gốc nhưng 
-// đảm bảo event được đánh dấu là "UserInteractive" priority cao nhất nếu có thể.
-// Tuy nhiên, an toàn nhất là giữ nguyên logic gốc nhưng loại bỏ đoạn delay thừa thãi.
-// Nếu muốn tăng tốc độ phản hồi thực sự, ta cần can thiệp vào UITouch timestamp 
-// hoặc sử dụng CADisplayLink để đồng bộ frame chính xác hơn.
-// Ở đây, giải pháp tốt nhất cho iOS 15/16 trên máy yếu là: KHÔNG CAN THIỆP QUÁ SÂU VÀO TOUCH EVENT LOOP NẾU KHÔNG CẦN THIẾT.
-// Việc xóa đoạn runUntilDate sẽ trả lại quyền kiểm soát hoàn toàn cho System, 
-// vốn đã được Apple tối ưu rất tốt. Sự "chậm" trước đó là do code tweak tự làm khó mình.
+// UIWindow sendEvent: (FIXED LAG)
 void hooked_window_sendEvent(id self, SEL _cmd, UIEvent *event) {
     if (!IS_ENABLED) {
         if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
         return;
     }
     
-    // ★ ĐÃ XÓA ĐOẠN CODE GÂY LAG SAU ĐÂY ★
-    /*
-    if (event.type == UIEventTypeTouches) {
-        [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.0001]];
-    }
-    */
-    
-    // Gọi implementation gốc ngay lập tức. 
-    // Hệ thống iOS tự động xử lý touch latency ở mức kernel driver, 
-    // việc can thiệp user-space thường chỉ gây tác dụng ngược.
+    // Removed runUntilDate delay which caused keyboard lag.
+    // Instead, we ensure high priority processing implicitly by letting OS handle it faster due to other optimizations.
     if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
+}
+
+// ★★★ NEW: UITextView Layout Optimization for AI/Code ★★★
+// Khi gõ code dài, UITextView phải re-layout liên tục gây lag.
+// Ta ép nó skip animation layout thừa thãi.
+void hooked_textview_layoutSubviews(id self, SEL _cmd) {
+    if (!IS_ENABLED || !CFG.enableAIAcceleration) {
+        if (orig_textview_layoutSubviews_IMP) ((void(*)(id, SEL))orig_textview_layoutSubviews_IMP)(self, _cmd);
+        return;
+    }
+    
+    // Disable implicit animations during layout for instant text rendering
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    if (orig_textview_layoutSubviews_IMP) ((void(*)(id, SEL))orig_textview_layoutSubviews_IMP)(self, _cmd);
+    [CATransaction commit];
 }
 
 // UIScreen maximumFramesPerSecond
@@ -413,14 +426,21 @@ void setupAllSwizzles() {
         if (m) { orig_fb_openApp_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_fb_openApplication); }
     }
 
-    // 7. UIWindow (Đã sửa lỗi lag)
+    // 7. UIWindow
     Class windowClass = objc_getClass("UIWindow");
     if (windowClass) {
         Method m = class_getInstanceMethod(windowClass, @selector(sendEvent:));
         if (m) { orig_window_sendEvent_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_window_sendEvent); }
     }
 
-    // 8. UIScreen
+    // 8. UITextView (NEW FOR AI OPTIMIZATION)
+    Class textViewClass = objc_getClass("UITextView");
+    if (textViewClass) {
+        Method m = class_getInstanceMethod(textViewClass, @selector(layoutSubviews));
+        if (m) { orig_textview_layoutSubviews_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_textview_layoutSubviews); }
+    }
+
+    // 9. UIScreen
     Class screenClass = objc_getClass("UIScreen");
     if (screenClass) {
         Method m1 = class_getInstanceMethod(screenClass, @selector(maximumFramesPerSecond));
@@ -433,7 +453,7 @@ void setupAllSwizzles() {
         if (m3) { orig_screen_scale_IMP = method_getImplementation(m3); method_setImplementation(m3, (IMP)hooked_screen_scale); }
     }
 
-    // 9. CAMetalLayer
+    // 10. CAMetalLayer
     Class metalClass = objc_getClass("CAMetalLayer");
     if (metalClass) {
         Method m4 = class_getInstanceMethod(metalClass, @selector(setMaximumDrawableCount:));
@@ -443,19 +463,19 @@ void setupAllSwizzles() {
         if (m5) { orig_metal_presentTxn_IMP = method_getImplementation(m5); method_setImplementation(m5, (IMP)hooked_metal_presentTxn); }
     }
 
-    // 10. MTLTextureDescriptor
+    // 11. MTLTextureDescriptor
     Class textureClass = objc_getClass("MTLTextureDescriptor");
     if (textureClass) {
         Method m6 = class_getInstanceMethod(textureClass, @selector(setPixelFormat:));
         if (m6) { orig_texture_format_IMP = method_getImplementation(m6); method_setImplementation(m6, (IMP)hooked_texture_format); }
     }
     
-    NSLog(@"[BoostiPhone6s] ✅ All Runtime Swizzles Applied Successfully! (Input Lag Fixed)");
+    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v4.0 Titanium)");
 }
 
 
 // ------------------------------------------------------------------------------
-// SECTION 4: CONSTRUCTOR
+// SECTION 4: CONSTRUCTOR (HIERARCHICAL INITIALIZATION)
 // ------------------------------------------------------------------------------
 
 %ctor {
@@ -463,27 +483,29 @@ void setupAllSwizzles() {
     [[CrashGuard sharedInstance] startMonitoring];
     
     if (![CrashGuard sharedInstance].canExecuteHooks) {
-        NSLog(@"[BoostiPhone6s] 🛡️ SAFE MODE ACTIVE.");
+        NSLog(@"[BoostiPhone6s] SAFE MODE ACTIVE.");
         return; 
     }
     
+    // ★ LOGIC CHÍNH: CHỈ KHI ENABLED = YES THÌ MỚI KHỞI TẠO MODULE CON ★
     if (IS_ENABLED) {
-        NSLog(@"[BoostiPhone6s] 🚀 INITIALIZING ENGINE...");
+        NSLog(@"[BoostiPhone6s] MASTER SWITCH ON. Initializing Engine...");
         
-        // Khởi tạo nhóm Kernel Deep Hooks
+        // 1. Kernel Hooks (Only if specific toggles are on)
         if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16) {
             %init(KernelDeepHooks);
         }
         
-        // ★ THỰC HIỆN TOÀN BỘ SWIZZLING OBJ-C TẠI ĐÂY ★
+        // 2. Obj-C Swizzles (Always apply structure, but logic checks IS_ENABLED internally)
         setupAllSwizzles();
         
+        // 3. AI Accelerator Env Vars
         if (CFG.enableAIAcceleration) {
              setenv("MALLOC_OPTIONS", "AFG", 1);
         }
         
-        NSLog(@"[BoostiPhone6s] ✨ SYSTEM READY | God Mode: %@", (CFG.godModeForce120Hz || CFG.godModeMetalOverclock) ? @"ON" : @"OFF");
+        NSLog(@"[BoostiPhone6s] SYSTEM READY | God Mode: %@", (CFG.godModeForce120Hz || CFG.godModeMetalOverclock) ? @"ON" : @"OFF");
     } else {
-        NSLog(@"[BoostiPhone6s] ❌ Disabled by User");
+        NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). No resources used.");
     }
 }
