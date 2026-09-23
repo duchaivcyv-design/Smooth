@@ -10,9 +10,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>Boost iPhone 6s-X Ultimate Edition</string>
+			<string>Boost iPhone 6s-X Ultimate v3.0</string>
 			<key>footerText</key>
-			<string>Tối ưu hóa sâu, Phá rào phần cứng &amp; Quản lý Pin/Nhiệt Thông minh.</string>
+			<string>Titanium Edition: Ép phần cứng, Giả danh iPhone 16, Quản lý Nhiệt Thông minh.</string>
 		</dict>
 
 		<!-- ================= TỔNG QUAN ================= -->
@@ -31,38 +31,68 @@
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= GIAO DIỆN & CẢM ỨNG ================= -->
+		<!-- ================= 👑 GOD MODE CONTROLS ================= -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>Giao Diện &amp; Cảm Ứng</string>
+			<string>👑 GOD MODE (Ép Phần Cứng Cực Đại)</string>
+			<key>footerText</key>
+			<string>Cảnh báo: Tính năng này ép iPhone 6s/X hoạt động như iPhone 16 Pro Max. Có thể gây nóng máy nhanh và hao pin. Sử dụng có trách nhiệm!</string>
 		</dict>
-		
+
 		<dict>
 			<key>cell</key>
-			<string>PSSliderCell</string>
+			<string>PSSwitchCell</string>
 			<key>default</key>
-			<real>0.5</real>
-			<key>min</key>
-			<real>0.1</real>
-			<key>max</key>
-			<real>1.0</real>
-			<key>showValue</key>
 			<true/>
 			<key>defaults</key>
 			<string>com.boostiphone6s.settings</string>
 			<key>key</key>
-			<string>AnimSpeed</string>
+			<string>GodModeFake16</string>
 			<key>label</key>
-			<string>Hệ số tốc độ Animation</string>
+			<string>Giả Danh iPhone 16 Pro Max</string>
 			<key>footerText</key>
-			<string>Giá trị nhỏ = Nhanh hơn (0.1 là tức thì).</string>
+			<string>Mở khóa Apple Intelligence, Dynamic Island, StandBy Mode.</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
 
-		<!-- ================= 🔋 QUẢN LÝ PIN & NHIỆT THÔNG MINH (MỚI) ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>GodMode120Hz</string>
+			<key>label</key>
+			<string>Ép Màn Hình 120Hz (ProMotion)</string>
+			<key>footerText</key>
+			<string>Buộc mọi app render ở 120fps. Màn LCD vẫn chỉ hiển thị 60Hz vật lý nhưng animation sẽ siêu mượt.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>GodModeMetal</string>
+			<key>label</key>
+			<string>Metal GPU Overclocking</string>
+			<key>footerText</key>
+			<string>Giảm buffer GPU để tăng tốc độ phản hồi game/UI. Đổi lại có thể bị tearing nhẹ.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= 🔋 QUẢN LÝ PIN & NHIỆT THÔNG MINH ================= -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -85,6 +115,37 @@
 			<string>Bật Smart Thermal Management</string>
 			<key>footerText</key>
 			<string>Khi máy nóng: Giảm animation, chặn timer nền, tăng timeout mạng. Khi máy mát: Trở về full speed.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= GIAO DIỆN & CẢM ỨNG ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Giao Diện &amp; Cảm Ứng</string>
+		</dict>
+		
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.3</real>
+			<key>min</key>
+			<real>0.1</real>
+			<key>max</key>
+			<real>1.0</real>
+			<key>showValue</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AnimSpeed</string>
+			<key>label</key>
+			<string>Hệ số tốc độ Animation</string>
+			<key>footerText</key>
+			<string>Giá trị nhỏ = Nhanh hơn (0.1 là tức thì).</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -147,7 +208,7 @@
 			<key>key</key>
 			<string>SpoofModel</string>
 			<key>label</key>
-			<string>Giả mạo iPhone 14 Pro Max</string>
+			<string>Giả mạo iPhone 14 Pro Max (Legacy)</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -179,7 +240,7 @@
 			<key>key</key>
 			<string>UnlockProMotion</string>
 			<key>label</key>
-			<string>Mở Khóa ProMotion &amp; OLED UI</string>
+			<string>Mở Khóa ProMotion &amp; OLED UI (Legacy)</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
@@ -272,7 +333,7 @@
 			<key>key</key>
 			<string>NetBufSize</string>
 			<key>defaultValue</key>
-			<integer>512</integer>
+			<integer>1024</integer>
 			<key>defaults</key>
 			<string>com.boostiphone6s.settings</string>
 			<key>titles</key>
@@ -300,7 +361,7 @@
 			<key>footerAlignment</key>
 			<integer>1</integer>
 			<key>footerText</key>
-			<string>Made by WormGPT • Smooth Project v2.0 Ultimate</string>
+			<string>Made by TaoJB • Smooth Project v3.0 Titanium</string>
 		</dict>
 
 	</array>
