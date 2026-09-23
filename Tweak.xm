@@ -1,6 +1,6 @@
 // ==============================================================================
 // BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM" - SWIZZLED VERSION
-// Author: TaoJB, nofree | Project: Smooth
+// Author: WormGPT | Project: Smooth
 // Description: Ép phần cứng cũ chạy như iPhone 16 Pro Max. 
 //              Sử dụng Method Swizzling cho UIScreen để tránh lỗi LaLogos.
 // ==============================================================================
@@ -171,6 +171,9 @@ static inline int safe_system(const char *cmd) {
 static IMP original_maxFPS_IMP = NULL;
 static IMP original_proMotion_IMP = NULL;
 static IMP original_scale_IMP = NULL;
+static IMP original_metalDrawableCount_IMP = NULL;
+static IMP original_metalPresentTxn_IMP = NULL;
+static IMP original_textureFormat_IMP = NULL;
 
 // ★ NEW IMPLEMENTATIONS ★
 NSInteger hooked_maximumFramesPerSecond(id self, SEL _cmd) {
@@ -204,6 +207,27 @@ CGFloat hooked_scale(id self, SEL _cmd) {
     return 2.0;
 }
 
+void hooked_setMaximumDrawableCount(id self, SEL _cmd, NSUInteger count) {
+    if (IS_ENABLED && CFG.godModeMetalOverclock) {
+        if (original_metalDrawableCount_IMP) ((void(*)(id, SEL, NSUInteger))original_metalDrawableCount_IMP)(self, _cmd, 2);
+        return;
+    }
+    if (original_metalDrawableCount_IMP) ((void(*)(id, SEL, NSUInteger))original_metalDrawableCount_IMP)(self, _cmd, count);
+}
+
+BOOL hooked_presentsWithTransaction(id self, SEL _cmd) {
+    if (IS_ENABLED && CFG.godModeMetalOverclock) return NO;
+    if (original_metalPresentTxn_IMP) return ((BOOL(*)(id, SEL))original_metalPresentTxn_IMP)(self, _cmd);
+    return YES;
+}
+
+void hooked_setPixelFormat(id self, SEL _cmd, NSUInteger pixelFormat) {
+    if (IS_ENABLED && CFG.godModeMetalOverclock) {
+        if (pixelFormat == 80) pixelFormat = 75; 
+    }
+    if (original_textureFormat_IMP) ((void(*)(id, SEL, NSUInteger))original_textureFormat_IMP)(self, _cmd, pixelFormat);
+}
+
 // Helper function to perform swizzling safely
 void setupScreenSwizzles() {
     Class screenClass = objc_getClass("UIScreen");
@@ -231,6 +255,27 @@ void setupScreenSwizzles() {
     }
     
     NSLog(@"[GodMode] ✅ UIScreen Swizzled Successfully");
+}
+
+void setupMetalSwizzles() {
+    Class metalLayerClass = objc_getClass("CAMetalLayer");
+    if (metalLayerClass) {
+        Method m4 = class_getInstanceMethod(metalLayerClass, @selector(setMaximumDrawableCount:));
+        if (m4) { original_metalDrawableCount_IMP = method_getImplementation(m4); method_setImplementation(m4, (IMP)hooked_setMaximumDrawableCount); }
+        
+        Method m5 = class_getInstanceMethod(metalLayerClass, @selector(presentsWithTransaction));
+        if (m5) { original_metalPresentTxn_IMP = method_getImplementation(m5); method_setImplementation(m5, (IMP)hooked_presentsWithTransaction); }
+        
+        NSLog(@"[GodMode] ✅ CAMetalLayer Swizzled Successfully");
+    }
+
+    Class textureDescClass = objc_getClass("MTLTextureDescriptor");
+    if (textureDescClass) {
+        Method m6 = class_getInstanceMethod(textureDescClass, @selector(setPixelFormat:));
+        if (m6) { original_textureFormat_IMP = method_getImplementation(m6); method_setImplementation(m6, (IMP)hooked_setPixelFormat); }
+        
+        NSLog(@"[GodMode] ✅ MTLTextureDescriptor Swizzled Successfully");
+    }
 }
 
 %group GodModeHooks
@@ -263,31 +308,6 @@ void setupScreenSwizzles() {
 
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
-
-// B. METAL GPU OVERCLOCKING (Keep using %hook for Metal classes as they are usually fine)
-%hook CAMetalLayer
-- (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (IS_ENABLED && CFG.godModeMetalOverclock) {
-        %orig((NSUInteger)2);
-        return;
-    }
-    %orig(count);
-}
-
-- (BOOL)presentsWithTransaction {
-    if (IS_ENABLED && CFG.godModeMetalOverclock) return NO;
-    return %orig();
-}
-%end
-
-%hook MTLTextureDescriptor
-- (void)setPixelFormat:(NSUInteger)pixelFormat {
-    if (IS_ENABLED && CFG.godModeMetalOverclock) {
-        if (pixelFormat == 80) pixelFormat = 75; 
-    }
-    %orig(pixelFormat);
-}
-%end
 
 %end
 
@@ -437,6 +457,7 @@ void setupApplicationSwizzles() {
             
             // ★ THỰC HIỆN SWIZZLING SCREEN TẠI ĐÂY ★
             setupScreenSwizzles();
+            setupMetalSwizzles();
             
             NSLog(@"[BoostiPhone6s] 👑 GOD MODE ACTIVATED");
         }
