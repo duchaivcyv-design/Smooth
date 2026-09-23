@@ -28,13 +28,17 @@ include $(THEOS_MAKE_PATH)/library.mk
 
 # ===================================================================
 # PART 2: BUILD PREFERENCE BUNDLE (SETTINGS UI)
+# ★ SỬA Ở ĐÂY: Thêm 'BoostiPhone6s/' vào trước 'Resources' ★
 # ===================================================================
 INTERNAL_INSTALL_PREFIX = Library/PreferenceBundles
 BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 BoostiPhone6sPrefs_INCLUDE_DIRS = Headers
-BoostiPhone6sPrefs_RESOURCES_DIR = Resources
+
+# ★ ĐƯỜNG DẪN CHÍNH XÁC ĐẾN FOLDER CHỨA INFO.PLIST VÀ ROOT.PLIST ★
+BoostiPhone6sPrefs_RESOURCES_DIR = BoostiPhone6s/Resources
+
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation CoreGraphics
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-undefined,dynamic_lookup
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable
@@ -43,7 +47,7 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 
 # ===================================================================
-# PACKAGING SCRIPT (CLEAN VERSION - NO SPECIAL CHARACTERS INSIDE CODE)
+# PACKAGING SCRIPT (CLEAN VERSION)
 # ===================================================================
 before-package::
 	@echo "Packaging files..."
@@ -51,6 +55,9 @@ before-package::
 	@cp control .theos/_/DEBIAN/control
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
+	
+	# Copy Entry plist từ đúng vị trí folder con
 	@mkdir -p .theos/_/Library/PreferenceLoader/Entries
 	@cp BoostiPhone6s/Resources/entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
+	
 	@echo "Done."
