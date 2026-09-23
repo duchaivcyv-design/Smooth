@@ -42,7 +42,7 @@ include $(THEOS_MAKE_PATH)/library.mk
 # PACKAGING LOGIC (SIMPLE & ROBUST)
 # ===================================================================
 before-package::
-	@echo "🛠️ Packaging Files..."
+	@echo "Packaging Files..."
 	@mkdir -p .theos/_/DEBIAN
 	@cp control .theos/_/DEBIAN/control
 	@cp postinst .theos/_/DEBIAN/postinst
@@ -51,8 +51,5 @@ before-package::
 	@mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 	@cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist
 	@cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist
-	@echo "✅ Structure Ready:"
+	@echo "Structure Ready:"
 	@ls -laR .theos/_/Library/PreferenceBundles/
-
-after-install::
-	install.exec "killall -9 SpringBoard backboardd"
