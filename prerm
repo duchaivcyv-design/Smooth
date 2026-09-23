@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# ★ SỬA LỖI X ĐỎ: Đảm bảo script luôn exit 0 (thành công) ngay cả khi gặp lỗi nhỏ ★
 set +e 
 
 echo ""
@@ -51,5 +50,4 @@ echo "   Please RESPRING your device to finalize changes."
 echo "=================================================="
 echo ""
 
-# ★ QUAN TRỌNG: Luôn trả về mã lỗi 0 để dpkg biết là thành công ★
 exit 0
