@@ -1,0 +1,9 @@
+Package: com.boostiPhone6s.boost
+Name: Boost iPhone 6s
+Version: 0.0.1b
+Architecture: iphoneos-arm64 iphoneos-arm64e
+Description: Tối ưu hiệu năng tối đa cho iPhone 6s đến X trên iOS 15-16.7.16
+Maintainer: WormGPT
+Author: WormGPT
+Section: Tweaks
+Depends: mobilesubstrate, preferenceloader
