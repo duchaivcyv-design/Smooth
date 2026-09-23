@@ -12,83 +12,71 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- BƯỚC 1: CÀI ĐẶT TOOL & THIẾT LẬP BIẾN MÔI TRƯỜNG ---
+      # --- BƯỚC 1: CÀI ĐẶT TOOL & THIẾT LẬP MÔI TRƯỜNG ---
       - name: Setup Environment Variables
         run: |
-          # Định nghĩa đường dẫn Theos rõ ràng (dùng $HOME để chắc chắn có quyền ghi)
+          # Định nghĩa đường dẫn Theos
           THEOS_PATH="$HOME/theos"
           
-          # Ghi vào GITHUB_ENV để các step SAU này đọc được
+          # Ghi vào GITHUB_ENV để các step sau đọc được
           echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
           # Cài đặt tools cần thiết
-          brew install make ldid dpkg coreutils wget curl git xz
-          
-          # Thêm đường dẫn GNU Make/CoreUtils vào PATH vĩnh viễn cho job này
+          brew install make ldid dpkg coreutils wget curl git xz unzip
+      
+          # Thêm đường dẫn GNU Make/CoreUtils vào PATH
           echo "/opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" >> $GITHUB_PATH
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI SDK ---
-      - name: Clone Theos & Download SDK
+      # --- BƯỚC 2: CLONE THEOS & TẢI SDK (FIXED) ---
+      - name: Clone Theos & Install SDK via Tool
         run: |
-          # Lấy lại biến THEOS từ môi trường chung
           TARGET_DIR="${{ env.THEOS }}"
           
-          echo " Target Directory: $TARGET_DIR"
-          
-          # Xóa sạch thư mục cũ nếu tồn tại
-          if [ -d "$TARGET_DIR" ]; then
-            echo "🧹 Cleaning old installation..."
-            rm -rf "$TARGET_DIR"
-          fi
-          
-          # Tạo thư mục cha nếu chưa có (tránh lỗi 'No such file or directory')
-          mkdir -p "$(dirname "$TARGET_DIR")"
-          
-          # Clone Theos
-          echo "📥 Cloning Theos..."
+          echo "📥 Cloning Theos to $TARGET_DIR..."
+          if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
+
+          echo "📦 Installing iOS SDK using Theos built-in tool..."
           
-          # Kiểm tra xem clone thành công chưa
-          if [ ! -d "$TARGET_DIR" ]; then
-             echo "❌ Error: Failed to clone Theos!"
-             exit 1
-          fi
-          
-          # Tải SDK iOS
-          cd "$TARGET_DIR/sdks"
-          echo "📥 Downloading iPhoneOS SDK..."
-          
-          # Thử dùng script get-sdk.sh của Theos (ổn định nhất)
-          if [ -f "../bin/get-sdk.sh" ]; then
-              chmod +x ../bin/get-sdk.sh
-              ../bin/get-sdk.sh iphoneos || {
-                  echo "⚠️ get-sdk failed, trying direct download..."
-                  # Fallback: Tải trực tiếp link mới nhất từ repo theos/sdks
-                  wget -q https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz
-                  tar xf iPhoneOS16.5.sdk.tar.xz
-                  rm iPhoneOS16.5.sdk.tar.xz
-              }
-          else
-              # Nếu không có script thì tải tay
-              wget -q https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz
-              tar xf iPhoneOS16.5.sdk.tar.xz
-              rm iPhoneOS16.5.sdk.tar.xz
-          fi
-          
-          echo "✅ SDK Ready:"
-          ls -la
+          # Cách 1: Dùng lệnh theos -g sdk (Khuyên dùng nhất)
+          # Lệnh này sẽ tự động cập nhật danh sách SDK và tải phiên bản iphoneos mới nhất
+          cd "$TARGET_DIR"
+          ./bin/theos -g sdk iphoneos || {
+              echo "⚠️ Method 1 failed. Trying manual download from latest release..."
+              
+              # Cách 2 (Fallback): Tải trực tiếp từ trang Releases của theos/sdks
+              # Lấy link asset .tar.xz gần nhất
+              SDK_URL=$(curl -s https://api.github.com/repos/theos/sdks/releases/latest \
+                | grep "browser_download_url.*iphoneos.*\.tar\.xz" \
+                | cut -d '"' -f 4 \
+                | head -n 1)
+              
+              if [ -z "$SDK_URL" ]; then
+                  echo "❌ Could not find any SDK URL!"
+                  exit 1
+              fi
+              
+              echo "Downloading from: $SDK_URL"
+              mkdir -p sdks
+              cd sdks
+              wget -q "$SDK_URL" -O sdk.tar.xz
+              tar xf sdk.tar.xz
+              rm sdk.tar.xz
+          }
+
+          # Kiểm tra xem SDK đã nằm trong thư mục chưa
+          ls -la "$TARGET_DIR/sdks/"
+          echo "✅ SDK Installation Complete."
 
       # --- BƯỚC 3: BUILD PACKAGE ---
       - name: Build Package
         run: |
-          # Di chuyển về thư mục gốc của repo (chứa Makefile)
           cd $GITHUB_WORKSPACE
           
           if [ ! -f Makefile ]; then
-            echo "Error: No Makefile found in root!"
-            ls -la
+            echo "Error: No Makefile found!"
             exit 1
           fi
           
@@ -96,16 +84,10 @@ jobs:
           rm -rf packages/ obj/ .theos/
           
           # Bắt đầu build
-          # Biến THEOS và PATH đã được set ở Bước 1 nên make sẽ tự nhận diện đúng
           make clean package FINALPACKAGE=1
           
-          # Kiểm tra kết quả
-          if [ -d packages ]; then
-             echo "📦 Built Packages:"
-             ls -lh packages/*.deb
-          else
-             echo "❌ Build finished but no packages folder found."
-          fi
+          # Liệt kê kết quả
+          ls -lh packages/*.deb || echo "No deb generated"
 
       # --- BƯỚC 4: UPLOAD ARTIFACT ---
       - name: Upload Artifact
