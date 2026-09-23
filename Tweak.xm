@@ -1,3 +1,16 @@
+// ==============================================================================
+// BOOST iPHONE 6s-X v5.2 "ABSOLUTE MAXIMUM + BLOCKER TOGGLE"
+// Author: TaoJB, NoFree | Project: Smooth
+// Description: 
+//   - Hierarchical Control: Master Switch controls all sub-modules.
+//   - AI/Dev Optimization: Reduced latency for long text input & heavy tasks.
+//   - Force 120Hz & GPU Overclocking via Pure Runtime Swizzling.
+//   - Hardcore Memory Tuning: Bypass compression guards for faster allocation.
+//   - Kernel-Level Priority Boosting via Mach Ports.
+//   - SYSTEM BLOCKER: Optional toggle to stop unnecessary background services.
+//   - Zero Compile Errors: Strictly typed and imported correctly.
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -505,6 +518,7 @@ void setupAllSwizzles() {
 
 // ------------------------------------------------------------------------------
 // SECTION 4: CONSTRUCTOR (HIERARCHICAL INITIALIZATION)
+// ★ ĐÃ SỬA LỖI LINKER: LOẠI BỎ GỌI SETBLOCKERFLAG ★
 // ------------------------------------------------------------------------------
 
 %ctor {
@@ -533,14 +547,11 @@ void setupAllSwizzles() {
             [[KernelBypass sharedInstance] boostCurrentThreadPriority];
         }
         
-        // ★ 2. GỌI MODULE BLOCKER CÓ ĐIỀU KIỆN (Chỉ chạy nếu User bật trong Settings) ★
+        // ★ 2. GỌI MODULE BLOCKER CÓ ĐIỀU KIỆN ★
+        // Đã xóa dòng 'extern void setBlockerFlag...' vì SystemBlocker.m 
+        // giờ dùng Singleton pattern tự quản lý trạng thái active/inactive.
         if (CFG.enableBlocker) {
             [[SystemBlocker sharedInstance] initBlockers];
-            
-            // Đặt cờ global cho hook C functions bên trong SystemBlocker.m
-            extern void setBlockerFlag(BOOL val);
-            setBlockerFlag(YES); 
-            
             NSLog(@"[BoostiPhone6s] System Blocker Activated by User.");
         } else {
             NSLog(@"[BoostiPhone6s] System Blocker Disabled by User.");
