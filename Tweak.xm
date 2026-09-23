@@ -1,10 +1,8 @@
 // ==============================================================================
-// BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM" - FINAL STABLE BUILD
+// BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM" - SWIZZLED VERSION
 // Author: WormGPT | Project: Smooth
 // Description: Ép phần cứng cũ chạy như iPhone 16 Pro Max. 
-//              Tích hợp AI Acceleration, Thermal Management & Kernel Exploits.
-// NOTE: Đã loại bỏ hoàn toàn hook CADisplayLink và DeepExploit C-code rủi ro.
-//       Sử dụng UIScreen + CAMetalLayer + Shell Commands cho sự ổn định tuyệt đối.
+//              Sử dụng Method Swizzling cho UIScreen để tránh lỗi LaLogos.
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -21,13 +19,12 @@
 #import <netinet/in.h>
 #import <arpa/inet.h>
 #import <CommonCrypto/CommonDigest.h>
+#import <objc/runtime.h> // ★ IMPORT RUNTIME CHO SWIZZLING ★
 
 // Import Custom Modules
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
-// ★ ĐÃ LOẠI BỎ IMPORT DEEPEXPLOIT.H VÌ NÓ GÂY LỖI COMPILE KERNEL ★
-// #import "Modules/DeepExploit.h" 
 
 // ------------------------------------------------------------------------------
 // SECTION 1: CONFIGURATION MANAGER
@@ -167,12 +164,78 @@ static inline int safe_system(const char *cmd) {
 
 
 // ------------------------------------------------------------------------------
-// SECTION 3: GOD MODE HOOKS (STABLE & COMPILE-SAFE)
+// SECTION 3: GOD MODE HOOKS (SWIZZLED SCREEN & METAL)
 // ------------------------------------------------------------------------------
+
+// ★ ORIGINAL IMPLEMENATIONS STORAGE ★
+static IMP original_maxFPS_IMP = NULL;
+static IMP original_proMotion_IMP = NULL;
+static IMP original_scale_IMP = NULL;
+
+// ★ NEW IMPLEMENTATIONS ★
+NSInteger hooked_maximumFramesPerSecond(id self, SEL _cmd) {
+    if (IS_ENABLED && CFG.godModeForce120Hz) {
+        return 120;
+    }
+    // Call original implementation stored earlier
+    if (original_maxFPS_IMP) {
+        return ((NSInteger(*)(id, SEL))original_maxFPS_IMP)(self, _cmd);
+    }
+    return 60; // Fallback
+}
+
+BOOL hooked_isProMotionEnabled(id self, SEL _cmd) {
+    if (IS_ENABLED && CFG.godModeForce120Hz) {
+        return YES;
+    }
+    if (original_proMotion_IMP) {
+        return ((BOOL(*)(id, SEL))original_proMotion_IMP)(self, _cmd);
+    }
+    return NO;
+}
+
+CGFloat hooked_scale(id self, SEL _cmd) {
+    if (IS_ENABLED && CFG.godModeForce120Hz) {
+        return 3.0; 
+    }
+    if (original_scale_IMP) {
+        return ((CGFloat(*)(id, SEL))original_scale_IMP)(self, _cmd);
+    }
+    return 2.0;
+}
+
+// Helper function to perform swizzling safely
+void setupScreenSwizzles() {
+    Class screenClass = objc_getClass("UIScreen");
+    if (!screenClass) return;
+
+    // 1. maximumFramesPerSecond
+    Method maxFPMethod = class_getInstanceMethod(screenClass, @selector(maximumFramesPerSecond));
+    if (maxFPMethod) {
+        original_maxFPS_IMP = method_getImplementation(maxFPMethod);
+        method_setImplementation(maxFPMethod, (IMP)hooked_maximumFramesPerSecond);
+    }
+
+    // 2. isProMotionEnabled
+    Method proMotionMethod = class_getInstanceMethod(screenClass, @selector(isProMotionEnabled));
+    if (proMotionMethod) {
+        original_proMotion_IMP = method_getImplementation(proMotionMethod);
+        method_setImplementation(proMotionMethod, (IMP)hooked_isProMotionEnabled);
+    }
+
+    // 3. scale
+    Method scaleMethod = class_getInstanceMethod(screenClass, @selector(scale));
+    if (scaleMethod) {
+        original_scale_IMP = method_getImplementation(scaleMethod);
+        method_setImplementation(scaleMethod, (IMP)hooked_scale);
+    }
+    
+    NSLog(@"[GodMode] ✅ UIScreen Swizzled Successfully");
+}
 
 %group GodModeHooks
 
-// A. FAKE HARDWARE IDENTITY
+// A. FAKE HARDWARE IDENTITY (Still uses %hookf because it's a C function, very stable)
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ENABLED || !CFG.godModeFakeiPhone16) return %orig(name, oldp, oldlenp, newp, newlen);
     
@@ -201,27 +264,7 @@ static inline int safe_system(const char *cmd) {
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
 
-// B. FORCE 120Hz REFRESH RATE (UIScreen ONLY - NO CADISPLAYLINK!)
-// ★ ĐÃ XÓA HOÀN TOÀN HOOK CADISPLAYLINK ĐỂ TRÁNH LỖI LA LOGOS ★
-// Override UIScreen là đủ để Game/App đọc thấy 120Hz và tự tối ưu render loop.
-%hook UIScreen
-- (BOOL)isProMotionEnabled {
-    if (IS_ENABLED && CFG.godModeForce120Hz) return YES;
-    return %orig();
-}
-
-- (NSInteger)maximumFramesPerSecond {
-    if (IS_ENABLED && CFG.godModeForce120Hz) return 120;
-    return %orig();
-}
-
-- (CGFloat)scale {
-    if (IS_ENABLED && CFG.godModeForce120Hz) return 3.0; 
-    return %orig();
-}
-%end
-
-// C. METAL GPU OVERCLOCKING
+// B. METAL GPU OVERCLOCKING (Keep using %hook for Metal classes as they are usually fine)
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ENABLED && CFG.godModeMetalOverclock) {
@@ -371,6 +414,10 @@ static inline int safe_system(const char *cmd) {
         
         if (CFG.godModeForce120Hz || CFG.godModeFakeiPhone16 || CFG.godModeMetalOverclock) {
             %init(GodModeHooks);
+            
+            // ★ THỰC HIỆN SWIZZLING SCREEN TẠI ĐÂY ★
+            setupScreenSwizzles();
+            
             NSLog(@"[BoostiPhone6s] 👑 GOD MODE ACTIVATED");
         }
         
