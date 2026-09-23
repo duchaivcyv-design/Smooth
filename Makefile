@@ -1,6 +1,8 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
-INSTALL_TARGET_PROCESSES = SpringBoard backboardd
+# ★ ĐÃ XÓA INSTALL_TARGET_PROCESSES ĐỂ TRÁNH AUTO RESPRING ★
+# Nếu cần thủ công, hãy comment dòng dưới này đi hoặc xóa hẳn nó.
+# INSTALL_TARGET_PROCESSES = SpringBoard backboardd 
 
 include $(THEOS)/makefiles/common.mk
 
@@ -27,6 +29,8 @@ BoostiPhone6s_CFLAGS = \
     -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
+
+# ★ SỬA LỖI LINKER: ĐÃ XÓA 'CommonCrypto' KHỎI DANH SÁCH FRAMEWORKS ★
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
 include $(THEOS_MAKE_PATH)/library.mk
@@ -48,7 +52,7 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 
 # ===================================================================
-# PACKAGING SCRIPT (FIXED PATH FOR ENTRY.PLIST)
+# PACKAGING SCRIPT (FIXED SYNTAX ERROR & MANUAL SPRINGBOARD RESTART)
 # ===================================================================
 before-package::
 	@echo "🛠️ Packaging Files..." && \
@@ -56,19 +60,14 @@ before-package::
 	cp control .theos/_/DEBIAN/control && \
 	if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi && \
 	if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi && \
-	
-	echo "📦 Installing Bundle Resources..." && \
 	mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle && \
 	cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist && \
 	cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist && \
-	
-	echo "🔗 Registering with PreferenceLoader..." && \
 	mkdir -p .theos/_/Library/PreferenceLoader/Entries && \
-	# ★ SỬA ĐƯỜNG DẪN Ở ĐÂY: Lấy từ thư mục gốc (/), KHÔNG phải Resources/ ★
 	cp entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist && \
-	
 	echo "✅ Structure Ready:" && \
 	ls -laR .theos/_/Library/PreferenceLoader/
 
-after-install::
-	install.exec "killall -9 SpringBoard backboardd"
+# ★ ĐÃ XÓA HOÀN TOÀN DÒNG after-install:: ★
+# Bây giờ tweak sẽ không tự kill SpringBoard nữa. 
+# Người dùng phải tự Respring/Reboot máy sau khi cài đặt xong.
