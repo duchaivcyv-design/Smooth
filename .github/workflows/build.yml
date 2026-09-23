@@ -3,7 +3,7 @@ name: Build Rootless Deb
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Cho phép bấm nút Run Manual
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -12,27 +12,40 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Tools & Theos
+      - name: Install Tools & Setup Theos
         run: |
-          brew install make ldid dpkg wget
+          # 1. Cài đặt tools
+          brew install make ldid dpkg wget coreutils
+
+          # 2. Fix Permission cho /opt (Quan trọng nhất)
+          sudo mkdir -p /opt/theos/sdks
+          sudo chown -R $(whoami):staff /opt/theos
+
+          # 3. Clone Theos (Giờ mới clone được vì đã cấp quyền owner)
           git clone --recursive https://github.com/theos/theos.git /opt/theos
-          mkdir -p /opt/theos/sdks
+
+          # 4. Tải SDK iOS 16.5
           cd /opt/theos/sdks
-          # Tải SDK iOS 16 (nhẹ và đủ dùng)
           wget -q https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.xz
           tar xf iPhoneOS16.5.sdk.tar.xz
+          rm iPhoneOS16.5.sdk.tar.xz
 
       - name: Build Package
         env:
           THEOS: /opt/theos
-          THEOS_PACKAGE_SCHEME: rootless # Quan trọng: Biến thành rootless
+          THEOS_PACKAGE_SCHEME: rootless
+          # Thêm đường dẫn GNU Make vào PATH để Theos dùng đúng phiên bản
+          PATH: /opt/homebrew/opt/make/libexec/gnubin:$PATH 
         run: |
-          # Sửa Makefile nếu chưa có target rootless
           if [ ! -f Makefile ]; then
             echo "Error: No Makefile found!"
             exit 1
           fi
           
+          # Xóa cache cũ nếu có
+          rm -rf packages/ obj/ .theos/
+          
+          # Bắt đầu build
           make clean package FINALPACKAGE=1
 
       - name: Upload Result
