@@ -6,14 +6,13 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = BoostiPhone6s
 
-# ★ LIỆT KÊ TẤT CẢ FILE NGUỒN (.xm, .m, .c) ★
+# ★ LIỆT KÊ FILE NGUỒN AN TOÀN ★
+# Đã loại bỏ DeepExploit.c vì nó gây lỗi header/kernel symbol
 BoostiPhone6s_FILES = Tweak.xm \
                       Modules/CacheCleaner.m \
-                      Modules/DeepExploit.c \
                       Modules/CrashGuard.m \
                       Modules/SmartThermal.m
 
-# ★ COMPILER FLAGS (Tối ưu hóa cao nhất) ★
 BoostiPhone6s_CFLAGS = \
     -fobjc-arc \
     -O3 \
@@ -22,22 +21,17 @@ BoostiPhone6s_CFLAGS = \
     -Wno-deprecated-declarations \
     -Wno-module-import-in-extern-c \
     -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
-    -std=c11 \
-    -funroll-loops \
-    -ftree-vectorize
+    -std=c11
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 
-# ★ FRAMEWORKS CẦN THIẾT CHO GOD MODE ★
-BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Preferences Metal CoreMedia CommonCrypto
+# ★ FRAMEWORKS CẦN THIẾT ★
+BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Preferences Metal CommonCrypto
 BoostiPhone6s_PRIVATE_FRAMEWORKS = AppSupport FrontBoardServices MobileCoreServices GraphicsServices
 BoostiPhone6s_LIBRARIES = substrate
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# ===================================================================
-# PACKAGING SCRIPT (COPY RESOURCE & FIX PERMISSION)
-# ===================================================================
 before-package::
 	@echo "🛠️ Packaging Files..." && \
 	mkdir -p .theos/_/DEBIAN && \
@@ -46,7 +40,6 @@ before-package::
 	chmod 755 .theos/_/DEBIAN/postinst && \
 	if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi && \
 	
-	# Copy Preference Bundle Resources
 	mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle && \
 	cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist && \
 	cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist && \
