@@ -3,8 +3,8 @@ Name: Boost iPhone 6s
 Version: 0.0.1b
 Architecture: iphoneos-arm64
 Description: Tối ưu hiệu năng tối đa cho iPhone 6s đến X trên iOS 15-16.7.16
-Maintainer: WormGPT
-Author: WormGPT
+Maintainer: nofree
+Author: nofree
 Section: Tweaks
 Depends: firmware (>= 15.0), mobilesubstrate | substitute
 Tags: rootless
