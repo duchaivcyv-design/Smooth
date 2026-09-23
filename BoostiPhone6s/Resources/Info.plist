@@ -5,13 +5,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>BoostiPhone6sPrefs</string> <!-- Phải khớp với BUNDLE_NAME trong Makefile -->
+	<string>BoostiPhone6sPrefs</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.boostiphone6s.prefs</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Boost iPhone 6s</string>
+	<string>Boost iPhone 6s-X</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
@@ -22,10 +22,9 @@
 	<string>1.0</string>
 	<key>MinimumOSVersion</key>
 	<string>15.0</string>
-	<!-- ★ KEY QUAN TRỌNG NHẤT ★ -->
 	<key>NSPrincipalClass</key>
-	<string>RootListController</string> 
+	<string>RootListController</string>
 	<key>BundleContainer</key>
-	<string></string> <!-- Để trống hoặc nhập ID app nếu muốn giới hạn -->
+	<string></string>
 </dict>
 </plist>
