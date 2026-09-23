@@ -55,7 +55,3 @@ rm -rf /var/log/*
 # Tối ưu bộ nhớ
 sync
 purge
-
-# Khởi động lại SpringBoard
-killall -9 SpringBoard
-killall -9 backboardd
