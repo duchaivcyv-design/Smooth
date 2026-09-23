@@ -1,7 +1,6 @@
-// ★ IMPORT HEADER CHUẨN ARC ★
 #import <Foundation/Foundation.h> // Cung cấp BOOL, nil, YES, NO, NSLog, NSObject
 #import <dispatch/dispatch.h>     // Cung cấp dispatch_queue_t, QOS_CLASS...
-#import "KernelBypass.h"          // ★ DÒNG QUAN TRỌNG NHẤT: Khai báo giao diện class ★
+#import "KernelBypass.h"          // DÒNG QUAN TRỌNG NHẤT: Khai báo giao diện class
 #import <mach/mach.h>             // Cho các hàm thread/host port
 #import <sys/sysctl.h>            // Cho sysctlbyname
 #import <dlfcn.h>                 // Cho dlopen/dlsym
@@ -46,14 +45,14 @@
         
         if (purge_func) {
             purge_func();
-            NSLog(@"[KernelBypass] ✅ Called direct purge() via dlsym.");
+            NSLog(@"[KernelBypass] Called direct purge() via dlsym.");
         } else {
-            NSLog(@"[KernelBypass] ⚠️ purge() not found in symbols. Skipping manual flush.");
+            NSLog(@"[KernelBypass] purge() not found in symbols. Skipping manual flush.");
         }
         
         dlclose(libSystem);
     } else {
-        NSLog(@"[KernelBypass] ❌ Failed to load libsystem_c.dylib.");
+        NSLog(@"[KernelBypass] Failed to load libsystem_c.dylib.");
     }
 }
 
@@ -73,9 +72,8 @@
         // Placeholder cho các tác vụ ưu tiên cao
     });
     
-    NSLog(@"[KernelBypass] ✅ Applied UserInteractive QoS Strategy (Safer than Kernel Hack).");
+    NSLog(@"[KernelBypass] Applied UserInteractive QoS Strategy (Safer than Kernel Hack).");
     
-    // ★ ĐÃ XÓA DÒNG dispatch_release(highPriQueue); ★
     // Trong môi trường ARC (-fobjc-arc), hệ thống tự động giải phóng memory 
     // khi biến local đi ra ngoài scope. Gọi release thủ công sẽ gây lỗi compile.
 }
