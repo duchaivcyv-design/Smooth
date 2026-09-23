@@ -38,7 +38,7 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 
-# ★ THÊM ĐƯỜNG DẪN HEADERS ★
+# ★ CHỈ ĐỊNH THƯ MỤC HEADERS ★
 BoostiPhone6sPrefs_INCLUDE_DIRS = Headers
 
 # ★ KHÔNG LINK FRAMEWORK PREFERENCES NỮA ★
@@ -46,6 +46,7 @@ BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation CoreGraphics
 
 # ★ SỬA LỖI UNDEFINED SYMBOLS BẰNG CỜ LINKER SAU ★
 # -undefined dynamic_lookup: Cho phép gọi hàm/class chưa có trong lib lúc build
+# Đây là chìa khóa để build bundle settings mà không cần SDK private!
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-undefined,dynamic_lookup
 
 # CFlags cho Bundle
