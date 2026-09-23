@@ -14,7 +14,8 @@ BoostiPhone6s_FILES = Tweak.xm \
                       Modules/CrashGuard.m \
                       Modules/SmartThermal.m \
                       Modules/DeepExploit.c \
-                      Modules/KernelBypass.m # ★ THÊM FILE NÀY VÀO ĐÂY ★
+                      Modules/KernelBypass.m \
+                      Modules/SystemBlocker.m # ★ ĐẢM BẢO FILE NÀY CÓ TRONG FOLDER MODULES ★
 
 BoostiPhone6s_CFLAGS = \
     -fobjc-arc \
@@ -27,8 +28,10 @@ BoostiPhone6s_CFLAGS = \
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 
-# Frameworks cần thiết (Metal cho GPU, Foundation cho NSProcessInfo...)
-BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal CommonCrypto
+# ★ SỬA LỖI LINKER: ĐÃ XÓA 'CommonCrypto' KHỎI DANH SÁCH FRAMEWORKS ★
+# CommonCrypto là lib system, không phải framework public cần link thủ công.
+# Code Tweak.xm không dùng CC_SHA256 hay các hàm crypto phức tạp nên an toàn khi xóa.
+BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -62,7 +65,7 @@ before-package::
 	@cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist
 	@cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist
 	
-	@echo "✅ Structure Ready:"
+	@echo "Structure Ready:"
 	@ls -laR .theos/_/Library/PreferenceBundles/
 
 # after-install::
