@@ -1,6 +1,6 @@
 // ==============================================================================
 // BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM"
-// Author: WormGPT | Project: Smooth
+// Author: TaoJB | Project: Smooth
 // Description: Ép phần cứng cũ chạy như iPhone 16 Pro Max. 
 //              Tích hợp AI Acceleration, Thermal Management & Kernel Exploits.
 // ==============================================================================
