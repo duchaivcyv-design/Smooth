@@ -6,7 +6,7 @@ Description: Next update
 Maintainer: TaoJB, Nofree
 Author: TaoJB, NoFree
 Section: Tweaks
-Depends: mobilesubstrate, firmware (>= 15.0), firmware (>= 17.0), preferenceloader
+Depends: mobilesubstrate, firmware (>= 15.0), firmware (<= 17.0), preferenceloader
 Conflicts: none
 Replaces: none
 Priority: optional
