@@ -44,6 +44,9 @@
 @property (nonatomic, assign) BOOL godModeMetalOverclock;
 @property (nonatomic, assign) BOOL smartThermalManagement;
 
+// ★ MỚI: PROPERTY CHO SYSTEM BLOCKER ★
+@property (nonatomic, assign) BOOL enableBlocker;
+
 + (instancetype)sharedInstance;
 - (void)loadSettings;
 @end
@@ -108,6 +111,10 @@
         self.godModeFakeiPhone16 = GET_BOOL(@"GodModeFake16", YES);
         self.godModeMetalOverclock = GET_BOOL(@"GodModeMetal", YES);
         self.smartThermalManagement = GET_BOOL(@"SmartThermal", YES);
+        
+        // ★ LOAD KEY BLOCKER TỪ SETTINGS ★
+        self.enableBlocker = GET_BOOL(@"EnableBlocker", NO); 
+        
     } else {
         // Reset all to default/off when master is off
         self.animSpeed = 1.0;
@@ -125,6 +132,7 @@
         self.godModeFakeiPhone16 = NO;
         self.godModeMetalOverclock = NO;
         self.smartThermalManagement = NO;
+        self.enableBlocker = NO; // ★ RESET BLOCKER KHI MASTER OFF ★
     }
 }
 
@@ -491,7 +499,7 @@ void setupAllSwizzles() {
         if (m6) { orig_texture_format_IMP = method_getImplementation(m6); method_setImplementation(m6, (IMP)hooked_texture_format); }
     }
     
-    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v5.1 Absolute Maximum + Blocker)");
+    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v5.2 Absolute Maximum + Blocker Toggle)");
 }
 
 
@@ -525,13 +533,18 @@ void setupAllSwizzles() {
             [[KernelBypass sharedInstance] boostCurrentThreadPriority];
         }
         
-        // ★ 2. GỌI MODULE BLOCKER MỚI (Chặn tác vụ nền thừa thãi) ★
-        [[SystemBlocker sharedInstance] initBlockers];
-        
-        // Đặt cờ global cho hook C functions bên trong SystemBlocker.m
-        // Lưu ý: Hàm này phải được export từ SystemBlocker.m hoặc declare extern ở đây
-        extern void setBlockerFlag(BOOL val);
-        setBlockerFlag(YES); 
+        // ★ 2. GỌI MODULE BLOCKER CÓ ĐIỀU KIỆN (Chỉ chạy nếu User bật trong Settings) ★
+        if (CFG.enableBlocker) {
+            [[SystemBlocker sharedInstance] initBlockers];
+            
+            // Đặt cờ global cho hook C functions bên trong SystemBlocker.m
+            extern void setBlockerFlag(BOOL val);
+            setBlockerFlag(YES); 
+            
+            NSLog(@"[BoostiPhone6s] System Blocker Activated by User.");
+        } else {
+            NSLog(@"[BoostiPhone6s] System Blocker Disabled by User.");
+        }
         
         // 3. Kernel Hooks (Only if specific toggles are on)
         if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16) {
@@ -546,7 +559,7 @@ void setupAllSwizzles() {
              setenv("MALLOC_OPTIONS", "AFGN", 1); // AFGN: Aggressive Fast Guardless No-Garbage
         }
         
-        NSLog(@"[BoostiPhone6s] SYSTEM READY | God Mode & Blockers Active");
+        NSLog(@"[BoostiPhone6s] SYSTEM READY | God Mode & Blockers Status Checked");
     } else {
         NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). No resources used.");
     }
