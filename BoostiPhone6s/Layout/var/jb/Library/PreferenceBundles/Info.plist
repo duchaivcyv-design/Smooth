@@ -24,7 +24,5 @@
 	<string>15.0</string>
 	<key>NSPrincipalClass</key>
 	<string>RootListController</string>
-	<key>BundleContainer</key>
-	<string></string>
 </dict>
 </plist>
