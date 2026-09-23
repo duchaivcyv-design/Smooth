@@ -1,7 +1,106 @@
 #import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
+#import <AVFoundation/AVFoundation.h>
 #import <IOKit/IOKitLib.h>
 #import <sys/sysctl.h>
+#import <dlfcn.h>
+
+// ==========================================
+// 1. FIX LỖI SYSTEM() UNAVAILABLE
+// Khai báo lại prototype system() để compiler ngừng phàn nàn
+// ==========================================
+#ifdef __cplusplus
+extern "C" {
+#endif
+    int system(const char *command);
+#ifdef __cplusplus
+}
+#endif
+
+// ==========================================
+// 2. FIX LỖI FORWARD CLASS DECLARATION
+// Khai báo Interface giả định nghĩa (Stub Interfaces) 
+// để compiler hiểu rằng các Class này kế thừa từ UIView/NSObject 
+// và CÓ property 'view', 'layer'...
+// ==========================================
+
+@interface UIViewController (BoostStubs)
+@property(nonatomic, strong) UIView *view;
+@end
+
+@interface NSObject (BoostStubs)
+- (id)valueForKey:(NSString *)key;
+@end
+
+// Các Class SpringBoard/Private Frameworks cần khai báo rõ ràng
+@interface SBSearchController : UIViewController @end
+@interface WGWidgetHostingViewController : UIViewController @end
+@interface CCUIControlCenterViewController : UIViewController @end
+@interface SBAppSwitcherController : UIViewController @end
+@interface SBLockScreenViewController : UIViewController @end
+@interface CameraController : NSObject 
+@property(nonatomic, strong) UIView *view; 
+@end
+@interface AVCaptureSession (BoostStubs)
+@property(copy) NSString *sessionPreset;
+@end
+
+// Fix hằng số nếu thiếu
+#ifndef AVCaptureSessionPresetLow
+#define AVCaptureSessionPresetLow @"AVCaptureSessionPresetLow"
+#endif
+
+// Các Class khác dùng cho hook (chỉ cần khai báo interface trống để %hook hoạt động)
+@interface SpringBoard : UIResponder @end
+@interface NSProcessInfo (BoostHooks) @end
+@interface FBSSystemService : NSObject @end
+@interface SBLockScreenManager : NSObject @end
+@interface CAMetalLayer : CALayer @end
+@interface MTLTextureDescriptor : NSObject @end
+@interface UITouch : NSObject @end
+@interface CADisplayLink : NSObject @end
+@interface NSURLCache : NSObject @end
+@interface NSLayoutConstraint : NSObject @end
+@interface UIImage (BoostHooks) @end
+@interface UIKeyboardImpl : NSObject @end
+@interface BBServer : NSObject @end
+@interface PHLivePhotoView : UIView @end
+@interface WiFiManager : NSObject @end
+@interface NSThread (BoostHooks) @end
+@interface UIApplicationDelegate (BoostHooks) @end
+@interface NSJSONSerialization : NSObject @end
+@interface CloudKit : NSObject @end
+@interface AVAudioSession : NSObject @end
+@interface UIFeedbackGenerator : NSObject @end
+@interface UIKeyboard : UIView @end
+@interface SBForceTouchGestureRecognizer : UIGestureRecognizer @end
+@interface SiriSuggestions : NSObject @end
+@interface SafariServices : NSObject @end
+@interface BrightnessSystem : NSObject @end
+@interface PreferencesAppController : UIResponder @end
+@interface Analytics : NSObject @end
+@interface PhotosUI : NSObject @end
+@interface MessagesApp : UIResponder @end
+@interface MapsApp : UIResponder @end
+@interface CLLocationManager : NSObject @end
+@interface MailApp : UIResponder @end
+@interface GameCenter : NSObject @end
+@interface BatteryCenter : NSObject @end
+@interface AirDrop : NSObject @end
+@interface BluetoothManager : NSObject @end
+@interface CameraCapture : NSObject @end
+@interface Handoff : NSObject @end
+@interface FrontBoardServices : NSObject @end
+@interface OrientationManager : NSObject @end
+@interface TabBarController : UITabBarController @end
+@interface Continuity : NSObject @end
+@interface NotificationCenter : NSObject @end
+@interface ProcessManager : NSObject @end
+
+// ==========================================
+// 3. CODE HOOK CHÍNH (Giữ nguyên logic của bạn)
+// ==========================================
 
 // Giảm animation tối đa
 %hook UIView
@@ -35,7 +134,14 @@
 // Tối ưu bộ nhớ
 %hook UIApplication
 - (void)didReceiveMemoryWarning {
-    [self _purgeMemoryCache];
+    // Dùng performSelector để tránh warning undeclared selector
+    SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
+    if ([self respondsToSelector:sel]) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:sel];
+        #pragma clang diagnostic pop
+    }
     %orig;
 }
 %end
@@ -69,7 +175,6 @@
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
-    // Giải phóng bộ nhớ không dùng
     system("sync");
     system("purge");
 }
@@ -165,8 +270,13 @@
 // Tối ưu notification
 %hook BBServer
 - (void)publishBulletin:(id)bulletin {
-    if ([[bulletin sectionID] isEqualToString:@"com.apple.springboard"]) {
-        return;
+    // Kiểm tra an toàn trước khi gọi method private
+    SEL sectionSel = NSSelectorFromString(@"sectionID");
+    if ([bulletin respondsToSelector:sectionSel]) {
+         NSString *secId = [bulletin valueForKey:@"sectionID"];
+         if ([secId isEqualToString:@"com.apple.springboard"]) {
+             return;
+         }
     }
     %orig(bulletin);
 }
@@ -246,7 +356,11 @@
 %hook UIViewController
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    [self.view removeFromSuperview];
+    // Cẩn thận: Xóa view khỏi superview có thể gây crash nếu VC vẫn còn sống
+    // Nhưng theo yêu cầu boost thì cứ giữ nguyên
+    if(self.isViewLoaded && self.view.window == nil) {
+       [self.view removeFromSuperview];
+    }
 }
 %end
 
@@ -491,5 +605,3 @@
     %orig(priority);
 }
 %end
-
-// Tối ưu b
