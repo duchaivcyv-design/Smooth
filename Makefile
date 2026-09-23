@@ -27,20 +27,19 @@ BoostiPhone6s_CFLAGS = \
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 
 # ===================================================================
-# FRAMEWORKS & LIBRARIES (ĐÃ SỬA LỖI LINKER)
-# ★ ĐÃ LOẠI BỎ 'CommonCrypto' VÌ NÓ KHÔNG PHẢI FRAMEWORK ★
-# Code hiện tại chỉ dùng NSUserDefaults nên không cần lib crypto.
+# FRAMEWORKS (ĐÃ SỬA LỖI LINKER TRIỆT ĐỂ)
+# ★ CHỈ GIỮ LẠI PUBLIC FRAMEWORKS AN TOÀN NHẤT ★
+# Đã xóa AppSupport, FrontBoardServices, GraphicsServices...
+# Vì code dùng Runtime Lookup (objc_getClass) nên không cần link tĩnh.
 # ===================================================================
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
-# Các framework private thường có stub header trong Theos, nhưng nếu vẫn lỗi 
-# thì hãy xóa bớt những cái không dùng trực tiếp. 
-# AppSupport/FrontBoardServices thường an toàn hơn GraphicsServices/MobileCoreServices trên SDK mới.
-BoostiPhone6s_PRIVATE_FRAMEWORKS = AppSupport FrontBoardServices 
+# ★ ĐÃ XÓA HOÀN TOÀN DÒNG PRIVATE_FRAMEWORKS ★
+# Nếu build pass thì không cần thêm lại.
 
-# Nếu cần link thêm lib khác (như substrate), để ở đây.
-# Nhưng với Rootless Jailbreak (ElleKit/Substitute), ta thường KHÔNG link substrate 
-# mà rely vào runtime injection. Để trống hoặc comment đi nếu build pass.
+# ★ ĐÃ COMMENT SUBSTRATE LIBRARY ★
+# Rootless jailbreak (ElleKit/Substitute) thường tự động inject, 
+# không cần link substrate lúc build để tránh lỗi symbol missing.
 # BoostiPhone6s_LIBRARIES = substrate 
 
 include $(THEOS_MAKE_PATH)/library.mk
