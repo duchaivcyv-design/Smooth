@@ -1,15 +1,3 @@
-// ==============================================================================
-// BOOST iPHONE 6s-X ULTIMATE EDITION v5.0 "ABSOLUTE MAXIMUM"
-// Author: TaoJB, NoFree | Project: Smooth
-// Description: 
-//   - Hierarchical Control: Master Switch controls all sub-modules.
-//   - AI/Dev Optimization: Reduced latency for long text input & heavy tasks.
-//   - Force 120Hz & GPU Overclocking via Pure Runtime Swizzling.
-//   - Hardcore Memory Tuning: Bypass compression guards for faster allocation.
-//   - Kernel-Level Priority Boosting via Mach Ports.
-//   - Zero Compile Errors: Strictly typed and imported correctly.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -24,14 +12,15 @@
 #import <netinet/in.h>
 #import <arpa/inet.h>
 #import <objc/runtime.h> // Required for Method Swizzling
-#import <CommonCrypto/CommonDigest.h> // For hashing if needed later
-#import <sys/resource.h> // ★ MỚI: Để điều chỉnh limit file descriptor & priority ★
+#import <CommonCrypto/CommonDigest.h> 
+#import <sys/resource.h> 
 
 // Import Custom Modules
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
-#import "Modules/KernelBypass.h" // ★ MỚI: Module khai thác sâu ★
+#import "Modules/KernelBypass.h" // ★ Module khai thác sâu ★
+#import "Modules/SystemBlocker.h" // ★ Module chặn hệ thống thừa thãi ★
 
 // ------------------------------------------------------------------------------
 // SECTION 1: CONFIGURATION MANAGER (HIERARCHICAL LOGIC)
@@ -237,8 +226,8 @@ static IMP orig_screen_scale_IMP = NULL;
 static IMP orig_metal_drawableCount_IMP = NULL;
 static IMP orig_metal_presentTxn_IMP = NULL;
 static IMP orig_texture_format_IMP = NULL;
-static IMP orig_textview_layoutSubviews_IMP = NULL; // NEW: For AI Text Lag
-static IMP orig_keyboard_impl_updateFrame_IMP = NULL; // NEW: Keyboard Latency Fix
+static IMP orig_textview_layoutSubviews_IMP = NULL; 
+static IMP orig_keyboard_impl_updateFrame_IMP = NULL; 
 
 // --- New Implementations ---
 
@@ -349,7 +338,6 @@ void hooked_textview_layoutSubviews(id self, SEL _cmd) {
 }
 
 // ★★★ NEW: Keyboard Frame Update Optimization ★★★
-// Giảm độ trễ khi bàn phím hiện lên/xuống bằng cách skip animation thừa thãi
 void hooked_keyboard_updateFrame(id self, SEL _cmd, CGRect frame) {
     if (!IS_ENABLED || !CFG.enableAIAcceleration) {
         if (orig_keyboard_impl_updateFrame_IMP) ((void(*)(id, SEL, CGRect))orig_keyboard_impl_updateFrame_IMP)(self, _cmd, frame);
@@ -503,7 +491,7 @@ void setupAllSwizzles() {
         if (m6) { orig_texture_format_IMP = method_getImplementation(m6); method_setImplementation(m6, (IMP)hooked_texture_format); }
     }
     
-    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v5.0 Absolute Maximum)");
+    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v5.1 Absolute Maximum + Blocker)");
 }
 
 
@@ -524,7 +512,7 @@ void setupAllSwizzles() {
     if (IS_ENABLED) {
         NSLog(@"[BoostiPhone6s] MASTER SWITCH ON. Initializing Engine...");
         
-        // 1. GỌI MODULE BYPASS MỚI (Khai thác sâu nhất)
+        // 1. GỌI MODULE BYPASS MỚI (Khai thác sâu nhất - Nâng quyền/Priority)
         [[KernelBypass sharedInstance] initEnvironment];
         
         // Nếu bật Aggressive RAM, ép purge sâu hơn
@@ -537,20 +525,28 @@ void setupAllSwizzles() {
             [[KernelBypass sharedInstance] boostCurrentThreadPriority];
         }
         
-        // 2. Kernel Hooks (Only if specific toggles are on)
+        // ★ 2. GỌI MODULE BLOCKER MỚI (Chặn tác vụ nền thừa thãi) ★
+        [[SystemBlocker sharedInstance] initBlockers];
+        
+        // Đặt cờ global cho hook C functions bên trong SystemBlocker.m
+        // Lưu ý: Hàm này phải được export từ SystemBlocker.m hoặc declare extern ở đây
+        extern void setBlockerFlag(BOOL val);
+        setBlockerFlag(YES); 
+        
+        // 3. Kernel Hooks (Only if specific toggles are on)
         if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16) {
             %init(KernelDeepHooks);
         }
         
-        // 3. Obj-C Swizzles (Always apply structure, but logic checks IS_ENABLED internally)
+        // 4. Obj-C Swizzles (Always apply structure, but logic checks IS_ENABLED internally)
         setupAllSwizzles();
         
-        // 4. AI Accelerator Env Vars
+        // 5. AI Accelerator Env Vars
         if (CFG.enableAIAcceleration) {
              setenv("MALLOC_OPTIONS", "AFGN", 1); // AFGN: Aggressive Fast Guardless No-Garbage
         }
         
-        NSLog(@"[BoostiPhone6s] SYSTEM READY | God Mode: %@", (CFG.godModeForce120Hz || CFG.godModeMetalOverclock) ? @"ON" : @"OFF");
+        NSLog(@"[BoostiPhone6s] SYSTEM READY | God Mode & Blockers Active");
     } else {
         NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). No resources used.");
     }
