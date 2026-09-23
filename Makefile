@@ -8,9 +8,7 @@ LIBRARY_NAME = BoostiPhone6s
 
 BoostiPhone6s_FILES = Tweak.xm
 
-# ===================================================================
-# CFLAGS: Chống lỗi compile cũ & IOKit Module
-# ===================================================================
+# CFlags chống lỗi compile cũ & IOKit Module
 BoostiPhone6s_CFLAGS = \
     -fobjc-arc \
     -O3 \
@@ -21,18 +19,16 @@ BoostiPhone6s_CFLAGS = \
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 
-# ===================================================================
-# FRAMEWORKS: Chỉ giữ Public Frameworks để tránh lỗi Linker
-# ===================================================================
+# Chỉ giữ Public Frameworks để tránh lỗi Linker
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation
 
 include $(THEOS_MAKE_PATH)/library.mk
 
 # ===================================================================
-# FIX LỖI DEBIAN STRUCTURE (VIẾT TRÊN 1 DÒNG ĐỂ TRÁNH SYNTAX ERROR)
+# FIX QUYỀN HẠN CHO POSTINST & PRERM
 # ===================================================================
 before-package::
-	@echo "🛠️ Organizing Debian structure for Rootless..." && \
+	@echo "🛠️ Organizing Debian structure & Fixing Permissions..." && \
 	mkdir -p .theos/_/DEBIAN && \
 	cp control .theos/_/DEBIAN/control && \
 	cp postinst .theos/_/DEBIAN/postinst && \
