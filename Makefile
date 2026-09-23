@@ -6,13 +6,14 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = BoostiPhone6s
 
-# ★ LIỆT KÊ TẤT CẢ FILE NGUỒN ★
+# ★ LIỆT KÊ TẤT CẢ FILE NGUỒN (.xm, .m, .c) ★
 BoostiPhone6s_FILES = Tweak.xm \
                       Modules/CacheCleaner.m \
                       Modules/DeepExploit.c \
                       Modules/CrashGuard.m \
                       Modules/SmartThermal.m
 
+# ★ COMPILER FLAGS (Tối ưu hóa cao nhất) ★
 BoostiPhone6s_CFLAGS = \
     -fobjc-arc \
     -O3 \
@@ -21,12 +22,14 @@ BoostiPhone6s_CFLAGS = \
     -Wno-deprecated-declarations \
     -Wno-module-import-in-extern-c \
     -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
-    -std=c11
+    -std=c11 \
+    -funroll-loops \
+    -ftree-vectorize
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 
 # ★ FRAMEWORKS CẦN THIẾT CHO GOD MODE ★
-BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Preferences Metal CoreMedia
+BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Preferences Metal CoreMedia CommonCrypto
 BoostiPhone6s_PRIVATE_FRAMEWORKS = AppSupport FrontBoardServices MobileCoreServices GraphicsServices
 BoostiPhone6s_LIBRARIES = substrate
 
