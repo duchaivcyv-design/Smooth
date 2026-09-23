@@ -6,7 +6,7 @@ TARGET := iphone:clang:latest:15.0
 include $(THEOS)/makefiles/common.mk
 
 # ===================================================================
-# PART 1: BUILD MAIN LIBRARY (TWEEK CORE LOGIC - FILE TWEAK.XM NÀY)
+# PART 1: BUILD MAIN LIBRARY (TWEEK CORE LOGIC)
 # ===================================================================
 LIBRARY_NAME = BoostiPhone6sCore
 
@@ -28,8 +28,6 @@ include $(THEOS_MAKE_PATH)/library.mk
 
 # ===================================================================
 # PART 2: GỌI SUB-FOLDER CHỨA SETTINGS UI
-# ★ DÒNG QUYẾT ĐỊNH: Theos sẽ tự cd vào folder 'BoostiPhone6s' 
-#   và chạy Makefile bên trong đó để build Bundle .settings ★
 # ===================================================================
 SUBPROJECTS += BoostiPhone6s
 
@@ -43,4 +41,24 @@ before-package::
 	@cp control .theos/_/DEBIAN/control
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
-	@echo "Done."
+	
+	# Đường dẫn đích trong package: /Library/PreferenceBundles/
+	@mkdir -p .theos/_/Library/PreferenceBundles
+	
+	# Tìm xem bundle đã build xong chưa (thường nằm trong .theos/obj hoặc similar)
+	# Cách an toàn nhất là copy trực tiếp từ folder source nếu build local fail
+	# Nhưng vì dùng GitHub Actions, ta tin tưởng vào SUBPROJECTS. 
+	# Tuy nhiên, để chắc ăn, ta sẽ verify sự tồn tại của nó trong staging area.
+	
+	@if [ ! -d ".theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
+	    echo "Warning: Bundle not found in standard location. Attempting manual copy from source..."; \
+	    mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle; \
+	    if [ -d "BoostiPhone6s/.theos/obj/debugfinal/BoostiPhone6sPrefs.bundle" ]; then \
+	        cp -r BoostiPhone6s/.theos/obj/debugfinal/BoostiPhone6sPrefs.bundle/* .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/; \
+	    elif [ -d "BoostiPhone6s/Resources" ]; then \
+	        # Fallback: Copy resources manually if binary missing (rare case)
+	        cp -r BoostiPhone6s/Resources/* .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/; \
+	    fi; \
+	fi
+
+	@echo "All Done."
