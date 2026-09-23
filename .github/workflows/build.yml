@@ -26,8 +26,8 @@ jobs:
           # Thêm GNU Make và CoreUtils vào PATH
           echo "/opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" >> $GITHUB_PATH
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI SDK (FIXED FOR DIRECTORY STRUCTURE) ---
-      - name: Clone Theos & Install SDK
+      # --- BƯỚC 2: CLONE THEOS & TẢI SDK (SPARSE CHECKOUT METHOD) ---
+      - name: Clone Theos & Install SDK via Git Sparse
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           
@@ -35,52 +35,44 @@ jobs:
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
 
-          echo "📦 Downloading iOS SDK from theos/sdks repository..."
+          echo "📦 Downloading iOS SDK using Git Sparse-Checkout (Fastest Method)..."
+          
+          # Tạo thư mục tạm để clone repo SDK
+          mkdir -p /tmp/sdk_repo
+          cd /tmp/sdk_repo
+          
+          # Khởi tạo repo rỗng
+          git init
+          git remote add origin https://github.com/theos/sdks.git
+          
+          # Bật chế độ sparse checkout (chỉ lấy file/folder được chỉ định)
+          git config core.sparseCheckout true
+          
+          # Chỉ định folder SDK muốn tải (iPhoneOS16.5.sdk)
+          # Nếu muốn bản khác, sửa tên ở đây
+          echo "iPhoneOS16.5.sdk/" > .git/info/sparse-checkout
+          
+          # Fetch và Checkout (Chỉ tải dữ liệu của folder đó, cực nhanh)
+          echo "Fetching specific SDK folder..."
+          git fetch --depth=1 origin master
+          git checkout FETCH_HEAD
+          
+          # Di chuyển folder SDK vừa tải về vào đúng chỗ trong Theos
           mkdir -p "$TARGET_DIR/sdks"
-          cd "$TARGET_DIR/sdks"
-
-          # Xác định phiên bản SDK muốn tải (Ưu tiên 16.5 cho rootless iOS 15-16)
-          # Nếu bạn cần bản khác, hãy sửa tên folder ở đây
-          SDK_VERSION="iPhoneOS16.5.sdk"
+          mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
           
-          echo "Targeting SDK: $SDK_VERSION"
+          # Dọn dẹp rác
+          cd ~
+          rm -rf /tmp/sdk_repo
           
-          # Kiểm tra xem folder đó có tồn tại trên repo không
-          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://api.github.com/repos/theos/sdks/contents/$SDK_VERSION?ref=master")
-            
-          if [ "$STATUS_CODE" != "200" ]; then
-              echo "❌ Error: Folder '$SDK_VERSION' does not exist in theos/sdks master branch."
-              echo "HTTP Status: $STATUS_CODE"
-              exit 1
-          fi
-
-          echo "✅ Found valid SDK directory. Downloading via Tarball API..."
-          
-          # Tải nguyên folder SDK dưới dạng tar.gz từ GitHub API
-          # Đây là cách chính thức để lấy subfolder từ repo lớn
-          curl -L -H "Accept: application/vnd.github+json" \
-               "https://api.github.com/repos/theos/sdks/tarball/master/$SDK_VERSION" \
-               -o sdk.tar.gz
-               
-          echo "📂 Extracting SDK..."
-          tar xf sdk.tar.gz
-          
-          # Sau khi extract, GitHub thường tạo một folder tạm thời như 'theos-sdks-xxxxx/iPhoneOS16.5.sdk'
-          # Chúng ta cần di chuyển nó lên đúng vị trí
-          TEMP_FOLDER=$(ls -d */ | head -n 1)
-          mv "${TEMP_FOLDER}${SDK_VERSION}" .
-          rm -rf "$TEMP_FOLDER" sdk.tar.gz
-          
-          # Kiểm tra kết quả cuối cùng
-          if [ ! -d "$SDK_VERSION" ]; then
-             echo "❌ Extraction failed or wrong structure."
-             ls -la
+          # Kiểm tra kết quả
+          if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
+             echo "❌ Error: Failed to move SDK."
              exit 1
           fi
           
           echo "✅ SDK Installation Complete."
-          du -sh "$SDK_VERSION"
+          du -sh "$TARGET_DIR/sdks/iPhoneOS16.5.sdk"
 
       # --- BƯỚC 3: BUILD PACKAGE ---
       - name: Build Package
