@@ -31,19 +31,22 @@ include $(THEOS_MAKE_PATH)/library.mk
 
 
 # ===================================================================
-# PART 2: BUILD PREFERENCE BUNDLE (SETTINGS UI) - FIXED LINKER ERROR
+# PART 2: BUILD PREFERENCE BUNDLE (SETTINGS UI) - FIXED WITH WEAK LINKING
 # ===================================================================
 INTERNAL_INSTALL_PREFIX = Library/PreferenceBundles
 BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 
-# ★ QUAN TRỌNG: Thêm đường dẫn tới thư mục Headers vừa tạo ★
+# ★ THÊM ĐƯỜNG DẪN HEADERS ★
 BoostiPhone6sPrefs_INCLUDE_DIRS = Headers
 
 # ★ KHÔNG LINK FRAMEWORK PREFERENCES NỮA ★
-# Thay vào đó, ta rely vào Runtime Injection khi tweak chạy trên máy thật.
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation CoreGraphics
+
+# ★ SỬA LỖI UNDEFINED SYMBOLS BẰNG CỜ LINKER SAU ★
+# -undefined dynamic_lookup: Cho phép gọi hàm/class chưa có trong lib lúc build
+BoostiPhone6sPrefs_LDFLAGS = -Wl,-undefined,dynamic_lookup
 
 # CFlags cho Bundle
 BoostiPhone6sPrefs_CFLAGS = \
@@ -68,8 +71,6 @@ before-package::
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
 	
 	# 2. Copy Resources vào Bundle
-	# Theos tự động build bundle vào .theos/_/Library/PreferenceBundles/...
-	# Ta chỉ cần copy plist vào đó nếu chưa có sẵn trong source tree
 	@mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 	@cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist
 	@cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist
