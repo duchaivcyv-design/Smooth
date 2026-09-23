@@ -43,8 +43,8 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 
 # ===================================================================
-# PACKAGING SCRIPT (FIXED FOR TAB ERROR)
-# ★ QUAN TRỌNG: Các dòng bên dưới PHẢI bắt đầu bằng phím TAB ★
+# PACKAGING SCRIPT (FIXED PATH ERROR)
+# ★ SỬA Ở ĐÂY: Thêm tiền tố 'BoostiPhone6s/' vào đường dẫn entry.plist ★
 # ===================================================================
 before-package::
 	@echo "Packaging..."
@@ -53,5 +53,6 @@ before-package::
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
 	@mkdir -p .theos/_/Library/PreferenceLoader/Entries
-	@cp Resources/entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
+	★ ĐƯỜNG DẪN ĐÃ ĐƯỢC CHỈNH SỬA CHO ĐÚNG VỚI CẤU TRÚC FOLDER CỦA BẠN ★
+	@cp BoostiPhone6s/Resources/entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
 	@echo "Done."
