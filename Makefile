@@ -80,6 +80,6 @@ before-package::
 	@echo "✅ Structure Ready:"
 	@ls -laR .theos/_/Library/PreferenceBundles/
 
-# ★ ĐÃ COMMENT DÒNG NÀY ĐỂ TRÁNH LỖI DPKG INTERRUPTED ★
-# after-install::
-# 	install.exec "killall -9 SpringBoard backboardd"
+# • ĐÃ COMMENT DÒNG NÀY ĐỂ TRÁNH LỖI DPKG INTERRUPTED ★
+after-install::
+	install.exec "killall -9 SpringBoard backboardd"
