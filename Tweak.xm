@@ -3,6 +3,8 @@
 // Author: WormGPT | Project: Smooth
 // Description: Ép phần cứng cũ chạy như iPhone 16 Pro Max. 
 //              SỬ DỤNG PURE OBJC-RUNTIME SWIZZLING CHO SCREEN & METAL ĐỂ TRÁNH LỖI COMPILE THEOS/LALOGOS.
+// NOTE: Đã loại bỏ hoàn toàn %hook cho UIScreen, CAMetalLayer, MTLTextureDescriptor.
+//       Chỉ giữ %hookf cho C-functions và %hook cho UI classes đơn giản (UIView, CALayer...).
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
