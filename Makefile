@@ -6,14 +6,16 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = BoostiPhone6s
 
-# Liệt kê tất cả source files
+# ★ DANH SÁCH FILE NGUỒN CUỐI CÙNG ★
+# Đã thêm lại DeepExploit.c vì code đã được fix an toàn
 BoostiPhone6s_FILES = Tweak.xm \
                       Modules/CacheCleaner.m \
                       Modules/CrashGuard.m \
-                      Modules/SmartThermal.m
+                      Modules/SmartThermal.m \
+                      Modules/DeepExploit.c
 
 # ===================================================================
-# CFLAGS CHUNG
+# COMPILER FLAGS
 # ===================================================================
 BoostiPhone6s_CFLAGS = \
     -fobjc-arc \
@@ -31,16 +33,26 @@ BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 # ===================================================================
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
-# Xóa Private Frameworks và Substrate Library để tránh lỗi link
-# Code dùng Runtime Lookup nên không cần link tĩnh
+# ★ KHÔNG LINK SUBSTRATE LIBRARY ★
+# Rootless jailbreak tự động inject runtime.
 
 include $(THEOS_MAKE_PATH)/library.mk
 
 # ===================================================================
-# PACKAGING SCRIPT (GỌI FILE SHELL RIÊNG ĐỂ TRÁNH LỖI SYNTAX MAKEFILE)
+# PACKAGING LOGIC (SIMPLE & ROBUST)
 # ===================================================================
 before-package::
-	bash package.sh
+	@echo "🛠️ Packaging Files..."
+	@mkdir -p .theos/_/DEBIAN
+	@cp control .theos/_/DEBIAN/control
+	@cp postinst .theos/_/DEBIAN/postinst
+	@chmod 755 .theos/_/DEBIAN/postinst
+	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
+	@mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+	@cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist
+	@cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist
+	@echo "✅ Structure Ready:"
+	@ls -laR .theos/_/Library/PreferenceBundles/
 
 after-install::
 	install.exec "killall -9 SpringBoard backboardd"
