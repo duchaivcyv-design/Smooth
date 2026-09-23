@@ -1,13 +1,122 @@
-		<!-- ★ SECTION: DEVICE BYPASS CONTROLS ★ -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		
+		<!-- ================= HEADER ================= -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>⚠️ Chế độ Phá Rào (Risky)</string>
+			<string>Boost iPhone 6s-X Pro</string>
 			<key>footerText</key>
-			<string>Cảnh báo: Các tính năng dưới đây can thiệp sâu vào phần cứng ảo. Có thể gây mất ổn định hệ thống hoặc bị App Bank phát hiện.</string>
+			<string>Tối ưu hóa sâu &amp; Phá vỡ giới hạn phần cứng cho iOS 15-16 Rootless.</string>
+		</dict>
+
+		<!-- ================= TỔNG QUAN ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>Enabled</string>
+			<key>label</key>
+			<string>Bật Tweak</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= HIỆU NĂNG GIAO DIỆN ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Giao Diện &amp; Cảm Ứng</string>
 		</dict>
 		
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.5</real>
+			<key>min</key>
+			<real>0.1</real>
+			<key>max</key>
+			<real>1.0</real>
+			<key>showValue</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AnimSpeed</string>
+			<key>label</key>
+			<string>Hệ số tốc độ Animation</string>
+			<key>footerText</key>
+			<string>Giá trị nhỏ = Nhanh hơn (0.1 là tức thì).</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= QUẢN LÝ BỘ NHỚ (RAM) ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Quản Lý Bộ Nhớ (RAM)</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AggressiveRAM</string>
+			<key>label</key>
+			<string>Xóa Cache Aggressive</string>
+			<key>footerText</key>
+			<string>Giải phóng RAM liên tục khi mở app nặng.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>KillBackgroundApps</string>
+			<key>label</key>
+			<string>Tự động Kill App nền</string>
+			<key>footerText</key>
+			<string>Đóng các tiến trình chạy ngầm để nhường tài nguyên cho Game/App đang dùng.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= ⚠️ PHÁ RÀO PHẦN CỨNG (DEVICE BYPASS) ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>⚠️ Chế Độ Risky (Phá Rào Phần Cứng)</string>
+			<key>footerText</key>
+			<string>CẢNH BÁO: Các tùy chọn dưới đây đánh lừa hệ thống về khả năng phần cứng. 
+Có thể gây nóng máy, hao pin nhanh hoặc bị App Ngân Hàng phát hiện Jailbreak. 
+Chỉ sử dụng khi chơi Game Offline hoặc cần kích hoạt tính năng UI mới.</string>
+		</dict>
+
+		<!-- 1. Giả Mạo Model Máy -->
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -19,10 +128,13 @@
 			<string>SpoofModel</string>
 			<key>label</key>
 			<string>Giả mạo iPhone 14 Pro Max</string>
+			<key>footerText</key>
+			<string>Ép App/Game nghĩ rằng bạn đang dùng chip A16 Bionic. Mở khóa Live Activities, Dynamic Island logic.</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-		
+
+		<!-- 2. Tắt Bảo Vệ Nhiệt Độ -->
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -33,13 +145,14 @@
 			<key>key</key>
 			<string>DisableThermal</string>
 			<key>label</key>
-			<string>Tắt Bảo Vệ Nhiệt Độ</string>
+			<string>Tắt Hoàn Toàn Cảnh Báo Nhiệt</string>
 			<key>footerText</key>
-			<string>Ngăn iOS giảm xung nhịp khi nóng. Giúp game mượt hơn nhưng máy sẽ rất nóng.</string>
+			<string>Ngăn iOS giảm xung nhịp CPU/GPU khi máy nóng. Giúp game giữ FPS ổn định nhưng IC nguồn sẽ chịu tải lớn.</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
-		
+
+		<!-- 3. Mở Khóa Màn Hình Cao Cấp -->
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
@@ -50,9 +163,25 @@
 			<key>key</key>
 			<string>UnlockProMotion</string>
 			<key>label</key>
-			<string>Mở Khóa ProMotion & OLED UI</string>
+			<string>Mở Khóa ProMotion &amp; OLED UI</string>
 			<key>footerText</key>
-			<string>Ép App vẽ giao diện 120Hz/Dark Mode chuẩn. Màn hình LCD vẫn chỉ chạy 60Hz vật lý.</string>
+			<string>Báo cáo màn hình hỗ trợ 120Hz và Dark Mode chuẩn. Dù vật lý chỉ là LCD 60Hz, giao diện sẽ mượt mà hơn nhờ ép render.</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
+
+		<!-- ================= FOOTER INFO ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerAlignment</key>
+			<integer>1</integer>
+			<key>footerText</key>
+			<string>Made by WormGPT • Smooth Project v1.2.0</string>
+		</dict>
+
+	</array>
+	<key>title</key>
+	<string>Boost iPhone 6s</string>
+</dict>
+</plist>
