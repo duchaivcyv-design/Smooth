@@ -1,5 +1,5 @@
 // ==============================================================================
-// BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM" - FIXED BUILD
+// BOOST iPHONE 6s-X ULTIMATE EDITION v3.0 "TITANIUM" - FINAL FIX
 // Author: TaoJB | Project: Smooth
 // Description: Ép phần cứng cũ chạy như iPhone 16 Pro Max. 
 //              Tích hợp AI Acceleration, Thermal Management & Kernel Exploits.
@@ -27,7 +27,7 @@
 #import "Modules/DeepExploit.h"
 
 // ------------------------------------------------------------------------------
-// SECTION 1: CONFIGURATION MANAGER (Singleton Pattern)
+// SECTION 1: CONFIGURATION MANAGER
 // ------------------------------------------------------------------------------
 
 @interface BoostConfig : NSObject
@@ -164,7 +164,7 @@ static inline int safe_system(const char *cmd) {
 
 
 // ------------------------------------------------------------------------------
-// SECTION 3: GOD MODE HOOKS (FIXED CADISPLAYLINK LOGIC)
+// SECTION 3: GOD MODE HOOKS (FIXED COMPILE ERROR)
 // ------------------------------------------------------------------------------
 
 %group GodModeHooks
@@ -216,22 +216,23 @@ static inline int safe_system(const char *cmd) {
 }
 %end
 
-// C. CADISPLAYLINK OPTIMIZATION (★ FIXED ERROR HERE ★)
-// Vấn đề cũ: Hook Setter gây lỗi cú pháp %orig trên một số môi trường build.
-// Giải pháp: Chỉ Hook Getter. Khi App hỏi "FPS tối đa là bao nhiêu?", ta trả lời 120.
-// App sẽ tự động cấu hình pipeline render tương ứng. Không cần ép Set lại.
+// C. CADISPLAYLINK OPTIMIZATION (★ FIXED WITH EXPLICIT PROTOTYPE ★)
+// Vấn đề cũ: LaLogos không biết return type của preferredFramesPerSecond.
+// Giải pháp: Khai báo interface giả định nghĩa rõ ràng trước khi hook.
+@interface CADisplayLink (BoostFix)
+@property (nonatomic, readonly) NSInteger preferredFramesPerSecond;
+@end
+
 %hook CADisplayLink
 
-// Override Getter ONLY: Báo cáo luôn là 120fps nếu bật God Mode
+// Override Getter với khai báo tường minh
 - (NSInteger)preferredFramesPerSecond {
     if (IS_ENABLED && CFG.godModeForce120Hz) {
         return 120;
     }
+    // Gọi orig an toàn vì đã có prototype
     return %orig();
 }
-
-// NOTE: Đã loại bỏ hoàn toàn -setPreferredFramesPerSecond: để tránh lỗi compile.
-// Việc chỉ override Getter là đủ để đánh lừa hệ thống và các engine game/UI.
 
 %end
 
