@@ -3,7 +3,7 @@
 
 #import <Foundation/Foundation.h>
 
-@interface KernelBypass : NSObject // ★ Phải kế thừa NSObject ★
+@interface KernelBypass : NSObject
 
 + (instancetype)sharedInstance;
 - (void)initEnvironment;
@@ -12,4 +12,4 @@
 
 @end
 
-#endif /* KERNEL_BYPASS_H */
+#endif
