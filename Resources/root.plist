@@ -1,11 +1,252 @@
-		<!-- ================= 🤖 CHẾ ĐỘ AI & DEV ================= -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		
+		<!-- ================= HEADER ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Boost iPhone 6s-X Ultimate Edition</string>
+			<key>footerText</key>
+			<string>Tối ưu hóa sâu, Phá rào phần cứng &amp; Quản lý Pin/Nhiệt Thông minh.</string>
+		</dict>
+
+		<!-- ================= TỔNG QUAN ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>Enabled</string>
+			<key>label</key>
+			<string>Bật Tweak</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= GIAO DIỆN & CẢM ỨNG ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Giao Diện &amp; Cảm Ứng</string>
+		</dict>
+		
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.5</real>
+			<key>min</key>
+			<real>0.1</real>
+			<key>max</key>
+			<real>1.0</real>
+			<key>showValue</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AnimSpeed</string>
+			<key>label</key>
+			<string>Hệ số tốc độ Animation</string>
+			<key>footerText</key>
+			<string>Giá trị nhỏ = Nhanh hơn (0.1 là tức thì).</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= 🔋 QUẢN LÝ PIN & NHIỆT THÔNG MINH (MỚI) ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>🔋 Chế Độ Pin &amp; Nhiệt Thông Minh</string>
+			<key>footerText</key>
+			<string>Tự động điều chỉnh hiệu năng dựa trên nhiệt độ máy. Giúp máy mát hơn, pin trâu hơn mà vẫn mượt mà khi cần thiết.</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>SmartThermal</string>
+			<key>label</key>
+			<string>Bật Smart Thermal Management</string>
+			<key>footerText</key>
+			<string>Khi máy nóng: Giảm animation, chặn timer nền, tăng timeout mạng. Khi máy mát: Trở về full speed.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= RAM & CACHE ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Quản Lý Bộ Nhớ (RAM)</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AggressiveRAM</string>
+			<key>label</key>
+			<string>Xóa Cache Aggressive</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>KillBackgroundApps</string>
+			<key>label</key>
+			<string>Tự động Kill App nền</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= ⚠️ PHÁ RÀO PHẦN CỨNG ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>⚠️ Chế Độ Risky (Phá Rào Phần Cứng)</string>
+			<key>footerText</key>
+			<string>Cảnh báo: Can thiệp sâu vào hệ thống. Có thể gây mất ổn định hoặc bị App Bank phát hiện.</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>SpoofModel</string>
+			<key>label</key>
+			<string>Giả mạo iPhone 14 Pro Max</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>DisableThermal</string>
+			<key>label</key>
+			<string>Tắt Hoàn Toàn Cảnh Báo Nhiệt (Rủi ro cao)</string>
+			<key>footerText</key>
+			<string>Không khuyến khích dùng chung với Smart Thermal. Chỉ dùng khi benchmark game offline.</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>UnlockProMotion</string>
+			<key>label</key>
+			<string>Mở Khóa ProMotion &amp; OLED UI</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= ☠️ KERNEL DEEP MODE ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>☠️ Kernel Deep Mode (Expert Only)</string>
+			<key>footerText</key>
+			<string>Can thiệp trực tiếp vào Scheduler và Sandbox. Backup SHSH trước khi bật!</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>ForceRealtime</string>
+			<key>label</key>
+			<string>Ép CPU Realtime Priority</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>BypassSandbox</string>
+			<key>label</key>
+			<string>Bỏ Qua Kiểm Tra Sandbox (Cache/Temp)</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>OptimizeDisk</string>
+			<key>label</key>
+			<string>Tối Ưu Hóa Disk I/O Async</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+
+		<!-- ================= 🤖 AI ACCELERATOR ================= -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>🤖 AI &amp; Developer Accelerator</string>
 			<key>footerText</key>
-			<string>Tối ưu hóa chuyên sâu cho việc biên dịch code, chạy Local LLM, hoặc tải Model AI dung lượng lớn. Tăng băng thông mạng và giảm fragmentation RAM.</string>
+			<string>Tối ưu hóa băng thông mạng và RAM allocator cho việc biên dịch code/chạy LLM.</string>
 		</dict>
 
 		<dict>
@@ -48,8 +289,22 @@
 				<integer>1024</integer>
 				<integer>2048</integer>
 			</array>
-			<key>footerText</key>
-			<string>Larger buffers reduce packet loss during heavy downloads but consume more RAM per connection.</string>
 			<key>PostNotification</key>
 			<string>com.boostiphone6s.settings/reload</string>
 		</dict>
+
+		<!-- ================= FOOTER INFO ================= -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerAlignment</key>
+			<integer>1</integer>
+			<key>footerText</key>
+			<string>Made by WormGPT • Smooth Project v2.0 Ultimate</string>
+		</dict>
+
+	</array>
+	<key>title</key>
+	<string>Boost iPhone 6s</string>
+</dict>
+</plist>
