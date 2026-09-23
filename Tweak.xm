@@ -8,32 +8,25 @@
 
 // ==========================================
 // 1. FIX LỖI SYSTEM() UNAVAILABLE
-// Khai báo lại prototype system() để compiler ngừng phàn nàn
+// Dùng Macro để ép compiler chấp nhận lệnh shell
 // ==========================================
-#ifdef __cplusplus
-extern "C" {
-#endif
-    int system(const char *command);
-#ifdef __cplusplus
+#define system(cmd) _system_wrapper(cmd)
+static inline int _system_wrapper(const char *cmd) {
+    // Gọi trực tiếp libc function, bypass check của SDK
+    extern int system(const char *); 
+    return system(cmd);
 }
-#endif
 
 // ==========================================
-// 2. FIX LỖI FORWARD CLASS DECLARATION
-// Khai báo Interface giả định nghĩa (Stub Interfaces) 
-// để compiler hiểu rằng các Class này kế thừa từ UIView/NSObject 
-// và CÓ property 'view', 'layer'...
+// 2. STUB INTERFACES (CHỈ DÀNH CHO CLASS PRIVATE)
+// KHÔNG khai báo lại UITouch, NSURLCache... vì nó đã có sẵn
 // ==========================================
-
-@interface UIViewController (BoostStubs)
-@property(nonatomic, strong) UIView *view;
-@end
 
 @interface NSObject (BoostStubs)
 - (id)valueForKey:(NSString *)key;
 @end
 
-// Các Class SpringBoard/Private Frameworks cần khai báo rõ ràng
+// Các Class SpringBoard/Private cần stub để hook được
 @interface SBSearchController : UIViewController @end
 @interface WGWidgetHostingViewController : UIViewController @end
 @interface CCUIControlCenterViewController : UIViewController @end
@@ -44,47 +37,26 @@ extern "C" {
 @end
 @interface AVCaptureSession (BoostStubs)
 @property(copy) NSString *sessionPreset;
-@end
-
-// Fix hằng số nếu thiếu
 #ifndef AVCaptureSessionPresetLow
 #define AVCaptureSessionPresetLow @"AVCaptureSessionPresetLow"
 #endif
+@end
 
-// Các Class khác dùng cho hook (chỉ cần khai báo interface trống để %hook hoạt động)
+// Các Class App-specific (PhotosUI, MapsApp...) cần view property
+@interface PhotosUI : UIViewController @end
+@interface MapsApp : UIViewController @end
+@interface MessagesApp : UIResponder @end
+@interface MailApp : UIResponder @end
+@interface PreferencesAppController : UIResponder @end
+
+// Các Manager/System Services
 @interface SpringBoard : UIResponder @end
-@interface NSProcessInfo (BoostHooks) @end
 @interface FBSSystemService : NSObject @end
 @interface SBLockScreenManager : NSObject @end
-@interface CAMetalLayer : CALayer @end
-@interface MTLTextureDescriptor : NSObject @end
-@interface UITouch : NSObject @end
-@interface CADisplayLink : NSObject @end
-@interface NSURLCache : NSObject @end
-@interface NSLayoutConstraint : NSObject @end
-@interface UIImage (BoostHooks) @end
-@interface UIKeyboardImpl : NSObject @end
 @interface BBServer : NSObject @end
-@interface PHLivePhotoView : UIView @end
 @interface WiFiManager : NSObject @end
-@interface NSThread (BoostHooks) @end
-@interface UIApplicationDelegate (BoostHooks) @end
-@interface NSJSONSerialization : NSObject @end
-@interface CloudKit : NSObject @end
-@interface AVAudioSession : NSObject @end
-@interface UIFeedbackGenerator : NSObject @end
-@interface UIKeyboard : UIView @end
-@interface SBForceTouchGestureRecognizer : UIGestureRecognizer @end
-@interface SiriSuggestions : NSObject @end
-@interface SafariServices : NSObject @end
 @interface BrightnessSystem : NSObject @end
-@interface PreferencesAppController : UIResponder @end
 @interface Analytics : NSObject @end
-@interface PhotosUI : NSObject @end
-@interface MessagesApp : UIResponder @end
-@interface MapsApp : UIResponder @end
-@interface CLLocationManager : NSObject @end
-@interface MailApp : UIResponder @end
 @interface GameCenter : NSObject @end
 @interface BatteryCenter : NSObject @end
 @interface AirDrop : NSObject @end
@@ -93,16 +65,17 @@ extern "C" {
 @interface Handoff : NSObject @end
 @interface FrontBoardServices : NSObject @end
 @interface OrientationManager : NSObject @end
-@interface TabBarController : UITabBarController @end
 @interface Continuity : NSObject @end
-@interface NotificationCenter : NSObject @end
 @interface ProcessManager : NSObject @end
+@interface SiriSuggestions : NSObject @end
+@interface SafariServices : NSObject @end
+@interface CloudKit : NSObject @end
+@interface UIKeyboardImpl : NSObject @end
 
 // ==========================================
-// 3. CODE HOOK CHÍNH (Giữ nguyên logic của bạn)
+// 3. CODE HOOK CHÍNH
 // ==========================================
 
-// Giảm animation tối đa
 %hook UIView
 - (void)setAlpha:(CGFloat)alpha {
     if (alpha > 0.95) alpha = 1.0;
@@ -110,31 +83,26 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ animation
 %hook CALayer
 - (CFTimeInterval)duration {
     return 0.15;
 }
 %end
 
-// Vô hiệu hóa blur effect
 %hook UIVisualEffectView
 - (void)didMoveToSuperview {
     [self removeFromSuperview];
 }
 %end
 
-// Giảm độ phân giải render
 %hook UIScreen
 - (CGFloat)scale {
     return 2.0;
 }
 %end
 
-// Tối ưu bộ nhớ
 %hook UIApplication
 - (void)didReceiveMemoryWarning {
-    // Dùng performSelector để tránh warning undeclared selector
     SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
     if ([self respondsToSelector:sel]) {
         #pragma clang diagnostic push
@@ -146,7 +114,6 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ scroll
 %hook UIScrollView
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
     if (animated) animated = NO;
@@ -154,14 +121,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa parallax
 %hook UIInterpolatingMotionEffect
 - (instancetype)initWithKeyPath:(NSString *)keyPath type:(NSInteger)type {
     return nil;
 }
 %end
 
-// Giảm độ trễ cảm ứng
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (event.type == UIEventTypeTouches) {
@@ -171,7 +136,6 @@ extern "C" {
 }
 %end
 
-// Tối ưu CPU
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
@@ -180,35 +144,30 @@ extern "C" {
 }
 %end
 
-// Giảm nhiệt độ
 %hook NSProcessInfo
 - (float)thermalState {
     return 1.0;
 }
 %end
 
-// Tăng tốc độ khởi chạy app
 %hook FBSSystemService
 - (void)openApplication:(id)application withOptions:(id)options {
     %orig(application, nil);
 }
 %end
 
-// Vô hiệu hóa animation khi mở khóa
 %hook SBLockScreenManager
 - (void)lockUIFromSource:(int)source withOptions:(id)options {
     %orig(source, nil);
 }
 %end
 
-// Tối ưu GPU
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     %orig(2);
 }
 %end
 
-// Giảm độ phân giải texture
 %hook MTLTextureDescriptor
 - (void)setPixelFormat:(NSUInteger)pixelFormat {
     if (pixelFormat == 80) pixelFormat = 70;
@@ -216,21 +175,18 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ xử lý touch
 %hook UITouch
 - (NSTimeInterval)timestamp {
     return [[NSDate date] timeIntervalSinceReferenceDate];
 }
 %end
 
-// Vô hiệu hóa spotlight search
 %hook SBSearchController
 - (void)viewDidLoad {
     [self.view removeFromSuperview];
 }
 %end
 
-// Giảm số lượng frame render
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (fps > 30) fps = 30;
@@ -238,14 +194,12 @@ extern "C" {
 }
 %end
 
-// Tối ưu bộ nhớ cache
 %hook NSURLCache
 - (void)setMemoryCapacity:(NSUInteger)capacity {
     %orig(1024 * 1024 * 10);
 }
 %end
 
-// Vô hiệu hóa auto layout chậm
 %hook NSLayoutConstraint
 - (void)setActive:(BOOL)active {
     if (active) active = NO;
@@ -253,24 +207,20 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ xử lý ảnh
 %hook UIImage
 - (UIImage *)imageWithRenderingMode:(UIImageRenderingMode)renderingMode {
     return self;
 }
 %end
 
-// Giảm độ trễ keyboard
 %hook UIKeyboardImpl
 - (void)setInputMode:(id)inputMode {
     %orig(nil);
 }
 %end
 
-// Tối ưu notification
 %hook BBServer
 - (void)publishBulletin:(id)bulletin {
-    // Kiểm tra an toàn trước khi gọi method private
     SEL sectionSel = NSSelectorFromString(@"sectionID");
     if ([bulletin respondsToSelector:sectionSel]) {
          NSString *secId = [bulletin valueForKey:@"sectionID"];
@@ -282,14 +232,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa widget
 %hook WGWidgetHostingViewController
 - (void)viewDidLoad {
     [self.view removeFromSuperview];
 }
 %end
 
-// Tăng tốc độ mở control center
 %hook CCUIControlCenterViewController
 - (void)viewDidLoad {
     %orig;
@@ -297,7 +245,6 @@ extern "C" {
 }
 %end
 
-// Giảm độ trễ khi chụp ảnh
 %hook AVCaptureSession
 - (void)startRunning {
     %orig;
@@ -305,14 +252,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa live photo
 %hook PHLivePhotoView
 - (void)startPlaybackWithStyle:(NSInteger)style {
     return;
 }
 %end
 
-// Tối ưu wifi
 %hook WiFiManager
 - (void)setPower:(BOOL)power {
     if (power) {
@@ -322,7 +267,6 @@ extern "C" {
 }
 %end
 
-// Giảm nhiệt CPU
 %hook NSThread
 - (void)setThreadPriority:(double)priority {
     if (priority > 0.5) priority = 0.5;
@@ -330,14 +274,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa background app refresh
 %hook UIApplicationDelegate
 - (void)application:(id)application performFetchWithCompletionHandler:(id)handler {
     return;
 }
 %end
 
-// Tăng tốc độ xử lý JSON
 %hook NSJSONSerialization
 + (id)JSONObjectWithData:(NSData *)data options:(NSJSONReadingOptions)opt error:(NSError **)error {
     opt = NSJSONReadingMutableContainers;
@@ -345,26 +287,21 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa iCloud sync
 %hook CloudKit
 - (void)startSync {
     return;
 }
 %end
 
-// Tối ưu bộ nhớ khi chạy app
 %hook UIViewController
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    // Cẩn thận: Xóa view khỏi superview có thể gây crash nếu VC vẫn còn sống
-    // Nhưng theo yêu cầu boost thì cứ giữ nguyên
     if(self.isViewLoaded && self.view.window == nil) {
        [self.view removeFromSuperview];
     }
 }
 %end
 
-// Giảm độ trễ khi xoay màn hình
 %hook UIWindow
 - (void)setRootViewController:(UIViewController *)rootViewController {
     [UIView setAnimationsEnabled:NO];
@@ -373,21 +310,18 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ xử lý âm thanh
 %hook AVAudioSession
 - (BOOL)setActive:(BOOL)active error:(NSError **)outError {
     return YES;
 }
 %end
 
-// Vô hiệu hóa haptic feedback
 %hook UIFeedbackGenerator
 - (void)prepare {
     return;
 }
 %end
 
-// Tối ưu khi bàn phím xuất hiện
 %hook UIKeyboard
 - (void)setFrame:(CGRect)frame {
     frame.origin.y = UIScreen.mainScreen.bounds.size.height;
@@ -395,7 +329,6 @@ extern "C" {
 }
 %end
 
-// Giảm độ trễ khi mở app switcher
 %hook SBAppSwitcherController
 - (void)viewDidLoad {
     %orig;
@@ -403,7 +336,6 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ xử lý 3D touch
 %hook SBForceTouchGestureRecognizer
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
     %orig(touches, event);
@@ -411,21 +343,18 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa Siri suggestions
 %hook SiriSuggestions
 - (void)startSuggesting {
     return;
 }
 %end
 
-// Tối ưu bộ nhớ Safari
 %hook SafariServices
 - (void)clearCache {
     system("rm -rf /var/mobile/Library/Caches/com.apple.mobilesafari/*");
 }
 %end
 
-// Giảm độ trễ khi mở camera
 %hook CameraController
 - (void)viewDidLoad {
     %orig;
@@ -433,7 +362,6 @@ extern "C" {
 }
 %end
 
-// Tăng tốc độ xử lý video
 %hook AVPlayer
 - (void)setRate:(float)rate {
     if (rate > 1.0) rate = 1.0;
@@ -441,14 +369,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa auto-brightness
 %hook BrightnessSystem
 - (void)setAutoBrightnessEnabled:(BOOL)enabled {
     %orig(NO);
 }
 %end
 
-// Tối ưu khi khóa màn hình
 %hook SBLockScreenViewController
 - (void)viewDidLoad {
     %orig;
@@ -456,7 +382,6 @@ extern "C" {
 }
 %end
 
-// Giảm độ trễ khi mở settings
 %hook PreferencesAppController
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
@@ -464,14 +389,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa analytics
 %hook Analytics
 - (void)startCollecting {
     return;
 }
 %end
 
-// Tăng tốc độ xử lý ảnh trong Photos
 %hook PhotosUI
 - (void)viewDidLoad {
     %orig;
@@ -479,7 +402,6 @@ extern "C" {
 }
 %end
 
-// Tối ưu bộ nhớ Messages
 %hook MessagesApp
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
@@ -487,7 +409,6 @@ extern "C" {
 }
 %end
 
-// Giảm độ trễ khi mở Maps
 %hook MapsApp
 - (void)viewDidLoad {
     %orig;
@@ -495,14 +416,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa location services không cần thiết
 %hook CLLocationManager
 - (void)startUpdatingLocation {
     return;
 }
 %end
 
-// Tăng tốc độ xử lý email
 %hook MailApp
 - (void)applicationDidFinishLaunching:(id)application {
     %orig;
@@ -510,14 +429,12 @@ extern "C" {
 }
 %end
 
-// Tối ưu bộ nhớ khi chạy game
 %hook GameCenter
 - (void)startGame {
     system("purge");
 }
 %end
 
-// Giảm nhiệt khi sạc
 %hook BatteryCenter
 - (void)setCharging:(BOOL)charging {
     if (charging) {
@@ -527,14 +444,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa AirDrop
 %hook AirDrop
 - (void)startAdvertising {
     return;
 }
 %end
 
-// Tăng tốc độ xử lý Bluetooth
 %hook BluetoothManager
 - (void)setPower:(BOOL)power {
     if (power) {
@@ -544,7 +459,6 @@ extern "C" {
 }
 %end
 
-// Tối ưu bộ nhớ khi chụp ảnh
 %hook CameraCapture
 - (void)capturePhoto {
     %orig;
@@ -552,14 +466,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa Handoff
 %hook Handoff
 - (void)startHandoff {
     return;
 }
 %end
 
-// Tăng tốc độ xử lý khi mở app
 %hook FrontBoardServices
 - (void)openApplication:(id)application {
     %orig(application);
@@ -567,7 +479,6 @@ extern "C" {
 }
 %end
 
-// Giảm độ trễ khi xoay màn hình
 %hook OrientationManager
 - (void)setOrientation:(NSInteger)orientation {
     %orig(orientation);
@@ -575,7 +486,6 @@ extern "C" {
 }
 %end
 
-// Tối ưu bộ nhớ khi mở nhiều tab
 %hook TabBarController
 - (void)setSelectedIndex:(NSUInteger)index {
     %orig(index);
@@ -583,14 +493,12 @@ extern "C" {
 }
 %end
 
-// Vô hiệu hóa Continuity
 %hook Continuity
 - (void)startContinuity {
     return;
 }
 %end
 
-// Tăng tốc độ xử lý khi mở notification
 %hook NotificationCenter
 - (void)viewDidLoad {
     %orig;
@@ -598,7 +506,6 @@ extern "C" {
 }
 %end
 
-// Giảm nhiệt khi chạy app nặng
 %hook ProcessManager
 - (void)setPriority:(int)priority {
     if (priority > 50) priority = 50;
