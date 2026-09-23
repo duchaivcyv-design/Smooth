@@ -1,16 +1,3 @@
-// ==============================================================================
-// BOOST iPHONE 6s-X v5.2 "ABSOLUTE MAXIMUM + BLOCKER TOGGLE"
-// Author: TaoJB, NoFree | Project: Smooth
-// Description: 
-//   - Hierarchical Control: Master Switch controls all sub-modules.
-//   - AI/Dev Optimization: Reduced latency for long text input & heavy tasks.
-//   - Force 120Hz & GPU Overclocking via Pure Runtime Swizzling.
-//   - Hardcore Memory Tuning: Bypass compression guards for faster allocation.
-//   - Kernel-Level Priority Boosting via Mach Ports.
-//   - SYSTEM BLOCKER: Optional toggle to stop unnecessary background services.
-//   - Zero Compile Errors: Strictly typed and imported correctly.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -24,7 +11,7 @@
 #import <net/if.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
-#import <objc/runtime.h> // Required for Method Swizzling
+#import <objc/runtime.h>
 #import <CommonCrypto/CommonDigest.h> 
 #import <sys/resource.h> 
 
@@ -32,32 +19,31 @@
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
-#import "Modules/KernelBypass.h" // ★ Module khai thác sâu ★
-#import "Modules/SystemBlocker.h" // ★ Module chặn hệ thống thừa thãi ★
+#import "Modules/KernelBypass.h"
+#import "Modules/SystemBlocker.h"
 
 // ------------------------------------------------------------------------------
 // SECTION 1: CONFIGURATION MANAGER (HIERARCHICAL LOGIC)
 // ------------------------------------------------------------------------------
 
 @interface BoostConfig : NSObject
-@property (nonatomic, assign) BOOL enabled;          // MASTER SWITCH
-@property (nonatomic, assign) CGFloat animSpeed;     
-@property (nonatomic, assign) BOOL aggressiveRAM;    
-@property (nonatomic, assign) BOOL killBgApps;       
-@property (nonatomic, assign) BOOL spoofModel;       
-@property (nonatomic, assign) BOOL disableThermal;   
-@property (nonatomic, assign) BOOL unlockProMotion;  
-@property (nonatomic, assign) BOOL forceRealtimePriority; 
-@property (nonatomic, assign) BOOL bypassSandboxChecks;   
-@property (nonatomic, assign) BOOL optimizeDiskIO;        
+@property (nonatomic, assign) BOOL enabled;
+@property (nonatomic, assign) CGFloat animSpeed;
+@property (nonatomic, assign) BOOL aggressiveRAM;
+@property (nonatomic, assign) BOOL killBgApps;
+@property (nonatomic, assign) BOOL spoofModel;
+@property (nonatomic, assign) BOOL disableThermal;
+@property (nonatomic, assign) BOOL unlockProMotion;
+@property (nonatomic, assign) BOOL forceRealtimePriority;
+@property (nonatomic, assign) BOOL bypassSandboxChecks;
+@property (nonatomic, assign) BOOL optimizeDiskIO;
 @property (nonatomic, assign) BOOL enableAIAcceleration; 
 @property (nonatomic, assign) NSInteger networkBufferSize;
-@property (nonatomic, assign) BOOL godModeForce120Hz;   
+@property (nonatomic, assign) BOOL godModeForce120Hz;
 @property (nonatomic, assign) BOOL godModeFakeiPhone16; 
 @property (nonatomic, assign) BOOL godModeMetalOverclock;
 @property (nonatomic, assign) BOOL smartThermalManagement;
 
-// ★ MỚI: PROPERTY CHO SYSTEM BLOCKER ★
 @property (nonatomic, assign) BOOL enableBlocker;
 
 + (instancetype)sharedInstance;
@@ -105,7 +91,7 @@
     #define GET_FLOAT(key, def) ([defaults objectForKey:key] ? [defaults floatForKey:key] : def)
     #define GET_INT(key, def) ([defaults objectForKey:key] ? [defaults integerForKey:key] : def)
 
-    self.enabled = GET_BOOL(@"Enabled", NO); // Mặc định TẮT để an toàn
+    self.enabled = GET_BOOL(@"Enabled", NO);
     
     // Sub-settings only matter if Enabled is YES
     if (self.enabled) {
@@ -125,7 +111,6 @@
         self.godModeMetalOverclock = GET_BOOL(@"GodModeMetal", YES);
         self.smartThermalManagement = GET_BOOL(@"SmartThermal", YES);
         
-        // ★ LOAD KEY BLOCKER TỪ SETTINGS ★
         self.enableBlocker = GET_BOOL(@"EnableBlocker", NO); 
         
     } else {
@@ -145,7 +130,7 @@
         self.godModeFakeiPhone16 = NO;
         self.godModeMetalOverclock = NO;
         self.smartThermalManagement = NO;
-        self.enableBlocker = NO; // ★ RESET BLOCKER KHI MASTER OFF ★
+        self.enableBlocker = NO;
     }
 }
 
