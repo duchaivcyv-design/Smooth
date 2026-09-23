@@ -26,35 +26,19 @@ BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
 # ===================================================================
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation
 
-# Lưu ý: Rootless tweak thường không cần link substrate nếu dùng ElleKit/Substitute runtime injection.
-# Nếu bắt buộc phải link thì uncomment dòng dưới:
-# BoostiPhone6s_LIBRARIES = substrate 
-
 include $(THEOS_MAKE_PATH)/library.mk
 
 # ===================================================================
-# FIX LỖI DEBIAN STRUCTURE (QUAN TRỌNG NHẤT)
-# Sử dụng .theos/_ thay vì $(THEOBJ) để đảm bảo đường dẫn đúng
+# FIX LỖI DEBIAN STRUCTURE (VIẾT TRÊN 1 DÒNG ĐỂ TRÁNH SYNTAX ERROR)
 # ===================================================================
 before-package::
-	@echo "🛠️ Organizing Debian structure for Rootless..."
-	
-	# 1. Đảm bảo thư mục đích tồn tại (.theos/_ là nơi Theos stage files trước khi đóng gói)
-	mkdir -p .theos/_/DEBIAN
-	
-	# 2. Copy các file control từ thư mục gốc repo vào DEBIAN folder
-	cp control .theos/_/DEBIAN/control
-	cp postinst .theos/_/DEBIAN/postinst
-	chmod 755 .theos/_/DEBIAN/postinst
-	
-	# 3. Xử lý prerm nếu có
-	if [ -f prerm ]; then 
-	    cp prerm .theos/_/DEBIAN/prerm; 
-	    chmod 755 .theos/_/DEBIAN/prerm; 
-	fi
-	
-	# 4. Kiểm tra nhanh xem đã copy chưa
-	ls -la .theos/_/DEBIAN/
+	@echo "🛠️ Organizing Debian structure for Rootless..." && \
+	mkdir -p .theos/_/DEBIAN && \
+	cp control .theos/_/DEBIAN/control && \
+	cp postinst .theos/_/DEBIAN/postinst && \
+	chmod 755 .theos/_/DEBIAN/postinst && \
+	if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi && \
+	echo "✅ Structure Ready:" && ls -la .theos/_/DEBIAN/
 
 after-install::
 	install.exec "killall -9 SpringBoard backboardd"
