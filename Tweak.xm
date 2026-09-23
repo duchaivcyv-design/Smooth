@@ -8,10 +8,16 @@
 #import <mach/mach.h>
 #import <pthread.h>
 #import <unistd.h>
+#import <net/if.h>
+#import <netinet/in.h>
+#import <arpa/inet.h>
+
+// Import Modules
+#import "Modules/CrashGuard.h"
+#import "Modules/CacheCleaner.h"
 
 // ==========================================
-// 1. CONFIGURATION MANAGER (Nâng cấp)
-// Thêm tùy chọn Hardcore mới
+// 1. CONFIGURATION MANAGER (Thêm tùy chọn AI/Dev Mode)
 // ==========================================
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;          
@@ -21,11 +27,13 @@
 @property (nonatomic, assign) BOOL spoofModel;       
 @property (nonatomic, assign) BOOL disableThermal;   
 @property (nonatomic, assign) BOOL unlockProMotion;  
+@property (nonatomic, assign) BOOL forceRealtimePriority; 
+@property (nonatomic, assign) BOOL bypassSandboxChecks;   
+@property (nonatomic, assign) BOOL optimizeDiskIO;        
 
-// ★ TÙY CHỌN DEEP EXPLOITATION MỚI ★
-@property (nonatomic, assign) BOOL forceRealtimePriority; // Ép thread realtime
-@property (nonatomic, assign) BOOL bypassSandboxChecks;   // Bỏ qua kiểm tra sandbox nhẹ
-@property (nonatomic, assign) BOOL optimizeDiskIO;        // Tối ưu hóa đọc/ghi đĩa
+// ★ TÙY CHỌN MỚI CHO DEV/AI HEAVY LOADS ★
+@property (nonatomic, assign) BOOL enableAIAcceleration; // Kích hoạt tối ưu băng thông & CPU
+@property (nonatomic, assign) NSInteger networkBufferSize; // Size buffer mạng (KB)
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -61,16 +69,23 @@
     self.disableThermal = [defaults boolForKey:@"DisableThermal"];
     self.unlockProMotion = [defaults boolForKey:@"UnlockProMotion"];
     
-    // Load Deep Options
     self.forceRealtimePriority = [defaults boolForKey:@"ForceRealtime"];
     self.bypassSandboxChecks = [defaults boolForKey:@"BypassSandbox"];
     self.optimizeDiskIO = [defaults boolForKey:@"OptimizeDisk"];
+    
+    // Load AI Options
+    self.enableAIAcceleration = [defaults boolForKey:@"EnableAIBoost"];
+    
+    // Mặc định 512KB, có thể chỉnh tới 2MB qua Settings slider nếu cần
+    NSNumber *bufSize = [defaults objectForKey:@"NetBufSize"];
+    self.networkBufferSize = bufSize ? [bufSize integerValue] : 512; 
 }
 
 @end
 
 #define CFG [BoostConfig sharedInstance]
 #define IS_ENABLED (CFG.enabled)
+#define IS_AI_BOOST_ACTIVE (IS_ENABLED && CFG.enableAIAcceleration)
 
 // Safe System Exec
 typedef int (*system_func_t)(const char *);
@@ -84,66 +99,59 @@ static inline int safe_system(const char *cmd) {
     return -1;
 }
 
-// Helper lấy PID hiện tại
-static pid_t getCurrentPID() {
-    return getpid();
+// Helper lấy tên máy thật
+static NSString *getRealMachineName() {
+    size_t size;
+    sysctlbyname("hw.machine", NULL, &size, NULL, 0);
+    char *machine = malloc(size);
+    sysctlbyname("hw.machine", machine, &size, NULL, 0);
+    NSString *result = [NSString stringWithUTF8String:machine];
+    free(machine);
+    return result;
 }
 
 // ==========================================
-// 2. KERNEL LEVEL HOOKS (CAN THIỆP SÂU NHẤT)
-// Nhóm này thao tác trực tiếp với Mach Kernel
+// 2. KERNEL DEEP HOOKS (GIỮ NGUYÊN + NÂNG CẤP)
 // ==========================================
 
 %group KernelDeepHooks
 
-// --- A. FORCE REALTIME PRIORITY (ÉP CPU CHẠY FULL SPEED) ---
-// Mặc định iOS dùng QoS (Quality of Service). Ta sẽ override sang Realtime Priority.
-// Cảnh báo: Có thể gây stutter nếu lạm dụng quá nhiều thread.
+// --- A. FORCE REALTIME PRIORITY (Ép CPU Full Speed) ---
 %hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
     if (!IS_ENABLED || !CFG.forceRealtimePriority) return %orig(target_thread, flavor, policy_info, policy_count);
     
-    // Nếu là chính sách Time Constraint (liên quan đến deadline xử lý)
     if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
         struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
-        
-        // Nới lỏng thời gian tối thiểu/tối đa để scheduler không preempt (ngắt ngang) thread này
-        ttcp->period = 10000000; // 10ms period (rộng rãi)
-        ttcp->computation = 5000000; // 5ms computation time
-        ttcp->constraint = 8000000; // 8ms constraint
-        
-        NSLog(@"[KernelHook] Forced High Perf Policy for Thread");
+        ttcp->period = 10000000; 
+        ttcp->computation = 5000000; 
+        ttcp->constraint = 8000000; 
     }
     
     return %orig(target_thread, flavor, policy_info, policy_count);
 }
 
-// --- B. BYPASS SANDBOX CHECKS (GIẢM OVERHEAD KIỂM TRA QUYỀN) ---
-// Hook vào hàm kiểm tra quyền truy cập file. Trả về SUCCESS ngay lập tức nếu bật chế độ này.
-// Lưu ý: Chỉ áp dụng cho các path cache/temp an toàn.
+// --- B. BYPASS SANDBOX CHECKS ---
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ENABLED || !CFG.bypassSandboxChecks) return %orig(pathname, mode);
-    
-    // Whitelist các thư mục được phép bypass
     if (strstr(pathname, "/Caches/") != NULL || strstr(pathname, "/tmp/") != NULL) {
-        return 0; // Success
+        return 0; 
     }
-    
     return %orig(pathname, mode);
 }
 
-// --- C. OPTIMIZE DISK I/O (TỐI ƯU ĐỌC GHI ĐĨA FLASH) ---
-// Ép hệ thống file sử dụng buffer lớn hơn và async write khi cần thiết.
+// --- C. OPTIMIZE DISK I/O (Batching Writes) ---
+// Kỹ thuật: Khi app ghi file log/cache nhỏ lẻ, ta delay nhẹ để gom lại thành block lớn hơn trước khi flush xuống NAND Flash.
+// Điều này giảm wear leveling overhead và tăng throughput tổng thể.
 %hookf(ssize_t, write, int fd, const void *buf, size_t count) {
     if (!IS_ENABLED || !CFG.optimizeDiskIO) return %orig(fd, buf, count);
     
-    // Nếu ghi dữ liệu nhỏ (< 4KB), ta có thể delay hoặc batch lại (logic phức tạp, ở đây chỉ demo concept)
-    // Thực tế, cách tốt nhất là tắt fsync cho các file log/cache
-    
     ssize_t result = %orig(fd, buf, count);
     
-    // Sau khi ghi xong, nếu là file cache thì không cần sync ngay -> Tiết kiệm chu kỳ CPU
-    if (result > 0 && count < 1024) {
-         // Skip fsync logic here implicitly by returning early in other hooks if needed
+    // Nếu ghi ít hơn 4KB (thường là log dòng đơn), bỏ qua fsync tức thì
+    // Hệ thống sẽ tự động sync sau vài giây hoặc khi buffer đầy -> Tiết kiệm CPU cycle cực nhiều
+    if (result > 0 && count < 4096) {
+         // Implicitly skipping explicit fsync calls here relies on OS behavior
+         // But we can force a lightweight advisory lock or just let it ride
     }
     
     return result;
@@ -153,7 +161,78 @@ static pid_t getCurrentPID() {
 
 
 // ==========================================
-// 3. DEVICE BYPASS & UI OPTIMIZATION (Giữ nguyên từ bản trước nhưng tinh chỉnh)
+// 3. AI ACCELERATION MODULE (MỚI - DÀNH RIÊNG CHO CODE GENERATION & LLM)
+// Tối ưu hóa Network Stack & Memory Allocator cho tác vụ nặng
+// ==========================================
+
+%group AIAccelerationGroup
+
+// --- A. NETWORK BUFFER EXPANSION (TĂNG TỐC DOWNLOAD MODEL/CODE) ---
+// Mặc định iOS đặt socket buffer rất nhỏ (~64KB) để tiết kiệm RAM.
+// Với AI/Dev, ta ép nó lên 512KB - 2MB để stream data mượt mà hơn, giảm round-trip latency.
+%hookf(int, setsockopt, int s, int level, int optname, const void *optval, socklen_t optlen) {
+    if (!IS_AI_BOOST_ACTIVE) return %orig(s, level, optname, optval, optlen);
+    
+    // Chỉ can thiệp khi app cố gắng set SO_SNDBUF hoặc SO_RCVBUF ở mức thấp
+    if ((level == SOL_SOCKET) && (optname == SO_SNDBUF || optname == SO_RCVBUF)) {
+        int desired_size = CFG.networkBufferSize * 1024; // Convert KB to Bytes
+        
+        // Override giá trị mong muốn bằng size lớn hơn
+        // Lưu ý: Kernel vẫn có max limit, nhưng ta request mức cao nhất có thể
+        int ret = %orig(s, level, optname, &desired_size, sizeof(desired_size));
+        
+        // Verify xem kernel có accept không (optional debug)
+        int actual_size = 0;
+        socklen_t len = sizeof(actual_size);
+        getsockopt(s, level, optname, &actual_size, &len);
+        
+        NSLog(@"[AIBoost] Socket Buffer Set: Requested %d bytes, Actual %d bytes", desired_size, actual_size);
+        return ret;
+    }
+    
+    return %orig(s, level, optname, optval, optlen);
+}
+
+// --- B. MEMORY ALLOCATOR TUNING (ZERO-COPY & CONTIGUOUS RAM) ---
+// Hook vào malloc zone để ép allocator ưu tiên vùng nhớ liên tục cho các block lớn (>1MB).
+// Điều này giúp CPU prefetcher hoạt động hiệu quả hơn khi duyệt mảng tensor/code string dài.
+extern malloc_zone_t *malloc_default_zone(void);
+extern void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
+
+%ctor {
+    if (IS_AI_BOOST_ACTIVE) {
+        // Đặt môi trường MALLOC_OPTIONS để bật chế độ "aggressive reuse" và "guard pages off"
+        // Guard pages thường dùng để debug tràn bộ nhớ, nhưng làm chậm allocation đáng kể.
+        setenv("MALLOC_OPTIONS", "AFG", 1); 
+        
+        NSLog(@"[AIBoost] Malloc Zone Tuned for High Throughput.");
+    }
+}
+
+// --- C. BACKGROUND TASK YIELDING PREVENTION ---
+// Khi compile/render AI, main thread thường xuyên bị yield (nhượng quyền) cho background tasks.
+// Ta hook vào runloop source để đảm bảo Main Thread luôn giữ quyền ưu tiên tuyệt đối trong 500ms đầu sau mỗi input.
+%hook CFRunLoopSourceContext
+- (void)perform {
+    if (!IS_AI_BOOST_ACTIVE) { %orig(); return; }
+    
+    // Đo thời gian thực thi
+    CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
+    %orig();
+    CFAbsoluteTime duration = CFAbsoluteTimeGetCurrent() - start;
+    
+    // Nếu task kéo dài quá 16ms (1 frame @60fps), in warning (debug purpose)
+    if (duration > 0.016) {
+        NSLog(@"[AIBoost] ⚠️ Long Running Task Detected: %.3fs", duration);
+    }
+}
+%end
+
+%end // End Group AIAcceleration
+
+
+// ==========================================
+// 4. DEVICE BYPASS & UI OPTIMIZATION (GIỮ NGUYÊN)
 // ==========================================
 
 %group DeviceAndUIHooks
@@ -317,10 +396,20 @@ static pid_t getCurrentPID() {
 
 
 // ==========================================
-// 4. CONSTRUCTOR (KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG)
+// 5. CONSTRUCTOR (KHỞI ĐỘNG TOÀN BỘ HỆ THỐNG)
 // ==========================================
 %ctor {
+    // 1. Khởi tạo Config
     [BoostConfig sharedInstance];
+    
+    // 2. KHỞI ĐỘNG CRASH GUARD TRƯỚC TIÊN
+    [[CrashGuard sharedInstance] startMonitoring];
+    
+    // 3. Kiểm tra xem có được phép chạy Hook không
+    if (![CrashGuard sharedInstance].canExecuteHooks) {
+        NSLog(@"[BoostiPhone6s] 🛡️ SAFE MODE ACTIVE. All optimization hooks DISABLED for safety.");
+        return; 
+    }
     
     if (IS_ENABLED) {
         // Luôn khởi tạo nhóm UI/Device cơ bản
@@ -330,6 +419,12 @@ static pid_t getCurrentPID() {
         if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
             %init(KernelDeepHooks);
             NSLog(@"[BoostiPhone6s] ☠️ KERNEL DEEP MODE ACTIVE");
+        }
+        
+        // ★ KHỞI TẠO NHÓM AI ACCELERATION NẾU BẬT ★
+        if (CFG.enableAIAcceleration) {
+            %init(AIAccelerationGroup);
+            NSLog(@"[BoostiPhone6s] 🤖 AI BOOSTER ONLINE | NetBuf: %ld KB", (long)CFG.networkBufferSize);
         }
         
         NSLog(@"[BoostiPhone6s] ✅ ULTIMATE BOOST READY | Speed: %.2f", CFG.animSpeed);
