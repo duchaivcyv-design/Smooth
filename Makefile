@@ -1,6 +1,6 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
-# INSTALL_TARGET_PROCESSES = SpringBoard backboardd # Comment dòng này để tránh auto-respring gây lỗi dpkg
+INSTALL_TARGET_PROCESSES = SpringBoard backboardd
 
 include $(THEOS)/makefiles/common.mk
 
@@ -27,8 +27,6 @@ BoostiPhone6s_CFLAGS = \
     -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip
-
-# ★ SỬA LỖI LINKER: ĐÃ XÓA 'CommonCrypto' KHỎI DANH SÁCH FRAMEWORKS ★
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
 include $(THEOS_MAKE_PATH)/library.mk
@@ -50,8 +48,7 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 
 # ===================================================================
-# PACKAGING SCRIPT (FIXED SYNTAX ERROR)
-# ★ QUAN TRỌNG: Dùng '&&' để nối lệnh, tránh lỗi parser Makefile khi gặp '#' ★
+# PACKAGING SCRIPT (FIXED TO SHOW IN SETTINGS)
 # ===================================================================
 before-package::
 	@echo "🛠️ Packaging Files..." && \
@@ -59,11 +56,18 @@ before-package::
 	cp control .theos/_/DEBIAN/control && \
 	if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi && \
 	if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi && \
+	
+	echo "📦 Installing Bundle Resources..." && \
 	mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle && \
 	cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist && \
 	cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist && \
+	
+	echo "🔗 Registering with PreferenceLoader..." && \
+	mkdir -p .theos/_/Library/PreferenceLoader/Entries && \
+	cp entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist && \
+	
 	echo "✅ Structure Ready:" && \
-	ls -laR .theos/_/Library/PreferenceBundles/
+	ls -laR .theos/_/Library/PreferenceLoader/
 
 after-install::
 	install.exec "killall -9 SpringBoard backboardd"
