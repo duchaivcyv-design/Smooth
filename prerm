@@ -51,7 +51,3 @@ mkdir -p /var/mobile/Library/Caches
 mkdir -p /var/mobile/Library/Logs
 mkdir -p /tmp
 mkdir -p /var/log
-
-# Khởi động lại SpringBoard
-killall -9 SpringBoard
-killall -9 backboardd
