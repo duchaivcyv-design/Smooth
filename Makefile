@@ -1,5 +1,6 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
+# Tắt auto respring
 # INSTALL_TARGET_PROCESSES = SpringBoard backboardd 
 
 include $(THEOS)/makefiles/common.mk
@@ -40,6 +41,8 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 BoostiPhone6sPrefs_INCLUDE_DIRS = Headers
+# ★ Lấy tài nguyên từ folder Resources bên trong BoostiPhone6s ★
+BoostiPhone6sPrefs_RESOURCES_DIR = Resources 
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation CoreGraphics
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-undefined,dynamic_lookup
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable
@@ -48,27 +51,24 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 
 
 # ===================================================================
-# PACKAGING SCRIPT (FIXED SYNTAX ERROR - ONE LINE PER COMMAND)
-# ★ QUAN TRỌNG: Mỗi dòng phải bắt đầu bằng TAB, KHÔNG dùng && để nối dài ★
+# PACKAGING SCRIPT (CUSTOMIZED FOR YOUR SPECIFIC FOLDER STRUCTURE)
+# ★ SỬA Ở ĐÂY: Copy file Entry từ folder con BoostiPhone6s/Resources/layout/... ★
 # ===================================================================
 before-package::
-	@echo "🛠️ Packaging Files..."
+	@echo "🛠️ Packaging..."
 	@mkdir -p .theos/_/DEBIAN
 	@cp control .theos/_/DEBIAN/control
+	
+	# Copy Scripts cài đặt/gỡ bỏ nếu có
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
 	
-	@echo "📦 Installing Bundle Resources..."
-	@mkdir -p .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
-	@cp Resources/root.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/root.plist
-	@cp Resources/Info.plist .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Info.plist
-	@if [ -f Resources/icon.png ]; then cp Resources/icon.png .theos/_/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/icon.png; fi
-	
-	@echo "🔗 Registering with PreferenceLoader..."
+	# ★ KHAI BÁO MENU SETTINGS: Copy entry.plist vào PreferenceLoader ★
+	# Đường dẫn nguồn: BoostiPhone6s/Resources/layout/Library/PreferenceLoader/Entries/...
 	@mkdir -p .theos/_/Library/PreferenceLoader/Entries
-	@cp entry.plist .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
+	@cp BoostiPhone6s/Resources/layout/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist \
+	   .theos/_/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
 	
-	@echo "✅ Structure Ready:"
-	@ls -laR .theos/_/Library/PreferenceLoader/
+	@echo "✅ Done."
 
-# after-install:: (Đã tắt auto-respring như yêu cầu trước đó)
+# after-install:: (Tắt thủ công)
