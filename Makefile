@@ -1,5 +1,7 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
+# Tắt auto respring
+# INSTALL_TARGET_PROCESSES = SpringBoard backboardd 
 
 include $(THEOS)/makefiles/common.mk
 
@@ -27,13 +29,13 @@ include $(THEOS_MAKE_PATH)/library.mk
 # ===================================================================
 # PART 2: GỌI SUB-FOLDER CHỨA SETTINGS UI
 # ★ CƠ CHẾ NATIVE: Theos sẽ cd vào BoostiPhone6s và chạy make ở đó ★
+# Folder 'layout' bên trong sẽ tự động được map vào /var/jb/... khi package.
 # ===================================================================
 SUBPROJECTS += BoostiPhone6s
 
 
 # ===================================================================
 # PACKAGING SCRIPT TỔNG HỢP (CHỈ LO DEBIAN CONTROL FILES)
-# ★ KHÔNG CẦN COPY RESOURCES HAY ENTRIES VÌ FOLDER 'LAYOUT' ĐÃ LO HẾT ★
 # ===================================================================
 before-package::
 	@echo "Finalizing Package..."
