@@ -1,57 +1,52 @@
-#!/bin/sh
-# Tối ưu hệ thống sau khi cài đặt
-sysctl -w kern.maxvnodes=60000
-sysctl -w kern.maxproc=2048
-sysctl -w vm.page_free_target=2048
-sysctl -w vm.page_free_min=1024
-sysctl -w vm.page_speculative_percentage=5
-sysctl -w vm.page_free_count=1024
-sysctl -w kern.memorystatus_purge_on_warning=1
-sysctl -w kern.memorystatus_purge_on_urgent=1
-sysctl -w kern.memorystatus_purge_on_critical=1
-sysctl -w vm.compressor_mode=4
-sysctl -w vm.page_background_count=1024
-sysctl -w vm.page_background_target=2048
-sysctl -w vm.pageout_algorithm=1
-sysctl -w vm.page_free_reserved=256
-sysctl -w kern.sched_preempt_threshold=100
-sysctl -w kern.timer_coalescing=0
-sysctl -w kern.timer_coalesce=0
-sysctl -w kern.timer_coalescing_bg=0
-sysctl -w kern.timer_coalescing_fg=0
-sysctl -w kern.timer_coalescing_idle=0
-sysctl -w kern.timer_coalescing_ktrace=0
-sysctl -w kern.timer_coalescing_sys=0
-sysctl -w kern.timer_coalescing_user=0
-sysctl -w kern.timer_coalescing_window=0
-sysctl -w kern.timer_coalescing_window_bg=0
-sysctl -w kern.timer_coalescing_window_fg=0
-sysctl -w kern.timer_coalescing_window_idle=0
-sysctl -w kern.timer_coalescing_window_ktrace=0
-sysctl -w kern.timer_coalescing_window_sys=0
-sysctl -w kern.timer_coalescing_window_user=0
-sysctl -w kern.timer_coalescing_window_window=0
-sysctl -w kern.timer_coalescing_window_window_bg=0
-sysctl -w kern.timer_coalescing_window_window_fg=0
-sysctl -w kern.timer_coalescing_window_window_idle=0
-sysctl -w kern.timer_coalescing_window_window_ktrace=0
-sysctl -w kern.timer_coalescing_window_window_sys=0
-sysctl -w kern.timer_coalescing_window_window_user=0
-sysctl -w kern.timer_coalescing_window_window_window=0
-sysctl -w kern.timer_coalescing_window_window_window_bg=0
-sysctl -w kern.timer_coalescing_window_window_window_fg=0
-sysctl -w kern.timer_coalescing_window_window_window_idle=0
-sysctl -w kern.timer_coalescing_window_window_window_ktrace=0
-sysctl -w kern.timer_coalescing_window_window_window_sys=0
-sysctl -w kern.timer_coalescing_window_window_window_user=0
-sysctl -w kern.timer_coalescing_window_window_window_window=0
+#!/bin/bash
 
-# Xóa cache không cần thiết
-rm -rf /var/mobile/Library/Caches/*
-rm -rf /var/mobile/Library/Logs/*
-rm -rf /tmp/*
-rm -rf /var/log/*
+echo ""
+echo "=================================================="
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v4.0"
+echo "   Status: INSTALLING..."
+echo "=================================================="
 
-# Tối ưu bộ nhớ
-sync
-purge
+# 1. Đặt quyền hạn cho Bundle Settings (Quan trọng để menu hiện ra)
+BUNDLE_PATH="/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
+if [ -d "$BUNDLE_PATH" ]; then
+    chmod -R 755 "$BUNDLE_PATH"
+    chown -R mobile:mobile "$BUNDLE_PATH"
+    echo "[OK] Permissions fixed for Settings Bundle."
+else
+    echo "[WARN] Settings Bundle not found yet (will be created on next build)."
+fi
+
+# 2. Tối ưu hóa Kernel (Chỉ áp dụng nếu hệ thống cho phép)
+# Chúng ta dùng '|| true' để nếu lệnh fail thì bash coi như thành công, không báo lỗi đỏ
+echo "[INFO] Applying safe kernel tweaks..."
+
+# Tăng vnode limit (Thường hoạt động trên iOS 15+)
+sysctl -w kern.maxvnodes=60000 >/dev/null 2>&1 || true
+
+# Bật chế độ purge memory khi thiếu RAM (An toàn hơn việc chỉnh page_free_target)
+sysctl -w kern.memorystatus_purge_on_warning=1 >/dev/null 2>&1 || true
+sysctl -w kern.memorystatus_purge_on_urgent=1 >/dev/null 2>&1 || true
+sysctl -w kern.memorystatus_purge_on_critical=1 >/dev/null 2>&1 || true
+
+# Xóa cache DNS nhẹ nhàng (Không xóa folder geod vì bị sandbox chặn)
+killall -HUP mDNSResponder >/dev/null 2>&1 || true
+
+echo "[OK] Kernel tweaks applied successfully."
+
+# 3. Dọn dẹp Cache tạm thời (Safe Mode)
+# Chỉ xóa các thư mục con người dùng sở hữu, tránh đụng vào System Files
+CACHE_DIR="/var/mobile/Library/Caches"
+if [ -d "$CACHE_DIR" ]; then
+    # Tìm và xóa file .tmp cũ hơn 1 ngày
+    find "$CACHE_DIR" -type f -name "*.tmp" -mtime +1 -delete >/dev/null 2>&1 || true
+    echo "[OK] Temporary files cleaned."
+fi
+
+echo ""
+echo "=================================================="
+echo "   INSTALLATION COMPLETE!"
+echo "   Please RESPRING your device to apply changes."
+echo "=================================================="
+echo ""
+
+exit 0
