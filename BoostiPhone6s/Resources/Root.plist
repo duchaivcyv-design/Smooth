@@ -4,12 +4,11 @@
 <dict>
     <key>items</key>
     <array>
-        <!-- HEADER -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Boost iPhone 6s-X v6.0 Ultimate</string>
+            <string>Boost iPhone 6s-X v7.0 Quantum Stability</string>
             <key>footerText</key>
             <string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
         </dict>
@@ -82,12 +81,12 @@
             <string>com.boostiphone6s.settings/reload</string>
         </dict>
 
-        <!-- V6.0 ULTIMATE FEATURES -->
+        <!-- V7.0 ULTIMATE FEATURES -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Tính Năng Mới v6.0</string>
+            <string>Tính Năng Mới v7.0</string>
             <key>footerText</key>
             <string>Các cải tiến giúp giảm nhiệt tối đa và tăng tốc độ hệ thống.</string>
         </dict>
@@ -158,6 +157,40 @@
             <string>DeepSleepOpt</string>
             <key>label</key>
             <string>Tối Ưu Chế Độ Ngủ Sâu</string>
+            <key>PostNotification</key>
+            <string>com.boostiphone6s.settings/reload</string>
+        </dict>
+        
+        <!-- ★ KEY MỚI V7.0: SAFE SPOOF GRAPHICS & ULTRA DEEP RAM ★ -->
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.boostiphone6s.settings</string>
+            <key>key</key>
+            <string>SafeSpoofGraphics</string>
+            <key>label</key>
+            <string>Kích Hoạt Đồ Họa Max An Toàn</string>
+            <key>footerText</key>
+            <string>Can thiệp nhẹ để mở khóa 120fps/Max Settings trong game mà không bị ban.</string>
+            <key>PostNotification</key>
+            <string>com.boostiphone6s.settings/reload</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.boostiphone6s.settings</string>
+            <key>key</key>
+            <string>UltraDeepRam</string>
+            <key>label</key>
+            <string>Xả RAM Cực Sâu (Mach Port)</string>
+            <key>footerText</key>
+            <string>Sử dụng trực tiếp Mach API để giải phóng bộ nhớ vật lý. Chỉ bật khi chơi game nặng.</string>
             <key>PostNotification</key>
             <string>com.boostiphone6s.settings/reload</string>
         </dict>
