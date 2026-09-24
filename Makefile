@@ -32,6 +32,7 @@ include $(THEOS_MAKE_PATH)/library.mk
 # Folder 'layout' bên trong sẽ tự động được map vào /var/jb/... khi package.
 # ===================================================================
 SUBPROJECTS += BoostiPhone6s
+include $(THEOS_MAKE_PATH)/aggregate.mk
 
 
 # ===================================================================
