@@ -17,8 +17,7 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
-# 1. Thêm -Wno-unknown-warning-option để Clang không dừng khi gặp flag lạ
-# 2. Thay -Wno-multiply-defined (flag sai) bằng các flag chuẩn hóa Clang
+# Các cờ dịch chuẩn hóa để tránh lỗi Clang trên GitHub Actions
 BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall \
                            -Wno-unknown-warning-option \
                            -Wno-unused-variable \
@@ -39,36 +38,39 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ===================================================================
-# PART 3: PACKAGING SCRIPT CHUẨN ROOTLESS
+# PART 3: PACKAGING SCRIPT CHUẨN ROOTLESS (SỬA LỖI TRÙNG VAR/JB)
 # ===================================================================
 before-package::
 	@echo "Packaging for Rootless Jailbreak..."
 	
-	# 1. Tạo cấu trúc thư mục Rootless chuẩn
-	@mkdir -p $(THEOS_STAGING_DIR)/var/jb/usr/lib
-	@mkdir -p $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles
-	@mkdir -p $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceLoader/Entries
+	# 1. Dọn dẹp triệt để nếu có thư mục var dư thừa từ lần build cũ[span_0](start_span)[span_0](end_span)
+	@rm -rf $(THEOS_STAGING_DIR)/var
+	
+	# 2. Tạo cấu trúc thư mục Staging chuẩn (THEOS_STAGING_DIR đã tự trỏ tới /var/jb)
+	@mkdir -p $(THEOS_STAGING_DIR)/usr/lib
+	@mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceBundles
+	@mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Entries
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
 	
-	# 2. Copy dylib vào /var/jb/usr/lib/
+	# 3. Copy dylib vào /usr/lib/
 	@if [ -f $(THEOS_OBJ_DIR)/BoostiPhone6sCore.dylib ]; then \
-	    cp $(THEOS_OBJ_DIR)/BoostiPhone6sCore.dylib $(THEOS_STAGING_DIR)/var/jb/usr/lib/BoostiPhone6sCore.dylib; \
+	    cp $(THEOS_OBJ_DIR)/BoostiPhone6sCore.dylib $(THEOS_STAGING_DIR)/usr/lib/BoostiPhone6sCore.dylib; \
 	fi
 	
-	# 3. Copy Bundle Settings từ subproject
+	# 4. Copy Bundle Settings từ subproject
 	@if [ -d .theos/obj/BoostiPhone6s/BoostiPhone6sPrefs.bundle ]; then \
-	    cp -r .theos/obj/BoostiPhone6s/BoostiPhone6sPrefs.bundle $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles/; \
+	    cp -r .theos/obj/BoostiPhone6s/BoostiPhone6sPrefs.bundle $(THEOS_STAGING_DIR)/Library/PreferenceBundles/; \
 	    echo "[OK] Settings Bundle copied."; \
 	fi
 	
-	# 4. Copy Entry Plist đăng ký Cài đặt
+	# 5. Copy Entry Plist đăng ký Cài đặt
 	@if [ -f BoostiPhone6s/layout/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist ]; then \
-	    cp BoostiPhone6s/layout/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceLoader/Entries/; \
+	    cp BoostiPhone6s/layout/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Entries/; \
 	elif [ -f BoostiPhone6s/layout/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist ]; then \
-	    cp BoostiPhone6s/layout/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceLoader/Entries/; \
+	    cp BoostiPhone6s/layout/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Entries/; \
 	fi
 	
-	# 5. Copy DEBIAN control & scripts
+	# 6. Copy DEBIAN control & scripts
 	@if [ -f control ]; then cp control $(THEOS_STAGING_DIR)/DEBIAN/control; fi
 	@if [ -f postinst ]; then cp postinst $(THEOS_STAGING_DIR)/DEBIAN/postinst && chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm $(THEOS_STAGING_DIR)/DEBIAN/prerm && chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; fi
