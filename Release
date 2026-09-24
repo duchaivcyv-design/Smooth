@@ -1,0 +1,8 @@
+Origin: Smooth Repo
+Label: Smooth
+Suite: stable
+Version: 1.0
+Codename: ios
+Architectures: iphoneos-arm64 iphoneos-arm64e
+Components: main
+Description: Repo Tweak Smooth iphone 6s-x ios 15-16.7.16
