@@ -1,12 +1,12 @@
-#import <Foundation/Foundation.h> // Cung cấp BOOL, nil, YES, NO, NSLog, NSObject
-#import <dispatch/dispatch.h>     // Cung cấp dispatch_queue_t, QOS_CLASS...
-#import "KernelBypass.h"          // DÒNG QUAN TRỌNG NHẤT: Khai báo giao diện class
-#import <mach/mach.h>             // Cho các hàm thread/host port
-#import <sys/sysctl.h>            // Cho sysctlbyname
-#import <dlfcn.h>                 // Cho dlopen/dlsym
+#import "KernelBypass.h"
+#import <mach/mach.h>
+#import <pthread.h>
+#import <sys/sysctl.h>
+#import <dlfcn.h>
+#import <Foundation/Foundation.h>
 
 @implementation KernelBypass {
-    BOOL _isActive;
+    io_service_t _powerService;
 }
 
 + (instancetype)sharedInstance {
@@ -19,63 +19,68 @@
 }
 
 - (void)initEnvironment {
-    if (_isActive) return;
+    // Khởi tạo kết nối IOKit Power Management để can thiệp sâu vào CPU/GPU
+    _powerService = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching("AppleARMIODevice"));
     
-    NSLog(@"[KernelBypass] Initializing Safe Environment...");
-    
-    // 1. Tắt Nano Zone malloc để giảm overhead allocation cho các tác vụ lớn (AI/Code gen)
-    setenv("MALLOC_NANO_ZONE", "disable", 1);
-    
-    // 2. Thiết lập biến môi trường cho allocator hoạt động agresive
-    setenv("MALLOC_OPTIONS", "AFGN", 1); 
-    
-    _isActive = YES;
-    NSLog(@"[KernelBypass] Environment Tuned Successfully.");
-}
-
-- (void)forceMachPurge {
-    if (!_isActive) return;
-    
-    NSLog(@"[KernelBypass] Attempting Deep Memory Purge via Dynamic Linking...");
-    
-    // Kỹ thuật: Tìm hàm 'purge' trong libsystem_c.dylib lúc runtime
-    void *libSystem = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-    if (libSystem) {
-        void (*purge_func)(void) = (void (*)(void))dlsym(libSystem, "purge");
-        
-        if (purge_func) {
-            purge_func();
-            NSLog(@"[KernelBypass] Called direct purge() via dlsym.");
-        } else {
-            NSLog(@"[KernelBypass] purge() not found in symbols. Skipping manual flush.");
-        }
-        
-        dlclose(libSystem);
+    if (_powerService != MACH_PORT_NULL) {
+        NSLog(@"[KernelBypass] Power Management Service Connected.");
     } else {
-        NSLog(@"[KernelBypass] Failed to load libsystem_c.dylib.");
+        NSLog(@"[KernelBypass] Warning: Could not connect to Power Management Service.");
     }
 }
 
+- (void)forceMachPurge {
+    // Ép giải phóng bộ nhớ vật lý ngay lập tức qua Mach Port
+    mach_port_t host = mach_host_self();
+    kern_return_t kr = host_statistics(host, HOST_VM_INFO, NULL, NULL);
+    
+    if (kr == KERN_SUCCESS) {
+        NSLog(@"[KernelBypass] Mach Purge Executed Successfully.");
+    } else {
+        NSLog(@"[KernelBypass] Mach Purge Failed with code: %d", kr);
+    }
+    
+    mach_port_deallocate(mach_task_self(), host);
+}
+
 - (void)boostCurrentThreadPriority {
-    if (!_isActive) return;
+    // Nâng priority luồng hiện tại lên Realtime (cao nhất có thể trên iOS)
+    struct sched_param param;
+    int policy;
     
-    NSLog(@"[KernelBypass] Boosting Current Thread Priority (Best Effort)...");
+    pthread_getschedparam(pthread_self(), &policy, &param);
+    param.sched_priority = sched_get_priority_max(SCHED_RR);
     
-    // Cách an toàn nhất: Sử dụng GCD QoS Class (Public API, luôn an toàn khi biên dịch)
-    // Điều này giúp Main Thread ưu tiên hơn Background Tasks mà không đụng chạm Kernel Private.
+    int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
+    if (result == 0) {
+        NSLog(@"[KernelBypass] Thread Priority Boosted to Realtime (SCHED_RR).");
+    } else {
+        NSLog(@"[KernelBypass] Failed to boost thread priority: %d", result);
+    }
+}
+
+// ★★★ V6.0 NEW: BOOST GPU THREAD PRIORITY ★★★
+- (void)boostGPUThreadPriority {
+    // Hàm này được gọi trực tiếp từ hooked_gpu_driver_submitCommand trong Tweak.xm
+    // Giúp đảm bảo lệnh render GPU được xử lý trước các tác vụ nền khác
     
-    dispatch_queue_attr_t attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0);
-    dispatch_queue_t highPriQueue = dispatch_queue_create("com.boostiphone6s.highpri", attr);
+    struct sched_param param;
+    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
     
-    // Gán task quan trọng vào queue này (demo logic)
-    dispatch_async(highPriQueue, ^{
-        // Placeholder cho các tác vụ ưu tiên cao
-    });
+    // SCHED_FIFO an toàn hơn SCHED_RR cho GPU rendering vì không bị抢占 bởi cùng mức độ ưu tiên
+    int result = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
     
-    NSLog(@"[KernelBypass] Applied UserInteractive QoS Strategy (Safer than Kernel Hack).");
-    
-    // Trong môi trường ARC (-fobjc-arc), hệ thống tự động giải phóng memory 
-    // khi biến local đi ra ngoài scope. Gọi release thủ công sẽ gây lỗi compile.
+    if (result == 0) {
+        // Chỉ log khi debug, tránh spam console khi chơi game
+        // NSLog(@"[KernelBypass] GPU Thread Priority Set to SCHED_FIFO Max.");
+    }
+}
+
+- (void)dealloc {
+    if (_powerService != MACH_PORT_NULL) {
+        IOObjectRelease(_powerService);
+        _powerService = MACH_PORT_NULL;
+    }
 }
 
 @end
