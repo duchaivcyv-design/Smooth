@@ -31,17 +31,17 @@
     return self;
 }
 
+// ★ SỬA LẠI NGƯNG NHIỆT CHO KHỚP VỚI ENUM MỚI TRONG HEADER ★
 - (CGFloat)recommendedAnimationMultiplier {
-    float currentTemp = [self getCurrentTemperature];
+    ThermalLevel state = [self currentThermalState];
     
-    if (_isOverheating && currentTemp > 44.0f) {
-        return 0.6f; 
+    switch (state) {
+        case ThermalCritical: return 0.5f; // Nguy hiểm: Giảm mạnh nhất
+        case ThermalHot:      return 0.7f; // Nóng: Giảm đáng kể
+        case ThermalWarm:     return 0.9f; // Ấm: Giảm nhẹ
+        case ThermalCool:     return 1.0f; // Mát: Full tốc độ
+        default:              return 1.0f;
     }
-    
-    if (currentTemp > 43.5f) return 0.75f;
-    if (currentTemp > 41.5f) return 0.85f;
-    if (currentTemp > 39.5f) return 0.95f;
-    return 1.0f;
 }
 
 - (float)getCurrentTemperature {
@@ -102,14 +102,19 @@
 
 - (ThermalLevel)currentThermalState {
     float temp = [self getCurrentTemperature];
-    if (temp > 43.5f) return ThermalCritical;
-    if (temp > 41.5f) return ThermalWarning;
-    if (temp > 39.5f) return ThermalElevated;
-    return ThermalNormal;
+    
+    if (temp > 43.5f) return ThermalCritical;  // > 43.5°C = Nguy hiểm
+    if (temp > 40.0f) return ThermalHot;       // > 40°C = Nóng
+    if (temp > 35.0f) return ThermalWarm;      // > 35°C = Ấm vừa
+    return ThermalCool;                        // ≤ 35°C = Mát mẻ
 }
 
 - (BOOL)shouldSuppressBackgroundTasks {
-    return _isOverheating || [[NSUserDefaults standardUserDefaults] boolForKey:@"DeepSleepOpt"];
+    ThermalLevel state = [self currentThermalState];
+    BOOL deepSleepOpt = [[NSUserDefaults standardUserDefaults] boolForKey:@"DeepSleepOpt"];
+    
+    // Chặn background khi nóng trở lên HOẶC khi bật tối ưu ngủ sâu
+    return (state == ThermalHot || state == ThermalCritical) || deepSleepOpt;
 }
 
 @end
