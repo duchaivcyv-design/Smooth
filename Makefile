@@ -1,6 +1,6 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
-# Tắt auto respring nếu cần
+# Tắt auto respring để tránh lỗi dpkg interrupted trên CI
 # INSTALL_TARGET_PROCESSES = SpringBoard backboardd 
 
 include $(THEOS)/makefiles/common.mk
@@ -10,26 +10,30 @@ include $(THEOS)/makefiles/common.mk
 # ===================================================================
 LIBRARY_NAME = BoostiPhone6sCore
 
+# ★ Danh sách file nguồn (DeviceBypass.xm nằm ở thư mục gốc)
 BoostiPhone6sCore_FILES = Tweak.xm \
+                          DeviceBypass.xm \
                           Modules/CacheCleaner.m \
                           Modules/CrashGuard.m \
                           Modules/SmartThermal.m \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
-                          Modules/SystemBlocker.m \
-                          DeviceBypass.xm
+                          Modules/SystemBlocker.m
 
-BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall -Wno-unused-variable -Wno-deprecated-declarations -Wno-module-import-in-extern-c -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
+BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall \
+                           -Wno-unused-variable \
+                           -Wno-deprecated-declarations \
+                           -Wno-module-import-in-extern-c \
+                           -Wno-multiply-defined \
+                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
-BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip
-
-# SỬA: CHỈ GIỮ LẠI CÁC FRAMEWORK HỆ THỐNG CƠ BẢN
-# Xóa Preferences khỏi danh sách link vì nó gây lỗi "not found" trên CI
-# Code vẫn compile bình thường nhờ header, runtime sẽ tự resolve
+# ★ SỬA: Loại bỏ Preferences khỏi FRAMEWORKS để tránh lỗi "not found" trên CI
+# Code vẫn hoạt động bình thường vì header đã đủ để compile,
+# runtime sẽ tự resolve symbol khi SpringBoard load framework này.
 BoostiPhone6sCore_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
-# Nếu vẫn muốn thử private framework, dùng ADDITIONAL_LDFLAGS an toàn hơn
-# BoostiPhone6sCore_ADDITIONAL_LDFLAGS = -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
+# ★ FIX: Thêm flag để chặn warning duplicate libraries trên Xcode 26+
+BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip -Wl,-no_warn_duplicate_libraries
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -43,6 +47,7 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ===================================================================
 # PART 3: PACKAGING SCRIPT CHO ROOTLESS JAILBREAK
+# ★ Tự động gom Library + Bundle + Entry Plist vào /var/jb/ ★
 # ===================================================================
 before-package::
 	@echo "Packaging for Rootless Jailbreak..."
@@ -50,14 +55,14 @@ before-package::
 	# 1. Tạo cấu trúc thư mục Rootless chuẩn cho Library
 	@mkdir -p .theos/_/var/jb/usr/lib
 	
-	# 2. Copy dylib vào đúng vị trí Rootless (/var/jb/usr/lib/)
+	# 2. Copy dylib vào đúng vị trí Rootless
 	@cp $(THEOS_OBJ_DIR)/BoostiPhone6sCore.dylib .theos/_/var/jb/usr/lib/BoostiPhone6sCore.dylib
 	
-	# 3. QUAN TRỌNG: Copy Bundle Settings từ subproject vào package
+	# 3. Copy Bundle Settings từ subproject vào package
 	@mkdir -p .theos/_/var/jb/Library/PreferenceBundles
 	@if [ -d .theos/obj/BoostiPhone6s/BoostiPhone6sPrefs.bundle ]; then \
 	    cp -r .theos/obj/BoostiPhone6s/BoostiPhone6sPrefs.bundle .theos/_/var/jb/Library/PreferenceBundles/; \
-	    echo "[OK] Settings Bundle copied to package."; \
+	    echo "[OK] Settings Bundle copied."; \
 	else \
 	    echo "[WARN] Settings Bundle not found in subproject output!"; \
 	fi
@@ -66,7 +71,7 @@ before-package::
 	@mkdir -p .theos/_/var/jb/Library/PreferenceLoader/Entries
 	@if [ -f BoostiPhone6s/layout/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist ]; then \
 	    cp BoostiPhone6s/layout/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist .theos/_/var/jb/Library/PreferenceLoader/Entries/; \
-	    echo "[OK] PreferenceLoader Entry copied to package."; \
+	    echo "[OK] PreferenceLoader Entry copied."; \
 	else \
 	    echo "[WARN] PreferenceLoader Entry plist not found!"; \
 	fi
@@ -77,4 +82,4 @@ before-package::
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
 	
-	@echo "Rootless Package Ready! (Library + Settings Bundle included)"
+	@echo "Rootless Package Ready!"
