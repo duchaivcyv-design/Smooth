@@ -1,12 +1,15 @@
-name: Build Rootless Deb
+name: Build Rootless Deb & Deploy Repo
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch: 
 
+permissions:
+  contents: write # Cấp quyền cho GitHub Actions tự push code/Deploy Pages
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: macos-latest
     steps:
       - name: Checkout Code
@@ -26,53 +29,40 @@ jobs:
           # Thêm GNU Make và CoreUtils vào PATH
           echo "/opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" >> $GITHUB_PATH
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI SDK (SPARSE CHECKOUT METHOD) ---
+      # --- BƯỚC 2: CLONE THEOS & TẢI SDK ---
       - name: Clone Theos & Install SDK via Git Sparse
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           
-          echo "📥 Cloning Theos to $TARGET_DIR..."
+          echo "Cloning Theos to $TARGET_DIR..."
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
 
-          echo "📦 Downloading iOS SDK using Git Sparse-Checkout (Fastest Method)..."
+          echo "Downloading iOS SDK using Git Sparse-Checkout..."
           
-          # Tạo thư mục tạm để clone repo SDK
           mkdir -p /tmp/sdk_repo
           cd /tmp/sdk_repo
           
-          # Khởi tạo repo rỗng
           git init
           git remote add origin https://github.com/theos/sdks.git
-          
-          # Bật chế độ sparse checkout (chỉ lấy file/folder được chỉ định)
           git config core.sparseCheckout true
-          
-          # Chỉ định folder SDK muốn tải (iPhoneOS16.5.sdk)
-          # Nếu muốn bản khác, sửa tên ở đây
           echo "iPhoneOS16.5.sdk/" > .git/info/sparse-checkout
           
-          # Fetch và Checkout (Chỉ tải dữ liệu của folder đó, cực nhanh)
-          echo "Fetching specific SDK folder..."
           git fetch --depth=1 origin master
           git checkout FETCH_HEAD
           
-          # Di chuyển folder SDK vừa tải về vào đúng chỗ trong Theos
           mkdir -p "$TARGET_DIR/sdks"
           mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
           
-          # Dọn dẹp rác
           cd ~
           rm -rf /tmp/sdk_repo
           
-          # Kiểm tra kết quả
           if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
-             echo "❌ Error: Failed to move SDK."
+             echo "Error: Failed to move SDK."
              exit 1
           fi
           
-          echo "✅ SDK Installation Complete."
-          du -sh "$TARGET_DIR/sdks/iPhoneOS16.5.sdk"
+          echo "SDK Installation Complete."
 
       # --- BƯỚC 3: BUILD PACKAGE ---
       - name: Build Package
@@ -86,14 +76,35 @@ jobs:
           
           rm -rf packages/ obj/ .theos/
           
-          # Chạy build
+          # Chạy build package
           make clean package FINALPACKAGE=1
           
           ls -lh packages/*.deb || echo "Build finished but no deb found"
 
-      # --- BƯỚC 4: UPLOAD ARTIFACT ---
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      # --- BƯỚC 4: TỰ ĐỘNG CẬP NHẬT CẤU TRÚC REPO CYDIA/SILEO ---
+      - name: Generate Repo Index & Package Metadata
+        run: |
+          cd $GITHUB_WORKSPACE
+          
+          # Tạo thư mục deb/ chứa file cài đặt cho Repo
+          mkdir -p deb
+          
+          # Copy file .deb mới vừa build vào thư mục deb/
+          cp packages/*.deb deb/
+          
+          # Tạo file Packages danh sách tweak cho Sileo/Zebra
+          dpkg-scanpackages -m ./deb /dev/null > Packages
+          
+          # Nén danh sách thành bz2 và xz
+          bzip2 -f -k Packages
+          xz -f -k Packages
+          
+          echo "Repo Metadata Successfully Created!"
+
+      # --- BƯỚC 5: ĐẨY TỰ ĐỘNG LÊN BRANCH GH-PAGES (PUBLIC REPO) ---
+      - name: Deploy Repo to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          name: MyRootlessTweak.deb
-          path: packages/*.deb
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
