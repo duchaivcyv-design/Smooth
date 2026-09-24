@@ -102,14 +102,13 @@
 
 - (ThermalLevel)currentThermalState {
     float temp = [self getCurrentTemperature];
-    if (temp > 43.5f) return ThermalLevelCritical;
-    if (temp > 41.5f) return ThermalLevelWarning;
-    if (temp > 39.5f) return ThermalLevelElevated;
-    return ThermalLevelNormal;
+    if (temp > 43.5f) return ThermalCritical;
+    if (temp > 41.5f) return ThermalWarning;
+    if (temp > 39.5f) return ThermalElevated;
+    return ThermalNormal;
 }
 
 - (BOOL)shouldSuppressBackgroundTasks {
-    // Chỉ chặn tác vụ nền khi máy đang quá nhiệt hoặc ở chế độ tối ưu pin sâu
     return _isOverheating || [[NSUserDefaults standardUserDefaults] boolForKey:@"DeepSleepOpt"];
 }
 
