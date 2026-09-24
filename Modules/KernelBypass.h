@@ -10,6 +10,8 @@
 - (void)forceMachPurge;
 - (void)boostCurrentThreadPriority;
 
+- (void)boostGPUThreadPriority;
+
 @end
 
 #endif
