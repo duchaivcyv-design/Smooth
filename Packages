@@ -7,10 +7,10 @@ Depends: mobilesubstrate, firmware (>= 15.0), firmware (<= 17.0), preferenceload
 Conflicts: none
 Replaces: none
 Filename: ./deb/com.taojb.boostiphone6s_1.0.0-6a_iphoneos-arm64.deb
-Size: 33982
-MD5sum: 8dd1374b23e2b2220b308330bfe5b3b7
-SHA1: 0b0932249b67bdd7edbd0874e36c882bf213c768
-SHA256: 3d3b0ad047e47805730a0222a261407989924c0ca33131477ed131bfe39540b0
+Size: 33970
+MD5sum: 65bdfa5d428a17c0e2063ef5a3da491f
+SHA1: 65943ff40a79954bee654e1330f1a57660ce1b58
+SHA256: 52135c0829389f219cc7740e59f557bf5414b9a0b6a0e8a30a5d29c5235fe19a
 Section: Tweaks
 Priority: optional
 Homepage: https://github.com/duchaivcyv-design/Smooth
