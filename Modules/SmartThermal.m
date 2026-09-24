@@ -1,11 +1,7 @@
 #import "SmartThermal.h"
 #import <sys/sysctl.h>
-#import <mach/mach.h>
 
-@implementation SmartThermal {
-    NSTimeInterval _lastCheckTime;
-    ThermalLevel _cachedState;
-}
+@implementation SmartThermal
 
 + (instancetype)sharedInstance {
     static SmartThermal *instance = nil;
@@ -16,73 +12,25 @@
     return instance;
 }
 
-- (instancetype)init {
-    self = [super init];
-    if (self) {
-        _cachedState = ThermalCool;
-        _lastCheckTime = 0;
-    }
-    return self;
-}
-
-// Đọc trạng thái nhiệt chuẩn iOS 15+
-- (ThermalLevel)currentThermalState {
-    // Cache kết quả trong 2 giây để tránh spam sysctl call tốn CPU
-    NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
-    if (now - _lastCheckTime < 2.0) {
-        return _cachedState;
-    }
-    
-    _lastCheckTime = now;
-    
-    @try {
-        NSProcessInfo *procInfo = [NSProcessInfo processInfo];
-        NSProcessInfoThermalState state = procInfo.thermalState;
-        
-        switch (state) {
-            case NSProcessInfoThermalStateNominal:
-                _cachedState = ThermalCool;
-                break;
-            case NSProcessInfoThermalStateFair:
-                _cachedState = ThermalWarm;
-                break;
-            case NSProcessInfoThermalStateSerious:
-                _cachedState = ThermalHot;
-                break;
-            case NSProcessInfoThermalStateCritical:
-                _cachedState = ThermalCritical;
-                break;
-            default:
-                _cachedState = ThermalCool;
-                break;
-        }
-    } @catch (NSException *exception) {
-        // Fallback nếu API lỗi (hiếm gặp trên iOS 15+)
-        _cachedState = ThermalCool;
-    }
-    
-    return _cachedState;
-}
-
 - (CGFloat)recommendedAnimationMultiplier {
-    ThermalLevel level = [self currentThermalState];
+    float currentTemp = [self getCurrentTemperature];
     
-    switch (level) {
-        case ThermalCool:
-            return 1.0; // Giữ nguyên tốc độ gốc (hoặc multiplier user set)
-        case ThermalWarm:
-            return 0.85; // Giảm 15% tốc độ để hạ nhiệt nhẹ
-        case ThermalHot:
-            return 0.6;  // Giảm 40%, ưu tiên ổn định hơn là nhanh
-        case ThermalCritical:
-            return 0.3;  // Gần như tắt animation để cứu máy
-    }
+    // Ngưỡng nhiệt an toàn cho iPhone 6s-X
+    if (currentTemp > 43.0f) return 0.8f; // Nóng: Giảm nhẹ animation để hạ nhiệt
+    if (currentTemp > 40.0f) return 0.9f; // Ấm: Giữ gần như nguyên bản
+    return 1.0f;                          // Mát: Full tốc độ
 }
 
-- (BOOL)shouldSuppressBackgroundTasks {
-    ThermalLevel level = [self currentThermalState];
-    // Nếu máy đang Nóng hoặc Nghiêm trọng, chặn mọi task nền không khẩn cấp
-    return (level >= ThermalHot);
+- (float)getCurrentTemperature {
+    // Đọc nhiệt độ từ sysctl an toàn, fallback về 38 nếu không đọc được
+    size_t size = sizeof(float);
+    float temp = 38.0f;
+    
+    if (sysctlbyname("kern.thermal.temperature", &temp, &size, NULL, 0) != 0) {
+        // Fallback cho các thiết bị/iOS cũ không có key này
+        temp = 38.0f; 
+    }
+    return temp;
 }
 
 @end
