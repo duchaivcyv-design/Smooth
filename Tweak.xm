@@ -10,10 +10,12 @@
 #import <unistd.h>
 #import <net/if.h>
 #import <netinet/in.h>
+#import <netinet/tcp.h>
 #import <arpa/inet.h>
 #import <objc/runtime.h>
 #import <CommonCrypto/CommonDigest.h> 
 #import <sys/resource.h> 
+#import <spawn.h>
 
 // Import All Custom Modules
 #import "Modules/CrashGuard.h"
@@ -24,7 +26,7 @@
 #import "Modules/DeepExploit.h"
 
 // ------------------------------------------------------------------------------
-// SECTION 1: CONFIGURATION MANAGER (V7.0 EXPANDED & SAFE DEFAULTS)
+// SECTION 1: CONFIGURATION MANAGER (ADVANCED FULL PATH ROOTLESS SUPPORT)
 // ------------------------------------------------------------------------------
 
 @interface BoostConfig : NSObject
@@ -51,6 +53,9 @@
 @property (nonatomic, assign) BOOL deepSleepOptimization;
 @property (nonatomic, assign) BOOL safeSpoofGraphics;   
 @property (nonatomic, assign) BOOL ultraDeepRamClean;   
+@property (nonatomic, assign) BOOL tcpNoDelayBoost;
+@property (nonatomic, assign) BOOL disableFrameThrottling;
+@property (nonatomic, assign) BOOL pageCompressionOptimized;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -74,28 +79,21 @@
     if (self) {
         _configQueue = dispatch_queue_create("com.boostiphone6s.config", DISPATCH_QUEUE_SERIAL);
         [self loadSettings];
-        
-        [[NSNotificationCenter defaultCenter] addObserver:self 
-                                                 selector:@selector(onReloadNotification:) 
-                                                     name:@"com.boostiphone6s.settings/reload" 
-                                                   object:nil];
     }
     return self;
 }
 
-- (void)onReloadNotification:(NSNotification *)note {
-    dispatch_async(_configQueue, ^{
-        [self loadSettings];
-        NSLog(@"[BoostConfig] Configuration Reloaded.");
-    });
-}
-
 - (void)loadSettings {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    
-    #define GET_BOOL(key, def) ([defaults objectForKey:key] ? [defaults boolForKey:key] : def)
-    #define GET_FLOAT(key, def) ([defaults objectForKey:key] ? [defaults floatForKey:key] : def)
-    #define GET_INT(key, def) ([defaults objectForKey:key] ? [defaults integerForKey:key] : def)
+    NSString *plistPath = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
+    if (!prefs) {
+        plistPath = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+        prefs = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
+    }
+
+    #define GET_BOOL(key, def) (prefs[key] ? [prefs[key] boolValue] : def)
+    #define GET_FLOAT(key, def) (prefs[key] ? [prefs[key] floatValue] : def)
+    #define GET_INT(key, def) (prefs[key] ? [prefs[key] integerValue] : def)
 
     self.enabled = GET_BOOL(@"Enabled", NO);
     
@@ -106,11 +104,11 @@
         self.spoofModel = GET_BOOL(@"SpoofModel", YES);
         self.disableThermal = GET_BOOL(@"DisableThermal", YES);
         self.unlockProMotion = GET_BOOL(@"UnlockProMotion", YES);
-        self.forceRealtimePriority = GET_BOOL(@"ForceRealtime", NO);
-        self.bypassSandboxChecks = GET_BOOL(@"BypassSandbox", NO);
-        self.optimizeDiskIO = GET_BOOL(@"OptimizeDisk", NO);
-        self.enableAIAcceleration = GET_BOOL(@"EnableAIBoost", NO);
-        self.networkBufferSize = GET_INT(@"NetBufSize", 1024);
+        self.forceRealtimePriority = GET_BOOL(@"ForceRealtime", YES);
+        self.bypassSandboxChecks = GET_BOOL(@"BypassSandbox", YES);
+        self.optimizeDiskIO = GET_BOOL(@"OptimizeDisk", YES);
+        self.enableAIAcceleration = GET_BOOL(@"EnableAIBoost", YES);
+        self.networkBufferSize = GET_INT(@"NetBufSize", 2048);
         self.godModeForce120Hz = GET_BOOL(@"GodMode120Hz", YES);
         self.godModeFakeiPhone16 = GET_BOOL(@"GodModeFake16", YES);
         self.godModeMetalOverclock = GET_BOOL(@"GodModeMetal", YES);
@@ -121,10 +119,11 @@
         self.blockAnalytics = GET_BOOL(@"BlockAnalytics", YES);
         self.deepSleepOptimization = GET_BOOL(@"DeepSleepOpt", NO);
         self.safeSpoofGraphics = GET_BOOL(@"SafeSpoofGraphics", YES);
-        self.ultraDeepRamClean = GET_BOOL(@"UltraDeepRam", NO);
-        
+        self.ultraDeepRamClean = GET_BOOL(@"UltraDeepRam", YES);
+        self.tcpNoDelayBoost = GET_BOOL(@"TCPNoDelayBoost", YES);
+        self.disableFrameThrottling = GET_BOOL(@"DisableFrameThrottling", YES);
+        self.pageCompressionOptimized = GET_BOOL(@"PageCompressionOptimized", YES);
     } else {
-        // Reset all when master is off
         self.animSpeed = 1.0;
         self.aggressiveRAM = NO;
         self.killBgApps = NO;
@@ -147,48 +146,41 @@
         self.deepSleepOptimization = NO;
         self.safeSpoofGraphics = NO;
         self.ultraDeepRamClean = NO;
+        self.tcpNoDelayBoost = NO;
+        self.disableFrameThrottling = NO;
+        self.pageCompressionOptimized = NO;
     }
 }
 
 @end
 
-// Giúp compiler nhận diện đầy đủ property như .enabled, .aggressiveRAM...
-// Tránh lỗi "property not found on object of type '__strong id'"
-extern BoostConfig *CFG;
-extern BOOL IS_ENABLED;
-
 BoostConfig *CFG = nil;
 BOOL IS_ENABLED = NO;
-
-%ctor {
-    [BoostConfig sharedInstance];
-    CFG = [BoostConfig sharedInstance]; // Gán pointer đúng kiểu
-    IS_ENABLED = CFG.enabled;           
-}
 
 #define CFG_PTR [BoostConfig sharedInstance]
 #define IS_ENABLED_CHECK (CFG_PTR.enabled)
 
-typedef int (*system_func_t)(const char *);
-static inline int safe_system(const char *cmd) {
-    static system_func_t real_system = NULL;
-    if (!real_system) {
-        void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-        if (handle) real_system = (system_func_t)dlsym(handle, "system");
-    }
-    if (real_system) return real_system(cmd);
-    return -1;
+static void reloadPrefsNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    [[BoostConfig sharedInstance] loadSettings];
+    CFG = [BoostConfig sharedInstance];
+    IS_ENABLED = CFG.enabled;
+    NSLog(@"[BoostiPhone6s] Preference Reloaded via Notification.");
+}
+
+static inline void run_posix_cmd(const char *path, char *const argv[]) {
+    pid_t pid;
+    posix_spawn(&pid, path, NULL, NULL, argv, NULL);
 }
 
 // ------------------------------------------------------------------------------
-// SECTION 2: KERNEL DEEP HOOKS (C FUNCTIONS - DYNAMIC COMPATIBILITY)
+// SECTION 2: KERNEL DEEP HOOKS & SYSTEM C-LEVEL OVERRIDES
 // ------------------------------------------------------------------------------
 
 %group KernelDeepHooks
 
 %hookf(int, access, const char *pathname, int mode) {
-    if (!IS_ENABLED_CHECK || !CFG_PTR.bypassSandboxChecks) return %orig(pathname, mode);
-    if (strstr(pathname, "/Caches/") != NULL || strstr(pathname, "/tmp/") != NULL) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.bypassSandboxChecks || !pathname) return %orig(pathname, mode);
+    if (strstr(pathname, "/Caches/") != NULL || strstr(pathname, "/tmp/") != NULL || strstr(pathname, "/var/mobile/Containers/") != NULL) {
         return 0;
     }
     return %orig(pathname, mode);
@@ -196,28 +188,27 @@ static inline int safe_system(const char *cmd) {
 
 %hookf(ssize_t, write, int fd, const void *buf, size_t count) {
     if (!IS_ENABLED_CHECK || !CFG_PTR.optimizeDiskIO) return %orig(fd, buf, count);
-    ssize_t result = %orig(fd, buf, count);
-    return result;
+    return %orig(fd, buf, count);
 }
 
 %hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
-    if (!IS_ENABLED_CHECK || !CFG_PTR.forceRealtimePriority) return %orig(target_thread, flavor, policy_info, policy_count);
+    if (!IS_ENABLED_CHECK || !CFG_PTR.forceRealtimePriority || !policy_info) return %orig(target_thread, flavor, policy_info, policy_count);
     
     if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
         struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
-        ttcp->period = 8333333;     
+        ttcp->period = 8333333;     // ~120 Hz Target
         ttcp->computation = 4000000; 
         ttcp->constraint = 6000000;  
     }
     return %orig(target_thread, flavor, policy_info, policy_count);
 }
 
-// Fake Hardware Identity (Safe for iOS 14-26)
+// Fake Hardware Identity & CPU Acceleration Mask
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (!IS_ENABLED_CHECK || !CFG_PTR.godModeFakeiPhone16) return %orig(name, oldp, oldlenp, newp, newlen);
+    if (!IS_ENABLED_CHECK || !name) return %orig(name, oldp, oldlenp, newp, newlen);
     
-    if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0) {
-        const char *fakeModel = "iPhone17,2"; 
+    if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0)) {
+        const char *fakeModel = "iPhone16,2"; // iPhone 15 Pro Max Identity
         if (oldp && oldlenp) {
             strlcpy((char *)oldp, fakeModel, *oldlenp);
             *oldlenp = strlen(fakeModel) + 1;
@@ -227,7 +218,7 @@ static inline int safe_system(const char *cmd) {
         return 0;
     }
     
-    if (strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.activecpu") == 0) {
+    if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.activecpu") == 0)) {
         int fakeCores = 6;
         if (oldp && oldlenp) {
             memcpy(oldp, &fakeCores, sizeof(fakeCores));
@@ -238,17 +229,39 @@ static inline int safe_system(const char *cmd) {
         return 0;
     }
 
+    if (CFG_PTR.tcpNoDelayBoost && strcmp(name, "net.inet.tcp.mscanned") == 0) {
+        int val = 1;
+        if (oldp && oldlenp) {
+            memcpy(oldp, &val, sizeof(val));
+            *oldlenp = sizeof(val);
+        }
+        return 0;
+    }
+
     return %orig(name, oldp, oldlenp, newp, newlen);
+}
+
+// TCP Network Optimization Engine
+%hookf(int, connect, int socket, const struct sockaddr *address, socklen_t address_len) {
+    if (IS_ENABLED_CHECK && CFG_PTR.tcpNoDelayBoost) {
+        int opt = 1;
+        setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+        
+        int bufSize = (int)(CFG_PTR.networkBufferSize * 1024);
+        if (bufSize > 0) {
+            setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
+            setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
+        }
+    }
+    return %orig(socket, address, address_len);
 }
 
 %end
 
-
 // ------------------------------------------------------------------------------
-// SECTION 3: OBJECTIVE-C HOOKS VIA PURE RUNTIME SWIZZLING
+// SECTION 3: DEEP OBJECTIVE-C SWIZZLING ENGINE & HOOKS
 // ------------------------------------------------------------------------------
 
-// --- Storage for Original IMPs ---
 static IMP orig_calayer_duration_IMP = NULL;
 static IMP orig_uiview_alpha_IMP = NULL;
 static IMP orig_blur_didMove_IMP = NULL;
@@ -264,14 +277,13 @@ static IMP orig_metal_presentTxn_IMP = NULL;
 static IMP orig_texture_format_IMP = NULL;
 static IMP orig_textview_layoutSubviews_IMP = NULL; 
 static IMP orig_keyboard_impl_updateFrame_IMP = NULL; 
-static IMP orig_dyld_loadImage_IMP = NULL;
 static IMP orig_thermal_daemon_getTemp_IMP = NULL;
 static IMP orig_gpu_driver_submitCommand_IMP = NULL;
-static IMP orig_analytics_sendEvent_IMP = NULL; //
+static IMP orig_analytics_sendEvent_IMP = NULL;
 static IMP orig_sleep_manager_enterDeepSleep_IMP = NULL;
 static IMP orig_graphics_quality_IMP = NULL;
-
-// --- New Implementations ---
+static IMP orig_cadisplaylink_setFrameInterval_IMP = NULL;
+static IMP orig_cadisplaylink_setPreferredFPS_IMP = NULL;
 
 CFTimeInterval hooked_calayer_duration(id self, SEL _cmd) {
     if (!IS_ENABLED_CHECK) {
@@ -353,10 +365,6 @@ void hooked_fb_openApplication(id self, SEL _cmd, id application, id options) {
 }
 
 void hooked_window_sendEvent(id self, SEL _cmd, UIEvent *event) {
-    if (!IS_ENABLED_CHECK) {
-        if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
-        return;
-    }
     if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
 }
 
@@ -420,22 +428,12 @@ void hooked_texture_format(id self, SEL _cmd, NSUInteger pixelFormat) {
     if (orig_texture_format_IMP) ((void(*)(id, SEL, NSUInteger))orig_texture_format_IMP)(self, _cmd, pixelFormat);
 }
 
-// V7.0 NEW HOOKS
-
-void hooked_dyld_loadImage(const struct mach_header *mh, intptr_t slide) {
-    if (!IS_ENABLED_CHECK || !CFG_PTR.turboAppLaunch) {
-        if (orig_dyld_loadImage_IMP) ((void(*)(const struct mach_header *, intptr_t))orig_dyld_loadImage_IMP)(mh, slide);
-        return;
-    }
-    if (orig_dyld_loadImage_IMP) ((void(*)(const struct mach_header *, intptr_t))orig_dyld_loadImage_IMP)(mh, slide);
-}
-
 float hooked_thermal_daemon_getTemp(id self, SEL _cmd) {
     if (!IS_ENABLED_CHECK || !CFG_PTR.disableThermal) {
         if (orig_thermal_daemon_getTemp_IMP) return ((float(*)(id, SEL))orig_thermal_daemon_getTemp_IMP)(self, _cmd);
         return 38.0f;
     }
-    return 38.0f;
+    return 35.0f; // Bỏ Thermal Throttling
 }
 
 void hooked_gpu_driver_submitCommand(id self, SEL _cmd, id commandBuffer) {
@@ -452,7 +450,6 @@ void hooked_analytics_sendEvent(id self, SEL _cmd, id eventData) {
         if (orig_analytics_sendEvent_IMP) ((void(*)(id, SEL, id))orig_analytics_sendEvent_IMP)(self, _cmd, eventData);
         return;
     }
-    return;
 }
 
 void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
@@ -460,11 +457,12 @@ void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
         if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
         return;
     }
-    safe_system("launchctl stop com.apple.analyticsd && launchctl stop com.apple.locationd");
+    char *const launchctlArgs[] = {"launchctl", "stop", "com.apple.analyticsd", NULL};
+    run_posix_cmd("/var/jb/bin/launchctl", launchctlArgs);
+    
     if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
 }
 
-// SAFE SPOOF GRAPHICS: Can thiệp nhẹ để kích hoạt max quality/120fps
 void hooked_graphics_quality(id self, SEL _cmd, NSUInteger quality) {
     if (!IS_ENABLED_CHECK || !CFG_PTR.safeSpoofGraphics) {
         if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, quality);
@@ -473,8 +471,15 @@ void hooked_graphics_quality(id self, SEL _cmd, NSUInteger quality) {
     if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, 3);
 }
 
-// --- Swizzle Setup Functions ---
+void hooked_cadisplaylink_setPreferredFPS(id self, SEL _cmd, NSInteger fps) {
+    if (IS_ENABLED_CHECK && CFG_PTR.disableFrameThrottling) {
+        if (orig_cadisplaylink_setPreferredFPS_IMP) ((void(*)(id, SEL, NSInteger))orig_cadisplaylink_setPreferredFPS_IMP)(self, _cmd, 120);
+        return;
+    }
+    if (orig_cadisplaylink_setPreferredFPS_IMP) ((void(*)(id, SEL, NSInteger))orig_cadisplaylink_setPreferredFPS_IMP)(self, _cmd, fps);
+}
 
+// Swizzle Initialization Setup
 void setupAllSwizzles() {
     Class calayerClass = objc_getClass("CALayer");
     if (calayerClass) {
@@ -551,13 +556,18 @@ void setupAllSwizzles() {
         if (m5) { orig_metal_presentTxn_IMP = method_getImplementation(m5); method_setImplementation(m5, (IMP)hooked_metal_presentTxn); }
     }
 
+    Class displayLinkClass = objc_getClass("CADisplayLink");
+    if (displayLinkClass) {
+        Method m = class_getInstanceMethod(displayLinkClass, @selector(setPreferredFramesPerSecond:));
+        if (m) { orig_cadisplaylink_setPreferredFPS_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_cadisplaylink_setPreferredFPS); }
+    }
+
     Class textureClass = objc_getClass("MTLTextureDescriptor");
     if (textureClass) {
         Method m6 = class_getInstanceMethod(textureClass, @selector(setPixelFormat:));
         if (m6) { orig_texture_format_IMP = method_getImplementation(m6); method_setImplementation(m6, (IMP)hooked_texture_format); }
     }
     
-    // V7.0 NEW SWIZZLES
     Class thermalClass = NSClassFromString(@"_ThermalMonitor");
     if (!thermalClass) thermalClass = objc_getClass("ThermalMonitor");
     if (thermalClass) {
@@ -589,34 +599,39 @@ void setupAllSwizzles() {
         if (m) { orig_graphics_quality_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_graphics_quality); }
     }
     
-    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v7.0 Quantum Stability)");
+    NSLog(@"[BoostiPhone6s] Advanced Deep Swizzles Applied Successfully!");
 }
 
-
 // ------------------------------------------------------------------------------
-// SECTION 4: CONSTRUCTOR (HIERARCHICAL INITIALIZATION)
+// SECTION 4: CONSTRUCTOR & INITIALIZATION ENGINE
 // ------------------------------------------------------------------------------
 
 %ctor {
-    [BoostConfig sharedInstance];
-    CFG = [BoostConfig sharedInstance]; // Gán cho biến global export
-    IS_ENABLED = CFG.enabled;           // Gán cho biến global export
+    CFG = [BoostConfig sharedInstance];
+    IS_ENABLED = CFG.enabled;
+    
+    // Đăng ký Darwin Notification Observer để lắng nghe cấu hình tức thì
+    CFNotificationCenterAddObserver(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        NULL,
+        reloadPrefsNotification,
+        CFSTR("com.taojb.boostiphone6s.settings/reload"),
+        NULL,
+        CFNotificationSuspensionBehaviorCoalesce
+    );
     
     [[CrashGuard sharedInstance] startMonitoring];
     
-    // Nếu đang ở Safe Mode, dừng ngay lập tức
     if (![[CrashGuard sharedInstance] canExecuteHooks]) {
-        NSLog(@"[BoostiPhone6s] SAFE MODE ACTIVE. All hooks bypassed.");
+        NSLog(@"[BoostiPhone6s] CrashGuard active. Hooks bypassed.");
         return; 
     }
     
     if (IS_ENABLED) {
-        NSLog(@"[BoostiPhone6s] MASTER SWITCH ON. Initializing Engine...");
+        NSLog(@"[BoostiPhone6s] Engine Initializing with Full Feature Matrix...");
         
-        // Init Kernel Bypass Environment
         [[KernelBypass sharedInstance] initEnvironment];
         
-        // Conditional Module Init
         if (CFG.aggressiveRAM || CFG.ultraDeepRamClean) {
             [[KernelBypass sharedInstance] forceMachPurge];
         }
@@ -625,26 +640,20 @@ void setupAllSwizzles() {
             [[KernelBypass sharedInstance] boostCurrentThreadPriority];
         }
         
-        // System Blocker (Conditional)
         if (CFG.enableBlocker) {
             [[SystemBlocker sharedInstance] initBlockers];
-            NSLog(@"[BoostiPhone6s] System Blocker Activated.");
         }
         
-        // ★ SỬA: GỌI C FUNCTION TRỰC TIẾP, KHÔNG DÙNG DOT SYNTAX ★
         if (CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
             init_privilege_escalation(); 
         }
         
-        // Kernel Hooks Group (Conditional)
-        if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16) {
+        if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16 || CFG.tcpNoDelayBoost) {
             %init(KernelDeepHooks);
         }
         
-        // Obj-C Swizzles (Always apply structure, logic checks IS_ENABLED internally)
         setupAllSwizzles();
         
-        // Env Vars for AI/Turbo
         if (CFG.enableAIAcceleration) {
              setenv("MALLOC_OPTIONS", "AFGN", 1);
         }
@@ -654,8 +663,12 @@ void setupAllSwizzles() {
             setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
         }
         
-        NSLog(@"[BoostiPhone6s] SYSTEM READY | Quantum Stability Mode Active");
+        if (CFG.pageCompressionOptimized) {
+            setenv("VM_COMPRESSION_RATIO", "MAX", 1);
+        }
+        
+        NSLog(@"[BoostiPhone6s] SYSTEM READY | Maximum Performance Mode Active");
     } else {
-        NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). Zero footprint.");
+        NSLog(@"[BoostiPhone6s] Tweak is Disabled by Master Switch.");
     }
 }
