@@ -1,7 +1,10 @@
 #import "SystemBlocker.h"
 #import <objc/runtime.h>
 #import <Foundation/Foundation.h>
-#import "../Tweak.xm" // Import để truy cập BoostConfig & CFG macro
+
+// Thay vào đó, khai báo extern các biến global từ Tweak.xm để sử dụng
+extern id CFG; 
+extern BOOL IS_ENABLED;
 
 // ------------------------------------------------------------------------------
 // 1. DECLARATION OF HOOK FUNCTIONS
@@ -16,10 +19,11 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData);
 static IMP orig_cl_startUpdating_IMP = NULL;
 static IMP orig_ubiqu_sync_IMP = NULL;
 static IMP orig_sk_requestReview_IMP = NULL;
-static IMP orig_analytics_send_IMP = NULL;
+static IMP orig_analytics_sendEvent_IMP = NULL;
 
 // Helper: Kiểm tra đồng thời Blocker Flag + Master Switch
 BOOL isBlockerActive() {
+    // Truy cập biến extern IS_ENABLED đã khai báo ở trên
     return [[SystemBlocker sharedInstance] isActive] && IS_ENABLED;
 }
 
@@ -49,8 +53,7 @@ static void blocker_hook_locationStart(id self, SEL _cmd) {
     if (allowed) {
         if (orig_cl_startUpdating_IMP) ((void(*)(id, SEL))orig_cl_startUpdating_IMP)(self, _cmd);
     } else {
-        NSLog(@"[SystemBlocker] 🚫 Blocked GPS for %@", bundleID);
-        // Trả về ngay lập tức, app sẽ nhận nil location thay vì bị treo
+        NSLog(@"[SystemBlocker] Blocked GPS for %@", bundleID);
     }
 }
 
@@ -60,9 +63,7 @@ static void blocker_hook_icloudSync(id self, SEL _cmd) {
         if (orig_ubiqu_sync_IMP) ((void(*)(id, SEL))orig_ubiqu_sync_IMP)(self, _cmd);
         return;
     }
-    
-    // Chặn hoàn toàn, KHÔNG delay. iCloud sync là tác vụ nền không cần thiết khi gaming
-    NSLog(@"[SystemBlocker]  Suppressed iCloud Sync");
+    NSLog(@"[SystemBlocker] Suppressed iCloud Sync");
 }
 
 // 3. Store Review Blocker (Multi-Version Compatible)
@@ -71,13 +72,13 @@ static void blocker_hook_storeReview(id self, SEL _cmd) {
         if (orig_sk_requestReview_IMP) ((void(*)(id, SEL))orig_sk_requestReview_IMP)(self, _cmd);
         return;
     }
-    NSLog(@"[SystemBlocker]  Blocked Rating Prompt");
+    NSLog(@"[SystemBlocker] Blocked Rating Prompt");
 }
 
 // 4. Analytics Blocker (New for v7.0)
 static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
     if (!isBlockerActive()) {
-        if (orig_analytics_send_IMP) ((void(*)(id, SEL, id))orig_analytics_send_IMP)(self, _cmd, eventData);
+        if (orig_analytics_sendEvent_IMP) ((void(*)(id, SEL, id))orig_analytics_sendEvent_IMP)(self, _cmd, eventData);
         return;
     }
     // Silently drop all telemetry
@@ -108,11 +109,11 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
 - (void)initBlockers {
     if (_isActive) return;
     
-    NSLog(@"[SystemBlocker] 🔒 Initializing Deep System Interception v7.0...");
+    NSLog(@"[SystemBlocker] Initializing Deep System Interception v7.0...");
     
     // 1. CHẶN GPS (Location Services)
     Class clClass = objc_getClass("CLLocationManager");
-    if (!clClass) clClass = NSClassFromString("_CLLocationManager"); // Fallback iOS 25+
+    if (!clClass) clClass = NSClassFromString(@"_CLLocationManager"); 
     if (clClass) {
         Method m = class_getInstanceMethod(clClass, @selector(startUpdatingLocation));
         if (m) {
@@ -123,7 +124,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
 
     // 2. CHẶN ICLOUD SYNC (Compatible with iOS 14-26)
     Class ubiqClass = objc_getClass("NSUbiquitousKeyValueStore");
-    if (!ubiqClass) ubiqClass = NSClassFromString("_CloudKitSyncManager"); // Fallback iOS 24+
+    if (!ubiqClass) ubiqClass = NSClassFromString(@"_CloudKitSyncManager"); 
     if (ubiqClass) {
         SEL syncSel = NSSelectorFromString(@"synchronize");
         Method m = class_getInstanceMethod(ubiqClass, syncSel);
@@ -135,7 +136,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
 
     // 3. CHẶN RATING PROMPT (Multi-selector fallback)
     Class skClass = objc_getClass("SKStoreReviewController");
-    if (!skClass) skClass = NSClassFromString("_AppStoreReviewManager"); // Fallback iOS 26+
+    if (!skClass) skClass = NSClassFromString(@"_AppStoreReviewManager"); 
     if (skClass) {
         SEL reviewSel = NSSelectorFromString(@"requestReviewInScene:");
         Method m = class_getInstanceMethod(skClass, reviewSel);
@@ -158,19 +159,28 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
         SEL sendSel = NSSelectorFromString(@"sendEvent:");
         Method m = class_getInstanceMethod(analyticsClass, sendSel);
         if (m) {
-            orig_analytics_send_IMP = method_getImplementation(m);
+            // ★ SỬA: GÁN VÀO ĐÚNG BIẾN orig_analytics_sendEvent_IMP ★
+            orig_analytics_sendEvent_IMP = method_getImplementation(m);
             method_setImplementation(m, (IMP)blocker_hook_analyticsEvent);
         }
     }
 
     _isActive = YES;
-    NSLog(@"[SystemBlocker] ✅ Active. GPS/iCloud/Analytics/Rating Blocked.");
+    NSLog(@"[SystemBlocker] Active. GPS/iCloud/Analytics/Rating Blocked.");
+}
+
+- (void)resetSafeModeManually {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
+    [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
+    [defaults synchronize];
+    _isActive = NO;
+    NSLog(@"[SystemBlocker] Safe Mode manually reset by user.");
 }
 
 - (void)stopBlockers {
     if (!_isActive) return;
     
-    // Restore original implementations safely
     Class clClass = objc_getClass("CLLocationManager");
     if (clClass && orig_cl_startUpdating_IMP) {
         Method m = class_getInstanceMethod(clClass, @selector(startUpdatingLocation));
@@ -178,7 +188,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
     }
     
     _isActive = NO;
-    NSLog(@"[SystemBlocker] ⏹️ Deactivated. Original hooks restored.");
+    NSLog(@"[SystemBlocker] Deactivated. Original hooks restored.");
 }
 
 @end
