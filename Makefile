@@ -17,18 +17,19 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m \
-                          DeviceBypass.xm
+                          Modules/DeviceBypass.xm
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall -Wno-unused-variable -Wno-deprecated-declarations -Wno-module-import-in-extern-c -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip
 
-# SỬA: CHUYỂN Preferences VÀO PRIVATE_FRAMEWORKS
-# Frameworks hệ thống chuẩn
+# SỬA: CHỈ GIỮ LẠI CÁC FRAMEWORK HỆ THỐNG CƠ BẢN
+# Xóa Preferences khỏi danh sách link vì nó gây lỗi "not found" trên CI
+# Code vẫn compile bình thường nhờ header, runtime sẽ tự resolve
 BoostiPhone6sCore_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
-# Private Frameworks (cần đường dẫn đặc biệt hoặc SDK đầy đủ)
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = Preferences
+# Nếu vẫn muốn thử private framework, dùng ADDITIONAL_LDFLAGS an toàn hơn
+# BoostiPhone6sCore_ADDITIONAL_LDFLAGS = -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -76,4 +77,4 @@ before-package::
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
 	
-	@echo "Rootless Package Ready! (Library + Settings Bundle included)"
+	@echo "✅ Rootless Package Ready! (Library + Settings Bundle included)"
