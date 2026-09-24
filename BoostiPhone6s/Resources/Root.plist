@@ -8,7 +8,7 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Boost iPhone 6s-X v7.0 Quantum Stability</string>
+            <string>Boost iPhone 6s-15prm</string>
             <key>footerText</key>
             <string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
         </dict>
@@ -375,6 +375,8 @@
             <key>PostNotification</key>
             <string>com.boostiphone6s.settings/reload</string>
         </dict>
+        
+        <!-- ĐÃ FIX: MỤC BỘ ĐỆM MẠNG (ITEM 28) -->
         <dict>
             <key>cell</key>
             <string>PSMultiValueSpecifier</string>
