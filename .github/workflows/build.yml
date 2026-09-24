@@ -81,28 +81,32 @@ jobs:
           
           ls -lh packages/*.deb || echo "Build finished but no deb found"
 
-            # --- BƯỚC 4: TỰ ĐỘNG CẬP NHẬT CẤU TRÚC REPO CYDIA/SILEO ---
+            # --- BƯỚC 4: TẠO REPO METADATA & THƯ MỤC DEB ---
       - name: Generate Repo Index & Package Metadata
         run: |
           cd $GITHUB_WORKSPACE
           
-          # 1. Tạo thư mục deb/ chứa file cài đặt cho Repo
+          # 1. Tạo thư mục deb/ công khai
           mkdir -p deb
           
-          # 2. Copy file .deb mới vừa build vào thư mục deb/
-          cp packages/*.deb deb/
+          # 2. Copy toàn bộ file .deb mới build vào thư mục deb/
+          if [ -d "packages" ] && [ "$(ls -A packages/*.deb 2>/dev/null)" ]; then
+            cp packages/*.deb deb/
+            echo "✅ Copy file .deb vào thư mục deb/ thành công!"
+          else
+            echo "❌ Không tìm thấy file .deb trong thư mục packages/"
+            exit 1
+          fi
           
-          # 3. Dọn dẹp triệt để thư mục/file cũ
+          # 3. Dọn dẹp file danh mục cũ
           rm -rf Packages Packages.bz2 Packages.xz Release
           
-          # 4. Tạo file Packages danh sách tweak chuẩn
+          # 4. Tạo file Packages danh sách tweak
           dpkg-scanpackages -m ./deb /dev/null > Packages
-          
-          # 5. Nén danh sách thành bz2 và xz
           bzip2 -f -k Packages
           xz -f -k Packages
           
-          # 6. TẠO FILE RELEASE CHUẨN KÈM BẢNG MÃ MD5/SHA256 CHO SILEO
+          # 5. Tạo file Release chuẩn cho Sileo / Zebra
           cat <<EOF > Release
           Origin: Smooth Repo
           Label: Smooth
@@ -114,9 +118,39 @@ jobs:
           Description: Repo Tweak Smooth iphone 6s-x ios 15-16.7.16
           EOF
           
-          echo "✅ Repo Metadata & Release File Successfully Created!"
+          # 6. Tạo trang index.html có link tải trực tiếp file .deb
+          DEB_FILE=$(ls deb/*.deb | head -n 1)
+          DEB_NAME=$(basename "$DEB_FILE")
+          
+          cat <<EOF > index.html
+          <!DOCTYPE html>
+          <html lang="vi">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Smooth Repo</title>
+              <style>
+                  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #000; color: #fff; text-align: center; padding: 30px 15px; }
+                  .card { background: #1c1c1e; padding: 20px; border-radius: 14px; margin: 20px auto; max-width: 360px; border: 1px solid #2c2c2e; }
+                  h1 { color: #34c759; font-size: 24px; }
+                  p { color: #8e8e93; font-size: 14px; }
+                  a.btn { display: block; padding: 12px; background: #007aff; color: white; text-decoration: none; border-radius: 10px; font-weight: bold; margin-top: 15px; }
+              </style>
+          </head>
+          <body>
+              <h1>🚀 Smooth Repo</h1>
+              <p>Kho Tweak iOS 15 - 16.7.16 (Rootless)</p>
+              
+              <div class="card">
+                  <h2>Boost iPhone 6s-X</h2>
+                  <p>Tối ưu hóa hệ thống, tăng tốc CPU/GPU.</p>
+                  <a class="btn" href="./deb/$DEB_NAME">⬇️ Tải Trực Tiếp File .DEB</a>
+              </div>
+          </body>
+          </html>
+          EOF
 
-      # --- BƯỚC 5: ĐẨY TỰ ĐỘNG LÊN BRANCH GH-PAGES (PUBLIC REPO) ---
+      # --- BƯỚC 5: ĐẨY TOÀN BỘ FILE LÊN BRANCH GH-PAGES ---
       - name: Deploy Repo to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
