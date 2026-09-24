@@ -8,7 +8,7 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>SmoothIOS</string>
+            <stringSmoothIOS</string>
             <key>footerText</key>
             <string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
         </dict>
@@ -376,36 +376,22 @@
             <string>com.boostiphone6s.settings/reload</string>
         </dict>
         
-        <!-- ĐÃ FIX: MỤC BỘ ĐỆM MẠNG (ITEM 28) -->
+        <!-- MỤC NHẬP SỐ BỘ ĐỆM MẠNG (ĐÃ ĐỔI THÀNH EDIT TEXT) -->
         <dict>
             <key>cell</key>
-            <string>PSMultiValueSpecifier</string>
-            <key>detail</key>
-            <string>PSListItemsController</string>
-            <key>label</key>
-            <string>Kích Thước Bộ Đệm Mạng</string>
-            <key>title</key>
-            <string>Kích Thước Bộ Đệm Mạng</string>
-            <key>key</key>
-            <string>NetBufSize</string>
+            <string>PSEditTextCell</string>
             <key>default</key>
             <string>1024</string>
             <key>defaults</key>
             <string>com.boostiphone6s.settings</string>
-            <key>titles</key>
-            <array>
-                <string>Chuẩn (64KB)</string>
-                <string>Trung Bình (512KB)</string>
-                <string>Cao (1MB)</string>
-                <string>Siêu Cao (2MB)</string>
-            </array>
-            <key>values</key>
-            <array>
-                <string>64</string>
-                <string>512</string>
-                <string>1024</string>
-                <string>2048</string>
-            </array>
+            <key>key</key>
+            <string>NetBufSize</string>
+            <key>label</key>
+            <string>Kích Thước Bộ Đệm Mạng</string>
+            <key>placeholder</key>
+            <string>Nhập dung lượng KB...</string>
+            <key>keyboard</key>
+            <string>numbers</string>
             <key>PostNotification</key>
             <string>com.boostiphone6s.settings/reload</string>
         </dict>
@@ -423,7 +409,7 @@
             <key>label</key>
             <string>Respring Thủ Công</string>
             <key>action</key>
-            <string>respringDevice</string>
+            <string>respring</string>
             <key>isDestructive</key>
             <true/>
         </dict>
@@ -439,6 +425,6 @@
         </dict>
     </array>
     <key>title</key>
-    <string>Boost iPhone 6s-X</string>
+    <string>Boost iPhone 6s-15Prm</string>
 </dict>
 </plist>
