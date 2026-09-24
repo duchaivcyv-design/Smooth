@@ -359,7 +359,8 @@
             <key>label</key>
             <string>Tăng Tốc AI</string>
             <key>footerText</key>
-            <string>Tối ưu băng thông mạng cho việc biên dịch code/chạy LLM.</string>
+            <string>Chuẩn (64KB),Trung Bình (512KB),Cao (1MB),Siêu Cao (2MB)-
+Chuẩn 64,trung bình 512,cao 1024,siêu cao 2048</string>
         </dict>
         <dict>
             <key>cell</key>
