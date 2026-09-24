@@ -1,8 +1,8 @@
 Package: com.taojb.boostiphone6s
 Name: Boost iPhone 6s-X
-Version: 1.0.1-1-Debug
+Version: 1.0.1-2-Debug
 Architecture: iphoneos-arm64
-Description: Next update
+Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm)
 Maintainer: TaoJB, Nofree
 Author: TaoJB, NoFree
 Section: Tweaks
