@@ -17,17 +17,25 @@
 - (void)respring:(id)sender {
     pid_t pid;
     
-    // Thử chạy sbreload
+    // 1. Chạy sbreload cho Rootless (/var/jb/usr/bin/sbreload)
     const char *args1[] = {"sbreload", NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL);
+    if (posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL) == 0) {
+        return;
+    }
     
-    // Thử chạy killall
+    // 2. Chạy killall cho Rootless (/var/jb/usr/bin/killall)
     const char *args2[] = {"killall", "-9", "SpringBoard", NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL);
-    
-    // Thử chạy lệnh qua system
-    system("killall -9 SpringBoard");
-    system("/var/jb/usr/bin/sbreload");
+    if (posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL) == 0) {
+        return;
+    }
+
+    // 3. Dự phòng cho Rootful (/usr/bin/sbreload)
+    if (posix_spawn(&pid, "/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL) == 0) {
+        return;
+    }
+
+    // 4. Dự phòng cho Rootful (/usr/bin/killall)
+    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL);
 }
 
 @end
