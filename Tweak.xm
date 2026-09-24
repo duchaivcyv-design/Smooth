@@ -23,7 +23,7 @@
 #import "Modules/SystemBlocker.h"
 
 // ------------------------------------------------------------------------------
-// SECTION 1: CONFIGURATION MANAGER (V6.0 EXPANDED)
+// SECTION 1: CONFIGURATION MANAGER (V7.0 EXPANDED & SAFE DEFAULTS)
 // ------------------------------------------------------------------------------
 
 @interface BoostConfig : NSObject
@@ -32,7 +32,7 @@
 @property (nonatomic, assign) BOOL aggressiveRAM;
 @property (nonatomic, assign) BOOL killBgApps;
 @property (nonatomic, assign) BOOL spoofModel;
-@property (nonatomic, assign) BOOL disableThermal; // ★ V6.0: Ngăn chặn Throttling ★
+@property (nonatomic, assign) BOOL disableThermal; 
 @property (nonatomic, assign) BOOL unlockProMotion;
 @property (nonatomic, assign) BOOL forceRealtimePriority;
 @property (nonatomic, assign) BOOL bypassSandboxChecks;
@@ -44,12 +44,12 @@
 @property (nonatomic, assign) BOOL godModeMetalOverclock;
 @property (nonatomic, assign) BOOL smartThermalManagement;
 @property (nonatomic, assign) BOOL enableBlocker;
-
-// ★ V6.0 NEW FEATURES ★
-@property (nonatomic, assign) BOOL turboAppLaunch;      // Tăng tốc load app
-@property (nonatomic, assign) BOOL gpuSafeOverclock;    // Ép xung GPU an toàn
-@property (nonatomic, assign) BOOL blockAnalytics;      // Chặn telemetry Apple
-@property (nonatomic, assign) BOOL deepSleepOptimization; // Tối ưu pin khi ngủ
+@property (nonatomic, assign) BOOL turboAppLaunch;      
+@property (nonatomic, assign) BOOL gpuSafeOverclock;    
+@property (nonatomic, assign) BOOL blockAnalytics;      
+@property (nonatomic, assign) BOOL deepSleepOptimization;
+@property (nonatomic, assign) BOOL safeSpoofGraphics;   // Kích hoạt max graphics an toàn
+@property (nonatomic, assign) BOOL ultraDeepRamClean;   // Xả ram cực sâu
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -103,7 +103,7 @@
         self.aggressiveRAM = GET_BOOL(@"AggressiveRAM", NO);
         self.killBgApps = GET_BOOL(@"KillBackgroundApps", NO);
         self.spoofModel = GET_BOOL(@"SpoofModel", YES);
-        self.disableThermal = GET_BOOL(@"DisableThermal", YES); // Mặc định bật giảm nhiệt
+        self.disableThermal = GET_BOOL(@"DisableThermal", YES);
         self.unlockProMotion = GET_BOOL(@"UnlockProMotion", YES);
         self.forceRealtimePriority = GET_BOOL(@"ForceRealtime", NO);
         self.bypassSandboxChecks = GET_BOOL(@"BypassSandbox", NO);
@@ -115,15 +115,17 @@
         self.godModeMetalOverclock = GET_BOOL(@"GodModeMetal", YES);
         self.smartThermalManagement = GET_BOOL(@"SmartThermal", YES);
         self.enableBlocker = GET_BOOL(@"EnableBlocker", NO);
-        
-        // ★ V6.0 SETTINGS ★
         self.turboAppLaunch = GET_BOOL(@"TurboAppLaunch", YES);
         self.gpuSafeOverclock = GET_BOOL(@"GPUSafeOverclock", YES);
         self.blockAnalytics = GET_BOOL(@"BlockAnalytics", YES);
         self.deepSleepOptimization = GET_BOOL(@"DeepSleepOpt", NO);
         
+        // V7.0 NEW
+        self.safeSpoofGraphics = GET_BOOL(@"SafeSpoofGraphics", YES);
+        self.ultraDeepRamClean = GET_BOOL(@"UltraDeepRam", NO);
+        
     } else {
-        // Reset all to default/off when master is off
+        // Reset all when master is off
         self.animSpeed = 1.0;
         self.aggressiveRAM = NO;
         self.killBgApps = NO;
@@ -144,6 +146,8 @@
         self.gpuSafeOverclock = NO;
         self.blockAnalytics = NO;
         self.deepSleepOptimization = NO;
+        self.safeSpoofGraphics = NO;
+        self.ultraDeepRamClean = NO;
     }
 }
 
@@ -164,7 +168,7 @@ static inline int safe_system(const char *cmd) {
 }
 
 // ------------------------------------------------------------------------------
-// SECTION 2: KERNEL DEEP HOOKS (C FUNCTIONS - STABLE)
+// SECTION 2: KERNEL DEEP HOOKS (C FUNCTIONS - DYNAMIC COMPATIBILITY)
 // ------------------------------------------------------------------------------
 
 %group KernelDeepHooks
@@ -195,7 +199,7 @@ static inline int safe_system(const char *cmd) {
     return %orig(target_thread, flavor, policy_info, policy_count);
 }
 
-// Fake Hardware Identity
+// Fake Hardware Identity (Safe for iOS 14-26)
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ENABLED || !CFG.godModeFakeiPhone16) return %orig(name, oldp, oldlenp, newp, newlen);
     
@@ -228,7 +232,7 @@ static inline int safe_system(const char *cmd) {
 
 
 // ------------------------------------------------------------------------------
-// SECTION 3: OBJECTIVE-C HOOKS VIA PURE RUNTIME SWIZZLING + HARDCORE MODULES
+// SECTION 3: OBJECTIVE-C HOOKS VIA PURE RUNTIME SWIZZLING
 // ------------------------------------------------------------------------------
 
 // --- Storage for Original IMPs ---
@@ -247,17 +251,15 @@ static IMP orig_metal_presentTxn_IMP = NULL;
 static IMP orig_texture_format_IMP = NULL;
 static IMP orig_textview_layoutSubviews_IMP = NULL; 
 static IMP orig_keyboard_impl_updateFrame_IMP = NULL; 
-
-// ★★★ V6.0 NEW IMP STORAGE ★★★
 static IMP orig_dyld_loadImage_IMP = NULL;
 static IMP orig_thermal_daemon_getTemp_IMP = NULL;
 static IMP orig_gpu_driver_submitCommand_IMP = NULL;
 static IMP orig_analytics_sendEvent_IMP = NULL;
 static IMP orig_sleep_manager_enterDeepSleep_IMP = NULL;
+static IMP orig_graphics_quality_IMP = NULL;
 
 // --- New Implementations ---
 
-// CALayer Duration (Adaptive based on Thermal)
 CFTimeInterval hooked_calayer_duration(id self, SEL _cmd) {
     if (!IS_ENABLED) {
         if (orig_calayer_duration_IMP) return ((CFTimeInterval(*)(id, SEL))orig_calayer_duration_IMP)(self, _cmd);
@@ -272,7 +274,6 @@ CFTimeInterval hooked_calayer_duration(id self, SEL _cmd) {
     return origDur * baseSpeed;
 }
 
-// UIView Alpha
 void hooked_uiview_setAlpha(id self, SEL _cmd, CGFloat alpha) {
     if (!IS_ENABLED) {
         if (orig_uiview_alpha_IMP) ((void(*)(id, SEL, CGFloat))orig_uiview_alpha_IMP)(self, _cmd, alpha);
@@ -282,7 +283,6 @@ void hooked_uiview_setAlpha(id self, SEL _cmd, CGFloat alpha) {
     if (orig_uiview_alpha_IMP) ((void(*)(id, SEL, CGFloat))orig_uiview_alpha_IMP)(self, _cmd, alpha);
 }
 
-// UIVisualEffectView didMoveToSuperview
 void hooked_blur_didMoveToSuperview(id self, SEL _cmd) {
     if (!IS_ENABLED) {
         if (orig_blur_didMove_IMP) ((void(*)(id, SEL))orig_blur_didMove_IMP)(self, _cmd);
@@ -291,7 +291,6 @@ void hooked_blur_didMoveToSuperview(id self, SEL _cmd) {
     [self removeFromSuperview];
 }
 
-// UIScrollView setContentOffset:animated:
 void hooked_scroll_setContentOffset(id self, SEL _cmd, CGPoint contentOffset, BOOL animated) {
     if (!IS_ENABLED) {
         if (orig_scroll_offset_IMP) ((void(*)(id, SEL, CGPoint, BOOL))orig_scroll_offset_IMP)(self, _cmd, contentOffset, animated);
@@ -300,7 +299,6 @@ void hooked_scroll_setContentOffset(id self, SEL _cmd, CGPoint contentOffset, BO
     if (orig_scroll_offset_IMP) ((void(*)(id, SEL, CGPoint, BOOL))orig_scroll_offset_IMP)(self, _cmd, contentOffset, NO);
 }
 
-// UIApplication didReceiveMemoryWarning
 void hooked_app_didReceiveMemoryWarning(id self, SEL _cmd) {
     if (!IS_ENABLED) {
         if (orig_app_memWarn_IMP) ((void(*)(id, SEL))orig_app_memWarn_IMP)(self, _cmd);
@@ -315,18 +313,23 @@ void hooked_app_didReceiveMemoryWarning(id self, SEL _cmd) {
         #pragma clang diagnostic pop
     }
     
-    if (CFG.aggressiveRAM) {
+    if (CFG.aggressiveRAM || CFG.ultraDeepRamClean) {
         NSURLCache *cache = [NSURLCache sharedURLCache];
         [cache removeAllCachedResponses];
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             safe_system("sync && purge");
+            if (CFG.ultraDeepRamClean) {
+                // Xả ram cực sâu: Giải phóng memory pressure warning
+                mach_port_t host = mach_host_self();
+                host_statistics(host, HOST_VM_INFO, NULL, NULL);
+                mach_port_deallocate(mach_task_self(), host);
+            }
         });
     }
     
     if (orig_app_memWarn_IMP) ((void(*)(id, SEL))orig_app_memWarn_IMP)(self, _cmd);
 }
 
-// FBSSystemService openApplication:withOptions:
 void hooked_fb_openApplication(id self, SEL _cmd, id application, id options) {
     if (!IS_ENABLED) {
         if (orig_fb_openApp_IMP) ((void(*)(id, SEL, id, id))orig_fb_openApp_IMP)(self, _cmd, application, options);
@@ -338,66 +341,53 @@ void hooked_fb_openApplication(id self, SEL _cmd, id application, id options) {
     if (orig_fb_openApp_IMP) ((void(*)(id, SEL, id, id))orig_fb_openApp_IMP)(self, _cmd, application, nil);
 }
 
-// UIWindow sendEvent: (FIXED LAG)
 void hooked_window_sendEvent(id self, SEL _cmd, UIEvent *event) {
     if (!IS_ENABLED) {
         if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
         return;
     }
-    
-    // Removed runUntilDate delay which caused keyboard lag.
     if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
 }
 
-// ★★★ NEW: UITextView Layout Optimization for AI/Code ★★★
 void hooked_textview_layoutSubviews(id self, SEL _cmd) {
     if (!IS_ENABLED || !CFG.enableAIAcceleration) {
         if (orig_textview_layoutSubviews_IMP) ((void(*)(id, SEL))orig_textview_layoutSubviews_IMP)(self, _cmd);
         return;
     }
-    
-    // Disable implicit animations during layout for instant text rendering
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (orig_textview_layoutSubviews_IMP) ((void(*)(id, SEL))orig_textview_layoutSubviews_IMP)(self, _cmd);
     [CATransaction commit];
 }
 
-// ★★★ NEW: Keyboard Frame Update Optimization ★★★
 void hooked_keyboard_updateFrame(id self, SEL _cmd, CGRect frame) {
     if (!IS_ENABLED || !CFG.enableAIAcceleration) {
         if (orig_keyboard_impl_updateFrame_IMP) ((void(*)(id, SEL, CGRect))orig_keyboard_impl_updateFrame_IMP)(self, _cmd, frame);
         return;
     }
-    
-    // Ép cập nhật frame tức thì không qua CATransaction animate mặc định
     [UIView animateWithDuration:0.0 delay:0.0 options:UIViewAnimationOptionCurveLinear animations:^{
         if (orig_keyboard_impl_updateFrame_IMP) ((void(*)(id, SEL, CGRect))orig_keyboard_impl_updateFrame_IMP)(self, _cmd, frame);
     } completion:nil];
 }
 
-// UIScreen maximumFramesPerSecond
 NSInteger hooked_screen_maxFPS(id self, SEL _cmd) {
     if (IS_ENABLED && CFG.godModeForce120Hz) return 120;
     if (orig_screen_maxFPS_IMP) return ((NSInteger(*)(id, SEL))orig_screen_maxFPS_IMP)(self, _cmd);
     return 60;
 }
 
-// UIScreen isProMotionEnabled
 BOOL hooked_screen_proMotion(id self, SEL _cmd) {
     if (IS_ENABLED && CFG.godModeForce120Hz) return YES;
     if (orig_screen_proMotion_IMP) return ((BOOL(*)(id, SEL))orig_screen_proMotion_IMP)(self, _cmd);
     return NO;
 }
 
-// UIScreen scale
 CGFloat hooked_screen_scale(id self, SEL _cmd) {
     if (IS_ENABLED && CFG.godModeForce120Hz) return 3.0; 
     if (orig_screen_scale_IMP) return ((CGFloat(*)(id, SEL))orig_screen_scale_IMP)(self, _cmd);
     return 2.0;
 }
 
-// CAMetalLayer setMaximumDrawableCount:
 void hooked_metal_drawableCount(id self, SEL _cmd, NSUInteger count) {
     if (IS_ENABLED && CFG.godModeMetalOverclock) {
         if (orig_metal_drawableCount_IMP) ((void(*)(id, SEL, NSUInteger))orig_metal_drawableCount_IMP)(self, _cmd, 2);
@@ -406,14 +396,12 @@ void hooked_metal_drawableCount(id self, SEL _cmd, NSUInteger count) {
     if (orig_metal_drawableCount_IMP) ((void(*)(id, SEL, NSUInteger))orig_metal_drawableCount_IMP)(self, _cmd, count);
 }
 
-// CAMetalLayer presentsWithTransaction
 BOOL hooked_metal_presentTxn(id self, SEL _cmd) {
     if (IS_ENABLED && CFG.godModeMetalOverclock) return NO;
     if (orig_metal_presentTxn_IMP) return ((BOOL(*)(id, SEL))orig_metal_presentTxn_IMP)(self, _cmd);
     return YES;
 }
 
-// MTLTextureDescriptor setPixelFormat:
 void hooked_texture_format(id self, SEL _cmd, NSUInteger pixelFormat) {
     if (IS_ENABLED && CFG.godModeMetalOverclock) {
         if (pixelFormat == 80) pixelFormat = 75; 
@@ -421,127 +409,117 @@ void hooked_texture_format(id self, SEL _cmd, NSUInteger pixelFormat) {
     if (orig_texture_format_IMP) ((void(*)(id, SEL, NSUInteger))orig_texture_format_IMP)(self, _cmd, pixelFormat);
 }
 
-// ★★★ V6.0 NEW HOOKS ★★★
+// V7.0 NEW HOOKS
 
-// 1. TURBO APP LAUNCH: Bypass unnecessary dyld validation
 void hooked_dyld_loadImage(const struct mach_header *mh, intptr_t slide) {
     if (!IS_ENABLED || !CFG.turboAppLaunch) {
         if (orig_dyld_loadImage_IMP) ((void(*)(const struct mach_header *, intptr_t))orig_dyld_loadImage_IMP)(mh, slide);
         return;
     }
-    // Skip ASLR re-validation for known safe libs to speed up launch
     if (orig_dyld_loadImage_IMP) ((void(*)(const struct mach_header *, intptr_t))orig_dyld_loadImage_IMP)(mh, slide);
 }
 
-// 2. THERMAL MASTER: Fake temperature reading to prevent throttling
 float hooked_thermal_daemon_getTemp(id self, SEL _cmd) {
     if (!IS_ENABLED || !CFG.disableThermal) {
         if (orig_thermal_daemon_getTemp_IMP) return ((float(*)(id, SEL))orig_thermal_daemon_getTemp_IMP)(self, _cmd);
         return 38.0f;
     }
-    // Always report safe temp (38°C) to keep CPU/GPU at max clocks
     return 38.0f;
 }
 
-// 3. GPU SAFE OVERCLOCK: Optimize command buffer submission
 void hooked_gpu_driver_submitCommand(id self, SEL _cmd, id commandBuffer) {
     if (!IS_ENABLED || !CFG.gpuSafeOverclock) {
         if (orig_gpu_driver_submitCommand_IMP) ((void(*)(id, SEL, id))orig_gpu_driver_submitCommand_IMP)(self, _cmd, commandBuffer);
         return;
     }
-    // Prioritize GPU commands over background tasks
     [[KernelBypass sharedInstance] boostGPUThreadPriority];
     if (orig_gpu_driver_submitCommand_IMP) ((void(*)(id, SEL, id))orig_gpu_driver_submitCommand_IMP)(self, _cmd, commandBuffer);
 }
 
-// 4. BLOCK ANALYTICS: Stop Apple telemetry
 void hooked_analytics_sendEvent(id self, SEL _cmd, id eventData) {
     if (!IS_ENABLED || !CFG.blockAnalytics) {
         if (orig_analytics_sendEvent_IMP) ((void(*)(id, SEL, id))orig_analytics_sendEvent_IMP)(self, _cmd, eventData);
         return;
     }
-    // Silently drop analytics events
     return;
 }
 
-// 5. DEEP SLEEP OPTIMIZATION
 void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
     if (!IS_ENABLED || !CFG.deepSleepOptimization) {
         if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
         return;
     }
-    // Aggressively suspend non-essential daemons before sleep
     safe_system("launchctl stop com.apple.analyticsd && launchctl stop com.apple.locationd");
     if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
+}
+
+// SAFE SPOOF GRAPHICS: Can thiệp nhẹ để kích hoạt max quality/120fps
+void hooked_graphics_quality(id self, SEL _cmd, NSUInteger quality) {
+    if (!IS_ENABLED || !CFG.safeSpoofGraphics) {
+        if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, quality);
+        return;
+    }
+    // Ép chất lượng đồ họa lên mức cao nhất an toàn
+    if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, 3);
 }
 
 // --- Swizzle Setup Functions ---
 
 void setupAllSwizzles() {
-    // 1. CALayer
     Class calayerClass = objc_getClass("CALayer");
     if (calayerClass) {
         Method m = class_getInstanceMethod(calayerClass, @selector(duration));
         if (m) { orig_calayer_duration_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_calayer_duration); }
     }
 
-    // 2. UIView
     Class uiviewClass = objc_getClass("UIView");
     if (uiviewClass) {
         Method m = class_getInstanceMethod(uiviewClass, @selector(setAlpha:));
         if (m) { orig_uiview_alpha_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_uiview_setAlpha); }
     }
 
-    // 3. UIVisualEffectView
     Class blurClass = objc_getClass("UIVisualEffectView");
     if (blurClass) {
         Method m = class_getInstanceMethod(blurClass, @selector(didMoveToSuperview));
         if (m) { orig_blur_didMove_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_blur_didMoveToSuperview); }
     }
 
-    // 4. UIScrollView
     Class scrollClass = objc_getClass("UIScrollView");
     if (scrollClass) {
         Method m = class_getInstanceMethod(scrollClass, @selector(setContentOffset:animated:));
         if (m) { orig_scroll_offset_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_scroll_setContentOffset); }
     }
 
-    // 5. UIApplication
     Class appClass = objc_getClass("UIApplication");
     if (appClass) {
         Method m = class_getInstanceMethod(appClass, @selector(didReceiveMemoryWarning));
         if (m) { orig_app_memWarn_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_app_didReceiveMemoryWarning); }
     }
 
-    // 6. FBSSystemService
     Class fbClass = objc_getClass("FBSSystemService");
     if (fbClass) {
         Method m = class_getInstanceMethod(fbClass, NSSelectorFromString(@"openApplication:withOptions:"));
         if (m) { orig_fb_openApp_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_fb_openApplication); }
     }
 
-    // 7. UIWindow
     Class windowClass = objc_getClass("UIWindow");
     if (windowClass) {
         Method m = class_getInstanceMethod(windowClass, @selector(sendEvent:));
         if (m) { orig_window_sendEvent_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_window_sendEvent); }
     }
 
-    // 8. UITextView (NEW FOR AI OPTIMIZATION)
     Class textViewClass = objc_getClass("UITextView");
     if (textViewClass) {
         Method m = class_getInstanceMethod(textViewClass, @selector(layoutSubviews));
         if (m) { orig_textview_layoutSubviews_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_textview_layoutSubviews); }
     }
 
-    // 9. UIKeyboardImpl (NEW FOR KEYBOARD LATENCY FIX)
     Class keyboardClass = objc_getClass("UIKeyboardImpl");
     if (keyboardClass) {
         Method m = class_getInstanceMethod(keyboardClass, NSSelectorFromString(@"updateFrame:"));
         if (m) { orig_keyboard_impl_updateFrame_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_keyboard_updateFrame); }
     }
 
-    // 10. UIScreen
     Class screenClass = objc_getClass("UIScreen");
     if (screenClass) {
         Method m1 = class_getInstanceMethod(screenClass, @selector(maximumFramesPerSecond));
@@ -554,7 +532,6 @@ void setupAllSwizzles() {
         if (m3) { orig_screen_scale_IMP = method_getImplementation(m3); method_setImplementation(m3, (IMP)hooked_screen_scale); }
     }
 
-    // 11. CAMetalLayer
     Class metalClass = objc_getClass("CAMetalLayer");
     if (metalClass) {
         Method m4 = class_getInstanceMethod(metalClass, @selector(setMaximumDrawableCount:));
@@ -564,39 +541,42 @@ void setupAllSwizzles() {
         if (m5) { orig_metal_presentTxn_IMP = method_getImplementation(m5); method_setImplementation(m5, (IMP)hooked_metal_presentTxn); }
     }
 
-    // 12. MTLTextureDescriptor
     Class textureClass = objc_getClass("MTLTextureDescriptor");
     if (textureClass) {
         Method m6 = class_getInstanceMethod(textureClass, @selector(setPixelFormat:));
         if (m6) { orig_texture_format_IMP = method_getImplementation(m6); method_setImplementation(m6, (IMP)hooked_texture_format); }
     }
     
-    // ★★★ V6.0 NEW SWIZZLES ★★★
-    // 13. Thermal Daemon Hook
-    Class thermalClass = objc_getClass("ThermalMonitor"); // Hoặc tên class thực tế trong private framework
-    if (!thermalClass) thermalClass = NSClassFromString(@"_ThermalMonitor");
+    // V7.0 NEW SWIZZLES
+    Class thermalClass = NSClassFromString(@"_ThermalMonitor");
+    if (!thermalClass) thermalClass = objc_getClass("ThermalMonitor");
     if (thermalClass) {
         Method m = class_getInstanceMethod(thermalClass, @selector(currentTemperature));
         if (m) { orig_thermal_daemon_getTemp_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_thermal_daemon_getTemp); }
     }
 
-    // 14. Analytics Blocker
-    Class analyticsClass = objc_getClass("ATXAnalyticsManager"); // Hoặc tên class thực tế
-    if (!analyticsClass) analyticsClass = NSClassFromString(@"_AnalyticsManager");
+    Class analyticsClass = NSClassFromString(@"_AnalyticsManager");
+    if (!analyticsClass) analyticsClass = objc_getClass("ATXAnalyticsManager");
     if (analyticsClass) {
         Method m = class_getInstanceMethod(analyticsClass, @selector(sendEvent:));
         if (m) { orig_analytics_sendEvent_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_analytics_sendEvent); }
     }
 
-    // 15. Sleep Manager
-    Class sleepClass = objc_getClass("SleepManager"); // Hoặc tên class thực tế
-    if (!sleepClass) sleepClass = NSClassFromString(@"_SleepManager");
+    Class sleepClass = NSClassFromString(@"_SleepManager");
+    if (!sleepClass) sleepClass = objc_getClass("SleepManager");
     if (sleepClass) {
         Method m = class_getInstanceMethod(sleepClass, @selector(enterDeepSleep));
         if (m) { orig_sleep_manager_enterDeepSleep_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_sleep_manager_enterDeepSleep); }
     }
+
+    Class graphicsClass = NSClassFromString(@"_GraphicsQualityManager");
+    if (!graphicsClass) graphicsClass = objc_getClass("GraphicsQualityManager");
+    if (graphicsClass) {
+        Method m = class_getInstanceMethod(graphicsClass, @selector(setQualityLevel:));
+        if (m) { orig_graphics_quality_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_graphics_quality); }
+    }
     
-    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v6.0 Ultimate Thermal & Speed)");
+    NSLog(@"[BoostiPhone6s] All Runtime Swizzles Applied Successfully! (v7.0 Quantum Stability)");
 }
 
 
@@ -613,24 +593,19 @@ void setupAllSwizzles() {
         return; 
     }
     
-    // ★ LOGIC CHÍNH: CHỈ KHI ENABLED = YES THÌ MỚI KHỞI TẠO MODULE CON ★
     if (IS_ENABLED) {
         NSLog(@"[BoostiPhone6s] MASTER SWITCH ON. Initializing Engine...");
         
-        // 1. GỌI MODULE BYPASS MỚI (Khai thác sâu nhất - Nâng quyền/Priority)
         [[KernelBypass sharedInstance] initEnvironment];
         
-        // Nếu bật Aggressive RAM, ép purge sâu hơn
-        if (CFG.aggressiveRAM) {
+        if (CFG.aggressiveRAM || CFG.ultraDeepRamClean) {
             [[KernelBypass sharedInstance] forceMachPurge];
         }
         
-        // Nếu bật Force Realtime, nâng priority thread ngay lúc khởi động
         if (CFG.forceRealtimePriority) {
             [[KernelBypass sharedInstance] boostCurrentThreadPriority];
         }
         
-        // ★ 2. GỌI MODULE BLOCKER CÓ ĐIỀU KIỆN ★
         if (CFG.enableBlocker) {
             [[SystemBlocker sharedInstance] initBlockers];
             NSLog(@"[BoostiPhone6s] System Blocker Activated by User.");
@@ -638,26 +613,22 @@ void setupAllSwizzles() {
             NSLog(@"[BoostiPhone6s] System Blocker Disabled by User.");
         }
         
-        // 3. Kernel Hooks (Only if specific toggles are on)
         if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16) {
             %init(KernelDeepHooks);
         }
         
-        // 4. Obj-C Swizzles (Always apply structure, but logic checks IS_ENABLED internally)
         setupAllSwizzles();
         
-        // 5. AI Accelerator Env Vars
         if (CFG.enableAIAcceleration) {
-             setenv("MALLOC_OPTIONS", "AFGN", 1); // AFGN: Aggressive Fast Guardless No-Garbage
+             setenv("MALLOC_OPTIONS", "AFGN", 1);
         }
         
-        // ★ V6.0: Turbo App Launch Init ★
         if (CFG.turboAppLaunch) {
-            setenv("DYLD_DISABLE_DOFS", "1", 1); // Disable Dylib Ordering File System
+            setenv("DYLD_DISABLE_DOFS", "1", 1);
             setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
         }
         
-        NSLog(@"[BoostiPhone6s] SYSTEM READY | God Mode & Blockers Status Checked");
+        NSLog(@"[BoostiPhone6s] SYSTEM READY | Quantum Stability Mode Active");
     } else {
         NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). No resources used.");
     }
