@@ -12,8 +12,10 @@
         <string>RootListController</string>
         <key>icon</key>
         <string>icon.png</string>
+        <key>isController</key>
+        <true/>
         <key>label</key>
-        <string>BoostiPhone6s</string>
+        <string>Boost iPhone 6s-X</string>
     </dict>
 </dict>
 </plist>
