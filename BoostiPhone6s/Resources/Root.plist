@@ -161,7 +161,6 @@
             <string>com.boostiphone6s.settings/reload</string>
         </dict>
         
-        <!-- ★ KEY MỚI V7.0: SAFE SPOOF GRAPHICS & ULTRA DEEP RAM ★ -->
         <dict>
             <key>cell</key>
             <string>PSSwitchCell</string>
@@ -379,6 +378,8 @@
         <dict>
             <key>cell</key>
             <string>PSMultiValueSpecifier</string>
+            <key>label</key>
+            <string>Kích Thước Bộ Đệm Mạng</string>
             <key>title</key>
             <string>Kích Thước Bộ Đệm Mạng</string>
             <key>key</key>
@@ -403,6 +404,24 @@
             </array>
             <key>PostNotification</key>
             <string>com.boostiphone6s.settings/reload</string>
+        </dict>
+
+        <!-- ACTION RESPRING BUTTON -->
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>Áp Dụng Thay Đổi</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Respring Thủ Công</string>
+            <key>action</key>
+            <string>respringDevice</string>
+            <key>isDestructive</key>
+            <true/>
         </dict>
 
         <!-- FOOTER -->
