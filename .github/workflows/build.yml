@@ -34,11 +34,11 @@ jobs:
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           
-          echo "Cloning Theos to $TARGET_DIR..."
+          echo "📥 Cloning Theos to $TARGET_DIR..."
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
 
-          echo "Downloading iOS SDK using Git Sparse-Checkout..."
+          echo "📦 Downloading iOS SDK using Git Sparse-Checkout..."
           
           mkdir -p /tmp/sdk_repo
           cd /tmp/sdk_repo
@@ -58,13 +58,13 @@ jobs:
           rm -rf /tmp/sdk_repo
           
           if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
-             echo "Error: Failed to move SDK."
+             echo "❌ Error: Failed to move SDK."
              exit 1
           fi
           
-          echo "SDK Installation Complete."
+          echo "✅ SDK Installation Complete."
 
-      # --- BƯỚC 3: BUILD PACKAGE ---
+      # --- BƯỚC 3: BUILD PACKAGE (GIỮ NGUYÊN AN TOÀN CHO DEB/SETTINGS) ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -81,25 +81,28 @@ jobs:
           
           ls -lh packages/*.deb || echo "Build finished but no deb found"
 
-      # --- BƯỚC 4: TỰ ĐỘNG CẬP NHẬT CẤU TRÚC REPO CYDIA/SILEO ---
+      # --- BƯỚC 4: TỰ ĐỘNG CẬP NHẬT CẤU TRÚC REPO CYDIA/SILEO (ĐÃ AN TOÀN) ---
       - name: Generate Repo Index & Package Metadata
         run: |
           cd $GITHUB_WORKSPACE
           
-          # Tạo thư mục deb/ chứa file cài đặt cho Repo
+          # 1. Tạo thư mục deb/ chứa file cài đặt cho Repo
           mkdir -p deb
           
-          # Copy file .deb mới vừa build vào thư mục deb/
+          # 2. Copy file .deb mới vừa build vào thư mục deb/
           cp packages/*.deb deb/
           
-          # Tạo file Packages danh sách tweak cho Sileo/Zebra
+          # 3. Dọn dẹp triệt để thư mục/file Packages cũ để chống lỗi "Packages: Is a directory"
+          rm -rf Packages Packages.bz2 Packages.xz
+          
+          # 4. Tạo lại file Packages chuẩn cho Sileo/Zebra
           dpkg-scanpackages -m ./deb /dev/null > Packages
           
-          # Nén danh sách thành bz2 và xz
+          # 5. Nén danh sách thành bz2 và xz (dùng cờ -f ép đè an toàn)
           bzip2 -f -k Packages
           xz -f -k Packages
           
-          echo "Repo Metadata Successfully Created!"
+          echo "✅ Repo Metadata Successfully Created!"
 
       # --- BƯỚC 5: ĐẨY TỰ ĐỘNG LÊN BRANCH GH-PAGES (PUBLIC REPO) ---
       - name: Deploy Repo to GitHub Pages
