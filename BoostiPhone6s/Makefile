@@ -5,13 +5,10 @@ BUNDLE_NAME := BoostiPhone6sPrefs
 BoostiPhone6sPrefs_FILES := RootListController.m
 BoostiPhone6sPrefs_FRAMEWORKS := UIKit
 BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS := Preferences
-
-# Sửa lại đúng đường dẫn chuẩn rootless cho PreferenceBundles
 BoostiPhone6sPrefs_INSTALL_PATH := /Library/PreferenceBundles
-
 BoostiPhone6sPrefs_CFLAGS := -fobjc-arc -O3
 
-# Tự động tìm SDK để tránh lỗi trên GitHub Actions
+# Tự động tìm SDK trên GitHub Actions để tránh lỗi không tìm thấy Preferences.framework
 ifeq ($(THEOS_SDK_DIR),)
     THEOS_SDK_DIR := $(shell ls -d $(THEOS)/sdks/iPhoneOS*.sdk 2>/dev/null | head -n 1)
 endif
