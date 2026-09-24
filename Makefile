@@ -12,7 +12,7 @@ LIBRARY_NAME = BoostiPhone6sCore
 
 # ★ GIỮ NGUYÊN DANH SÁCH FILE CŨ CỦA BẠN ★
 BoostiPhone6sCore_FILES = Tweak.xm \
-                          DeviceBypass.xm
+                          DeviceBypass.xm \
                           Modules/CacheCleaner.m \
                           Modules/CrashGuard.m \
                           Modules/SmartThermal.m \
