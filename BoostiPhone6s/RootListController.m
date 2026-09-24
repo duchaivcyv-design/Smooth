@@ -1,4 +1,6 @@
-#Preferences/Preferences.h>
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
+#import <spawn.h>
 
 @interface RootListController : PSListController
 @end
@@ -9,7 +11,6 @@
     if (!_specifiers) {
         _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
     }
-
     return _specifiers;
 }
 
