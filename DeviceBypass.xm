@@ -1,9 +1,3 @@
-// ==============================================================================
-// DEVICE BYPASS MODULE v7.0 - SAFE SPOOFING ENGINE
-// Target: iOS 14.0 - 26.0.1 | iPhone 6s to Latest
-// Features: ProMotion Force, Thermal Bypass, Hardware Identity Spoof
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -12,12 +6,15 @@
 #import <dlfcn.h>
 #import <mach/mach.h>
 
-// ★ FIX: IMPORT TRỰC TIẾP CONFIG THAY VÌ DÙNG EXTERN GLOBAL ★
-// Giả định Tweak.xm đã expose macro CFG hoặc BoostConfig class
-// Nếu tách biệt hoàn toàn, hãy copy interface BoostConfig vào header riêng
-#import "../Tweak.xm" 
+// Sử dụng extern để truy cập biến global đã export từ Tweak.xm
+// Lưu ý: CFG là id trong context này nên ta dùng valueForKey hoặc ép kiểu nếu cần
+extern id CFG; 
+extern BOOL IS_ENABLED;
 
-#define IS_BYPASS_ACTIVE (CFG.enabled && (CFG.spoofModel || CFG.godModeForce120Hz || CFG.disableThermal))
+#define IS_BYPASS_ACTIVE (IS_ENABLED && \
+                          ([CFG valueForKey:@"spoofModel"] || \
+                           [CFG valueForKey:@"godModeForce120Hz"] || \
+                           [CFG valueForKey:@"disableThermal"]))
 
 // ==========================================
 // 1. FAKE HARDWARE CAPABILITIES (GPU & DISPLAY)
@@ -26,18 +23,18 @@
 %group DisplaySpoof
 %hook UIScreen
 - (BOOL)isProMotionEnabled {
-    if (CFG.godModeForce120Hz) return YES;
+    if ([CFG valueForKey:@"godModeForce120Hz"]) return YES;
     return %orig;
 }
 
 - (NSInteger)maximumFramesPerSecond {
-    if (CFG.godModeForce120Hz) return 120;
+    if ([CFG valueForKey:@"godModeForce120Hz"]) return 120;
     return %orig;
 }
 
 - (CGFloat)nativeScale {
     // Ép scale 3.0 cho màn hình OLED giả lập độ sắc nét cao
-    if (CFG.spoofModel) return 3.0;
+    if ([CFG valueForKey:@"spoofModel"]) return 3.0;
     return %orig;
 }
 %end
@@ -45,12 +42,12 @@
 %hook CALayer
 - (BOOL)allowsEdgeAntialiasing {
     // Bật antialiasing cạnh để UI trông mượt hơn trên máy cũ
-    if (CFG.spoofModel) return YES;
+    if ([CFG valueForKey:@"spoofModel"]) return YES;
     return %orig;
 }
 
 - (CGFloat)rasterizationScale {
-    if (CFG.spoofModel) return [UIScreen mainScreen].scale;
+    if ([CFG valueForKey:@"spoofModel"]) return [UIScreen mainScreen].scale;
     return %orig;
 }
 %end
@@ -63,12 +60,12 @@
 %group ThermalBypass
 %hook NSProcessInfo
 - (NSProcessInfoThermalState)thermalState {
-    if (CFG.disableThermal) return NSProcessInfoThermalStateNominal;
+    if ([CFG valueForKey:@"disableThermal"]) return NSProcessInfoThermalStateNominal;
     return %orig;
 }
 
 + (BOOL)isThermalPressureCritical {
-    if (CFG.disableThermal) return NO;
+    if ([CFG valueForKey:@"disableThermal"]) return NO;
     return %orig;
 }
 %end
@@ -80,7 +77,7 @@
 
 %group HardwareSpoof
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (!CFG.spoofModel) return %orig(name, oldp, oldlenp, newp, newlen);
+    if (![CFG valueForKey:@"spoofModel"]) return %orig(name, oldp, oldlenp, newp, newlen);
     
     // Fake Machine Model (iPhone 17,2 = iPhone 16 Pro Max)
     if ((strcmp(name, "hw.machine") == 0) || (strcmp(name, "hw.model") == 0)) {
@@ -118,19 +115,19 @@
     // Chỉ init nhóm hook khi config tương ứng được bật
     // Tránh hook thừa gây overhead hoặc crash trên iOS lạ
     
-    if (CFG.enabled) {
-        if (CFG.godModeForce120Hz || CFG.spoofModel) {
+    if (IS_ENABLED) {
+        if ([CFG valueForKey:@"godModeForce120Hz"] || [CFG valueForKey:@"spoofModel"]) {
             %init(DisplaySpoof);
         }
         
-        if (CFG.disableThermal) {
+        if ([CFG valueForKey:@"disableThermal"]) {
             %init(ThermalBypass);
         }
         
-        if (CFG.spoofModel) {
+        if ([CFG valueForKey:@"spoofModel"]) {
             %init(HardwareSpoof);
         }
         
-        NSLog(@"[DeviceBypass] ✅ Initialized with active spoofing modules.");
+        NSLog(@"[DeviceBypass] Initialized with active spoofing modules.");
     }
 }
