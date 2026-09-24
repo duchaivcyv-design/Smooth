@@ -8,11 +8,14 @@ BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS := Preferences
 BoostiPhone6sPrefs_INSTALL_PATH := /Library/PreferenceLoader/Preferences
 BoostiPhone6sPrefs_CFLAGS := -fobjc-arc -O3
 
-# Trỏ trực tiếp vào SDK đang được Theos sử dụng trên GitHub Actions
-ifeq ($(wildcard $(THEOS_SDK_DIR)),)
-    THEOS_SDK_DIR := $(shell $(THEOS)/bin/theos-sdk-path iphoneos)
+# Tự động tìm thư mục SDK của Apple trong Theos sdks folder
+ifeq ($(THEOS_SDK_DIR),)
+    THEOS_SDK_DIR := $(shell ls -d $(THEOS)/sdks/iPhoneOS*.sdk 2>/dev/null | head -n 1)
 endif
 
-BoostiPhone6sPrefs_LDFLAGS += -F$(THEOS_SDK_DIR)/System/Library/PrivateFrameworks
+# Thêm đường dẫn PrivateFrameworks nếu tìm thấy SDK
+ifneq ($(THEOS_SDK_DIR),)
+    BoostiPhone6sPrefs_LDFLAGS += -F$(THEOS_SDK_DIR)/System/Library/PrivateFrameworks
+endif
 
 include $(THEOS_MAKE_PATH)/bundle.mk
