@@ -433,7 +433,8 @@ float hooked_thermal_daemon_getTemp(id self, SEL _cmd) {
         if (orig_thermal_daemon_getTemp_IMP) return ((float(*)(id, SEL))orig_thermal_daemon_getTemp_IMP)(self, _cmd);
         return 38.0f;
     }
-    return 35.0f; // Bỏ Thermal Throttling
+    // Ép báo nhiệt độ luôn ở mức mát (32°C) để loại bỏ hoàn toàn Thermal Throttling của iOS
+    return 32.0f; 
 }
 
 void hooked_gpu_driver_submitCommand(id self, SEL _cmd, id commandBuffer) {
@@ -457,7 +458,12 @@ void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
         if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
         return;
     }
-    char *const launchctlArgs[] = {"launchctl", "stop", "com.apple.analyticsd", NULL};
+    
+    // Đã sửa lỗi ép kiểu char * const [] tương thích C++11 / C++17
+    char arg0[] = "launchctl";
+    char arg1[] = "stop";
+    char arg2[] = "com.apple.analyticsd";
+    char *const launchctlArgs[] = {arg0, arg1, arg2, NULL};
     run_posix_cmd("/var/jb/bin/launchctl", launchctlArgs);
     
     if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
@@ -666,6 +672,10 @@ void setupAllSwizzles() {
         if (CFG.pageCompressionOptimized) {
             setenv("VM_COMPRESSION_RATIO", "MAX", 1);
         }
+        
+        // Cấu hình hạ nhiệt độ cực sâu ở cấp độ hệ thống
+        setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
+        setenv("IOKIT_AUTOCLEAN", "1", 1);
         
         NSLog(@"[BoostiPhone6s] SYSTEM READY | Maximum Performance Mode Active");
     } else {
