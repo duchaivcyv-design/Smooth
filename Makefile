@@ -17,7 +17,7 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m \
-                          Modules/DeviceBypass.xm
+                          DeviceBypass.xm
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall -Wno-unused-variable -Wno-deprecated-declarations -Wno-module-import-in-extern-c -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
