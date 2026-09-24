@@ -1,45 +1,52 @@
 #!/bin/bash
 
+# postinst - Post-installation script for Boost iPhone 6s-X v7.0
+# Target: Rootless Jailbreak (iOS 14.0 - 26.0.1)
+
+set +e # Tiếp tục thực thi dù có lỗi nhỏ
+
 echo ""
 echo "=================================================="
-echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v4.0"
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v7.0"
 echo "   Status: INSTALLING..."
 echo "=================================================="
 
-# 1. Đặt quyền hạn cho Bundle Settings (Quan trọng để menu hiện ra)
+# 1. ĐẶT QUYỀN HẠN CHO BUNDLE SETTINGS
+# ★ QUAN TRỌNG: Đảm bảo SpringBoard đọc được bundle mà không bị permission denied
 BUNDLE_PATH="/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
 if [ -d "$BUNDLE_PATH" ]; then
     chmod -R 755 "$BUNDLE_PATH"
     chown -R mobile:mobile "$BUNDLE_PATH"
-    echo "[OK] Permissions fixed for Settings Bundle."
+    echo "[OK] Settings Bundle permissions fixed."
 else
-    echo "[WARN] Settings Bundle not found yet (will be created on next build)."
+    echo "[WARN] Settings Bundle not found at $BUNDLE_PATH"
 fi
 
-# 2. Tối ưu hóa Kernel (Chỉ áp dụng nếu hệ thống cho phép)
-# Chúng ta dùng '|| true' để nếu lệnh fail thì bash coi như thành công, không báo lỗi đỏ
-echo "[INFO] Applying safe kernel tweaks..."
+# 2. RESET TRẠNG THÁI SAFE MODE
+# ★ FIX: Xóa key Safe Mode cũ để đảm bảo tweak khởi động bình thường lần đầu
+if command -v defaults &> /dev/null; then
+    defaults delete com.boostiphone6s.settings BoostiPhone6s_SafeModeActive 2>/dev/null || true
+    defaults delete com.boostiphone6s.settings BoostiPhone6s_LastCrashReason 2>/dev/null || true
+    echo "[OK] Safe Mode state reset for fresh install."
+fi
 
-# Tăng vnode limit (Thường hoạt động trên iOS 15+)
-sysctl -w kern.maxvnodes=60000 >/dev/null 2>&1 || true
+# 3. KHỞI TẠO THƯ MỤC CACHE RIÊNG (NẾU CHƯA CÓ)
+TWEAK_CACHE="/var/mobile/Library/Caches/com.boostiphone6s.settings"
+if [ ! -d "$TWEAK_CACHE" ]; then
+    mkdir -p "$TWEAK_CACHE"
+    chown mobile:mobile "$TWEAK_CACHE"
+    chmod 755 "$TWEAK_CACHE"
+    echo "[OK] Tweak cache directory created."
+fi
 
-# Bật chế độ purge memory khi thiếu RAM (An toàn hơn việc chỉnh page_free_target)
-sysctl -w kern.memorystatus_purge_on_warning=1 >/dev/null 2>&1 || true
-sysctl -w kern.memorystatus_purge_on_urgent=1 >/dev/null 2>&1 || true
-sysctl -w kern.memorystatus_purge_on_critical=1 >/dev/null 2>&1 || true
-
-# Xóa cache DNS nhẹ nhàng (Không xóa folder geod vì bị sandbox chặn)
-killall -HUP mDNSResponder >/dev/null 2>&1 || true
-
-echo "[OK] Kernel tweaks applied successfully."
-
-# 3. Dọn dẹp Cache tạm thời (Safe Mode)
-# Chỉ xóa các thư mục con người dùng sở hữu, tránh đụng vào System Files
-CACHE_DIR="/var/mobile/Library/Caches"
-if [ -d "$CACHE_DIR" ]; then
-    # Tìm và xóa file .tmp cũ hơn 1 ngày
-    find "$CACHE_DIR" -type f -name "*.tmp" -mtime +1 -delete >/dev/null 2>&1 || true
-    echo "[OK] Temporary files cleaned."
+# 4. REFRESH PREFERENCE LOADER CACHE
+# Gửi signal HUP để cfprefsd reload danh sách entry mới nhất
+# An toàn hơn killall -9 trên Rootless
+if pidof cfprefsd > /dev/null 2>&1; then
+    killall -HUP cfprefsd >/dev/null 2>&1 || true
+    echo "[OK] Preference cache refreshed."
+else
+    echo "[INFO] cfprefsd not running. Will refresh after respring."
 fi
 
 echo ""
