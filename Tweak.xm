@@ -152,13 +152,18 @@
 
 @end
 
-id CFG = nil;
+// Giúp compiler nhận diện đầy đủ property như .enabled, .aggressiveRAM...
+// Tránh lỗi "property not found on object of type '__strong id'"
+extern BoostConfig *CFG;
+extern BOOL IS_ENABLED;
+
+BoostConfig *CFG = nil;
 BOOL IS_ENABLED = NO;
 
 %ctor {
     [BoostConfig sharedInstance];
-    CFG = [BoostConfig sharedInstance];
-    IS_ENABLED = CFG.enabled;
+    CFG = [BoostConfig sharedInstance]; // Gán pointer đúng kiểu
+    IS_ENABLED = CFG.enabled;           
 }
 
 #define CFG_PTR [BoostConfig sharedInstance]
@@ -626,6 +631,7 @@ void setupAllSwizzles() {
             NSLog(@"[BoostiPhone6s] System Blocker Activated.");
         }
         
+        // ★ SỬA: GỌI C FUNCTION TRỰC TIẾP, KHÔNG DÙNG DOT SYNTAX ★
         if (CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
             init_privilege_escalation(); 
         }
