@@ -152,8 +152,17 @@
 
 @end
 
-#define CFG [BoostConfig sharedInstance]
-#define IS_ENABLED (CFG.enabled)
+id CFG = nil;
+BOOL IS_ENABLED = NO;
+
+%ctor {
+    [BoostConfig sharedInstance];
+    CFG = [BoostConfig sharedInstance];
+    IS_ENABLED = CFG.enabled;
+}
+
+#define CFG_PTR [BoostConfig sharedInstance]
+#define IS_ENABLED_CHECK (CFG_PTR.enabled)
 
 typedef int (*system_func_t)(const char *);
 static inline int safe_system(const char *cmd) {
@@ -173,7 +182,7 @@ static inline int safe_system(const char *cmd) {
 %group KernelDeepHooks
 
 %hookf(int, access, const char *pathname, int mode) {
-    if (!IS_ENABLED || !CFG.bypassSandboxChecks) return %orig(pathname, mode);
+    if (!IS_ENABLED_CHECK || !CFG_PTR.bypassSandboxChecks) return %orig(pathname, mode);
     if (strstr(pathname, "/Caches/") != NULL || strstr(pathname, "/tmp/") != NULL) {
         return 0;
     }
@@ -181,13 +190,13 @@ static inline int safe_system(const char *cmd) {
 }
 
 %hookf(ssize_t, write, int fd, const void *buf, size_t count) {
-    if (!IS_ENABLED || !CFG.optimizeDiskIO) return %orig(fd, buf, count);
+    if (!IS_ENABLED_CHECK || !CFG_PTR.optimizeDiskIO) return %orig(fd, buf, count);
     ssize_t result = %orig(fd, buf, count);
     return result;
 }
 
 %hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
-    if (!IS_ENABLED || !CFG.forceRealtimePriority) return %orig(target_thread, flavor, policy_info, policy_count);
+    if (!IS_ENABLED_CHECK || !CFG_PTR.forceRealtimePriority) return %orig(target_thread, flavor, policy_info, policy_count);
     
     if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
         struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
@@ -200,7 +209,7 @@ static inline int safe_system(const char *cmd) {
 
 // Fake Hardware Identity (Safe for iOS 14-26)
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (!IS_ENABLED || !CFG.godModeFakeiPhone16) return %orig(name, oldp, oldlenp, newp, newlen);
+    if (!IS_ENABLED_CHECK || !CFG_PTR.godModeFakeiPhone16) return %orig(name, oldp, oldlenp, newp, newlen);
     
     if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0) {
         const char *fakeModel = "iPhone17,2"; 
@@ -253,20 +262,20 @@ static IMP orig_keyboard_impl_updateFrame_IMP = NULL;
 static IMP orig_dyld_loadImage_IMP = NULL;
 static IMP orig_thermal_daemon_getTemp_IMP = NULL;
 static IMP orig_gpu_driver_submitCommand_IMP = NULL;
-static IMP orig_analytics_sendEvent_IMP = NULL;
+static IMP orig_analytics_sendEvent_IMP = NULL; //
 static IMP orig_sleep_manager_enterDeepSleep_IMP = NULL;
 static IMP orig_graphics_quality_IMP = NULL;
 
 // --- New Implementations ---
 
 CFTimeInterval hooked_calayer_duration(id self, SEL _cmd) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_calayer_duration_IMP) return ((CFTimeInterval(*)(id, SEL))orig_calayer_duration_IMP)(self, _cmd);
         return 0.3;
     }
     CFTimeInterval origDur = orig_calayer_duration_IMP ? ((CFTimeInterval(*)(id, SEL))orig_calayer_duration_IMP)(self, _cmd) : 0.3;
-    CGFloat baseSpeed = CFG.animSpeed;
-    if (CFG.smartThermalManagement) {
+    CGFloat baseSpeed = CFG_PTR.animSpeed;
+    if (CFG_PTR.smartThermalManagement) {
          CGFloat thermalFactor = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
          baseSpeed *= thermalFactor;
     }
@@ -274,7 +283,7 @@ CFTimeInterval hooked_calayer_duration(id self, SEL _cmd) {
 }
 
 void hooked_uiview_setAlpha(id self, SEL _cmd, CGFloat alpha) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_uiview_alpha_IMP) ((void(*)(id, SEL, CGFloat))orig_uiview_alpha_IMP)(self, _cmd, alpha);
         return;
     }
@@ -283,7 +292,7 @@ void hooked_uiview_setAlpha(id self, SEL _cmd, CGFloat alpha) {
 }
 
 void hooked_blur_didMoveToSuperview(id self, SEL _cmd) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_blur_didMove_IMP) ((void(*)(id, SEL))orig_blur_didMove_IMP)(self, _cmd);
         return;
     }
@@ -291,7 +300,7 @@ void hooked_blur_didMoveToSuperview(id self, SEL _cmd) {
 }
 
 void hooked_scroll_setContentOffset(id self, SEL _cmd, CGPoint contentOffset, BOOL animated) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_scroll_offset_IMP) ((void(*)(id, SEL, CGPoint, BOOL))orig_scroll_offset_IMP)(self, _cmd, contentOffset, animated);
         return;
     }
@@ -299,7 +308,7 @@ void hooked_scroll_setContentOffset(id self, SEL _cmd, CGPoint contentOffset, BO
 }
 
 void hooked_app_didReceiveMemoryWarning(id self, SEL _cmd) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_app_memWarn_IMP) ((void(*)(id, SEL))orig_app_memWarn_IMP)(self, _cmd);
         return;
     }
@@ -312,11 +321,11 @@ void hooked_app_didReceiveMemoryWarning(id self, SEL _cmd) {
         #pragma clang diagnostic pop
     }
     
-    if (CFG.aggressiveRAM || CFG.ultraDeepRamClean) {
+    if (CFG_PTR.aggressiveRAM || CFG_PTR.ultraDeepRamClean) {
         NSURLCache *cache = [NSURLCache sharedURLCache];
         [cache removeAllCachedResponses];
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            if (CFG.ultraDeepRamClean) {
+            if (CFG_PTR.ultraDeepRamClean) {
                 [CacheCleaner forceDeepMemoryPurge];
             } else {
                 [CacheCleaner forceMemoryPurge];
@@ -328,18 +337,18 @@ void hooked_app_didReceiveMemoryWarning(id self, SEL _cmd) {
 }
 
 void hooked_fb_openApplication(id self, SEL _cmd, id application, id options) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_fb_openApp_IMP) ((void(*)(id, SEL, id, id))orig_fb_openApp_IMP)(self, _cmd, application, options);
         return;
     }
-    if (CFG.killBgApps) {
+    if (CFG_PTR.killBgApps) {
          [CacheCleaner forceMemoryPurge];
     }
     if (orig_fb_openApp_IMP) ((void(*)(id, SEL, id, id))orig_fb_openApp_IMP)(self, _cmd, application, nil);
 }
 
 void hooked_window_sendEvent(id self, SEL _cmd, UIEvent *event) {
-    if (!IS_ENABLED) {
+    if (!IS_ENABLED_CHECK) {
         if (orig_window_sendEvent_IMP) ((void(*)(id, SEL, UIEvent*))orig_window_sendEvent_IMP)(self, _cmd, event);
         return;
     }
@@ -347,7 +356,7 @@ void hooked_window_sendEvent(id self, SEL _cmd, UIEvent *event) {
 }
 
 void hooked_textview_layoutSubviews(id self, SEL _cmd) {
-    if (!IS_ENABLED || !CFG.enableAIAcceleration) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.enableAIAcceleration) {
         if (orig_textview_layoutSubviews_IMP) ((void(*)(id, SEL))orig_textview_layoutSubviews_IMP)(self, _cmd);
         return;
     }
@@ -358,7 +367,7 @@ void hooked_textview_layoutSubviews(id self, SEL _cmd) {
 }
 
 void hooked_keyboard_updateFrame(id self, SEL _cmd, CGRect frame) {
-    if (!IS_ENABLED || !CFG.enableAIAcceleration) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.enableAIAcceleration) {
         if (orig_keyboard_impl_updateFrame_IMP) ((void(*)(id, SEL, CGRect))orig_keyboard_impl_updateFrame_IMP)(self, _cmd, frame);
         return;
     }
@@ -368,25 +377,25 @@ void hooked_keyboard_updateFrame(id self, SEL _cmd, CGRect frame) {
 }
 
 NSInteger hooked_screen_maxFPS(id self, SEL _cmd) {
-    if (IS_ENABLED && CFG.godModeForce120Hz) return 120;
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeForce120Hz) return 120;
     if (orig_screen_maxFPS_IMP) return ((NSInteger(*)(id, SEL))orig_screen_maxFPS_IMP)(self, _cmd);
     return 60;
 }
 
 BOOL hooked_screen_proMotion(id self, SEL _cmd) {
-    if (IS_ENABLED && CFG.godModeForce120Hz) return YES;
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeForce120Hz) return YES;
     if (orig_screen_proMotion_IMP) return ((BOOL(*)(id, SEL))orig_screen_proMotion_IMP)(self, _cmd);
     return NO;
 }
 
 CGFloat hooked_screen_scale(id self, SEL _cmd) {
-    if (IS_ENABLED && CFG.godModeForce120Hz) return 3.0; 
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeForce120Hz) return 3.0; 
     if (orig_screen_scale_IMP) return ((CGFloat(*)(id, SEL))orig_screen_scale_IMP)(self, _cmd);
     return 2.0;
 }
 
 void hooked_metal_drawableCount(id self, SEL _cmd, NSUInteger count) {
-    if (IS_ENABLED && CFG.godModeMetalOverclock) {
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeMetalOverclock) {
         if (orig_metal_drawableCount_IMP) ((void(*)(id, SEL, NSUInteger))orig_metal_drawableCount_IMP)(self, _cmd, 2);
         return;
     }
@@ -394,13 +403,13 @@ void hooked_metal_drawableCount(id self, SEL _cmd, NSUInteger count) {
 }
 
 BOOL hooked_metal_presentTxn(id self, SEL _cmd) {
-    if (IS_ENABLED && CFG.godModeMetalOverclock) return NO;
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeMetalOverclock) return NO;
     if (orig_metal_presentTxn_IMP) return ((BOOL(*)(id, SEL))orig_metal_presentTxn_IMP)(self, _cmd);
     return YES;
 }
 
 void hooked_texture_format(id self, SEL _cmd, NSUInteger pixelFormat) {
-    if (IS_ENABLED && CFG.godModeMetalOverclock) {
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeMetalOverclock) {
         if (pixelFormat == 80) pixelFormat = 75; 
     }
     if (orig_texture_format_IMP) ((void(*)(id, SEL, NSUInteger))orig_texture_format_IMP)(self, _cmd, pixelFormat);
@@ -409,7 +418,7 @@ void hooked_texture_format(id self, SEL _cmd, NSUInteger pixelFormat) {
 // V7.0 NEW HOOKS
 
 void hooked_dyld_loadImage(const struct mach_header *mh, intptr_t slide) {
-    if (!IS_ENABLED || !CFG.turboAppLaunch) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.turboAppLaunch) {
         if (orig_dyld_loadImage_IMP) ((void(*)(const struct mach_header *, intptr_t))orig_dyld_loadImage_IMP)(mh, slide);
         return;
     }
@@ -417,7 +426,7 @@ void hooked_dyld_loadImage(const struct mach_header *mh, intptr_t slide) {
 }
 
 float hooked_thermal_daemon_getTemp(id self, SEL _cmd) {
-    if (!IS_ENABLED || !CFG.disableThermal) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.disableThermal) {
         if (orig_thermal_daemon_getTemp_IMP) return ((float(*)(id, SEL))orig_thermal_daemon_getTemp_IMP)(self, _cmd);
         return 38.0f;
     }
@@ -425,7 +434,7 @@ float hooked_thermal_daemon_getTemp(id self, SEL _cmd) {
 }
 
 void hooked_gpu_driver_submitCommand(id self, SEL _cmd, id commandBuffer) {
-    if (!IS_ENABLED || !CFG.gpuSafeOverclock) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.gpuSafeOverclock) {
         if (orig_gpu_driver_submitCommand_IMP) ((void(*)(id, SEL, id))orig_gpu_driver_submitCommand_IMP)(self, _cmd, commandBuffer);
         return;
     }
@@ -434,15 +443,15 @@ void hooked_gpu_driver_submitCommand(id self, SEL _cmd, id commandBuffer) {
 }
 
 void hooked_analytics_sendEvent(id self, SEL _cmd, id eventData) {
-    if (!IS_ENABLED || !CFG.blockAnalytics) {
-        if (orig_analytics_send_IMP) ((void(*)(id, SEL, id))orig_analytics_send_IMP)(self, _cmd, eventData);
+    if (!IS_ENABLED_CHECK || !CFG_PTR.blockAnalytics) {
+        if (orig_analytics_sendEvent_IMP) ((void(*)(id, SEL, id))orig_analytics_sendEvent_IMP)(self, _cmd, eventData);
         return;
     }
     return;
 }
 
 void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
-    if (!IS_ENABLED || !CFG.deepSleepOptimization) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.deepSleepOptimization) {
         if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
         return;
     }
@@ -452,7 +461,7 @@ void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
 
 // SAFE SPOOF GRAPHICS: Can thiệp nhẹ để kích hoạt max quality/120fps
 void hooked_graphics_quality(id self, SEL _cmd, NSUInteger quality) {
-    if (!IS_ENABLED || !CFG.safeSpoofGraphics) {
+    if (!IS_ENABLED_CHECK || !CFG_PTR.safeSpoofGraphics) {
         if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, quality);
         return;
     }
@@ -555,7 +564,10 @@ void setupAllSwizzles() {
     if (!analyticsClass) analyticsClass = objc_getClass("ATXAnalyticsManager");
     if (analyticsClass) {
         Method m = class_getInstanceMethod(analyticsClass, @selector(sendEvent:));
-        if (m) { orig_analytics_send_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_analytics_sendEvent); }
+        if (m) { 
+            orig_analytics_sendEvent_IMP = method_getImplementation(m); 
+            method_setImplementation(m, (IMP)hooked_analytics_sendEvent); 
+        }
     }
 
     Class sleepClass = NSClassFromString(@"_SleepManager");
@@ -581,8 +593,10 @@ void setupAllSwizzles() {
 // ------------------------------------------------------------------------------
 
 %ctor {
-    // ★ STEP 1: LUÔN KHỞI TẠO CRASHGUARD ĐẦU TIÊN ★
     [BoostConfig sharedInstance];
+    CFG = [BoostConfig sharedInstance]; // Gán cho biến global export
+    IS_ENABLED = CFG.enabled;           // Gán cho biến global export
+    
     [[CrashGuard sharedInstance] startMonitoring];
     
     // Nếu đang ở Safe Mode, dừng ngay lập tức
@@ -591,7 +605,6 @@ void setupAllSwizzles() {
         return; 
     }
     
-    // ★ STEP 2: CHỈ INIT KHI MASTER SWITCH BẬT ★
     if (IS_ENABLED) {
         NSLog(@"[BoostiPhone6s] MASTER SWITCH ON. Initializing Engine...");
         
@@ -613,9 +626,8 @@ void setupAllSwizzles() {
             NSLog(@"[BoostiPhone6s] System Blocker Activated.");
         }
         
-        // Deep Exploit Privilege Check
         if (CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
-            [DeepExploit init_privilege_escalation];
+            init_privilege_escalation(); 
         }
         
         // Kernel Hooks Group (Conditional)
