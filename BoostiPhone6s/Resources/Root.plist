@@ -378,14 +378,16 @@
         <dict>
             <key>cell</key>
             <string>PSMultiValueSpecifier</string>
+            <key>detail</key>
+            <string>PSListItemsController</string>
             <key>label</key>
             <string>Kích Thước Bộ Đệm Mạng</string>
             <key>title</key>
             <string>Kích Thước Bộ Đệm Mạng</string>
             <key>key</key>
             <string>NetBufSize</string>
-            <key>defaultValue</key>
-            <integer>1024</integer>
+            <key>default</key>
+            <string>1024</string>
             <key>defaults</key>
             <string>com.boostiphone6s.settings</string>
             <key>titles</key>
@@ -397,10 +399,10 @@
             </array>
             <key>values</key>
             <array>
-                <integer>64</integer>
-                <integer>512</integer>
-                <integer>1024</integer>
-                <integer>2048</integer>
+                <string>64</string>
+                <string>512</string>
+                <string>1024</string>
+                <string>2048</string>
             </array>
             <key>PostNotification</key>
             <string>com.boostiphone6s.settings/reload</string>
