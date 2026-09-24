@@ -23,6 +23,9 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall -Wno-unused-variable -Wno-deprec
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip
 BoostiPhone6sCore_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal
 
+# Thêm dòng định vị đường dẫn cài đặt chuẩn Rootless cho Tweak Core
+BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
+
 include $(THEOS_MAKE_PATH)/library.mk
 
 
