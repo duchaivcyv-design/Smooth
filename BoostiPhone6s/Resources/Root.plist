@@ -410,7 +410,7 @@ Chuẩn 64,trung bình 512,cao 1024,siêu cao 2048</string>
             <key>label</key>
             <string>Respring Thủ Công</string>
             <key>action</key>
-            <string>respring</string>
+            <string>respring:</string>
             <key>isDestructive</key>
             <true/>
         </dict>
