@@ -16,6 +16,8 @@
         <true/>
         <key>label</key>
         <string>SmoothIOS</string>
+        <key>defaults</key>
+        <string>com.boostiphone6s.settings</string>
     </dict>
 </dict>
 </plist>
