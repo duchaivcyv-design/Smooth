@@ -15,12 +15,13 @@
 #import <CommonCrypto/CommonDigest.h> 
 #import <sys/resource.h> 
 
-// Import Custom Modules
+// Import All Custom Modules
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
 #import "Modules/KernelBypass.h"
 #import "Modules/SystemBlocker.h"
+#import "Modules/DeepExploit.h"
 
 // ------------------------------------------------------------------------------
 // SECTION 1: CONFIGURATION MANAGER (V7.0 EXPANDED & SAFE DEFAULTS)
@@ -48,8 +49,8 @@
 @property (nonatomic, assign) BOOL gpuSafeOverclock;    
 @property (nonatomic, assign) BOOL blockAnalytics;      
 @property (nonatomic, assign) BOOL deepSleepOptimization;
-@property (nonatomic, assign) BOOL safeSpoofGraphics;   // Kích hoạt max graphics an toàn
-@property (nonatomic, assign) BOOL ultraDeepRamClean;   // Xả ram cực sâu
+@property (nonatomic, assign) BOOL safeSpoofGraphics;   
+@property (nonatomic, assign) BOOL ultraDeepRamClean;   
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -119,8 +120,6 @@
         self.gpuSafeOverclock = GET_BOOL(@"GPUSafeOverclock", YES);
         self.blockAnalytics = GET_BOOL(@"BlockAnalytics", YES);
         self.deepSleepOptimization = GET_BOOL(@"DeepSleepOpt", NO);
-        
-        // V7.0 NEW
         self.safeSpoofGraphics = GET_BOOL(@"SafeSpoofGraphics", YES);
         self.ultraDeepRamClean = GET_BOOL(@"UltraDeepRam", NO);
         
@@ -317,12 +316,10 @@ void hooked_app_didReceiveMemoryWarning(id self, SEL _cmd) {
         NSURLCache *cache = [NSURLCache sharedURLCache];
         [cache removeAllCachedResponses];
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            safe_system("sync && purge");
             if (CFG.ultraDeepRamClean) {
-                // Xả ram cực sâu: Giải phóng memory pressure warning
-                mach_port_t host = mach_host_self();
-                host_statistics(host, HOST_VM_INFO, NULL, NULL);
-                mach_port_deallocate(mach_task_self(), host);
+                [CacheCleaner forceDeepMemoryPurge];
+            } else {
+                [CacheCleaner forceMemoryPurge];
             }
         });
     }
@@ -336,7 +333,7 @@ void hooked_fb_openApplication(id self, SEL _cmd, id application, id options) {
         return;
     }
     if (CFG.killBgApps) {
-         safe_system("sync && purge");
+         [CacheCleaner forceMemoryPurge];
     }
     if (orig_fb_openApp_IMP) ((void(*)(id, SEL, id, id))orig_fb_openApp_IMP)(self, _cmd, application, nil);
 }
@@ -438,7 +435,7 @@ void hooked_gpu_driver_submitCommand(id self, SEL _cmd, id commandBuffer) {
 
 void hooked_analytics_sendEvent(id self, SEL _cmd, id eventData) {
     if (!IS_ENABLED || !CFG.blockAnalytics) {
-        if (orig_analytics_sendEvent_IMP) ((void(*)(id, SEL, id))orig_analytics_sendEvent_IMP)(self, _cmd, eventData);
+        if (orig_analytics_send_IMP) ((void(*)(id, SEL, id))orig_analytics_send_IMP)(self, _cmd, eventData);
         return;
     }
     return;
@@ -459,7 +456,6 @@ void hooked_graphics_quality(id self, SEL _cmd, NSUInteger quality) {
         if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, quality);
         return;
     }
-    // Ép chất lượng đồ họa lên mức cao nhất an toàn
     if (orig_graphics_quality_IMP) ((void(*)(id, SEL, NSUInteger))orig_graphics_quality_IMP)(self, _cmd, 3);
 }
 
@@ -559,7 +555,7 @@ void setupAllSwizzles() {
     if (!analyticsClass) analyticsClass = objc_getClass("ATXAnalyticsManager");
     if (analyticsClass) {
         Method m = class_getInstanceMethod(analyticsClass, @selector(sendEvent:));
-        if (m) { orig_analytics_sendEvent_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_analytics_sendEvent); }
+        if (m) { orig_analytics_send_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_analytics_sendEvent); }
     }
 
     Class sleepClass = NSClassFromString(@"_SleepManager");
@@ -585,19 +581,24 @@ void setupAllSwizzles() {
 // ------------------------------------------------------------------------------
 
 %ctor {
+    // ★ STEP 1: LUÔN KHỞI TẠO CRASHGUARD ĐẦU TIÊN ★
     [BoostConfig sharedInstance];
     [[CrashGuard sharedInstance] startMonitoring];
     
-    if (![CrashGuard sharedInstance].canExecuteHooks) {
-        NSLog(@"[BoostiPhone6s] SAFE MODE ACTIVE.");
+    // Nếu đang ở Safe Mode, dừng ngay lập tức
+    if (![[CrashGuard sharedInstance] canExecuteHooks]) {
+        NSLog(@"[BoostiPhone6s] SAFE MODE ACTIVE. All hooks bypassed.");
         return; 
     }
     
+    // ★ STEP 2: CHỈ INIT KHI MASTER SWITCH BẬT ★
     if (IS_ENABLED) {
         NSLog(@"[BoostiPhone6s] MASTER SWITCH ON. Initializing Engine...");
         
+        // Init Kernel Bypass Environment
         [[KernelBypass sharedInstance] initEnvironment];
         
+        // Conditional Module Init
         if (CFG.aggressiveRAM || CFG.ultraDeepRamClean) {
             [[KernelBypass sharedInstance] forceMachPurge];
         }
@@ -606,19 +607,26 @@ void setupAllSwizzles() {
             [[KernelBypass sharedInstance] boostCurrentThreadPriority];
         }
         
+        // System Blocker (Conditional)
         if (CFG.enableBlocker) {
             [[SystemBlocker sharedInstance] initBlockers];
-            NSLog(@"[BoostiPhone6s] System Blocker Activated by User.");
-        } else {
-            NSLog(@"[BoostiPhone6s] System Blocker Disabled by User.");
+            NSLog(@"[BoostiPhone6s] System Blocker Activated.");
         }
         
+        // Deep Exploit Privilege Check
+        if (CFG.bypassSandboxChecks || CFG.optimizeDiskIO) {
+            [DeepExploit init_privilege_escalation];
+        }
+        
+        // Kernel Hooks Group (Conditional)
         if (CFG.forceRealtimePriority || CFG.bypassSandboxChecks || CFG.optimizeDiskIO || CFG.godModeFakeiPhone16) {
             %init(KernelDeepHooks);
         }
         
+        // Obj-C Swizzles (Always apply structure, logic checks IS_ENABLED internally)
         setupAllSwizzles();
         
+        // Env Vars for AI/Turbo
         if (CFG.enableAIAcceleration) {
              setenv("MALLOC_OPTIONS", "AFGN", 1);
         }
@@ -630,6 +638,6 @@ void setupAllSwizzles() {
         
         NSLog(@"[BoostiPhone6s] SYSTEM READY | Quantum Stability Mode Active");
     } else {
-        NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). No resources used.");
+        NSLog(@"[BoostiPhone6s] Disabled by User (Master Switch OFF). Zero footprint.");
     }
 }
