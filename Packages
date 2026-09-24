@@ -1,0 +1,21 @@
+Package: com.taojb.boostiphone6s
+Version: 1.0.0-6a
+Architecture: iphoneos-arm64
+Maintainer: TaoJB, Nofree
+Installed-Size: 0
+Depends: mobilesubstrate, firmware (>= 15.0), firmware (<= 17.0), preferenceloader
+Conflicts: none
+Replaces: none
+Filename: ./deb/com.taojb.boostiphone6s_1.0.0-6a_iphoneos-arm64.deb
+Size: 33950
+MD5sum: d79fba7bbb6e4d3f4b08fa51cb3b3f76
+SHA1: c2de18b5f4f0ae1bf53cf48dd204e1247161a8f7
+SHA256: 2d332ff2e522804d42201d9178b345b1e9a52cfeb41cec6ae06f63b21e990945
+Section: Tweaks
+Priority: optional
+Homepage: https://github.com/duchaivcyv-design/Smooth
+Description: Next update
+Author: TaoJB, NoFree
+Icon: https://github.com/duchaivcyv-design/Smooth/blob/44fe7df07d032007f33a7172df3383a6e2b2e336/BoostiPhone6s/Resources/icon.png
+Name: Boost iPhone 6s-X
+

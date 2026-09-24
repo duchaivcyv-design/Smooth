@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Boost iPhone 6s-X v5.2</string>
+			<key>footerText</key>
+			<string>Titanium Core + Absolute Maximum Edition.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>Enabled</string>
+			<key>label</key>
+			<string>Bat Tweak (Master)</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>GOD MODE (Risk)</string>
+			<key>footerText</key>
+			<string>Canh bao: Co the gay nong may hoac bi app bank phat hien.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>GodModeFake16</string>
+			<key>label</key>
+			<string>Gia danh iPhone 16 Pro Max</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>GodMode120Hz</string>
+			<key>label</key>
+			<string>Ep man hinh 120Hz</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>GodModeMetal</string>
+			<key>label</key>
+			<string>Metal GPU Overclocking</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Performance Optimization</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.5</real>
+			<key>min</key>
+			<real>0.1</real>
+			<key>max</key>
+			<real>1.0</real>
+			<key>showValue</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AnimSpeed</string>
+			<key>label</key>
+			<string>Animation Speed Factor</string>
+			<key>footerText</key>
+			<string>Nho hon = Nhanh hon (0.1 la toc do toi da).</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>AggressiveRAM</string>
+			<key>label</key>
+			<string>Xoa Cache Aggressive</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>KillBackgroundApps</string>
+			<key>label</key>
+			<string>Tu dong Kill App nen</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Smart Thermal Management</string>
+			<key>footerText</key>
+			<string>Tu dong dieu chinh hieu nang dua tren nhiet do may.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>SmartThermal</string>
+			<key>label</key>
+			<string>Bat Smart Thermal</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>System Blocker (Anti-Bloatware)</string>
+			<key>footerText</key>
+			<string>Chan GPS, iCloud Sync va Rating Prompt khong can thiet de tiet kiem pin/RAM.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>EnableBlocker</string>
+			<key>label</key>
+			<string>Bat He Thong Chan</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Kernel Deep Mode (Expert)</string>
+			<key>footerText</key>
+			<string>Can thiep truc tiep vao Scheduler va Sandbox.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>ForceRealtime</string>
+			<key>label</key>
+			<string>Ep CPU Realtime Priority</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>BypassSandbox</string>
+			<key>label</key>
+			<string>Bo qua kiem tra Sandbox</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>OptimizeDisk</string>
+			<key>label</key>
+			<string>Toi uu Disk I/O Async</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>AI Accelerator</string>
+			<key>footerText</key>
+			<string>Toi uu bang thong mang cho viec bien dich code/chay LLM.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>key</key>
+			<string>EnableAIBoost</string>
+			<key>label</key>
+			<string>Bat AI Acceleration</string>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>title</key>
+			<string>Network Buffer Size</string>
+			<key>key</key>
+			<string>NetBufSize</string>
+			<key>defaultValue</key>
+			<integer>1024</integer>
+			<key>defaults</key>
+			<string>com.boostiphone6s.settings</string>
+			<key>titles</key>
+			<array>
+				<string>Standard (64KB)</string>
+				<string>Medium (512KB)</string>
+				<string>High (1MB)</string>
+				<string>Ultra (2MB)</string>
+			</array>
+			<key>values</key>
+			<array>
+				<integer>64</integer>
+				<integer>512</integer>
+				<integer>1024</integer>
+				<integer>2048</integer>
+			</array>
+			<key>PostNotification</key>
+			<string>com.boostiphone6s.settings/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerAlignment</key>
+			<integer>1</integer>
+			<key>footerText</key>
+			<string>Made by TaoJB, NoFree | Support: JB0301, BypassJB1</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>Boost iPhone 6s-X</string>
+</dict>
+</plist>

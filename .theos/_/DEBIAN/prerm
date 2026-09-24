@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set +e 
+
+echo ""
+echo "=================================================="
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v5.2"
+echo "   Status: UNINSTALLING..."
+echo "=================================================="
+
+# 1. Khôi phục quyền hạn cơ bản (Chỉ làm nếu thư mục tồn tại)
+CACHE_DIR="/var/mobile/Library/Caches"
+LOGS_DIR="/var/mobile/Library/Logs"
+
+if [ -d "$CACHE_DIR" ]; then
+    chown mobile:mobile "$CACHE_DIR" >/dev/null 2>&1 || true
+    chmod 755 "$CACHE_DIR" >/dev/null 2>&1 || true
+fi
+
+if [ -d "$LOGS_DIR" ]; then
+    chown mobile:mobile "$LOGS_DIR" >/dev/null 2>&1 || true
+    chmod 755 "$LOGS_DIR" >/dev/null 2>&1 || true
+fi
+
+# 2. Xóa cache riêng của Tweak (An toàn tuyệt đối)
+TWEAK_CACHE="$CACHE_DIR/com.boostiphone6s.settings"
+if [ -d "$TWEAK_CACHE" ]; then
+    rm -rf "$TWEAK_CACHE" >/dev/null 2>&1 || true
+    echo "[OK] Tweak-specific cache cleared."
+else
+    echo "[INFO] No tweak cache found to clean."
+fi
+
+# 3. Reset PreferenceLoader Cache (Giúp menu Settings biến mất)
+# Sử dụng 'launchctl' thay vì 'killall' để an toàn hơn trên Rootless Jailbreak
+if command -v launchctl &> /dev/null; then
+    # Thử unload service preferences loader nếu có
+    launchctl unload com.apple.cfprefsd.daemon >/dev/null 2>&1 || true
+    sleep 1
+    launchctl load com.apple.cfprefsd.daemon >/dev/null 2>&1 || true
+else
+    # Fallback cũ nếu không có launchctl
+    killall cfprefsd >/dev/null 2>&1 || true
+fi
+
+echo ""
+echo "=================================================="
+echo "   UNINSTALLATION COMPLETE!"
+echo "   Please RESPRING your device to finalize changes."
+echo "=================================================="
+echo ""
+
+exit 0

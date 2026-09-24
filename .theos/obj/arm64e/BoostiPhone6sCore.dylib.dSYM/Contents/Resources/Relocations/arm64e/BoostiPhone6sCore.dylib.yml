@@ -1,0 +1,162 @@
+---
+triple:          'arm64e-apple-darwin'
+binary-path:     '/Users/runner/work/Smooth/Smooth/.theos/obj/arm64e/BoostiPhone6sCore.dylib'
+relocations:
+  - { offset: 0x1E, size: 0x8, addend: 0x0, symName: '+[BoostConfig sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x4000, symSize: 0xB4 }
+  - { offset: 0x2B, size: 0x8, addend: 0x0, symName: '+[BoostConfig sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x4000, symSize: 0xB4 }
+  - { offset: 0x54, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x69, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x385, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x3B1, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x3CC, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x3E7, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x402, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x429, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x444, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x45F, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x47A, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x495, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x4B0, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x4CB, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x4E6, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x501, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x51C, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x538, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x569, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x5CD, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x678, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0xEE48, symBinAddr: 0x14EA8, symSize: 0x0 }
+  - { offset: 0x9CF, size: 0x8, addend: 0x0, symName: '___29+[BoostConfig sharedInstance]_block_invoke', symObjAddr: 0xB4, symBinAddr: 0x40B4, symSize: 0x3C }
+  - { offset: 0x9F4, size: 0x8, addend: 0x0, symName: '-[BoostConfig init]', symObjAddr: 0xF0, symBinAddr: 0x40F0, symSize: 0xF8 }
+  - { offset: 0xA5E, size: 0x8, addend: 0x0, symName: '-[BoostConfig onReloadNotification:]', symObjAddr: 0x1E8, symBinAddr: 0x41E8, symSize: 0x74 }
+  - { offset: 0xABF, size: 0x8, addend: 0x0, symName: '___36-[BoostConfig onReloadNotification:]_block_invoke', symObjAddr: 0x25C, symBinAddr: 0x425C, symSize: 0x28 }
+  - { offset: 0xB22, size: 0x8, addend: 0x0, symName: ___copy_helper_block_ea8_32s, symObjAddr: 0x284, symBinAddr: 0x4284, symSize: 0x8 }
+  - { offset: 0xB46, size: 0x8, addend: 0x0, symName: ___destroy_helper_block_ea8_32s, symObjAddr: 0x28C, symBinAddr: 0x428C, symSize: 0x8 }
+  - { offset: 0xB63, size: 0x8, addend: 0x0, symName: '-[BoostConfig loadSettings]', symObjAddr: 0x294, symBinAddr: 0x4294, symSize: 0x6C4 }
+  - { offset: 0xBA2, size: 0x8, addend: 0x0, symName: '-[BoostConfig enabled]', symObjAddr: 0x958, symBinAddr: 0x4958, symSize: 0x8 }
+  - { offset: 0xBD6, size: 0x8, addend: 0x0, symName: '-[BoostConfig setEnabled:]', symObjAddr: 0x960, symBinAddr: 0x4960, symSize: 0x8 }
+  - { offset: 0xC0D, size: 0x8, addend: 0x0, symName: '-[BoostConfig animSpeed]', symObjAddr: 0x968, symBinAddr: 0x4968, symSize: 0x8 }
+  - { offset: 0xC3F, size: 0x8, addend: 0x0, symName: '-[BoostConfig setAnimSpeed:]', symObjAddr: 0x970, symBinAddr: 0x4970, symSize: 0x8 }
+  - { offset: 0xC79, size: 0x8, addend: 0x0, symName: '-[BoostConfig aggressiveRAM]', symObjAddr: 0x978, symBinAddr: 0x4978, symSize: 0x8 }
+  - { offset: 0xCAD, size: 0x8, addend: 0x0, symName: '-[BoostConfig setAggressiveRAM:]', symObjAddr: 0x980, symBinAddr: 0x4980, symSize: 0x8 }
+  - { offset: 0xCE4, size: 0x8, addend: 0x0, symName: '-[BoostConfig killBgApps]', symObjAddr: 0x988, symBinAddr: 0x4988, symSize: 0x8 }
+  - { offset: 0xD18, size: 0x8, addend: 0x0, symName: '-[BoostConfig setKillBgApps:]', symObjAddr: 0x990, symBinAddr: 0x4990, symSize: 0x8 }
+  - { offset: 0xD4F, size: 0x8, addend: 0x0, symName: '-[BoostConfig spoofModel]', symObjAddr: 0x998, symBinAddr: 0x4998, symSize: 0x8 }
+  - { offset: 0xD83, size: 0x8, addend: 0x0, symName: '-[BoostConfig setSpoofModel:]', symObjAddr: 0x9A0, symBinAddr: 0x49A0, symSize: 0x8 }
+  - { offset: 0xDBA, size: 0x8, addend: 0x0, symName: '-[BoostConfig disableThermal]', symObjAddr: 0x9A8, symBinAddr: 0x49A8, symSize: 0x8 }
+  - { offset: 0xDEE, size: 0x8, addend: 0x0, symName: '-[BoostConfig setDisableThermal:]', symObjAddr: 0x9B0, symBinAddr: 0x49B0, symSize: 0x8 }
+  - { offset: 0xE25, size: 0x8, addend: 0x0, symName: '-[BoostConfig unlockProMotion]', symObjAddr: 0x9B8, symBinAddr: 0x49B8, symSize: 0x8 }
+  - { offset: 0xE59, size: 0x8, addend: 0x0, symName: '-[BoostConfig setUnlockProMotion:]', symObjAddr: 0x9C0, symBinAddr: 0x49C0, symSize: 0x8 }
+  - { offset: 0xE90, size: 0x8, addend: 0x0, symName: '-[BoostConfig forceRealtimePriority]', symObjAddr: 0x9C8, symBinAddr: 0x49C8, symSize: 0x8 }
+  - { offset: 0xEC4, size: 0x8, addend: 0x0, symName: '-[BoostConfig setForceRealtimePriority:]', symObjAddr: 0x9D0, symBinAddr: 0x49D0, symSize: 0x8 }
+  - { offset: 0xEFB, size: 0x8, addend: 0x0, symName: '-[BoostConfig bypassSandboxChecks]', symObjAddr: 0x9D8, symBinAddr: 0x49D8, symSize: 0x8 }
+  - { offset: 0xF2F, size: 0x8, addend: 0x0, symName: '-[BoostConfig setBypassSandboxChecks:]', symObjAddr: 0x9E0, symBinAddr: 0x49E0, symSize: 0x8 }
+  - { offset: 0xF66, size: 0x8, addend: 0x0, symName: '-[BoostConfig optimizeDiskIO]', symObjAddr: 0x9E8, symBinAddr: 0x49E8, symSize: 0x8 }
+  - { offset: 0xF9A, size: 0x8, addend: 0x0, symName: '-[BoostConfig setOptimizeDiskIO:]', symObjAddr: 0x9F0, symBinAddr: 0x49F0, symSize: 0x8 }
+  - { offset: 0xFD1, size: 0x8, addend: 0x0, symName: '-[BoostConfig enableAIAcceleration]', symObjAddr: 0x9F8, symBinAddr: 0x49F8, symSize: 0x8 }
+  - { offset: 0x1005, size: 0x8, addend: 0x0, symName: '-[BoostConfig setEnableAIAcceleration:]', symObjAddr: 0xA00, symBinAddr: 0x4A00, symSize: 0x8 }
+  - { offset: 0x103C, size: 0x8, addend: 0x0, symName: '-[BoostConfig networkBufferSize]', symObjAddr: 0xA08, symBinAddr: 0x4A08, symSize: 0x8 }
+  - { offset: 0x1070, size: 0x8, addend: 0x0, symName: '-[BoostConfig setNetworkBufferSize:]', symObjAddr: 0xA10, symBinAddr: 0x4A10, symSize: 0x8 }
+  - { offset: 0x10A9, size: 0x8, addend: 0x0, symName: '-[BoostConfig godModeForce120Hz]', symObjAddr: 0xA18, symBinAddr: 0x4A18, symSize: 0x8 }
+  - { offset: 0x10DD, size: 0x8, addend: 0x0, symName: '-[BoostConfig setGodModeForce120Hz:]', symObjAddr: 0xA20, symBinAddr: 0x4A20, symSize: 0x8 }
+  - { offset: 0x1114, size: 0x8, addend: 0x0, symName: '-[BoostConfig godModeFakeiPhone16]', symObjAddr: 0xA28, symBinAddr: 0x4A28, symSize: 0x8 }
+  - { offset: 0x1148, size: 0x8, addend: 0x0, symName: '-[BoostConfig setGodModeFakeiPhone16:]', symObjAddr: 0xA30, symBinAddr: 0x4A30, symSize: 0x8 }
+  - { offset: 0x117F, size: 0x8, addend: 0x0, symName: '-[BoostConfig godModeMetalOverclock]', symObjAddr: 0xA38, symBinAddr: 0x4A38, symSize: 0x8 }
+  - { offset: 0x11B3, size: 0x8, addend: 0x0, symName: '-[BoostConfig setGodModeMetalOverclock:]', symObjAddr: 0xA40, symBinAddr: 0x4A40, symSize: 0x8 }
+  - { offset: 0x11EA, size: 0x8, addend: 0x0, symName: '-[BoostConfig smartThermalManagement]', symObjAddr: 0xA48, symBinAddr: 0x4A48, symSize: 0x8 }
+  - { offset: 0x121E, size: 0x8, addend: 0x0, symName: '-[BoostConfig setSmartThermalManagement:]', symObjAddr: 0xA50, symBinAddr: 0x4A50, symSize: 0x8 }
+  - { offset: 0x1255, size: 0x8, addend: 0x0, symName: '-[BoostConfig enableBlocker]', symObjAddr: 0xA58, symBinAddr: 0x4A58, symSize: 0x8 }
+  - { offset: 0x1289, size: 0x8, addend: 0x0, symName: '-[BoostConfig setEnableBlocker:]', symObjAddr: 0xA60, symBinAddr: 0x4A60, symSize: 0x8 }
+  - { offset: 0x12C0, size: 0x8, addend: 0x0, symName: '-[BoostConfig .cxx_destruct]', symObjAddr: 0xA68, symBinAddr: 0x4A68, symSize: 0xC }
+  - { offset: 0x12F0, size: 0x8, addend: 0x0, symName: __Z23hooked_calayer_durationP11objc_objectP13objc_selector, symObjAddr: 0xA74, symBinAddr: 0x4A74, symSize: 0x1E4 }
+  - { offset: 0x1397, size: 0x8, addend: 0x0, symName: __Z22hooked_uiview_setAlphaP11objc_objectP13objc_selectord, symObjAddr: 0xC58, symBinAddr: 0x4C58, symSize: 0xE8 }
+  - { offset: 0x13FA, size: 0x8, addend: 0x0, symName: __Z30hooked_blur_didMoveToSuperviewP11objc_objectP13objc_selector, symObjAddr: 0xD40, symBinAddr: 0x4D40, symSize: 0xC4 }
+  - { offset: 0x144D, size: 0x8, addend: 0x0, symName: __Z30hooked_scroll_setContentOffsetP11objc_objectP13objc_selector7CGPointb, symObjAddr: 0xE04, symBinAddr: 0x4E04, symSize: 0xE0 }
+  - { offset: 0x14BC, size: 0x8, addend: 0x0, symName: __Z34hooked_app_didReceiveMemoryWarningP11objc_objectP13objc_selector, symObjAddr: 0xEE4, symBinAddr: 0x4EE4, symSize: 0x1B0 }
+  - { offset: 0x15EF, size: 0x8, addend: 0x0, symName: ____Z34hooked_app_didReceiveMemoryWarningP11objc_objectP13objc_selector_block_invoke, symObjAddr: 0x1094, symBinAddr: 0x5094, symSize: 0x80 }
+  - { offset: 0x169E, size: 0x8, addend: 0x0, symName: __Z25hooked_fb_openApplicationP11objc_objectP13objc_selectorS0_S0_, symObjAddr: 0x1114, symBinAddr: 0x5114, symSize: 0x18C }
+  - { offset: 0x176B, size: 0x8, addend: 0x0, symName: __Z23hooked_window_sendEventP11objc_objectP13objc_selectorP7UIEvent, symObjAddr: 0x12A0, symBinAddr: 0x52A0, symSize: 0xD8 }
+  - { offset: 0x17D4, size: 0x8, addend: 0x0, symName: __Z30hooked_textview_layoutSubviewsP11objc_objectP13objc_selector, symObjAddr: 0x1378, symBinAddr: 0x5378, symSize: 0x138 }
+  - { offset: 0x183F, size: 0x8, addend: 0x0, symName: __Z27hooked_keyboard_updateFrameP11objc_objectP13objc_selector6CGRect, symObjAddr: 0x14B0, symBinAddr: 0x54B0, symSize: 0x1E0 }
+  - { offset: 0x18A2, size: 0x8, addend: 0x0, symName: ____Z27hooked_keyboard_updateFrameP11objc_objectP13objc_selector6CGRect_block_invoke, symObjAddr: 0x1690, symBinAddr: 0x5690, symSize: 0x24 }
+  - { offset: 0x18D4, size: 0x8, addend: 0x0, symName: __Z20hooked_screen_maxFPSP11objc_objectP13objc_selector, symObjAddr: 0x16B4, symBinAddr: 0x56B4, symSize: 0x11C }
+  - { offset: 0x192B, size: 0x8, addend: 0x0, symName: __Z23hooked_screen_proMotionP11objc_objectP13objc_selector, symObjAddr: 0x17D0, symBinAddr: 0x57D0, symSize: 0x11C }
+  - { offset: 0x1982, size: 0x8, addend: 0x0, symName: __Z19hooked_screen_scaleP11objc_objectP13objc_selector, symObjAddr: 0x18EC, symBinAddr: 0x58EC, symSize: 0x12C }
+  - { offset: 0x19D9, size: 0x8, addend: 0x0, symName: __Z26hooked_metal_drawableCountP11objc_objectP13objc_selectorm, symObjAddr: 0x1A18, symBinAddr: 0x5A18, symSize: 0x118 }
+  - { offset: 0x1A42, size: 0x8, addend: 0x0, symName: __Z23hooked_metal_presentTxnP11objc_objectP13objc_selector, symObjAddr: 0x1B30, symBinAddr: 0x5B30, symSize: 0x11C }
+  - { offset: 0x1A99, size: 0x8, addend: 0x0, symName: __Z21hooked_texture_formatP11objc_objectP13objc_selectorm, symObjAddr: 0x1C4C, symBinAddr: 0x5C4C, symSize: 0x124 }
+  - { offset: 0x1B02, size: 0x8, addend: 0x0, symName: __Z16setupAllSwizzlesv, symObjAddr: 0x1D70, symBinAddr: 0x5D70, symSize: 0x464 }
+  - { offset: 0x2174, size: 0x8, addend: 0x0, symName: __ZL24_logosLocalCtor_438d2243iPPcS0_, symObjAddr: 0x21D4, symBinAddr: 0x61D4, symSize: 0x4EC }
+  - { offset: 0x2310, size: 0x8, addend: 0x0, symName: '__ZL38_logos_function$KernelDeepHooks$accessPKci', symObjAddr: 0x26C0, symBinAddr: 0x66C0, symSize: 0x11C }
+  - { offset: 0x23DF, size: 0x8, addend: 0x0, symName: '__ZL37_logos_function$KernelDeepHooks$writeiPKvm', symObjAddr: 0x27DC, symBinAddr: 0x67DC, symSize: 0xD4 }
+  - { offset: 0x2440, size: 0x8, addend: 0x0, symName: '__ZL49_logos_function$KernelDeepHooks$thread_policy_setjjPjj', symObjAddr: 0x28B0, symBinAddr: 0x68B0, symSize: 0x118 }
+  - { offset: 0x24C0, size: 0x8, addend: 0x0, symName: '__ZL44_logos_function$KernelDeepHooks$sysctlbynamePKcPvPmS1_m', symObjAddr: 0x29C8, symBinAddr: 0x69C8, symSize: 0x1B8 }
+  - { offset: 0x297C, size: 0x8, addend: 0x0, symName: '+[CacheCleaner cleanDirectoryAtPath:]', symObjAddr: 0x0, symBinAddr: 0x6B80, symSize: 0x32C }
+  - { offset: 0x29D3, size: 0x8, addend: 0x0, symName: '+[CacheCleaner cleanDirectoryAtPath:]', symObjAddr: 0x0, symBinAddr: 0x6B80, symSize: 0x32C }
+  - { offset: 0x2B12, size: 0x8, addend: 0x0, symName: '+[CacheCleaner cleanupTempFiles]', symObjAddr: 0x32C, symBinAddr: 0x6EAC, symSize: 0x104 }
+  - { offset: 0x2B8B, size: 0x8, addend: 0x0, symName: '+[CacheCleaner forceMemoryPurge]', symObjAddr: 0x430, symBinAddr: 0x6FB0, symSize: 0x80 }
+  - { offset: 0x2DF3, size: 0x8, addend: 0x0, symName: '+[CrashGuard sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x7030, symSize: 0xB4 }
+  - { offset: 0x2E00, size: 0x8, addend: 0x0, symName: '+[CrashGuard sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x7030, symSize: 0xB4 }
+  - { offset: 0x2E29, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x7F40, symBinAddr: 0x14F68, symSize: 0x0 }
+  - { offset: 0x2E3E, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x7F40, symBinAddr: 0x14F68, symSize: 0x0 }
+  - { offset: 0x2FB0, size: 0x8, addend: 0x0, symName: '-[CrashGuard triggerSoftRespring]', symObjAddr: 0x9C8, symBinAddr: 0x79F8, symSize: 0x80 }
+  - { offset: 0x2FD5, size: 0x8, addend: 0x0, symName: _triggerSoftRespring.real_system, symObjAddr: 0x7F38, symBinAddr: 0x14F60, symSize: 0x0 }
+  - { offset: 0x35C1, size: 0x8, addend: 0x0, symName: '___28+[CrashGuard sharedInstance]_block_invoke', symObjAddr: 0xB4, symBinAddr: 0x70E4, symSize: 0x3C }
+  - { offset: 0x35E7, size: 0x8, addend: 0x0, symName: '-[CrashGuard init]', symObjAddr: 0xF0, symBinAddr: 0x7120, symSize: 0xD4 }
+  - { offset: 0x3653, size: 0x8, addend: 0x0, symName: '-[CrashGuard startMonitoring]', symObjAddr: 0x1C4, symBinAddr: 0x71F4, symSize: 0x40 }
+  - { offset: 0x3690, size: 0x8, addend: 0x0, symName: _handleUncaughtException, symObjAddr: 0x204, symBinAddr: 0x7234, symSize: 0x128 }
+  - { offset: 0x37CF, size: 0x8, addend: 0x0, symName: _handleUncaughtException, symObjAddr: 0x204, symBinAddr: 0x7234, symSize: 0x128 }
+  - { offset: 0x381F, size: 0x8, addend: 0x0, symName: '-[CrashGuard reportException:]', symObjAddr: 0x32C, symBinAddr: 0x735C, symSize: 0xAC }
+  - { offset: 0x388C, size: 0x8, addend: 0x0, symName: '___30-[CrashGuard reportException:]_block_invoke', symObjAddr: 0x3D8, symBinAddr: 0x7408, symSize: 0x148 }
+  - { offset: 0x3932, size: 0x8, addend: 0x0, symName: ___copy_helper_block_e8_32s40s, symObjAddr: 0x520, symBinAddr: 0x7550, symSize: 0x3C }
+  - { offset: 0x395A, size: 0x8, addend: 0x0, symName: ___destroy_helper_block_e8_32s40s, symObjAddr: 0x55C, symBinAddr: 0x758C, symSize: 0x3C }
+  - { offset: 0x3978, size: 0x8, addend: 0x0, symName: '-[CrashGuard activateSafeModeWithReason:]', symObjAddr: 0x598, symBinAddr: 0x75C8, symSize: 0x130 }
+  - { offset: 0x39CC, size: 0x8, addend: 0x0, symName: '___41-[CrashGuard activateSafeModeWithReason:]_block_invoke', symObjAddr: 0x6C8, symBinAddr: 0x76F8, symSize: 0x1E8 }
+  - { offset: 0x3A2E, size: 0x8, addend: 0x0, symName: '___41-[CrashGuard activateSafeModeWithReason:]_block_invoke_2', symObjAddr: 0x8B0, symBinAddr: 0x78E0, symSize: 0x8 }
+  - { offset: 0x3A5F, size: 0x8, addend: 0x0, symName: ___copy_helper_block_e8_32s, symObjAddr: 0x8B8, symBinAddr: 0x78E8, symSize: 0x8 }
+  - { offset: 0x3A85, size: 0x8, addend: 0x0, symName: ___destroy_helper_block_e8_32s, symObjAddr: 0x8C0, symBinAddr: 0x78F0, symSize: 0x8 }
+  - { offset: 0x3AA3, size: 0x8, addend: 0x0, symName: '-[CrashGuard canExecuteHooks]', symObjAddr: 0x8C8, symBinAddr: 0x78F8, symSize: 0x80 }
+  - { offset: 0x3AE2, size: 0x8, addend: 0x0, symName: '-[CrashGuard resetStateOnWake:]', symObjAddr: 0x948, symBinAddr: 0x7978, symSize: 0x74 }
+  - { offset: 0x3B45, size: 0x8, addend: 0x0, symName: '___31-[CrashGuard resetStateOnWake:]_block_invoke', symObjAddr: 0x9BC, symBinAddr: 0x79EC, symSize: 0xC }
+  - { offset: 0x3B98, size: 0x8, addend: 0x0, symName: '-[CrashGuard .cxx_destruct]', symObjAddr: 0xA48, symBinAddr: 0x7A78, symSize: 0x44 }
+  - { offset: 0x513C, size: 0x8, addend: 0x0, symName: '+[SmartThermal sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x7ABC, symSize: 0xB4 }
+  - { offset: 0x5149, size: 0x8, addend: 0x0, symName: '+[SmartThermal sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x7ABC, symSize: 0xB4 }
+  - { offset: 0x5172, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x1D60, symBinAddr: 0x14F78, symSize: 0x0 }
+  - { offset: 0x5187, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x1D60, symBinAddr: 0x14F78, symSize: 0x0 }
+  - { offset: 0x537C, size: 0x8, addend: 0x0, symName: '___30+[SmartThermal sharedInstance]_block_invoke', symObjAddr: 0xB4, symBinAddr: 0x7B70, symSize: 0x3C }
+  - { offset: 0x53A2, size: 0x8, addend: 0x0, symName: '-[SmartThermal init]', symObjAddr: 0xF0, symBinAddr: 0x7BAC, symSize: 0x40 }
+  - { offset: 0x53D6, size: 0x8, addend: 0x0, symName: '-[SmartThermal currentThermalState]', symObjAddr: 0x130, symBinAddr: 0x7BEC, symSize: 0xA8 }
+  - { offset: 0x5456, size: 0x8, addend: 0x0, symName: '-[SmartThermal recommendedAnimationMultiplier]', symObjAddr: 0x1D8, symBinAddr: 0x7C94, symSize: 0x34 }
+  - { offset: 0x5499, size: 0x8, addend: 0x0, symName: '-[SmartThermal shouldSuppressBackgroundTasks]', symObjAddr: 0x20C, symBinAddr: 0x7CC8, symSize: 0x20 }
+  - { offset: 0x5833, size: 0x8, addend: 0x0, symName: _init_privilege_escalation, symObjAddr: 0x0, symBinAddr: 0x7CE8, symSize: 0x94 }
+  - { offset: 0x5868, size: 0x8, addend: 0x0, symName: _init_privilege_escalation, symObjAddr: 0x0, symBinAddr: 0x7CE8, symSize: 0x94 }
+  - { offset: 0x5937, size: 0x8, addend: 0x0, symName: _deep_clean_raw_fds, symObjAddr: 0x94, symBinAddr: 0x7D7C, symSize: 0x88 }
+  - { offset: 0x59DE, size: 0x8, addend: 0x0, symName: _recursive_delete_raw, symObjAddr: 0x11C, symBinAddr: 0x7E04, symSize: 0x154 }
+  - { offset: 0x5FC2, size: 0x8, addend: 0x0, symName: _force_kernel_page_flush, symObjAddr: 0x270, symBinAddr: 0x7F58, symSize: 0xEC }
+  - { offset: 0x60EA, size: 0x8, addend: 0x0, symName: _disable_runtime_signing_checks, symObjAddr: 0x35C, symBinAddr: 0x8044, symSize: 0x38 }
+  - { offset: 0x618C, size: 0x8, addend: 0x0, symName: '+[KernelBypass sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x807C, symSize: 0xB4 }
+  - { offset: 0x6199, size: 0x8, addend: 0x0, symName: '+[KernelBypass sharedInstance]', symObjAddr: 0x0, symBinAddr: 0x807C, symSize: 0xB4 }
+  - { offset: 0x61C2, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x1FC0, symBinAddr: 0x14F90, symSize: 0x0 }
+  - { offset: 0x61D7, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x1FC0, symBinAddr: 0x14F90, symSize: 0x0 }
+  - { offset: 0x63A0, size: 0x8, addend: 0x0, symName: '___30+[KernelBypass sharedInstance]_block_invoke', symObjAddr: 0xB4, symBinAddr: 0x8130, symSize: 0x3C }
+  - { offset: 0x63C6, size: 0x8, addend: 0x0, symName: '-[KernelBypass initEnvironment]', symObjAddr: 0xF0, symBinAddr: 0x816C, symSize: 0x7C }
+  - { offset: 0x649D, size: 0x8, addend: 0x0, symName: '-[KernelBypass forceMachPurge]', symObjAddr: 0x16C, symBinAddr: 0x81E8, symSize: 0xC4 }
+  - { offset: 0x6562, size: 0x8, addend: 0x0, symName: '-[KernelBypass boostCurrentThreadPriority]', symObjAddr: 0x230, symBinAddr: 0x82AC, symSize: 0x9C }
+  - { offset: 0x65A9, size: 0x8, addend: 0x0, symName: '-[KernelBypass boostCurrentThreadPriority]', symObjAddr: 0x230, symBinAddr: 0x82AC, symSize: 0x9C }
+  - { offset: 0x66CC, size: 0x8, addend: 0x0, symName: '___42-[KernelBypass boostCurrentThreadPriority]_block_invoke', symObjAddr: 0x2CC, symBinAddr: 0x8348, symSize: 0x4 }
+  - { offset: 0x67FE, size: 0x8, addend: 0x0, symName: _isBlockerActive, symObjAddr: 0x0, symBinAddr: 0x834C, symSize: 0x48 }
+  - { offset: 0x680B, size: 0x8, addend: 0x0, symName: '+[SystemBlocker sharedInstance]', symObjAddr: 0x48, symBinAddr: 0x8394, symSize: 0xB4 }
+  - { offset: 0x6834, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x2FB8, symBinAddr: 0x14FA0, symSize: 0x0 }
+  - { offset: 0x6849, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x2FB8, symBinAddr: 0x14FA0, symSize: 0x0 }
+  - { offset: 0x6935, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x2FB8, symBinAddr: 0x14FA0, symSize: 0x0 }
+  - { offset: 0x695E, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x2FB8, symBinAddr: 0x14FA0, symSize: 0x0 }
+  - { offset: 0x6975, size: 0x8, addend: 0x0, symName: __MergedGlobals, symObjAddr: 0x2FB8, symBinAddr: 0x14FA0, symSize: 0x0 }
+  - { offset: 0x69CD, size: 0x8, addend: 0x0, symName: _isBlockerActive, symObjAddr: 0x0, symBinAddr: 0x834C, symSize: 0x48 }
+  - { offset: 0x6A8C, size: 0x8, addend: 0x0, symName: '___31+[SystemBlocker sharedInstance]_block_invoke', symObjAddr: 0xFC, symBinAddr: 0x8448, symSize: 0x3C }
+  - { offset: 0x6AB2, size: 0x8, addend: 0x0, symName: '-[SystemBlocker isActive]', symObjAddr: 0x138, symBinAddr: 0x8484, symSize: 0x8 }
+  - { offset: 0x6AE6, size: 0x8, addend: 0x0, symName: '-[SystemBlocker initBlockers]', symObjAddr: 0x140, symBinAddr: 0x848C, symSize: 0x160 }
+  - { offset: 0x6D80, size: 0x8, addend: 0x0, symName: _blocker_hook_locationStart, symObjAddr: 0x2A0, symBinAddr: 0x85EC, symSize: 0x1D0 }
+  - { offset: 0x6E5E, size: 0x8, addend: 0x0, symName: _blocker_hook_icloudSync, symObjAddr: 0x470, symBinAddr: 0x87BC, symSize: 0x134 }
+  - { offset: 0x6FA1, size: 0x8, addend: 0x0, symName: _blocker_hook_storeReview, symObjAddr: 0x5A4, symBinAddr: 0x88F0, symSize: 0xB8 }
+  - { offset: 0x700F, size: 0x8, addend: 0x0, symName: '-[SystemBlocker stopBlockers]', symObjAddr: 0x65C, symBinAddr: 0x89A8, symSize: 0x34 }
+  - { offset: 0x704D, size: 0x8, addend: 0x0, symName: ___blocker_hook_icloudSync_block_invoke, symObjAddr: 0x690, symBinAddr: 0x89DC, symSize: 0x1C }
+...
