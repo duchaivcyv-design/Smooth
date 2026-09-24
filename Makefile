@@ -10,7 +10,6 @@ include $(THEOS)/makefiles/common.mk
 # ===================================================================
 LIBRARY_NAME = BoostiPhone6sCore
 
-# ★ GIỮ NGUYÊN DANH SÁCH FILE CŨ CỦA BẠN ★
 BoostiPhone6sCore_FILES = Tweak.xm \
                           DeviceBypass.xm \
                           Modules/CacheCleaner.m \
@@ -18,7 +17,7 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/SmartThermal.m \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
-                          Modules/SystemBlocker.m \
+                          Modules/SystemBlocker.m 
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall -Wno-unused-variable -Wno-deprecated-declarations -Wno-module-import-in-extern-c -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
@@ -38,11 +37,9 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ===================================================================
 # PART 3: PACKAGING SCRIPT CHO ROOTLESS JAILBREAK
-# ★ SỬA ĐƯỜNG DẪN /usr/lib THÀNH /var/jb/usr/lib ★
-# ★ BỔ SUNG LỆNH COPY BUNDLE SETTINGS TỪ SUBPROJECT ★
 # ===================================================================
 before-package::
-	@echo "🚀 Packaging for Rootless Jailbreak..."
+	@echo "Packaging for Rootless Jailbreak..."
 	
 	# 1. Tạo cấu trúc thư mục Rootless chuẩn cho Library
 	@mkdir -p .theos/_/var/jb/usr/lib
