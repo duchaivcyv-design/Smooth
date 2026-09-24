@@ -12,13 +12,13 @@ LIBRARY_NAME = BoostiPhone6sCore
 
 # ★ GIỮ NGUYÊN DANH SÁCH FILE CŨ CỦA BẠN ★
 BoostiPhone6sCore_FILES = Tweak.xm \
+                          DeviceBypass.xm
                           Modules/CacheCleaner.m \
                           Modules/CrashGuard.m \
                           Modules/SmartThermal.m \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m \
-                          Modules/DeviceBypass.xm
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wall -Wno-unused-variable -Wno-deprecated-declarations -Wno-module-import-in-extern-c -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000
 
