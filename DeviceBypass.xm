@@ -1,3 +1,9 @@
+// ==============================================================================
+// DEVICE BYPASS MODULE v7.0 - SAFE SPOOFING ENGINE
+// Target: iOS 14.0 - 26.0.1 | iPhone 6s to Latest
+// Features: ProMotion Force, Thermal Bypass, Hardware Identity Spoof
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -6,136 +12,125 @@
 #import <dlfcn.h>
 #import <mach/mach.h>
 
-// Import config từ Tweak.xm (hoặc bạn có thể copy class BoostConfig sang đây nếu muốn tách bạch hoàn toàn)
-// Ở đây ta dùng biến global đơn giản để tránh phụ thuộc vòng lặp
-extern BOOL g_spoofModel;
-extern BOOL g_forceHighPerf;
-extern BOOL g_disableThermal; // Tùy chọn mới: Tắt cảnh báo nhiệt độ
+// ★ FIX: IMPORT TRỰC TIẾP CONFIG THAY VÌ DÙNG EXTERN GLOBAL ★
+// Giả định Tweak.xm đã expose macro CFG hoặc BoostConfig class
+// Nếu tách biệt hoàn toàn, hãy copy interface BoostConfig vào header riêng
+#import "../Tweak.xm" 
 
-#define IS_BYPASS_ACTIVE (g_spoofModel || g_forceHighPerf || g_disableThermal)
+#define IS_BYPASS_ACTIVE (CFG.enabled && (CFG.spoofModel || CFG.godModeForce120Hz || CFG.disableThermal))
 
 // ==========================================
 // 1. FAKE HARDWARE CAPABILITIES (GPU & DISPLAY)
-// Đánh lừa ứng dụng rằng máy có GPU mạnh và màn hình tần số quét cao
 // ==========================================
 
-%hookf(CAPublicKeyRef, CAGetDefaultRendererContext) {
-    if (!IS_BYPASS_ACTIVE) return %orig();
-    
-    // Trả về context mặc định nhưng ép flag "SupportsProMotion" = YES
-    // Lưu ý: Đây là kỹ thuật nâng cao, thực tế CAContext khó patch trực tiếp 
-    // nên ta thường patch qua layer properties bên dưới.
-    return %orig();
-}
-
-// Patch CALayer để kích hoạt tính năng chỉ dành cho máy đời mới
-%hook CALayer
-- (BOOL)supportsRasterization {
-    if (g_spoofModel) return YES; // Ép bật rasterization (làm mượt UI cũ)
-    return %orig();
-}
-
-- (CGFloat)rasterizationScale {
-    if (g_spoofModel) return 2.0; // Đảm bảo render sắc nét dù fake model
-    return %orig();
-}
-%end
-
-// Fake Screen Properties (Cho app nghĩ là màn OLED/ProMotion)
+%group DisplaySpoof
 %hook UIScreen
 - (BOOL)isProMotionEnabled {
-    if (g_spoofModel) return YES; // Báo là có 120Hz
-    return %orig();
+    if (CFG.godModeForce120Hz) return YES;
+    return %orig;
 }
 
 - (NSInteger)maximumFramesPerSecond {
-    if (g_spoofModel) return 120; // Cho phép app vẽ tới 120fps (dù máy chỉ chạy 60)
-    return %orig();
+    if (CFG.godModeForce120Hz) return 120;
+    return %orig;
+}
+
+- (CGFloat)nativeScale {
+    // Ép scale 3.0 cho màn hình OLED giả lập độ sắc nét cao
+    if (CFG.spoofModel) return 3.0;
+    return %orig;
 }
 %end
 
+%hook CALayer
+- (BOOL)allowsEdgeAntialiasing {
+    // Bật antialiasing cạnh để UI trông mượt hơn trên máy cũ
+    if (CFG.spoofModel) return YES;
+    return %orig;
+}
+
+- (CGFloat)rasterizationScale {
+    if (CFG.spoofModel) return [UIScreen mainScreen].scale;
+    return %orig;
+}
+%end
+%end
+
 // ==========================================
-// 2. DISABLE THERMAL THROTTLING (NHIỆT ĐỘ)
-// Ngăn iOS giảm xung nhịp CPU/GPU khi máy nóng
+// 2. DISABLE THERMAL THROTTLING (FIXED SYNTAX)
 // ==========================================
 
-if (%c(NSProcessInfo)) {
-    %hook NSProcessInfo
+%group ThermalBypass
+%hook NSProcessInfo
+- (NSProcessInfoThermalState)thermalState {
+    if (CFG.disableThermal) return NSProcessInfoThermalStateNominal;
+    return %orig;
+}
+
++ (BOOL)isThermalPressureCritical {
+    if (CFG.disableThermal) return NO;
+    return %orig;
+}
+%end
+%end
+
+// ==========================================
+// 3. HARDWARE IDENTITY SPOOF (SAFE VERSION)
+// ==========================================
+
+%group HardwareSpoof
+%hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    if (!CFG.spoofModel) return %orig(name, oldp, oldlenp, newp, newlen);
     
-    // Luôn báo trạng thái nhiệt độ là "Nominal" (Bình thường/Mát mẻ)
-    // Kể cả khi máy đang nóng ran
-    - (NSProcessInfoThermalState)thermalState {
-        if (g_disableThermal) {
-            return NSProcessInfoThermalStateNominal;
+    // Fake Machine Model (iPhone 17,2 = iPhone 16 Pro Max)
+    if ((strcmp(name, "hw.machine") == 0) || (strcmp(name, "hw.model") == 0)) {
+        const char *fakeModel = "iPhone17,2";
+        if (oldp && oldlenp) {
+            strlcpy((char *)oldp, fakeModel, *oldlenp);
+            *oldlenp = strlen(fakeModel) + 1;
+        } else if (oldlenp) {
+            *oldlenp = strlen(fakeModel) + 1;
         }
-        return %orig();
+        return 0;
     }
     
-    // Vô hiệu hóa thông báo "Máy quá nóng"
-    + (BOOL)isThermalPressureCritical {
-        if (g_disableThermal) return NO;
-        return %orig();
+    // Fake CPU Cores (6 cores = A18 Pro spec)
+    if ((strcmp(name, "hw.ncpu") == 0) || (strcmp(name, "hw.activecpu") == 0)) {
+        int fakeCores = 6;
+        if (oldp && oldlenp) {
+            memcpy(oldp, &fakeCores, sizeof(fakeCores));
+            *oldlenp = sizeof(fakeCores);
+        } else if (oldlenp) {
+            *oldlenp = sizeof(fakeCores);
+        }
+        return 0;
     }
-    
-    %end
-}
 
-// Can thiệp vào IOKit để đọc cảm biến nhiệt sai lệch
-%hookf(io_service_t, IOServiceGetMatchingService, mach_port_t masterPort, io_registry_entry_t matching) {
-    if (!IS_BYPASS_ACTIVE) return %orig(masterPort, matching);
-    
-    // Nếu app hỏi về thermal sensor, trả về giá trị ảo thấp
-    // Kỹ thuật này phức tạp vì IOKit registry rất động.
-    // Cách an toàn hơn là hook ở tầng User Space (NSProcessInfo như trên).
-    return %orig(masterPort, matching);
-}
-
-// ==========================================
-// 3. BYPASS APP STORE & GAME CENTER CHECKS
-// Một số game check entitlements hoặc device family
-// ==========================================
-
-%hook ASAppStoreReceipt
-- (NSDictionary *)receiptData {
-    if (g_spoofModel) {
-        NSMutableDictionary *data = [[super receiptData] mutableCopy];
-        // Chèn key giả mạo nếu cần (tùy game cụ thể)
-        // [data setObject:@"iPhone15,3" forKey:@"product_type"]; 
-        return data;
-    }
-    return %orig();
-}
-%end
-
-%hook GKLocalPlayer
-- (NSString *)alias {
-    if (g_spoofModel) {
-        // Đôi khi Game Center check alias/device id để rank
-        // Ta giữ nguyên nhưng đảm bảo không bị block bởi server
-    }
-    return %orig();
+    return %orig(name, oldp, oldlenp, newp, newlen);
 }
 %end
 
 // ==========================================
-// 4. FORCE HIGH PERFORMANCE MODE (CPU SCHEDULER)
-// Ép Kernel ưu tiên thread foreground tuyệt đối
+// 4. INITIALIZATION LOGIC (CONDITIONAL GROUPS)
 // ==========================================
 
-%hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
-    if (!g_forceHighPerf) return %orig(target_thread, flavor, policy_info, policy_count);
+%ctor {
+    // Chỉ init nhóm hook khi config tương ứng được bật
+    // Tránh hook thừa gây overhead hoặc crash trên iOS lạ
     
-    // Nếu là policy Time Constraint (liên quan đến deadline xử lý)
-    if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
-        struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
+    if (CFG.enabled) {
+        if (CFG.godModeForce120Hz || CFG.spoofModel) {
+            %init(DisplaySpoof);
+        }
         
-        // Nới lỏng thời gian tối thiểu/tối đa để scheduler không preempt (ngắt ngang) thread này
-        ttcp->period = 10000000; // 10ms period (rộng rãi)
-        ttcp->computation = 5000000; // 5ms computation time
-        ttcp->constraint = 8000000; // 8ms constraint
+        if (CFG.disableThermal) {
+            %init(ThermalBypass);
+        }
         
-        NSLog(@"[Bypass] Forced High Perf Policy for Thread");
+        if (CFG.spoofModel) {
+            %init(HardwareSpoof);
+        }
+        
+        NSLog(@"[DeviceBypass] ✅ Initialized with active spoofing modules.");
     }
-    
-    return %orig(target_thread, flavor, policy_info, policy_count);
 }
