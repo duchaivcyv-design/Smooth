@@ -77,4 +77,4 @@ before-package::
 	@if [ -f postinst ]; then cp postinst .theos/_/DEBIAN/postinst; chmod 755 .theos/_/DEBIAN/postinst; fi
 	@if [ -f prerm ]; then cp prerm .theos/_/DEBIAN/prerm; chmod 755 .theos/_/DEBIAN/prerm; fi
 	
-	@echo "✅ Rootless Package Ready! (Library + Settings Bundle included)"
+	@echo "Rootless Package Ready! (Library + Settings Bundle included)"
