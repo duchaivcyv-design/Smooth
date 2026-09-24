@@ -31,7 +31,6 @@ include $(THEOS_MAKE_PATH)/library.mk
 
 # ===================================================================
 # PART 2: GỌI SUB-FOLDER CHỨA SETTINGS UI
-# ★ CƠ CHẾ NATIVE: Theos sẽ cd vào BoostiPhone6s và chạy make ở đó ★
 # Folder 'layout' bên trong sẽ tự động được map vào /var/jb/... khi package.
 # ===================================================================
 SUBPROJECTS += BoostiPhone6s
