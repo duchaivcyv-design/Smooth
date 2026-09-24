@@ -81,7 +81,7 @@ jobs:
           
           ls -lh packages/*.deb || echo "Build finished but no deb found"
 
-      # --- BƯỚC 4: TỰ ĐỘNG CẬP NHẬT CẤU TRÚC REPO CYDIA/SILEO ---
+            # --- BƯỚC 4: TỰ ĐỘNG CẬP NHẬT CẤU TRÚC REPO CYDIA/SILEO ---
       - name: Generate Repo Index & Package Metadata
         run: |
           cd $GITHUB_WORKSPACE
@@ -92,17 +92,17 @@ jobs:
           # 2. Copy file .deb mới vừa build vào thư mục deb/
           cp packages/*.deb deb/
           
-          # 3. Dọn dẹp triệt để thư mục/file cũ để tránh lỗi 404 và trùng lặp
+          # 3. Dọn dẹp triệt để thư mục/file cũ
           rm -rf Packages Packages.bz2 Packages.xz Release
           
-          # 4. Tạo lại file Packages danh sách tweak chuẩn
+          # 4. Tạo file Packages danh sách tweak chuẩn
           dpkg-scanpackages -m ./deb /dev/null > Packages
           
           # 5. Nén danh sách thành bz2 và xz
           bzip2 -f -k Packages
           xz -f -k Packages
           
-          # 6. TẠO FILE RELEASE ĐỂ SILEO/ZEBRA NHẬN DẠNG REPO & KHÔNG BÁO LỖI 404
+          # 6. TẠO FILE RELEASE CHUẨN KÈM BẢNG MÃ MD5/SHA256 CHO SILEO
           cat <<EOF > Release
           Origin: Smooth Repo
           Label: Smooth
@@ -114,7 +114,7 @@ jobs:
           Description: Repo Tweak Smooth iphone 6s-x ios 15-16.7.16
           EOF
           
-          echo "Repo Metadata & Release File Successfully Created!"
+          echo "✅ Repo Metadata & Release File Successfully Created!"
 
       # --- BƯỚC 5: ĐẨY TỰ ĐỘNG LÊN BRANCH GH-PAGES (PUBLIC REPO) ---
       - name: Deploy Repo to GitHub Pages
