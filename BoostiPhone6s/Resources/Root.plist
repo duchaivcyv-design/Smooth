@@ -8,7 +8,7 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <stringSmoothIOS</string>
+            <string>SmoothIOS</string>
             <key>footerText</key>
             <string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
         </dict>
