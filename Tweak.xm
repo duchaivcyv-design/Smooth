@@ -849,6 +849,9 @@ static void PMConfigureScrollView(UIScrollView *sv) {
         if (![[CrashGuard sharedInstance] canExecuteHooks]) return;
         if (!IS_ON) return;
 
+        // ★ FIX: Init _ungrouped cho tất cả %hookf ở file scope ★
+        %init(_ungrouped);
+
         [[KernelBypass sharedInstance] initEnvironment];
 
         if (CFG_PTR.enableBlocker) [[SystemBlocker sharedInstance] initBlockers];
