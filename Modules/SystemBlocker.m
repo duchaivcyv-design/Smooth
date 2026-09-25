@@ -1,5 +1,8 @@
 #import "SystemBlocker.h"
-#import <dlfcn.h>
+#import <spawn.h>
+
+// environ declaration cho posix_spawn trên iOS 26 SDK
+extern char **environ;
 
 // Danh sách các tiến trình telemetry/analytics mặc định bị chặn
 static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
@@ -26,15 +29,14 @@ static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
         _blockedProcessSet = [NSMutableSet set];
         _blockerQueue = dispatch_queue_create("com.boostiphone6s.systemblocker", DISPATCH_QUEUE_SERIAL);
         
-        // Khởi tạo danh sách mặc định
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
             kDefaultBlockedProcesses = @[
-                @"analyticsd",      // Apple Analytics daemon
-                @"adid",            // Advertising Identifier
-                @"rapportd",        // Continuity telemetry
-                @"diagnosticsd",    // Diagnostics daemon (optional)
-                @"awdd",            // Apple Wireless Diagnostics
+                @"analyticsd",
+                @"adid",
+                @"rapportd",
+                @"diagnosticsd",
+                @"awdd",
             ];
         });
     }
@@ -50,16 +52,14 @@ static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
     dispatch_sync(_blockerQueue, ^{
         NSLog(@"[SystemBlocker] Initializing system blockers...");
         
-        // Thêm các tiến trình mặc định vào danh sách chặn
         for (NSString *process in kDefaultBlockedProcesses) {
             [self->_blockedProcessSet addObject:process];
         }
         
-        // Thực hiện chặn qua launchctl
         [self applyBlockers];
         
         self->_isActive = YES;
-        NSLog(@"[SystemBlocker] ✅ Blockers initialized - %lu processes blocked",
+        NSLog(@"[SystemBlocker] Blockers initialized - %lu processes blocked",
               (unsigned long)self->_blockedProcessSet.count);
     });
 }
@@ -79,11 +79,11 @@ static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
         if (block) {
             [self->_blockedProcessSet addObject:processName];
             [self blockSingleProcess:processName];
-            NSLog(@"[SystemBlocker] ✅ Blocked: %@", processName);
+            NSLog(@"[SystemBlocker] Blocked: %@", processName);
         } else {
             [self->_blockedProcessSet removeObject:processName];
             [self unblockSingleProcess:processName];
-            NSLog(@"[SystemBlocker] ✅ Unblocked: %@", processName);
+            NSLog(@"[SystemBlocker] Unblocked: %@", processName);
         }
     });
 }
@@ -94,7 +94,6 @@ static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
         
         NSLog(@"[SystemBlocker] Stopping all blockers...");
         
-        // Unblock tất cả tiến trình
         for (NSString *process in self->_blockedProcessSet) {
             [self unblockSingleProcess:process];
         }
@@ -102,16 +101,12 @@ static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
         [self->_blockedProcessSet removeAllObjects];
         self->_isActive = NO;
         
-        NSLog(@"[SystemBlocker] ✅ All blockers stopped");
+        NSLog(@"[SystemBlocker] All blockers stopped");
     });
 }
 
 #pragma mark - Private Methods
 
-/**
- * Áp dụng tất cả blockers bằng launchctl.
- * Sử dụng "launchctl stop" để dừng các daemon telemetry.
- */
 - (void)applyBlockers {
     for (NSString *process in _blockedProcessSet) {
         [self blockSingleProcess:process];
@@ -120,72 +115,82 @@ static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
 
 /**
  * Chặn một tiến trình đơn lẻ qua launchctl stop.
- * @param processName Tên tiến trình cần chặn
+ * FIX v10: Dùng posix_spawn thay vì dlopen/system() cho iOS 26 SDK compatibility.
+ * FIX v10: %s cho launchctlPath (const char *), %@ cho processName (NSString *).
  */
 - (void)blockSingleProcess:(NSString *)processName {
-    // Tạo command string
     NSString *jbPath = @"/var/jb/bin/launchctl";
     NSString *rootfulPath = @"/bin/launchctl";
     
-    // Kiểm tra path nào tồn tại
-    const char *launchctlPath = NULL;
+    const char *launchctlBin = NULL;
     
     if ([[NSFileManager defaultManager] fileExistsAtPath:jbPath]) {
-        launchctlPath = [jbPath UTF8String];
+        launchctlBin = "/var/jb/bin/launchctl";
     } else if ([[NSFileManager defaultManager] fileExistsAtPath:rootfulPath]) {
-        launchctlPath = [rootfulPath UTF8String];
+        launchctlBin = "/bin/launchctl";
     }
     
-    if (!launchctlPath) {
-        NSLog(@"[SystemBlocker] ⚠️ launchctl not found, cannot block %@", processName);
+    if (!launchctlBin) {
+        NSLog(@"[SystemBlocker] launchctl not found, cannot block %@", processName);
         return;
     }
     
-    // Execute launchctl stop
-    NSString *command = [NSString stringWithFormat:@"%@ stop com.apple.%@", launchctlPath, processName];
+    // Tạo argument: "stop" "com.apple.<processName>"
+    NSString *serviceName = [NSString stringWithFormat:@"com.apple.%@", processName];
     
-    typedef int (*sys_func)(const char *);
-    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-    if (handle) {
-        sys_func sys = (sys_func)dlsym(handle, "system");
-        if (sys) {
-            int result = sys([command UTF8String]);
-            if (result == 0) {
-                NSLog(@"[SystemBlocker] ✅ Stopped: com.apple.%@", processName);
-            }
-        }
-        dlclose(handle);
+    pid_t pid;
+    char *argv[] = {
+        (char *)launchctlBin,
+        "stop",
+        (char *)[serviceName UTF8String],
+        NULL
+    };
+    
+    int result = posix_spawn(&pid, launchctlBin, NULL, NULL, argv, environ);
+    
+    if (result == 0) {
+        int status;
+        waitpid(pid, &status, 0);
+        NSLog(@"[SystemBlocker] Stopped: %@", serviceName);
+    } else {
+        NSLog(@"[SystemBlocker] posix_spawn failed for %@ (errno: %d)", serviceName, result);
     }
 }
 
 /**
  * Bỏ chặn một tiến trình qua launchctl start.
- * @param processName Tên tiến trình cần bỏ chặn
+ * FIX v10: Dùng posix_spawn thay vì dlopen/system().
  */
 - (void)unblockSingleProcess:(NSString *)processName {
     NSString *jbPath = @"/var/jb/bin/launchctl";
     NSString *rootfulPath = @"/bin/launchctl";
     
-    const char *launchctlPath = NULL;
+    const char *launchctlBin = NULL;
     
     if ([[NSFileManager defaultManager] fileExistsAtPath:jbPath]) {
-        launchctlPath = [jbPath UTF8String];
+        launchctlBin = "/var/jb/bin/launchctl";
     } else if ([[NSFileManager defaultManager] fileExistsAtPath:rootfulPath]) {
-        launchctlPath = [rootfulPath UTF8String];
+        launchctlBin = "/bin/launchctl";
     }
     
-    if (!launchctlPath) return;
+    if (!launchctlBin) return;
     
-    NSString *command = [NSString stringWithFormat:@"%@ start com.apple.%@", launchctlPath, processName];
+    NSString *serviceName = [NSString stringWithFormat:@"com.apple.%@", processName];
     
-    typedef int (*sys_func)(const char *);
-    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-    if (handle) {
-        sys_func sys = (sys_func)dlsym(handle, "system");
-        if (sys) {
-            sys([command UTF8String]);
-        }
-        dlclose(handle);
+    pid_t pid;
+    char *argv[] = {
+        (char *)launchctlBin,
+        "start",
+        (char *)[serviceName UTF8String],
+        NULL
+    };
+    
+    int result = posix_spawn(&pid, launchctlBin, NULL, NULL, argv, environ);
+    
+    if (result == 0) {
+        int status;
+        waitpid(pid, &status, 0);
+        NSLog(@"[SystemBlocker] Started: %@", serviceName);
     }
 }
 
