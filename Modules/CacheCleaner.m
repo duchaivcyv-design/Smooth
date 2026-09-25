@@ -1,179 +1,208 @@
 #import "CacheCleaner.h"
 #import <dlfcn.h>
-#import <Foundation/Foundation.h>
-#import <mach/mach.h>
 #import <sys/stat.h>
-#include <pthread.h>
+#import <dirent.h>
 
-// ★ GLOBAL CALLBACK CHO PTHREAD_ONCE - SCOPE FILE LEVEL ★
-static int (*g_cached_system)(const char *) = NULL;
-static pthread_once_t g_system_init_once = PTHREAD_ONCE_INIT;
+// Function pointer cho system() - load qua dlsym để tránh implicit declaration warning
+typedef int (*system_func_t)(const char *);
+static system_func_t g_system_func = NULL;
+static dispatch_once_t g_system_once_token;
 
-static void cached_system_init(void) {
-    typedef int (*sys_func)(const char*);
-    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-    if (handle) {
-        g_cached_system = (sys_func)dlsym(handle, "system");
-    }
+/**
+ * Load hàm system() từ libsystem_c.dylib thông qua dlsym.
+ * An toàn hơn việc gọi trực tiếp system() vì tránh compiler warning
+ * và cho phép kiểm tra null trước khi gọi.
+ */
+static void load_system_function(void) {
+    dispatch_once(&g_system_once_token, ^{
+        void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+        if (handle) {
+            g_system_func = (system_func_t)dlsym(handle, "system");
+        }
+    });
 }
 
-static int safe_exec(const char *cmd) {
-    pthread_once(&g_system_init_once, cached_system_init);
-    return g_cached_system ? g_cached_system(cmd) : -1;
+/**
+ * Wrapper an toàn để gọi system command.
+ * Kiểm tra null pointer trước khi gọi.
+ * @param command Command string để execute
+ * @return Return code từ system(), hoặc -1 nếu không thể execute
+ */
+static int safe_system(const char *command) {
+    load_system_function();
+    if (g_system_func) {
+        return g_system_func(command);
+    }
+    return -1;
 }
 
 @implementation CacheCleaner
 
-+ (unsigned long long)cleanDirectoryAtPath:(NSString *)path {
-    NSString *safePath = path;
-    if ([path hasPrefix:@"/var/jb/var/mobile"]) {
-        safePath = [path stringByReplacingOccurrencesOfString:@"/var/jb/var/mobile" withString:@"/var/mobile"];
-    } else if ([path hasPrefix:@"/private/var/mobile"]) {
-        safePath = [path stringByReplacingOccurrencesOfString:@"/private/var/mobile" withString:@"/var/mobile"];
++ (void)forceMemoryPurge {
+    NSLog(@"[CacheCleaner] Executing standard memory purge...");
+    
+    int result = safe_system("purge");
+    
+    if (result == 0) {
+        NSLog(@"[CacheCleaner] ✅ Memory purge completed successfully");
+    } else {
+        NSLog(@"[CacheCleaner] ⚠️ Memory purge returned code: %d", result);
     }
+    
+    // Bổ sung: clear NSURLCache
+    [self clearURLCache];
+}
 
++ (void)forceDeepMemoryPurge {
+    NSLog(@"[CacheCleaner] Executing deep memory purge (sync + purge)...");
+    
+    // Sync đảm bảo tất cả pending writes được flush xuống disk
+    // trước khi purge RAM, tránh data loss
+    int result = safe_system("sync && purge");
+    
+    if (result == 0) {
+        NSLog(@"[CacheCleaner] ✅ Deep memory purge completed successfully");
+    } else {
+        NSLog(@"[CacheCleaner] ⚠️ Deep memory purge returned code: %d", result);
+    }
+    
+    // Bổ sung: clear NSURLCache và image cache
+    [self clearURLCache];
+    
+    // Clear UIKit image cache
+    [[NSURLCache sharedURLCache] removeAllCachedResponses];
+}
+
++ (void)clearURLCache {
+    NSURLCache *sharedCache = [NSURLCache sharedURLCache];
+    if (sharedCache) {
+        NSUInteger memoryCapacity = sharedCache.memoryCapacity;
+        NSUInteger diskCapacity = sharedCache.diskCapacity;
+        
+        [sharedCache removeAllCachedResponses];
+        
+        NSLog(@"[CacheCleaner] ✅ URL cache cleared (Memory: %lu MB, Disk: %lu MB)",
+              (unsigned long)(memoryCapacity / 1024 / 1024),
+              (unsigned long)(diskCapacity / 1024 / 1024));
+    }
+}
+
++ (unsigned long long)cleanDirectoryAtPath:(NSString *)path {
+    if (!path || path.length == 0) return 0;
+    
     NSFileManager *fm = [NSFileManager defaultManager];
     BOOL isDir = NO;
-    if (![fm fileExistsAtPath:safePath isDirectory:&isDir] || !isDir) return 0;
-
-    NSError *error = nil;
-    NSArray<NSString *> *contents = [fm contentsOfDirectoryAtPath:safePath error:&error];
-    if (error || !contents) return 0;
-
+    
+    if (![fm fileExistsAtPath:path isDirectory:&isDir] || !isDir) {
+        return 0;
+    }
+    
     unsigned long long freedBytes = 0;
-    NSUInteger count = 0;
-
+    NSError *error = nil;
+    NSArray<NSString *> *contents = [fm contentsOfDirectoryAtPath:path error:&error];
+    
+    if (error || !contents) {
+        NSLog(@"[CacheCleaner] ⚠️ Cannot read directory: %@ - %@", path, error.localizedDescription);
+        return 0;
+    }
+    
     for (NSString *item in contents) {
-        if ([item isEqualToString:@".DS_Store"] || [item isEqualToString:@".localized"]) continue;
-
-        NSString *fullPath = [safePath stringByAppendingPathComponent:item];
-        struct stat sb;
-        if (lstat([fullPath UTF8String], &sb) != 0) continue;
-
-        BOOL isSubDir = S_ISDIR(sb.st_mode);
-
-        if (isSubDir) {
-            unsigned long long dirSize = [self getDirectorySize:fullPath];
-            if ([fm removeItemAtPath:fullPath error:nil]) {
-                freedBytes += dirSize;
-                count++;
-            }
+        // Bỏ qua hidden files và system files
+        if ([item hasPrefix:@"."]) continue;
+        
+        NSString *fullPath = [path stringByAppendingPathComponent:item];
+        unsigned long long itemSize = [self getDirectorySize:fullPath];
+        
+        NSError *removeError = nil;
+        if ([fm removeItemAtPath:fullPath error:&removeError]) {
+            freedBytes += itemSize;
         } else {
-            unsigned long long fileSize = (unsigned long long)sb.st_size;
-            if ([fm removeItemAtPath:fullPath error:nil]) {
-                freedBytes += fileSize;
-                count++;
-            }
+            NSLog(@"[CacheCleaner] ⚠️ Cannot remove: %@ - %@", fullPath, removeError.localizedDescription);
         }
     }
-
-    if (count > 0) {
-        NSLog(@"[CacheCleaner] 🧹 Cleaned %@: %lu items, %.2f MB freed",
-              safePath.lastPathComponent, (unsigned long)count, freedBytes / 1024.0 / 1024.0);
+    
+    if (freedBytes > 0) {
+        NSLog(@"[CacheCleaner] ✅ Cleaned %@: %.2f MB freed",
+              path.lastPathComponent, freedBytes / 1024.0 / 1024.0);
     }
-
+    
     return freedBytes;
 }
 
 + (unsigned long long)getDirectorySize:(NSString *)path {
-    unsigned long long size = 0;
-    struct stat sb;
-
-    NSDirectoryEnumerator *enumerator = [[NSFileManager defaultManager] enumeratorAtPath:path];
-    NSString *fileName;
-
-    while ((fileName = [enumerator nextObject])) {
-        NSString *fullPath = [path stringByAppendingPathComponent:fileName];
-        if (lstat([fullPath UTF8String], &sb) == 0 && !S_ISDIR(sb.st_mode)) {
-            size += (unsigned long long)sb.st_size;
+    if (!path || path.length == 0) return 0;
+    
+    NSFileManager *fm = [NSFileManager defaultManager];
+    BOOL isDir = NO;
+    
+    if (![fm fileExistsAtPath:path isDirectory:&isDir]) {
+        return 0;
+    }
+    
+    if (!isDir) {
+        // Là file đơn lẻ
+        NSDictionary *attrs = [fm attributesOfItemAtPath:path error:nil];
+        return [attrs[NSFileSize] unsignedLongLongValue];
+    }
+    
+    // Là thư mục - duyệt đệ quy
+    unsigned long long totalSize = 0;
+    NSDirectoryEnumerator *enumerator = [fm enumeratorAtPath:path];
+    NSString *file;
+    
+    while ((file = [enumerator nextObject])) {
+        NSString *fullPath = [path stringByAppendingPathComponent:file];
+        NSDictionary *attrs = [fm attributesOfItemAtPath:fullPath error:nil];
+        if (attrs) {
+            totalSize += [attrs[NSFileSize] unsignedLongLongValue];
         }
     }
-    return size;
+    
+    return totalSize;
 }
 
-// ★ SỬA: TRẢ VỀ unsigned long long THAY VÌ void ★
-+ (unsigned long long)cleanupTempFiles {
-    NSArray *junkPaths = @[
++ (unsigned long long)cleanAllSystemCaches {
+    NSLog(@"[CacheCleaner] Starting full system cache cleanup...");
+    
+    unsigned long long totalFreed = 0;
+    
+    // Danh sách các thư mục cache phổ biến trên iOS
+    NSArray<NSString *> *cachePaths = @[
+        // Safari caches
         @"/var/mobile/Library/Caches/com.apple.Safari",
+        @"/var/mobile/Library/Caches/com.apple.Safari.SafeBrowsing",
+        
+        // WebKit caches
         @"/var/mobile/Library/Caches/com.apple.WebKit.Networking",
         @"/var/mobile/Library/Caches/com.apple.WebKit.ProcessPool",
+        
+        // System caches
+        @"/var/mobile/Library/Caches/com.apple.nsurlsessiond",
+        @"/var/mobile/Library/Caches/com.apple.akd",
+        
+        // App snapshots
         @"/var/mobile/Library/Caches/Snapshots",
+        
+        // Temp files
         @"/var/tmp",
-        @"/var/mobile/Library/Logs/CrashReporter",
-        @"/var/mobile/Library/Logs/MobileGestalt",
         @"/var/mobile/Library/Caches/com.apple.UIKit.keyboardCache",
-        @"/var/mobile/Library/Caches/com.apple.nsurlsessiond"
+        
+        // Rootless paths
+        @"/var/jb/var/mobile/Library/Caches/com.apple.Safari",
+        @"/var/jb/var/tmp"
     ];
-
-    unsigned long long totalFreed = 0;
-    for (NSString *p in junkPaths) {
-        totalFreed += [self cleanDirectoryAtPath:p];
+    
+    for (NSString *cachePath in cachePaths) {
+        totalFreed += [self cleanDirectoryAtPath:cachePath];
     }
-
-    if (totalFreed > 0) {
-        NSLog(@"[CacheCleaner] ✅ Total Cleanup Complete: %.2f MB Freed", totalFreed / 1024.0 / 1024.0);
-    }
-
-    return totalFreed;
-}
-
-+ (void)forceMemoryPurge {
-    safe_exec("sync && purge");
-    NSLog(@"[CacheCleaner] 💨 Standard Memory Purge Executed.");
-}
-
-+ (void)forceDeepMemoryPurge {
-    mach_port_t host = mach_host_self();
-    if (host != MACH_PORT_NULL) {
-        vm_statistics_data_t vmStats;
-        mach_msg_type_number_t infoCount = HOST_VM_INFO_COUNT;
-        kern_return_t kr = host_statistics(host, HOST_VM_INFO, (host_info_t)&vmStats, &infoCount);
-        mach_port_deallocate(mach_task_self(), host);
-
-        if (kr == KERN_SUCCESS) {
-            NSLog(@"[CacheCleaner] 🔥 Deep Memory Purge | Free pages: %u | Active: %u | Inactive: %u",
-                  vmStats.free_count, vmStats.active_count, vmStats.inactive_count);
-        } else {
-            NSLog(@"[CacheCleaner] ⚠️ Deep Memory Purge Failed: %d", kr);
-        }
-    }
-
-    safe_exec("sync && purge");
-}
-
-+ (void)clearURLCache {
-    NSURLCache *cache = [NSURLCache sharedURLCache];
-    [cache removeAllCachedResponses];
-    NSLog(@"[CacheCleaner] 🌐 URL Cache Cleared.");
-}
-
-+ (void)clearImageCache {
-    Class cacheClass = NSClassFromString(@"UIImageCache");
-    if (cacheClass) {
-        SEL sel = NSSelectorFromString(@"sharedImageCache");
-        if ([cacheClass respondsToSelector:sel]) {
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            id cache = [cacheClass performSelector:sel];
-            SEL clearSel = NSSelectorFromString(@"clearCache");
-            if ([cache respondsToSelector:clearSel]) {
-                [cache performSelector:clearSel];
-            }
-            #pragma clang diagnostic pop
-        }
-    }
-    NSLog(@"[CacheCleaner] 🖼️ Image Cache Cleared.");
-}
-
-// ★ SỬA: cleanupTempFiles GIỜ TRẢ VỀ unsigned long long NÊN CỘNG ĐƯỢC ★
-+ (unsigned long long)fullSystemCleanup {
-    unsigned long long total = 0;
-    total += [self cleanupTempFiles];
+    
+    // Clear URL cache
     [self clearURLCache];
-    [self clearImageCache];
-    [self forceMemoryPurge];
-    NSLog(@"[CacheCleaner] 🏁 Full System Cleanup Complete: %.2f MB", total / 1024.0 / 1024.0);
-    return total;
+    
+    NSLog(@"[CacheCleaner] ✅ Full cleanup complete: %.2f MB total freed",
+          totalFreed / 1024.0 / 1024.0);
+    
+    return totalFreed;
 }
 
 @end
