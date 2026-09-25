@@ -1,6 +1,6 @@
 #import "KernelBypass.h"
 #import <mach/mach.h>
-#import <mach/mach_host.h> // ★ BẮT BUỘC THÊM CHO host_get_io_main ★
+#import <mach/mach_host.h>
 #import <pthread.h>
 #import <sys/sysctl.h>
 #import <dlfcn.h>
@@ -36,7 +36,6 @@
     dispatch_async(_kernelQueue, ^{
         mach_port_t masterPort = MACH_PORT_NULL;
         
-        // ★ SỬA: host_get_io_master → host_get_io_main CHO IOS 26 SDK ★
         kern_return_t kr = host_get_io_main(mach_host_self(), &masterPort);
         
         if (kr == KERN_SUCCESS && masterPort != MACH_PORT_NULL) {
