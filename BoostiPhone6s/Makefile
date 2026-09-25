@@ -10,10 +10,13 @@ BoostiPhone6sPrefs_INSTALL_INFO = Info.plist
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation
 BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 
-# SỬA: THÊM CFLAGS ĐỂ TRÁNH LỖI LINKER VÀ ĐỊNH NGHĨA FLAG BUILD
-# -F giúp linker tìm PrivateFrameworks trong SDK
-# -DBUILDING_SUBPROJECT để kích hoạt conditional import trong code
-BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks -DBUILDING_SUBPROJECT
-BoostiPhone6sPrefs_LDFLAGS = -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
+# ★ SỬA: DÙNG THEOS_SDK_DIR THAY VÌ HARDCODE SDK PATH ★
+# $(THEOS_SDK_DIR) tự động trỏ đến SDK đang dùng trong môi trường build
+# Hoạt động trên mọi phiên bản SDK (16.x, 17.x, 26.x)
+BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
+                            -F$(THEOS_SDK_DIR)/System/Library/PrivateFrameworks \
+                            -DBUILDING_SUBPROJECT
+
+BoostiPhone6sPrefs_LDFLAGS = -F$(THEOS_SDK_DIR)/System/Library/PrivateFrameworks
 
 include $(THEOS_MAKE_PATH)/bundle.mk
