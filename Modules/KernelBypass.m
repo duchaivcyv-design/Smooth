@@ -2,14 +2,11 @@
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <pthread.h>
-#import <sys/sysctl.h>
-#import <dlfcn.h>
-#import <Foundation/Foundation.h>
-#import <IOKit/IOKitLib.h>
+#import <sched.h>
 
 @implementation KernelBypass {
-    io_service_t _powerService;
-    BOOL _ioKitAvailable;
+    mach_port_t _hostPort;
+    BOOL _environmentReady;
     dispatch_queue_t _kernelQueue;
 }
 
@@ -25,99 +22,176 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _powerService = MACH_PORT_NULL;
-        _ioKitAvailable = NO;
-        _kernelQueue = dispatch_queue_create("com.boostiphone6s.kernel.v9", DISPATCH_QUEUE_SERIAL);
+        _hostPort = MACH_PORT_NULL;
+        _environmentReady = NO;
+        _kernelQueue = dispatch_queue_create("com.boostiphone6s.kernelbypass", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
 
 - (void)initEnvironment {
-    dispatch_async(_kernelQueue, ^{
-        mach_port_t masterPort = MACH_PORT_NULL;
-        kern_return_t kr = host_get_io_main(mach_host_self(), &masterPort);
-
-        if (kr == KERN_SUCCESS && masterPort != MACH_PORT_NULL) {
-            _ioKitAvailable = YES;
-
-            _powerService = IOServiceGetMatchingService(masterPort,
-                                                       IOServiceMatching("AppleARMIODevice"));
-
-            if (_powerService != MACH_PORT_NULL) {
-                NSLog(@"[KernelBypass] ✅ Power Management Service Connected.");
-            } else {
-                _powerService = IOServiceGetMatchingService(masterPort,
-                                                           IOServiceMatching("AppleARMPMU"));
-                if (_powerService != MACH_PORT_NULL) {
-                    NSLog(@"[KernelBypass] ⚠️ Using fallback PM service (AppleARMPMU).");
-                } else {
-                    _ioKitAvailable = NO;
-                    NSLog(@"[KernelBypass] ❌ No PM service available.");
-                }
-            }
-
-            mach_port_deallocate(mach_task_self(), masterPort);
+    if (_environmentReady) return;
+    
+    dispatch_sync(_kernelQueue, ^{
+        // Lấy host port cho Mach operations
+        self->_hostPort = mach_host_self();
+        
+        if (self->_hostPort != MACH_PORT_NULL) {
+            self->_environmentReady = YES;
+            NSLog(@"[KernelBypass] ✅ Environment initialized (host_port: %u)", self->_hostPort);
         } else {
-            _ioKitAvailable = NO;
-            NSLog(@"[KernelBypass] ❌ IOKit unavailable (kr=%d). Running in limited mode.", kr);
+            NSLog(@"[KernelBypass] ⚠️ Failed to get host port");
         }
-    });
-}
-
-- (void)forceMachPurge {
-    dispatch_async(_kernelQueue, ^{
-        mach_port_t host = mach_host_self();
-        if (host == MACH_PORT_NULL) return;
-
-        vm_statistics_data_t vmStats;
-        mach_msg_type_number_t infoCount = HOST_VM_INFO_COUNT;
-        kern_return_t kr = host_statistics(host, HOST_VM_INFO, (host_info_t)&vmStats, &infoCount);
-        mach_port_deallocate(mach_task_self(), host);
-
-        if (kr == KERN_SUCCESS) {
-            NSLog(@"[KernelBypass] ✅ Mach Purge | Free: %u | Active: %u | Inactive: %u",
-                  vmStats.free_count, vmStats.active_count, vmStats.inactive_count);
-        } else {
-            NSLog(@"[KernelBypass] ⚠️ Mach Purge Failed: %d", kr);
-        }
+        
+        // Log VM statistics ban đầu
+        NSDictionary *stats = [self getVMStatistics];
+        NSLog(@"[KernelBypass] Initial VM Stats - Free: %@ | Active: %@ | Inactive: %@ | Wired: %@",
+              stats[@"free_count"], stats[@"active_count"],
+              stats[@"inactive_count"], stats[@"wire_count"]);
     });
 }
 
 - (void)boostCurrentThreadPriority {
     struct sched_param param;
-    int policy;
-    pthread_getschedparam(pthread_self(), &policy, &param);
-    int maxPriority = MIN(sched_get_priority_max(SCHED_RR), 47);
-    param.sched_priority = maxPriority;
-
-    int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-    if (result != 0) {
-        NSLog(@"[KernelBypass] ⚠️ Priority boost limited by OS security (errno=%d).", result);
-    } else {
-        NSLog(@"[KernelBypass] ✅ Current thread boosted to priority %d.", maxPriority);
+    int policy = SCHED_RR;
+    
+    // Lấy priority max cho SCHED_RR
+    int maxPriority = sched_get_priority_max(policy);
+    
+    if (maxPriority <= 0) {
+        // Fallback: dùng giá trị mặc định
+        maxPriority = 47; // Giá trị phổ biến trên iOS
     }
+    
+    param.sched_priority = maxPriority;
+    
+    int result = pthread_setschedparam(pthread_self(), policy, &param);
+    
+    if (result == 0) {
+        NSLog(@"[KernelBypass] ✅ Thread priority boosted to %d (SCHED_RR)", maxPriority);
+    } else {
+        NSLog(@"[KernelBypass] ⚠️ Failed to boost thread priority (errno: %d)", result);
+        
+        // Fallback: thử tăng nice value
+        if (setpriority(PRIO_PROCESS, 0, -20) == 0) {
+            NSLog(@"[KernelBypass] ✅ Fallback: nice value set to -20");
+        }
+    }
+}
+
+- (void)forceMachPurge {
+    if (!_environmentReady) {
+        NSLog(@"[KernelBypass] ⚠️ Environment not ready, call initEnvironment first");
+        return;
+    }
+    
+    dispatch_async(_kernelQueue, ^{
+        // Đọc stats trước purge
+        vm_statistics_data_t vmStatsBefore;
+        mach_msg_type_number_t infoCount = HOST_VM_INFO_COUNT;
+        
+        kern_return_t kr = host_statistics(self->_hostPort, HOST_VM_INFO,
+                                           (host_info_t)&vmStatsBefore, &infoCount);
+        
+        if (kr != KERN_SUCCESS) {
+            NSLog(@"[KernelBypass] ⚠️ Failed to read VM stats before purge (kr: %d)", kr);
+            return;
+        }
+        
+        NSLog(@"[KernelBypass] Before purge - Free: %u | Active: %u | Inactive: %u",
+              vmStatsBefore.free_count, vmStatsBefore.active_count, vmStatsBefore.inactive_count);
+        
+        // Thực hiện purge qua system command
+        // (Mach API không cung cấp direct purge, phải dùng purge command)
+        extern int safe_system(const char *); // Từ CacheCleaner
+        
+        // Gọi trực tiếp qua dlsym
+        typedef int (*sys_func)(const char *);
+        void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+        if (handle) {
+            sys_func sys = (sys_func)dlsym(handle, "system");
+            if (sys) {
+                sys("purge");
+            }
+            dlclose(handle);
+        }
+        
+        // Đọc stats sau purge
+        vm_statistics_data_t vmStatsAfter;
+        infoCount = HOST_VM_INFO_COUNT;
+        kr = host_statistics(self->_hostPort, HOST_VM_INFO,
+                             (host_info_t)&vmStatsAfter, &infoCount);
+        
+        if (kr == KERN_SUCCESS) {
+            uint32_t freedPages = vmStatsAfter.free_count - vmStatsBefore.free_count;
+            float freedMB = (freedPages * 4096.0) / (1024.0 * 1024.0); // Giả sử page size 4KB
+            
+            NSLog(@"[KernelBypass] ✅ After purge - Free: %u | Freed: %.1f MB",
+                  vmStatsAfter.free_count, freedMB);
+        }
+    });
+}
+
+- (NSDictionary *)getVMStatistics {
+    if (!_environmentReady) {
+        return @{
+            @"free_count": @0,
+            @"active_count": @0,
+            @"inactive_count": @0,
+            @"wire_count": @0
+        };
+    }
+    
+    __block NSDictionary *result = nil;
+    
+    dispatch_sync(_kernelQueue, ^{
+        vm_statistics_data_t vmStats;
+        mach_msg_type_number_t infoCount = HOST_VM_INFO_COUNT;
+        
+        kern_return_t kr = host_statistics(self->_hostPort, HOST_VM_INFO,
+                                           (host_info_t)&vmStats, &infoCount);
+        
+        if (kr == KERN_SUCCESS) {
+            result = @{
+                @"free_count": @(vmStats.free_count),
+                @"active_count": @(vmStats.active_count),
+                @"inactive_count": @(vmStats.inactive_count),
+                @"wire_count": @(vmStats.wire_count),
+                @"page_size": @(vm_kernel_page_size)
+            };
+        } else {
+            result = @{
+                @"free_count": @0,
+                @"active_count": @0,
+                @"inactive_count": @0,
+                @"wire_count": @0,
+                @"error": @(kr)
+            };
+        }
+    });
+    
+    return result ?: @{};
 }
 
 - (void)boostGPUThreadPriority {
+    // GPU threads thường chạy trên QOS_CLASS_USER_INTERACTIVE
+    // Boost lên cao nhất có thể
+    
     struct sched_param param;
-    int maxPriority = MIN(sched_get_priority_max(SCHED_RR), 48);
-    param.sched_priority = maxPriority;
-
-    int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-#ifdef DEBUG
-    if (result != 0) {
-        NSLog(@"[KernelBypass] ⚠️ GPU priority boost failed (errno=%d).", result);
-    }
-#endif
-    (void)result;
-}
-
-- (void)dealloc {
-    if (_powerService != MACH_PORT_NULL && _ioKitAvailable) {
-        IOObjectRelease(_powerService);
-        _powerService = MACH_PORT_NULL;
-        _ioKitAvailable = NO;
-        NSLog(@"[KernelBypass] 🔒 Power Service Released Safely.");
+    int policy = SCHED_RR;
+    int maxPriority = sched_get_priority_max(policy);
+    
+    if (maxPriority <= 0) maxPriority = 47;
+    
+    // Giảm 1 bậc so với max để tránh chiếm hoàn toàn CPU
+    param.sched_priority = maxPriority - 1;
+    
+    int result = pthread_setschedparam(pthread_self(), policy, &param);
+    
+    if (result == 0) {
+        NSLog(@"[KernelBypass] ✅ GPU thread priority boosted to %d", param.sched_priority);
+    } else {
+        NSLog(@"[KernelBypass] ⚠️ Failed to boost GPU thread priority (errno: %d)", result);
     }
 }
 
