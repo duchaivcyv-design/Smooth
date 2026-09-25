@@ -9,6 +9,7 @@
 @implementation KernelBypass {
     io_service_t _powerService;
     BOOL _ioKitAvailable;
+    dispatch_queue_t _kernelQueue;
 }
 
 + (instancetype)sharedInstance {
@@ -20,30 +21,66 @@
     return instance;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _powerService = MACH_PORT_NULL;
+        _ioKitAvailable = NO;
+        _kernelQueue = dispatch_queue_create("com.boostiphone6s.kernel", DISPATCH_QUEUE_SERIAL);
+    }
+    return self;
+}
+
 - (void)initEnvironment {
-    // Kiểm tra khả năng truy cập IOKit trước khi kết nối (An toàn cho iOS 25+)
-    _ioKitAvailable = (kIOMasterPortDefault != MACH_PORT_NULL);
-    
-    if (_ioKitAvailable) {
-        _powerService = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching("AppleARMIODevice"));
-        if (_powerService != MACH_PORT_NULL) {
-            NSLog(@"[KernelBypass] Power Management Service Connected Safely.");
+    dispatch_async(_kernelQueue, ^{
+        // kIOMasterPortDefault có thể bị deprecated hoặc null trên iOS mới
+        mach_port_t masterPort = MACH_PORT_NULL;
+        kern_return_t kr = host_get_io_master(mach_host_self(), &masterPort);
+        
+        if (kr == KERN_SUCCESS && masterPort != MACH_PORT_NULL) {
+            _ioKitAvailable = YES;
+            
+            // Thử kết nối AppleARMIODevice (có trên hầu hết thiết bị A-series)
+            _powerService = IOServiceGetMatchingService(masterPort, 
+                                                       IOServiceMatching("AppleARMIODevice"));
+            
+            if (_powerService != MACH_PORT_NULL) {
+                NSLog(@"[KernelBypass] ✅ Power Management Service Connected.");
+            } else {
+                // Fallback: Thử AppleARMPMU nếu AppleARMIODevice không khả dụng
+                _powerService = IOServiceGetMatchingService(masterPort, 
+                                                           IOServiceMatching("AppleARMPMU"));
+                if (_powerService != MACH_PORT_NULL) {
+                    NSLog(@"[KernelBypass] ⚠️ Using fallback PM service (AppleARMPMU).");
+                } else {
+                    _ioKitAvailable = NO;
+                    NSLog(@"[KernelBypass] ❌ No PM service available on this device/iOS.");
+                }
+            }
+            
+            // Deallocate master port sau khi dùng xong
+            mach_port_deallocate(mach_task_self(), masterPort);
         } else {
             _ioKitAvailable = NO;
-            NSLog(@"[KernelBypass] Warning: Power Service unavailable (Protected on this iOS version).");
+            NSLog(@"[KernelBypass] ❌ IOKit unavailable (kr=%d). Running in limited mode.", kr);
         }
-    }
+    });
 }
 
 - (void)forceMachPurge {
-    mach_port_t host = mach_host_self();
-    if (host == MACH_PORT_NULL) return;
-    
-    kern_return_t kr = host_statistics(host, HOST_VM_INFO, NULL, NULL);
-    if (kr == KERN_SUCCESS) {
-        NSLog(@"[KernelBypass] Mach Purge Executed Successfully.");
-    }
-    mach_port_deallocate(mach_task_self(), host);
+    dispatch_async(_kernelQueue, ^{
+        mach_port_t host = mach_host_self();
+        if (host == MACH_PORT_NULL) return;
+        
+        kern_return_t kr = host_statistics(host, HOST_VM_INFO, NULL, NULL);
+        mach_port_deallocate(mach_task_self(), host);
+        
+        if (kr == KERN_SUCCESS) {
+            NSLog(@"[KernelBypass] ✅ Mach Purge Executed Successfully.");
+        } else {
+            NSLog(@"[KernelBypass] ⚠️ Mach Purge Failed: %d", kr);
+        }
+    });
 }
 
 - (void)boostCurrentThreadPriority {
@@ -51,28 +88,41 @@
     int policy;
     
     pthread_getschedparam(pthread_self(), &policy, &param);
-    // Giới hạn priority tối đa an toàn cho iOS 24+ để tránh watchdog kill
-    param.sched_priority = MIN(sched_get_priority_max(SCHED_RR), 47); 
+    
+    // Priority > 47 có thể bị watchdog kill trên iOS mới
+    int maxPriority = MIN(sched_get_priority_max(SCHED_RR), 47);
+    param.sched_priority = maxPriority;
     
     int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
     if (result != 0) {
-        NSLog(@"[KernelBypass] Priority boost limited by OS security policy.");
+        NSLog(@"[KernelBypass] ️ Priority boost limited by OS security (errno=%d).", result);
     }
 }
 
 - (void)boostGPUThreadPriority {
     struct sched_param param;
-    param.sched_priority = MIN(sched_get_priority_max(SCHED_FIFO), 48);
     
-    int result = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-    // Không log để tránh spam console khi render frame
-    (void)result; 
+    // SCHED_FIFO có thể gây deadlock nếu GPU thread block quá lâu
+    int maxPriority = MIN(sched_get_priority_max(SCHED_RR), 48);
+    param.sched_priority = maxPriority;
+    
+    int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
+    
+    // Log debug chỉ khi build debug, tránh spam console lúc render frame
+#ifdef DEBUG
+    if (result != 0) {
+        NSLog(@"[KernelBypass] ⚠️ GPU priority boost failed (errno=%d).", result);
+    }
+#endif
+    (void)result; // Suppress unused warning in release
 }
 
 - (void)dealloc {
     if (_powerService != MACH_PORT_NULL && _ioKitAvailable) {
         IOObjectRelease(_powerService);
         _powerService = MACH_PORT_NULL;
+        _ioKitAvailable = NO;
+        NSLog(@"[KernelBypass] 🔒 Power Service Released Safely.");
     }
 }
 
