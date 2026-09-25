@@ -1,8 +1,8 @@
 Package: com.taojb.boostiphone6s
 Name: SmoothIOS
-Version: 1.0.1-3-Beta
+Version: 1.1.0-1-Debug
 Architecture: iphoneos-arm64
-Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm ) Pc hỏng dcm
+Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm )
 Maintainer: TaoJB, Nofree
 Author: TaoJB, NoFree
 Section: Tweaks
