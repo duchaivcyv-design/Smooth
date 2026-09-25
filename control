@@ -3,8 +3,8 @@ Name: SmoothIOS
 Version: 2.0.0-5a
 Architecture: iphoneos-arm64
 Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm ) Release 9 day
-Maintainer: TaoJB, Nofree, JbPro1
-Author: TaoJB, NoFree, JbPro1
+Maintainer: TaoJB, NMH
+Author: TaoJB, NMH
 Section: Tweaks
 Depends: mobilesubstrate, firmware (>= 14.0), firmware (<= 26.0.1), preferenceloader
 Conflicts: none
