@@ -1,3 +1,14 @@
+// ==============================================================================
+// BOOST iPHONE 6s-X v8.0 "ABSOLUTE PERFORMANCE & STABILITY"
+// Author: TaoJB | Project: Smooth
+// Target: iOS 14.0 - 26.0.1 | iPhone 6s to Latest
+// Features: 
+//   - Dynamic Thermal Throttling & Low Power Scheduler (<20% pin)
+//   - Frame Pacing & GPU Batch Optimization (Fix khựng vật thể)
+//   - TCP Network Turbo & Touch Sampling Boost
+//   - LiquidAss Conflict Resolver & AI Neural Engine Unlock
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -26,7 +37,7 @@
 #import "Modules/DeepExploit.h"
 
 // ------------------------------------------------------------------------------
-// SECTION 1: CONFIGURATION MANAGER (ADVANCED FULL PATH ROOTLESS SUPPORT)
+// SECTION 1: CONFIGURATION MANAGER (ROOTLESS AWARE)
 // ------------------------------------------------------------------------------
 
 @interface BoostConfig : NSObject
@@ -56,6 +67,7 @@
 @property (nonatomic, assign) BOOL tcpNoDelayBoost;
 @property (nonatomic, assign) BOOL disableFrameThrottling;
 @property (nonatomic, assign) BOOL pageCompressionOptimized;
+@property (nonatomic, assign) NSInteger forcedRefreshRate;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -84,8 +96,11 @@
 }
 
 - (void)loadSettings {
-    NSString *plistPath = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    // ★ SỬA: ĐƯỜNG DẪN PLIST CHUẨN ROOTLESS ★
+    NSString *plistPath = @"/var/jb/Library/Preferences/com.taojb.boostiphone6s.plist";
     NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
+    
+    // Fallback cho rooted hoặc cấu trúc khác
     if (!prefs) {
         plistPath = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
         prefs = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
@@ -123,7 +138,9 @@
         self.tcpNoDelayBoost = GET_BOOL(@"TCPNoDelayBoost", YES);
         self.disableFrameThrottling = GET_BOOL(@"DisableFrameThrottling", YES);
         self.pageCompressionOptimized = GET_BOOL(@"PageCompressionOptimized", YES);
+        self.forcedRefreshRate = GET_INT(@"ForcedRefreshRate", 120); // ★ DEFAULT 120HZ ★
     } else {
+        // Reset all when disabled
         self.animSpeed = 1.0;
         self.aggressiveRAM = NO;
         self.killBgApps = NO;
@@ -149,27 +166,32 @@
         self.tcpNoDelayBoost = NO;
         self.disableFrameThrottling = NO;
         self.pageCompressionOptimized = NO;
+        self.forcedRefreshRate = 60;
     }
 }
 
 @end
 
+// Global Variables for Cross-Module Access
 BoostConfig *CFG = nil;
 BOOL IS_ENABLED = NO;
 
 #define CFG_PTR [BoostConfig sharedInstance]
 #define IS_ENABLED_CHECK (CFG_PTR.enabled)
 
+// Safe Command Runner (Fix C++ Compatibility)
+static inline void run_posix_cmd_safe(const char *path, const char *arg1, const char *arg2) {
+    pid_t pid;
+    char *argv[] = {(char *)path, (char *)arg1, (char *)arg2, NULL};
+    posix_spawn(&pid, path, NULL, NULL, argv, environ);
+}
+
+// Darwin Notification Callback
 static void reloadPrefsNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     [[BoostConfig sharedInstance] loadSettings];
     CFG = [BoostConfig sharedInstance];
     IS_ENABLED = CFG.enabled;
-    NSLog(@"[BoostiPhone6s] Preference Reloaded via Notification.");
-}
-
-static inline void run_posix_cmd(const char *path, char *const argv[]) {
-    pid_t pid;
-    posix_spawn(&pid, path, NULL, NULL, argv, NULL);
+    NSLog(@"[BoostiPhone6s]  Preference Reloaded via Darwin Notification.");
 }
 
 // ------------------------------------------------------------------------------
@@ -282,7 +304,6 @@ static IMP orig_gpu_driver_submitCommand_IMP = NULL;
 static IMP orig_analytics_sendEvent_IMP = NULL;
 static IMP orig_sleep_manager_enterDeepSleep_IMP = NULL;
 static IMP orig_graphics_quality_IMP = NULL;
-static IMP orig_cadisplaylink_setFrameInterval_IMP = NULL;
 static IMP orig_cadisplaylink_setPreferredFPS_IMP = NULL;
 
 CFTimeInterval hooked_calayer_duration(id self, SEL _cmd) {
@@ -390,7 +411,10 @@ void hooked_keyboard_updateFrame(id self, SEL _cmd, CGRect frame) {
 }
 
 NSInteger hooked_screen_maxFPS(id self, SEL _cmd) {
-    if (IS_ENABLED_CHECK && CFG_PTR.godModeForce120Hz) return 120;
+    // ★ LOGIC ÉP HZ THEO LỰA CHỌN 30-60-90-120 ★
+    if (IS_ENABLED_CHECK && CFG_PTR.godModeForce120Hz) {
+        return CFG_PTR.forcedRefreshRate > 0 ? CFG_PTR.forcedRefreshRate : 120;
+    }
     if (orig_screen_maxFPS_IMP) return ((NSInteger(*)(id, SEL))orig_screen_maxFPS_IMP)(self, _cmd);
     return 60;
 }
@@ -459,12 +483,8 @@ void hooked_sleep_manager_enterDeepSleep(id self, SEL _cmd) {
         return;
     }
     
-    // Đã sửa lỗi ép kiểu char * const [] tương thích C++11 / C++17
-    char arg0[] = "launchctl";
-    char arg1[] = "stop";
-    char arg2[] = "com.apple.analyticsd";
-    char *const launchctlArgs[] = {arg0, arg1, arg2, NULL};
-    run_posix_cmd("/var/jb/bin/launchctl", launchctlArgs);
+    // ★ FIX: DÙNG HELPER AN TOÀN CHO C++ ★
+    run_posix_cmd_safe("/var/jb/bin/launchctl", "stop", "com.apple.analyticsd");
     
     if (orig_sleep_manager_enterDeepSleep_IMP) ((void(*)(id, SEL))orig_sleep_manager_enterDeepSleep_IMP)(self, _cmd);
 }
@@ -479,7 +499,8 @@ void hooked_graphics_quality(id self, SEL _cmd, NSUInteger quality) {
 
 void hooked_cadisplaylink_setPreferredFPS(id self, SEL _cmd, NSInteger fps) {
     if (IS_ENABLED_CHECK && CFG_PTR.disableFrameThrottling) {
-        if (orig_cadisplaylink_setPreferredFPS_IMP) ((void(*)(id, SEL, NSInteger))orig_cadisplaylink_setPreferredFPS_IMP)(self, _cmd, 120);
+        NSInteger targetFPS = CFG_PTR.forcedRefreshRate > 0 ? CFG_PTR.forcedRefreshRate : 120;
+        if (orig_cadisplaylink_setPreferredFPS_IMP) ((void(*)(id, SEL, NSInteger))orig_cadisplaylink_setPreferredFPS_IMP)(self, _cmd, targetFPS);
         return;
     }
     if (orig_cadisplaylink_setPreferredFPS_IMP) ((void(*)(id, SEL, NSInteger))orig_cadisplaylink_setPreferredFPS_IMP)(self, _cmd, fps);
@@ -564,8 +585,11 @@ void setupAllSwizzles() {
 
     Class displayLinkClass = objc_getClass("CADisplayLink");
     if (displayLinkClass) {
-        Method m = class_getInstanceMethod(displayLinkClass, @selector(setPreferredFramesPerSecond:));
-        if (m) { orig_cadisplaylink_setPreferredFPS_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_cadisplaylink_setPreferredFPS); }
+        // ★ FIX: CHECK SELECTOR TỒN TẠI TRƯỚC KHI SWIZZLE ★
+        if (class_getInstanceMethod(displayLinkClass, @selector(setPreferredFramesPerSecond:))) {
+            Method m = class_getInstanceMethod(displayLinkClass, @selector(setPreferredFramesPerSecond:));
+            if (m) { orig_cadisplaylink_setPreferredFPS_IMP = method_getImplementation(m); method_setImplementation(m, (IMP)hooked_cadisplaylink_setPreferredFPS); }
+        }
     }
 
     Class textureClass = objc_getClass("MTLTextureDescriptor");
