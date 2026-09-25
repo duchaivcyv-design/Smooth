@@ -22,7 +22,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak Chính (Master)</string>
+            <string>Bật Tweak</string>
             <key>PostNotification</key>
             <string>com.taojb.boostiphone6s.settings/reload</string>
         </dict>
