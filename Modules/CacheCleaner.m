@@ -5,12 +5,7 @@
 #import <sys/stat.h>
 #include <pthread.h>
 
-@implementation CacheCleaner
-
-// ==========================================
-// HELPER: SAFE SHELL EXECUTION (THREAD-SAFE)
-// ==========================================
-
+// ★ GLOBAL CALLBACK CHO PTHREAD_ONCE - SCOPE FILE LEVEL ★
 static int (*g_cached_system)(const char *) = NULL;
 static pthread_once_t g_system_init_once = PTHREAD_ONCE_INIT;
 
@@ -23,51 +18,42 @@ static void cached_system_init(void) {
 }
 
 static int safe_exec(const char *cmd) {
-    // pthread_once đảm bảo cached_system_init chỉ chạy đúng 1 lần duy nhất trên toàn bộ process
     pthread_once(&g_system_init_once, cached_system_init);
-    
     return g_cached_system ? g_cached_system(cmd) : -1;
 }
 
-// Hàm dọn dẹp thư mục thông minh & An toàn cho Rootless
+@implementation CacheCleaner
+
 + (unsigned long long)cleanDirectoryAtPath:(NSString *)path {
-    // Tự động sửa /var/jb/var/mobile -> /var/mobile nếu người dùng nhập sai
     NSString *safePath = path;
     if ([path hasPrefix:@"/var/jb/var/mobile"]) {
-        safePath = [path stringByReplacingOccurrencesOfString:@"/var/jb/var/mobile" 
-                                                   withString:@"/var/mobile"];
+        safePath = [path stringByReplacingOccurrencesOfString:@"/var/jb/var/mobile" withString:@"/var/mobile"];
     } else if ([path hasPrefix:@"/private/var/mobile"]) {
-        safePath = [path stringByReplacingOccurrencesOfString:@"/private/var/mobile" 
-                                                   withString:@"/var/mobile"];
+        safePath = [path stringByReplacingOccurrencesOfString:@"/private/var/mobile" withString:@"/var/mobile"];
     }
 
     NSFileManager *fm = [NSFileManager defaultManager];
-    
     BOOL isDir = NO;
     if (![fm fileExistsAtPath:safePath isDirectory:&isDir] || !isDir) return 0;
-    
+
     NSError *error = nil;
     NSArray<NSString *> *contents = [fm contentsOfDirectoryAtPath:safePath error:&error];
     if (error || !contents) return 0;
-    
+
     unsigned long long freedBytes = 0;
     NSUInteger count = 0;
-    
+
     for (NSString *item in contents) {
-        // Bỏ qua các file hệ thống quan trọng tránh crash
         if ([item isEqualToString:@".DS_Store"] || [item isEqualToString:@".localized"]) continue;
-        
+
         NSString *fullPath = [safePath stringByAppendingPathComponent:item];
-        
         struct stat sb;
         if (lstat([fullPath UTF8String], &sb) != 0) continue;
-        
+
         BOOL isSubDir = S_ISDIR(sb.st_mode);
-        
+
         if (isSubDir) {
-            // Ước lượng nhanh kích thước folder trước khi xóa
             unsigned long long dirSize = [self getDirectorySize:fullPath];
-            
             if ([fm removeItemAtPath:fullPath error:nil]) {
                 freedBytes += dirSize;
                 count++;
@@ -80,26 +66,24 @@ static int safe_exec(const char *cmd) {
             }
         }
     }
-    
+
     if (count > 0) {
-        NSLog(@"[CacheCleaner] 🧹 Cleaned %@: %lu items, %.2f MB freed", 
+        NSLog(@"[CacheCleaner] 🧹 Cleaned %@: %lu items, %.2f MB freed",
               safePath.lastPathComponent, (unsigned long)count, freedBytes / 1024.0 / 1024.0);
     }
-    
+
     return freedBytes;
 }
 
-// Helper ước lượng dung lượng folder CỰC NHANH (Low Overhead)
 + (unsigned long long)getDirectorySize:(NSString *)path {
     unsigned long long size = 0;
     struct stat sb;
-    
+
     NSDirectoryEnumerator *enumerator = [[NSFileManager defaultManager] enumeratorAtPath:path];
     NSString *fileName;
-    
+
     while ((fileName = [enumerator nextObject])) {
         NSString *fullPath = [path stringByAppendingPathComponent:fileName];
-        // lstat nhanh hơn nhiều so với attributesOfItemAtPath vì không tạo NSDictionary
         if (lstat([fullPath UTF8String], &sb) == 0 && !S_ISDIR(sb.st_mode)) {
             size += (unsigned long long)sb.st_size;
         }
@@ -115,14 +99,16 @@ static int safe_exec(const char *cmd) {
         @"/var/mobile/Library/Caches/Snapshots",
         @"/var/tmp",
         @"/var/mobile/Library/Logs/CrashReporter",
-        @"/var/mobile/Library/Logs/MobileGestalt"
+        @"/var/mobile/Library/Logs/MobileGestalt",
+        @"/var/mobile/Library/Caches/com.apple.UIKit.keyboardCache",
+        @"/var/mobile/Library/Caches/com.apple.nsurlsessiond"
     ];
-    
+
     unsigned long long totalFreed = 0;
     for (NSString *p in junkPaths) {
         totalFreed += [self cleanDirectoryAtPath:p];
     }
-    
+
     if (totalFreed > 0) {
         NSLog(@"[CacheCleaner] ✅ Total Cleanup Complete: %.2f MB Freed", totalFreed / 1024.0 / 1024.0);
     }
@@ -130,24 +116,61 @@ static int safe_exec(const char *cmd) {
 
 + (void)forceMemoryPurge {
     safe_exec("sync && purge");
-    NSLog(@"[CacheCleaner]  Standard Memory Purge Executed.");
+    NSLog(@"[CacheCleaner] 💨 Standard Memory Purge Executed.");
 }
 
 + (void)forceDeepMemoryPurge {
     mach_port_t host = mach_host_self();
     if (host != MACH_PORT_NULL) {
-        kern_return_t kr = host_statistics(host, HOST_VM_INFO, NULL, NULL);
+        vm_statistics_data_t vmStats;
+        mach_msg_type_number_t infoCount = HOST_VM_INFO_COUNT;
+        kern_return_t kr = host_statistics(host, HOST_VM_INFO, (host_info_t)&vmStats, &infoCount);
         mach_port_deallocate(mach_task_self(), host);
-        
+
         if (kr == KERN_SUCCESS) {
-            NSLog(@"[CacheCleaner] 🔥 Deep Memory Purge Executed via Mach Host API.");
+            NSLog(@"[CacheCleaner] 🔥 Deep Memory Purge | Free pages: %u | Active: %u | Inactive: %u",
+                  vmStats.free_count, vmStats.active_count, vmStats.inactive_count);
         } else {
             NSLog(@"[CacheCleaner] ⚠️ Deep Memory Purge Failed: %d", kr);
         }
     }
-    
-    // Fallback an toàn đảm bảo disk luôn đồng bộ trước khi purge
+
     safe_exec("sync && purge");
+}
+
++ (void)clearURLCache {
+    NSURLCache *cache = [NSURLCache sharedURLCache];
+    [cache removeAllCachedResponses];
+    NSLog(@"[CacheCleaner] 🌐 URL Cache Cleared.");
+}
+
++ (void)clearImageCache {
+    // Clear UIKit image cache via private selector
+    Class cacheClass = NSClassFromString(@"UIImageCache");
+    if (cacheClass) {
+        SEL sel = NSSelectorFromString(@"sharedImageCache");
+        if ([cacheClass respondsToSelector:sel]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            id cache = [cacheClass performSelector:sel];
+            SEL clearSel = NSSelectorFromString(@"clearCache");
+            if ([cache respondsToSelector:clearSel]) {
+                [cache performSelector:clearSel];
+            }
+            #pragma clang diagnostic pop
+        }
+    }
+    NSLog(@"[CacheCleaner] 🖼️ Image Cache Cleared.");
+}
+
++ (unsigned long long)fullSystemCleanup {
+    unsigned long long total = 0;
+    total += [self cleanupTempFiles];
+    [self clearURLCache];
+    [self clearImageCache];
+    [self forceMemoryPurge];
+    NSLog(@"[CacheCleaner] 🏁 Full System Cleanup Complete: %.2f MB", total / 1024.0 / 1024.0);
+    return total;
 }
 
 @end
