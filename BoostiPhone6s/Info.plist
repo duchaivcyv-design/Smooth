@@ -13,12 +13,22 @@
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>8.0.0</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>8.0.0</string>
     <key>PrincipalClass</key>
     <string>RootListController</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.png</string>
+    <key>NSPrefPaneIconFile</key>
+    <string>icon.png</string>
+    <key>MinimumOSVersion</key>
+    <string>14.0</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>iPhoneOS</string>
+    </array>
 </dict>
 </plist>
