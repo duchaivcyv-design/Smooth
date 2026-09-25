@@ -4,10 +4,11 @@
 #import <Foundation/Foundation.h>
 
 @implementation CrashGuard {
-    NSMutableArray *_crashTimestamps;
+    NSMutableArray<NSDate *> *_crashTimestamps;
     GuardStatus _currentStatus;
     dispatch_queue_t _guardQueue;
-    BOOL _alertShownThisSession; // Ngăn chặn spam alert loop
+    BOOL _alertShownThisSession;
+    NSTimeInterval _lastSafeModeCheckTime;
 }
 
 + (instancetype)sharedInstance {
@@ -25,11 +26,8 @@
         _crashTimestamps = [NSMutableArray array];
         _currentStatus = GuardStatusNormal;
         _alertShownThisSession = NO;
+        _lastSafeModeCheckTime = 0;
         _guardQueue = dispatch_queue_create("com.boostiphone6s.guard", DISPATCH_QUEUE_SERIAL);
-        
-        // ★ SỬA LỖI: KHÔNG DÙNG UIApplicationDidBecomeActiveNotification NỮA ★
-        // Notification này không đáng tin cậy trong process hook system-wide.
-        // Ta dùng cách check trực tiếp từ %ctor hoặc khi load settings.
     }
     return self;
 }
@@ -50,18 +48,27 @@ static void handleUncaughtException(NSException *exception) {
     NSLog(@"[CrashGuard] ⚠️ EXCEPTION CAUGHT: %@ - %@", name, reason);
     [[CrashGuard sharedInstance] reportException:[NSString stringWithFormat:@"%@: %@", name, reason]];
     
-    // ★ QUAN TRỌNG: KHÔNG RE-RAISE EXCEPTION ★
-    // Trên iOS 14-26, việc throw lại exception trong uncaught handler 
-    // thường gây double-fault và bootloop. Hãy để hệ thống tự xử lý shutdown an toàn.
+    // Trên iOS 14-26, throw lại exception gây double-fault/bootloop.
+    // Để hệ thống tự shutdown an toàn sau khi đã kích hoạt Safe Mode.
 }
 
 - (void)checkSafeModeStatus {
+    NSTimeInterval now = CFAbsoluteTimeGetCurrent();
+    if (now - _lastSafeModeCheckTime < 5.0 && _currentStatus != GuardStatusNormal) return;
+    _lastSafeModeCheckTime = now;
+    
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     BOOL isSafe = [defaults boolForKey:@"BoostiPhone6s_SafeModeActive"];
     
     if (isSafe && _currentStatus != GuardStatusSafeMode) {
         _currentStatus = GuardStatusSafeMode;
-        NSLog(@"[CrashGuard] 🔒 Loaded Safe Mode from persistent storage.");
+        NSLog(@"[CrashGuard]  Loaded Safe Mode from persistent storage.");
+    } else if (!isSafe && _currentStatus == GuardStatusSafeMode) {
+        // Tự động thoát Safe Mode nếu user đã reset thủ công từ Settings
+        _currentStatus = GuardStatusNormal;
+        _alertShownThisSession = NO;
+        [_crashTimestamps removeAllObjects];
+        NSLog(@"[CrashGuard] ✅ Auto-exited Safe Mode after manual reset.");
     }
 }
 
@@ -88,15 +95,14 @@ static void handleUncaughtException(NSException *exception) {
 
 - (void)activateSafeModeWithReason:(NSString *)reason {
     _currentStatus = GuardStatusSafeMode;
-    _alertShownThisSession = YES; // Đánh dấu đã hiển thị alert
+    _alertShownThisSession = YES;
     
-    // 1. Lưu trạng thái vào UserDefaults
+    // Lưu trạng thái vào UserDefaults
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:YES forKey:@"BoostiPhone6s_SafeModeActive"];
     [defaults setObject:reason forKey:@"BoostiPhone6s_LastCrashReason"];
     [defaults synchronize];
     
-    // 2. ★ SỬA LỖI ALERT: DÙNG CÁCH AN TOÀN CHO IOS 15+ ★
     dispatch_async(dispatch_get_main_queue(), ^{
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️ Boost iPhone 6s - SAFE MODE"
                                                                        message:[NSString stringWithFormat:@"Phát hiện %d lỗi liên tiếp trong 60s.\n\nTất cả tính năng tối ưu sâu đã bị TẮM để bảo vệ hệ thống.\n\nVui lòng mở Cài đặt > Boost iPhone 6s để tắt bớt tính năng Risky.", 3]
@@ -110,8 +116,9 @@ static void handleUncaughtException(NSException *exception) {
         
         [alert addAction:okAction];
         
-        // ★ FIX: Tìm top VC an toàn cho iOS 14-26 ★
         UIViewController *topVC = nil;
+        
+        // Ưu tiên WindowScene (iOS 13+)
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
                 for (UIWindow *window in scene.windows) {
@@ -124,9 +131,10 @@ static void handleUncaughtException(NSException *exception) {
             if (topVC) break;
         }
         
-        // Fallback cho iOS 14 hoặc nếu không tìm thấy WindowScene
+        // Fallback cho iOS 12 trở xuống hoặc khi không tìm thấy WindowScene
         if (!topVC) {
-            topVC = [UIApplication sharedApplication].keyWindow.rootViewController;
+            UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+            if (keyWindow) topVC = keyWindow.rootViewController;
         }
         
         // Present alert an toàn
@@ -149,7 +157,7 @@ static void handleUncaughtException(NSException *exception) {
     return (_currentStatus != GuardStatusSafeMode);
 }
 
-// ★ HÀM MỚI: Cho phép user manually reset Safe Mode từ Settings ★
+// ★ HÀM RESET SAFE MODE THỦ CÔNG ★
 - (void)resetSafeModeManually {
     dispatch_async(_guardQueue, ^{
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -159,6 +167,7 @@ static void handleUncaughtException(NSException *exception) {
         
         _currentStatus = GuardStatusNormal;
         _alertShownThisSession = NO;
+        _lastSafeModeCheckTime = 0;
         [_crashTimestamps removeAllObjects];
         
         NSLog(@"[CrashGuard] ✅ Safe Mode manually reset by user.");
@@ -168,21 +177,25 @@ static void handleUncaughtException(NSException *exception) {
 - (void)triggerSoftRespring {
     typedef int (*system_func_t)(const char *);
     static system_func_t real_system = NULL;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
+    static pthread_once_t onceToken = PTHREAD_ONCE_INIT;
+    
+    void init_sys(void) {
         void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
         if (handle) real_system = (system_func_t)dlsym(handle, "system");
-    });
+    }
+    
+    pthread_once(&onceToken, init_sys);
     
     if (real_system) {
-        // ★ FIX: FALLBACK CHAIN CHO MỌI BẢN ROOTLESS ★
-        // Thử sbreload trước (Dopamine), nếu fail thì killall SpringBoard (Palera1n/TrollStore)
+        // ★ FALLBACK CHAIN CHO MỌI BẢN ROOTLESS ★
+        // 1. sbreload (Dopamine/Palera1n rootless)
+        // 2. killall SpringBoard (Legacy/TrollStore)
+        // 3. uicache + kill backboardd (Last resort)
         int result = real_system("sbreload 2>/dev/null || killall -9 SpringBoard 2>/dev/null");
         if (result != 0) {
-            // Fallback cuối cùng: uicache + kill backboardd
             real_system("uicache --all && killall -9 backboardd 2>/dev/null");
         }
-        NSLog(@"[CrashGuard]  Soft Respring triggered via fallback chain.");
+        NSLog(@"[CrashGuard] 🔄 Soft Respring triggered via fallback chain.");
     }
 }
 
