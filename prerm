@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# prerm - Pre-removal script for Boost iPhone 6s-X v7.0
+# prerm - Pre-removal script for Boost iPhone 6s-X v8.0
 # Target: Rootless Jailbreak (iOS 14.0 - 26.0.1)
+# Đảm bảo gỡ bỏ SẠCH SẼ 100% không để lại rác hệ thống
 
 set +e # Tiếp tục thực thi dù có lỗi nhỏ
 
 echo ""
 echo "=================================================="
-echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v7.0"
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v8.0"
 echo "   Status: UNINSTALLING..."
 echo "=================================================="
 
 # 1. XÓA ENTRY PLIST ĐĂNG KÝ MENU SETTINGS
-# ★ QUAN TRỌNG: Ngăn chặn menu "ma" xuất hiện sau khi gỡ tweak
 ENTRY_PLIST="/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"
 if [ -f "$ENTRY_PLIST" ]; then
     rm -f "$ENTRY_PLIST"
@@ -21,8 +21,15 @@ else
     echo "[INFO] No PreferenceLoader entry found."
 fi
 
-# 2. XÓA CACHE RIÊNG CỦA TWEAK
-TWEAK_CACHE="/var/mobile/Library/Caches/com.boostiphone6s.settings"
+# 2. XÓA TOÀN BỘ THƯ MỤC PREFERENCES & CACHE
+TWEAK_PREFS="/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+TWEAK_CACHE="/var/mobile/Library/Caches/com.taojb.boostiphone6s"
+
+if [ -f "$TWEAK_PREFS" ]; then
+    rm -f "$TWEAK_PREFS"
+    echo "[OK] Preferences plist removed."
+fi
+
 if [ -d "$TWEAK_CACHE" ]; then
     rm -rf "$TWEAK_CACHE"
     echo "[OK] Tweak-specific cache cleared."
@@ -30,17 +37,26 @@ else
     echo "[INFO] No tweak cache found to clean."
 fi
 
-# 3. RESET CFPREFSD AN TOÀN CHO ROOTLESS
-# Không unload/load daemon trực tiếp. Chỉ cần xóa file là đủ.
-# SpringBoard sẽ tự động reload preference cache sau khi respring.
-echo "[INFO] Preferences cache will be refreshed after respring."
-
-# 4. XÓA USERDEFAULTS KEY SAFE MODE (NẾU CÓ)
-# Đảm bảo lần cài đặt sau không bị kẹt trong Safe Mode cũ
+# 3. RESET USERDEFAULTS AN TOÀN CHO ROOTLESS
+# Dùng 'defaults' command thay vì truy cập trực tiếp file plist
+# Đảm bảo xóa sạch cả Safe Mode state và crash logs cũ
 if command -v defaults &> /dev/null; then
-    defaults delete com.boostiphone6s.settings BoostiPhone6s_SafeModeActive 2>/dev/null || true
-    defaults delete com.boostiphone6s.settings BoostiPhone6s_LastCrashReason 2>/dev/null || true
-    echo "[OK] Safe Mode state reset."
+    defaults delete com.taojb.boostiphone6s.settings 2>/dev/null || true
+    echo "[OK] UserDefaults domain completely wiped."
+else
+    # Fallback cho môi trường không có 'defaults' command
+    rm -f "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.settings.plist" 2>/dev/null || true
+    echo "[OK] Settings plist removed via fallback."
+fi
+
+# 4. FORCE REFRESH CFPREFSD DAEMON
+# Gửi signal HUP để daemon reload danh sách preference mới nhất
+# An toàn hơn killall -9 trên Rootless, tránh crash SpringBoard
+if pidof cfprefsd > /dev/null 2>&1; then
+    killall -HUP cfprefsd >/dev/null 2>&1 || true
+    echo "[OK] cfprefsd signaled to refresh cache."
+else
+    echo "[INFO] cfprefsd not running. Will refresh after respring."
 fi
 
 echo ""
