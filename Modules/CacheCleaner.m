@@ -3,22 +3,30 @@
 #import <Foundation/Foundation.h>
 #import <mach/mach.h>
 #import <sys/stat.h>
+#include <pthread.h>
 
 @implementation CacheCleaner
 
-// Helper an toàn để chạy lệnh shell (Thread-safe tuyệt đối)
-static int safe_exec(const char *cmd) {
+// ==========================================
+// HELPER: SAFE SHELL EXECUTION (THREAD-SAFE)
+// ==========================================
+
+static int (*g_cached_system)(const char *) = NULL;
+static pthread_once_t g_system_init_once = PTHREAD_ONCE_INIT;
+
+static void cached_system_init(void) {
     typedef int (*sys_func)(const char*);
-    static sys_func real_sys = NULL;
-    static pthread_once_t onceToken = PTHREAD_ONCE_INIT;
-    
-    void init_sys(void) {
-        void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-        if (handle) real_sys = (sys_func)dlsym(handle, "system");
+    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+    if (handle) {
+        g_cached_system = (sys_func)dlsym(handle, "system");
     }
+}
+
+static int safe_exec(const char *cmd) {
+    // pthread_once đảm bảo cached_system_init chỉ chạy đúng 1 lần duy nhất trên toàn bộ process
+    pthread_once(&g_system_init_once, cached_system_init);
     
-    pthread_once(&onceToken, init_sys);
-    return real_sys ? real_sys(cmd) : -1;
+    return g_cached_system ? g_cached_system(cmd) : -1;
 }
 
 // Hàm dọn dẹp thư mục thông minh & An toàn cho Rootless
@@ -122,7 +130,7 @@ static int safe_exec(const char *cmd) {
 
 + (void)forceMemoryPurge {
     safe_exec("sync && purge");
-    NSLog(@"[CacheCleaner] 💨 Standard Memory Purge Executed.");
+    NSLog(@"[CacheCleaner]  Standard Memory Purge Executed.");
 }
 
 + (void)forceDeepMemoryPurge {
