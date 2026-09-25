@@ -24,26 +24,19 @@ static void blocker_hook_locationStart(id self, SEL _cmd) {
         if (orig_cl_startUpdating_IMP) ((void(*)(id, SEL))orig_cl_startUpdating_IMP)(self, _cmd);
         return;
     }
-    
+
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
     NSArray *whitelist = @[
-        @"com.apple.Maps",
-        @"com.apple.mobileslideshow",
-        @"com.apple.weather",
-        @"com.apple.findmy",
-        @"com.apple.Home",
-        @"uber.ridepassengeriphone",
-        @"grab.driver.ios",
-        @"com.google.Maps",
-        @"com.shazam.Shazam",
-        @"com.facebook.Messenger"
+        @"com.apple.Maps", @"com.apple.mobileslideshow", @"com.apple.weather",
+        @"com.apple.findmy", @"com.apple.Home", @"uber.ridepassengeriphone",
+        @"grab.driver.ios", @"com.google.Maps", @"com.shazam.Shazam", @"com.facebook.Messenger"
     ];
-    
+
     BOOL allowed = [whitelist containsObject:bundleID];
     if (allowed) {
         if (orig_cl_startUpdating_IMP) ((void(*)(id, SEL))orig_cl_startUpdating_IMP)(self, _cmd);
     } else {
-        NSLog(@"[SystemBlocker] Blocked GPS for %@", bundleID);
+        NSLog(@"[SystemBlocker] 🚫 Blocked GPS for %@", bundleID);
     }
 }
 
@@ -52,7 +45,7 @@ static void blocker_hook_icloudSync(id self, SEL _cmd) {
         if (orig_ubiqu_sync_IMP) ((void(*)(id, SEL))orig_ubiqu_sync_IMP)(self, _cmd);
         return;
     }
-    NSLog(@"[SystemBlocker] Suppressed iCloud Sync");
+    NSLog(@"[SystemBlocker] ⛔ Suppressed iCloud Sync");
 }
 
 static void blocker_hook_storeReview(id self, SEL _cmd) {
@@ -60,7 +53,7 @@ static void blocker_hook_storeReview(id self, SEL _cmd) {
         if (orig_sk_requestReview_IMP) ((void(*)(id, SEL))orig_sk_requestReview_IMP)(self, _cmd);
         return;
     }
-    NSLog(@"[SystemBlocker] Blocked Rating Prompt");
+    NSLog(@"[SystemBlocker] ⛔ Blocked Rating Prompt");
 }
 
 static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
@@ -88,7 +81,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
     self = [super init];
     if (self) {
         _isActive = NO;
-        _blockerQueue = dispatch_queue_create("com.boostiphone6s.blocker", DISPATCH_QUEUE_SERIAL);
+        _blockerQueue = dispatch_queue_create("com.boostiphone6s.blocker.v9", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
@@ -98,9 +91,9 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
 - (void)initBlockers {
     dispatch_sync(_blockerQueue, ^{
         if (_isActive) return;
-        
-        NSLog(@"[SystemBlocker] Initializing Deep System Interception v8.0...");
-        
+
+        NSLog(@"[SystemBlocker] 🔒 Initializing Deep System Interception v9.0...");
+
         Class clClass = objc_getClass("CLLocationManager");
         if (!clClass) clClass = NSClassFromString(@"_CLLocationManager");
         if (clClass) {
@@ -149,7 +142,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
         }
 
         _isActive = YES;
-        NSLog(@"[SystemBlocker] Active. GPS/iCloud/Analytics/Rating Blocked.");
+        NSLog(@"[SystemBlocker] ✅ Active. GPS/iCloud/Analytics/Rating Blocked.");
     });
 }
 
@@ -160,7 +153,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
         [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
         [defaults synchronize];
         _isActive = NO;
-        NSLog(@"[SystemBlocker] Safe Mode manually reset by user.");
+        NSLog(@"[SystemBlocker] ✅ Safe Mode manually reset by user.");
     });
 }
 
@@ -173,7 +166,7 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
             if (m) method_setImplementation(m, orig_cl_startUpdating_IMP);
         }
         _isActive = NO;
-        NSLog(@"[SystemBlocker] Deactivated. Original hooks restored.");
+        NSLog(@"[SystemBlocker] ⏹️ Deactivated. Original hooks restored.");
     });
 }
 
