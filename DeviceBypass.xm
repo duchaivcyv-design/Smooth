@@ -18,7 +18,6 @@
 #import <unistd.h>
 
 // ★ EXTERN GLOBAL VARIABLES TỪ Tweak.xm ★
-// Dùng id + valueForKey để tránh circular dependency
 extern id CFG;
 extern BOOL IS_ENABLED;
 
@@ -29,8 +28,6 @@ extern BOOL IS_ENABLED;
 
 // ==============================================================================
 // HELPER: AUTO-DETECT OLD vs NEW DEVICE
-// iPhone 6s/7/8/SE1/SE2 = Old (max 60Hz)
-// iPhone X trở lên = New (support 120Hz)
 // ==============================================================================
 
 static BOOL isOldDevice(void) {
@@ -61,8 +58,6 @@ static BOOL isOldDevice(void) {
 
 // ==============================================================================
 // GROUP 1: DISPLAY SPOOF - TRUE Hz CONTROL
-// Ép CADisplayLink và UIScreen tuân theo Hz người dùng chọn
-// Auto-cap 60Hz cho thiết bị cũ để tránh crash GPU
 // ==============================================================================
 
 %group DisplaySpoof
@@ -79,7 +74,6 @@ static BOOL isOldDevice(void) {
     if (!IS_ENABLED) return %orig;
     if ([CFG valueForKey:@"godModeForce120Hz"]) {
         NSInteger targetHz = [[CFG valueForKey:@"forcedRefreshRate"] integerValue];
-        // Auto-cap cho thiết bị cũ
         if (isOldDevice() && targetHz > 60) targetHz = 60;
         if (targetHz > 0) return targetHz;
     }
@@ -94,7 +88,6 @@ static BOOL isOldDevice(void) {
 
 - (CGRect)bounds {
     if (!IS_ENABLED) return %orig;
-    // Giữ nguyên bounds thật để tránh layout break
     return %orig;
 }
 
@@ -106,7 +99,6 @@ static BOOL isOldDevice(void) {
 
 %end
 
-// ★ CADisplayLink: ÉP Hz THẬT SỰ Ở TẦNG RENDER ENGINE ★
 %hook CADisplayLink
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
@@ -115,10 +107,7 @@ static BOOL isOldDevice(void) {
     NSInteger target = [[CFG valueForKey:@"forcedRefreshRate"] integerValue];
     if (isOldDevice() && target > 60) target = 60;
     
-    // Nếu app yêu cầu cao hơn target, ép xuống
     if (target > 0 && fps > target) fps = target;
-    
-    // Chế độ 30Hz tiết kiệm pin
     if (target == 30) fps = 30;
     
     %orig(fps);
@@ -133,7 +122,6 @@ static BOOL isOldDevice(void) {
 
 %end
 
-// ★ CALayer: TỐI ƯU RENDER QUALITY ★
 %hook CALayer
 
 - (BOOL)allowsEdgeAntialiasing {
@@ -162,8 +150,7 @@ static BOOL isOldDevice(void) {
 %end
 
 // ==============================================================================
-// GROUP 2: THERMAL BYPASS - CHẶN iOS GIẢM XUNG KHI NÓNG
-// Hook NSProcessInfo và IOKit thermal sensor
+// GROUP 2: THERMAL BYPASS
 // ==============================================================================
 
 %group ThermalBypass
@@ -184,14 +171,12 @@ static BOOL isOldDevice(void) {
 
 - (BOOL)isLowPowerModeEnabled {
     if (!IS_ENABLED) return %orig;
-    // Nếu bật LowPowerScheduler, fake low power mode OFF để giữ hiệu năng
     if ([CFG valueForKey:@"lowPowerScheduler"]) return NO;
     return %orig;
 }
 
 %end
 
-// ★ THERMAL DAEMON HOOK: ÉP BÁO NHIỆT ĐỘ MÁT ★
 %hook _ThermalMonitor
 
 - (float)currentTemperature {
@@ -202,7 +187,6 @@ static BOOL isOldDevice(void) {
 
 %end
 
-// Fallback class name cho iOS version khác
 %hook ThermalMonitor
 
 - (float)currentTemperature {
@@ -217,7 +201,6 @@ static BOOL isOldDevice(void) {
 
 // ==============================================================================
 // GROUP 3: HARDWARE IDENTITY SPOOF
-// Fake hw.machine, hw.model, hw.ncpu qua sysctlbyname
 // ==============================================================================
 
 %group HardwareSpoof
@@ -226,9 +209,8 @@ static BOOL isOldDevice(void) {
     if (!IS_ENABLED) return %orig(name, oldp, oldlenp, newp, newlen);
     if (![CFG valueForKey:@"spoofModel"]) return %orig(name, oldp, oldlenp, newp, newlen);
 
-    // Fake model identifier
     if ((strcmp(name, "hw.machine") == 0) || (strcmp(name, "hw.model") == 0)) {
-        const char *fakeModel = "iPhone16,2"; // iPhone 15 Pro Max Identity
+        const char *fakeModel = "iPhone16,2";
         if (oldp && oldlenp) {
             strlcpy((char *)oldp, fakeModel, *oldlenp);
             *oldlenp = strlen(fakeModel) + 1;
@@ -238,7 +220,6 @@ static BOOL isOldDevice(void) {
         return 0;
     }
 
-    // Fake CPU core count
     if ((strcmp(name, "hw.ncpu") == 0) || (strcmp(name, "hw.activecpu") == 0)) {
         int fakeCores = 6;
         if (oldp && oldlenp) {
@@ -250,7 +231,6 @@ static BOOL isOldDevice(void) {
         return 0;
     }
 
-    // Fake physical CPU
     if (strcmp(name, "hw.physicalcpu") == 0) {
         int fakePhysical = 6;
         if (oldp && oldlenp) {
@@ -262,7 +242,6 @@ static BOOL isOldDevice(void) {
         return 0;
     }
 
-    // Fake logical CPU
     if (strcmp(name, "hw.logicalcpu") == 0) {
         int fakeLogical = 6;
         if (oldp && oldlenp) {
@@ -274,9 +253,8 @@ static BOOL isOldDevice(void) {
         return 0;
     }
 
-    // Fake memory size (report 8GB cho mọi thiết bị)
     if (strcmp(name, "hw.memsize") == 0) {
-        uint64_t fakeMem = 8ULL * 1024 * 1024 * 1024; // 8GB
+        uint64_t fakeMem = 8ULL * 1024 * 1024 * 1024;
         if (oldp && oldlenp) {
             memcpy(oldp, &fakeMem, sizeof(fakeMem));
             *oldlenp = sizeof(fakeMem);
@@ -293,7 +271,6 @@ static BOOL isOldDevice(void) {
 
 // ==============================================================================
 // GROUP 4: GPU & METAL OVERCLOCK ENGINE
-// Tối ưu CAMetalLayer và MTLTextureDescriptor
 // ==============================================================================
 
 %group GPUEngine
@@ -303,7 +280,6 @@ static BOOL isOldDevice(void) {
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (!IS_ENABLED) return %orig;
     if ([CFG valueForKey:@"godModeMetalOverclock"]) {
-        // Giảm drawable count để giảm GPU memory pressure
         %orig(2);
         return;
     }
@@ -313,124 +289,135 @@ static BOOL isOldDevice(void) {
 - (BOOL)presentsWithTransaction {
     if (!IS_ENABLED) return %orig;
     if ([CFG valueForKey:@"godModeMetalOverclock"]) return NO;
-    return %orig;Tôi đã hít thở sâu. Dưới đây là **4 FILE** được viết lại hoàn chỉnh, dài hơn, mạnh mẽ hơn bản cũ. Không thiếu một chữ, không bịa một dòng.
+    return %orig;
+}
 
----
+- (void)setFramebufferOnly:(BOOL)flag {
+    if (!IS_ENABLED) return %orig;
+    if ([CFG valueForKey:@"godModeMetalOverclock"]) {
+        %orig(NO);
+        return;
+    }
+    %orig;
+}
 
-## 📄 FILE 1: `prerm` (Pre-Removal Script v9.0)
+%end
 
-```bash
-#!/bin/bash
+%hook MTLTextureDescriptor
 
-# ==============================================================================
-# PRERM - PRE-REMOVAL SCRIPT FOR BOOST iPHONE 6s-X v9.0
-# Target: Rootless Jailbreak (iOS 14.0 - 26.0.1)
-# Author: TaoJB | Project: Smooth
-# Đảm bảo gỡ bỏ SẠCH SẼ 100% không để lại rác hệ thống
-# ==============================================================================
+- (void)setPixelFormat:(NSUInteger)pixelFormat {
+    if (!IS_ENABLED) return %orig;
+    if ([CFG valueForKey:@"godModeMetalOverclock"]) {
+        if (pixelFormat == 80) pixelFormat = 75;
+    }
+    %orig(pixelFormat);
+}
 
-set +e
+- (void)setStorageMode:(NSUInteger)storageMode {
+    if (!IS_ENABLED) return %orig;
+    if ([CFG valueForKey:@"godModeMetalOverclock"]) {
+        %orig(0);
+        return;
+    }
+    %orig;
+}
 
-echo ""
-echo "=================================================="
-echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v9.0"
-echo "   Status: UNINSTALLING..."
-echo "=================================================="
-echo ""
+%end
 
-# ------------------------------------------------------------------------------
-# 1. XÓA ENTRY PLIST ĐĂNG KÝ MENU SETTINGS
-# Ngăn chặn menu "ma" xuất hiện sau khi gỡ tweak
-# ------------------------------------------------------------------------------
-ENTRY_PLIST="/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"
-if [ -f "<LaTex>id_1</LaTex>ENTRY_PLIST"
-    echo "[OK] PreferenceLoader entry removed."
-else
-    echo "[INFO] No PreferenceLoader entry found at <LaTex>id_2</LaTex>ENTRY_PLIST_ROOTFUL" ]; then
-    rm -f "<LaTex>id_3</LaTex>TWEAK_PREFS" ]; then
-    rm -f "<LaTex>id_4</LaTex>TWEAK_PREFS"
-fi
+%end
 
-if [ -f "<LaTex>id_5</LaTex>TWEAK_PREFS_JB"
-    echo "[OK] JB Preferences plist removed: <LaTex>id_6</LaTex>TWEAK_CACHE" ]; then
-    rm -rf "<LaTex>id_7</LaTex>TWEAK_CACHE"
-else
-    echo "[INFO] No tweak cache found at <LaTex>id_8</LaTex>TWEAK_LOGS" ]; then
-    rm -rf "<LaTex>id_9</LaTex>TWEAK_LOGS"
-fi
+// ==============================================================================
+// GROUP 5: SCROLL & TOUCH OPTIMIZATION
+// ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 3. XÓA DYLIB KHỎI HỆ THỐNG
-# Đảm bảo dylib không còn tồn tại sau khi gỡ
-# ------------------------------------------------------------------------------
-DYLIB_PATH="/var/jb/usr/lib/BoostiPhone6sCore.dylib"
-if [ -f "<LaTex>id_10</LaTex>DYLIB_PATH"
-    echo "[OK] Dylib removed: <LaTex>id_11</LaTex>DYLIB_PATH"
-fi
+%group ScrollOptimization
 
-# Fallback rootful
-DYLIB_ROOTFUL="/usr/lib/BoostiPhone6sCore.dylib"
-if [ -f "<LaTex>id_12</LaTex>DYLIB_ROOTFUL"
-    echo "[OK] Rootful dylib removed: <LaTex>id_13</LaTex>BUNDLE_PATH" ]; then
-    rm -rf "<LaTex>id_14</LaTex>BUNDLE_PATH"
-else
-    echo "[INFO] Settings bundle not found at <LaTex>id_15</LaTex>BUNDLE_ROOTFUL" ]; then
-    rm -rf "<LaTex>id_16</LaTex>BUNDLE_ROOTFUL"
-fi
+%hook UIScrollView
 
-# ------------------------------------------------------------------------------
-# 5. RESET USERDEFAULTS AN TOÀN CHO ROOTLESS
-# Dùng 'defaults' command thay vì truy cập trực tiếp file plist
-# Đảm bảo xóa sạch cả Safe Mode state và crash logs cũ
-# ------------------------------------------------------------------------------
-if command -v defaults &> /dev/null; then
-    defaults delete com.taojb.boostiphone6s 2>/dev/null || true
-    echo "[OK] UserDefaults domain completely wiped via defaults command."
-else
-    # Fallback cho môi trường không có 'defaults' command
-    rm -f "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
-    echo "[OK] Settings plist removed via fallback."
-fi
+- (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated {
+    if (!IS_ENABLED) return %orig;
+    if ([CFG valueForKey:@"disableFrameThrottling"]) {
+        %orig(offset, NO);
+    } else {
+        %orig;
+    }
+}
 
-# Xóa thêm các key riêng lẻ để đảm bảo sạch sẽ
-if command -v defaults &> /dev/null; then
-    defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
-    defaults delete com.taojb.boostiphone6s BoostiPhone6s_LastCrashReason 2>/dev/null || true
-    defaults delete com.taojb.boostiphone6s Enabled 2>/dev/null || true
-    echo "[OK] Individual safe mode keys removed."
-fi
+- (void)_setContentOffset:(CGPoint)offset animated:(BOOL)animated {
+    if (!IS_ENABLED) return %orig;
+    if ([CFG valueForKey:@"disableFrameThrottling"]) {
+        %orig(offset, NO);
+    } else {
+        %orig;
+    }
+}
 
-# ------------------------------------------------------------------------------
-# 6. FORCE REFRESH CFPREFSD DAEMON
-# Gửi signal HUP để daemon reload danh sách preference mới nhất
-# An toàn hơn killall -9 trên Rootless, tránh crash SpringBoard
-# ------------------------------------------------------------------------------
-if pidof cfprefsd > /dev/null 2>&1; then
-    killall -HUP cfprefsd >/dev/null 2>&1 || true
-    echo "[OK] cfprefsd signaled to refresh cache."
-else
-    echo "[INFO] cfprefsd not running. Will refresh after respring."
-fi
+- (void)setDecelerationRate:(CGFloat)rate {
+    if (!IS_ENABLED) return %orig;
+    if ([CFG valueForKey:@"disableFrameThrottling"]) {
+        %orig(UIScrollViewDecelerationRateFast);
+    } else {
+        %orig;
+    }
+}
 
-# ------------------------------------------------------------------------------
-# 7. XÓA MOBILESUBSTRATE DYLID LIST ENTRY (NẾU CÓ)
-# ------------------------------------------------------------------------------
-DYLIB_LIST="/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"
-if [ -f "<LaTex>id_17</LaTex>DYLIB_LIST"
-    echo "[OK] MobileSubstrate dylib list entry removed."
-fi
+%end
 
-DYLIB_LIST_ROOTFUL="/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"
-if [ -f "<LaTex>id_18</LaTex>DYLIB_LIST_ROOTFUL"
-    echo "[OK] Rootful MobileSubstrate dylib list entry removed."
-fi
+%hook UIWindow
 
-echo ""
-echo "=================================================="
-echo "   UNINSTALLATION COMPLETE!"
-echo "   All traces of Boost iPhone 6s-X v9.0 removed."
-echo "   Please RESPRING your device to finalize changes."
-echo "=================================================="
-echo ""
+- (void)sendEvent:(UIEvent *)event {
+    if (!IS_ENABLED) return %orig;
+    %orig;
+}
 
-exit 0
+%end
+
+%end
+
+// ==============================================================================
+// CONSTRUCTOR
+// ==============================================================================
+
+%ctor {
+    @autoreleasepool {
+        if (!IS_ENABLED) {
+            NSLog(@"[DeviceBypass v9.0] ⏸️ Disabled by Master Switch.");
+            return;
+        }
+
+        BOOL hasDisplaySpoof = [CFG valueForKey:@"godModeForce120Hz"] || [CFG valueForKey:@"spoofModel"];
+        BOOL hasThermalBypass = [CFG valueForKey:@"disableThermal"];
+        BOOL hasHardwareSpoof = [CFG valueForKey:@"spoofModel"];
+        BOOL hasGPUEngine = [CFG valueForKey:@"godModeMetalOverclock"];
+        BOOL hasScrollOpt = [CFG valueForKey:@"disableFrameThrottling"];
+
+        if (hasDisplaySpoof) {
+            %init(DisplaySpoof);
+            NSLog(@"[DeviceBypass v9.0] 🖥️ DisplaySpoof ACTIVE | Hz: %ld | OldDevice: %@",
+                  (long)[[CFG valueForKey:@"forcedRefreshRate"] integerValue],
+                  isOldDevice() ? @"YES (capped 60Hz)" : @"NO");
+        }
+
+        if (hasThermalBypass) {
+            %init(ThermalBypass);
+            NSLog(@"[DeviceBypass v9.0] 🌡️ ThermalBypass ACTIVE | Temp locked to 32°C");
+        }
+
+        if (hasHardwareSpoof) {
+            %init(HardwareSpoof);
+            NSLog(@"[DeviceBypass v9.0] 🔧 HardwareSpoof ACTIVE | Model: iPhone16,2 | Cores: 6 | RAM: 8GB");
+        }
+
+        if (hasGPUEngine) {
+            %init(GPUEngine);
+            NSLog(@"[DeviceBypass v9.0] 🎮 GPUEngine ACTIVE | Metal Overclock ON");
+        }
+
+        if (hasScrollOpt) {
+            %init(ScrollOptimization);
+            NSLog(@"[DeviceBypass v9.0] 📜 ScrollOptimization ACTIVE | Animation bypass ON");
+        }
+
+        NSLog(@"[DeviceBypass v9.0] ✅ ALL ENGINES INITIALIZED | Rootless Mode");
+    }
+}
