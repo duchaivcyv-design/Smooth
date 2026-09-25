@@ -9,7 +9,6 @@ ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
 # ★ ROOTLESS NATIVE MODE ★
-# Báo cho Theos biết: Mọi thứ build ra hãy ném vào /var/jb/
 _INSTALL_PATH_TARGET = /var/jb
 
 include $(THEOS)/makefiles/common.mk
@@ -28,7 +27,10 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
-# ★ COMPILER FLAGS - TỐI ƯU HÓA CHO iOS 26 SDK ★
+# ★ COMPILER FLAGS ★
+# -IHeaders: Cho phép #import "PSListController.h" từ thư mục Headers/
+# -IModules: Cho phép #import "CrashGuard.h" từ thư mục Modules/
+# -I.: Cho phép #import file cùng thư mục gốc
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
@@ -40,9 +42,12 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wno-unused-function \
                            -Wno-implicit-function-declaration \
                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
-                           -DBUILDING_LIBRARY=1
+                           -DBUILDING_LIBRARY=1 \
+                           -IHeaders \
+                           -IModules \
+                           -I.
 
-# ★ FRAMEWORKS - TẤT CẢ CẦN THIẾT CHO v9.0 ★
+# ★ FRAMEWORKS ★
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -53,7 +58,7 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreVideo \
                                Accelerate
 
-# ★ LINKER FLAGS - TỐI ƯU SIZE VÀ LOẠI BỎ SYMBOL THỪA ★
+# ★ LINKER FLAGS ★
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-no_warn_duplicate_libraries \
                             -Wl,-exported_symbol,_init_privilege_escalation
@@ -68,15 +73,12 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================================
 # PART 3: PACKAGING SCRIPT CHUẨN ROOTLESS v9.0
-# THEOS ĐÃ TỰ ĐỘNG MAP LIBRARY + BUNDLE + ENTRY PLIST VÀO /var/jb/
-# KHÔNG CẦN COPY THỦ CÔNG NỮA TRÁNH LỖI DUPLICATE HOẶC SAI PATH
 # ==============================================================================
 before-package::
 	@echo ""
 	@echo "🚀 Finalizing Rootless Package v9.0..."
 	@echo ""
 	
-	# Hoàn tất DEBIAN control files
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
 	@if [ -f control ]; then \
 	    cp control $(THEOS_STAGING_DIR)/DEBIAN/control; \
@@ -93,7 +95,6 @@ before-package::
 	    echo "[OK] DEBIAN/prerm copied and chmod 755."; \
 	fi
 	
-	# Verify package structure
 	@echo ""
 	@echo "📦 Package Structure Verification:"
 	@if [ -f $(THEOS_STAGING_DIR)/var/jb/usr/lib/BoostiPhone6sCore.dylib ]; then \
