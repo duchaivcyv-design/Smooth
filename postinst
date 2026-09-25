@@ -1,175 +1,56 @@
 #!/bin/bash
 
 # ==============================================================================
-# POSTINST - POST-INSTALLATION SCRIPT FOR BOOST iPHONE 6s-X v9.0
-# Target: Rootless Jailbreak (iOS 14.0 - 26.0.1)
-# Author: TaoJB | Project: Smooth
-# Đảm bảo cài đặt SẠCH SẼ, đúng quyền hạn và reset trạng thái an toàn
+# POSTINST - BOOST iPHONE 6s-X v10
+# Target: Rootless (/var/jb) & Rootful
 # ==============================================================================
 
 set +e
 
-echo ""
-echo "=================================================="
-echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v9.0"
-echo "   Status: INSTALLING..."
-echo "=================================================="
-echo ""
+echo "[BoostiPhone6s v10] Running post-installation script..."
 
-# ------------------------------------------------------------------------------
-# 1. ĐẶT QUYỀN HẠN CHO BUNDLE SETTINGS
-# Đảm bảo SpringBoard đọc được bundle mà không bị permission denied
-# ------------------------------------------------------------------------------
-BUNDLE_PATH="/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
-if [ -d "$BUNDLE_PATH" ]; then
-    chmod -R 755 "$BUNDLE_PATH"
-    chown -R mobile:mobile "$BUNDLE_PATH"
-    echo "[OK] Settings Bundle permissions fixed: $BUNDLE_PATH"
-else
-    echo "[WARN] Settings Bundle not found at $BUNDLE_PATH"
+# 1. Fix permissions cho Rootless paths
+if [ -d "/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then
+    chmod -R 755 /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+    chown -R mobile:mobile /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+    echo "[OK] Fixed permissions for PreferenceBundle."
 fi
 
-# Fallback rootful
-BUNDLE_ROOTFUL="/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
-if [ -d "$BUNDLE_ROOTFUL" ]; then
-    chmod -R 755 "$BUNDLE_ROOTFUL"
-    chown -R mobile:mobile "$BUNDLE_ROOTFUL"
-    echo "[OK] Rootful Settings Bundle permissions fixed: $BUNDLE_ROOTFUL"
+if [ -f "/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; then
+    chmod 644 /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
+    chown mobile:mobile /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
+    echo "[OK] Fixed permissions for PreferenceLoader entry."
 fi
 
-# ------------------------------------------------------------------------------
-# 2. ĐẶT QUYỀN HẠN CHO ENTRY PLIST
-# Đảm bảo PreferenceLoader đọc được entry đăng ký menu
-# ------------------------------------------------------------------------------
-ENTRY_PLIST="/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"
-if [ -f "$ENTRY_PLIST" ]; then
-    chmod 644 "$ENTRY_PLIST"
-    chown mobile:mobile "$ENTRY_PLIST"
-    echo "[OK] Entry plist permissions fixed: $ENTRY_PLIST"
-else
-    echo "[WARN] Entry plist not found at $ENTRY_PLIST"
+if [ -f "/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib" ]; then
+    chmod 755 /var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
+    echo "[OK] Fixed permissions for Dylib."
 fi
 
-ENTRY_PLIST_ROOTFUL="/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"
-if [ -f "$ENTRY_PLIST_ROOTFUL" ]; then
-    chmod 644 "$ENTRY_PLIST_ROOTFUL"
-    chown mobile:mobile "$ENTRY_PLIST_ROOTFUL"
-    echo "[OK] Rootful entry plist permissions fixed: $ENTRY_PLIST_ROOTFUL"
-fi
-
-# ------------------------------------------------------------------------------
-# 3. ĐẶT QUYỀN HẠN CHO DYLIB
-# Đảm bảo dyld load được dylib mà không bị code signature error
-# ------------------------------------------------------------------------------
-DYLIB_PATH="/var/jb/usr/lib/BoostiPhone6sCore.dylib"
-if [ -f "$DYLIB_PATH" ]; then
-    chmod 755 "$DYLIB_PATH"
-    chown mobile:mobile "$DYLIB_PATH"
-    echo "[OK] Dylib permissions fixed: $DYLIB_PATH"
-else
-    echo "[WARN] Dylib not found at $DYLIB_PATH"
-fi
-
-DYLIB_ROOTFUL="/usr/lib/BoostiPhone6sCore.dylib"
-if [ -f "$DYLIB_ROOTFUL" ]; then
-    chmod 755 "$DYLIB_ROOTFUL"
-    chown mobile:mobile "$DYLIB_ROOTFUL"
-    echo "[OK] Rootful dylib permissions fixed: $DYLIB_ROOTFUL"
-fi
-
-# ------------------------------------------------------------------------------
-# 4. RESET TOÀN BỘ USERDEFAULTS DOMAIN
-# Xóa sạch domain để đảm bảo không còn sót Safe Mode state hay config cũ
-# ------------------------------------------------------------------------------
+# 2. Reset UserDefaults để tránh xung đột config cũ (v9 -> v10)
+# Chỉ xóa nếu cần thiết, hoặc giữ nguyên để user không phải setting lại.
+# Ở đây ta chọn an toàn: không xóa config user, chỉ xóa cache crash guard nếu có.
 if command -v defaults &> /dev/null; then
-    defaults delete com.taojb.boostiphone6s 2>/dev/null || true
-    echo "[OK] UserDefaults domain wiped for fresh install."
-else
-    # Fallback xóa trực tiếp file plist nếu không có lệnh 'defaults'
-    rm -f "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
-    echo "[OK] Settings plist removed via fallback."
+    defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null
+    defaults delete com.taojb.boostiphone6s BoostiPhone6s_CrashCount 2>/dev/null
+    echo "[OK] Cleared Safe Mode flags."
 fi
 
-# Xóa thêm các key riêng lẻ để đảm bảo sạch sẽ tuyệt đối
-if command -v defaults &> /dev/null; then
-    defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
-    defaults delete com.taojb.boostiphone6s BoostiPhone6s_LastCrashReason 2>/dev/null || true
-    echo "[OK] Safe mode keys explicitly removed."
-fi
+# 3. Reload daemons
+echo "[INFO] Reloading system daemons..."
 
-# ------------------------------------------------------------------------------
-# 5. KHỞI TẠO THƯ MỤC CACHE RIÊNG (NẾU CHƯA CÓ)
-# Tránh lỗi "Permission Denied" hoặc "Directory not found" khi tweak ghi log/cache
-# ------------------------------------------------------------------------------
-TWEAK_CACHE="/var/mobile/Library/Caches/com.taojb.boostiphone6s"
-if [ ! -d "$TWEAK_CACHE" ]; then
-    mkdir -p "$TWEAK_CACHE"
-    chown mobile:mobile "$TWEAK_CACHE"
-    chmod 755 "$TWEAK_CACHE"
-    echo "[OK] Tweak cache directory created: $TWEAK_CACHE"
-else
-    # Đảm bảo quyền đúng nếu thư mục đã tồn tại
-    chown mobile:mobile "$TWEAK_CACHE"
-    chmod 755 "$TWEAK_CACHE"
-    echo "[OK] Tweak cache directory permissions verified: $TWEAK_CACHE"
-fi
-
-TWEAK_LOGS="/var/mobile/Library/Logs/BoostiPhone6s"
-if [ ! -d "$TWEAK_LOGS" ]; then
-    mkdir -p "$TWEAK_LOGS"
-    chown mobile:mobile "$TWEAK_LOGS"
-    chmod 755 "$TWEAK_LOGS"
-    echo "[OK] Tweak logs directory created: $TWEAK_LOGS"
-fi
-
-# ------------------------------------------------------------------------------
-# 6. FORCE REFRESH CFPREFSD DAEMON
-# Gửi signal HUP để daemon reload danh sách preference entry mới nhất
-# An toàn hơn killall -9 trên Rootless, tránh crash SpringBoard
-# ------------------------------------------------------------------------------
+# Reload cfprefsd để nhận plist mới
 if pidof cfprefsd > /dev/null 2>&1; then
-    killall -HUP cfprefsd >/dev/null 2>&1 || true
-    echo "[OK] cfprefsd signaled to refresh cache."
-else
-    echo "[INFO] cfprefsd not running. Will refresh after respring."
+    killall -HUP cfprefsd 2>/dev/null
+    echo "[OK] Signaled cfprefsd."
 fi
 
-# ------------------------------------------------------------------------------
-# 7. RELOAD UIKIT CACHE (NẾU CÓ LỆNH UICACHE)
-# Đảm bảo icon và bundle được nhận diện ngay lập tức
-# ------------------------------------------------------------------------------
+# Reload UIKit cache (nếu có uicache)
 if command -v uicache &> /dev/null; then
-    uicache -p "$BUNDLE_PATH" 2>/dev/null || true
-    echo "[OK] UIKit cache reloaded for settings bundle."
-else
-    echo "[INFO] uicache not available. Will refresh after respring."
+    uicache -p /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null
+    echo "[OK] Updated UIKit cache."
 fi
 
-# ------------------------------------------------------------------------------
-# 8. LOG THÔNG TIN THIẾT BỊ CHO DEBUG
-# ------------------------------------------------------------------------------
-echo ""
-echo "[DEBUG] Device Information:"
-if command -v uname &> /dev/null; then
-    echo "  Kernel: $(uname -r)"
-fi
-if [ -f "/var/jb/usr/bin/sbreload" ]; then
-    echo "  Jailbreak Type: Rootless (sbreload found)"
-elif [ -f "/usr/bin/sbreload" ]; then
-    echo "  Jailbreak Type: Rootful (sbreload found)"
-else
-    echo "  Jailbreak Type: Unknown"
-fi
-echo "  Bundle ID: com.taojb.boostiphone6s"
-echo "  Version: 9.0.0"
-echo "  Target: iOS 14.0 - 26.0.1"
-
-echo ""
-echo "=================================================="
-echo "   INSTALLATION COMPLETE!"
-echo "   Boost iPhone 6s-X v9.0 installed successfully."
-echo "   Please RESPRING your device to apply changes."
-echo "=================================================="
-echo ""
+echo "[BoostiPhone6s v10] Installation complete. Please Respring to apply changes."
 
 exit 0
