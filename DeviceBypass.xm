@@ -347,6 +347,9 @@ static void deviceBypass_entry(void) {
             return;
         }
 
+        // ★ FIX: Init _ungrouped cho tất cả %hookf ở file scope ★
+        %init(_ungrouped);
+
         %init(DeviceBypassAll);
 
         NSLog(@"[DeviceBypass v10] ALL ENGINES INITIALIZED | Device: %@ | Spoof: %@ | Thermal: %@",
