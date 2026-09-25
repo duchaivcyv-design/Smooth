@@ -7,102 +7,163 @@
 NS_ASSUME_NONNULL_BEGIN
 
 /**
- * Enum định nghĩa loại cell trong PreferenceKit.
- * Khớp chính xác với PSConstants.h trong Private Framework.
+ * PSType - Enum định nghĩa loại cell trong PreferenceKit.
+ * Khớp chính xác với PSConstants.h trong Private Framework Preferences.
  * iOS 14.0 - 26.0.1 compatible.
  */
-typedef NS_ENUM(NSInteger, PSType) {
+typedef NS_ENUM(NSInteger, PSCellType) {
     PSGroupCell = 0,
-    PSTitleValueCell = 1,
-    PSSliderCell = 2,
-    PSSwitchCell = 3,
-    PSEditTextCell = 4,
-    PSStaticTextCell = 5,
-    PSLinkCell = 6,
-    PSMultiValueCell = 7,
-    PSRadioGroupCell = 8,
-    PSCheckboxCell = 9,
-    PSSegmentCell = 10,
-    PSButtonCell = 11,
-    PSFooterTextGroupCell = 12,
-    PSHeaderStaticTextGroupCell = 13
+    PSLinkCell = 1,
+    PSLinkListCell = 2,
+    PSListItemCell = 3,
+    PSTitleValueCell = 4,
+    PSSliderCell = 5,
+    PSSwitchCell = 6,
+    PSStaticTextCell = 7,
+    PSEditTextCell = 8,
+    PSSegmentCell = 9,
+    PSGiantCell = 10,
+    PSGiantIconCell = 11,
+    PSMultiValueCell = 12,
+    PSSecureEditTextCell = 13,
+    PSButtonCell = 14,
+    PSEditTextViewCell = 15,
+    PSSpinnerCell = 16,
+    PSHeaderStaticTextGroupCell = 17,
+    PSFooterTextGroupCell = 18,
 };
 
+// Alias cho tương thích ngược
+typedef PSCellType PSType;
+
 /**
- * Đối tượng mô tả một mục cấu hình trong Settings.
- * Được tạo bởi [PSSpecifier preferenceSpecifierNamed:title:detail:cell:edit:get:set:values:titles:min:max:]
- * Hỗ trợ đầy đủ cho iOS 14-26 Rootless PreferenceKit.
+ * PSSpecifier - Đối tượng mô tả một mục cấu hình trong Settings.
+ * 
+ * Được tạo tự động bởi [PSListController loadSpecifiersFromPlistName:target:]
+ * từ file Root.plist trong Resources/.
+ * 
+ * Mỗi dict trong Root.plist array "items" trở thành 1 PSSpecifier instance.
+ * 
+ * An toàn tuyệt đối trên iOS 14-26 Rootless.
  */
 @interface PSSpecifier : NSObject
 
+// ==============================================================================
+// CORE PROPERTIES - Khớp với keys trong Root.plist
+// ==============================================================================
+
+/** Tên internal key dùng để lưu trữ value vào UserDefaults */
+@property (nonatomic, copy, nullable) NSString *identifier;
+
+/** Tiêu đề hiển thị trên UI (key "label" trong plist) */
 @property (nonatomic, copy, nullable) NSString *name;
-@property (nonatomic, copy, nullable) NSString *label;
-@property (nonatomic, assign) PSType cellType;
-@property (nonatomic, retain, nullable) id target;
+
+/** Loại cell (key "cell" trong plist) */
+@property (nonatomic, assign) PSCellType cellType;
+
+/** Target object để resolve selector get/set/action */
+@property (nonatomic, assign, nullable) id target;
+
+/** Selector lấy giá trị hiện tại (key "get" trong plist) */
 @property (nonatomic, assign) SEL getter;
+
+/** Selector lưu giá trị mới (key "set" trong plist) */
 @property (nonatomic, assign) SEL setter;
+
+/** Selector action khi tap (key "action" trong plist) */
 @property (nonatomic, assign) SEL action;
+
+/** Giá trị mặc định (key "default" trong plist) */
 @property (nonatomic, retain, nullable) id defaultValue;
+
+/** Domain UserDefaults (key "defaults" trong plist) */
+@property (nonatomic, copy, nullable) NSString *defaultsDomain;
+
+/** Key trong UserDefaults (key "key" trong plist) */
+@property (nonatomic, copy, nullable) NSString *key;
+
+// ==============================================================================
+// MULTI-VALUE / LINK-LIST PROPERTIES
+// ==============================================================================
+
+/** Mảng giá trị khả dụng cho PSLinkListCell / PSMultiValueCell */
 @property (nonatomic, retain, nullable) NSArray *validValues;
+
+/** Mảng tiêu đề tương ứng với validValues */
 @property (nonatomic, retain, nullable) NSArray *titleStrings;
+
+/** Class controller cho PSLinkListCell (key "detail" trong plist) */
+@property (nonatomic, copy, nullable) NSString *detailControllerClass;
+
+// ==============================================================================
+// SLIDER PROPERTIES
+// ==============================================================================
+
+/** Giá trị tối thiểu cho PSSliderCell (key "min" trong plist) */
 @property (nonatomic, assign) CGFloat sliderMin;
+
+/** Giá trị tối đa cho PSSliderCell (key "max" trong plist) */
 @property (nonatomic, assign) CGFloat sliderMax;
+
+/** Hiển thị giá trị số trên slider (key "showValue" trong plist) */
 @property (nonatomic, assign) BOOL showValue;
-@property (nonatomic, retain, nullable) NSString *footerText;
-@property (nonatomic, retain, nullable) NSString *placeholder;
+
+// ==============================================================================
+// DISPLAY PROPERTIES
+// ==============================================================================
+
+/** Footer text hiển thị dưới group (key "footerText" trong plist) */
+@property (nonatomic, copy, nullable) NSString *footerText;
+
+/** Placeholder cho PSEditTextCell (key "placeholder" trong plist) */
+@property (nonatomic, copy, nullable) NSString *placeholder;
+
+/** Icon name (key "icon" trong plist) */
+@property (nonatomic, copy, nullable) NSString *iconName;
+
+/** Post notification name khi value thay đổi (key "PostNotification" trong plist) */
+@property (nonatomic, copy, nullable) NSString *postNotificationName;
+
+/** Keyboard type cho PSEditTextCell (key "keyboard" trong plist) */
+@property (nonatomic, copy, nullable) NSString *keyboardType;
+
+/** Properties dictionary bổ sung */
 @property (nonatomic, retain, nullable) NSDictionary *properties;
 
-/**
- * Khởi tạo specifier mới (constructor chuẩn của PreferenceKit).
- * @param name Tên internal key dùng để lưu trữ value.
- * @param title Tiêu đề hiển thị trên UI.
- * @param detail Mô tả chi tiết (footer text).
- * @param type Loại cell (PSTitleValueCell, PSSwitchCell...).
- * @param editClass Class xử lý editing (thường là nil).
- * @param getSelector Selector lấy giá trị hiện tại.
- * @param setSelector Selector lưu giá trị mới.
- * @param values Mảng giá trị khả dụng (cho MultiValue/Radio).
- * @param titles Mảng tiêu đề tương ứng với values.
- * @param minVal Giá trị tối thiểu (cho Slider).
- * @param maxVal Giá trị tối đa (cho Slider).
- */
-- (instancetype)initWithName:(nullable NSString *)name
-                       title:(nullable NSString *)title
-                      detail:(nullable NSString *)detail
-                        cell:(PSType)type
-                    editClass:(nullable Class)editClass
-                          get:(SEL)getSelector
-                          set:(SEL)setSelector
-                       values:(nullable NSArray *)values
-                       titles:(nullable NSArray *)titles
-                          min:(double)minVal
-                          max:(double)maxVal;
+// ==============================================================================
+// FACTORY METHODS
+// ==============================================================================
 
 /**
  * Factory method chuẩn của PreferenceKit.
- * Tạo specifier từ plist dictionary hoặc manual parameters.
+ * Tạo specifier từ các parameter riêng lẻ.
  */
 + (instancetype)preferenceSpecifierNamed:(nullable NSString *)name
-                                   title:(nullable NSString *)title
-                                  detail:(nullable NSString *)detail
-                                    cell:(PSType)type
-                                editClass:(nullable Class)editClass
-                                      get:(SEL)getSelector
-                                      set:(SEL)setSelector
-                                   values:(nullable NSArray *)values
-                                   titles:(nullable NSArray *)titles
-                                      min:(double)minVal
-                                      max:(double)maxVal;
+                                   target:(nullable id)target
+                                      set:(nullable SEL)setSelector
+                                      get:(nullable SEL)getSelector
+                                   detail:(nullable Class)detailClass
+                                     cell:(PSCellType)cellType
+                                     edit:(nullable Class)editClass;
 
 /**
- * Lấy giá trị hiện tại của specifier qua getter selector.
- * @return Giá trị hiện tại hoặc defaultValue nếu chưa set.
+ * Khởi tạo specifier trống.
+ */
+- (instancetype)init;
+
+// ==============================================================================
+// VALUE ACCESSORS
+// ==============================================================================
+
+/**
+ * Lấy giá trị hiện tại qua getter selector hoặc từ UserDefaults.
+ * @return Giá trị hiện tại hoặc defaultValue nếu chưa set
  */
 - (nullable id)performGetter;
 
 /**
- * Set giá trị mới cho specifier qua setter selector.
- * @param value Giá trị mới cần lưu.
+ * Set giá trị mới qua setter selector và ghi vào UserDefaults.
+ * @param value Giá trị mới cần lưu
  */
 - (void)performSetterWithValue:(nullable id)value;
 
@@ -111,6 +172,12 @@ typedef NS_ENUM(NSInteger, PSType) {
  * Dùng cho PSButtonCell và PSLinkCell.
  */
 - (void)performAction;
+
+/**
+ * Gửi PostNotification nếu có cấu hình.
+ * Gọi tự động sau khi value thay đổi.
+ */
+- (void)sendPostNotification;
 
 @end
 
