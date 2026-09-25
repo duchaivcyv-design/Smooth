@@ -2,7 +2,6 @@ ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
 # ROOTLESS NATIVE MODE
-# Theos tự động prefix /var/jb/ cho mọi INSTALL_PATH khi THEOS_PACKAGE_SCHEME=rootless
 _INSTALL_PATH_TARGET = /var/jb
 
 include $(THEOS)/makefiles/common.mk
@@ -12,8 +11,6 @@ include $(THEOS)/makefiles/common.mk
 # ==============================================================================
 LIBRARY_NAME = BoostiPhone6sCore
 
-# Dylib sẽ được cài vào /var/jb/Library/MobileSubstrate/DynamicLibraries/
-# Đây là đường dẫn chuẩn mà Substrate/CydiaSubstrate scan để load tweak
 BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 BoostiPhone6sCore_FILES = Tweak.xm \
@@ -26,12 +23,14 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/SystemBlocker.m
 
 # COMPILER FLAGS
-# -IHeaders: import PSListController.h, PSSpecifier.h từ Headers/
-# -IModules: import CrashGuard.h, CacheCleaner.h... từ Modules/
-# -I.: import file cùng thư mục gốc
+# -Wno-error: Logos warnings (multiple %group, duplicate hooks) không được treat as errors
+#   vì code gốc merge 2 codebase (Boost + ProMotion) có thể trigger logos warnings
+# -Wno-logos: suppress Logos-specific warnings hoàn toàn
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
+                           -Wno-error \
+                           -Wno-logos \
                            -Wno-unknown-warning-option \
                            -Wno-unused-variable \
                            -Wno-deprecated-declarations \
@@ -46,6 +45,7 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -I.
 
 # FRAMEWORKS
+# Thêm CoreServices cho CFNotificationCenter, posix_spawn, environ
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -54,11 +54,10 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Foundation \
                                Metal \
                                CoreVideo \
-                               Accelerate
+                               Accelerate \
+                               CoreServices
 
 # LINKER FLAGS
-# -exported_symbol: đảm bảo init_privilege_escalation() từ DeepExploit.c
-#   được export đúng C linkage cho Tweak.xm (Objective-C++) gọi qua extern "C"
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-no_warn_duplicate_libraries \
                             -Wl,-exported_symbol,_init_privilege_escalation
@@ -73,10 +72,6 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================================
 # PART 3: PACKAGING SCRIPT CHUẨN ROOTLESS v10
-# THEOS_PACKAGE_SCHEME=rootless tự động map:
-#   /Library/MobileSubstrate/... -> /var/jb/Library/MobileSubstrate/...
-#   /Library/PreferenceBundles/... -> /var/jb/Library/PreferenceBundles/...
-#   /Library/PreferenceLoader/... -> /var/jb/Library/PreferenceLoader/...
 # ==============================================================================
 before-package::
 	@echo ""
