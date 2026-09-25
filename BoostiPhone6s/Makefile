@@ -10,14 +10,15 @@ BoostiPhone6sPrefs_RESOURCE_DIRS = Resources
 
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation
 
-# Theos tự động thêm -framework Preferences nhưng không tìm thấy đường dẫn
-# Ta tự thêm -F trỏ đến PrivateFrameworks trong SDK đang dùng
+# ★ SỬA: HARDCODE ĐÚNG TÊN SDK MÀ WORKFLOW ĐÃ TẢI VỀ ★
+# Workflow build.yml tải iPhoneOS16.5.sdk vào $(THEOS)/sdks/
+# $(THEOS_SDK_NAME) trống trên runner nên phải dùng đường dẫn trực tiếp
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I../Headers \
                             -I. \
+                            -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks \
                             -DBUILDING_SUBPROJECT
 
-BoostiPhone6sPrefs_LDFLAGS = -F$(THEOS)/sdks/$(THEOS_SDK_NAME)/System/Library/PrivateFrameworks \
-                             -framework Preferences
+BoostiPhone6sPrefs_LDFLAGS = -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
 
 include $(THEOS_MAKE_PATH)/bundle.mk
