@@ -1,70 +1,12 @@
 #import "SystemBlocker.h"
-#import <objc/runtime.h>
-#import <Foundation/Foundation.h>
+#import <dlfcn.h>
 
-extern id CFG;
-extern BOOL IS_ENABLED;
-
-static void blocker_hook_locationStart(id self, SEL _cmd);
-static void blocker_hook_icloudSync(id self, SEL _cmd);
-static void blocker_hook_storeReview(id self, SEL _cmd);
-static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData);
-
-static IMP orig_cl_startUpdating_IMP = NULL;
-static IMP orig_ubiqu_sync_IMP = NULL;
-static IMP orig_sk_requestReview_IMP = NULL;
-static IMP orig_analytics_sendEvent_IMP = NULL;
-
-static inline BOOL isBlockerActive(void) {
-    return IS_ENABLED && [CFG valueForKey:@"enableBlocker"] && [[SystemBlocker sharedInstance] isActive];
-}
-
-static void blocker_hook_locationStart(id self, SEL _cmd) {
-    if (!isBlockerActive()) {
-        if (orig_cl_startUpdating_IMP) ((void(*)(id, SEL))orig_cl_startUpdating_IMP)(self, _cmd);
-        return;
-    }
-
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    NSArray *whitelist = @[
-        @"com.apple.Maps", @"com.apple.mobileslideshow", @"com.apple.weather",
-        @"com.apple.findmy", @"com.apple.Home", @"uber.ridepassengeriphone",
-        @"grab.driver.ios", @"com.google.Maps", @"com.shazam.Shazam", @"com.facebook.Messenger"
-    ];
-
-    BOOL allowed = [whitelist containsObject:bundleID];
-    if (allowed) {
-        if (orig_cl_startUpdating_IMP) ((void(*)(id, SEL))orig_cl_startUpdating_IMP)(self, _cmd);
-    } else {
-        NSLog(@"[SystemBlocker] 🚫 Blocked GPS for %@", bundleID);
-    }
-}
-
-static void blocker_hook_icloudSync(id self, SEL _cmd) {
-    if (!isBlockerActive()) {
-        if (orig_ubiqu_sync_IMP) ((void(*)(id, SEL))orig_ubiqu_sync_IMP)(self, _cmd);
-        return;
-    }
-    NSLog(@"[SystemBlocker] ⛔ Suppressed iCloud Sync");
-}
-
-static void blocker_hook_storeReview(id self, SEL _cmd) {
-    if (!isBlockerActive()) {
-        if (orig_sk_requestReview_IMP) ((void(*)(id, SEL))orig_sk_requestReview_IMP)(self, _cmd);
-        return;
-    }
-    NSLog(@"[SystemBlocker] ⛔ Blocked Rating Prompt");
-}
-
-static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
-    if (!isBlockerActive()) {
-        if (orig_analytics_sendEvent_IMP) ((void(*)(id, SEL, id))orig_analytics_sendEvent_IMP)(self, _cmd, eventData);
-        return;
-    }
-}
+// Danh sách các tiến trình telemetry/analytics mặc định bị chặn
+static NSArray<NSString *> *kDefaultBlockedProcesses = nil;
 
 @implementation SystemBlocker {
     BOOL _isActive;
+    NSMutableSet<NSString *> *_blockedProcessSet;
     dispatch_queue_t _blockerQueue;
 }
 
@@ -81,93 +23,170 @@ static void blocker_hook_analyticsEvent(id self, SEL _cmd, id eventData) {
     self = [super init];
     if (self) {
         _isActive = NO;
-        _blockerQueue = dispatch_queue_create("com.boostiphone6s.blocker.v9", DISPATCH_QUEUE_SERIAL);
+        _blockedProcessSet = [NSMutableSet set];
+        _blockerQueue = dispatch_queue_create("com.boostiphone6s.systemblocker", DISPATCH_QUEUE_SERIAL);
+        
+        // Khởi tạo danh sách mặc định
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            kDefaultBlockedProcesses = @[
+                @"analyticsd",      // Apple Analytics daemon
+                @"adid",            // Advertising Identifier
+                @"rapportd",        // Continuity telemetry
+                @"diagnosticsd",    // Diagnostics daemon (optional)
+                @"awdd",            // Apple Wireless Diagnostics
+            ];
+        });
     }
     return self;
 }
 
-- (BOOL)isActive { return _isActive; }
-
 - (void)initBlockers {
+    if (_isActive) {
+        NSLog(@"[SystemBlocker] Already active, skipping initialization");
+        return;
+    }
+    
     dispatch_sync(_blockerQueue, ^{
-        if (_isActive) return;
-
-        NSLog(@"[SystemBlocker] 🔒 Initializing Deep System Interception v9.0...");
-
-        Class clClass = objc_getClass("CLLocationManager");
-        if (!clClass) clClass = NSClassFromString(@"_CLLocationManager");
-        if (clClass) {
-            Method m = class_getInstanceMethod(clClass, @selector(startUpdatingLocation));
-            if (m) {
-                orig_cl_startUpdating_IMP = method_getImplementation(m);
-                method_setImplementation(m, (IMP)blocker_hook_locationStart);
-            }
+        NSLog(@"[SystemBlocker] Initializing system blockers...");
+        
+        // Thêm các tiến trình mặc định vào danh sách chặn
+        for (NSString *process in kDefaultBlockedProcesses) {
+            [self->_blockedProcessSet addObject:process];
         }
-
-        Class ubiqClass = objc_getClass("NSUbiquitousKeyValueStore");
-        if (!ubiqClass) ubiqClass = NSClassFromString(@"_CloudKitSyncManager");
-        if (ubiqClass) {
-            SEL syncSel = NSSelectorFromString(@"synchronize");
-            Method m = class_getInstanceMethod(ubiqClass, syncSel);
-            if (m) {
-                orig_ubiqu_sync_IMP = method_getImplementation(m);
-                method_setImplementation(m, (IMP)blocker_hook_icloudSync);
-            }
-        }
-
-        Class skClass = objc_getClass("SKStoreReviewController");
-        if (!skClass) skClass = NSClassFromString(@"_AppStoreReviewManager");
-        if (skClass) {
-            SEL reviewSel = NSSelectorFromString(@"requestReviewInScene:");
-            Method m = class_getInstanceMethod(skClass, reviewSel);
-            if (!m) {
-                reviewSel = NSSelectorFromString(@"requestReview");
-                m = class_getInstanceMethod(skClass, reviewSel);
-            }
-            if (m) {
-                orig_sk_requestReview_IMP = method_getImplementation(m);
-                method_setImplementation(m, (IMP)blocker_hook_storeReview);
-            }
-        }
-
-        Class analyticsClass = NSClassFromString(@"_AnalyticsManager");
-        if (!analyticsClass) analyticsClass = objc_getClass("ATXAnalyticsManager");
-        if (analyticsClass) {
-            SEL sendSel = NSSelectorFromString(@"sendEvent:");
-            Method m = class_getInstanceMethod(analyticsClass, sendSel);
-            if (m) {
-                orig_analytics_sendEvent_IMP = method_getImplementation(m);
-                method_setImplementation(m, (IMP)blocker_hook_analyticsEvent);
-            }
-        }
-
-        _isActive = YES;
-        NSLog(@"[SystemBlocker] ✅ Active. GPS/iCloud/Analytics/Rating Blocked.");
+        
+        // Thực hiện chặn qua launchctl
+        [self applyBlockers];
+        
+        self->_isActive = YES;
+        NSLog(@"[SystemBlocker] ✅ Blockers initialized - %lu processes blocked",
+              (unsigned long)self->_blockedProcessSet.count);
     });
 }
 
-- (void)resetSafeModeManually {
+- (BOOL)isActive {
+    return _isActive;
+}
+
+- (NSArray<NSString *> *)blockedProcesses {
+    return [_blockedProcessSet allObjects];
+}
+
+- (void)setBlock:(BOOL)block forProcess:(NSString *)processName {
+    if (!processName || processName.length == 0) return;
+    
     dispatch_async(_blockerQueue, ^{
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
-        [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
-        [defaults synchronize];
-        _isActive = NO;
-        NSLog(@"[SystemBlocker] ✅ Safe Mode manually reset by user.");
+        if (block) {
+            [self->_blockedProcessSet addObject:processName];
+            [self blockSingleProcess:processName];
+            NSLog(@"[SystemBlocker] ✅ Blocked: %@", processName);
+        } else {
+            [self->_blockedProcessSet removeObject:processName];
+            [self unblockSingleProcess:processName];
+            NSLog(@"[SystemBlocker] ✅ Unblocked: %@", processName);
+        }
     });
 }
 
-- (void)stopBlockers {
+- (void)stopAllBlockers {
     dispatch_sync(_blockerQueue, ^{
-        if (!_isActive) return;
-        Class clClass = objc_getClass("CLLocationManager");
-        if (clClass && orig_cl_startUpdating_IMP) {
-            Method m = class_getInstanceMethod(clClass, @selector(startUpdatingLocation));
-            if (m) method_setImplementation(m, orig_cl_startUpdating_IMP);
+        if (!self->_isActive) return;
+        
+        NSLog(@"[SystemBlocker] Stopping all blockers...");
+        
+        // Unblock tất cả tiến trình
+        for (NSString *process in self->_blockedProcessSet) {
+            [self unblockSingleProcess:process];
         }
-        _isActive = NO;
-        NSLog(@"[SystemBlocker] ⏹️ Deactivated. Original hooks restored.");
+        
+        [self->_blockedProcessSet removeAllObjects];
+        self->_isActive = NO;
+        
+        NSLog(@"[SystemBlocker] ✅ All blockers stopped");
     });
+}
+
+#pragma mark - Private Methods
+
+/**
+ * Áp dụng tất cả blockers bằng launchctl.
+ * Sử dụng "launchctl stop" để dừng các daemon telemetry.
+ */
+- (void)applyBlockers {
+    for (NSString *process in _blockedProcessSet) {
+        [self blockSingleProcess:process];
+    }
+}
+
+/**
+ * Chặn một tiến trình đơn lẻ qua launchctl stop.
+ * @param processName Tên tiến trình cần chặn
+ */
+- (void)blockSingleProcess:(NSString *)processName {
+    // Tạo command string
+    NSString *jbPath = @"/var/jb/bin/launchctl";
+    NSString *rootfulPath = @"/bin/launchctl";
+    
+    // Kiểm tra path nào tồn tại
+    const char *launchctlPath = NULL;
+    
+    if ([[NSFileManager defaultManager] fileExistsAtPath:jbPath]) {
+        launchctlPath = [jbPath UTF8String];
+    } else if ([[NSFileManager defaultManager] fileExistsAtPath:rootfulPath]) {
+        launchctlPath = [rootfulPath UTF8String];
+    }
+    
+    if (!launchctlPath) {
+        NSLog(@"[SystemBlocker] ⚠️ launchctl not found, cannot block %@", processName);
+        return;
+    }
+    
+    // Execute launchctl stop
+    NSString *command = [NSString stringWithFormat:@"%@ stop com.apple.%@", launchctlPath, processName];
+    
+    typedef int (*sys_func)(const char *);
+    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+    if (handle) {
+        sys_func sys = (sys_func)dlsym(handle, "system");
+        if (sys) {
+            int result = sys([command UTF8String]);
+            if (result == 0) {
+                NSLog(@"[SystemBlocker] ✅ Stopped: com.apple.%@", processName);
+            }
+        }
+        dlclose(handle);
+    }
+}
+
+/**
+ * Bỏ chặn một tiến trình qua launchctl start.
+ * @param processName Tên tiến trình cần bỏ chặn
+ */
+- (void)unblockSingleProcess:(NSString *)processName {
+    NSString *jbPath = @"/var/jb/bin/launchctl";
+    NSString *rootfulPath = @"/bin/launchctl";
+    
+    const char *launchctlPath = NULL;
+    
+    if ([[NSFileManager defaultManager] fileExistsAtPath:jbPath]) {
+        launchctlPath = [jbPath UTF8String];
+    } else if ([[NSFileManager defaultManager] fileExistsAtPath:rootfulPath]) {
+        launchctlPath = [rootfulPath UTF8String];
+    }
+    
+    if (!launchctlPath) return;
+    
+    NSString *command = [NSString stringWithFormat:@"%@ start com.apple.%@", launchctlPath, processName];
+    
+    typedef int (*sys_func)(const char *);
+    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+    if (handle) {
+        sys_func sys = (sys_func)dlsym(handle, "system");
+        if (sys) {
+            sys([command UTF8String]);
+        }
+        dlclose(handle);
+    }
 }
 
 @end
