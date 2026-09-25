@@ -10,13 +10,8 @@
 #import <pthread.h>
 #import <unistd.h>
 
-// Extern global variables từ Tweak.xm
 extern id CFG;
 extern BOOL IS_ENABLED;
-
-// ==============================================================================
-// HELPER: AUTO-DETECT OLD vs NEW DEVICE
-// ==============================================================================
 
 static BOOL isOldDevice(void) {
     static BOOL cached = NO;
@@ -44,7 +39,6 @@ static BOOL isOldDevice(void) {
     return cached;
 }
 
-// Helper an toàn để đọc BOOL từ CFG (tránh bug object != nil)
 static inline BOOL CfgBool(NSString *key) {
     id v = [CFG valueForKey:key];
     return v ? [v boolValue] : NO;
@@ -56,118 +50,10 @@ static inline NSInteger CfgInt(NSString *key) {
 }
 
 // ==============================================================================
-// SINGLE GROUP: TẤT CẢ HOOKS CỦA DEVICE BYPASS
+// %hookf Ở FILE SCOPE — TRƯỚC %group DeviceBypassAll
+// ★ FIX: Logos yêu cầu %hookf phải ở file scope, không được trong %group ★
 // ==============================================================================
 
-%group DeviceBypassAll
-
-// ---- UIScreen: các property không trùng với Tweak.xm ----
-%hook UIScreen
-
-- (BOOL)isProMotionEnabled {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"godModeForce120Hz") && !isOldDevice()) return YES;
-    return %orig;
-}
-
-- (NSInteger)maximumFramesPerSecond {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"godModeForce120Hz")) {
-        NSInteger targetHz = CfgInt(@"forcedRefreshRate");
-        if (isOldDevice() && targetHz > 60) targetHz = 60;
-        if (targetHz > 0) return targetHz;
-    }
-    return %orig;
-}
-
-- (CGFloat)nativeScale {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"spoofModel")) return 3.0;
-    return %orig;
-}
-
-- (CGFloat)scale {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"spoofModel")) return 3.0;
-    return %orig;
-}
-
-%end
-
-// ---- CALayer: properties không trùng với Tweak.xm (Tweak.xm đã hook duration) ----
-%hook CALayer
-
-- (BOOL)allowsEdgeAntialiasing {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"spoofModel")) return YES;
-    return %orig;
-}
-
-- (CGFloat)rasterizationScale {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"spoofModel")) return [UIScreen mainScreen].scale;
-    return %orig;
-}
-
-- (void)setContentsScale:(CGFloat)scale {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"spoofModel")) {
-        %orig([UIScreen mainScreen].scale);
-        return;
-    }
-    %orig;
-}
-
-// v10: DeepImageProcessing - bỏ group opacity để giảm blend pass khi xử lý ảnh sâu
-- (BOOL)allowsGroupOpacity {
-    if (IS_ENABLED && CfgBool(@"deepImageProcessing")) return NO;
-    return %orig;
-}
-
-%end
-
-// ---- NSProcessInfo ----
-%hook NSProcessInfo
-
-- (NSProcessInfoThermalState)thermalState {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"disableThermal")) return NSProcessInfoThermalStateNominal;
-    return %orig;
-}
-
-+ (BOOL)isThermalPressureCritical {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"disableThermal")) return NO;
-    return %orig;
-}
-
-- (BOOL)isLowPowerModeEnabled {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"lowPowerScheduler")) return NO;
-    return %orig;
-}
-
-%end
-
-// ---- _ThermalMonitor ----
-%hook _ThermalMonitor
-- (float)currentTemperature {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"disableThermal")) return 32.0f;
-    return %orig;
-}
-%end
-
-// ---- ThermalMonitor (fallback class name) ----
-%hook ThermalMonitor
-- (float)currentTemperature {
-    if (!IS_ENABLED) return %orig;
-    if (CfgBool(@"disableThermal")) return 32.0f;
-    return %orig;
-}
-%end
-
-// ---- sysctlbyname: fake hw.machine, hw.ncpu, hw.memsize ----
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ENABLED) return %orig(name, oldp, oldlenp, newp, newlen);
     if (!CfgBool(@"spoofModel")) return %orig(name, oldp, oldlenp, newp, newlen);
@@ -230,8 +116,6 @@ static inline NSInteger CfgInt(NSString *key) {
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
 
-// v10: spoof thêm uname() vì nhiều app đọc utsname thay vì sysctl
-// FIX: struct utsname KHÔNG có field "model" trên iOS — chỉ có "machine"
 %hookf(int, uname, struct utsname *name) {
     int ret = %orig(name);
     if (ret == 0 && IS_ENABLED && CfgBool(@"spoofModel") && name) {
@@ -240,13 +124,117 @@ static inline NSInteger CfgInt(NSString *key) {
     return ret;
 }
 
-// ---- CAMetalLayer ----
+// ==============================================================================
+// GROUP: CHỈ CHỨA %hook (ObjC class hooks) — KHÔNG CÓ %hookf
+// ==============================================================================
+
+%group DeviceBypassAll
+
+%hook UIScreen
+
+- (BOOL)isProMotionEnabled {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"godModeForce120Hz") && !isOldDevice()) return YES;
+    return %orig;
+}
+
+- (NSInteger)maximumFramesPerSecond {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"godModeForce120Hz")) {
+        NSInteger targetHz = CfgInt(@"forcedRefreshRate");
+        if (isOldDevice() && targetHz > 60) targetHz = 60;
+        if (targetHz > 0) return targetHz;
+    }
+    return %orig;
+}
+
+- (CGFloat)nativeScale {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"spoofModel")) return 3.0;
+    return %orig;
+}
+
+- (CGFloat)scale {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"spoofModel")) return 3.0;
+    return %orig;
+}
+
+%end
+
+%hook CALayer
+
+- (BOOL)allowsEdgeAntialiasing {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"spoofModel")) return YES;
+    return %orig;
+}
+
+- (CGFloat)rasterizationScale {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"spoofModel")) return [UIScreen mainScreen].scale;
+    return %orig;
+}
+
+- (void)setContentsScale:(CGFloat)scale {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"spoofModel")) {
+        %orig([UIScreen mainScreen].scale);
+        return;
+    }
+    %orig;
+}
+
+- (BOOL)allowsGroupOpacity {
+    if (IS_ENABLED && CfgBool(@"deepImageProcessing")) return NO;
+    return %orig;
+}
+
+%end
+
+%hook NSProcessInfo
+
+- (NSProcessInfoThermalState)thermalState {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"disableThermal")) return NSProcessInfoThermalStateNominal;
+    return %orig;
+}
+
++ (BOOL)isThermalPressureCritical {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"disableThermal")) return NO;
+    return %orig;
+}
+
+- (BOOL)isLowPowerModeEnabled {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"lowPowerScheduler")) return NO;
+    return %orig;
+}
+
+%end
+
+%hook _ThermalMonitor
+- (float)currentTemperature {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"disableThermal")) return 32.0f;
+    return %orig;
+}
+%end
+
+%hook ThermalMonitor
+- (float)currentTemperature {
+    if (!IS_ENABLED) return %orig;
+    if (CfgBool(@"disableThermal")) return 32.0f;
+    return %orig;
+}
+%end
+
 %hook CAMetalLayer
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (!IS_ENABLED) return %orig;
     if (CfgBool(@"godModeMetalOverclock")) {
-        // v10: GameStutterFix dùng triple buffer (3), bình thường double (2)
         if (CfgBool(@"gameStutterFix")) {
             %orig(3);
         } else {
@@ -274,13 +262,11 @@ static inline NSInteger CfgInt(NSString *key) {
 
 %end
 
-// ---- MTLTextureDescriptor ----
 %hook MTLTextureDescriptor
 
 - (void)setPixelFormat:(NSUInteger)pixelFormat {
     if (!IS_ENABLED) return %orig;
     if (CfgBool(@"godModeMetalOverclock")) {
-        // BGRA8Unorm_sRGB (80) -> BGRA8Unorm (75) nhanh hơn
         if (pixelFormat == 80) pixelFormat = 75;
     }
     %orig(pixelFormat);
@@ -289,7 +275,7 @@ static inline NSInteger CfgInt(NSString *key) {
 - (void)setStorageMode:(NSUInteger)storageMode {
     if (!IS_ENABLED) return %orig;
     if (CfgBool(@"godModeMetalOverclock")) {
-        %orig(0); // shared storage
+        %orig(0);
         return;
     }
     %orig;
@@ -297,8 +283,6 @@ static inline NSInteger CfgInt(NSString *key) {
 
 %end
 
-// ---- UIScrollView: chỉ hook phần KHÔNG trùng với Tweak.xm ----
-// setContentOffset / _setContentOffset đã có trong Tweak.xm FramePacingEngine
 %hook UIScrollView
 
 - (void)setDecelerationRate:(CGFloat)rate {
@@ -310,7 +294,6 @@ static inline NSInteger CfgInt(NSString *key) {
     }
 }
 
-// v10: SmoothFeelEngine - giảm touch latency gesture recognizer
 - (void)didMoveToWindow {
     %orig;
     if (IS_ENABLED && CfgBool(@"smoothFeelEngine") && self.window != nil) {
@@ -324,7 +307,6 @@ static inline NSInteger CfgInt(NSString *key) {
 
 %end
 
-// ---- UIWindow: touch boost ----
 %hook UIWindow
 
 - (void)sendEvent:(UIEvent *)event {
@@ -333,8 +315,6 @@ static inline NSInteger CfgInt(NSString *key) {
 
 %end
 
-// ---- v10: BatterySaverMax - clamp NSTimer lặp quá nhanh ----
-// Timer < 33ms (≈30Hz) gây wakeup CPU liên tục, clamp lên 33ms
 %hook NSTimer
 
 + (NSTimer *)timerWithTimeInterval:(NSTimeInterval)ti target:(id)t selector:(SEL)s userInfo:(id)u repeats:(BOOL)r {
@@ -357,22 +337,19 @@ static inline NSInteger CfgInt(NSString *key) {
 
 // ==============================================================================
 // C-LEVEL CONSTRUCTOR (KHÔNG PHẢI LOGOS %ctor)
-// Tránh conflict với %ctor trong Tweak.xm khi cả 2 file cùng build vào 1 dylib.
-// Constructor này chạy sau khi tất cả Logos constructors hoàn tất.
 // ==============================================================================
 
 __attribute__((constructor))
 static void deviceBypass_entry(void) {
     @autoreleasepool {
         if (!IS_ENABLED) {
-            NSLog(@"[DeviceBypass v10] ⏸️ Disabled by Master Switch.");
+            NSLog(@"[DeviceBypass v10] Disabled by Master Switch.");
             return;
         }
 
-        // Init toàn bộ group DeviceBypassAll
         %init(DeviceBypassAll);
 
-        NSLog(@"[DeviceBypass v10] ✅ ALL ENGINES INITIALIZED | Device: %@ | Spoof: %@ | Thermal: %@",
+        NSLog(@"[DeviceBypass v10] ALL ENGINES INITIALIZED | Device: %@ | Spoof: %@ | Thermal: %@",
               isOldDevice() ? @"OLD (6s-8)" : @"NEW (X-15PM)",
               CfgBool(@"spoofModel") ? @"ON" : @"OFF",
               CfgBool(@"disableThermal") ? @"BYPASSED" : @"NORMAL");
