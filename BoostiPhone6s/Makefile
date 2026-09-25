@@ -3,8 +3,6 @@ include $(THEOS)/makefiles/common.mk
 BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
-# Subproject sẽ tự động kế thừa _INSTALL_PATH_TARGET = /var/jb từ project gốc
-# Bundle sẽ được map chính xác vào /var/jb/Library/PreferenceBundles/
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 BoostiPhone6sPrefs_INSTALL_INFO = Info.plist
 
@@ -12,8 +10,10 @@ BoostiPhone6sPrefs_INSTALL_INFO = Info.plist
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation
 BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 
-# Theos tự động resolve PrivateFrameworks trong SDK target.
-# Flag -fobjc-arc là đủ, không cần ép đường dẫn SDK thủ công.
-BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -DBUILDING_SUBPROJECT
+# SỬA: THÊM CFLAGS ĐỂ TRÁNH LỖI LINKER VÀ ĐỊNH NGHĨA FLAG BUILD
+# -F giúp linker tìm PrivateFrameworks trong SDK
+# -DBUILDING_SUBPROJECT để kích hoạt conditional import trong code
+BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks -DBUILDING_SUBPROJECT
+BoostiPhone6sPrefs_LDFLAGS = -F$(THEOS)/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks
 
 include $(THEOS_MAKE_PATH)/bundle.mk
