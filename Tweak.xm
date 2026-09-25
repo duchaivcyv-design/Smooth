@@ -1,14 +1,3 @@
-// ==============================================================================
-// BOOST iPHONE 6s-X v8.0 "ABSOLUTE PERFORMANCE & STABILITY"
-// Author: TaoJB | Project: Smooth
-// Target: iOS 14.0 - 26.0.1 | iPhone 6s to Latest
-// Features: 
-//   - Dynamic Thermal Throttling & Low Power Scheduler (<20% pin)
-//   - Frame Pacing & GPU Batch Optimization (Fix khựng vật thể)
-//   - TCP Network Turbo & Touch Sampling Boost
-//   - LiquidAss Conflict Resolver & AI Neural Engine Unlock
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
