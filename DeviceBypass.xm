@@ -1,7 +1,6 @@
 // ==============================================================================
 // DEVICE BYPASS MODULE v8.0 - HIGH PERFORMANCE SYNC ENGINE
 // Target: iOS 14.0 - 26.0.1 | iPhone 6s to Latest
-// Features: Dynamic Hz Selector, Thermal Bypass, Hardware Spoof
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -12,18 +11,13 @@
 #import <dlfcn.h>
 #import <mach/mach.h>
 
-// Giúp compiler nhận diện type BoostConfig * để cho phép dot syntax
-// Tuyệt đối an toàn, không gây circular dependency hay parse error
-@class BoostConfig; 
-
-// Khai báo extern biến global từ Tweak.xm với đúng kiểu dữ liệu
-extern BoostConfig *CFG; 
+extern id CFG; 
 extern BOOL IS_ENABLED;
 
 #define IS_BYPASS_ACTIVE (IS_ENABLED && \
-                          (CFG.spoofModel || \
-                           CFG.godModeForce120Hz || \
-                           CFG.disableThermal))
+                          ([CFG valueForKey:@"spoofModel"] || \
+                           [CFG valueForKey:@"godModeForce120Hz"] || \
+                           [CFG valueForKey:@"disableThermal"]))
 
 // ==========================================
 // 1. FAKE HARDWARE CAPABILITIES (GPU & DISPLAY)
@@ -32,32 +26,30 @@ extern BOOL IS_ENABLED;
 %group DisplaySpoof
 %hook UIScreen
 - (BOOL)isProMotionEnabled {
-    if (CFG.godModeForce120Hz) return YES;
+    if ([CFG valueForKey:@"godModeForce120Hz"]) return YES;
     return %orig;
 }
 
 - (NSInteger)maximumFramesPerSecond {
-    if (CFG.godModeForce120Hz) {
-        NSInteger targetHz = CFG.forcedRefreshRate > 0 ? CFG.forcedRefreshRate : 120;
-        return targetHz;
-    }
+    NSInteger targetHz = [[CFG valueForKey:@"forcedRefreshRate"] integerValue];
+    if ([CFG valueForKey:@"godModeForce120Hz"] && targetHz > 0) return targetHz;
     return %orig;
 }
 
 - (CGFloat)nativeScale {
-    if (CFG.spoofModel) return 3.0;
+    if ([CFG valueForKey:@"spoofModel"]) return 3.0;
     return %orig;
 }
 %end
 
 %hook CALayer
 - (BOOL)allowsEdgeAntialiasing {
-    if (CFG.spoofModel) return YES;
+    if ([CFG valueForKey:@"spoofModel"]) return YES;
     return %orig;
 }
 
 - (CGFloat)rasterizationScale {
-    if (CFG.spoofModel) return [UIScreen mainScreen].scale;
+    if ([CFG valueForKey:@"spoofModel"]) return [UIScreen mainScreen].scale;
     return %orig;
 }
 %end
@@ -70,12 +62,12 @@ extern BOOL IS_ENABLED;
 %group ThermalBypass
 %hook NSProcessInfo
 - (NSProcessInfoThermalState)thermalState {
-    if (CFG.disableThermal) return NSProcessInfoThermalStateNominal;
+    if ([CFG valueForKey:@"disableThermal"]) return NSProcessInfoThermalStateNominal;
     return %orig;
 }
 
 + (BOOL)isThermalPressureCritical {
-    if (CFG.disableThermal) return NO;
+    if ([CFG valueForKey:@"disableThermal"]) return NO;
     return %orig;
 }
 %end
@@ -87,10 +79,10 @@ extern BOOL IS_ENABLED;
 
 %group HardwareSpoof
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (!CFG.spoofModel) return %orig(name, oldp, oldlenp, newp, newlen);
+    if (![CFG valueForKey:@"spoofModel"]) return %orig(name, oldp, oldlenp, newp, newlen);
     
     if ((strcmp(name, "hw.machine") == 0) || (strcmp(name, "hw.model") == 0)) {
-        const char *fakeModel = "iPhone16,2"; // Khớp với Tweak.xm v8.0
+        const char *fakeModel = "iPhone16,2";
         if (oldp && oldlenp) {
             strlcpy((char *)oldp, fakeModel, *oldlenp);
             *oldlenp = strlen(fakeModel) + 1;
@@ -121,15 +113,15 @@ extern BOOL IS_ENABLED;
 
 %ctor {
     if (IS_ENABLED) {
-        if (CFG.godModeForce120Hz || CFG.spoofModel) {
+        if ([CFG valueForKey:@"godModeForce120Hz"] || [CFG valueForKey:@"spoofModel"]) {
             %init(DisplaySpoof);
         }
         
-        if (CFG.disableThermal) {
+        if ([CFG valueForKey:@"disableThermal"]) {
             %init(ThermalBypass);
         }
         
-        if (CFG.spoofModel) {
+        if ([CFG valueForKey:@"spoofModel"]) {
             %init(HardwareSpoof);
         }
         
