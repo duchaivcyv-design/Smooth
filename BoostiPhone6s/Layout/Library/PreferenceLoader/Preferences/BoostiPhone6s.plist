@@ -17,7 +17,7 @@
         <key>label</key>
         <string>SmoothIOS</string>
         <key>defaults</key>
-        <string>com.boostiphone6s.settings</string>
+        <string>com.taojb.boostiphone6s</string>
     </dict>
 </dict>
 </plist>
