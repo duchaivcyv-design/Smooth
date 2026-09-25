@@ -91,7 +91,8 @@ static int safe_exec(const char *cmd) {
     return size;
 }
 
-+ (void)cleanupTempFiles {
+// ★ SỬA: TRẢ VỀ unsigned long long THAY VÌ void ★
++ (unsigned long long)cleanupTempFiles {
     NSArray *junkPaths = @[
         @"/var/mobile/Library/Caches/com.apple.Safari",
         @"/var/mobile/Library/Caches/com.apple.WebKit.Networking",
@@ -112,6 +113,8 @@ static int safe_exec(const char *cmd) {
     if (totalFreed > 0) {
         NSLog(@"[CacheCleaner] ✅ Total Cleanup Complete: %.2f MB Freed", totalFreed / 1024.0 / 1024.0);
     }
+
+    return totalFreed;
 }
 
 + (void)forceMemoryPurge {
@@ -145,7 +148,6 @@ static int safe_exec(const char *cmd) {
 }
 
 + (void)clearImageCache {
-    // Clear UIKit image cache via private selector
     Class cacheClass = NSClassFromString(@"UIImageCache");
     if (cacheClass) {
         SEL sel = NSSelectorFromString(@"sharedImageCache");
@@ -163,6 +165,7 @@ static int safe_exec(const char *cmd) {
     NSLog(@"[CacheCleaner] 🖼️ Image Cache Cleared.");
 }
 
+// ★ SỬA: cleanupTempFiles GIỜ TRẢ VỀ unsigned long long NÊN CỘNG ĐƯỢC ★
 + (unsigned long long)fullSystemCleanup {
     unsigned long long total = 0;
     total += [self cleanupTempFiles];
