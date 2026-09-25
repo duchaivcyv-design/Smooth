@@ -2,6 +2,7 @@
 #import <dlfcn.h>
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
+#include <pthread.h>
 
 @implementation CrashGuard {
     NSMutableArray<NSDate *> *_crashTimestamps;
@@ -9,6 +10,21 @@
     dispatch_queue_t _guardQueue;
     BOOL _alertShownThisSession;
     NSTimeInterval _lastSafeModeCheckTime;
+}
+
+// ==========================================
+// HELPER: SAFE SYSTEM CALL FOR RESPRING
+// ==========================================
+
+static int (*g_respring_system)(const char *) = NULL;
+static pthread_once_t g_respring_init_once = PTHREAD_ONCE_INIT;
+
+static void respring_system_init(void) {
+    typedef int (*sys_func)(const char*);
+    void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
+    if (handle) {
+        g_respring_system = (sys_func)dlsym(handle, "system");
+    }
 }
 
 + (instancetype)sharedInstance {
@@ -62,7 +78,7 @@ static void handleUncaughtException(NSException *exception) {
     
     if (isSafe && _currentStatus != GuardStatusSafeMode) {
         _currentStatus = GuardStatusSafeMode;
-        NSLog(@"[CrashGuard]  Loaded Safe Mode from persistent storage.");
+        NSLog(@"[CrashGuard] 🔒 Loaded Safe Mode from persistent storage.");
     } else if (!isSafe && _currentStatus == GuardStatusSafeMode) {
         // Tự động thoát Safe Mode nếu user đã reset thủ công từ Settings
         _currentStatus = GuardStatusNormal;
@@ -157,7 +173,6 @@ static void handleUncaughtException(NSException *exception) {
     return (_currentStatus != GuardStatusSafeMode);
 }
 
-// ★ HÀM RESET SAFE MODE THỦ CÔNG ★
 - (void)resetSafeModeManually {
     dispatch_async(_guardQueue, ^{
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -175,25 +190,15 @@ static void handleUncaughtException(NSException *exception) {
 }
 
 - (void)triggerSoftRespring {
-    typedef int (*system_func_t)(const char *);
-    static system_func_t real_system = NULL;
-    static pthread_once_t onceToken = PTHREAD_ONCE_INIT;
+    pthread_once(&g_respring_init_once, respring_system_init);
     
-    void init_sys(void) {
-        void *handle = dlopen("/usr/lib/system/libsystem_c.dylib", RTLD_LAZY);
-        if (handle) real_system = (system_func_t)dlsym(handle, "system");
-    }
-    
-    pthread_once(&onceToken, init_sys);
-    
-    if (real_system) {
-        // ★ FALLBACK CHAIN CHO MỌI BẢN ROOTLESS ★
+    if (g_respring_system) {
         // 1. sbreload (Dopamine/Palera1n rootless)
         // 2. killall SpringBoard (Legacy/TrollStore)
         // 3. uicache + kill backboardd (Last resort)
-        int result = real_system("sbreload 2>/dev/null || killall -9 SpringBoard 2>/dev/null");
+        int result = g_respring_system("sbreload 2>/dev/null || killall -9 SpringBoard 2>/dev/null");
         if (result != 0) {
-            real_system("uicache --all && killall -9 backboardd 2>/dev/null");
+            g_respring_system("uicache --all && killall -9 backboardd 2>/dev/null");
         }
         NSLog(@"[CrashGuard] 🔄 Soft Respring triggered via fallback chain.");
     }
