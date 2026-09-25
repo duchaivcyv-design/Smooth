@@ -1,5 +1,6 @@
 #import "KernelBypass.h"
 #import <mach/mach.h>
+#import <mach/mach_host.h> // ★ BẮT BUỘC THÊM CHO host_get_io_main ★
 #import <pthread.h>
 #import <sys/sysctl.h>
 #import <dlfcn.h>
@@ -33,21 +34,20 @@
 
 - (void)initEnvironment {
     dispatch_async(_kernelQueue, ^{
-        // kIOMasterPortDefault có thể bị deprecated hoặc null trên iOS mới
         mach_port_t masterPort = MACH_PORT_NULL;
-        kern_return_t kr = host_get_io_master(mach_host_self(), &masterPort);
+        
+        // ★ SỬA: host_get_io_master → host_get_io_main CHO IOS 26 SDK ★
+        kern_return_t kr = host_get_io_main(mach_host_self(), &masterPort);
         
         if (kr == KERN_SUCCESS && masterPort != MACH_PORT_NULL) {
             _ioKitAvailable = YES;
             
-            // Thử kết nối AppleARMIODevice (có trên hầu hết thiết bị A-series)
             _powerService = IOServiceGetMatchingService(masterPort, 
                                                        IOServiceMatching("AppleARMIODevice"));
             
             if (_powerService != MACH_PORT_NULL) {
                 NSLog(@"[KernelBypass] ✅ Power Management Service Connected.");
             } else {
-                // Fallback: Thử AppleARMPMU nếu AppleARMIODevice không khả dụng
                 _powerService = IOServiceGetMatchingService(masterPort, 
                                                            IOServiceMatching("AppleARMPMU"));
                 if (_powerService != MACH_PORT_NULL) {
@@ -58,7 +58,6 @@
                 }
             }
             
-            // Deallocate master port sau khi dùng xong
             mach_port_deallocate(mach_task_self(), masterPort);
         } else {
             _ioKitAvailable = NO;
@@ -88,33 +87,27 @@
     int policy;
     
     pthread_getschedparam(pthread_self(), &policy, &param);
-    
-    // Priority > 47 có thể bị watchdog kill trên iOS mới
     int maxPriority = MIN(sched_get_priority_max(SCHED_RR), 47);
     param.sched_priority = maxPriority;
     
     int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
     if (result != 0) {
-        NSLog(@"[KernelBypass] ️ Priority boost limited by OS security (errno=%d).", result);
+        NSLog(@"[KernelBypass] ⚠️ Priority boost limited by OS security (errno=%d).", result);
     }
 }
 
 - (void)boostGPUThreadPriority {
     struct sched_param param;
-    
-    // SCHED_FIFO có thể gây deadlock nếu GPU thread block quá lâu
     int maxPriority = MIN(sched_get_priority_max(SCHED_RR), 48);
     param.sched_priority = maxPriority;
     
     int result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-    
-    // Log debug chỉ khi build debug, tránh spam console lúc render frame
 #ifdef DEBUG
     if (result != 0) {
         NSLog(@"[KernelBypass] ⚠️ GPU priority boost failed (errno=%d).", result);
     }
 #endif
-    (void)result; // Suppress unused warning in release
+    (void)result;
 }
 
 - (void)dealloc {
