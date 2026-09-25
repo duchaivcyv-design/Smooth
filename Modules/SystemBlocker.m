@@ -2,8 +2,9 @@
 #import <objc/runtime.h>
 #import <Foundation/Foundation.h>
 
-// Dùng extern để truy cập biến global mà không cần include file nguồn
-extern BoostConfig *CFG; 
+// Compiler không cần biết interface BoostConfig, chỉ cần biết CFG là object.
+// Dot syntax vẫn hoạt động bình thường nhờ cơ chế message sending của ObjC.
+extern id CFG; 
 extern BOOL IS_ENABLED;
 
 // ------------------------------------------------------------------------------
@@ -23,7 +24,7 @@ static IMP orig_analytics_sendEvent_IMP = NULL;
 
 // Helper: Kiểm tra đồng thời Blocker Flag + Master Switch
 static inline BOOL isBlockerActive(void) {
-    return IS_ENABLED && CFG.enableBlocker && [[SystemBlocker sharedInstance] isActive];
+    return IS_ENABLED && [CFG enableBlocker] && [[SystemBlocker sharedInstance] isActive];
 }
 
 // ------------------------------------------------------------------------------
@@ -47,7 +48,7 @@ static void blocker_hook_locationStart(id self, SEL _cmd) {
     if (allowed) {
         if (orig_cl_startUpdating_IMP) ((void(*)(id, SEL))orig_cl_startUpdating_IMP)(self, _cmd);
     } else {
-        NSLog(@"[SystemBlocker] 🚫 Blocked GPS for %@", bundleID);
+        NSLog(@"[SystemBlocker]  Blocked GPS for %@", bundleID);
     }
 }
 
