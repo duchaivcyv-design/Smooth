@@ -9,10 +9,11 @@ BoostiPhone6sPrefs_INSTALL_INFO = Info.plist
 BoostiPhone6sPrefs_RESOURCE_DIRS = Resources
 
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit Foundation
+BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 
-# ★ SỬA: HARDCODE ĐÚNG TÊN SDK MÀ WORKFLOW ĐÃ TẢI VỀ ★
-# Workflow build.yml tải iPhoneOS16.5.sdk vào $(THEOS)/sdks/
-# $(THEOS_SDK_NAME) trống trên runner nên phải dùng đường dẫn trực tiếp
+# v10: -I../Headers de tim PSListController.h, PSSpecifier.h
+# v10: -I. de tim RootListController.h cung thu muc
+# v10: -F SDK path dong cho PrivateFrameworks
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I../Headers \
                             -I. \
