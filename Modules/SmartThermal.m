@@ -9,6 +9,7 @@
     NSTimeInterval _lastReadTime;
     BOOL _isOverheating;
     NSUInteger _highTempCounter;
+    dispatch_queue_t _thermalQueue;
 }
 
 + (instancetype)sharedInstance {
@@ -27,11 +28,11 @@
         _lastReadTime = 0;
         _isOverheating = NO;
         _highTempCounter = 0;
+        _thermalQueue = dispatch_queue_create("com.boostiphone6s.thermal", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
 
-// ★ SỬA LẠI NGƯNG NHIỆT CHO KHỚP VỚI ENUM MỚI TRONG HEADER ★
 - (CGFloat)recommendedAnimationMultiplier {
     ThermalLevel state = [self currentThermalState];
     
@@ -52,12 +53,20 @@
     }
     _lastReadTime = now;
     
-    float rawTemp = [self readRawTemperature];
-    _filteredTemp = (_filteredTemp * 0.7f) + (rawTemp * 0.3f);
+    // Đọc nhiệt async trên serial queue để tránh block main thread
+    __block float rawTemp = 38.0f;
+    dispatch_sync(_thermalQueue, ^{
+        rawTemp = [self readRawTemperature];
+    });
     
+    float delta = fabsf(rawTemp - _filteredTemp);
+    float alpha = (delta > 5.0f) ? 0.5f : 0.3f; // Phản ứng nhanh hơn khi nhiệt thay đổi đột ngột
+    _filteredTemp = (_filteredTemp * (1.0f - alpha)) + (rawTemp * alpha);
+    
+    // Track trạng thái quá nhiệt kéo dài
     if (_filteredTemp > 43.0f) {
         _highTempCounter++;
-        _isOverheating = (_highTempCounter >= 5);
+        _isOverheating = (_highTempCounter >= 5); // 5 lần đọc liên tiếp (>10s) = quá nhiệt thật sự
     } else {
         _highTempCounter = MAX(0, _highTempCounter - 1);
         if (_highTempCounter == 0) _isOverheating = NO;
@@ -68,36 +77,51 @@
 
 - (float)readRawTemperature {
     float temp = 38.0f;
+    BOOL hasValidReading = NO;
     
+    // Priority 1: Sysctl thermal temperature (Chính xác nhất)
     size_t size = sizeof(float);
     if (sysctlbyname("kern.thermal.temperature", &temp, &size, NULL, 0) == 0) {
-        return temp;
+        hasValidReading = YES;
     }
     
-    int activeCores = 0;
-    size = sizeof(int);
-    if (sysctlbyname("hw.activecpu", &activeCores, &size, NULL, 0) == 0) {
-        if (activeCores <= 2) temp = 44.0f;
-        else if (activeCores <= 4) temp = 41.0f;
-        else temp = 38.0f;
-    }
-    
-    io_service_t batteryService = IOServiceGetMatchingService(kIOMasterPortDefault, 
-                                                               IOServiceMatching("AppleARMPMUCharger"));
-    if (batteryService != MACH_PORT_NULL) {
-        CFTypeRef tempData = IORegistryEntryCreateCFProperty(batteryService, 
-                                                              CFSTR("Temperature"), 
-                                                              kCFAllocatorDefault, 0);
-        if (tempData && CFGetTypeID(tempData) == CFNumberGetTypeID()) {
-            double battTemp = 0;
-            CFNumberGetValue((CFNumberRef)tempData, kCFNumberDoubleType, &battTemp);
-            temp = (float)(battTemp + 7.0);
+    // Priority 2: Active CPU cores heuristic (Fallback khi sysctl fail)
+    if (!hasValidReading) {
+        int activeCores = 0;
+        size = sizeof(int);
+        if (sysctlbyname("hw.activecpu", &activeCores, &size, NULL, 0) == 0) {
+            if (activeCores <= 2) { temp = 44.0f; hasValidReading = YES; }
+            else if (activeCores <= 4) { temp = 41.0f; hasValidReading = YES; }
+            else { temp = 38.0f; hasValidReading = YES; }
         }
-        if (tempData) CFRelease(tempData);
-        IOObjectRelease(batteryService);
     }
     
-    return temp;
+    // Priority 3: IOKit Battery Sensor (An toàn với master port management)
+    if (!hasValidReading) {
+        mach_port_t masterPort = MACH_PORT_NULL;
+        kern_return_t kr = host_get_io_master(mach_host_self(), &masterPort);
+        
+        if (kr == KERN_SUCCESS && masterPort != MACH_PORT_NULL) {
+            io_service_t batteryService = IOServiceGetMatchingService(masterPort, 
+                                                                       IOServiceMatching("AppleARMPMUCharger"));
+            if (batteryService != MACH_PORT_NULL) {
+                CFTypeRef tempData = IORegistryEntryCreateCFProperty(batteryService, 
+                                                                      CFSTR("Temperature"), 
+                                                                      kCFAllocatorDefault, 0);
+                if (tempData && CFGetTypeID(tempData) == CFNumberGetTypeID()) {
+                    double battTemp = 0;
+                    CFNumberGetValue((CFNumberRef)tempData, kCFNumberDoubleType, &battTemp);
+                    temp = (float)(battTemp + 7.0); // Bù chênh lệch giữa pin và CPU
+                    hasValidReading = YES;
+                }
+                if (tempData) CFRelease(tempData);
+                IOObjectRelease(batteryService);
+            }
+            mach_port_deallocate(mach_task_self(), masterPort);
+        }
+    }
+    
+    return hasValidReading ? temp : 38.0f;
 }
 
 - (ThermalLevel)currentThermalState {
