@@ -38,7 +38,7 @@ static BOOL isOldDevice(void) {
         size_t size = 0;
         sysctlbyname("hw.machine", NULL, &size, NULL, 0);
         if (size > 0) {
-            char *buf = malloc(size);
+            char *buf = (char *)malloc(size);
             if (buf) {
                 sysctlbyname("hw.machine", buf, &size, NULL, 0);
                 machine = [NSString stringWithUTF8String:buf];
