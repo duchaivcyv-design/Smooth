@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# postinst - Post-installation script for Boost iPhone 6s-X v7.0
+# postinst - Post-installation script for Boost iPhone 6s-X v8.0
 # Target: Rootless Jailbreak (iOS 14.0 - 26.0.1)
+# Đảm bảo cài đặt SẠCH SẼ, đúng quyền hạn và reset trạng thái an toàn
 
 set +e # Tiếp tục thực thi dù có lỗi nhỏ
 
 echo ""
 echo "=================================================="
-echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v7.0"
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v8.0"
 echo "   Status: INSTALLING..."
 echo "=================================================="
 
 # 1. ĐẶT QUYỀN HẠN CHO BUNDLE SETTINGS
-# ★ QUAN TRỌNG: Đảm bảo SpringBoard đọc được bundle mà không bị permission denied
 BUNDLE_PATH="/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
 if [ -d "$BUNDLE_PATH" ]; then
     chmod -R 755 "$BUNDLE_PATH"
@@ -22,16 +22,19 @@ else
     echo "[WARN] Settings Bundle not found at $BUNDLE_PATH"
 fi
 
-# 2. RESET TRẠNG THÁI SAFE MODE
-# ★ FIX: Xóa key Safe Mode cũ để đảm bảo tweak khởi động bình thường lần đầu
+# 2. RESET TOÀN BỘ USERDEFAULTS DOMAIN
+# Xóa sạch domain để đảm bảo không còn sót Safe Mode state hay config cũ
 if command -v defaults &> /dev/null; then
-    defaults delete com.boostiphone6s.settings BoostiPhone6s_SafeModeActive 2>/dev/null || true
-    defaults delete com.boostiphone6s.settings BoostiPhone6s_LastCrashReason 2>/dev/null || true
-    echo "[OK] Safe Mode state reset for fresh install."
+    defaults delete com.taojb.boostiphone6s 2>/dev/null || true
+    echo "[OK] UserDefaults domain wiped for fresh install."
+else
+    # Fallback xóa trực tiếp file plist nếu không có lệnh 'defaults'
+    rm -f "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
+    echo "[OK] Settings plist removed via fallback."
 fi
 
 # 3. KHỞI TẠO THƯ MỤC CACHE RIÊNG (NẾU CHƯA CÓ)
-TWEAK_CACHE="/var/mobile/Library/Caches/com.boostiphone6s.settings"
+TWEAK_CACHE="/var/mobile/Library/Caches/com.taojb.boostiphone6s"
 if [ ! -d "$TWEAK_CACHE" ]; then
     mkdir -p "$TWEAK_CACHE"
     chown mobile:mobile "$TWEAK_CACHE"
@@ -39,12 +42,12 @@ if [ ! -d "$TWEAK_CACHE" ]; then
     echo "[OK] Tweak cache directory created."
 fi
 
-# 4. REFRESH PREFERENCE LOADER CACHE
-# Gửi signal HUP để cfprefsd reload danh sách entry mới nhất
-# An toàn hơn killall -9 trên Rootless
+# 4. FORCE REFRESH CFPREFSD DAEMON
+# Gửi signal HUP để daemon reload danh sách preference entry mới nhất
+# An toàn hơn killall -9 trên Rootless, tránh crash SpringBoard
 if pidof cfprefsd > /dev/null 2>&1; then
     killall -HUP cfprefsd >/dev/null 2>&1 || true
-    echo "[OK] Preference cache refreshed."
+    echo "[OK] cfprefsd signaled to refresh cache."
 else
     echo "[INFO] cfprefsd not running. Will refresh after respring."
 fi
