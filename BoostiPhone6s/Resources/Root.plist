@@ -78,11 +78,13 @@
 			<key>label</key>
 			<string>Mở Khóa ProMotion Hỗ Trợ Màn Hình</string>
 		</dict>
-		<dict>
+	    <dict>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s.settings/reload</string>
 			<key>cell</key>
-			<string>PSMultiValueSpecifier</string>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
 			<key>default</key>
 			<integer>120</integer>
 			<key>defaults</key>
