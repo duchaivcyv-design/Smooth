@@ -76,13 +76,13 @@
 			<key>label</key>
 			<string>Mở Khóa ProMotion Hỗ Trợ Màn Hình</string>
 		</dict>
-
-		<!-- CHỌN HZ DẠNG POPUP MENU CHUẨN (KHÔNG BỊ CRASH) -->
 		<dict>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s.settings/reload</string>
 			<key>cell</key>
-			<string>PSMultiValueSpecifier</string>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
 			<key>default</key>
 			<integer>120</integer>
 			<key>defaults</key>
@@ -91,21 +91,14 @@
 			<string>ForcedRefreshRate</string>
 			<key>label</key>
 			<string>Ép Tần Số Quét Màn Hình</string>
-			<key>shortTitles</key>
-			<array>
-				<string>30 Hz</string>
-				<string>60 Hz</string>
-				<string>90 Hz</string>
-				<string>120 Hz</string>
-			</array>
-			<key>titles</key>
+			<key>validTitles</key>
 			<array>
 				<string>30 Hz (Tiết kiệm pin)</string>
 				<string>60 Hz (Chuẩn)</string>
 				<string>90 Hz (Mượt vừa)</string>
 				<string>120 Hz (Tối đa)</string>
 			</array>
-			<key>values</key>
+			<key>validValues</key>
 			<array>
 				<integer>30</integer>
 				<integer>60</integer>
@@ -113,7 +106,6 @@
 				<integer>120</integer>
 			</array>
 		</dict>
-
 		<dict>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s.settings/reload</string>
