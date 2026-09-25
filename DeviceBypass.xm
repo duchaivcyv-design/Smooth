@@ -231,11 +231,11 @@ static inline NSInteger CfgInt(NSString *key) {
 }
 
 // v10: spoof thêm uname() vì nhiều app đọc utsname thay vì sysctl
+// FIX: struct utsname KHÔNG có field "model" trên iOS — chỉ có "machine"
 %hookf(int, uname, struct utsname *name) {
     int ret = %orig(name);
     if (ret == 0 && IS_ENABLED && CfgBool(@"spoofModel") && name) {
         strlcpy(name->machine, "iPhone16,2", sizeof(name->machine));
-        strlcpy(name->model, "iPhone16,2", sizeof(name->model));
     }
     return ret;
 }
