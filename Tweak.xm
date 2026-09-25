@@ -19,10 +19,8 @@
 #import <malloc/malloc.h>
 #import <CommonCrypto/CommonDigest.h>
 
-// environ declaration cho iOS 26 SDK strict mode
 extern char **environ;
 
-// Weak import: chi ton tai trong SpringBoard / process co entitlement
 extern void BKSTerminateApplicationForReasonAndReportWithDescription(
     NSString *bundleID, NSInteger reason, BOOL report, NSString *description)
     __attribute__((weak_import));
@@ -34,7 +32,6 @@ extern void BKSTerminateApplicationForReasonAndReportWithDescription(
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
 
-// Forward declaration cho ProMotion Control (tranh implicit declaration)
 static void PMConfigureScrollView(UIScrollView *scrollView);
 
 // ==============================================================================
@@ -260,7 +257,6 @@ static BOOL BoostIsSpringBoard(void) {
 }
 
 static void BoostApplyRamPressure(void) {
-    // goal tinh theo MB tu slider 0.1-100
     size_t goal = (size_t)(CFG_PTR.ramCleanIntensity * 1024 * 1024);
     malloc_zone_pressure_relief(NULL, goal);
 }
@@ -278,9 +274,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 // ==============================================================================
 // SECTION 2: KERNEL DEEP HOOKS
+// ★ FIX v10.1: TẤT CẢ %hookf Ở FILE SCOPE — KHÔNG TRONG %group ★
+// ★ FIX v10.1: %hookf(uname) CHỈ 1 LẦN — KHÔNG TRÙNG LẶP ★
+// ★ FIX v10.1: uname CHỈ DÙNG machine — KHÔNG CÓ model TRÊN iOS ★
+// ★ FIX v10.1: KHÔI PHỤC hw.machine/hw.model TRONG sysctlbyname ★
 // ==============================================================================
-
-%group KernelDeepHooks
 
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ON || !CFG_PTR.bypassSandboxChecks || !pathname) return %orig(pathname, mode);
@@ -322,13 +320,16 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         }
     }
 
-%hookf(int, uname, struct utsname *name) {
-    int ret = %orig(name);
-    if (ret == 0 && IS_ON && CFG_PTR.godModeFakeiPhone16 && name) {
-        strlcpy(name->machine, "iPhone16,2", sizeof(name->machine));
+    if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0)) {
+        const char *fakeModel = "iPhone16,2";
+        if (oldp && oldlenp) {
+            strlcpy((char *)oldp, fakeModel, *oldlenp);
+            *oldlenp = strlen(fakeModel) + 1;
+        } else if (oldlenp) {
+            *oldlenp = strlen(fakeModel) + 1;
+        }
+        return 0;
     }
-    return ret;
-}
 
     if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.activecpu") == 0)) {
         int fakeCores = 6;
@@ -353,12 +354,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
 
-// v10: spoof them uname() vi nhieu app doc utsname thay vi sysctl
 %hookf(int, uname, struct utsname *name) {
     int ret = %orig(name);
     if (ret == 0 && IS_ON && CFG_PTR.godModeFakeiPhone16 && name) {
         strlcpy(name->machine, "iPhone16,2", sizeof(name->machine));
-        strlcpy(name->model, "iPhone16,2", sizeof(name->model));
     }
     return ret;
 }
@@ -376,11 +375,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     return %orig(socket, address, address_len);
 }
 
+%group KernelDeepHooks
 %end
 
 // ==============================================================================
 // SECTION 3: FRAME PACING + PROMOTION SCROLL ENGINE
-// v10 FIX: ep dung target ke ca khi app set 0 (trước đây chọn 30 vẫn chạy 60)
 // ==============================================================================
 
 %group FramePacingEngine
@@ -491,7 +490,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 // ==============================================================================
 // SECTION 5: GPU & METAL ENGINE
-// v10 FIX: triple buffering (3) khi GameStutterFix de het khung game
 // ==============================================================================
 
 %group GPUEngine
@@ -521,8 +519,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 // ==============================================================================
 // SECTION 6: MEMORY & APP LAUNCH & REAL BACKGROUND KILL
-// v10 FIX: kill that tien trinh nen qua BKSTerminate (chi SpringBoard)
-// v10 FIX: dung slider RamCleanIntensity cho pressure relief
 // ==============================================================================
 
 %group MemoryEngine
@@ -663,7 +659,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// v10: bo group opacity de giam blend pass khi xu ly anh sau
 %hook CALayer
 
 - (BOOL)allowsGroupOpacity {
@@ -676,7 +671,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// SECTION 8: BATTERY SAVER (clamp timer lap lai qua nho gay wakeup)
+// SECTION 8: BATTERY SAVER
 // ==============================================================================
 
 %group BatteryEngine
@@ -741,10 +736,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// SECTION 10: PROMOTION CONTROL 5.1.3b ENGINE (merged, da fix)
-// - OBJC_ASSOCIATION_RETAIN_NONATOMIC thay ASSIGN
-// - khong duplicate import, khong ctor rieng, khong hook UIScrollView rieng
-// - v10: them giam touch latency gesture khi SmoothFeelEngine bat
+// SECTION 10: PROMOTION CONTROL 5.1.3b ENGINE
 // ==============================================================================
 
 static const BOOL PMEnabled = YES;
@@ -836,7 +828,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 }
 
 // ==============================================================================
-// SECTION 11: UNIFIED CONSTRUCTOR (duy nhat 1 ctor)
+// SECTION 11: UNIFIED CONSTRUCTOR
 // ==============================================================================
 
 %ctor {
@@ -864,12 +856,10 @@ static void PMConfigureScrollView(UIScrollView *sv) {
         if (CFG_PTR.aggressiveRAM || CFG_PTR.ultraDeepRamClean) [[KernelBypass sharedInstance] forceMachPurge];
         if (CFG_PTR.bypassSandboxChecks || CFG_PTR.optimizeDiskIO) init_privilege_escalation();
 
-        // v10: scheduler kieu iOS 27 va boost CPU/GPU 60%
         if (CFG_PTR.ios27Scheduler || CFG_PTR.cpuGpuBoost60) {
             BoostApplyCpuPriority();
         }
 
-        // v10: RAM 70% nhanh hon qua pressure relief ngay khi khoi dong
         if (CFG_PTR.ramBoost70) {
             BoostApplyRamPressure();
         }
