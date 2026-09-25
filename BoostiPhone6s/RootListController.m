@@ -2,13 +2,11 @@
 #import <Preferences/PSSpecifier.h>
 #import <spawn.h>
 #import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 
-// Import header internal để truy cập CrashGuard/SystemBlocker reset function
-// Lưu ý: Chỉ import khi build subproject, không ảnh hưởng main library
-#ifdef BUILDING_SUBPROJECT
-#import "../Modules/CrashGuard.h"
-#import "../Modules/SystemBlocker.h"
-#endif
+// SỬA: KHÔNG IMPORT CRASHGUARD/SYSTEMBLOCKER NỮA ĐỂ TRÁNH LỖI LINKER
+// Ta sẽ dùng cách xóa UserDefaults trực tiếp và dựa vào Darwin Notification
+// mà Tweak.xm đã đăng ký để reload cấu hình.
 
 @implementation RootListController
 
@@ -27,10 +25,18 @@
     UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Đồng ý" 
                                                       style:UIAlertActionStyleDestructive 
                                                     handler:^(UIAlertAction * _Nonnull action) {
-        #ifdef BUILDING_SUBPROJECT
-            [[CrashGuard sharedInstance] resetSafeModeManually];
-            [[SystemBlocker sharedInstance] resetSafeModeManually];
-        #endif
+        // SỬA: XÓA USERDEFAULTS TRỰC TIẾP THAY VÌ GỌI CLASS TỪ LIBRARY
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
+        [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
+        [defaults synchronize];
+        
+        // Gửi Darwin Notification để Tweak.xm reload config ngay lập tức
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), 
+                                             CFSTR("com.taojb.boostiphone6s.settings/reload"), 
+                                             NULL, NULL, TRUE);
+        
+        NSLog(@"[Settings] Safe Mode keys removed & Notification sent.");
         
         // Force reload specifiers để cập nhật UI ngay lập tức
         [self reloadSpecifiers];
