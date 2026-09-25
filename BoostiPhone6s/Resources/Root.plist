@@ -10,7 +10,7 @@
 			<key>footerText</key>
 			<string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
 			<key>label</key>
-			<string>SmoothIOS</string>
+			<string>SmoothIOS v9.0</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -24,15 +24,17 @@
 			<key>key</key>
 			<string>Enabled</string>
 			<key>label</key>
-			<string>Bật Tweak</string>
+			<string>Bật Tweak Chính (Master)</string>
 		</dict>
+
+		<!-- GOD MODE -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>Cảnh báo: Có thể gây nóng máy hoặc bị ứng dụng ngân hàng phát hiện.</string>
 			<key>label</key>
-			<string>Chế Độ (God Mode)</string>
+			<string>Chế Độ Thần Thánh (God Mode)</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -80,9 +82,7 @@
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s.settings/reload</string>
 			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>detail</key>
-			<string>PSListItemsController</string>
+			<string>PSMultiValueSpecifier</string>
 			<key>default</key>
 			<integer>120</integer>
 			<key>defaults</key>
@@ -148,13 +148,109 @@
 			<key>label</key>
 			<string>Metal GPU Overclocking</string>
 		</dict>
+
+		<!-- V9.0 NEW FEATURES -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Các tính năng mới v9.0: Touch Boost, Neural Engine, Low Power Scheduler.</string>
+			<key>label</key>
+			<string>Tính Năng Mới v9.0</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>TouchSamplingBoost</string>
+			<key>label</key>
+			<string>Tăng Tốc Touch Sampling</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>NeuralEngineUnlock</string>
+			<key>label</key>
+			<string>Mở Khóa Neural Engine (AI)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>LiquidAssResolver</string>
+			<key>label</key>
+			<string>Giải Xung Đột LiquidAss</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>LowPowerScheduler</string>
+			<key>label</key>
+			<string>Lập Lịch Tiết Kiệm Pin Thông Minh</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>GPUBatchOptimization</string>
+			<key>label</key>
+			<string>Tối Ưu GPU Batch Rendering</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>HideJailbreak</string>
+			<key>label</key>
+			<string>Ẩn Jailbreak (HideJB)</string>
+		</dict>
+
+		<!-- V8.0 FEATURES -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>Các cải tiến giúp giảm nhiệt tối đa và tăng tốc độ hệ thống.</string>
 			<key>label</key>
-			<string>Tính Năng Mới v8.0</string>
+			<string>Tính Năng v8.0</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -254,6 +350,8 @@
 			<key>label</key>
 			<string>Xả RAM Cực Sâu (Mach Port)</string>
 		</dict>
+
+		<!-- PERFORMANCE -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -266,7 +364,7 @@
 			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>default</key>
-			<real>0.29999999999999999</real>
+			<real>0.3</real>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -276,7 +374,7 @@
 			<key>max</key>
 			<real>1</real>
 			<key>min</key>
-			<real>0.050000000000000003</real>
+			<real>0.05</real>
 			<key>showValue</key>
 			<true/>
 		</dict>
@@ -322,6 +420,8 @@
 			<key>label</key>
 			<string>Tự Động Kill Ứng Dụng Nền</string>
 		</dict>
+
+		<!-- SMART THERMAL -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -344,6 +444,8 @@
 			<key>label</key>
 			<string>Bật Quản Lý Nhiệt Thông Minh</string>
 		</dict>
+
+		<!-- SYSTEM BLOCKER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -364,6 +466,8 @@
 			<key>label</key>
 			<string>Bật Hệ Thống Chặn Tiến Trình Rác</string>
 		</dict>
+
+		<!-- KERNEL DEEP -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -412,6 +516,8 @@
 			<key>label</key>
 			<string>Tối Ưu Disk I/O Async</string>
 		</dict>
+
+		<!-- NETWORK & AI -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -464,6 +570,8 @@
 			<key>placeholder</key>
 			<string>2048</string>
 		</dict>
+
+		<!-- RESPRING -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -480,13 +588,15 @@
 			<key>label</key>
 			<string>Respring Thủ Công</string>
 		</dict>
+
+		<!-- FOOTER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerAlignment</key>
 			<integer>1</integer>
 			<key>footerText</key>
-			<string>Phát triển bởi TaoJB, NoFree,JbPro1 | Hỗ trợ: JB0301, BypassJB1,JbPro1</string>
+			<string>Phát triển bởi TaoJB, NoFree, JbPro1 | Hỗ trợ: JB0301, BypassJB1, JbPro1</string>
 		</dict>
 	</array>
 	<key>title</key>
