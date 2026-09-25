@@ -2,522 +2,502 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>items</key>
-    <array>
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>SmoothIOS</string>
-            <key>footerText</key>
-            <string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>Enabled</string>
-            <key>label</key>
-            <string>Bật Tweak</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép 120Hz &amp; tăng tốc độ mở app.</string>
+			<key>label</key>
+			<string>SmoothIOS</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>Enabled</string>
+			<key>label</key>
+			<string>Bật Tweak</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Cảnh báo: Có thể gây nóng máy hoặc bị ứng dụng ngân hàng phát hiện.</string>
+			<key>label</key>
+			<string>Chế Độ (God Mode)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>SpoofModel</string>
+			<key>label</key>
+			<string>Bật Fake Model Thiết Bị</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>GodModeFake16</string>
+			<key>label</key>
+			<string>Giả danh iPhone 16 Pro Max</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>UnlockProMotion</string>
+			<key>label</key>
+			<string>Mở Khóa ProMotion Hỗ Trợ Màn Hình</string>
+		</dict>
 
-        <!-- GOD MODE GROUP -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Chế Độ (God Mode)</string>
-            <key>footerText</key>
-            <string>Cảnh báo: Có thể gây nóng máy hoặc bị ứng dụng ngân hàng phát hiện.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>SpoofModel</string>
-            <key>label</key>
-            <string>Bật Fake Model Thiết Bị</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>GodModeFake16</string>
-            <key>label</key>
-            <string>Giả danh iPhone 16 Pro Max</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>UnlockProMotion</string>
-            <key>label</key>
-            <string>Mở Khóa ProMotion Hỗ Trợ Màn Hình</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        
-         <!-- CHỌN HZ (SỬ DỤNG POPUP CHUẨN TRÁNH CRASH) -->
-        <dict>
-            <key>cell</key>
-            <string>PSMultiValueSpecifier</string>
-            <key>key</key>
-            <string>ForcedRefreshRate</string>
-            <key>label</key>
-            <string>Ép Tần Số Quét Màn Hình</string>
-            <key>default</key>
-            <integer>120</integer>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>detail</key>
-            <string>PSListItemsController</string>
-            <key>titles</key>
-            <array>
-                <string>30 Hz (Tiết kiệm pin)</string>
-                <string>60 Hz (Chuẩn)</string>
-                <string>90 Hz (Mượt vừa)</string>
-                <string>120 Hz (Tối đa)</string>
-            </array>
-            <key>shortTitles</key>
-            <array>
-                <string>30 Hz</string>
-                <string>60 Hz</string>
-                <string>90 Hz</string>
-                <string>120 Hz</string>
-            </array>
-            <key>values</key>
-            <array>
-                <integer>30</integer>
-                <integer>60</integer>
-                <integer>90</integer>
-                <integer>120</integer>
-            </array>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
+		<!-- CHỌN HZ DẠNG POPUP MENU CHUẨN (KHÔNG BỊ CRASH) -->
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>default</key>
+			<integer>120</integer>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ForcedRefreshRate</string>
+			<key>label</key>
+			<string>Ép Tần Số Quét Màn Hình</string>
+			<key>shortTitles</key>
+			<array>
+				<string>30 Hz</string>
+				<string>60 Hz</string>
+				<string>90 Hz</string>
+				<string>120 Hz</string>
+			</array>
+			<key>titles</key>
+			<array>
+				<string>30 Hz (Tiết kiệm pin)</string>
+				<string>60 Hz (Chuẩn)</string>
+				<string>90 Hz (Mượt vừa)</string>
+				<string>120 Hz (Tối đa)</string>
+			</array>
+			<key>values</key>
+			<array>
+				<integer>30</integer>
+				<integer>60</integer>
+				<integer>90</integer>
+				<integer>120</integer>
+			</array>
+		</dict>
 
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>GodMode120Hz</string>
-            <key>label</key>
-            <string>Mở khóa giới hạn FPS hệ thống</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>DisableFrameThrottling</string>
-            <key>label</key>
-            <string>Bỏ Giới Hạn Khung Hình (CADisplayLink)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>GodModeMetal</string>
-            <key>label</key>
-            <string>Metal GPU Overclocking</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- V8.0 ULTIMATE FEATURES -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Tính Năng Mới v8.0</string>
-            <key>footerText</key>
-            <string>Các cải tiến giúp giảm nhiệt tối đa và tăng tốc độ hệ thống.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>TurboAppLaunch</string>
-            <key>label</key>
-            <string>Turbo Mở App (+30% Tốc Độ)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>GPUSafeOverclock</string>
-            <key>label</key>
-            <string>GPU An Toàn Khi Chơi Game</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>DisableThermal</string>
-            <key>label</key>
-            <string>Vô Hiệu Hóa Giới Hạn Nhiệt</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>BlockAnalytics</string>
-            <key>label</key>
-            <string>Chặn Telemetry Apple (Tiết Kiệm Pin)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>DeepSleepOpt</string>
-            <key>label</key>
-            <string>Tối Ưu Chế Độ Ngủ Sâu</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>SafeSpoofGraphics</string>
-            <key>label</key>
-            <string>Kích Hoạt Đồ Họa Max An Toàn</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>UltraDeepRam</string>
-            <key>label</key>
-            <string>Xả RAM Cực Sâu (Mach Port)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- PERFORMANCE OPTIMIZATION -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Tối Ưu Hiệu Năng &amp; Bộ Nhớ</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSliderCell</string>
-            <key>default</key>
-            <real>0.3</real>
-            <key>min</key>
-            <real>0.05</real>
-            <key>max</key>
-            <real>1.0</real>
-            <key>showValue</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>AnimSpeed</string>
-            <key>label</key>
-            <string>Tốc Độ Hoạt Ảnh</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>PageCompressionOptimized</string>
-            <key>label</key>
-            <string>Nén Trang RAM Tối Đa (Max Ratio)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>AggressiveRAM</string>
-            <key>label</key>
-            <string>Xóa Cache RAM Mạnh Mẽ</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>KillBackgroundApps</string>
-            <key>label</key>
-            <string>Tự Động Kill Ứng Dụng Nền</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- SMART THERMAL -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Quản Lý Nhiệt Thông Minh</string>
-            <key>footerText</key>
-            <string>Tự động điều chỉnh hiệu năng dựa trên nhiệt độ thực tế của máy.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>SmartThermal</string>
-            <key>label</key>
-            <string>Bật Quản Lý Nhiệt Thông Minh</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- SYSTEM BLOCKER -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Chặn Hệ Thống (Anti-Bloatware)</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>EnableBlocker</string>
-            <key>label</key>
-            <string>Bật Hệ Thống Chặn Tiến Trình Rác</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- KERNEL DEEP MODE -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Chế Độ Kernel Sâu (Expert)</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>ForceRealtime</string>
-            <key>label</key>
-            <string>Ép CPU Realtime Priority</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>BypassSandbox</string>
-            <key>label</key>
-            <string>Bỏ Qua Kiểm Tra Sandbox</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>OptimizeDisk</string>
-            <key>label</key>
-            <string>Tối Ưu Disk I/O Async</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- NETWORK & AI ACCELERATOR -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Tăng Tốc AI &amp; Mạng</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>EnableAIBoost</string>
-            <key>label</key>
-            <string>Bật Tăng Tốc AI (UI Animation Engine)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>TCPNoDelayBoost</string>
-            <key>label</key>
-            <string>Tăng Tốc TCP (TCP_NODELAY Giảm Ping)</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSEditTextCell</string>
-            <key>default</key>
-            <string>2048</string>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>NetBufSize</string>
-            <key>label</key>
-            <string>Kích Thước Bộ Đệm Mạng (KB)</string>
-            <key>placeholder</key>
-            <string>2048</string>
-            <key>keyboard</key>
-            <string>numbers</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-
-        <!-- ACTION RESPRING BUTTON -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Áp Dụng Thay Đổi</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>Respring Thủ Công</string>
-            <key>action</key>
-            <string>respring:</string>
-            <key>isDestructive</key>
-            <true/>
-        </dict>
-
-        <!-- FOOTER -->
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>footerAlignment</key>
-            <integer>1</integer>
-            <key>footerText</key>
-            <string>Phát triển bởi TaoJB, NoFree,JbPro1 | Hỗ trợ: JB0301, BypassJB1,JbPro1</string>
-        </dict>
-    </array>
-    <key>title</key>
-    <string>SmoothIOS</string>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>GodMode120Hz</string>
+			<key>label</key>
+			<string>Mở khóa giới hạn FPS hệ thống</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>DisableFrameThrottling</string>
+			<key>label</key>
+			<string>Bỏ Giới Hạn Khung Hình (CADisplayLink)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>GodModeMetal</string>
+			<key>label</key>
+			<string>Metal GPU Overclocking</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Các cải tiến giúp giảm nhiệt tối đa và tăng tốc độ hệ thống.</string>
+			<key>label</key>
+			<string>Tính Năng Mới v8.0</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>TurboAppLaunch</string>
+			<key>label</key>
+			<string>Turbo Mở App (+30% Tốc Độ)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>GPUSafeOverclock</string>
+			<key>label</key>
+			<string>GPU An Toàn Khi Chơi Game</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>DisableThermal</string>
+			<key>label</key>
+			<string>Vô Hiệu Hóa Giới Hạn Nhiệt</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>BlockAnalytics</string>
+			<key>label</key>
+			<string>Chặn Telemetry Apple (Tiết Kiệm Pin)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>DeepSleepOpt</string>
+			<key>label</key>
+			<string>Tối Ưu Chế Độ Ngủ Sâu</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>SafeSpoofGraphics</string>
+			<key>label</key>
+			<string>Kích Hoạt Đồ Họa Max An Toàn</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>UltraDeepRam</string>
+			<key>label</key>
+			<string>Xả RAM Cực Sâu (Mach Port)</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Tối Ưu Hiệu Năng &amp; Bộ Nhớ</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>0.29999999999999999</real>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>AnimSpeed</string>
+			<key>label</key>
+			<string>Tốc Độ Hoạt Ảnh</string>
+			<key>max</key>
+			<real>1</real>
+			<key>min</key>
+			<real>0.050000000000000003</real>
+			<key>showValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>PageCompressionOptimized</string>
+			<key>label</key>
+			<string>Nén Trang RAM Tối Đa (Max Ratio)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>AggressiveRAM</string>
+			<key>label</key>
+			<string>Xóa Cache RAM Mạnh Mẽ</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>KillBackgroundApps</string>
+			<key>label</key>
+			<string>Tự Động Kill Ứng Dụng Nền</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Tự động điều chỉnh hiệu năng dựa trên nhiệt độ thực tế của máy.</string>
+			<key>label</key>
+			<string>Quản Lý Nhiệt Thông Minh</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>SmartThermal</string>
+			<key>label</key>
+			<string>Bật Quản Lý Nhiệt Thông Minh</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Chặn Hệ Thống (Anti-Bloatware)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>EnableBlocker</string>
+			<key>label</key>
+			<string>Bật Hệ Thống Chặn Tiến Trình Rác</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Chế Độ Kernel Sâu (Expert)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ForceRealtime</string>
+			<key>label</key>
+			<string>Ép CPU Realtime Priority</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>BypassSandbox</string>
+			<key>label</key>
+			<string>Bỏ Qua Kiểm Tra Sandbox</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>OptimizeDisk</string>
+			<key>label</key>
+			<string>Tối Ưu Disk I/O Async</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Tăng Tốc AI &amp; Mạng</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>EnableAIBoost</string>
+			<key>label</key>
+			<string>Bật Tăng Tốc AI (UI Animation Engine)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>TCPNoDelayBoost</string>
+			<key>label</key>
+			<string>Tăng Tốc TCP (TCP_NODELAY Giảm Ping)</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>2048</string>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>NetBufSize</string>
+			<key>keyboard</key>
+			<string>numbers</string>
+			<key>label</key>
+			<string>Kích Thước Bộ Đệm Mạng (KB)</string>
+			<key>placeholder</key>
+			<string>2048</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Áp Dụng Thay Đổi</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>respring:</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>isDestructive</key>
+			<true/>
+			<key>label</key>
+			<string>Respring Thủ Công</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerAlignment</key>
+			<integer>1</integer>
+			<key>footerText</key>
+			<string>Phát triển bởi TaoJB, NoFree,JbPro1 | Hỗ trợ: JB0301, BypassJB1,JbPro1</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>SmoothIOS</string>
 </dict>
 </plist>
