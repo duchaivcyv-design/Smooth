@@ -12,9 +12,13 @@
 #import <dlfcn.h>
 #import <mach/mach.h>
 
-// Giúp compiler nhận diện property trực tiếp, loại bỏ overhead valueForKey
-// Không gây circular dependency vì header chỉ chứa interface
-#import "Tweak.xm" 
+// Giúp compiler nhận diện type BoostConfig * để cho phép dot syntax
+// Tuyệt đối an toàn, không gây circular dependency hay parse error
+@class BoostConfig; 
+
+// Khai báo extern biến global từ Tweak.xm với đúng kiểu dữ liệu
+extern BoostConfig *CFG; 
+extern BOOL IS_ENABLED;
 
 #define IS_BYPASS_ACTIVE (IS_ENABLED && \
                           (CFG.spoofModel || \
@@ -33,7 +37,6 @@
 }
 
 - (NSInteger)maximumFramesPerSecond {
-    // ★ SỬA: ĐỌC ĐỘNG forcedRefreshRate TỪ CONFIG MỚI ★
     if (CFG.godModeForce120Hz) {
         NSInteger targetHz = CFG.forcedRefreshRate > 0 ? CFG.forcedRefreshRate : 120;
         return targetHz;
