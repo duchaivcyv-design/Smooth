@@ -1,15 +1,3 @@
-// ==============================================================================
-// BOOST iPHONE 6s-X v9.0 ULTIMATE - TRUE ROOTLESS HARDWARE CONTROL
-// Author: TaoJB | Project: Smooth | Target: iOS 14.0 - 26.0.1
-// ARCHITECTURE: Rootless-Aware (/var/jb) | HideJB Compatible
-// DEVICES: iPhone 6s → iPhone 15 Pro Max+ (Auto-detect & Adapt)
-// FIXES v9.0 Final:
-//   - Fix Hz 30/60/90/120 không hoạt động (Ép đúng target)
-//   - Giữ nguyên animation hệ thống (Không bỏ animated:NO)
-//   - Tăng tốc animation mượt hơn 30% (Factor 0.7)
-//   - Merge ProMotion Control an toàn (Fix crash objc_msgSend & Association)
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -18,20 +6,27 @@
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <pthread.h>
+#import <pthread/qos.h>
 #import <unistd.h>
 #import <spawn.h>
 #import <sys/sysctl.h>
 #import <sys/resource.h>
+#import <sys/utsname.h>
 #import <netinet/in.h>
 #import <netinet/tcp.h>
 #import <objc/runtime.h>
 #import <dlfcn.h>
+#import <malloc/malloc.h>
 #import <CommonCrypto/CommonDigest.h>
 
-// ★ ROOTLESS SAFE: environ declaration cho iOS 26 SDK strict mode ★
+// environ declaration cho iOS 26 SDK strict mode
 extern char **environ;
 
-// ★ MODULE IMPORTS - TẤT CẢ ĐỀU ROOTLESS-AWARE ★
+// Weak import: chi ton tai trong SpringBoard / process co entitlement
+extern void BKSTerminateApplicationForReasonAndReportWithDescription(
+    NSString *bundleID, NSInteger reason, BOOL report, NSString *description)
+    __attribute__((weak_import));
+
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
@@ -39,17 +34,17 @@ extern char **environ;
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
 
-// ★ FIX MERGE: FORWARD DECLARATION CHO PROMOTION CONTROL ★
-// Phải khai báo trước khi %hook UIScrollView gọi hàm này
+// Forward declaration cho ProMotion Control (tranh implicit declaration)
 static void PMConfigureScrollView(UIScrollView *scrollView);
 
 // ==============================================================================
-// SECTION 1: BOOST CONFIGURATION MANAGER (ROOTLESS PLIST READER)
+// SECTION 1: BOOST CONFIGURATION MANAGER
 // ==============================================================================
 
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;
 @property (nonatomic, assign) CGFloat animSpeed;
+@property (nonatomic, assign) CGFloat ramCleanIntensity;
 @property (nonatomic, assign) BOOL aggressiveRAM;
 @property (nonatomic, assign) BOOL killBgApps;
 @property (nonatomic, assign) BOOL spoofModel;
@@ -81,6 +76,13 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
 @property (nonatomic, assign) BOOL neuralEngineUnlock;
 @property (nonatomic, assign) BOOL lowPowerScheduler;
 @property (nonatomic, assign) BOOL gpuBatchOptimization;
+@property (nonatomic, assign) BOOL gameStutterFix;
+@property (nonatomic, assign) BOOL batterySaverMax;
+@property (nonatomic, assign) BOOL ios27Scheduler;
+@property (nonatomic, assign) BOOL smoothFeelEngine;
+@property (nonatomic, assign) BOOL deepImageProcessing;
+@property (nonatomic, assign) BOOL cpuGpuBoost60;
+@property (nonatomic, assign) BOOL ramBoost70;
 + (instancetype)sharedInstance;
 - (void)loadSettings;
 - (BOOL)isDeviceOldGeneration;
@@ -94,16 +96,14 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
 + (instancetype)sharedInstance {
     static BoostConfig *instance = nil;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [[self alloc] init];
-    });
+    dispatch_once(&onceToken, ^{ instance = [[self alloc] init]; });
     return instance;
 }
 
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _configQueue = dispatch_queue_create("com.boostiphone6s.config.v9", DISPATCH_QUEUE_SERIAL);
+        _configQueue = dispatch_queue_create("com.boostiphone6s.config.v10", DISPATCH_QUEUE_SERIAL);
         _isOldDevice = [self isDeviceOldGeneration];
         [self loadSettings];
     }
@@ -133,7 +133,6 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
     dispatch_sync(_configQueue, ^{
         NSString *plistPath = @"/var/jb/Library/Preferences/com.taojb.boostiphone6s.plist";
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:plistPath];
-        
         if (!prefs) {
             plistPath = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
             prefs = [NSDictionary dictionaryWithContentsOfFile:plistPath];
@@ -144,9 +143,10 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
         #define GET_INT(key, def) (prefs[key] ? [prefs[key] integerValue] : def)
 
         self.enabled = GET_BOOL(@"Enabled", NO);
-        
+
         if (self.enabled) {
             self.animSpeed = GET_FLOAT(@"AnimSpeed", 0.3);
+            self.ramCleanIntensity = GET_FLOAT(@"RamCleanIntensity", 50.0);
             self.aggressiveRAM = GET_BOOL(@"AggressiveRAM", NO);
             self.killBgApps = GET_BOOL(@"KillBackgroundApps", NO);
             self.spoofModel = GET_BOOL(@"SpoofModel", YES);
@@ -178,12 +178,22 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
             self.neuralEngineUnlock = GET_BOOL(@"NeuralEngineUnlock", YES);
             self.lowPowerScheduler = GET_BOOL(@"LowPowerScheduler", YES);
             self.gpuBatchOptimization = GET_BOOL(@"GPUBatchOptimization", YES);
-            
+            self.gameStutterFix = GET_BOOL(@"GameStutterFix", YES);
+            self.batterySaverMax = GET_BOOL(@"BatterySaverMax", NO);
+            self.ios27Scheduler = GET_BOOL(@"IOS27Scheduler", YES);
+            self.smoothFeelEngine = GET_BOOL(@"SmoothFeelEngine", YES);
+            self.deepImageProcessing = GET_BOOL(@"DeepImageProcessing", YES);
+            self.cpuGpuBoost60 = GET_BOOL(@"CPUGPUBoost60", YES);
+            self.ramBoost70 = GET_BOOL(@"RamBoost70", YES);
+
             if (_isOldDevice && self.forcedRefreshRate > 60) {
                 self.forcedRefreshRate = 60;
             }
+            if (self.ramCleanIntensity < 0.1) self.ramCleanIntensity = 0.1;
+            if (self.ramCleanIntensity > 100.0) self.ramCleanIntensity = 100.0;
         } else {
             self.animSpeed = 1.0;
+            self.ramCleanIntensity = 50.0;
             self.aggressiveRAM = NO;
             self.killBgApps = NO;
             self.spoofModel = NO;
@@ -215,6 +225,13 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
             self.neuralEngineUnlock = NO;
             self.lowPowerScheduler = NO;
             self.gpuBatchOptimization = NO;
+            self.gameStutterFix = NO;
+            self.batterySaverMax = NO;
+            self.ios27Scheduler = NO;
+            self.smoothFeelEngine = NO;
+            self.deepImageProcessing = NO;
+            self.cpuGpuBoost60 = NO;
+            self.ramBoost70 = NO;
         }
     });
 }
@@ -222,7 +239,7 @@ static void PMConfigureScrollView(UIScrollView *scrollView);
 @end
 
 // ==============================================================================
-// GLOBAL VARIABLES & HELPER FUNCTIONS
+// GLOBAL VARIABLES & HELPERS
 // ==============================================================================
 
 BoostConfig *CFG = nil;
@@ -238,6 +255,21 @@ static inline void run_posix_cmd_safe(const char *path, const char *arg1, const 
     posix_spawn(&pid, path, NULL, NULL, argv, environ);
 }
 
+static BOOL BoostIsSpringBoard(void) {
+    return [[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"];
+}
+
+static void BoostApplyRamPressure(void) {
+    // goal tinh theo MB tu slider 0.1-100
+    size_t goal = (size_t)(CFG_PTR.ramCleanIntensity * 1024 * 1024);
+    malloc_zone_pressure_relief(NULL, goal);
+}
+
+static void BoostApplyCpuPriority(void) {
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    setpriority(PRIO_PROCESS, 0, -14);
+}
+
 static void reloadPrefsNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     [[BoostConfig sharedInstance] loadSettings];
     CFG = [BoostConfig sharedInstance];
@@ -245,15 +277,15 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// SECTION 2: KERNEL DEEP HOOKS - ROOTLESS COMPATIBLE
+// SECTION 2: KERNEL DEEP HOOKS
 // ==============================================================================
 
 %group KernelDeepHooks
 
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ON || !CFG_PTR.bypassSandboxChecks || !pathname) return %orig(pathname, mode);
-    if (strstr(pathname, "/Caches/") != NULL || 
-        strstr(pathname, "/tmp/") != NULL || 
+    if (strstr(pathname, "/Caches/") != NULL ||
+        strstr(pathname, "/tmp/") != NULL ||
         strstr(pathname, "/var/mobile/Containers/") != NULL ||
         strstr(pathname, "/var/jb/") != NULL) {
         return 0;
@@ -268,7 +300,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
     if (!IS_ON || !CFG_PTR.forceRealtimePriority || !policy_info) return %orig(target_thread, flavor, policy_info, policy_count);
-    
     if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
         struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
         NSInteger hz = CFG_PTR.forcedRefreshRate > 0 ? CFG_PTR.forcedRefreshRate : 60;
@@ -282,7 +313,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ON || !name) return %orig(name, oldp, oldlenp, newp, newlen);
-    
+
     if (CFG_PTR.disableThermal && strcmp(name, "kern.thermal.temperature") == 0) {
         float fakeTemp = 35.0f;
         if (oldp && oldlenp && *oldlenp >= sizeof(float)) {
@@ -290,7 +321,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             return 0;
         }
     }
-    
+
     if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0)) {
         const char *fakeModel = "iPhone16,2";
         if (oldp && oldlenp) {
@@ -301,7 +332,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         }
         return 0;
     }
-    
+
     if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.activecpu") == 0)) {
         int fakeCores = 6;
         if (oldp && oldlenp) {
@@ -325,11 +356,20 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
 
+// v10: spoof them uname() vi nhieu app doc utsname thay vi sysctl
+%hookf(int, uname, struct utsname *name) {
+    int ret = %orig(name);
+    if (ret == 0 && IS_ON && CFG_PTR.godModeFakeiPhone16 && name) {
+        strlcpy(name->machine, "iPhone16,2", sizeof(name->machine));
+        strlcpy(name->model, "iPhone16,2", sizeof(name->model));
+    }
+    return ret;
+}
+
 %hookf(int, connect, int socket, const struct sockaddr *address, socklen_t address_len) {
     if (IS_ON && CFG_PTR.tcpNoDelayBoost) {
         int opt = 1;
         setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
-        
         int bufSize = (int)(CFG_PTR.networkBufferSize * 1024);
         if (bufSize > 0) {
             setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
@@ -342,28 +382,22 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// SECTION 3: TRUE FRAME PACING & DISPLAY CONTROL (FIX LAG VUỐT)
-// ★ FIX YÊU CẦU MỚI: ÉP ĐÚNG Hz (30/60/90/120) & GIỮ NGUYÊN ANIMATION ★
+// SECTION 3: FRAME PACING + PROMOTION SCROLL ENGINE
+// v10 FIX: ep dung target ke ca khi app set 0 (trước đây chọn 30 vẫn chạy 60)
 // ==============================================================================
 
 %group FramePacingEngine
 
-// ★ ÉP CADisplayLink TUÂN THEO Hz THẬT SỰ ★
 %hook CADisplayLink
+
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (!IS_ON || !CFG_PTR.godModeForce120Hz) return %orig;
-    
     NSInteger target = CFG_PTR.forcedRefreshRate;
     if (IS_OLD_DEVICE && target > 60) target = 60;
-    
-    // ★ FIX: ÉP ĐÚNG TARGET (Cả lên lẫn xuống) ★
-    // Trước đây chỉ ép xuống (fps > target), nên chọn 30Hz vẫn chạy 60Hz.
-    // Nay ép cứng về target nếu target > 0.
     if (target > 0) {
         %orig(target);
         return;
     }
-    
     %orig;
 }
 
@@ -373,14 +407,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_OLD_DEVICE && target > 60) target = 60;
     return target > 0 ? target : %orig;
 }
+
 %end
 
-// ★ UIScrollView: GIỮ NGUYÊN ANIMATION HỆ THỐNG ★
 %hook UIScrollView
 
-// ★ FIX: KHÔNG BỎ ANIMATION (animated:NO) NỮA ★
-// Việc ép animated:NO gây ra hiện tượng giật cục, mất mượt mà.
-// Ta để hệ thống tự xử lý animation, chỉ can thiệp qua ProMotion Engine bên dưới.
 - (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated {
     %orig;
 }
@@ -389,7 +420,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     %orig;
 }
 
-// ★ PROMOTION CONTROL: didMoveToWindow lifecycle hook ★
 - (void)didMoveToWindow {
     %orig;
     if (IS_ON && self.window != nil) {
@@ -399,8 +429,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// ★ UIScreen: BÁO CÁO Hz CHÍNH XÁC ★
 %hook UIScreen
+
 - (NSInteger)maximumFramesPerSecond {
     if (IS_ON && CFG_PTR.godModeForce120Hz) {
         NSInteger target = CFG_PTR.forcedRefreshRate;
@@ -419,18 +449,19 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_ON && CFG_PTR.spoofModel) return 3.0;
     return %orig;
 }
+
 %end
 
 %end
 
 // ==============================================================================
-// SECTION 4: TRUE THERMAL CONTROL (FIX NÓNG KHỰNG)
-// ★ FIX YÊU CẦU MỚI: TĂNG TỐC ANIMATION 30% ★
+// SECTION 4: THERMAL CONTROL
 // ==============================================================================
 
 %group ThermalBypassEngine
 
 %hook NSProcessInfo
+
 - (NSProcessInfoThermalState)thermalState {
     if (IS_ON && CFG_PTR.disableThermal) return NSProcessInfoThermalStateNominal;
     return %orig;
@@ -440,42 +471,43 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_ON && CFG_PTR.disableThermal) return NO;
     return %orig;
 }
+
 %end
 
-// ★ SmartThermal INTEGRATION: ADAPTIVE PERFORMANCE + 30% BOOST ★
 %hook CALayer
+
 - (CFTimeInterval)duration {
     if (!IS_ON) return %orig;
-    
     CFTimeInterval base = %orig;
     CGFloat speed = CFG_PTR.animSpeed;
-    
-    // ★ FIX: NHÂN 0.7 ĐỂ NHANH HƠN 30% ★
-    // 1.0 * 0.7 = 0.7 (Nhanh hơn 30%)
     speed *= 0.7;
-    
     if (CFG_PTR.smartThermalManagement) {
-         CGFloat thermalFactor = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
-         speed *= thermalFactor;
+        CGFloat thermalFactor = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
+        speed *= thermalFactor;
     }
-    
     return base * speed;
 }
+
 %end
 
 %end
 
 // ==============================================================================
-// SECTION 5: GPU & METAL OPTIMIZATION ENGINE
-// ★ FIX: XÓA HOOK objc_msgSend NGUY HIỂM GÂY CRASH ★
+// SECTION 5: GPU & METAL ENGINE
+// v10 FIX: triple buffering (3) khi GameStutterFix de het khung game
 // ==============================================================================
 
 %group GPUEngine
 
 %hook CAMetalLayer
+
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ON && CFG_PTR.godModeMetalOverclock) {
-        %orig(2);
+        if (CFG_PTR.gameStutterFix) {
+            %orig(3);
+        } else {
+            %orig(2);
+        }
         return;
     }
     %orig;
@@ -485,23 +517,24 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_ON && CFG_PTR.godModeMetalOverclock) return NO;
     return %orig;
 }
-%end
 
-// ĐÃ XÓA: %hookf(void, objc_msgSend...) vì hook này can thiệp vào mọi message
-// của hệ thống, gây crash ngẫu nhiên và giảm hiệu năng nghiêm trọng.
+%end
 
 %end
 
 // ==============================================================================
-// SECTION 6: MEMORY & APP LAUNCH OPTIMIZATION
+// SECTION 6: MEMORY & APP LAUNCH & REAL BACKGROUND KILL
+// v10 FIX: kill that tien trinh nen qua BKSTerminate (chi SpringBoard)
+// v10 FIX: dung slider RamCleanIntensity cho pressure relief
 // ==============================================================================
 
 %group MemoryEngine
 
 %hook UIApplication
+
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
     if (!IS_ON) return %orig;
-    
+
     SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
     if ([self respondsToSelector:sel]) {
         #pragma clang diagnostic push
@@ -509,63 +542,101 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         [self performSelector:sel];
         #pragma clang diagnostic pop
     }
-    
+
     if (CFG_PTR.aggressiveRAM || CFG_PTR.ultraDeepRamClean) {
-        NSURLCache *cache = [NSURLCache sharedURLCache];
-        [cache removeAllCachedResponses];
+        [[NSURLCache sharedURLCache] removeAllCachedResponses];
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             if (CFG_PTR.ultraDeepRamClean) {
                 [CacheCleaner forceDeepMemoryPurge];
             } else {
                 [CacheCleaner forceMemoryPurge];
             }
+            if (CFG_PTR.ramBoost70) {
+                BoostApplyRamPressure();
+            }
         });
     }
-    
+
     %orig;
 }
+
 %end
 
 %hook FBSSystemService
+
 - (void)openApplication:(id)application withOptions:(id)options {
     if (!IS_ON) return %orig;
-    
-    if (CFG_PTR.killBgApps) {
-         [CacheCleaner forceMemoryPurge];
+
+    if (CFG_PTR.killBgApps && BoostIsSpringBoard() &&
+        BKSTerminateApplicationForReasonAndReportWithDescription != NULL) {
+
+        NSString *openingBid = nil;
+        if ([application respondsToSelector:@selector(bundleIdentifier)]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            openingBid = (NSString *)[application performSelector:@selector(bundleIdentifier)];
+            #pragma clang diagnostic pop
+        }
+
+        Class sac = objc_getClass("SBApplicationController");
+        if (sac) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            id controller = [sac performSelector:@selector(sharedInstance)];
+            if (controller && [controller respondsToSelector:@selector(allApplications)]) {
+                NSArray *apps = (NSArray *)[controller performSelector:@selector(allApplications)];
+                for (id app in apps) {
+                    if (![app respondsToSelector:@selector(bundleIdentifier)]) continue;
+                    NSString *bid = (NSString *)[app performSelector:@selector(bundleIdentifier)];
+                    if (!bid) continue;
+                    if ([bid isEqualToString:openingBid]) continue;
+                    if ([bid hasPrefix:@"com.apple."]) continue;
+                    BKSTerminateApplicationForReasonAndReportWithDescription(
+                        bid, 5, NO, @"BoostiPhone6s background cleanup");
+                }
+            }
+            #pragma clang diagnostic pop
+        }
     }
-    
+
     if (CFG_PTR.turboAppLaunch) {
         %orig(application, nil);
     } else {
         %orig;
     }
 }
+
 %end
 
 %end
 
 // ==============================================================================
-// SECTION 7: UI RENDERING & TOUCH OPTIMIZATION
+// SECTION 7: UI RENDERING, TOUCH, SMOOTH FEEL, DEEP IMAGE
 // ==============================================================================
 
 %group UIEngine
 
 %hook UIView
+
 - (void)setAlpha:(CGFloat)alpha {
     if (!IS_ON) return %orig;
     if (alpha > 0.95) alpha = 1.0;
     %orig(alpha);
 }
+
 %end
 
 %hook UIVisualEffectView
+
 - (void)didMoveToSuperview {
     if (!IS_ON) return %orig;
     [self removeFromSuperview];
 }
+
 %end
 
 %hook UITextView
+
 - (void)layoutSubviews {
     if (!IS_ON || !CFG_PTR.enableAIAcceleration) return %orig;
     [CATransaction begin];
@@ -573,47 +644,93 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     %orig;
     [CATransaction commit];
 }
+
 %end
 
 %hook UIKeyboardImpl
+
 - (void)updateFrame:(CGRect)frame {
     if (!IS_ON || !CFG_PTR.enableAIAcceleration) return %orig;
     [UIView animateWithDuration:0.0 delay:0.0 options:UIViewAnimationOptionCurveLinear animations:^{
         %orig(frame);
     } completion:nil];
 }
+
 %end
 
 %hook UIWindow
+
 - (void)sendEvent:(UIEvent *)event {
     %orig;
 }
+
+%end
+
+// v10: bo group opacity de giam blend pass khi xu ly anh sau
+%hook CALayer
+
+- (BOOL)allowsGroupOpacity {
+    if (IS_ON && CFG_PTR.deepImageProcessing) return NO;
+    return %orig;
+}
+
 %end
 
 %end
 
 // ==============================================================================
-// SECTION 8: SYSTEM SERVICE HOOKS
+// SECTION 8: BATTERY SAVER (clamp timer lap lai qua nho gay wakeup)
+// ==============================================================================
+
+%group BatteryEngine
+
+%hook NSTimer
+
++ (NSTimer *)timerWithTimeInterval:(NSTimeInterval)ti target:(id)t selector:(SEL)s userInfo:(id)u repeats:(BOOL)r {
+    if (IS_ON && CFG_PTR.batterySaverMax && r && ti > 0 && ti < 0.033) {
+        ti = 0.033;
+    }
+    return %orig(ti, t, s, u, r);
+}
+
++ (NSTimer *)scheduledTimerWithTimeInterval:(NSTimeInterval)ti target:(id)t selector:(SEL)s userInfo:(id)u repeats:(BOOL)r {
+    if (IS_ON && CFG_PTR.batterySaverMax && r && ti > 0 && ti < 0.033) {
+        ti = 0.033;
+    }
+    return %orig(ti, t, s, u, r);
+}
+
+%end
+
+%end
+
+// ==============================================================================
+// SECTION 9: SYSTEM SERVICE HOOKS
 // ==============================================================================
 
 %group SystemHooks
 
 %hook ATXAnalyticsManager
+
 - (void)sendEvent:(id)eventData {
     if (IS_ON && CFG_PTR.blockAnalytics) return;
     %orig;
 }
+
 %end
 
 %hook SleepManager
+
 - (void)enterDeepSleep {
     if (!IS_ON || !CFG_PTR.deepSleepOptimization) return %orig;
     run_posix_cmd_safe("/var/jb/bin/launchctl", "stop", "com.apple.analyticsd");
     %orig;
 }
+
 %end
 
 %hook GraphicsQualityManager
+
 - (void)setQualityLevel:(NSUInteger)quality {
     if (IS_ON && CFG_PTR.safeSpoofGraphics) {
         %orig(3);
@@ -621,17 +738,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     }
     %orig;
 }
+
 %end
 
 %end
 
 // ==============================================================================
-// SECTION 9: PROMOTION CONTROL 5.1.3b — SCROLL OPTIMIZATION ENGINE
-// ★ FIX: OBJC_ASSOCIATION_RETAIN_NONATOMIC (Tránh crash) ★
-// ★ FIX: Không duplicate import, không %ctor riêng ★
+// SECTION 10: PROMOTION CONTROL 5.1.3b ENGINE (merged, da fix)
+// - OBJC_ASSOCIATION_RETAIN_NONATOMIC thay ASSIGN
+// - khong duplicate import, khong ctor rieng, khong hook UIScrollView rieng
+// - v10: them giam touch latency gesture khi SmoothFeelEngine bat
 // ==============================================================================
-
-#pragma mark - ProMotion Control Configuration
 
 static const BOOL PMEnabled = YES;
 static const BOOL PMTouchResponseEnabled = YES;
@@ -639,27 +756,19 @@ static const BOOL PMSmoothScrollEnabled = YES;
 static const BOOL PMReduceRepeatedWork = YES;
 static const BOOL PMDiagnosticsEnabled = NO;
 
-#pragma mark - ProMotion Runtime State
-
 static BOOL PMRuntimeReady = NO;
 static NSObject *PMConfiguredMarker = nil;
 static const void *kPMConfiguredKey = &kPMConfiguredKey;
 
-#pragma mark - ProMotion Diagnostic
-
 static void PMDebugLog(NSString *format, ...) {
     if (!PMDiagnosticsEnabled) return;
-    if (format == nil || format.length == 0) return;
-    
-    va_list arguments;
-    va_start(arguments, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
-    va_end(arguments);
-    
-    NSLog(@"[ProMotionControl] %@", message);
+    if (!format || format.length == 0) return;
+    va_list args;
+    va_start(args, format);
+    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    NSLog(@"[ProMotionControl] %@", msg);
 }
-
-#pragma mark - ProMotion Runtime Preparation
 
 static void PMPrepareRuntime(void) {
     if (PMRuntimeReady) return;
@@ -668,120 +777,76 @@ static void PMPrepareRuntime(void) {
     PMDebugLog(@"Runtime initialized");
 }
 
-#pragma mark - ProMotion Process Safety
-
 static BOOL PMIsUsableProcess(void) {
     if (!PMRuntimeReady) return NO;
-    NSString *processName = [[NSProcessInfo processInfo] processName];
-    return processName.length > 0;
+    NSString *pn = [[NSProcessInfo processInfo] processName];
+    return pn.length > 0;
 }
 
-#pragma mark - ProMotion Scroll State
-
-static BOOL PMScrollViewWasConfigured(UIScrollView *scrollView) {
-    if (scrollView == nil) return NO;
-    return objc_getAssociatedObject(scrollView, kPMConfiguredKey) != nil;
+static BOOL PMScrollViewWasConfigured(UIScrollView *sv) {
+    if (!sv) return NO;
+    return objc_getAssociatedObject(sv, kPMConfiguredKey) != nil;
 }
 
-static void PMMarkScrollViewConfigured(UIScrollView *scrollView) {
-    if (scrollView == nil) return;
-    if (PMConfiguredMarker == nil) return;
-    
-    // ★ FIX: Dùng RETAIN_NONATOMIC thay vì ASSIGN để tránh dangling pointer crash ★
-    objc_setAssociatedObject(
-        scrollView,
-        kPMConfiguredKey,
-        PMConfiguredMarker,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC
-    );
+static void PMMarkScrollViewConfigured(UIScrollView *sv) {
+    if (!sv || !PMConfiguredMarker) return;
+    objc_setAssociatedObject(sv, kPMConfiguredKey, PMConfiguredMarker, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-#pragma mark - ProMotion Visibility Checks
-
-static BOOL PMIsSuitableScrollView(UIScrollView *scrollView) {
-    if (!PMEnabled) return NO;
-    if (!PMRuntimeReady) return NO;
-    if (scrollView == nil) return NO;
-    if (scrollView.window == nil) return NO;
-    if (scrollView.hidden) return NO;
-    if (!scrollView.userInteractionEnabled) return NO;
-    
-    if (PMReduceRepeatedWork && PMScrollViewWasConfigured(scrollView)) {
-        return NO;
-    }
-    
+static BOOL PMIsSuitableScrollView(UIScrollView *sv) {
+    if (!PMEnabled || !PMRuntimeReady || !sv) return NO;
+    if (!sv.window || sv.hidden || !sv.userInteractionEnabled) return NO;
+    if (PMReduceRepeatedWork && PMScrollViewWasConfigured(sv)) return NO;
     return YES;
 }
 
-#pragma mark - ProMotion Touch Optimisation
-
-static void PMApplyTouchOptimisation(UIScrollView *scrollView) {
+static void PMApplyTouchOptimisation(UIScrollView *sv) {
     if (!PMTouchResponseEnabled) return;
-    if (scrollView.delaysContentTouches) {
-        scrollView.delaysContentTouches = NO;
+    if (sv.delaysContentTouches) {
+        sv.delaysContentTouches = NO;
     }
 }
 
-#pragma mark - ProMotion Scroll Stability
-
-static void PMApplyScrollOptimisation(UIScrollView *scrollView) {
-    if (!PMSmoothScrollEnabled) return;
-    (void)scrollView;
-}
-
-#pragma mark - ProMotion Gesture Stability
-
-static void PMApplyGestureStability(UIScrollView *scrollView) {
-    if (scrollView == nil) return;
-}
-
-#pragma mark - ProMotion Table View Specialisation
-
-static void PMConfigureTableView(UITableView *tableView) {
-    if (tableView == nil) return;
-    (void)tableView;
-}
-
-#pragma mark - ProMotion Collection View Specialisation
-
-static void PMConfigureCollectionView(UICollectionView *collectionView) {
-    if (collectionView == nil) return;
-    (void)collectionView;
-}
-
-#pragma mark - ProMotion Generic Scroll View Configuration
-
-// ★ ĐỊNH NGHĨA HÀM (Forward declaration ở đầu file trỏ đến đây) ★
-static void PMConfigureScrollView(UIScrollView *scrollView) {
-    if (!PMIsSuitableScrollView(scrollView)) return;
-    
-    PMMarkScrollViewConfigured(scrollView);
-    PMApplyTouchOptimisation(scrollView);
-    PMApplyScrollOptimisation(scrollView);
-    PMApplyGestureStability(scrollView);
-    
-    if ([scrollView isKindOfClass:[UITableView class]]) {
-        PMConfigureTableView((UITableView *)scrollView);
-    } else if ([scrollView isKindOfClass:[UICollectionView class]]) {
-        PMConfigureCollectionView((UICollectionView *)scrollView);
+static void PMApplySmoothFeel(UIScrollView *sv) {
+    if (!IS_ON || !CFG_PTR.smoothFeelEngine) return;
+    UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
+    if (pan) {
+        pan.delaysTouchesBegan = NO;
+        pan.delaysTouchesEnded = NO;
     }
-    
+}
+
+static void PMApplyScrollOptimisation(UIScrollView *sv) { (void)sv; }
+static void PMApplyGestureStability(UIScrollView *sv) { (void)sv; }
+static void PMConfigureTableView(UITableView *tv) { (void)tv; }
+static void PMConfigureCollectionView(UICollectionView *cv) { (void)cv; }
+
+static void PMConfigureScrollView(UIScrollView *sv) {
+    if (!PMIsSuitableScrollView(sv)) return;
+    PMMarkScrollViewConfigured(sv);
+    PMApplyTouchOptimisation(sv);
+    PMApplySmoothFeel(sv);
+    PMApplyScrollOptimisation(sv);
+    PMApplyGestureStability(sv);
+    if ([sv isKindOfClass:[UITableView class]]) {
+        PMConfigureTableView((UITableView *)sv);
+    } else if ([sv isKindOfClass:[UICollectionView class]]) {
+        PMConfigureCollectionView((UICollectionView *)sv);
+    }
     if (PMDiagnosticsEnabled) {
-        PMDebugLog(@"Configured scroll view: %@", NSStringFromClass([scrollView class]));
+        PMDebugLog(@"Configured: %@", NSStringFromClass([sv class]));
     }
 }
 
 // ==============================================================================
-// SECTION 10: CONSTRUCTOR & INITIALIZATION ENGINE (UNIFIED)
-// ★ DUY NHẤT 1 %ctor — GỘP BOOST + PROMOTION RUNTIME ★
+// SECTION 11: UNIFIED CONSTRUCTOR (duy nhat 1 ctor)
 // ==============================================================================
 
 %ctor {
     @autoreleasepool {
-        // ★ BOOST INITIALIZATION ★
         CFG = [BoostConfig sharedInstance];
         IS_ENABLED = CFG.enabled;
-        
+
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             NULL,
@@ -790,101 +855,66 @@ static void PMConfigureScrollView(UIScrollView *scrollView) {
             NULL,
             CFNotificationSuspensionBehaviorCoalesce
         );
-        
+
         [[CrashGuard sharedInstance] startMonitoring];
-        
-        if (![[CrashGuard sharedInstance] canExecuteHooks]) {
-            NSLog(@"[BoostiPhone6s v9.0] 🛡️ CrashGuard ACTIVE - All hooks bypassed for safety.");
-            return;
-        }
-        
-        if (!IS_ON) {
-            NSLog(@"[BoostiPhone6s v9.0] ⏸️ Tweak DISABLED by Master Switch.");
-            return;
-        }
-        
-        NSLog(@"[BoostiPhone6s v9.0] 🚀 INITIALIZING | Device: %@ | Hz: %ld | Thermal: %@",
-              IS_OLD_DEVICE ? @"OLD (6s-8)" : @"NEW (X-15PM)",
-              (long)CFG_PTR.forcedRefreshRate,
-              CFG_PTR.disableThermal ? @"BYPASSED" : @"NORMAL");
-        
-        // ★ MODULE INITIALIZATION ★
+        if (![[CrashGuard sharedInstance] canExecuteHooks]) return;
+        if (!IS_ON) return;
+
         [[KernelBypass sharedInstance] initEnvironment];
-        
-        if (CFG_PTR.enableBlocker) {
-            [[SystemBlocker sharedInstance] initBlockers];
+
+        if (CFG_PTR.enableBlocker) [[SystemBlocker sharedInstance] initBlockers];
+        if (CFG_PTR.forceRealtimePriority) [[KernelBypass sharedInstance] boostCurrentThreadPriority];
+        if (CFG_PTR.aggressiveRAM || CFG_PTR.ultraDeepRamClean) [[KernelBypass sharedInstance] forceMachPurge];
+        if (CFG_PTR.bypassSandboxChecks || CFG_PTR.optimizeDiskIO) init_privilege_escalation();
+
+        // v10: scheduler kieu iOS 27 va boost CPU/GPU 60%
+        if (CFG_PTR.ios27Scheduler || CFG_PTR.cpuGpuBoost60) {
+            BoostApplyCpuPriority();
         }
-        
-        if (CFG_PTR.forceRealtimePriority) {
-            [[KernelBypass sharedInstance] boostCurrentThreadPriority];
+
+        // v10: RAM 70% nhanh hon qua pressure relief ngay khi khoi dong
+        if (CFG_PTR.ramBoost70) {
+            BoostApplyRamPressure();
         }
-        
-        if (CFG_PTR.aggressiveRAM || CFG_PTR.ultraDeepRamClean) {
-            [[KernelBypass sharedInstance] forceMachPurge];
-        }
-        
-        if (CFG_PTR.bypassSandboxChecks || CFG_PTR.optimizeDiskIO) {
-            init_privilege_escalation();
-        }
-        
-        // ★ HOOK GROUPS INITIALIZATION ★
-        if (CFG_PTR.forceRealtimePriority || CFG_PTR.bypassSandboxChecks || 
+
+        if (CFG_PTR.forceRealtimePriority || CFG_PTR.bypassSandboxChecks ||
             CFG_PTR.optimizeDiskIO || CFG_PTR.godModeFakeiPhone16 || CFG_PTR.tcpNoDelayBoost) {
             %init(KernelDeepHooks);
         }
-        
         if (CFG_PTR.godModeForce120Hz || CFG_PTR.disableFrameThrottling || CFG_PTR.spoofModel) {
             %init(FramePacingEngine);
         }
-        
         if (CFG_PTR.disableThermal || CFG_PTR.smartThermalManagement) {
             %init(ThermalBypassEngine);
         }
-        
-        if (CFG_PTR.godModeMetalOverclock || CFG_PTR.gpuSafeOverclock) {
+        if (CFG_PTR.godModeMetalOverclock || CFG_PTR.gpuSafeOverclock || CFG_PTR.gameStutterFix) {
             %init(GPUEngine);
         }
-        
-        if (CFG_PTR.aggressiveRAM || CFG_PTR.killBgApps || CFG_PTR.turboAppLaunch) {
+        if (CFG_PTR.aggressiveRAM || CFG_PTR.killBgApps || CFG_PTR.turboAppLaunch || CFG_PTR.ramBoost70) {
             %init(MemoryEngine);
         }
-        
-        if (CFG_PTR.enableAIAcceleration || CFG_PTR.touchSamplingBoost) {
+        if (CFG_PTR.enableAIAcceleration || CFG_PTR.touchSamplingBoost || CFG_PTR.deepImageProcessing || CFG_PTR.smoothFeelEngine) {
             %init(UIEngine);
         }
-        
+        if (CFG_PTR.batterySaverMax || CFG_PTR.lowPowerScheduler) {
+            %init(BatteryEngine);
+        }
         if (CFG_PTR.blockAnalytics || CFG_PTR.deepSleepOptimization || CFG_PTR.safeSpoofGraphics) {
             %init(SystemHooks);
         }
-        
-        // ★ ENVIRONMENT VARIABLES ★
-        if (CFG_PTR.enableAIAcceleration) {
-            setenv("MALLOC_OPTIONS", "AFGN", 1);
-        }
-        
+
+        if (CFG_PTR.enableAIAcceleration) setenv("MALLOC_OPTIONS", "AFGN", 1);
         if (CFG_PTR.turboAppLaunch) {
             setenv("DYLD_DISABLE_DOFS", "1", 1);
             setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
         }
-        
-        if (CFG_PTR.pageCompressionOptimized) {
-            setenv("VM_COMPRESSION_RATIO", "MAX", 1);
-        }
-        
+        if (CFG_PTR.pageCompressionOptimized) setenv("VM_COMPRESSION_RATIO", "MAX", 1);
         setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
         setenv("IOKIT_AUTOCLEAN", "1", 1);
-        
-        // ★ PROMOTION CONTROL RUNTIME INITIALIZATION ★
-        // Gộp vào cùng %ctor — KHÔNG có %ctor thứ 2
+
         PMPrepareRuntime();
-        
         if (!PMIsUsableProcess()) {
             PMRuntimeReady = NO;
-            NSLog(@"[BoostiPhone6s v9.0] ⚠️ ProMotion Runtime disabled (unusable process).");
-        } else {
-            NSLog(@"[BoostiPhone6s v9.0] ✅ ProMotion Scroll Engine ACTIVE");
         }
-        
-        NSLog(@"[BoostiPhone6s v9.0] ✅ SYSTEM READY | ALL ENGINES ACTIVE | ROOTLESS MODE");
     }
 }
