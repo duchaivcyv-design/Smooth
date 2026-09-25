@@ -17,6 +17,9 @@
 #import <sys/resource.h> 
 #import <spawn.h>
 
+// Giải quyết lỗi "use of undeclared identifier 'environ'" khi dùng posix_spawn
+extern char **environ;
+
 // Import All Custom Modules
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
@@ -85,7 +88,6 @@
 }
 
 - (void)loadSettings {
-    // ★ SỬA: ĐƯỜNG DẪN PLIST CHUẨN ROOTLESS ★
     NSString *plistPath = @"/var/jb/Library/Preferences/com.taojb.boostiphone6s.plist";
     NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
     
@@ -686,7 +688,6 @@ void setupAllSwizzles() {
             setenv("VM_COMPRESSION_RATIO", "MAX", 1);
         }
         
-        // Cấu hình hạ nhiệt độ cực sâu ở cấp độ hệ thống
         setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
         setenv("IOKIT_AUTOCLEAN", "1", 1);
         
