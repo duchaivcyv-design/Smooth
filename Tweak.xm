@@ -322,16 +322,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         }
     }
 
-    if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0)) {
-        const char *fakeModel = "iPhone16,2";
-        if (oldp && oldlenp) {
-            strlcpy((char *)oldp, fakeModel, *oldlenp);
-            *oldlenp = strlen(fakeModel) + 1;
-        } else if (oldlenp) {
-            *oldlenp = strlen(fakeModel) + 1;
-        }
-        return 0;
+%hookf(int, uname, struct utsname *name) {
+    int ret = %orig(name);
+    if (ret == 0 && IS_ON && CFG_PTR.godModeFakeiPhone16 && name) {
+        strlcpy(name->machine, "iPhone16,2", sizeof(name->machine));
     }
+    return ret;
+}
 
     if (CFG_PTR.godModeFakeiPhone16 && (strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.activecpu") == 0)) {
         int fakeCores = 6;
