@@ -4,6 +4,7 @@
 <dict>
     <key>items</key>
     <array>
+        <!-- HEADER -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -52,6 +53,37 @@
             <key>PostNotification</key>
             <string>com.taojb.boostiphone6s.settings/reload</string>
         </dict>
+        
+        <!-- ★ MỚI: CHỌN HZ 30-60-90-120 THEO LỜI NHẮC ★ -->
+        <dict>
+            <key>cell</key>
+            <string>PSMultiValueSpecifier</string>
+            <key>label</key>
+            <string>Ép Tần Số Quét Màn Hình</string>
+            <key>key</key>
+            <string>ForcedRefreshRate</string>
+            <key>default</key>
+            <integer>120</integer>
+            <key>defaults</key>
+            <string>com.taojb.boostiphone6s</string>
+            <key>titles</key>
+            <array>
+                <string>30 Hz (Tiết kiệm pin)</string>
+                <string>60 Hz (Chuẩn)</string>
+                <string>90 Hz (Mượt vừa)</string>
+                <string>120 Hz (Tối đa)</string>
+            </array>
+            <key>values</key>
+            <array>
+                <integer>30</integer>
+                <integer>60</integer>
+                <integer>90</integer>
+                <integer>120</integer>
+            </array>
+            <key>PostNotification</key>
+            <string>com.taojb.boostiphone6s.settings/reload</string>
+        </dict>
+
         <dict>
             <key>cell</key>
             <string>PSSwitchCell</string>
@@ -62,21 +94,7 @@
             <key>key</key>
             <string>GodMode120Hz</string>
             <key>label</key>
-            <string>Ép màn hình 120Hz ProMotion</string>
-            <key>PostNotification</key>
-            <string>com.taojb.boostiphone6s.settings/reload</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.taojb.boostiphone6s</string>
-            <key>key</key>
-            <string>UnlockProMotion</string>
-            <key>label</key>
-            <string>Mở khóa ProMotion Engine</string>
+            <string>Mở khóa giới hạn FPS hệ thống</string>
             <key>PostNotification</key>
             <string>com.taojb.boostiphone6s.settings/reload</string>
         </dict>
@@ -109,12 +127,12 @@
             <string>com.taojb.boostiphone6s.settings/reload</string>
         </dict>
 
-        <!-- V7.0 ULTIMATE FEATURES -->
+        <!-- V8.0 ULTIMATE FEATURES -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Tính Năng Mới v7.0</string>
+            <string>Tính Năng Mới v8.0</string>
             <key>footerText</key>
             <string>Các cải tiến giúp giảm nhiệt tối đa và tăng tốc độ hệ thống.</string>
         </dict>
@@ -433,7 +451,6 @@
             <string>2048</string>
             <key>keyboard</key>
             <string>numbers</string>
-
             <key>PostNotification</key>
             <string>com.taojb.boostiphone6s.settings/reload</string>
         </dict>
@@ -467,6 +484,6 @@
         </dict>
     </array>
     <key>title</key>
-    <string>Boost iPhone 6s-15Prm</string>
+    <string>SmoothIOS</string>
 </dict>
 </plist>
