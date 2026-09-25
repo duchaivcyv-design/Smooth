@@ -79,10 +79,12 @@
             <string>com.taojb.boostiphone6s.settings/reload</string>
         </dict>
         
-        <!-- CHỌN HZ 30-60-90-120 -->
+        <!-- CHỌN HZ 30-60-90-120 (ĐÃ SỬA LỖI KHÔNG MỞ MENU) -->
         <dict>
             <key>cell</key>
-            <string>PSMultiValueSpecifier</string>
+            <string>PSLinkListCell</string>
+            <key>detail</key>
+            <string>PSListItemsController</string>
             <key>label</key>
             <string>Ép Tần Số Quét Màn Hình</string>
             <key>key</key>
@@ -98,7 +100,7 @@
                 <string>90 Hz (Mượt vừa)</string>
                 <string>120 Hz (Tối đa)</string>
             </array>
-            <key>values</key>
+            <key>validValues</key>
             <array>
                 <integer>30</integer>
                 <integer>60</integer>
