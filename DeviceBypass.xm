@@ -1,130 +1,162 @@
-// ==============================================================================
-// DEVICE BYPASS MODULE v8.0 - HIGH PERFORMANCE SYNC ENGINE
-// Target: iOS 14.0 - 26.0.1 | iPhone 6s to Latest
-// ==============================================================================
+#!/bin/bash
 
-#import <UIKit/UIKit.h>
-#import <Foundation/Foundation.h>
-#import <QuartzCore/QuartzCore.h>
-#import <IOKit/IOKitLib.h>
-#import <sys/sysctl.h>
-#import <dlfcn.h>
-#import <mach/mach.h>
+# ==============================================================================
+# PRERM - PRE-REMOVAL SCRIPT FOR BOOST iPHONE 6s-X v9.0
+# Target: Rootless Jailbreak (iOS 14.0 - 26.0.1)
+# Author: TaoJB | Project: Smooth
+# Đảm bảo gỡ bỏ SẠCH SẼ 100% không để lại rác hệ thống
+# ==============================================================================
 
-extern id CFG; 
-extern BOOL IS_ENABLED;
+set +e
 
-#define IS_BYPASS_ACTIVE (IS_ENABLED && \
-                          ([CFG valueForKey:@"spoofModel"] || \
-                           [CFG valueForKey:@"godModeForce120Hz"] || \
-                           [CFG valueForKey:@"disableThermal"]))
+echo ""
+echo "=================================================="
+echo "   BOOST iPHONE 6s-X ULTIMATE EDITION v9.0"
+echo "   Status: UNINSTALLING..."
+echo "=================================================="
+echo ""
 
-// ==========================================
-// 1. FAKE HARDWARE CAPABILITIES (GPU & DISPLAY)
-// ==========================================
+# ------------------------------------------------------------------------------
+# 1. XÓA ENTRY PLIST ĐĂNG KÝ MENU SETTINGS
+# Ngăn chặn menu "ma" xuất hiện sau khi gỡ tweak
+# ------------------------------------------------------------------------------
+ENTRY_PLIST="/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"
+if [ -f "$ENTRY_PLIST" ]; then
+    rm -f "$ENTRY_PLIST"
+    echo "[OK] PreferenceLoader entry removed."
+else
+    echo "[INFO] No PreferenceLoader entry found at $ENTRY_PLIST"
+fi
 
-%group DisplaySpoof
-%hook UIScreen
-- (BOOL)isProMotionEnabled {
-    if ([CFG valueForKey:@"godModeForce120Hz"]) return YES;
-    return %orig;
-}
+# Fallback cho rootful path
+ENTRY_PLIST_ROOTFUL="/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"
+if [ -f "$ENTRY_PLIST_ROOTFUL" ]; then
+    rm -f "$ENTRY_PLIST_ROOTFUL"
+    echo "[OK] Rootful PreferenceLoader entry removed."
+fi
 
-- (NSInteger)maximumFramesPerSecond {
-    NSInteger targetHz = [[CFG valueForKey:@"forcedRefreshRate"] integerValue];
-    if ([CFG valueForKey:@"godModeForce120Hz"] && targetHz > 0) return targetHz;
-    return %orig;
-}
+# ------------------------------------------------------------------------------
+# 2. XÓA TOÀN BỘ THƯ MỤC PREFERENCES & CACHE
+# Xóa cả thư mục chứa plist để tránh rác tồn đọng
+# ------------------------------------------------------------------------------
+TWEAK_PREFS="/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+TWEAK_PREFS_JB="/var/jb/Library/Preferences/com.taojb.boostiphone6s.plist"
+TWEAK_CACHE="/var/mobile/Library/Caches/com.taojb.boostiphone6s"
+TWEAK_LOGS="/var/mobile/Library/Logs/BoostiPhone6s"
 
-- (CGFloat)nativeScale {
-    if ([CFG valueForKey:@"spoofModel"]) return 3.0;
-    return %orig;
-}
-%end
+if [ -f "$TWEAK_PREFS" ]; then
+    rm -f "$TWEAK_PREFS"
+    echo "[OK] Preferences plist removed: $TWEAK_PREFS"
+fi
 
-%hook CALayer
-- (BOOL)allowsEdgeAntialiasing {
-    if ([CFG valueForKey:@"spoofModel"]) return YES;
-    return %orig;
-}
+if [ -f "$TWEAK_PREFS_JB" ]; then
+    rm -f "$TWEAK_PREFS_JB"
+    echo "[OK] JB Preferences plist removed: $TWEAK_PREFS_JB"
+fi
 
-- (CGFloat)rasterizationScale {
-    if ([CFG valueForKey:@"spoofModel"]) return [UIScreen mainScreen].scale;
-    return %orig;
-}
-%end
-%end
+if [ -d "$TWEAK_CACHE" ]; then
+    rm -rf "$TWEAK_CACHE"
+    echo "[OK] Tweak cache directory cleared: $TWEAK_CACHE"
+else
+    echo "[INFO] No tweak cache found at $TWEAK_CACHE"
+fi
 
-// ==========================================
-// 2. DISABLE THERMAL THROTTLING
-// ==========================================
+if [ -d "$TWEAK_LOGS" ]; then
+    rm -rf "$TWEAK_LOGS"
+    echo "[OK] Tweak logs directory cleared: $TWEAK_LOGS"
+fi
 
-%group ThermalBypass
-%hook NSProcessInfo
-- (NSProcessInfoThermalState)thermalState {
-    if ([CFG valueForKey:@"disableThermal"]) return NSProcessInfoThermalStateNominal;
-    return %orig;
-}
+# ------------------------------------------------------------------------------
+# 3. XÓA DYLIB KHỎI HỆ THỐNG
+# Đảm bảo dylib không còn tồn tại sau khi gỡ
+# ------------------------------------------------------------------------------
+DYLIB_PATH="/var/jb/usr/lib/BoostiPhone6sCore.dylib"
+if [ -f "$DYLIB_PATH" ]; then
+    rm -f "$DYLIB_PATH"
+    echo "[OK] Dylib removed: $DYLIB_PATH"
+else
+    echo "[INFO] Dylib not found at $DYLIB_PATH"
+fi
 
-+ (BOOL)isThermalPressureCritical {
-    if ([CFG valueForKey:@"disableThermal"]) return NO;
-    return %orig;
-}
-%end
-%end
+# Fallback rootful
+DYLIB_ROOTFUL="/usr/lib/BoostiPhone6sCore.dylib"
+if [ -f "$DYLIB_ROOTFUL" ]; then
+    rm -f "$DYLIB_ROOTFUL"
+    echo "[OK] Rootful dylib removed: $DYLIB_ROOTFUL"
+fi
 
-// ==========================================
-// 3. HARDWARE IDENTITY SPOOF
-// ==========================================
+# ------------------------------------------------------------------------------
+# 4. XÓA SETTINGS BUNDLE
+# ------------------------------------------------------------------------------
+BUNDLE_PATH="/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
+if [ -d "$BUNDLE_PATH" ]; then
+    rm -rf "$BUNDLE_PATH"
+    echo "[OK] Settings bundle removed: $BUNDLE_PATH"
+else
+    echo "[INFO] Settings bundle not found at $BUNDLE_PATH"
+fi
 
-%group HardwareSpoof
-%hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (![CFG valueForKey:@"spoofModel"]) return %orig(name, oldp, oldlenp, newp, newlen);
-    
-    if ((strcmp(name, "hw.machine") == 0) || (strcmp(name, "hw.model") == 0)) {
-        const char *fakeModel = "iPhone16,2";
-        if (oldp && oldlenp) {
-            strlcpy((char *)oldp, fakeModel, *oldlenp);
-            *oldlenp = strlen(fakeModel) + 1;
-        } else if (oldlenp) {
-            *oldlenp = strlen(fakeModel) + 1;
-        }
-        return 0;
-    }
-    
-    if ((strcmp(name, "hw.ncpu") == 0) || (strcmp(name, "hw.activecpu") == 0)) {
-        int fakeCores = 6;
-        if (oldp && oldlenp) {
-            memcpy(oldp, &fakeCores, sizeof(fakeCores));
-            *oldlenp = sizeof(fakeCores);
-        } else if (oldlenp) {
-            *oldlenp = sizeof(fakeCores);
-        }
-        return 0;
-    }
+BUNDLE_ROOTFUL="/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
+if [ -d "$BUNDLE_ROOTFUL" ]; then
+    rm -rf "$BUNDLE_ROOTFUL"
+    echo "[OK] Rootful settings bundle removed: $BUNDLE_ROOTFUL"
+fi
 
-    return %orig(name, oldp, oldlenp, newp, newlen);
-}
-%end
+# ------------------------------------------------------------------------------
+# 5. RESET USERDEFAULTS AN TOÀN CHO ROOTLESS
+# Dùng 'defaults' command thay vì truy cập trực tiếp file plist
+# Đảm bảo xóa sạch cả Safe Mode state và crash logs cũ
+# ------------------------------------------------------------------------------
+if command -v defaults &> /dev/null; then
+    defaults delete com.taojb.boostiphone6s 2>/dev/null || true
+    echo "[OK] UserDefaults domain completely wiped via defaults command."
+else
+    # Fallback cho môi trường không có 'defaults' command
+    rm -f "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
+    echo "[OK] Settings plist removed via fallback."
+fi
 
-// ==========================================
-// 4. INITIALIZATION LOGIC
-// ==========================================
+# Xóa thêm các key riêng lẻ để đảm bảo sạch sẽ
+if command -v defaults &> /dev/null; then
+    defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
+    defaults delete com.taojb.boostiphone6s BoostiPhone6s_LastCrashReason 2>/dev/null || true
+    defaults delete com.taojb.boostiphone6s Enabled 2>/dev/null || true
+    echo "[OK] Individual safe mode keys removed."
+fi
 
-%ctor {
-    if (IS_ENABLED) {
-        if ([CFG valueForKey:@"godModeForce120Hz"] || [CFG valueForKey:@"spoofModel"]) {
-            %init(DisplaySpoof);
-        }
-        
-        if ([CFG valueForKey:@"disableThermal"]) {
-            %init(ThermalBypass);
-        }
-        
-        if ([CFG valueForKey:@"spoofModel"]) {
-            %init(HardwareSpoof);
-        }
-        
-        NSLog(@"[DeviceBypass] ✅ v8.0 Initialized with Dynamic Hz & Safe Spoof.");
-    }
-}
+# ------------------------------------------------------------------------------
+# 6. FORCE REFRESH CFPREFSD DAEMON
+# Gửi signal HUP để daemon reload danh sách preference mới nhất
+# An toàn hơn killall -9 trên Rootless, tránh crash SpringBoard
+# ------------------------------------------------------------------------------
+if pidof cfprefsd > /dev/null 2>&1; then
+    killall -HUP cfprefsd >/dev/null 2>&1 || true
+    echo "[OK] cfprefsd signaled to refresh cache."
+else
+    echo "[INFO] cfprefsd not running. Will refresh after respring."
+fi
+
+# ------------------------------------------------------------------------------
+# 7. XÓA MOBILESUBSTRATE DYLID LIST ENTRY (NẾU CÓ)
+# ------------------------------------------------------------------------------
+DYLIB_LIST="/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"
+if [ -f "$DYLIB_LIST" ]; then
+    rm -f "$DYLIB_LIST"
+    echo "[OK] MobileSubstrate dylib list entry removed."
+fi
+
+DYLIB_LIST_ROOTFUL="/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"
+if [ -f "$DYLIB_LIST_ROOTFUL" ]; then
+    rm -f "$DYLIB_LIST_ROOTFUL"
+    echo "[OK] Rootful MobileSubstrate dylib list entry removed."
+fi
+
+echo ""
+echo "=================================================="
+echo "   UNINSTALLATION COMPLETE!"
+echo "   All traces of Boost iPhone 6s-X v9.0 removed."
+echo "   Please RESPRING your device to finalize changes."
+echo "=================================================="
+echo ""
+
+exit 0
