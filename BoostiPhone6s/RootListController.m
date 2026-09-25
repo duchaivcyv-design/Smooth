@@ -15,31 +15,30 @@
 }
 
 - (void)resetSafeMode:(id)sender {
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Xác nhận thoát Safe Mode?"
-                                                                     message:@"Tất cả tính năng tối ưu sâu sẽ được bật lại.\nMáy sẽ tự động respring sau khi xác nhận."
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Xac nhan thoat Safe Mode?"
+                                                                     message:@"Tat ca tinh nang toi uu sau se duoc bat lai.\nMay se tu dong respring sau khi xac nhan."
                                                               preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Đồng ý" 
-                                                      style:UIAlertActionStyleDestructive 
+
+    UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Dong y"
+                                                      style:UIAlertActionStyleDestructive
                                                     handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
         [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
         [defaults synchronize];
-        
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), 
-                                             CFSTR("com.taojb.boostiphone6s.settings/reload"), 
+
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                             CFSTR("com.taojb.boostiphone6s.settings/reload"),
                                              NULL, NULL, TRUE);
-        
-        NSLog(@"[Settings] Safe Mode keys removed & Notification sent.");
+
         [self reloadSpecifiers];
         [self performRespring];
     }];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Hủy" 
-                                                         style:UIAlertActionStyleCancel 
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Huy"
+                                                         style:UIAlertActionStyleCancel
                                                        handler:nil];
-    
+
     [confirm addAction:yesAction];
     [confirm addAction:cancelAction];
     [self presentViewController:confirm animated:YES completion:nil];
@@ -49,12 +48,12 @@
     pid_t pid;
     const char *args1[] = {"sbreload", NULL};
     if (posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL) == 0) return;
-    
+
     const char *args2[] = {"killall", "-9", "SpringBoard", NULL};
     if (posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL) == 0) return;
-    
+
     if (posix_spawn(&pid, "/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL) == 0) return;
-    
+
     posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL);
 }
 
