@@ -1,33 +1,19 @@
-# ==============================================================================
-# V20 ULTIMATE ROOT MAKEFILE - SIÊU SẠCH (THEOS NATIVE)
-# ==============================================================================
+# ==============================================================
+# V20 PREFERENCE BUNDLE MAKEFILE (BYPASS GITHUB ACTIONS)
+# ==============================================================
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
-# Bật dòng dưới nếu muốn Build cho Rootless, tắt nếu Build Rootful
-# THEOS_PACKAGE_SCHEME=rootless
-
-GO_EASY_ON_ME = 1
-DEBUG = 0
-FINALPACKAGE = 1
-
 include $(THEOS)/makefiles/common.mk
 
-# --------------------------------------------------------------
-# 1. BIÊN DỊCH LÕI TWEAK
-# --------------------------------------------------------------
-TWEAK_NAME = BoostiPhone6sCore
-BoostiPhone6sCore_FILES = Tweak.xm $(wildcard Modules/*.m) $(wildcard Modules/*.c)
+BUNDLE_NAME = BoostiPhone6sPrefs
 
-# Tối ưu hóa -O3 cực độ và ẩn toàn bộ cảnh báo rác
-BoostiPhone6sCore_CFLAGS = -fobjc-arc -O3 -Wno-everything
-BoostiPhone6sCore_FRAMEWORKS = UIKit CoreGraphics QuartzCore AVFoundation IOKit Foundation Metal CoreVideo Accelerate CoreServices
-BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip
+BoostiPhone6sPrefs_FILES = RootListController.m
+BoostiPhone6sPrefs_FRAMEWORKS = UIKit
+BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
+BoostiPhone6sPrefs_CFLAGS = -fobjc-arc -O3
 
-include $(THEOS_MAKE_PATH)/tweak.mk
+# Lệnh phép thuật giúp bỏ qua lỗi thiếu Framework trên Github
+BoostiPhone6sPrefs_LDFLAGS = -undefined dynamic_lookup
 
-# --------------------------------------------------------------
-# 2. BIÊN DỊCH MENU CÀI ĐẶT
-# --------------------------------------------------------------
-SUBPROJECTS += BoostiPhone6s
-include $(THEOS_MAKE_PATH)/aggregate.mk
+include $(THEOS_MAKE_PATH)/bundle.mk
