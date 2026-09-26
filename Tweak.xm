@@ -1,5 +1,5 @@
 // ==============================================================================
-// 🚀 TWEAK.XM - BOOST IPHONE 6S TO 15 PRO MAX - V20 ULTIMATE EDITION
+// 🚀 TWEAK.XM - BOOST IPHONE 6S TO 15 PRO MAX
 // 🐍 PHILOSOPHY: PYTHONIC SAFETY - EXPLICIT, CLEAN, CRASH-PROOF, MODULAR.
 // 🎯 TARGET: iOS 14.0 -> iOS 18.x (Rootful & Rootless /var/jb/)
 // ==============================================================================
@@ -35,11 +35,6 @@ extern char **environ;
 #import "Modules/KernelBypass.h"
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
-
-// ==============================================================================
-// 🧱 PHẦN 1: C-FUNCTIONS & HELPERS (FILE SCOPE)
-// Kỷ luật: Tất cả hàm C phải ở đây. KHÔNG BAO GIỜ bị lỗi "function definition".
-// ==============================================================================
 
 // --- Forward Declarations (Tránh lỗi biên dịch) ---
 @interface SBApplication : NSObject
