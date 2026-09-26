@@ -2,12 +2,30 @@
 #import <Preferences/PSSpecifier.h>
 #import <spawn.h>
 #import <notify.h>
+#import <sys/stat.h>
+#import <fcntl.h>
+#import <unistd.h>
 
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
 #define NOTIFY_RELOAD "com.duchaivcy.boostiphone6s/ReloadPrefs"
+#define SHARED_MMAP_FILE "/tmp/.smoothios_shared_config.bin"
 
 extern char **environ;
+
+typedef struct {
+    uint32_t magic;
+    uint32_t enabled;
+    uint32_t enableHzControl;
+    uint32_t targetHz;
+    uint32_t enableFPSControl;
+    uint32_t targetFPS;
+    uint32_t forceOverclock144Hz;
+    uint32_t dynamicThermalEngineBeta1;
+    uint32_t zeroLagNeuralBoosterBeta1;
+    uint32_t vsyncAdaptiveBufferBeta1;
+    float animSpeed;
+} __attribute__((packed)) SmoothSharedConfig;
 
 @interface RootListController : PSListController
 @end
@@ -30,6 +48,29 @@ extern char **environ;
     return FALLBACK_PREF_PATH;
 }
 
+- (void)broadcastConfigToSharedMemory:(NSDictionary *)prefs {
+    int fd = open(SHARED_MMAP_FILE, O_RDWR | O_CREAT | O_TRUNC, 0666);
+    if (fd >= 0) {
+        SmoothSharedConfig cfg;
+        memset(&cfg, 0, sizeof(SmoothSharedConfig));
+        cfg.magic = 0x534D5448; // "SMTH"
+        cfg.enabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : 1;
+        cfg.enableHzControl = prefs[@"EnableHzControl"] ? [prefs[@"EnableHzControl"] boolValue] : 1;
+        cfg.targetHz = (uint32_t)(prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60);
+        cfg.enableFPSControl = prefs[@"EnableFPSControl"] ? [prefs[@"EnableFPSControl"] boolValue] : 1;
+        cfg.targetFPS = (uint32_t)(prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60);
+        cfg.forceOverclock144Hz = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : 1;
+        cfg.dynamicThermalEngineBeta1 = prefs[@"DynamicThermalEngineBeta1"] ? [prefs[@"DynamicThermalEngineBeta1"] boolValue] : 1;
+        cfg.zeroLagNeuralBoosterBeta1 = prefs[@"ZeroLagNeuralBoosterBeta1"] ? [prefs[@"ZeroLagNeuralBoosterBeta1"] boolValue] : 1;
+        cfg.vsyncAdaptiveBufferBeta1 = prefs[@"VsyncAdaptiveBufferBeta1"] ? [prefs[@"VsyncAdaptiveBufferBeta1"] boolValue] : 1;
+        cfg.animSpeed = prefs[@"AnimSpeed"] ? [prefs[@"AnimSpeed"] floatValue] : 0.82f;
+        
+        write(fd, &cfg, sizeof(SmoothSharedConfig));
+        close(fd);
+        chmod(SHARED_MMAP_FILE, 0666);
+    }
+}
+
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     @try {
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
@@ -47,12 +88,15 @@ extern char **environ;
         NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
         prefs[specifier.properties[@"key"]] = value;
         [prefs writeToFile:path atomically:YES];
+        
+        // Đồng bộ tức thì ra shared memory để các app con nhận lệnh lập tức
+        [self broadcastConfigToSharedMemory:prefs];
         notify_post(NOTIFY_RELOAD);
     } @catch (NSException *e) {}
 }
 
 // ============================================================================
-// HIỂN THỊ TRẠNG THÁI HIỆN TẠI RA CELL
+// HIỂN THỊ ĐỘNG TRỰC TIẾP TRÊN DANH SÁCH
 // ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
@@ -81,7 +125,7 @@ extern char **environ;
 }
 
 // ============================================================================
-// BẢNG ACTION SHEET TỪ ĐÁY MÀN HÌNH (CHUẨN ẢNH 100%)
+// BẬT ACTION SHEET CHUẨN 100% THEO ẢNH MẪU
 // ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     [self presentActionSheetForSpecifier:specifier 
@@ -94,7 +138,7 @@ extern char **environ;
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     [self presentActionSheetForSpecifier:specifier 
                                    title:@"Chọn Mức Khung Hình Ứng Dụng (FPS)" 
-                                 message:@"Lựa chọn giới hạn FPS render ứng dụng:\n• Tự Động: Theo engine mặc định của app\n• 30 FPS: Tiết kiệm pin, chống quá nhiệt\n• 60 FPS: Mượt mà ổn định chuẩn\n• 90 FPS - 120 FPS - 144 FPS: Đột phá giới hạn cực hạn" 
+                                 message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt" 
                                      key:@"TargetFPSRate" 
                                   suffix:@"FPS"];
 }
@@ -114,6 +158,8 @@ extern char **environ;
         NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
         prefs[prefKey] = val;
         [prefs writeToFile:path atomically:YES];
+        
+        [weakSelf broadcastConfigToSharedMemory:prefs];
         notify_post(NOTIFY_RELOAD);
         [weakSelf reloadSpecifiers];
     };
@@ -158,7 +204,7 @@ extern char **environ;
 // ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để áp dụng thay đổi?"
+                                                                   message:@"Respring để áp dụng toàn bộ thay đổi cấu hình Titanium Hyper V22.0.1?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -171,12 +217,13 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V21.5.7?"
+                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V22.0.1?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
+        unlink(SHARED_MMAP_FILE);
         notify_post(NOTIFY_RELOAD);
         [self reloadSpecifiers];
     }]];
