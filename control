@@ -1,14 +1,12 @@
 Package: com.taojb.boostiphone6s
 Name: SmoothIOS
-Version: 2.0.0-5a
+Version: 3.5.0-8a
 Architecture: iphoneos-arm64
-Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm ) Release 9 day
+Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm tuỳ máy và ios )
 Maintainer: TaoJB, NMH
 Author: TaoJB, NMH
 Section: Tweaks
 Depends: mobilesubstrate, firmware (>= 14.0), firmware (<= 26.0.1), preferenceloader
-Conflicts: none
-Replaces: none
 Priority: optional
 Tag: role::hacker, purpose::extension, cydia::requires=respring
 Filename: pool/main/b/boostiphone6s/com.taojb.boostiphone6s_5.2.0_iphoneos-arm64.deb
