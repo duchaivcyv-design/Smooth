@@ -10,6 +10,9 @@
 #import <pthread.h>
 #import <unistd.h>
 
+// FIX: Thêm import SmartThermal.h để sử dụng recommendedAnimationMultiplier
+#import "Modules/SmartThermal.h"
+
 extern id CFG;
 extern BOOL IS_ENABLED;
 
@@ -350,10 +353,7 @@ static inline NSInteger CfgInt(NSString *key) {
 
 %ctor {
     @autoreleasepool {
-        if (!IS_ENABLED) {
-            return;
-        }
-
+        if (!IS_ENABLED) return;
         %init(_ungrouped);
         %init(DeviceBypassAll);
     }
