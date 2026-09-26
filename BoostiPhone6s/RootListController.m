@@ -20,17 +20,36 @@ extern char **environ;
     return _specifiers;
 }
 
+- (id)readPreferenceValue:(PSSpecifier *)specifier {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH];
+    if (!prefs) {
+        return specifier.properties[@"default"];
+    }
+    id val = prefs[specifier.properties[@"key"]];
+    return val ? val : specifier.properties[@"default"];
+}
+
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
+    prefs[specifier.properties[@"key"]] = value;
+    [prefs writeToFile:PREF_PATH atomically:YES];
+    notify_post(NOTIFY_RELOAD);
+}
+
 // ============================================================================
-// POPUP NỔI CHỌN TẦN SỐ QUÉT HZ & FPS (30 - 60 - 90 - 120 - 144)
+// POPUP NỔI CHỌN TẦN SỐ QUÉT HZ/FPS (TỰ ĐỘNG, 30, 60, 90, 120, 144)
 // ============================================================================
-- (void)showHzPopupPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Tần Số Quét (Hz & FPS)"
-                                                                   message:@"Chọn mức giới hạn hiển thị hệ thống:\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn iOS\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt"
+- (void)showHzPickerPopup {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Tần Số Quét (Hz & FPS)"
+                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *hzValues = @[@30, @60, @90, @120, @144];
-    for (NSNumber *hz in hzValues) {
-        NSString *title = [NSString stringWithFormat:@"Khóa ở %@ Hz / FPS", hz];
+    NSArray *hzTitles = @[@"Tự Động Điều Chỉnh (Dynamic)", @"Khóa ở 30 Hz (Tiết kiệm pin)", @"Khóa ở 60 Hz (Mặc định)", @"Khóa ở 90 Hz (Mượt mà)", @"Khóa ở 120 Hz (Cực mượt)", @"Khóa ở 144 Hz (Cực đại)"];
+    NSArray *hzValues = @[@0, @30, @60, @90, @120, @144];
+
+    for (NSUInteger i = 0; i < hzValues.count; i++) {
+        NSNumber *hz = hzValues[i];
+        NSString *title = hzTitles[i];
         [alert addAction:[UIAlertAction actionWithTitle:title
                                                  style:UIAlertActionStyleDefault
                                                handler:^(UIAlertAction * _Nonnull action) {
@@ -57,38 +76,38 @@ extern char **environ;
 }
 
 // ============================================================================
-// CHỨC NĂNG RESPRING HỆ THỐNG
+// RESPRING HỆ THỐNG
 // ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Bạn có chắc chắn muốn Respring để áp dụng toàn bộ thay đổi?"
+                                                                   message:@"Respring ngay để áp dụng toàn bộ tinh chỉnh?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    
+
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         pid_t pid;
         const char *argv[] = {"killall", "-9", "SpringBoard", NULL};
         posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)argv, environ);
     }]];
-    
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 // ============================================================================
-// CHỨC NĂNG ĐẶT LẠI CÀI ĐẶT BAN ĐẦU
+// ĐẶT LẠI CÀI ĐẶT
 // ============================================================================
 - (void)resetAllSettings {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Toàn bộ thiết lập của BoostiPhone6s sẽ được khôi phục về trạng thái xuất xưởng."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Toàn Bộ Cấu Hình"
+                                                                   message:@"Mọi thiết lập của tweak sẽ trở về trạng thái gốc."
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    
+
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         notify_post(NOTIFY_RELOAD);
         [self reloadSpecifiers];
     }]];
-    
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
