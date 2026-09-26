@@ -749,7 +749,7 @@ static void BoostInjectEnvironmentVariables(void) {
 
 %hook FBSSystemService
 
-- (void)openApplication:(id)application withOptions:(id)options {
+- (void)openApplication:(id)application withOptions:(NSDictionary *)options {
     if (!IS_ON) { 
         %orig(application, options); 
         return; 
@@ -784,12 +784,9 @@ static void BoostInjectEnvironmentVariables(void) {
         }
     }
 
-    // ĐÃ SỬA: Thay vì truyền trực tiếp điều kiện vào %orig gây lỗi preprocessor, dùng %orig chuẩn thuần túy
-    if (CFG_PTR.turboAppLaunch) {
-        %orig(application, nil);
-    } else {
-        %orig(application, options);
-    }
+    // ĐÃ SỬA TRIỆT ĐỂ: Dùng chung một cấu trúc gọi %orig duy nhất không phân nhánh rẽ arg kiểu nil thô
+    NSDictionary *launchOptions = CFG_PTR.turboAppLaunch ? nil : options;
+    %orig(application, launchOptions);
 }
 
 %end
