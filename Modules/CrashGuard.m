@@ -20,7 +20,7 @@ static void handleUncaughtException(NSException *exception);
     if (self) {
         _crashTimestamps = [NSMutableArray array];
         _currentStatus = GuardStatusNormal;
-        _guardQueue = dispatch_queue_create("com.boostiphone6s.guard.v11", DISPATCH_QUEUE_SERIAL);
+        _guardQueue = dispatch_queue_create("com.boostiphone6s.guard.v12", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
@@ -51,7 +51,7 @@ static void handleUncaughtException(NSException *exception);
 
 static void handleUncaughtException(NSException *exception) {
     NSString *reason = exception.reason ?: @"Unknown";
-    NSLog(@"[CrashGuard] EXCEPTION: %@", reason);
-    [[CrashGuard sharedInstance] resetSafeModeManually]; 
+    NSLog(@"[CrashGuard] EXCEPTION CAUGHT: %@", reason);
     // Auto-reset safe mode on crash to prevent permanent lockout during dev/testing
+    [[CrashGuard sharedInstance] resetSafeModeManually]; 
 }
