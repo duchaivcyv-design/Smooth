@@ -444,17 +444,26 @@ static void BoostApplyUnifiedPerformance(void) {
 %end
 
 %hook UIScrollView
-- (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated { %orig; }
-- (void)_setContentOffset:(CGPoint)offset animated:(BOOL)animated { %orig; }
+
+- (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated { 
+    %orig; 
+}
+
+- (void)_setContentOffset:(CGPoint)offset animated:(BOOL)animated { 
+    %orig; 
+}
+
 - (void)didMoveToWindow {
     %orig;
     if (IS_ON && self.window != nil) {
         PMConfigureScrollView(self);
     }
 }
+
 %end
 
 %hook UIScreen
+
 - (NSInteger)maximumFramesPerSecond {
     if (IS_ON && CFG_PTR.godModeForce120Hz) {
         NSInteger target = CFG_PTR.forcedRefreshRate;
@@ -463,18 +472,22 @@ static void BoostApplyUnifiedPerformance(void) {
     }
     return %orig;
 }
+
 - (BOOL)isProMotionEnabled {
     if (IS_ON && CFG_PTR.godModeForce120Hz && !IS_OLD_DEVICE) return YES;
     return %orig;
 }
+
 - (CGFloat)nativeScale {
     if (IS_ON && CFG_PTR.spoofModel) return 3.0;
     return %orig;
 }
+
 - (CGFloat)scale {
     if (IS_ON && CFG_PTR.spoofModel) return 3.0;
     return %orig;
 }
+
 %end
 
 %end
