@@ -749,7 +749,7 @@ static void BoostInjectEnvironmentVariables(void) {
 
 %hook FBSSystemService
 
-- (void)openApplication:(id)application withOptions:(id)options {
+- (void)openApplication:(id)application withOptions:(NSDictionary *)options {
     if (!IS_ON) { 
         %orig(application, options); 
         return; 
@@ -784,12 +784,12 @@ static void BoostInjectEnvironmentVariables(void) {
         }
     }
 
-    // Fix triệt để lỗi "Invalid argument structure in %orig":
-    // Gán biến options và chỉ gọi %orig(application, options) duy nhất 1 lần
+    // ĐÃ SỬA: Dùng chung một biến định danh duy nhất và gọi %orig một lần duy nhất
+    NSDictionary *finalOptions = options;
     if (CFG_PTR.turboAppLaunch) {
-        options = nil;
+        finalOptions = nil;
     }
-    %orig(application, options);
+    %orig(application, finalOptions);
 }
 
 %end
