@@ -1,3 +1,9 @@
+// ==============================================================================
+// 🚀 TWEAK.XM - SMOOTHIOS V21 ULTIMATE MONSTER ENGINE
+// 🎯 TARGET: iOS 14.0 -> iOS 18.x (Rootless /var/jb/ & Rootful)
+// 🛠 TẬP TRUNG TOÀN DIỆN: FPS/HZ LOCK, COLOROS CURVE, ANTI-STUTTER, THERMAL & RAM
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -23,7 +29,7 @@
 
 extern char **environ;
 
-// Tích hợp các Module phụ trợ
+// Modules phụ trợ
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
@@ -47,7 +53,6 @@ static inline CAFrameRateRange CAFrameRateRangeMake(float minimum, float maximum
 }
 #endif
 
-// --- Forward Declarations ---
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
 @end
@@ -109,7 +114,7 @@ static BOOL PMIsUsableProcess(void) {
     return [[NSProcessInfo processInfo] processName].length > 0;
 }
 
-// Xử lý dọn RAM và Framebuffer ngầm theo phong cách Garbage Collector
+// Xả rác bộ nhớ & làm sạch Framebuffer đồ họa ngầm
 static void V21_RunGarbageCollector_Aggressive(void) {
     if (!v21_background_queue) v21_background_queue = dispatch_queue_create("com.boostv21.gc", DISPATCH_QUEUE_SERIAL);
     dispatch_async(v21_background_queue, ^{
@@ -154,33 +159,44 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 }
 
 // ==============================================================================
-// 🧠 PHẦN 2: CẤU HÌNH HỆ THỐNG V21 (GỘP CHUNG VÀ TỐI ƯU CÔNG TẮC)
+// 🧠 CẤU HÌNH HỆ THỐNG TOÀN CỤC V21 (KHỚP HOÀN TOÀN CÁC MỤC GIAO DIỆN)
 // ==============================================================================
 
 @interface BoostConfig : NSObject
+// 1. Tùy chỉnh chung
 @property (nonatomic, assign) BOOL enabled;
 
-// Nhóm 1: Điều phối Frame rate & Tần số quét (30 - 60 - 90 - 120 - 144)
-@property (nonatomic, assign) NSInteger targetHz; 
+// 2. Màn hình & Tần số quét (0: Tự động, 30, 60, 90, 120, 144)
+@property (nonatomic, assign) NSInteger targetHz;
+@property (nonatomic, assign) BOOL forceOverclockFrame;
 
-// Nhóm 2: Tối ưu cảm ứng & Độ mượt chuyển cảnh (ColorOS Curve)
-@property (nonatomic, assign) BOOL colorOsSmoothness;
-@property (nonatomic, assign) CGFloat animSpeed;
+// 3. Giao diện & Đa nhiệm
+@property (nonatomic, assign) BOOL optimizeAnimTransition;
+@property (nonatomic, assign) BOOL reduceMultiTaskLag;
+@property (nonatomic, assign) BOOL fixAppExitStutter;
+@property (nonatomic, assign) BOOL touchResponseBoost;
 
-// Nhóm 3: Sửa lỗi khựng đa nhiệm & thoát app nặng
-@property (nonatomic, assign) BOOL fixMultiTaskAndExitLag;
-@property (nonatomic, assign) BOOL turboAppLaunch;
-@property (nonatomic, assign) BOOL killBgApps;
+// 4. Hiệu năng lõi & RAM
+@property (nonatomic, assign) BOOL boostCpuGpu;
+@property (nonatomic, assign) BOOL smartRamClean;
+@property (nonatomic, assign) BOOL metalGraphicsOptimize;
+@property (nonatomic, assign) BOOL gameFpsStabilizer;
+@property (nonatomic, assign) BOOL optimizeSystemProcess;
+@property (nonatomic, assign) BOOL spoofNewModel;
 
-// Nhóm 4: Phần cứng, Đồ họa Metal & Điều tiết nhiệt
-@property (nonatomic, assign) BOOL godModeMetal;
-@property (nonatomic, assign) BOOL smartThermalCharging;
-@property (nonatomic, assign) BOOL bypassSandboxVar;
-@property (nonatomic, assign) BOOL blockAnalytics;
-@property (nonatomic, assign) BOOL tcpNoDelayBoost;
+// 5. Nhiệt độ & Quản lý Pin
+@property (nonatomic, assign) BOOL antiThermalThrottling;
+@property (nonatomic, assign) BOOL smartThermalManager;
+@property (nonatomic, assign) BOOL heavyLoadCooling;
+@property (nonatomic, assign) BOOL chargeCooling;
+@property (nonatomic, assign) BOOL powerSaveMode;
+
+// 6. Hệ thống nâng cao
+@property (nonatomic, assign) BOOL bypassVarSandbox;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
+- (NSInteger)resolvedTargetHz;
 @end
 
 @implementation BoostConfig {
@@ -212,39 +228,49 @@ static void PMConfigureScrollView(UIScrollView *sv) {
             prefs = [NSDictionary dictionaryWithContentsOfFile:plistPath];
         }
         
-        #define GET_BOOL(key, def) (prefs[key] ? [prefs[key] boolValue] : def)
-        #define GET_INT(key, def) (prefs[key] ? [prefs[key] integerValue] : def)
-        #define GET_FLOAT(key, def) (prefs[key] ? [prefs[key] floatValue] : def)
+        #define GET_B(k, d) (prefs[k] ? [prefs[k] boolValue] : d)
+        #define GET_I(k, d) (prefs[k] ? [prefs[k] integerValue] : d)
         
-        self.enabled = GET_BOOL(@"Enabled", YES);
+        self.enabled = GET_B(@"Enabled", YES);
         
         if (self.enabled) {
-            // Đọc tần số quét (mặc định 60, hỗ trợ 30, 60, 90, 120, 144)
-            self.targetHz = GET_INT(@"TargetRefreshRate", 60);
-            if (self.targetHz <= 0) self.targetHz = 60;
+            self.targetHz = GET_I(@"TargetRefreshRate", 60);
+            self.forceOverclockFrame = GET_B(@"ForceOverclockFrame", YES);
             
-            // Gộp các nhóm tính năng mượt mà và chuyển cảnh
-            self.colorOsSmoothness = GET_BOOL(@"ColorOsSmoothness", YES);
-            self.animSpeed = GET_FLOAT(@"AnimSpeed", 0.82); 
+            self.optimizeAnimTransition = GET_B(@"OptimizeAnimTransition", YES);
+            self.reduceMultiTaskLag = GET_B(@"ReduceMultiTaskLag", YES);
+            self.fixAppExitStutter = GET_B(@"FixAppExitStutter", YES);
+            self.touchResponseBoost = GET_B(@"TouchResponseBoost", YES);
             
-            // Khắc phục triệt để khựng đa nhiệm và thoát ứng dụng nặng
-            self.fixMultiTaskAndExitLag = GET_BOOL(@"FixMultiTaskAndExitLag", YES);
-            self.turboAppLaunch = GET_BOOL(@"TurboAppLaunch", YES);
-            self.killBgApps = GET_BOOL(@"KillBgApps", NO);
+            self.boostCpuGpu = GET_B(@"BoostCpuGpu", YES);
+            self.smartRamClean = GET_B(@"SmartRamClean", YES);
+            self.metalGraphicsOptimize = GET_B(@"MetalGraphicsOptimize", YES);
+            self.gameFpsStabilizer = GET_B(@"GameFpsStabilizer", YES);
+            self.optimizeSystemProcess = GET_B(@"OptimizeSystemProcess", YES);
+            self.spoofNewModel = GET_B(@"SpoofNewModel", YES);
             
-            // Đồ họa Metal và kiểm soát nhiệt
-            self.godModeMetal = GET_BOOL(@"GodModeMetal", YES);
-            self.smartThermalCharging = GET_BOOL(@"SmartThermalCharging", YES);
+            self.antiThermalThrottling = GET_B(@"AntiThermalThrottling", YES);
+            self.smartThermalManager = GET_B(@"SmartThermalManager", YES);
+            self.heavyLoadCooling = GET_B(@"HeavyLoadCooling", YES);
+            self.chargeCooling = GET_B(@"ChargeCooling", YES);
+            self.powerSaveMode = GET_B(@"PowerSaveMode", NO);
             
-            // Tối ưu mạng và hệ thống ngầm
-            self.bypassSandboxVar = GET_BOOL(@"BypassSandboxVar", YES);
-            self.blockAnalytics = GET_BOOL(@"BlockAnalytics", YES);
-            self.tcpNoDelayBoost = GET_BOOL(@"TcpNoDelayBoost", YES);
+            self.bypassVarSandbox = GET_B(@"BypassVarSandbox", YES);
         } else {
             self.targetHz = 60;
-            self.animSpeed = 1.0;
         }
     });
+}
+
+// Tính toán tần số quét thực tế: Điều phối thông minh hoặc khóa cố định
+- (NSInteger)resolvedTargetHz {
+    if (self.powerSaveMode) return 30;
+    if (self.targetHz == 0) {
+        NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
+        if (state >= NSProcessInfoThermalStateSerious) return 45;
+        return 60; // Tự động mặc định điều tiết 60fps mượt mà
+    }
+    return self.targetHz;
 }
 @end
 
@@ -258,28 +284,26 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// ⚡️ PHẦN 3: CAN THIỆP KERNEL, TIẾN TRÌNH & ĐIỀU PHỐI THỜI GIAN THỰC (QOS)
+// ⚡️ PHẦN 1: HOOK KERNEL, TIẾN TRÌNH & ĐIỀU PHỐI THỜI GIAN THỰC (QOS)
 // ==============================================================================
 
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ON || !pathname) return %orig(pathname, mode);
-    @try {
-        if (CFG_PTR.bypassSandboxVar) {
-            if (strstr(pathname, "/var/jb/") || strstr(pathname, "/Library/MobileSubstrate/")) return 0;
-        }
-    } @catch (NSException *e) {}
+    if (CFG_PTR.bypassVarSandbox) {
+        if (strstr(pathname, "/var/jb/") || strstr(pathname, "/Library/MobileSubstrate/")) return 0;
+    }
     return %orig(pathname, mode);
 }
 
 %hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
     if (!IS_ON) return %orig(target_thread, flavor, policy_info, policy_count);
     @try {
-        if (flavor == THREAD_TIME_CONSTRAINT_POLICY) {
+        if (CFG_PTR.optimizeSystemProcess && flavor == THREAD_TIME_CONSTRAINT_POLICY) {
             struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
-            NSInteger hz = CFG_PTR.targetHz > 0 ? CFG_PTR.targetHz : 60;
-            uint64_t periodNs = 1000000000ULL / (uint64_t)hz;
-            ttcp->period = (uint32_t)(periodNs);
-            ttcp->computation = (uint32_t)(periodNs * 0.45); 
+            NSInteger currentHz = [CFG_PTR resolvedTargetHz];
+            uint64_t periodNs = 1000000000ULL / (uint64_t)currentHz;
+            ttcp->period = (uint32_t)periodNs;
+            ttcp->computation = (uint32_t)(periodNs * 0.45);
             ttcp->constraint = (uint32_t)(periodNs * 0.55);
         }
     } @catch (NSException *e) {}
@@ -289,67 +313,66 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ON || !name) return %orig(name, oldp, oldlenp, newp, newlen);
     
-    // Giảm nhiệt giả lập để ngăn hệ điều hành bóp xung nhịp đột ngột
-    if (CFG_PTR.smartThermalCharging && strcmp(name, "kern.thermal.temperature") == 0) {
-        float fakeTemp = 31.5f;
+    // Ngăn chặn hệ điều hành bóp xung nhịp CPU/GPU khi máy sinh nhiệt
+    if (CFG_PTR.antiThermalThrottling && strcmp(name, "kern.thermal.temperature") == 0) {
+        float safeTemp = 31.0f;
         if (oldp && oldlenp && *oldlenp >= sizeof(float)) {
-            memcpy(oldp, &fakeTemp, sizeof(float));
+            memcpy(oldp, &safeTemp, sizeof(float));
             *oldlenp = sizeof(float);
             return 0;
         }
     }
     
-    if (CFG_PTR.tcpNoDelayBoost && strcmp(name, "net.inet.tcp.mscanned") == 0) {
-        int val = 1;
-        if (oldp && oldlenp) {
-            memcpy(oldp, &val, sizeof(val));
-            *oldlenp = sizeof(val);
+    if (CFG_PTR.spoofNewModel) {
+        if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0) {
+            const char *model = "iPhone16,2";
+            if (oldp && oldlenp) {
+                strlcpy((char *)oldp, model, *oldlenp);
+                *oldlenp = strlen(model) + 1;
+            }
+            return 0;
         }
-        return 0;
     }
     
     return %orig(name, oldp, oldlenp, newp, newlen);
 }
 
-%hookf(int, connect, int socket, const struct sockaddr *address, socklen_t address_len) {
-    if (IS_ON && CFG_PTR.tcpNoDelayBoost) {
-        int nodelay = 1;
-        setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
-        int bufSize = 2048 * 1024;
-        setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
-        setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
+%hookf(int, uname, struct utsname *name) {
+    int ret = %orig(name);
+    if (ret == 0 && IS_ON && CFG_PTR.spoofNewModel && name) {
+        strlcpy(name->machine, "iPhone16,2", sizeof(name->machine));
     }
-    return %orig(socket, address, address_len);
+    return ret;
 }
 
 // ==============================================================================
-// 🖥 PHẦN 4: KHÓA CHUẨN XÁC TẦN SỐ QUÉT HZ/FPS (FIX 30-60-90-120-144 HZ)
+// 🖥 PHẦN 2: ĐIỀU PHỐI MÀN HÌNH & KHÓA CHUẨN FPS/HZ (FIX 30-60-90-120-144)
 // ==============================================================================
-%group Group_Display_Hz_Fix
+%group Group_Display_Hz
 
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (IS_ON && CFG_PTR.targetHz > 0) {
-        %orig(CFG_PTR.targetHz);
+    if (IS_ON) {
+        %orig([CFG_PTR resolvedTargetHz]);
     } else {
         %orig(fps);
     }
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ON && CFG_PTR.targetHz > 0) {
-        float target = (float)CFG_PTR.targetHz;
-        // Khóa chặt dải ProMotion: Min, Max và Preferred đều nhận chung một giá trị
-        CAFrameRateRange forcedRange = CAFrameRateRangeMake(target, target, target);
-        %orig(forcedRange);
+    if (IS_ON) {
+        float target = (float)[CFG_PTR resolvedTargetHz];
+        // Ghim cố định toàn bộ dải (min=max=preferred) để triệt tiêu biến thiên gây sụt khung hình
+        CAFrameRateRange locked = CAFrameRateRangeMake(target, target, target);
+        %orig(locked);
     } else {
         %orig(range);
     }
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    if (IS_ON && CFG_PTR.targetHz == 30) {
-        // Khi chọn 30Hz, kéo giãn chu kỳ khung hình gấp đôi để hạ tải triệt để
+    if (IS_ON && [CFG_PTR resolvedTargetHz] == 30) {
+        // Khóa ép chu kỳ làm tươi ở mức 30 khung hình/giây
         %orig(2);
     } else {
         %orig(1);
@@ -359,38 +382,39 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
-    if (IS_ON && CFG_PTR.targetHz > 0) {
-        return CFG_PTR.targetHz;
+    if (IS_ON) {
+        return [CFG_PTR resolvedTargetHz];
     }
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (IS_ON && CFG_PTR.targetHz > 0) {
-        return CFG_PTR.targetHz;
+    if (IS_ON) {
+        return [CFG_PTR resolvedTargetHz];
     }
     return %orig;
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (IS_ON && CFG_PTR.targetHz > 0) {
-        %orig((CGFloat)CFG_PTR.targetHz);
+    if (IS_ON) {
+        %orig((CGFloat)[CFG_PTR resolvedTargetHz]);
     } else {
         %orig(rate);
     }
 }
 %end
 
-%end // Group_Display_Hz_Fix
+%end // Group_Display_Hz
 
 // ==============================================================================
-// 🎨 PHẦN 5: ĐỘ MƯỢT TỪNG CHUYỂN CẢNH & PHẢN HỒI CẢM ỨNG (COLOROS CURVE)
+// 🎨 PHẦN 3: GIAO DIỆN, ĐA NHIỆM & PHẢN HỒI CẢM ỨNG (COLOROS SMOOTHNESS)
 // ==============================================================================
-%group Group_UI_ColorOS_Curve
+%group Group_UI_MultiTask
 
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
-    if (IS_ON && CFG_PTR.colorOsSmoothness) {
+    if (IS_ON && CFG_PTR.touchResponseBoost) {
+        // Nâng quyền ưu tiên của luồng nhận diện cảm ứng lên mức cao nhất
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(event);
@@ -399,7 +423,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScrollView
 - (void)setDecelerationRate:(CGFloat)rate {
-    if (IS_ON && CFG_PTR.colorOsSmoothness) {
+    if (IS_ON && CFG_PTR.optimizeAnimTransition) {
         %orig(UIScrollViewDecelerationRateFast);
     } else {
         %orig(rate);
@@ -408,41 +432,25 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)didMoveToWindow {
     %orig;
-    if (IS_ON && CFG_PTR.colorOsSmoothness && self.window != nil) {
+    if (IS_ON && CFG_PTR.optimizeAnimTransition && self.window != nil) {
         PMConfigureScrollView(self);
     }
 }
 %end
 
-%hook CAMediaTimingFunction
-+ (instancetype)functionWithName:(CAMediaTimingFunctionName)name {
-    if (IS_ON && CFG_PTR.colorOsSmoothness) {
-        if ([name isEqualToString:kCAMediaTimingFunctionDefault] || 
-            [name isEqualToString:kCAMediaTimingFunctionEaseInEaseOut]) {
-            return %orig(kCAMediaTimingFunctionEaseOut);
-        }
-    }
-    return %orig(name);
-}
-%end
-
 %hook CALayer
-- (CFTimeInterval)duration {
-    if (!IS_ON) return %orig;
-    return %orig * CFG_PTR.animSpeed;
-}
-
 - (void)setNeedsDisplay {
     %orig;
-    if (IS_ON && CFG_PTR.colorOsSmoothness) {
+    if (IS_ON && CFG_PTR.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
 }
 %end
 
+// Tối ưu hóa chuyển cảnh không làm mất hoạt ảnh gốc
 %hook UIView
 + (void)animateWithDuration:(NSTimeInterval)duration animations:(void (^)(void))animations {
-    if (IS_ON && CFG_PTR.colorOsSmoothness) {
+    if (IS_ON && CFG_PTR.optimizeAnimTransition) {
         %orig(duration * 0.82, animations);
     } else {
         %orig(duration, animations);
@@ -450,16 +458,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%end // Group_UI_ColorOS_Curve
-
-// ==============================================================================
-// 🚀 PHẦN 6: FIX TRIỆT ĐỂ KHỰNG ĐA NHIỆM & VUỐT THOÁT ỨNG DỤNG NẶNG
-// ==============================================================================
-%group Group_SpringBoard_AntiLag
-
 %hook SBAppSwitcherController
 - (void)viewWillAppear:(BOOL)animated {
-    if (IS_ON && CFG_PTR.fixMultiTaskAndExitLag) {
+    if (IS_ON && CFG_PTR.reduceMultiTaskLag) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         [UIView setAnimationDuration:0.16];
         [UIView setAnimationCurve:UIViewAnimationCurveEaseOut];
@@ -468,7 +469,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-    if (IS_ON && CFG_PTR.fixMultiTaskAndExitLag) {
+    if (IS_ON && CFG_PTR.reduceMultiTaskLag) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         V21_RunGarbageCollector_Aggressive();
     }
@@ -477,26 +478,19 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 %hook SBFluidSwitcherViewController
-- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    %orig(scrollView);
-    if (IS_ON && CFG_PTR.fixMultiTaskAndExitLag) {
-        scrollView.layer.shadowOpacity = 0.0;
-    }
-}
-
 - (void)handleFluidSwitcherGesture:(id)gesture {
-    if (IS_ON && CFG_PTR.fixMultiTaskAndExitLag) {
+    if (IS_ON && CFG_PTR.reduceMultiTaskLag) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(gesture);
 }
 %end
 
-// Xả bộ đệm đồ họa ngay khi thoát app nặng ra màn hình chính
+// Triệt tiêu tình trạng khựng khi thoát ứng dụng nặng đang loading
 %hook SBApplication
 - (void)processDidExit:(id)process {
     %orig(process);
-    if (IS_ON && CFG_PTR.fixMultiTaskAndExitLag) {
+    if (IS_ON && CFG_PTR.fixAppExitStutter) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
             [CATransaction begin];
             [CATransaction setDisableActions:YES];
@@ -507,103 +501,42 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%hook SBIconController
-- (void)iconTapped:(id)icon {
-    if (IS_ON && CFG_PTR.fixMultiTaskAndExitLag) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(icon);
-}
-%end
-
-%end // Group_SpringBoard_AntiLag
+%end // Group_UI_MultiTask
 
 // ==============================================================================
-// 🧹 PHẦN 7: ĐIỀU TIẾT RAM & KHỞI CHẠY APP
+// 🚀 PHẦN 4: ĐỒ HỌA METAL, TRIPLE BUFFERING & BỘ NHỚ LÕI
 // ==============================================================================
-%group Group_Memory_Engine
-
-%hook UIApplication
-- (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
-    %orig(application);
-    if (IS_ON) {
-        V21_RunGarbageCollector_Light();
-    }
-}
-
-- (void)applicationDidEnterBackground:(UIApplication *)application {
-    %orig(application);
-    if (IS_ON) {
-        V21_RunGarbageCollector_Aggressive();
-    }
-}
-%end
-
-%hook FBSSystemService
-- (void)openApplication:(id)application withOptions:(NSDictionary *)options {
-    if (!IS_ON) { 
-        %orig(application, options); 
-        return; 
-    }
-    
-    if (CFG_PTR.killBgApps && BoostIsSpringBoard()) {
-        @try {
-            load_bks_terminate();
-            if (g_bksTerminate != NULL && [application respondsToSelector:@selector(bundleIdentifier)]) {
-                NSString *openingBid = [application performSelector:@selector(bundleIdentifier)];
-                Class sac = objc_getClass("SBApplicationController");
-                if (sac) {
-                    id controller = [sac performSelector:@selector(sharedInstance)];
-                    NSArray *apps = [controller performSelector:@selector(allApplications)];
-                    for (id app in apps) {
-                        NSString *bid = [app performSelector:@selector(bundleIdentifier)];
-                        if (bid && ![bid isEqualToString:openingBid] && ![bid hasPrefix:@"com.apple."]) {
-                            g_bksTerminate(bid, 5, NO, @"V21 Kill Background");
-                        }
-                    }
-                }
-            }
-        } @catch (NSException *e) {}
-    }
-
-    NSDictionary *finalOptions = (CFG_PTR.turboAppLaunch) ? nil : options;
-    %orig(application, finalOptions);
-}
-%end
-
-%end // Group_Memory_Engine
-
-// ==============================================================================
-// 🎮 PHẦN 8: ĐỒ HỌA METAL TRIPLE BUFFERING & GIẢM NHIỆT ĐỘ KHI SẠC
-// ==============================================================================
-%group Group_System_Metal_Engine
+%group Group_Core_Engine
 
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (IS_ON && CFG_PTR.godModeMetal) {
-        %orig(3); // Cấp phát 3 frame buffer liên tục chống drop frame
+    if (IS_ON && CFG_PTR.metalGraphicsOptimize) {
+        // 3 Buffer ngăn ngừa nghẽn cổ chai khi tải cảnh đồ họa phức tạp
+        NSUInteger optimalCount = CFG_PTR.gameFpsStabilizer ? 3 : 2;
+        %orig(optimalCount);
     } else {
         %orig(count);
     }
 }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
-    if (IS_ON && CFG_PTR.godModeMetal) {
-        %orig(NO); // Render bất đồng bộ, không bao giờ khóa luồng giao diện chính
+    if (IS_ON && CFG_PTR.metalGraphicsOptimize) {
+        // Render bất đồng bộ để bảo vệ luồng giao diện chính
+        %orig(NO);
     } else {
         %orig(flag);
     }
 }
 
 - (BOOL)allowsNextDrawableTimeout {
-    if (IS_ON && CFG_PTR.godModeMetal) {
+    if (IS_ON && CFG_PTR.metalGraphicsOptimize) {
         return NO;
     }
     return %orig;
 }
 
 - (void)setFramebufferOnly:(BOOL)only {
-    if (IS_ON && CFG_PTR.godModeMetal) {
+    if (IS_ON && CFG_PTR.metalGraphicsOptimize) {
         %orig(YES);
     } else {
         %orig(only);
@@ -611,24 +544,40 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
+%hook UIApplication
+- (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
+    %orig(application);
+    if (IS_ON && CFG_PTR.smartRamClean) {
+        V21_RunGarbageCollector_Light();
+    }
+}
+
+- (void)applicationDidEnterBackground:(UIApplication *)application {
+    %orig(application);
+    if (IS_ON && CFG_PTR.smartRamClean) {
+        V21_RunGarbageCollector_Aggressive();
+    }
+}
+%end
+
+%end // Group_Core_Engine
+
+// ==============================================================================
+// ❄️ PHẦN 5: KIỂM SOÁT NHIỆT ĐỘ, TẢN NHIỆT KHI TẢI NẶNG & KHI SẠC
+// ==============================================================================
+%group Group_Thermal_Engine
+
 %hook NSProcessInfo
 - (NSProcessInfoThermalState)thermalState {
-    if (IS_ON && CFG_PTR.smartThermalCharging) {
+    if (IS_ON && CFG_PTR.antiThermalThrottling) {
         return NSProcessInfoThermalStateNominal;
     }
     return %orig;
 }
 
 + (BOOL)isThermalPressureCritical {
-    if (IS_ON && CFG_PTR.smartThermalCharging) return NO;
+    if (IS_ON && CFG_PTR.antiThermalThrottling) return NO;
     return %orig;
-}
-%end
-
-%hook ATXAnalyticsManager
-- (void)sendEvent:(id)eventData {
-    if (IS_ON && CFG_PTR.blockAnalytics) return; 
-    %orig(eventData);
 }
 %end
 
@@ -638,25 +587,27 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Tự động giải phóng áp lực render khi thiết bị cắm sạc hoặc sinh nhiệt cao
 %hook IOPMPowerSource
 - (void)updateStatus {
     %orig;
-    if (IS_ON && CFG_PTR.smartThermalCharging) {
+    if (IS_ON && CFG_PTR.chargeCooling) {
         UIDeviceBatteryState bState = [[UIDevice currentDevice] batteryState];
         if (bState == UIDeviceBatteryStateCharging || bState == UIDeviceBatteryStateFull) {
             [CATransaction begin];
             [CATransaction setAnimationDuration:0.10];
             [CATransaction commit];
+            if (CFG_PTR.heavyLoadCooling) {
+                V21_RunGarbageCollector_Light();
+            }
         }
     }
 }
 %end
 
-%end // Group_System_Metal_Engine
+%end // Group_Thermal_Engine
 
 // ==============================================================================
-// ⚙️ PHẦN 9: KHỞI TẠO BỘ LÕI TWEAK V21
+// ⚙️ PHẦN 6: KHỞI TẠO BỘ LÕI TWEAK V21
 // ==============================================================================
 
 %ctor {
@@ -682,28 +633,20 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         @try {
             [[KernelBypass sharedInstance] initEnvironment];
             [[SystemBlocker sharedInstance] initBlockers];
-            [[KernelBypass sharedInstance] boostCurrentThreadPriority];
-            [[KernelBypass sharedInstance] forceMachPurge];
-            if (CFG_PTR.bypassSandboxVar) init_privilege_escalation();
+            if (CFG_PTR.boostCpuGpu) [[KernelBypass sharedInstance] boostCurrentThreadPriority];
+            if (CFG_PTR.smartRamClean) [[KernelBypass sharedInstance] forceMachPurge];
+            if (CFG_PTR.bypassVarSandbox) init_privilege_escalation();
         } @catch (NSException *e) {}
         
         setenv("MALLOC_OPTIONS", "AFGN", 1);
-        if (CFG_PTR.turboAppLaunch) {
-            setenv("DYLD_DISABLE_DOFS", "1", 1);
-            setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
-        }
-        if (CFG_PTR.tcpNoDelayBoost) setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
+        setenv("DYLD_DISABLE_DOFS", "1", 1);
+        setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
         
-        %init(_ungrouped); 
-        %init(Group_Display_Hz_Fix);
-        %init(Group_UI_ColorOS_Curve);
-        
-        if (BoostIsSpringBoard()) {
-            %init(Group_SpringBoard_AntiLag);
-        }
-        
-        %init(Group_Memory_Engine);
-        %init(Group_System_Metal_Engine); 
+        %init(_ungrouped);
+        %init(Group_Display_Hz);
+        %init(Group_UI_MultiTask);
+        %init(Group_Core_Engine);
+        %init(Group_Thermal_Engine);
         
         PMPrepareRuntime();
         if (!PMIsUsableProcess()) PMRuntimeReady = NO;
