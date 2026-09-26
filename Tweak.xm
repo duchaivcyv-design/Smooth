@@ -307,6 +307,113 @@ static void BoostApplyUnifiedPerformance(void) {
     }
 }
 
+#pragma mark - Helper Functions for ScrollView
+static const BOOL PMEnabled = YES;
+static const BOOL PMTouchResponseEnabled = YES;
+static const BOOL PMSmoothScrollEnabled = YES;
+static const BOOL PMReduceRepeatedWork = YES;
+static const BOOL PMDiagnosticsEnabled = NO;
+
+static BOOL PMRuntimeReady = NO;
+static NSObject *PMConfiguredMarker = nil;
+static const void *kPMConfiguredKey = &kPMConfiguredKey;
+
+static void PMDebugLog(NSString *format, ...) {
+    if (!PMDiagnosticsEnabled) return;
+    if (!format || format.length == 0) return;
+    va_list args; va_start(args, format);
+    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    NSLog(@"[ProMotionControl] %@", msg);
+}
+
+static void PMPrepareRuntime(void) {
+    if (PMRuntimeReady) return;
+    PMConfiguredMarker = [NSObject new];
+    PMRuntimeReady = YES;
+    PMDebugLog(@"Runtime initialized");
+}
+
+static BOOL PMIsUsableProcess(void) {
+    if (!PMRuntimeReady) return NO;
+    return [[NSProcessInfo processInfo] processName].length > 0;
+}
+
+static BOOL PMScrollViewWasConfigured(UIScrollView *sv) {
+    if (!sv) return NO;
+    return objc_getAssociatedObject(sv, kPMConfiguredKey) != nil;
+}
+
+static void PMMarkScrollViewConfigured(UIScrollView *sv) {
+    if (!sv || !PMConfiguredMarker) return;
+    objc_setAssociatedObject(sv, kPMConfiguredKey, PMConfiguredMarker, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static BOOL PMIsSuitableScrollView(UIScrollView *sv) {
+    if (!PMEnabled || !PMRuntimeReady || !sv) return NO;
+    if (!sv.window || sv.hidden || !sv.userInteractionEnabled) return NO;
+    if (PMReduceRepeatedWork && PMScrollViewWasConfigured(sv)) return NO;
+    return YES;
+}
+
+static void PMApplyTouchOptimisation(UIScrollView *sv) {
+    if (!PMTouchResponseEnabled) return;
+    if (sv.delaysContentTouches) sv.delaysContentTouches = NO;
+}
+
+static void PMApplySmoothFeel(UIScrollView *sv) {
+    if (!IS_ON || !CFG_PTR.smoothFeelEngine) return;
+    UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
+    if (pan) {
+        pan.delaysTouchesBegan = NO;
+        pan.delaysTouchesEnded = NO;
+    }
+}
+
+static void PMApplyScrollOptimisation(UIScrollView *sv) {
+    if (!PMSmoothScrollEnabled) return;
+    (void)sv;
+}
+
+static void PMApplyGestureStability(UIScrollView *sv) {
+    if (sv == nil) return;
+}
+
+static void PMConfigureTableView(UITableView *tv) {
+    if (tv == nil) return;
+    (void)tv;
+}
+
+static void PMConfigureCollectionView(UICollectionView *cv) {
+    if (cv == nil) return;
+    (void)cv;
+}
+
+static void PMConfigureScrollView(UIScrollView *sv) {
+    if (!PMIsSuitableScrollView(sv)) return;
+    PMMarkScrollViewConfigured(sv);
+    PMApplyTouchOptimisation(sv);
+    PMApplySmoothFeel(sv);
+    PMApplyScrollOptimisation(sv);
+    PMApplyGestureStability(sv);
+    if ([sv isKindOfClass:[UITableView class]]) PMConfigureTableView((UITableView *)sv);
+    else if ([sv isKindOfClass:[UICollectionView class]]) PMConfigureCollectionView((UICollectionView *)sv);
+    if (PMDiagnosticsEnabled) PMDebugLog(@"Configured: %@", NSStringFromClass([sv class]));
+}
+
+static void BoostInjectEnvironmentVariables(void) {
+    if (!IS_ON) return;
+    if (CFG_PTR.enableAIAcceleration) setenv("MALLOC_OPTIONS", "AFGN", 1);
+    if (CFG_PTR.turboAppLaunch) {
+        setenv("DYLD_DISABLE_DOFS", "1", 1);
+        setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
+    }
+    if (CFG_PTR.pageCompressionOptimized) setenv("VM_COMPRESSION_RATIO", "MAX", 1);
+    setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
+    setenv("IOKIT_AUTOCLEAN", "1", 1);
+}
+
+#pragma mark - Hook Function Hooks
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ON || !CFG_PTR.bypassSandboxChecks || !pathname) return %orig(pathname, mode);
     if (strstr(pathname, "/Caches/") || strstr(pathname, "/tmp/") || 
@@ -416,6 +523,8 @@ static void BoostApplyUnifiedPerformance(void) {
     }
     return %orig(socket, address, address_len);
 }
+
+#pragma mark - Logos Groups
 
 %group KernelDeepHooks
 %end
@@ -735,124 +844,7 @@ static void BoostApplyUnifiedPerformance(void) {
 
 %end
 
-#pragma mark - Configuration
-static const BOOL PMEnabled = YES;
-static const BOOL PMTouchResponseEnabled = YES;
-static const BOOL PMSmoothScrollEnabled = YES;
-static const BOOL PMReduceRepeatedWork = YES;
-static const BOOL PMDiagnosticsEnabled = NO;
-
-#pragma mark - Runtime State
-static BOOL PMRuntimeReady = NO;
-static NSObject *PMConfiguredMarker = nil;
-static const void *kPMConfiguredKey = &kPMConfiguredKey;
-
-#pragma mark - Diagnostic
-static void PMDebugLog(NSString *format, ...) {
-    if (!PMDiagnosticsEnabled) return;
-    if (!format || format.length == 0) return;
-    va_list args; va_start(args, format);
-    NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-    NSLog(@"[ProMotionControl] %@", msg);
-}
-
-#pragma mark - Preparation
-static void PMPrepareRuntime(void) {
-    if (PMRuntimeReady) return;
-    PMConfiguredMarker = [NSObject new];
-    PMRuntimeReady = YES;
-    PMDebugLog(@"Runtime initialized");
-}
-
-#pragma mark - Safety
-static BOOL PMIsUsableProcess(void) {
-    if (!PMRuntimeReady) return NO;
-    return [[NSProcessInfo processInfo] processName].length > 0;
-}
-
-#pragma mark - Scroll State
-static BOOL PMScrollViewWasConfigured(UIScrollView *sv) {
-    if (!sv) return NO;
-    return objc_getAssociatedObject(sv, kPMConfiguredKey) != nil;
-}
-
-static void PMMarkScrollViewConfigured(UIScrollView *sv) {
-    if (!sv || !PMConfiguredMarker) return;
-    objc_setAssociatedObject(sv, kPMConfiguredKey, PMConfiguredMarker, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-#pragma mark - Validity Checks
-static BOOL PMIsSuitableScrollView(UIScrollView *sv) {
-    if (!PMEnabled || !PMRuntimeReady || !sv) return NO;
-    if (!sv.window || sv.hidden || !sv.userInteractionEnabled) return NO;
-    if (PMReduceRepeatedWork && PMScrollViewWasConfigured(sv)) return NO;
-    return YES;
-}
-
-#pragma mark - Touch Optimisation
-static void PMApplyTouchOptimisation(UIScrollView *sv) {
-    if (!PMTouchResponseEnabled) return;
-    if (sv.delaysContentTouches) sv.delaysContentTouches = NO;
-}
-
-#pragma mark - Smooth Feel Engine
-static void PMApplySmoothFeel(UIScrollView *sv) {
-    if (!IS_ON || !CFG_PTR.smoothFeelEngine) return;
-    UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
-    if (pan) {
-        pan.delaysTouchesBegan = NO;
-        pan.delaysTouchesEnded = NO;
-    }
-}
-
-#pragma mark - Scroll Stability
-static void PMApplyScrollOptimisation(UIScrollView *sv) {
-    if (!PMSmoothScrollEnabled) return;
-    (void)sv;
-}
-
-#pragma mark - Gesture Stability
-static void PMApplyGestureStability(UIScrollView *sv) {
-    if (sv == nil) return;
-}
-
-#pragma mark - Table View Specialisation
-static void PMConfigureTableView(UITableView *tv) {
-    if (tv == nil) return;
-    (void)tv;
-}
-
-#pragma mark - Collection View Specialisation
-static void PMConfigureCollectionView(UICollectionView *cv) {
-    if (cv == nil) return;
-    (void)cv;
-}
-
-#pragma mark - Generic Scroll View Configuration
-static void PMConfigureScrollView(UIScrollView *sv) {
-    if (!PMIsSuitableScrollView(sv)) return;
-    PMMarkScrollViewConfigured(sv);
-    PMApplyTouchOptimisation(sv);
-    PMApplySmoothFeel(sv);
-    PMApplyScrollOptimisation(sv);
-    PMApplyGestureStability(sv);
-    if ([sv isKindOfClass:[UITableView class]]) PMConfigureTableView((UITableView *)sv);
-    else if ([sv isKindOfClass:[UICollectionView class]]) PMConfigureCollectionView((UICollectionView *)sv);
-    if (PMDiagnosticsEnabled) PMDebugLog(@"Configured: %@", NSStringFromClass([sv class]));
-}
-
-static void BoostInjectEnvironmentVariables(void) {
-    if (!IS_ON) return;
-    if (CFG_PTR.enableAIAcceleration) setenv("MALLOC_OPTIONS", "AFGN", 1);
-    if (CFG_PTR.turboAppLaunch) {
-        setenv("DYLD_DISABLE_DOFS", "1", 1);
-        setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
-    }
-    if (CFG_PTR.pageCompressionOptimized) setenv("VM_COMPRESSION_RATIO", "MAX", 1);
-    setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
-    setenv("IOKIT_AUTOCLEAN", "1", 1);
-}
+#pragma mark - Constructor
 
 %ctor {
     @autoreleasepool {
@@ -884,10 +876,6 @@ static void BoostInjectEnvironmentVariables(void) {
             BoostApplyUnifiedPerformance();
         }
         
-        if (CFG_PTR.forceRealtimePriority || CFG_PTR.bypassSandboxChecks ||
-            CFG_PTR.optimizeDiskIO || CFG_PTR.godModeFakeiPhone16 || CFG_PTR.tcpNoDelayBoost) {
-            %init(KernelDeepHooks);
-        }
         if (CFG_PTR.godModeForce120Hz || CFG_PTR.disableFrameThrottling || CFG_PTR.spoofModel) {
             %init(FramePacingEngine);
         }
