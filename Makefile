@@ -23,9 +23,6 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/SystemBlocker.m
 
 # COMPILER FLAGS
-# -Wno-error: Logos warnings (multiple %group, duplicate hooks) không được treat as errors
-#   vì code gốc merge 2 codebase (Boost + ProMotion) có thể trigger logos warnings
-# -Wno-logos: suppress Logos-specific warnings hoàn toàn
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
@@ -45,7 +42,6 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -I.
 
 # FRAMEWORKS
-# Thêm CoreServices cho CFNotificationCenter, posix_spawn, environ
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -71,11 +67,30 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================================
-# PART 3: PACKAGING SCRIPT CHUẨN ROOTLESS v10
+# PART 3: AUTO-COPY PLIST TO MOBILESUBSTRATE DYNAMICLIBRARIES
+# ==============================================================================
+# Tên file plist filter (phải trùng với tên dylib + .plist)
+BOOST_PLIST_NAME = BoostiPhone6sCore.plist
+
+after-stage::
+	@echo ""
+	@echo "[v12] Copying MobileSubstrate filter plist..."
+	@if [ -f "$(BOOST_PLIST_NAME)" ]; then \
+	    mkdir -p $(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries; \
+	    cp "$(BOOST_PLIST_NAME)" "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
+	    chmod 644 "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
+	    echo "[OK] Filter plist installed to MobileSubstrate/DynamicLibraries/"; \
+	else \
+	    echo "[WARN] $(BOOST_PLIST_NAME) not found in project root! Skipping..."; \
+	fi
+	@echo ""
+
+# ==============================================================================
+# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS v12
 # ==============================================================================
 before-package::
 	@echo ""
-	@echo "Finalizing Rootless Package v10..."
+	@echo "Finalizing Rootless Package v12..."
 	@echo ""
 	
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
@@ -107,6 +122,11 @@ before-package::
 	else \
 	    echo "  [FAIL] Dylib NOT FOUND in any expected path!"; \
 	fi; \
+	if [ -f "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)" ]; then \
+	    echo "  [OK] Plist: var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
+	else \
+	    echo "  [WARN] Filter plist NOT FOUND in DynamicLibraries!"; \
+	fi; \
 	if [ -d "$(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
 	    echo "  [OK] Bundle: var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"; \
 	else \
@@ -119,5 +139,5 @@ before-package::
 	fi
 	
 	@echo ""
-	@echo "Rootless Package v10 Ready!"
+	@echo "Rootless Package v12 Ready!"
 	@echo ""
