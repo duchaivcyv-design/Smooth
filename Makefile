@@ -1,11 +1,10 @@
 # ==============================================================
-# V20 ULTIMATE ROOT MAKEFILE - TWEAK NATIVE CHUẨN XÁC
+# V20 ULTIMATE ROOT MAKEFILE - SỬ DỤNG FILE PLIST CÓ SẴN
 # ==============================================================
 
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
-# Tối ưu Log Github Actions
 GO_EASY_ON_ME = 1
 DEBUG = 0
 FINALPACKAGE = 1
@@ -13,7 +12,7 @@ FINALPACKAGE = 1
 include $(THEOS)/makefiles/common.mk
 
 # ==============================================================
-# PART 1: BUILD MAIN TWEAK (TWEAK CORE LOGIC)
+# PART 1: BUILD MAIN TWEAK
 # ==============================================================
 TWEAK_NAME = BoostiPhone6sCore
 
@@ -25,7 +24,6 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
-# Kỷ luật thép: Bật tối ưu -O3, tắt hoàn toàn cảnh báo rác
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
@@ -66,7 +64,7 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================
-# PART 3: PACKAGING & DEBIAN FOLDER SETUP
+# PART 3: ĐÓNG GÓI CONTROL, POSTINST, PRERM
 # ==============================================================
 before-package::
 	@echo ""
@@ -76,19 +74,14 @@ before-package::
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
 	@if [ -f control ]; then \
 	    cp control $(THEOS_STAGING_DIR)/DEBIAN/control; \
-	    echo "[OK] DEBIAN/control copied."; \
 	fi
 	@if [ -f postinst ]; then \
 	    cp postinst $(THEOS_STAGING_DIR)/DEBIAN/postinst; \
 	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/postinst; \
-	    echo "[OK] DEBIAN/postinst copied and chmod 755."; \
 	fi
 	@if [ -f prerm ]; then \
 	    cp prerm $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
 	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
-	    echo "[OK] DEBIAN/prerm copied and chmod 755."; \
 	fi
-	
-	@echo ""
 	@echo "Rootless Package V20 Ready!"
 	@echo ""
