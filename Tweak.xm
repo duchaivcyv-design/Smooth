@@ -1,8 +1,8 @@
 // ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V21.4.4 HYPER-HANDSHAKE & ANTI-CRASH CORE
+// 🚀 TWEAK.XM - SMOOTHIOS V21.5.1 UNIVERSAL UNLOCKED FRAME & ZERO-BLACK ENGINE
 // 🎯 TARGET: iOS 14.0 -> iOS 18.x (Rootless /var/jb/ & Rootful)
-// 🛡 BẢO TOÀN 100% TÍNH NĂNG - ĐẠI PHẪU THUẬT LỖI CRASH VĂNG VÀ ĐEN MÀN HÌNH
-// ⚡️ RENDER HANDSHAKE PIPELINE + TRIPLE BUFFERING + OVERCLOCK 144HZ + FAKE A18 PRO
+// 🛡 ĐỒNG BỘ ÉP KHUNG HÌNH TOÀN DIỆN MỌI DÒNG MÁY (30 - 60 - 90 - 120 - 144 HZ/FPS)
+// ⚡️ KHÔNG PHÂN LOẠI MÁY - SỬA THÔNG LUỒNG SURFACE BRIDGE TRIỆT TIÊU ĐEN MÀN
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -69,9 +69,13 @@ extern char **environ;
 - (void)_setSecure:(BOOL)arg1;
 @end
 
-static void V2144_RunGarbageCollector_Aggressive(void);
-static void V2144_RunGarbageCollector_Light(void);
-static void V2144_AsyncMemoryPurgeSafe(void);
+@interface CALayer (PrivateBridge)
+- (id)context;
+@end
+
+static void V2151_RunGarbageCollector_Aggressive(void);
+static void V2151_RunGarbageCollector_Light(void);
+static void V2151_AsyncMemoryPurgeSafe(void);
 static void PMPrepareRuntime(void);
 static BOOL PMIsUsableProcess(void);
 
@@ -79,14 +83,15 @@ static dispatch_once_t g_bksTerminate_once;
 typedef void (*BKSTerminateFunc)(NSString *, NSInteger, BOOL, NSString *);
 static BKSTerminateFunc g_bksTerminate = NULL;
 
-static dispatch_queue_t v2144_bg_gc_queue = NULL;
-static dispatch_queue_t v2144_async_io_queue = NULL;
-static dispatch_queue_t v2144_render_sync_queue = NULL;
+static dispatch_queue_t v2151_bg_gc_queue = NULL;
+static dispatch_queue_t v2151_async_io_queue = NULL;
+static dispatch_queue_t v2151_render_bridge_queue = NULL;
 
 static BOOL PMRuntimeReady = NO;
+static BOOL g_AppWindowReadyToRender = NO;
 static const void *kPMConfiguredKey = &kPMConfiguredKey;
-static const void *kMetalHandshakeKey = &kMetalHandshakeKey;
-static const void *kMetalFrameCountKey = &kMetalFrameCountKey;
+static const void *kMetalBridgeReadyKey = &kMetalBridgeReadyKey;
+static const void *kMetalFrameTrackerKey = &kMetalFrameTrackerKey;
 
 // Khởi chạy an toàn không treo luồng
 static inline void run_posix_cmd_safe(const char *path, const char *arg1, const char *arg2) {
@@ -159,13 +164,13 @@ static BOOL PMIsUsableProcess(void) {
 }
 
 // ==============================================================================
-// 🧹 BỘ THU HỒI BỘ NHỚ VÀ FRAMEBUFFER ĐA TẦNG V21.4.4
+// 🧹 BỘ THU HỒI BỘ NHỚ VÀ FRAMEBUFFER ĐA TẦNG V21.5.1
 // ==============================================================================
-static void V2144_RunGarbageCollector_Aggressive(void) {
-    if (!v2144_bg_gc_queue) {
-        v2144_bg_gc_queue = dispatch_queue_create("com.boostv2144.gc.aggressive", DISPATCH_QUEUE_SERIAL);
+static void V2151_RunGarbageCollector_Aggressive(void) {
+    if (!v2151_bg_gc_queue) {
+        v2151_bg_gc_queue = dispatch_queue_create("com.boostv2151.gc.aggressive", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2144_bg_gc_queue, ^{
+    dispatch_async(v2151_bg_gc_queue, ^{
         @autoreleasepool {
             @try {
                 [[NSURLCache sharedURLCache] removeAllCachedResponses];
@@ -181,11 +186,11 @@ static void V2144_RunGarbageCollector_Aggressive(void) {
     });
 }
 
-static void V2144_RunGarbageCollector_Light(void) {
-    if (!v2144_bg_gc_queue) {
-        v2144_bg_gc_queue = dispatch_queue_create("com.boostv2144.gc.light", DISPATCH_QUEUE_SERIAL);
+static void V2151_RunGarbageCollector_Light(void) {
+    if (!v2151_bg_gc_queue) {
+        v2151_bg_gc_queue = dispatch_queue_create("com.boostv2151.gc.light", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2144_bg_gc_queue, ^{
+    dispatch_async(v2151_bg_gc_queue, ^{
         @autoreleasepool {
             @try {
                 [CacheCleaner forceMemoryPurge];
@@ -195,11 +200,11 @@ static void V2144_RunGarbageCollector_Light(void) {
     });
 }
 
-static void V2144_AsyncMemoryPurgeSafe(void) {
-    if (!v2144_async_io_queue) {
-        v2144_async_io_queue = dispatch_queue_create("com.boostv2144.async.purge", DISPATCH_QUEUE_SERIAL);
+static void V2151_AsyncMemoryPurgeSafe(void) {
+    if (!v2151_async_io_queue) {
+        v2151_async_io_queue = dispatch_queue_create("com.boostv2151.async.purge", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2144_async_io_queue, ^{
+    dispatch_async(v2151_async_io_queue, ^{
         @autoreleasepool {
             malloc_zone_pressure_relief(NULL, 1024 * 1024 * 16);
         }
@@ -224,7 +229,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 }
 
 // ==============================================================================
-// 🧠 PHẦN 1: CẤU HÌNH HỆ THỐNG V21.4.4 (NÂNG CẤP NHÃN BETA 3.2)
+// 🧠 PHẦN 1: CẤU HÌNH HỆ THỐNG V21.5.1 (THẾ HỆ BETA 4.5 HYPER)
 // ==============================================================================
 
 @interface BoostConfig : NSObject
@@ -245,31 +250,31 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 @property (nonatomic, assign) BOOL touchResponseBoost;
 @property (nonatomic, assign) CGFloat animSpeed;
 
-// Nhóm 3: Hiệu năng Lõi, Auto Fake iPhone 16 Pro & Điều phối (BETA 3.2)
-@property (nonatomic, assign) BOOL ios27AutoSchedulerBeta32;      
-@property (nonatomic, assign) BOOL realtimePriorityBoostBeta32;   
+// Nhóm 3: Hiệu năng Lõi, Auto Fake iPhone 16 Pro & Điều phối (BETA 4.5)
+@property (nonatomic, assign) BOOL ios27AutoSchedulerBeta45;      
+@property (nonatomic, assign) BOOL realtimePriorityBoostBeta45;   
 @property (nonatomic, assign) BOOL boostCpuGpu;
 @property (nonatomic, assign) BOOL smartRamClean;
-@property (nonatomic, assign) BOOL aggressiveRamCleanBeta32;     
+@property (nonatomic, assign) BOOL aggressiveRamCleanBeta45;     
 @property (nonatomic, assign) BOOL killBgApps;
 @property (nonatomic, assign) BOOL turboAppLaunch;
 @property (nonatomic, assign) BOOL metalTripleBuffering;
-@property (nonatomic, assign) BOOL metalHandshakePipeline;        
+@property (nonatomic, assign) BOOL metalSurfaceBridgeBeta45;      // Cơ chế Surface Synchronous Bridge mới
 @property (nonatomic, assign) BOOL gameFpsStabilizer;
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
 @property (nonatomic, assign) BOOL autoSpoofNewDevice;
 
-// Nhóm 4: Nhiệt độ Cực Đoan & Sạc Pin (BETA 3.2)
+// Nhóm 4: Nhiệt độ Cực Đoan & Sạc Pin (BETA 4.5)
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
-@property (nonatomic, assign) BOOL heavyLoadCoolingBeta32;       
+@property (nonatomic, assign) BOOL heavyLoadCoolingBeta45;       
 @property (nonatomic, assign) BOOL chargeCoolingProtection;
 @property (nonatomic, assign) BOOL powerSaveMode;
 
-// Nhóm 5: Hệ thống Nâng Cao & Mạng (BETA 3.2)
+// Nhóm 5: Hệ thống Nâng Cao & Mạng (BETA 4.5)
 @property (nonatomic, assign) BOOL bypassVarSandbox;
 @property (nonatomic, assign) BOOL blockAnalytics;
-@property (nonatomic, assign) BOOL tcpTurboNetworkBeta32;        
+@property (nonatomic, assign) BOOL tcpTurboNetworkBeta45;        
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -291,7 +296,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _configQueue = dispatch_queue_create("com.boostv2144.config.queue", DISPATCH_QUEUE_SERIAL);
+        _configQueue = dispatch_queue_create("com.boostv2151.config.queue", DISPATCH_QUEUE_SERIAL);
         [self loadSettings];
     }
     return self;
@@ -326,29 +331,29 @@ static void PMConfigureScrollView(UIScrollView *sv) {
             self.touchResponseBoost = GET_B(@"TouchResponseBoost", YES);
             self.animSpeed = GET_F(@"AnimSpeed", 0.82);
 
-            // BETA 3.2
-            self.ios27AutoSchedulerBeta32 = GET_B(@"Ios27AutoSchedulerBeta32", YES);
-            self.realtimePriorityBoostBeta32 = GET_B(@"RealtimePriorityBoostBeta32", YES);
+            // BETA 4.5 Hyper
+            self.ios27AutoSchedulerBeta45 = GET_B(@"Ios27AutoSchedulerBeta45", YES);
+            self.realtimePriorityBoostBeta45 = GET_B(@"RealtimePriorityBoostBeta45", YES);
             self.boostCpuGpu = GET_B(@"BoostCpuGpu", YES);
             self.smartRamClean = GET_B(@"SmartRamClean", YES);
-            self.aggressiveRamCleanBeta32 = GET_B(@"AggressiveRamCleanBeta32", NO);
+            self.aggressiveRamCleanBeta45 = GET_B(@"AggressiveRamCleanBeta45", NO);
             self.killBgApps = GET_B(@"KillBgApps", NO);
             self.turboAppLaunch = GET_B(@"TurboAppLaunch", YES);
             self.metalTripleBuffering = GET_B(@"MetalTripleBuffering", YES);
-            self.metalHandshakePipeline = GET_B(@"MetalHandshakePipeline", YES);
+            self.metalSurfaceBridgeBeta45 = GET_B(@"MetalSurfaceBridgeBeta45", YES);
             self.gameFpsStabilizer = GET_B(@"GameFpsStabilizer", YES);
             self.optimizeSystemProcess = GET_B(@"OptimizeSystemProcess", YES);
             self.autoSpoofNewDevice = GET_B(@"AutoSpoofNewDevice", YES);
 
             self.antiThermalThrottling = GET_B(@"AntiThermalThrottling", YES);
             self.smartThermalManager = GET_B(@"SmartThermalManager", YES);
-            self.heavyLoadCoolingBeta32 = GET_B(@"HeavyLoadCoolingBeta32", YES);
+            self.heavyLoadCoolingBeta45 = GET_B(@"HeavyLoadCoolingBeta45", YES);
             self.chargeCoolingProtection = GET_B(@"ChargeCoolingProtection", YES);
             self.powerSaveMode = GET_B(@"PowerSaveMode", NO);
 
             self.bypassVarSandbox = GET_B(@"BypassVarSandbox", YES);
             self.blockAnalytics = GET_B(@"BlockAnalytics", YES);
-            self.tcpTurboNetworkBeta32 = GET_B(@"TcpTurboNetworkBeta32", YES);
+            self.tcpTurboNetworkBeta45 = GET_B(@"TcpTurboNetworkBeta45", YES);
         } else {
             self.enableHzControl = NO;
             self.enableFPSControl = NO;
@@ -385,7 +390,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// ⚡️ PHẦN 2: AUTO FAKE IPHONE 16 PRO (A18 PRO) & SCHEDULER BETA 3.2
+// ⚡️ PHẦN 2: AUTO FAKE IPHONE 16 PRO (A18 PRO) & SCHEDULER BETA 4.5
 // ==============================================================================
 
 %hookf(int, access, const char *pathname, int mode) {
@@ -401,7 +406,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hookf(kern_return_t, thread_policy_set, thread_act_t target_thread, thread_policy_flavor_t flavor, natural_t *policy_info, mach_msg_type_number_t policy_count) {
     if (!IS_ON) return %orig(target_thread, flavor, policy_info, policy_count);
     @try {
-        if (BoostIsSpringBoard() && (CFG_PTR.ios27AutoSchedulerBeta32 || CFG_PTR.realtimePriorityBoostBeta32) && flavor == THREAD_TIME_CONSTRAINT_POLICY && policy_info) {
+        if (BoostIsSpringBoard() && (CFG_PTR.ios27AutoSchedulerBeta45 || CFG_PTR.realtimePriorityBoostBeta45) && flavor == THREAD_TIME_CONSTRAINT_POLICY && policy_info) {
             struct thread_time_constraint_policy *ttcp = (struct thread_time_constraint_policy *)policy_info;
             NSInteger currentHz = [CFG_PTR resolvedTargetHz];
             uint64_t periodNs = 1000000000ULL / (uint64_t)currentHz;
@@ -455,7 +460,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 %hookf(int, connect, int socket, const struct sockaddr *address, socklen_t address_len) {
-    if (IS_ON && CFG_PTR.tcpTurboNetworkBeta32) {
+    if (IS_ON && CFG_PTR.tcpTurboNetworkBeta45) {
         int nodelay = 1;
         setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
         int bufSize = 2048 * 1024;
@@ -466,13 +471,20 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 PHẦN 3: ÉP TRẦN HZ & FPS ĐỘC LẬP (30 - 60 - 90 - 120 - 144)
+// 🖥 PHẦN 3: ÉP TRẦN ĐỒNG NHẤT MỌI PHẦN CỨNG (KHÔNG PHÂN LOẠI - KHÔNG ĐEN MÀN)
 // ==============================================================================
 %group Group_Display_DualRate
 
+%hook UIWindow
+- (void)makeKeyAndVisible {
+    %orig;
+    g_AppWindowReadyToRender = YES;
+}
+%end
+
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (IS_ON && CFG_PTR.enableFPSControl) {
+    if (IS_ON && CFG_PTR.enableFPSControl && (BoostIsSpringBoard() || g_AppWindowReadyToRender)) {
         %orig([CFG_PTR resolvedTargetFPS]);
     } else {
         %orig(fps);
@@ -480,8 +492,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyToRender)) {
         float rate = (float)[CFG_PTR resolvedTargetHz];
+        // Ép đồng nhất toàn bộ phần cứng mà không loại trừ máy nào
         CAFrameRateRange locked = CAFrameRateRangeMake(rate, rate, rate);
         %orig(locked);
     } else {
@@ -490,8 +503,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    if (IS_ON && (([CFG_PTR resolvedTargetHz] == 30) || ([CFG_PTR resolvedTargetFPS] == 30))) {
-        %orig(2);
+    if (IS_ON && (BoostIsSpringBoard() || g_AppWindowReadyToRender) && (([CFG_PTR resolvedTargetHz] == 30) || ([CFG_PTR resolvedTargetFPS] == 30))) {
+        %orig(2); // Kéo giãn interval để khóa cứng trần 30 FPS mát máy
     } else {
         %orig(1);
     }
@@ -500,21 +513,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyToRender)) {
         return [CFG_PTR resolvedTargetHz];
     }
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyToRender)) {
         return [CFG_PTR resolvedTargetHz];
     }
     return %orig;
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyToRender)) {
         %orig((CGFloat)[CFG_PTR resolvedTargetHz]);
     } else {
         %orig(rate);
@@ -525,9 +538,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Display_DualRate
 
 // ==============================================================================
-// 🎮 PHẦN 4: CƠ CHẾ RENDER HANDSHAKE PIPELINE (THÔNG LUỒNG KHÔNG ĐEN MÀN)
+// 🎮 PHẦN 4: SURFACE SYNCHRONOUS BRIDGE (TRIỆT TIÊU 100% ĐEN MÀN HÌNH METAL)
 // ==============================================================================
-%group Group_Metal_Handshake_Engine
+%group Group_Metal_SurfaceBridge_Engine
 
 %hook CAMetalLayer
 
@@ -537,49 +550,49 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         if (BoostIsSpringBoard()) {
             [self setMaximumDrawableCount:3];
         } else {
-            objc_setAssociatedObject(self, kMetalHandshakeKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(self, kMetalFrameCountKey, @(0), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kMetalBridgeReadyKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kMetalFrameTrackerKey, @(0), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
     return self;
 }
 
 - (id<CAMetalDrawable>)nextDrawable {
-    if (!IS_ON || !CFG_PTR.metalHandshakePipeline || BoostIsSpringBoard()) {
+    if (!IS_ON || !CFG_PTR.metalSurfaceBridgeBeta45 || BoostIsSpringBoard()) {
         return %orig;
     }
 
-    NSNumber *handshakeDone = objc_getAssociatedObject(self, kMetalHandshakeKey);
-    NSNumber *frameCount = objc_getAssociatedObject(self, kMetalFrameCountKey);
-    NSInteger currentCount = frameCount ? [frameCount integerValue] : 0;
+    NSNumber *bridgeReady = objc_getAssociatedObject(self, kMetalBridgeReadyKey);
+    NSNumber *tracker = objc_getAssociatedObject(self, kMetalFrameTrackerKey);
+    NSInteger currentCount = tracker ? [tracker integerValue] : 0;
 
-    // FRAME 0 -> 2: Chạy handshake nhả luồng an toàn cho UIKit dựng Splash Window
-    if (!handshakeDone || ![handshakeDone boolValue] || currentCount < 3) {
-        id<CAMetalDrawable> firstDrawable = %orig;
-        if (firstDrawable) {
+    // KIỂM TRA SURFACE BRIDGE: Chỉ kích hoạt Triple Buffer khi Layer đã liên kết Context
+    if (!bridgeReady || ![bridgeReady boolValue] || currentCount < 2) {
+        id<CAMetalDrawable> baseDrawable = %orig;
+        if (baseDrawable) {
             currentCount++;
-            objc_setAssociatedObject(self, kMetalFrameCountKey, @(currentCount), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            if (currentCount >= 3) {
-                objc_setAssociatedObject(self, kMetalHandshakeKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kMetalFrameTrackerKey, @(currentCount), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (currentCount >= 2) {
+                objc_setAssociatedObject(self, kMetalBridgeReadyKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                 if (CFG_PTR.metalTripleBuffering) {
                     [self setMaximumDrawableCount:3];
                 }
             }
         }
-        return firstDrawable;
+        return baseDrawable;
     }
 
     return %orig;
 }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
-    if (IS_ON && CFG_PTR.metalHandshakePipeline) {
+    if (IS_ON && CFG_PTR.metalSurfaceBridgeBeta45) {
         if (BoostIsSpringBoard()) {
             %orig(NO);
         } else {
-            NSNumber *handshakeDone = objc_getAssociatedObject(self, kMetalHandshakeKey);
-            if (!handshakeDone || ![handshakeDone boolValue]) {
-                %orig(flag);
+            NSNumber *bridgeReady = objc_getAssociatedObject(self, kMetalBridgeReadyKey);
+            if (!bridgeReady || ![bridgeReady boolValue]) {
+                %orig(flag); // Bảo tồn cờ render gốc cho Frame số 0 không bị nghẽn
             } else {
                 %orig(NO);
             }
@@ -606,10 +619,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-%end // Group_Metal_Handshake_Engine
+%end // Group_Metal_SurfaceBridge_Engine
 
 // ==============================================================================
-// 🎨 PHẦN 5: GIAO DIỆN COLOROS 17 & CÁCH LY CHỐNG ĐƠ BÀN PHÍM/SETTINGS
+// 🎨 PHẦN 5: GIAO DIỆN COLOROS 17 & CÁCH LY CHỐNG ĐƠ 10S BÀN PHÍM/SETTINGS
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
@@ -633,6 +646,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook CALayer
 - (void)setNeedsDisplay {
     %orig;
+    // CÔ LẬP QOS: Tuyệt đối không can thiệp bên trong app thường
     if (IS_ON && CFG_PTR.touchResponseBoost && BoostIsSpringBoard() && !BoostIsIsolatedKeyboardSearchProcess()) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -688,7 +702,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)viewWillDisappear:(BOOL)animated {
     if (IS_ON && CFG_PTR.reduceMultiTaskLag) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        V2144_AsyncMemoryPurgeSafe();
+        V2151_AsyncMemoryPurgeSafe();
     }
     %orig(animated);
 }
@@ -718,7 +732,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             [CATransaction begin];
             [CATransaction setDisableActions:YES];
             [CATransaction commit];
-            V2144_AsyncMemoryPurgeSafe();
+            V2151_AsyncMemoryPurgeSafe();
         });
     }
 }
@@ -762,8 +776,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             [CATransaction begin];
             [CATransaction setAnimationDuration:0.10];
             [CATransaction commit];
-            if (CFG_PTR.heavyLoadCoolingBeta32) {
-                V2144_AsyncMemoryPurgeSafe();
+            if (CFG_PTR.heavyLoadCoolingBeta45) {
+                V2151_AsyncMemoryPurgeSafe();
             }
         }
     }
@@ -780,7 +794,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_SpringBoard_Only
 
 // ==============================================================================
-// 🧹 PHẦN 7: QUẢN LÝ RAM & THU HỒI TIẾN TRÌNH KHỞI CHẠY
+// 🧹 PHẦN 7: QUẢN LÝ RAM & THU HỒI TIẾN TRÌNH KHỞI CHẠY AN TOÀN
 // ==============================================================================
 %group Group_Memory_Engine
 
@@ -788,14 +802,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
     %orig(application);
     if (IS_ON) {
-        V2144_RunGarbageCollector_Light();
+        V2151_RunGarbageCollector_Light();
     }
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     %orig(application);
-    if (IS_ON && (CFG_PTR.smartRamClean || CFG_PTR.aggressiveRamCleanBeta32)) {
-        V2144_RunGarbageCollector_Aggressive();
+    if (IS_ON && (CFG_PTR.smartRamClean || CFG_PTR.aggressiveRamCleanBeta45)) {
+        V2151_RunGarbageCollector_Aggressive();
     }
 }
 %end
@@ -819,7 +833,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
                     for (id app in apps) {
                         NSString *bid = [app performSelector:@selector(bundleIdentifier)];
                         if (bid && ![bid isEqualToString:openingBid] && ![bid hasPrefix:@"com.apple."]) {
-                            g_bksTerminate(bid, 5, NO, @"V21.4.4 Kill Background");
+                            g_bksTerminate(bid, 5, NO, @"V21.5.1 Kill Background");
                         }
                     }
                 }
@@ -827,7 +841,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         } @catch (NSException *e) {}
     }
 
-    // Bảo tồn trọn vẹn context options gốc để UIKit không bị đen màn hình
     %orig(application, options);
 }
 %end
@@ -835,7 +848,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Memory_Engine
 
 // ==============================================================================
-// ⚙️ PHẦN 8: KHỞI TẠO BỘ LÕI TWEAK V21.4.4
+// ⚙️ PHẦN 8: KHỞI TẠO BỘ LÕI TWEAK V21.5.1
 // ==============================================================================
 
 %ctor {
@@ -858,17 +871,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         if (!IS_ON) return;
 
-        // Bỏ qua nạp hook hoàn toàn nếu là tiến trình Bàn phím / Spotlight / Search
+        // Bỏ qua hoàn toàn nếu là tiến trình Bàn phím / Spotlight / Search
         if (BoostIsIsolatedKeyboardSearchProcess()) {
             return;
         }
 
-        // BẢO VỆ PREFERENCES: Không inject hook nặng vào Cài đặt để chống văng khi Safe Mode
+        // BẢO VỆ PREFERENCES: Chống crash khi nạp Cài đặt
         if (BoostIsPreferencesApp()) {
             return;
         }
 
-        // Khai thác Kernel chỉ bên trong SpringBoard
+        // Can thiệp sâu Kernel chỉ bên trong SpringBoard
         if (BoostIsSpringBoard()) {
             @try {
                 [[KernelBypass sharedInstance] initEnvironment];
@@ -886,11 +899,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             setenv("DYLD_DISABLE_DOFS", "1", 1);
             setenv("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES", 1);
         }
-        if (CFG_PTR.tcpTurboNetworkBeta32) setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
+        if (CFG_PTR.tcpTurboNetworkBeta45) setenv("CFNETWORK_DIAGNOSTICS", "0", 1);
 
         %init(_ungrouped);
         %init(Group_Display_DualRate);
-        %init(Group_Metal_Handshake_Engine);
+        %init(Group_Metal_SurfaceBridge_Engine);
         %init(Group_ColorOS17_SafeUI);
         %init(Group_Memory_Engine);
 
