@@ -635,8 +635,11 @@ static void BoostApplyUnifiedPerformance(void) {
             }
         }
     }
-    id finalOptions = CFG_PTR.turboAppLaunch ? nil : options;
-    %orig(application, finalOptions);
+    if (CFG_PTR.turboAppLaunch) {
+        %orig(application, nil);
+    } else {
+        %orig(application, options);
+    }
 }
 %end
 
