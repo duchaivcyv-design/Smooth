@@ -16,6 +16,7 @@
             <string>com.apple.QuartzCore</string>
             <string>com.apple.BackBoardServices</string>
             <string>com.apple.frontboard</string>
+            <string>com.apple.Preferences</string>
         </array>
     </dict>
 </dict>
