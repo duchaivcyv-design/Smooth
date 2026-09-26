@@ -9,6 +9,54 @@
 
 extern char **environ;
 
+// ==============================================================================
+// 📱 CONTROLLER MENU NHỎ GỌN (POPOVER TABLE MINI)
+// ==============================================================================
+@interface MiniPickerViewController : UITableViewController
+@property (nonatomic, strong) NSArray *titles;
+@property (nonatomic, strong) NSArray *values;
+@property (nonatomic, copy) void (^onSelect)(NSNumber *val);
+@end
+
+@implementation MiniPickerViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.tableView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.tableView.rowHeight = 44.0;
+    self.tableView.separatorInset = UIEdgeInsetsMake(0, 15, 0, 15);
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.titles.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *cellId = @"MiniCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellId];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cellId];
+        cell.backgroundColor = [UIColor clearColor];
+        cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+        cell.textLabel.textColor = [UIColor labelColor];
+    }
+    cell.textLabel.text = self.titles[indexPath.row];
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.onSelect) {
+        self.onSelect(self.values[indexPath.row]);
+    }
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+@end
+
+// ==============================================================================
+// ⚙️ ROOT LIST CONTROLLER CHÍNH
+// ==============================================================================
 @interface RootListController : PSListController <UIPopoverPresentationControllerDelegate>
 @end
 
@@ -62,72 +110,69 @@ extern char **environ;
     return [NSString stringWithFormat:@"%ld FPS", (long)val];
 }
 
-// ============================================================================
-// BẮT BUỘC POPUP NHỎ GỌN TRÊN IPHONE (KHÔNG CHO PHÉP NHẢY SANG BẢNG TO DƯỚI)
-// ============================================================================
+// BẮT BUỘC KHÔNG CHO IPHONE TỰ BIẾN THÀNH SHEET ĐÁY
 - (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller {
-    return UIModalPresentationNone; // Bắt buộc giữ nguyên popover nhỏ
+    return UIModalPresentationNone;
 }
 
 - (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller traitCollection:(UITraitCollection *)traitCollection {
     return UIModalPresentationNone;
 }
 
+// ============================================================================
+// HIỂN THỊ KHUNG NHỎ GỌN NEO CHUẨN XÁC MŨI TÊN BÊN PHẢI
+// ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    [self presentSmallPopoverAtRightEdgeForSpecifier:specifier title:@"Tần Số Quét" key:@"TargetRefreshRate" suffix:@"Hz"];
+    [self presentMiniPopoverForSpecifier:specifier key:@"TargetRefreshRate" suffix:@"Hz"];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    [self presentSmallPopoverAtRightEdgeForSpecifier:specifier title:@"Tốc Độ Khung Hình" key:@"TargetFPSRate" suffix:@"FPS"];
+    [self presentMiniPopoverForSpecifier:specifier key:@"TargetFPSRate" suffix:@"FPS"];
 }
 
-- (void)presentSmallPopoverAtRightEdgeForSpecifier:(PSSpecifier *)specifier title:(NSString *)title key:(NSString *)prefKey suffix:(NSString *)suffix {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-
-    NSArray *titles = @[@"Tự Động (Auto)", @"30", @"60", @"90", @"120", @"144"];
-    NSArray *values = @[@0, @30, @60, @90, @120, @144];
-
-    for (NSUInteger i = 0; i < values.count; i++) {
-        NSNumber *val = values[i];
-        NSString *btnTitle = (i == 0) ? titles[i] : [NSString stringWithFormat:@"%@ %@", titles[i], suffix];
-        [alert addAction:[UIAlertAction actionWithTitle:btnTitle
-                                                 style:UIAlertActionStyleDefault
-                                               handler:^(UIAlertAction * _Nonnull action) {
-            NSString *path = [self effectivePrefPath];
-            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
-            prefs[prefKey] = val;
-            [prefs writeToFile:path atomically:YES];
-            notify_post(NOTIFY_RELOAD);
-            [self reloadSpecifiers];
-        }]];
-    }
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-
-    // NEO VÀO ĐÚNG MŨI TÊN / CHỮ Ở GÓC PHẢI CELL
-    UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
-    alert.modalPresentationStyle = UIModalPresentationPopover;
+- (void)presentMiniPopoverForSpecifier:(PSSpecifier *)specifier key:(NSString *)prefKey suffix:(NSString *)suffix {
+    MiniPickerViewController *miniVC = [[MiniPickerViewController alloc] initWithStyle:UITableViewStylePlain];
+    miniVC.titles = @[@"Tự Động (Auto)", 
+                      [NSString stringWithFormat:@"30 %@", suffix], 
+                      [NSString stringWithFormat:@"60 %@", suffix], 
+                      [NSString stringWithFormat:@"90 %@", suffix], 
+                      [NSString stringWithFormat:@"120 %@", suffix], 
+                      [NSString stringWithFormat:@"144 %@", suffix]];
+    miniVC.values = @[@0, @30, @60, @90, @120, @144];
     
-    UIPopoverPresentationController *popover = alert.popoverPresentationController;
+    // KÍCH THƯỚC KHUNG NHỎ GỌN MINI
+    miniVC.preferredContentSize = CGSizeMake(190, 264);
+    miniVC.modalPresentationStyle = UIModalPresentationPopover;
+
+    __weak typeof(self) weakSelf = self;
+    miniVC.onSelect = ^(NSNumber *selectedVal) {
+        NSString *path = [weakSelf effectivePrefPath];
+        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
+        prefs[prefKey] = selectedVal;
+        [prefs writeToFile:path atomically:YES];
+        notify_post(NOTIFY_RELOAD);
+        [weakSelf reloadSpecifiers];
+    };
+
+    UIPopoverPresentationController *popover = miniVC.popoverPresentationController;
     if (popover) {
-        popover.delegate = self; // Ép dùng UIModalPresentationNone
+        popover.delegate = self;
+        UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
         popover.sourceView = cell ? cell : self.view;
+        // Neo dính chặt vào góc phải (chỗ hiển thị số và mũi tên chevron)
         if (cell) {
-            // Đặt điểm neo đúng ngay mép phải mũi tên chevron
-            popover.sourceRect = CGRectMake(cell.bounds.size.width - 45, cell.bounds.size.height / 2.0, 1.0, 1.0);
+            popover.sourceRect = CGRectMake(cell.bounds.size.width - 50, cell.bounds.size.height / 2.0, 1.0, 1.0);
         } else {
-            popover.sourceRect = CGRectMake(self.view.bounds.size.width - 45, 120, 1.0, 1.0);
+            popover.sourceRect = CGRectMake(self.view.bounds.size.width - 50, 140, 1.0, 1.0);
         }
         popover.permittedArrowDirections = UIPopoverArrowDirectionUp | UIPopoverArrowDirectionDown | UIPopoverArrowDirectionRight;
     }
 
-    [self presentViewController:alert animated:YES completion:nil];
+    [self presentViewController:miniVC animated:YES completion:nil];
 }
 
 // ============================================================================
-// HỆ THỐNG: RESPRING & ĐẶT LẠI CÀI ĐẶT
+// QUẢN LÝ HỆ THỐNG
 // ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
@@ -144,7 +189,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V21.3.6.2?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V21.4.1?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
