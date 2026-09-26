@@ -749,7 +749,7 @@ static void BoostInjectEnvironmentVariables(void) {
 
 %hook FBSSystemService
 
-- (void)openApplication:(id)application withOptions:(NSDictionary *)options {
+- (void)openApplication:(id)application withOptions:(id)options {
     if (!IS_ON) { 
         %orig(application, options); 
         return; 
@@ -784,12 +784,12 @@ static void BoostInjectEnvironmentVariables(void) {
         }
     }
 
-    // ĐÃ SỬA: Dùng chung một biến định danh duy nhất và gọi %orig một lần duy nhất
-    NSDictionary *finalOptions = options;
+    // ĐÃ FIX: Chỉ sử dụng cú pháp %orig tiêu chuẩn và gán lại tham số trực tiếp không qua biến phức hợp phụ
     if (CFG_PTR.turboAppLaunch) {
-        finalOptions = nil;
+        %orig(application, nil);
+    } else {
+        %orig(application, options);
     }
-    %orig(application, finalOptions);
 }
 
 %end
