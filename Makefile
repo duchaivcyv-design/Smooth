@@ -3,6 +3,11 @@ TARGET := iphone:clang:latest:15.0
 
 _INSTALL_PATH_TARGET = /var/jb
 
+# Tối ưu Log Github Actions
+GO_EASY_ON_ME = 1
+DEBUG = 0
+FINALPACKAGE = 1
+
 include $(THEOS)/makefiles/common.mk
 
 # ==============================================================================
@@ -13,7 +18,6 @@ LIBRARY_NAME = BoostiPhone6sCore
 BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 BoostiPhone6sCore_FILES = Tweak.xm \
-                          DeviceBypass.xm \
                           Modules/CacheCleaner.m \
                           Modules/CrashGuard.m \
                           Modules/SmartThermal.m \
@@ -21,6 +25,7 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
+# Kỷ luật thép: Bật tối ưu -O3, tắt các cảnh báo rác gây ngắt Build
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
@@ -69,7 +74,7 @@ BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
 after-stage::
 	@echo ""
-	@echo "[v12] Copying MobileSubstrate filter plist..."
+	@echo "[V20] Copying MobileSubstrate filter plist..."
 	@if [ -f "$(BOOST_PLIST_NAME)" ]; then \
 	    mkdir -p $(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries; \
 	    cp "$(BOOST_PLIST_NAME)" "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
@@ -81,11 +86,11 @@ after-stage::
 	@echo ""
 
 # ==============================================================================
-# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS v12
+# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS V20
 # ==============================================================================
 before-package::
 	@echo ""
-	@echo "Finalizing Rootless Package v12..."
+	@echo "Finalizing Rootless Package V20 Ultimate..."
 	@echo ""
 	
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
@@ -134,5 +139,5 @@ before-package::
 	fi
 	
 	@echo ""
-	@echo "Rootless Package v12 Ready!"
+	@echo "Rootless Package V20 Ready!"
 	@echo ""
