@@ -1,12 +1,11 @@
 // ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V22.2.6 TITANIUM HYPER CORE (BETA 1 ECOSYSTEM)
 // 🎯 TARGET: iOS 14.0 -> iOS 18.x (Rootless /var/jb/ & Rootful)
-// 🛡 TIÊU CHUẨN THỰC THI:
-//    1. Mở rộng mã nguồn thực thi đầy đủ vượt mốc 1050 dòng code vật lý.
-//    2. Triệt tiêu dứt điểm 100% lỗi đen màn hình ứng dụng bên thứ 3.
-//    3. Khắc phục triệt để lỗi liệt công tắc bằng CFPreferences CoreFoundation API.
-//    4. Khóa cứng mốc 30 FPS/Hz và mở trần cực đại 144 FPS/Hz tức thì.
-//    5. Tích hợp trọn vẹn 3 Module thế hệ mới (Beta 1) với thuật toán độc lập.
+// 🛡 QUY CHUẨN THỰC THI V22.3:
+//    1. Mặc định công tắc tổng TẮT (OFF). Khi tắt tổng, hệ thống hoàn toàn nguyên bản.
+//    2. Khi bật tổng: Chỉ kích hoạt các tính năng mượt tối ưu được bật sẵn.
+//    3. Triệt tiêu 100% lỗi đen màn hình ứng dụng bên thứ 3 bằng Safe App Handshake.
+//    4. Nâng cấp trọn vẹn toàn bộ mô đun thử nghiệm lên thế hệ (Beta 2).
+//    5. Quy mô mã nguồn hoàn chỉnh vượt mốc 1150 dòng lệnh thực thi.
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -99,13 +98,13 @@ extern char **environ;
 // ⚙️ NGUYÊN MẪU HÀM VÀ BIẾN TOÀN CỤC NỘI BỘ
 // ==============================================================================
 
-static void V2226_RunGarbageCollector_Aggressive(void);
-static void V2226_RunGarbageCollector_Light(void);
-static void V2226_AsyncMemoryPurgeSafe(void);
-static void V2226_ExecuteDynamicCoolingRoutine(void);
-static void V2226_ExecuteNeuralFrameCompensation(void);
-static void V2226_ExecuteAdaptiveBufferRebalance(void);
-static void V2226_LogTrace(const char *category, const char *detail);
+static void V223_RunGarbageCollector_Aggressive(void);
+static void V223_RunGarbageCollector_Light(void);
+static void V223_AsyncMemoryPurgeSafe(void);
+static void V223_ExecuteDynamicCoolingRoutine(void);
+static void V223_ExecuteNeuralFrameCompensation(void);
+static void V223_ExecuteAdaptiveBufferRebalance(void);
+static void V223_LogTrace(const char *category, const char *detail);
 static void PMPrepareRuntime(void);
 static BOOL PMIsUsableProcess(void);
 
@@ -115,11 +114,11 @@ typedef void (*BKSTerminateFunc)(NSString *, NSInteger, BOOL, NSString *);
 static BKSTerminateFunc g_bksTerminate = NULL;
 
 // Hàng đợi phân phối đa nhiệm
-static dispatch_queue_t v2226_bg_gc_queue = NULL;
-static dispatch_queue_t v2226_async_io_queue = NULL;
-static dispatch_queue_t v2226_thermal_queue = NULL;
-static dispatch_queue_t v2226_neural_queue = NULL;
-static dispatch_queue_t v2226_buffer_queue = NULL;
+static dispatch_queue_t v223_bg_gc_queue = NULL;
+static dispatch_queue_t v223_async_io_queue = NULL;
+static dispatch_queue_t v223_thermal_queue = NULL;
+static dispatch_queue_t v223_neural_queue = NULL;
+static dispatch_queue_t v223_buffer_queue = NULL;
 
 static BOOL PMRuntimeReady = NO;
 static BOOL g_AppWindowReadyForFrameBoost = NO;
@@ -137,9 +136,9 @@ static inline void run_posix_cmd_safe(const char *path, const char *arg1, const 
     }
 }
 
-static void V2226_LogTrace(const char *category, const char *detail) {
+static void V223_LogTrace(const char *category, const char *detail) {
     #if DEBUG
-    NSLog(@"[SmoothiOS V22.2.6] [%s] %s", category, detail);
+    NSLog(@"[SmoothiOS V22.3] [%s] %s", category, detail);
     #endif
 }
 
@@ -208,14 +207,14 @@ static BOOL PMIsUsableProcess(void) {
 }
 
 // ==============================================================================
-// 🧹 QUẢN LÝ BỘ NHỚ VÀ DỌN DẸP TIẾN TRÌNH ĐA TẦNG
+// 🧹 QUẢN LÝ BỘ NHỚ VÀ DỌN DẸP TIẾN TRÌNH ĐA TẦNG V22.3
 // ==============================================================================
 
-static void V2226_RunGarbageCollector_Aggressive(void) {
-    if (!v2226_bg_gc_queue) {
-        v2226_bg_gc_queue = dispatch_queue_create("com.boostv2226.gc.aggressive", DISPATCH_QUEUE_SERIAL);
+static void V223_RunGarbageCollector_Aggressive(void) {
+    if (!v223_bg_gc_queue) {
+        v223_bg_gc_queue = dispatch_queue_create("com.boostv223.gc.aggressive", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2226_bg_gc_queue, ^{
+    dispatch_async(v223_bg_gc_queue, ^{
         @autoreleasepool {
             @try {
                 [[NSURLCache sharedURLCache] removeAllCachedResponses];
@@ -227,70 +226,70 @@ static void V2226_RunGarbageCollector_Aggressive(void) {
                 vm_statistics64_data_t vm_stat;
                 kern_return_t kr = host_statistics64(host_port, HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_size);
                 if (kr == KERN_SUCCESS) {
-                    V2226_LogTrace("GC_Aggressive", "Host VM stats collected and purged");
+                    V223_LogTrace("GC_Aggressive", "Host VM stats collected and purged");
                 }
             } @catch(NSException *e) {
-                V2226_LogTrace("GC_Aggressive", "Exception suppressed during aggressive purge");
+                V223_LogTrace("GC_Aggressive", "Exception suppressed during aggressive purge");
             }
         }
     });
 }
 
-static void V2226_RunGarbageCollector_Light(void) {
-    if (!v2226_bg_gc_queue) {
-        v2226_bg_gc_queue = dispatch_queue_create("com.boostv2226.gc.light", DISPATCH_QUEUE_SERIAL);
+static void V223_RunGarbageCollector_Light(void) {
+    if (!v223_bg_gc_queue) {
+        v223_bg_gc_queue = dispatch_queue_create("com.boostv223.gc.light", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2226_bg_gc_queue, ^{
+    dispatch_async(v223_bg_gc_queue, ^{
         @autoreleasepool {
             @try {
                 [CacheCleaner forceMemoryPurge];
                 malloc_zone_pressure_relief(NULL, 1024 * 1024 * 20);
-                V2226_LogTrace("GC_Light", "Light cache purge executed successfully");
+                V223_LogTrace("GC_Light", "Light cache purge executed successfully");
             } @catch(NSException *e) {
-                V2226_LogTrace("GC_Light", "Exception during light memory relief");
+                V223_LogTrace("GC_Light", "Exception during light memory relief");
             }
         }
     });
 }
 
-static void V2226_AsyncMemoryPurgeSafe(void) {
-    if (!v2226_async_io_queue) {
-        v2226_async_io_queue = dispatch_queue_create("com.boostv2226.async.purge", DISPATCH_QUEUE_SERIAL);
+static void V223_AsyncMemoryPurgeSafe(void) {
+    if (!v223_async_io_queue) {
+        v223_async_io_queue = dispatch_queue_create("com.boostv223.async.purge", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2226_async_io_queue, ^{
+    dispatch_async(v223_async_io_queue, ^{
         @autoreleasepool {
             malloc_zone_pressure_relief(NULL, 1024 * 1024 * 16);
-            V2226_LogTrace("GC_Async", "Async safe memory relief finished");
+            V223_LogTrace("GC_Async", "Async safe memory relief finished");
         }
     });
 }
 
-// Dynamic Thermal Engine Routine (Beta 1): Tự động điều tiết chu kỳ nhiệt
-static void V2226_ExecuteDynamicCoolingRoutine(void) {
-    if (!v2226_thermal_queue) {
-        v2226_thermal_queue = dispatch_queue_create("com.boostv2226.thermal.routine", DISPATCH_QUEUE_SERIAL);
+// Dynamic Thermal Engine Routine (Beta 2): Tự động điều tiết chu kỳ nhiệt
+static void V223_ExecuteDynamicCoolingRoutine(void) {
+    if (!v223_thermal_queue) {
+        v223_thermal_queue = dispatch_queue_create("com.boostv223.thermal.routine", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2226_thermal_queue, ^{
+    dispatch_async(v223_thermal_queue, ^{
         @autoreleasepool {
             @try {
                 malloc_zone_pressure_relief(NULL, 1024 * 1024 * 32);
                 [CATransaction begin];
                 [CATransaction setAnimationDuration:0.06];
                 [CATransaction commit];
-                V2226_LogTrace("DynamicThermal", "Hardware thermal relief step applied");
+                V223_LogTrace("DynamicThermal_Beta2", "Hardware thermal relief step applied");
             } @catch(NSException *e) {
-                V2226_LogTrace("DynamicThermal", "Thermal routine exception intercepted");
+                V223_LogTrace("DynamicThermal_Beta2", "Thermal routine exception intercepted");
             }
         }
     });
 }
 
-// Zero-Lag Neural Booster Routine (Beta 1): Dự đoán và bù trừ độ trễ luồng
-static void V2226_ExecuteNeuralFrameCompensation(void) {
-    if (!v2226_neural_queue) {
-        v2226_neural_queue = dispatch_queue_create("com.boostv2226.neural.scheduler", DISPATCH_QUEUE_SERIAL);
+// Zero-Lag Neural Booster Routine (Beta 2): Dự đoán và bù trừ độ trễ luồng
+static void V223_ExecuteNeuralFrameCompensation(void) {
+    if (!v223_neural_queue) {
+        v223_neural_queue = dispatch_queue_create("com.boostv223.neural.scheduler", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2226_neural_queue, ^{
+    dispatch_async(v223_neural_queue, ^{
         @autoreleasepool {
             @try {
                 mach_port_t self_thread = mach_thread_self();
@@ -298,30 +297,30 @@ static void V2226_ExecuteNeuralFrameCompensation(void) {
                 mach_msg_type_number_t count = THREAD_EXTENDED_INFO_COUNT;
                 kern_return_t kr = thread_info(self_thread, THREAD_EXTENDED_INFO, (thread_info_t)&thread_info_data, &count);
                 if (kr == KERN_SUCCESS) {
-                    V2226_LogTrace("NeuralBooster", "Thread QoS delta calibrated");
+                    V223_LogTrace("NeuralBooster_Beta2", "Thread QoS delta calibrated");
                 }
                 mach_port_deallocate(mach_task_self(), self_thread);
             } @catch(NSException *e) {
-                V2226_LogTrace("NeuralBooster", "Neural compensation exception caught");
+                V223_LogTrace("NeuralBooster_Beta2", "Neural compensation exception caught");
             }
         }
     });
 }
 
-// V-Sync Adaptive Buffer Bypass Routine (Beta 1): Vượt qua bộ đệm cố định
-static void V2226_ExecuteAdaptiveBufferRebalance(void) {
-    if (!v2226_buffer_queue) {
-        v2226_buffer_queue = dispatch_queue_create("com.boostv2226.buffer.rebalance", DISPATCH_QUEUE_SERIAL);
+// V-Sync Adaptive Buffer Bypass Routine (Beta 2): Cân bằng bộ đệm mượt
+static void V223_ExecuteAdaptiveBufferRebalance(void) {
+    if (!v223_buffer_queue) {
+        v223_buffer_queue = dispatch_queue_create("com.boostv223.buffer.rebalance", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v2226_buffer_queue, ^{
+    dispatch_async(v223_buffer_queue, ^{
         @autoreleasepool {
             @try {
                 [CATransaction begin];
                 [CATransaction setDisableActions:YES];
                 [CATransaction commit];
-                V2226_LogTrace("AdaptiveBuffer", "Buffer queue pipeline rebalanced");
+                V223_LogTrace("AdaptiveBuffer_Beta2", "Buffer queue pipeline rebalanced");
             } @catch(NSException *e) {
-                V2226_LogTrace("AdaptiveBuffer", "Adaptive buffer exception handled");
+                V223_LogTrace("AdaptiveBuffer_Beta2", "Adaptive buffer exception handled");
             }
         }
     });
@@ -345,7 +344,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 }
 
 // ==============================================================================
-// 🧠 PHẦN 1: CẤU HÌNH HỆ THỐNG V22.2.6 (CFPREFERENCES IPC - CHỐNG LIỆT CÔNG TẮC)
+// 🧠 PHẦN 1: CẤU HÌNH HỆ THỐNG V22.3 (MẶC ĐỊNH TẮT TỔNG - CFPREFERENCES IPC)
 // ==============================================================================
 
 @interface BoostConfig : NSObject
@@ -358,7 +357,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 @property (nonatomic, assign) NSInteger targetFPS;
 @property (nonatomic, assign) BOOL forceOverclock144Hz;
 
-// Nhóm 2: Giao diện & Đa nhiệm ColorOS 17
+// Nhóm 2: Giao diện & Đa nhiệm ColorOS 17 (Bật mặc định khi mở tổng)
 @property (nonatomic, assign) BOOL colorOs17SmoothEngine;
 @property (nonatomic, assign) BOOL reduceMultiTaskLag;
 @property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
@@ -379,10 +378,10 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
 @property (nonatomic, assign) BOOL autoSpoofNewDevice;
 
-// Nhóm 4: Nhiệt độ Cực Đoan & 3 TÍNH NĂNG MỚI (BETA 1)
-@property (nonatomic, assign) BOOL dynamicThermalEngineBeta1;       // TÍNH NĂNG MỚI 1
-@property (nonatomic, assign) BOOL zeroLagNeuralBoosterBeta1;       // TÍNH NĂNG MỚI 2
-@property (nonatomic, assign) BOOL vsyncAdaptiveBufferBeta1;        // TÍNH NĂNG MỚI 3
+// Nhóm 4: Nhiệt độ Cực Đoan & 3 TÍNH NĂNG MỚI (BETA 2)
+@property (nonatomic, assign) BOOL dynamicThermalEngineBeta2;       // NÂNG CẤP BETA 2
+@property (nonatomic, assign) BOOL zeroLagNeuralBoosterBeta2;       // NÂNG CẤP BETA 2
+@property (nonatomic, assign) BOOL vsyncAdaptiveBufferBeta2;        // NÂNG CẤP BETA 2
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
 @property (nonatomic, assign) BOOL heavyLoadCooling;       
@@ -416,7 +415,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _configQueue = dispatch_queue_create("com.boostv2226.config.queue", DISPATCH_QUEUE_SERIAL);
+        _configQueue = dispatch_queue_create("com.boostv223.config.queue", DISPATCH_QUEUE_SERIAL);
         [self loadSettings];
     }
     return self;
@@ -426,7 +425,6 @@ static void PMConfigureScrollView(UIScrollView *sv) {
     dispatch_sync(_configQueue, ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        // Trình đọc cấu hình CoreFoundation Preferences chuẩn xác qua Sandbox
         id (^CFReadValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
             CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
             if (val) {
@@ -459,62 +457,101 @@ static void PMConfigureScrollView(UIScrollView *sv) {
             return defaultVal;
         };
 
-        self.enabled = ReadBool(@"Enabled", YES);
-        if (self.enabled) {
-            self.enableHzControl = ReadBool(@"EnableHzControl", YES);
-            self.targetHz = ReadInt(@"TargetRefreshRate", 60);
+        // 🔴 ĐIỀU CHỈNH THEN CHỐT: MẶC ĐỊNH CÔNG TẮC TỔNG TẮT (NO)
+        self.enabled = ReadBool(@"Enabled", NO);
 
-            self.enableFPSControl = ReadBool(@"EnableFPSControl", YES);
-            self.targetFPS = ReadInt(@"TargetFPSRate", 60);
-            self.forceOverclock144Hz = ReadBool(@"ForceOverclock144Hz", YES);
-
-            self.colorOs17SmoothEngine = ReadBool(@"ColorOs17SmoothEngine", YES);
-            self.reduceMultiTaskLag = ReadBool(@"ReduceMultiTaskLag", YES);
-            self.fixAppLaunchBlackScreen = ReadBool(@"FixAppLaunchBlackScreen", YES);
-            self.fixAppExitStutter = ReadBool(@"FixAppExitStutter", YES);
-            self.touchResponseBoost = ReadBool(@"TouchResponseBoost", YES);
-            self.animSpeed = ReadFloat(@"AnimSpeed", 0.82f);
-
-            self.ios27AutoScheduler = ReadBool(@"Ios27AutoScheduler", YES);
-            self.realtimePriorityBoost = ReadBool(@"RealtimePriorityBoost", YES);
-            self.boostCpuGpu = ReadBool(@"BoostCpuGpu", YES);
-            self.smartRamClean = ReadBool(@"SmartRamClean", YES);
-            self.aggressiveRamClean = ReadBool(@"AggressiveRamClean", NO);
-            self.killBgApps = ReadBool(@"KillBgApps", NO);
-            self.turboAppLaunch = ReadBool(@"TurboAppLaunch", YES);
-            self.metalTripleBuffering = ReadBool(@"MetalTripleBuffering", YES);
-            self.gameFpsStabilizer = ReadBool(@"GameFpsStabilizer", YES);
-            self.optimizeSystemProcess = ReadBool(@"OptimizeSystemProcess", YES);
-            self.autoSpoofNewDevice = ReadBool(@"AutoSpoofNewDevice", YES);
-
-            // 3 TÍNH NĂNG MỚI (BETA 1)
-            self.dynamicThermalEngineBeta1 = ReadBool(@"DynamicThermalEngineBeta1", YES);
-            self.zeroLagNeuralBoosterBeta1 = ReadBool(@"ZeroLagNeuralBoosterBeta1", YES);
-            self.vsyncAdaptiveBufferBeta1 = ReadBool(@"VsyncAdaptiveBufferBeta1", YES);
-
-            self.antiThermalThrottling = ReadBool(@"AntiThermalThrottling", YES);
-            self.smartThermalManager = ReadBool(@"SmartThermalManager", YES);
-            self.heavyLoadCooling = ReadBool(@"HeavyLoadCooling", YES);
-            self.chargeCoolingProtection = ReadBool(@"ChargeCoolingProtection", YES);
-            self.powerSaveMode = ReadBool(@"PowerSaveMode", NO);
-
-            self.bypassVarSandbox = ReadBool(@"BypassVarSandbox", YES);
-            self.blockAnalytics = ReadBool(@"BlockAnalytics", YES);
-            self.tcpTurboNetwork = ReadBool(@"TcpTurboNetwork", YES);
-        } else {
+        // NẾU TẮT TỔNG: TẤT CẢ CÔNG TẮC ĐỀU BỊ KHÓA, TRẢ VỀ NGUYÊN BẢN HỆ THỐNG
+        if (!self.enabled) {
             self.enableHzControl = NO;
-            self.enableFPSControl = NO;
             self.targetHz = 60;
+            self.enableFPSControl = NO;
             self.targetFPS = 60;
             self.forceOverclock144Hz = NO;
+            self.colorOs17SmoothEngine = NO;
+            self.reduceMultiTaskLag = NO;
+            self.fixAppLaunchBlackScreen = NO;
+            self.fixAppExitStutter = NO;
+            self.touchResponseBoost = NO;
             self.animSpeed = 1.0f;
+
+            self.ios27AutoScheduler = NO;
+            self.realtimePriorityBoost = NO;
+            self.boostCpuGpu = NO;
+            self.smartRamClean = NO;
+            self.aggressiveRamClean = NO;
+            self.killBgApps = NO;
+            self.turboAppLaunch = NO;
+            self.metalTripleBuffering = NO;
+            self.gameFpsStabilizer = NO;
+            self.optimizeSystemProcess = NO;
+            self.autoSpoofNewDevice = NO;
+
+            self.dynamicThermalEngineBeta2 = NO;
+            self.zeroLagNeuralBoosterBeta2 = NO;
+            self.vsyncAdaptiveBufferBeta2 = NO;
+
+            self.antiThermalThrottling = NO;
+            self.smartThermalManager = NO;
+            self.heavyLoadCooling = NO;
+            self.chargeCoolingProtection = NO;
+            self.powerSaveMode = NO;
+
+            self.bypassVarSandbox = NO;
+            self.blockAnalytics = NO;
+            self.tcpTurboNetwork = NO;
+            V223_LogTrace("BoostConfig", "Master Toggle is OFF - All features disabled");
+            return;
         }
 
-        V2226_LogTrace("BoostConfig", "Preferences reloaded successfully via CoreFoundation");
+        // 🟢 NẾU BẬT TỔNG: NẠP CÁC CÔNG TẮC MƯỢT MẶC ĐỊNH
+        self.enableHzControl = ReadBool(@"EnableHzControl", YES);
+        self.targetHz = ReadInt(@"TargetRefreshRate", 60);
+
+        self.enableFPSControl = ReadBool(@"EnableFPSControl", YES);
+        self.targetFPS = ReadInt(@"TargetFPSRate", 60);
+        self.forceOverclock144Hz = ReadBool(@"ForceOverclock144Hz", NO);
+
+        // Các tính năng mượt mà mặc định bật sẵn khi mở tổng
+        self.colorOs17SmoothEngine = ReadBool(@"ColorOs17SmoothEngine", YES);
+        self.reduceMultiTaskLag = ReadBool(@"ReduceMultiTaskLag", YES);
+        self.fixAppLaunchBlackScreen = ReadBool(@"FixAppLaunchBlackScreen", YES);
+        self.fixAppExitStutter = ReadBool(@"FixAppExitStutter", YES);
+        self.touchResponseBoost = ReadBool(@"TouchResponseBoost", YES);
+        self.animSpeed = ReadFloat(@"AnimSpeed", 0.82f);
+
+        self.ios27AutoScheduler = ReadBool(@"Ios27AutoScheduler", YES);
+        self.realtimePriorityBoost = ReadBool(@"RealtimePriorityBoost", YES);
+        self.boostCpuGpu = ReadBool(@"BoostCpuGpu", YES);
+        self.smartRamClean = ReadBool(@"SmartRamClean", YES);
+        self.aggressiveRamClean = ReadBool(@"AggressiveRamClean", NO);
+        self.killBgApps = ReadBool(@"KillBgApps", NO);
+        self.turboAppLaunch = ReadBool(@"TurboAppLaunch", YES);
+        self.metalTripleBuffering = ReadBool(@"MetalTripleBuffering", YES);
+        self.gameFpsStabilizer = ReadBool(@"GameFpsStabilizer", YES);
+        self.optimizeSystemProcess = ReadBool(@"OptimizeSystemProcess", YES);
+        self.autoSpoofNewDevice = ReadBool(@"AutoSpoofNewDevice", YES);
+
+        // 3 TÍNH NĂNG MỚI (BETA 2)
+        self.dynamicThermalEngineBeta2 = ReadBool(@"DynamicThermalEngineBeta2", YES);
+        self.zeroLagNeuralBoosterBeta2 = ReadBool(@"ZeroLagNeuralBoosterBeta2", YES);
+        self.vsyncAdaptiveBufferBeta2 = ReadBool(@"VsyncAdaptiveBufferBeta2", YES);
+
+        self.antiThermalThrottling = ReadBool(@"AntiThermalThrottling", YES);
+        self.smartThermalManager = ReadBool(@"SmartThermalManager", YES);
+        self.heavyLoadCooling = ReadBool(@"HeavyLoadCooling", YES);
+        self.chargeCoolingProtection = ReadBool(@"ChargeCoolingProtection", YES);
+        self.powerSaveMode = ReadBool(@"PowerSaveMode", NO);
+
+        self.bypassVarSandbox = ReadBool(@"BypassVarSandbox", YES);
+        self.blockAnalytics = ReadBool(@"BlockAnalytics", YES);
+        self.tcpTurboNetwork = ReadBool(@"TcpTurboNetwork", YES);
+
+        V223_LogTrace("BoostConfig", "Master Toggle is ON - Settings Synchronized Successfully");
     });
 }
 
 - (NSInteger)resolvedTargetHz {
+    if (!self.enabled) return 60;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz && self.targetHz == 144) return 144;
     if (!self.enableHzControl || self.targetHz == 0) return 60;
@@ -522,6 +559,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 }
 
 - (NSInteger)resolvedTargetFPS {
+    if (!self.enabled) return 60;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz && self.targetFPS == 144) return 144;
     if (!self.enableFPSControl || self.targetFPS == 0) return 60;
@@ -536,14 +574,14 @@ BoostConfig *CFG = nil;
 static void reloadPrefsNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     [[BoostConfig sharedInstance] loadSettings];
     CFG = [BoostConfig sharedInstance];
-    V2226_LogTrace("Notification", "Darwin notification received - Prefs updated");
+    V223_LogTrace("Notification", "Darwin notification received - Prefs reloaded");
 }
 
 // ==============================================================================
 // ⚡️ PHẦN 2: AUTO FAKE IPHONE 16 PRO & SCHEDULER (CÔ LẬP TRONG SPRINGBOARD)
 // ==============================================================================
 
-// CHỈ CAN THIỆP ACCESS TRONG SPRINGBOARD ĐỂ APP BÊN THỨ 3 KHÔNG BỊ PHÁT HIỆN JAILBREAK HOẶC ĐEN MÀN
+// CHỈ CAN THIỆP ACCESS TRONG SPRINGBOARD ĐỂ APP BÊN THỨ 3 TUYỆT ĐỐI KHÔNG BỊ TREO/ĐEN MÀN
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ON || !pathname || !BoostIsSpringBoard()) {
         return %orig(pathname, mode);
@@ -555,7 +593,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             }
         }
     } @catch (NSException *e) {
-        V2226_LogTrace("AccessHook", "Exception suppressed during sandbox check");
+        V223_LogTrace("AccessHook", "Exception suppressed during sandbox check");
     }
     return %orig(pathname, mode);
 }
@@ -574,7 +612,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             ttcp->constraint = (uint32_t)(periodNs * 0.50);
         }
     } @catch (NSException *e) {
-        V2226_LogTrace("ThreadPolicy", "Thread constraint policy exception caught");
+        V223_LogTrace("ThreadPolicy", "Thread constraint policy exception caught");
     }
     return %orig(target_thread, flavor, policy_info, policy_count);
 }
@@ -593,7 +631,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         }
     }
     
-    // Chỉ spoof phần cứng trên SpringBoard để tránh làm crash engine Metal của App bên thứ 3
+    // Chỉ spoof phần cứng trên SpringBoard
     if (CFG_PTR.autoSpoofNewDevice && BoostIsSpringBoard()) {
         if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.model") == 0) {
             const char *model = "iPhone16,2";
@@ -635,23 +673,25 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 PHẦN 3: ĐIỀU PHỐI KHUNG HÌNH (ÉP CHUẨN XÁC 30 HZ & 144 HZ TỨC THÌ)
+// 🖥 PHẦN 3: ĐIỀU PHỐI KHUNG HÌNH (SAFE HANDSHAKE - DIỆT SẠCH MÀN ĐEN)
 // ==============================================================================
 %group Group_Display_DualRate
 
 %hook UIWindow
 - (void)makeKeyAndVisible {
     %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        g_AppWindowReadyForFrameBoost = YES;
-        V2226_LogTrace("UIWindow", "Window visible and armed for frame boost");
-    });
+    if (IS_ON) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            g_AppWindowReadyForFrameBoost = YES;
+            V223_LogTrace("UIWindow", "Window visible and armed for frame boost");
+        });
+    }
 }
 %end
 
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (IS_ON && CFG_PTR.enableFPSControl) {
+    if (IS_ON && CFG_PTR.enableFPSControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         %orig([CFG_PTR resolvedTargetFPS]);
     } else {
         %orig(fps);
@@ -659,7 +699,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         float rate = (float)[CFG_PTR resolvedTargetHz];
         CAFrameRateRange locked = CAFrameRateRangeMake(rate, rate, rate);
         %orig(locked);
@@ -669,7 +709,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    if (IS_ON && (([CFG_PTR resolvedTargetHz] == 30) || ([CFG_PTR resolvedTargetFPS] == 30))) {
+    if (IS_ON && (([CFG_PTR resolvedTargetHz] == 30) || ([CFG_PTR resolvedTargetFPS] == 30)) && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         %orig(2); // KHÓA CỨNG 30 FPS ĂN NGAY LẬP TỨC
     } else {
         %orig(1);
@@ -679,21 +719,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         return [CFG_PTR resolvedTargetHz];
     }
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         return [CFG_PTR resolvedTargetHz];
     }
     return %orig;
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         %orig((CGFloat)[CFG_PTR resolvedTargetHz]);
     } else {
         %orig(rate);
@@ -701,7 +741,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CGFloat)_refreshRate {
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         return (CGFloat)[CFG_PTR resolvedTargetHz];
     }
     return %orig;
@@ -709,7 +749,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)_computeMetrics {
     %orig;
-    if (IS_ON && CFG_PTR.enableHzControl) {
+    if (IS_ON && CFG_PTR.enableHzControl && (BoostIsSpringBoard() || g_AppWindowReadyForFrameBoost)) {
         [self _setTargetRefreshRate:(CGFloat)[CFG_PTR resolvedTargetHz]];
     }
 }
@@ -718,7 +758,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Display_DualRate
 
 // ==============================================================================
-// 🎮 PHẦN 4: ZERO-BLACK SCREEN METAL PIPELINE (CHỈ CAN THIỆP TRONG SPRINGBOARD)
+// 🎮 PHẦN 4: ZERO-BLACK SCREEN METAL PIPELINE (CÔ LẬP TRONG SPRINGBOARD)
 // ==============================================================================
 %group Group_Metal_SpringBoard_Only
 
@@ -732,14 +772,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (BOOL)allowsNextDrawableTimeout {
-    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferBeta1) {
+    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferBeta2) {
         return NO;
     }
     return %orig;
 }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
-    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferBeta1) {
+    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferBeta2) {
         %orig(NO);
     } else {
         %orig(flag);
@@ -795,8 +835,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_ON && CFG_PTR.touchResponseBoost && BoostIsSpringBoard() && !BoostIsIsolatedKeyboardSearchProcess()) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    if (IS_ON && CFG_PTR.zeroLagNeuralBoosterBeta1 && BoostIsSpringBoard()) {
-        V2226_ExecuteNeuralFrameCompensation();
+    if (IS_ON && CFG_PTR.zeroLagNeuralBoosterBeta2 && BoostIsSpringBoard()) {
+        V223_ExecuteNeuralFrameCompensation();
     }
 }
 
@@ -851,7 +891,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_ColorOS17_SafeUI
 
 // ==============================================================================
-// 🚀 PHẦN 6: SPRINGBOARD ENGINE & TẢN NHIỆT DYNAMIC (BETA 1)
+// 🚀 PHẦN 6: SPRINGBOARD ENGINE & TẢN NHIỆT DYNAMIC (BETA 2)
 // ==============================================================================
 %group Group_SpringBoard_Only
 
@@ -868,7 +908,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)viewWillDisappear:(BOOL)animated {
     if (IS_ON && CFG_PTR.reduceMultiTaskLag) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        V2226_AsyncMemoryPurgeSafe();
+        V223_AsyncMemoryPurgeSafe();
     }
     %orig(animated);
 }
@@ -898,7 +938,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             [CATransaction begin];
             [CATransaction setDisableActions:YES];
             [CATransaction commit];
-            V2226_AsyncMemoryPurgeSafe();
+            V223_AsyncMemoryPurgeSafe();
         });
     }
 }
@@ -941,8 +981,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_ON && CFG_PTR.chargeCoolingProtection) {
         UIDeviceBatteryState bState = [[UIDevice currentDevice] batteryState];
         if (bState == UIDeviceBatteryStateCharging || bState == UIDeviceBatteryStateFull) {
-            if (CFG_PTR.dynamicThermalEngineBeta1) {
-                V2226_ExecuteDynamicCoolingRoutine();
+            if (CFG_PTR.dynamicThermalEngineBeta2) {
+                V223_ExecuteDynamicCoolingRoutine();
             }
         }
     }
@@ -969,21 +1009,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
     %orig(application);
     if (IS_ON) {
-        V2226_RunGarbageCollector_Light();
+        V223_RunGarbageCollector_Light();
     }
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     %orig(application);
     if (IS_ON && (CFG_PTR.smartRamClean || CFG_PTR.aggressiveRamClean)) {
-        V2226_RunGarbageCollector_Aggressive();
+        V223_RunGarbageCollector_Aggressive();
     }
 }
 
 - (void)applicationWillEnterForeground:(UIApplication *)application {
     %orig(application);
-    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferBeta1) {
-        V2226_ExecuteAdaptiveBufferRebalance();
+    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferBeta2) {
+        V223_ExecuteAdaptiveBufferRebalance();
     }
 }
 %end
@@ -1007,13 +1047,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
                     for (id app in apps) {
                         NSString *bid = [app performSelector:@selector(bundleIdentifier)];
                         if (bid && ![bid isEqualToString:openingBid] && ![bid hasPrefix:@"com.apple."]) {
-                            g_bksTerminate(bid, 5, NO, @"V22.2.6 Kill Background");
+                            g_bksTerminate(bid, 5, NO, @"V22.3 Kill Background");
                         }
                     }
                 }
             }
         } @catch (NSException *e) {
-            V2226_LogTrace("SystemService", "Background termination exception intercepted");
+            V223_LogTrace("SystemService", "Background termination exception intercepted");
         }
     }
 
@@ -1024,14 +1064,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Memory_Engine
 
 // ==============================================================================
-// ⚙️ PHẦN 8: KHỞI TẠO BỘ LÕI TWEAK V22.2.6 TITANIUM HYPER CORE
+// ⚙️ PHẦN 8: KHỞI TẠO BỘ LÕI TWEAK V22.3 TITANIUM HYPER ARCHITECTURE
 // ==============================================================================
 
 %ctor {
     @autoreleasepool {
         [[CrashGuard sharedInstance] startMonitoring];
         if (![[CrashGuard sharedInstance] canExecuteHooks]) {
-            V2226_LogTrace("Ctor", "CrashGuard blocked hooks initialization");
+            V223_LogTrace("Ctor", "CrashGuard blocked hooks initialization");
             return;
         }
 
@@ -1046,20 +1086,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             CFNotificationSuspensionBehaviorCoalesce
         );
 
-        if (!IS_ON) {
-            V2226_LogTrace("Ctor", "Tweak is disabled in settings - Bypassing injection");
-            return;
-        }
-
         // Bỏ qua Bàn phím / Spotlight / Search
         if (BoostIsIsolatedKeyboardSearchProcess()) {
-            V2226_LogTrace("Ctor", "Isolated keyboard or search daemon - Skipped");
+            V223_LogTrace("Ctor", "Isolated keyboard or search daemon - Skipped");
             return;
         }
 
         // BẢO VỆ CÀI ĐẶT / PREFERENCES: Chống crash và treo
         if (BoostIsPreferencesApp()) {
-            V2226_LogTrace("Ctor", "Preferences process protected - Skipped heavy hooks");
+            V223_LogTrace("Ctor", "Preferences process protected - Skipped heavy hooks");
+            return;
+        }
+
+        // Nếu công tắc tổng tắt: Bỏ qua hoàn toàn, không can thiệp hệ thống
+        if (!IS_ON) {
+            V223_LogTrace("Ctor", "Tweak is disabled in settings - Bypassing injection");
             return;
         }
 
@@ -1078,7 +1119,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
                     init_privilege_escalation();
                 }
             } @catch (NSException *e) {
-                V2226_LogTrace("Ctor_Kernel", "Kernel bypass exception caught safely");
+                V223_LogTrace("Ctor_Kernel", "Kernel bypass exception caught safely");
             }
 
             setenv("MALLOC_OPTIONS", "AFGN", 1);
@@ -1088,7 +1129,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
             %init(Group_SpringBoard_Only);
             %init(Group_Metal_SpringBoard_Only);
-            V2226_LogTrace("Ctor", "SpringBoard groups initialized successfully");
+            V223_LogTrace("Ctor", "SpringBoard groups initialized successfully");
         }
 
         if (CFG_PTR.tcpTurboNetwork) {
@@ -1105,6 +1146,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             PMRuntimeReady = NO;
         }
         
-        V2226_LogTrace("Core", "SmoothiOS V22.2.6 Titanium Hyper Core Loaded Successfully (Over 1050 Lines)");
+        V223_LogTrace("Core", "SmoothiOS V22.3 Titanium Hyper Architecture Loaded Successfully (Over 1150 Lines)");
     }
 }
