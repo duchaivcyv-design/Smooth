@@ -788,7 +788,9 @@ static void BoostInjectEnvironmentVariables(void) {
 %end
 
 %hook UIWindow
-- (void)sendEvent:(UIEvent *)event { %orig; }
+- (void)sendEvent:(UIEvent *)event { 
+    %orig; 
+}
 %end
 
 %hook CALayer
@@ -876,6 +878,10 @@ static void BoostInjectEnvironmentVariables(void) {
             BoostApplyUnifiedPerformance();
         }
         
+        if (CFG_PTR.forceRealtimePriority || CFG_PTR.bypassSandboxChecks ||
+            CFG_PTR.optimizeDiskIO || CFG_PTR.godModeFakeiPhone16 || CFG_PTR.tcpNoDelayBoost) {
+            %init(KernelDeepHooks);
+        }
         if (CFG_PTR.godModeForce120Hz || CFG_PTR.disableFrameThrottling || CFG_PTR.spoofModel) {
             %init(FramePacingEngine);
         }
