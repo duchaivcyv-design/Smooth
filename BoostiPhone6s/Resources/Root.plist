@@ -20,7 +20,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak V21.4.4</string>
+            <string>Bật Tweak V21.5.1</string>
         </dict>
 
         <dict>
@@ -171,9 +171,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>Ios27AutoSchedulerBeta32</string>
+            <string>Ios27AutoSchedulerBeta45</string>
             <key>label</key>
-            <string>Auto Sắp Xếp Tiến Trình iOS 27 (Beta 3.2)</string>
+            <string>Auto Sắp Xếp Tiến Trình iOS 27 (Beta 4.5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -183,9 +183,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>RealtimePriorityBoostBeta32</string>
+            <string>RealtimePriorityBoostBeta45</string>
             <key>label</key>
-            <string>Ưu Tiên Luồng Realtime (Beta 3.2)</string>
+            <string>Ưu Tiên Luồng Realtime (Beta 4.5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -219,9 +219,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>AggressiveRamCleanBeta32</string>
+            <string>AggressiveRamCleanBeta45</string>
             <key>label</key>
-            <string>Dọn RAM Chuyên Sâu Tăng Cường (Beta 3.2)</string>
+            <string>Dọn RAM Chuyên Sâu Tăng Cường (Beta 4.5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -243,9 +243,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>MetalHandshakePipeline</string>
+            <string>MetalSurfaceBridgeBeta45</string>
             <key>label</key>
-            <string>Render Handshake Thông Luồng (Beta 3.2)</string>
+            <string>Surface Synchronous Bridge Metal (Beta 4.5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -322,9 +322,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>HeavyLoadCoolingBeta32</string>
+            <string>HeavyLoadCoolingBeta45</string>
             <key>label</key>
-            <string>Hạ Nhiệt Khi Tải Nặng (Beta 3.2)</string>
+            <string>Hạ Nhiệt Khi Tải Nặng (Beta 4.5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -377,9 +377,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>TcpTurboNetworkBeta32</string>
+            <string>TcpTurboNetworkBeta45</string>
             <key>label</key>
-            <string>Tăng Tốc Mạng Socket TCP Turbo (Beta 3.2)</string>
+            <string>Tăng Tốc Mạng Socket TCP Turbo (Beta 4.5)</string>
         </dict>
 
         <dict>
@@ -411,7 +411,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>SmoothiOS V21.4.4 Hyper-Handshake Engine&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
+            <string>SmoothiOS V21.5.1 Universal Unlocked Frame Engine&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
         </dict>
     </array>
     <key>title</key>
