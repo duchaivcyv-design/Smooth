@@ -11,7 +11,7 @@
 			<key>footerText</key>
 			<string>Bản tối ưu hóa mạnh mẽ nhất: Giảm nhiệt, ép Hz, kill nền thật, mượt như iOS 27.</string>
 			<key>label</key>
-			<string>SmoothIOS v10</string>
+			<string>SmoothIOS v12</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -152,14 +152,14 @@
 			<string>Metal GPU Overclocking</string>
 		</dict>
 
-		<!-- V10 NEW FEATURES -->
+		<!-- V12 NEW FEATURES -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
-			<string>Các tính năng mới v10: hết khung game, kill nền thật, mượt như iOS 27.</string>
+			<string>Các tính năng mới v12: Gộp hiệu năng, giảm nhiệt thông minh, xả RAM khi thoát app.</string>
 			<key>label</key>
-			<string>Tính Năng v10</string>
+			<string>Tính Năng v12</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -241,9 +241,9 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>CPUGPUBoost60</string>
+			<string>CPUGPUBoost80</string>
 			<key>label</key>
-			<string>CPU GPU Nhanh Hơn 60%</string>
+			<string>CPU GPU Nhanh Hơn 80%</string>
 		</dict>
 		<dict>
 			<key>PostNotification</key>
@@ -278,6 +278,48 @@
 			<real>100</real>
 			<key>showValue</key>
 			<true/>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>AdaptiveThermalFPS</string>
+			<key>label</key>
+			<string>Giảm FPS Tự Động Khi Nóng</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ChargingThermalGuard</string>
+			<key>label</key>
+			<string>Giảm Nhiệt Khi Đang Cắm Sạc</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s.settings/reload</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>BackgroundPurgeOnExit</string>
+			<key>label</key>
+			<string>Xả RAM Khi Thoát Ứng Dụng</string>
 		</dict>
 
 		<!-- V9.0 FEATURES -->
