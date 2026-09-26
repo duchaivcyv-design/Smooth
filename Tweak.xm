@@ -749,9 +749,9 @@ static void BoostInjectEnvironmentVariables(void) {
 
 %hook FBSSystemService
 
-- (void)openApplication:(id)application withOptions:(NSDictionary *)options {
+- (void)openApplication:(id)application withOptions:(id)options {
     if (!IS_ON) { 
-        %orig(application, options); 
+        %orig; 
         return; 
     }
     
@@ -784,9 +784,8 @@ static void BoostInjectEnvironmentVariables(void) {
         }
     }
 
-    // ĐÃ SỬA TRIỆT ĐỂ: Dùng chung một cấu trúc gọi %orig duy nhất không phân nhánh rẽ arg kiểu nil thô
-    NSDictionary *launchOptions = CFG_PTR.turboAppLaunch ? nil : options;
-    %orig(application, launchOptions);
+    // ĐÃ SỬA TRIỆT ĐỂ: Dùng %orig; không có tham số để Logos tự động map nguyên bản hàm gốc, tránh hoàn toàn lỗi preprocessor.
+    %orig;
 }
 
 %end
