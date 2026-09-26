@@ -278,32 +278,6 @@ static BOOL BoostIsSpringBoard(void) {
     return [[[NSProcessInfo processInfo] processName] isEqualToString:@"SpringBoard"];
 }
 
-typedef void (*BKSTerminateFunc)(NSString *, NSInteger, BOOL, NSString *);
-static BKSTerminateFunc g_bksTerminate = NULL;
-static dispatch_once_t g_bksTerminate_once;
-
-static void bks_fallback_impl(NSString *bid, NSInteger reason, BOOL report, NSString *desc) {
-    pid_t pid;
-    char *argv[] = {(char *)"/var/jb/bin/launchctl", (char *)"kill", (char *)[bid UTF8String], NULL};
-    posix_spawn(&pid, "/var/jb/bin/launchctl", NULL, NULL, argv, environ);
-}
-
-static void load_bks_terminate(void) {
-    dispatch_once(&g_bksTerminate_once, ^{
-        void *handle = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_LAZY);
-        if (handle) {
-            g_bksTerminate = (BKSTerminateFunc)dlsym(handle, "BKSTerminateApplicationForReasonAndReportWithDescription");
-            if (g_bksTerminate) return;
-        }
-        handle = dlopen("/System/Library/PrivateFrameworks/BackBoardServices.framework/BackBoardServices", RTLD_LAZY);
-        if (handle) {
-            g_bksTerminate = (BKSTerminateFunc)dlsym(handle, "BKSTerminateApplicationForReasonAndReportWithDescription");
-            if (g_bksTerminate) return;
-        }
-        g_bksTerminate = &bks_fallback_impl;
-    });
-}
-
 static void reloadPrefsNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     [[BoostConfig sharedInstance] loadSettings];
     CFG = [BoostConfig sharedInstance];
@@ -743,49 +717,6 @@ static void BoostInjectEnvironmentVariables(void) {
         });
     }
     %orig(application);
-}
-
-%end
-
-%hook FBSSystemService
-
-- (void)openApplication:(id)application withOptions:(id)options {
-    if (!IS_ON) { 
-        %orig; 
-        return; 
-    }
-    
-    if (CFG_PTR.killBgApps && BoostIsSpringBoard()) {
-        load_bks_terminate();
-        if (g_bksTerminate != NULL) {
-            NSString *openingBid = nil;
-            if ([application respondsToSelector:@selector(bundleIdentifier)]) {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                openingBid = (NSString *)[application performSelector:@selector(bundleIdentifier)];
-                #pragma clang diagnostic pop
-            }
-            Class sac = objc_getClass("SBApplicationController");
-            if (sac) {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                id controller = [sac performSelector:@selector(sharedInstance)];
-                if (controller && [controller respondsToSelector:@selector(allApplications)]) {
-                    NSArray *apps = (NSArray *)[controller performSelector:@selector(allApplications)];
-                    for (id app in apps) {
-                        if (![app respondsToSelector:@selector(bundleIdentifier)]) continue;
-                        NSString *bid = (NSString *)[app performSelector:@selector(bundleIdentifier)];
-                        if (!bid || [bid isEqualToString:openingBid] || [bid hasPrefix:@"com.apple."]) continue;
-                        g_bksTerminate(bid, 5, NO, @"BoostiPhone6s v12 cleanup");
-                    }
-                }
-                #pragma clang diagnostic pop
-            }
-        }
-    }
-
-    // ĐÃ SỬA TRIỆT ĐỂ: Dùng %orig; không có tham số để Logos tự động map nguyên bản hàm gốc, tránh hoàn toàn lỗi preprocessor.
-    %orig;
 }
 
 %end
