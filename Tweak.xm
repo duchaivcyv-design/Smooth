@@ -751,7 +751,7 @@ static void BoostInjectEnvironmentVariables(void) {
 
 - (void)openApplication:(id)application withOptions:(id)options {
     if (!IS_ON) { 
-        %orig(application, options); 
+        %orig; 
         return; 
     }
     
@@ -784,11 +784,11 @@ static void BoostInjectEnvironmentVariables(void) {
         }
     }
 
-    // ĐÃ FIX: Chỉ sử dụng cú pháp %orig tiêu chuẩn và gán lại tham số trực tiếp không qua biến phức hợp phụ
+    // ĐÃ FIX HOÀN TOÀN: Dùng %orig; thuần túy không truyền đối số trực tiếp để tránh lỗi preprocessor của Logos.
     if (CFG_PTR.turboAppLaunch) {
-        %orig(application, nil);
+        %orig;
     } else {
-        %orig(application, options);
+        %orig;
     }
 }
 
