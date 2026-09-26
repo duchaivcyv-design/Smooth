@@ -1,3 +1,10 @@
+// ==============================================================================
+// Tweak.xm - Ultimate Performance, Thermal & Display Engine (Version 11.0)
+// Target Architecture: arm64 / arm64e (iOS 14.0 - iOS 18.x)
+// Hardware Range: iPhone 6s to iPhone 15 Pro Max
+// Pure Code Output - Strictly Synchronized with DeviceBypass Infrastructure
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -28,6 +35,10 @@ extern char **environ;
 #import "Modules/KernelBypass.h"
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
+
+// ==============================================================================
+// SECTION 0: CONFIGURATION INTERFACE & IMPLEMENTATION
+// ==============================================================================
 
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;
@@ -249,7 +260,9 @@ BOOL IS_ENABLED = NO;
 #define IS_ON (CFG_PTR.enabled)
 #define IS_OLD_DEVICE ([CFG_PTR isDeviceOldGeneration])
 
-#pragma mark - Helper Functions & C Definitions
+// ==============================================================================
+// SECTION 1: C HELPER FUNCTIONS (FILE SCOPE — TRƯỚC TẤT CẢ LOGOS HOOKS)
+// ==============================================================================
 
 static inline void run_posix_cmd_safe(const char *path, const char *arg1, const char *arg2) {
     pid_t pid;
@@ -320,7 +333,8 @@ static const void *kPMConfiguredKey = &kPMConfiguredKey;
 static void PMDebugLog(NSString *format, ...) {
     if (!PMDiagnosticsEnabled) return;
     if (!format || format.length == 0) return;
-    va_list args; va_start(args, format);
+    va_list args; 
+    va_start(args, format);
     NSString *msg = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
     NSLog(@"[ProMotionControl] %@", msg);
@@ -412,7 +426,9 @@ static void BoostInjectEnvironmentVariables(void) {
     setenv("IOKIT_AUTOCLEAN", "1", 1);
 }
 
-#pragma mark - Hook Functions (Global Scope)
+// ==============================================================================
+// SECTION 2: %hookf AT FILE SCOPE (C FUNCTION HOOKS)
+// ==============================================================================
 
 %hookf(int, access, const char *pathname, int mode) {
     if (!IS_ON || !CFG_PTR.bypassSandboxChecks || !pathname) return %orig(pathname, mode);
@@ -524,11 +540,14 @@ static void BoostInjectEnvironmentVariables(void) {
     return %orig(socket, address, address_len);
 }
 
-#pragma mark - Logos Groups
+// ==============================================================================
+// SECTION 3: LOGOS GROUPS (OBJECTIVE-C CLASS HOOKS)
+// ==============================================================================
 
 %group FramePacingEngine
 
 %hook CADisplayLink
+
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (!IS_ON || !CFG_PTR.godModeForce120Hz) {
         %orig(fps);
@@ -550,6 +569,7 @@ static void BoostInjectEnvironmentVariables(void) {
     if (IS_OLD_DEVICE && target > 60) target = 60;
     return target > 0 ? target : %orig;
 }
+
 %end
 
 %hook UIScrollView
@@ -599,22 +619,26 @@ static void BoostInjectEnvironmentVariables(void) {
 
 %end
 
-%end
+%end // FramePacingEngine
 
 %group ThermalBypassEngine
 
 %hook NSProcessInfo
+
 - (NSProcessInfoThermalState)thermalState {
     if (IS_ON && CFG_PTR.disableThermal) return NSProcessInfoThermalStateNominal;
     return %orig;
 }
+
 + (BOOL)isThermalPressureCritical {
     if (IS_ON && CFG_PTR.disableThermal) return NO;
     return %orig;
 }
+
 %end
 
 %hook CALayer
+
 - (CFTimeInterval)duration {
     if (!IS_ON) return %orig;
     CFTimeInterval base = %orig;
@@ -626,13 +650,15 @@ static void BoostInjectEnvironmentVariables(void) {
     }
     return base * speed;
 }
-%end
 
 %end
+
+%end // ThermalBypassEngine
 
 %group GPUEngine
 
 %hook CAMetalLayer
+
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ON && CFG_PTR.godModeMetalOverclock) {
         NSUInteger optimalCount = CFG_PTR.gameStutterFix ? 3 : 2;
@@ -641,10 +667,12 @@ static void BoostInjectEnvironmentVariables(void) {
     }
     %orig(count);
 }
+
 - (BOOL)presentsWithTransaction {
     if (IS_ON && CFG_PTR.godModeMetalOverclock) return NO;
     return %orig;
 }
+
 - (void)setFramebufferOnly:(BOOL)flag {
     if (IS_ON && CFG_PTR.godModeMetalOverclock) {
         %orig(NO);
@@ -652,14 +680,17 @@ static void BoostInjectEnvironmentVariables(void) {
     }
     %orig(flag);
 }
+
 %end
 
 %hook MTLTextureDescriptor
+
 - (void)setPixelFormat:(NSUInteger)pixelFormat {
     if (!IS_ON) { %orig(pixelFormat); return; }
     if (CFG_PTR.godModeMetalOverclock && pixelFormat == 80) pixelFormat = 75;
     %orig(pixelFormat);
 }
+
 - (void)setStorageMode:(NSUInteger)storageMode {
     if (!IS_ON) { %orig(storageMode); return; }
     if (CFG_PTR.godModeMetalOverclock) {
@@ -668,13 +699,15 @@ static void BoostInjectEnvironmentVariables(void) {
     }
     %orig(storageMode);
 }
-%end
 
 %end
+
+%end // GPUEngine
 
 %group MemoryEngine
 
 %hook UIApplication
+
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
     if (!IS_ON) { %orig(application); return; }
     SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
@@ -711,11 +744,17 @@ static void BoostInjectEnvironmentVariables(void) {
     }
     %orig(application);
 }
+
 %end
 
 %hook FBSSystemService
+
 - (void)openApplication:(id)application withOptions:(id)options {
-    if (!IS_ON) { %orig(application, options); return; }
+    if (!IS_ON) { 
+        %orig(application, options); 
+        return; 
+    }
+    
     if (CFG_PTR.killBgApps && BoostIsSpringBoard()) {
         load_bks_terminate();
         if (g_bksTerminate != NULL) {
@@ -744,31 +783,42 @@ static void BoostInjectEnvironmentVariables(void) {
             }
         }
     }
-    if (CFG_PTR.turboAppLaunch) %orig(application, nil);
-    else %orig(application, options);
+
+    // Fix triệt để lỗi "Invalid argument structure in %orig":
+    // Gán biến options và chỉ gọi %orig(application, options) duy nhất 1 lần
+    if (CFG_PTR.turboAppLaunch) {
+        options = nil;
+    }
+    %orig(application, options);
 }
-%end
 
 %end
+
+%end // MemoryEngine
 
 %group UIEngine
 
 %hook UIView
+
 - (void)setAlpha:(CGFloat)alpha {
     if (!IS_ON) { %orig(alpha); return; }
     if (alpha >= 0.95) alpha = 1.0;
     %orig(alpha);
 }
+
 %end
 
 %hook UIVisualEffectView
+
 - (void)didMoveToSuperview {
     if (!IS_ON) { %orig; return; }
     [self removeFromSuperview];
 }
+
 %end
 
 %hook UITextView
+
 - (void)layoutSubviews {
     if (!IS_ON || !CFG_PTR.enableAIAcceleration) { %orig; return; }
     [CATransaction begin];
@@ -776,63 +826,80 @@ static void BoostInjectEnvironmentVariables(void) {
     %orig;
     [CATransaction commit];
 }
+
 %end
 
 %hook UIKeyboardImpl
+
 - (void)updateFrame:(CGRect)frame {
     if (!IS_ON || !CFG_PTR.enableAIAcceleration) { %orig(frame); return; }
     [UIView animateWithDuration:0.0 delay:0.0 options:UIViewAnimationOptionCurveLinear animations:^{
         %orig(frame);
     } completion:nil];
 }
+
 %end
 
 %hook UIWindow
-- (void)sendEvent:(UIEvent *)event { %orig(event); }
+
+- (void)sendEvent:(UIEvent *)event { 
+    %orig(event); 
+}
+
 %end
 
 %hook CALayer
+
 - (BOOL)allowsGroupOpacity {
     if (IS_ON && CFG_PTR.deepImageProcessing) return NO;
     return %orig;
 }
-%end
 
 %end
+
+%end // UIEngine
 
 %group BatteryEngine
 
 %hook NSTimer
+
 + (NSTimer *)timerWithTimeInterval:(NSTimeInterval)ti target:(id)t selector:(SEL)s userInfo:(id)u repeats:(BOOL)r {
     if (IS_ON && CFG_PTR.batterySaverMax && r && ti > 0 && ti < 0.033) ti = 0.033;
     return %orig(ti, t, s, u, r);
 }
+
 + (NSTimer *)scheduledTimerWithTimeInterval:(NSTimeInterval)ti target:(id)t selector:(SEL)s userInfo:(id)u repeats:(BOOL)r {
     if (IS_ON && CFG_PTR.batterySaverMax && r && ti > 0 && ti < 0.033) ti = 0.033;
     return %orig(ti, t, s, u, r);
 }
-%end
 
 %end
+
+%end // BatteryEngine
 
 %group SystemHooks
 
 %hook ATXAnalyticsManager
+
 - (void)sendEvent:(id)eventData {
     if (IS_ON && CFG_PTR.blockAnalytics) return;
     %orig(eventData);
 }
+
 %end
 
 %hook SleepManager
+
 - (void)enterDeepSleep {
     if (!IS_ON || !CFG_PTR.deepSleepOptimization) { %orig; return; }
     run_posix_cmd_safe("/var/jb/bin/launchctl", "stop", "com.apple.analyticsd");
     %orig;
 }
+
 %end
 
 %hook GraphicsQualityManager
+
 - (void)setQualityLevel:(NSUInteger)quality {
     if (IS_ON && CFG_PTR.safeSpoofGraphics) {
         %orig(3);
@@ -840,11 +907,14 @@ static void BoostInjectEnvironmentVariables(void) {
     }
     %orig(quality);
 }
-%end
 
 %end
 
-#pragma mark - Constructor
+%end // SystemHooks
+
+// ==============================================================================
+// SECTION 4: CONSTRUCTOR & SUBSYSTEM INITIALIZATION
+// ==============================================================================
 
 %ctor {
     @autoreleasepool {
