@@ -71,7 +71,7 @@ extern char **environ;
         @try {
             _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
         } @catch (NSException *e) {
-            _specifiers = [NSArray array];
+            _specifiers = [NSMutableArray array]; // SỬA LỖI: Dùng NSMutableArray khớp hoàn toàn kiểu con trỏ
         }
     }
     return _specifiers;
