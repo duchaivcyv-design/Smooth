@@ -33,7 +33,7 @@
             <key>label</key>
             <string>MÀN HÌNH &amp; TẦN SỐ QUÉT (HZ &amp; FPS)</string>
             <key>footerText</key>
-            <string>Bảng chọn Action Sheet mở trực tiếp từ đáy màn hình. Hỗ trợ khóa cứng 30 FPS mát máy hoặc mở khóa 144 FPS cực đại.</string>
+            <string>Bảng chọn Action Sheet mở trực tiếp từ đáy màn hình. Hỗ trợ khóa cứng 30 FPS mát máy hoặc mở khóa 144 FPS cực đại (TÍNH NĂNG CHƯA ỔN ĐỊNH NÊN CẬN THẬN TRÁNH LỖI).</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -45,7 +45,7 @@
             <key>key</key>
             <string>EnableHzControl</string>
             <key>label</key>
-            <string>Bật khóa tần số quét (Hz)</string>
+            <string>Bật khóa hz (chưa ổn định)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -67,7 +67,7 @@
             <key>key</key>
             <string>EnableFPSControl</string>
             <key>label</key>
-            <string>Bật khóa khung hình (FPS)</string>
+            <string>Bật khóa FPS (chưa ổn định)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -89,7 +89,7 @@
             <key>key</key>
             <string>ForceOverclock144Hz</string>
             <key>label</key>
-            <string>Ép xung cực hạn 144Hz</string>
+            <string>Ép xung cực hạn 144Hz(chưa ổn định)</string>
         </dict>
 
         <!-- KHỐI 3: GIAO DIỆN & ĐA NHIỆM (COLOROS 17) -->
