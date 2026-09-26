@@ -678,51 +678,6 @@ static void BoostInjectEnvironmentVariables(void) {
 
 %end // GPUEngine
 
-%group MemoryEngine
-
-%hook UIApplication
-
-- (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
-    if (!IS_ON) { %orig(application); return; }
-    SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
-    if ([self respondsToSelector:sel]) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:sel];
-        #pragma clang diagnostic pop
-    }
-    if (CFG_PTR.aggressiveRAM || CFG_PTR.ultraDeepRamClean) {
-        [[NSURLCache sharedURLCache] removeAllCachedResponses];
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            if (CFG_PTR.ultraDeepRamClean) [CacheCleaner forceDeepMemoryPurge];
-            else [CacheCleaner forceMemoryPurge];
-            if (CFG_PTR.ramBoost70) {
-                size_t goalBytes = (size_t)(CFG_PTR.ramCleanIntensity * 1024 * 1024);
-                malloc_zone_pressure_relief(NULL, goalBytes);
-            }
-        });
-    }
-    %orig(application);
-}
-
-- (void)applicationDidEnterBackground:(UIApplication *)application {
-    if (IS_ON && CFG_PTR.backgroundPurgeOnExit) {
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            [[NSURLCache sharedURLCache] removeAllCachedResponses];
-            if (CFG_PTR.ramBoost70) {
-                size_t goalBytes = (size_t)(CFG_PTR.ramCleanIntensity * 1024 * 1024);
-                malloc_zone_pressure_relief(NULL, goalBytes);
-            }
-            [CacheCleaner forceMemoryPurge];
-        });
-    }
-    %orig(application);
-}
-
-%end
-
-%end // MemoryEngine
-
 %group UIEngine
 
 %hook UIView
