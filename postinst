@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+# Phân quyền chuẩn xác cho thư mục Rootless
 if [ -d "/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then
     chmod -R 755 /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
     chown -R mobile:mobile /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
@@ -11,13 +12,11 @@ if [ -f "/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; t
     chown mobile:mobile /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
 fi
 
-if [ -f "/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib" ]; then
-    chmod 755 /var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
-fi
-
+# Xóa các flag gây dính Safe Mode của bản cũ
+defaults delete com.taojb.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
 defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
-defaults delete com.taojb.boostiphone6s BoostiPhone6s_CrashCount 2>/dev/null || true
 
+# Refresh UI Cache
 if command -v uicache &> /dev/null; then
     uicache -p /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
 fi
