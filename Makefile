@@ -1,5 +1,5 @@
 # ==============================================================
-# V20 ULTIMATE ROOT MAKEFILE - CHUẨN TẮC THEOS NATIVE
+# V20 ULTIMATE ROOT MAKEFILE - TỰ SINH CODE PLIST
 # ==============================================================
 
 ARCHS = arm64 arm64e
@@ -12,7 +12,7 @@ FINALPACKAGE = 1
 include $(THEOS)/makefiles/common.mk
 
 # ==============================================================
-# PART 1: BUILD MAIN TWEAK
+# PART 1: BUILD MAIN TWEAK & NHÓM MÃ NGUỒN
 # ==============================================================
 TWEAK_NAME = BoostiPhone6sCore
 
@@ -23,9 +23,6 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
-
-# 👉 BIẾN ĐỊNH DANH BỘ LỌC CHÍNH THỐNG CỦA THEOS:
-BoostiPhone6sCore_BUNDLE_FILTER = BoostiPhone6sCore.plist
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
@@ -67,24 +64,18 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================
-# PART 3: ĐÓNG GÓI CONTROL, POSTINST, PRERM
+# PART 3: CODE TỰ ĐỘNG TẠO VÀ NHÉT FILE PLIST KHI BUILD
 # ==============================================================
+internal-tweak-stage::
+	@echo "==> [V20] Đang tự động tạo code file BoostiPhone6sCore.plist..."
+	@mkdir -p $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries
+	@printf "{\n  Filter = {\n    Executables = ( \"SpringBoard\" );\n    Bundles = ( \"com.apple.springboard\", \"com.apple.UIKit\", \"com.apple.Preferences\" );\n  };\n}\n" > "$(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"
+	@chmod 644 "$(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"
+	@echo "[OK] Đã nhét code plist vào phân vùng hệ thống thành công!"
+
 before-package::
-	@echo ""
-	@echo "Finalizing Rootless Package V20 Ultimate..."
-	@echo ""
-	
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
-	@if [ -f control ]; then \
-	    cp control $(THEOS_STAGING_DIR)/DEBIAN/control; \
-	fi
-	@if [ -f postinst ]; then \
-	    cp postinst $(THEOS_STAGING_DIR)/DEBIAN/postinst; \
-	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/postinst; \
-	fi
-	@if [ -f prerm ]; then \
-	    cp prerm $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
-	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
-	fi
+	@if [ -f control ]; then cp control $(THEOS_STAGING_DIR)/DEBIAN/control; fi
+	@if [ -f postinst ]; then cp postinst $(THEOS_STAGING_DIR)/DEBIAN/postinst; chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/postinst; fi
+	@if [ -f prerm ]; then cp prerm $(THEOS_STAGING_DIR)/DEBIAN/prerm; chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; fi
 	@echo "Rootless Package V20 Ready!"
-	@echo ""
