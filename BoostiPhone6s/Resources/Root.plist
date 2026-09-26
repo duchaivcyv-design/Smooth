@@ -20,7 +20,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak V21.5.1</string>
+            <string>Bật Tweak V21.5.7</string>
         </dict>
 
         <dict>
@@ -29,7 +29,7 @@
             <key>label</key>
             <string>MÀN HÌNH &amp; TẦN SỐ QUÉT (HZ &amp; FPS)</string>
             <key>footerText</key>
-            <string>Khung nhỏ mini neo thẳng vào mép phải. Chọn xong sẽ đổi số hiển thị tức thì (Auto, 30, 60, 90, 120, 144).</string>
+            <string>Nhấn vào dòng để mở bảng chọn Action Sheet từ cạnh dưới màn hình. Khóa cố định tần số quét theo ý muốn.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -94,7 +94,7 @@
             <key>label</key>
             <string>GIAO DIỆN &amp; ĐA NHIỆM (COLOROS 17)</string>
             <key>footerText</key>
-            <string>Tối ưu phản hồi cảm ứng cực đại và gia tốc chuyển cảnh mượt hơn 80%.</string>
+            <string>Tối ưu hóa gia tốc cử chỉ ColorOS mượt hơn 80%, cách ly hoàn toàn Bàn phím và Spotlight.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -171,9 +171,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>Ios27AutoSchedulerBeta45</string>
+            <string>Ios27AutoSchedulerBeta60</string>
             <key>label</key>
-            <string>Auto Sắp Xếp Tiến Trình iOS 27 (Beta 4.5)</string>
+            <string>Auto Sắp Xếp Tiến Trình iOS 27 (Beta 6.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -183,9 +183,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>RealtimePriorityBoostBeta45</string>
+            <string>RealtimePriorityBoostBeta60</string>
             <key>label</key>
-            <string>Ưu Tiên Luồng Realtime (Beta 4.5)</string>
+            <string>Ưu Tiên Luồng Realtime (Beta 6.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -219,9 +219,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>AggressiveRamCleanBeta45</string>
+            <string>AggressiveRamCleanBeta60</string>
             <key>label</key>
-            <string>Dọn RAM Chuyên Sâu Tăng Cường (Beta 4.5)</string>
+            <string>Dọn RAM Chuyên Sâu Tăng Cường (Beta 6.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -243,9 +243,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>MetalSurfaceBridgeBeta45</string>
+            <string>HardwareFrameSyncBeta60</string>
             <key>label</key>
-            <string>Surface Synchronous Bridge Metal (Beta 4.5)</string>
+            <string>Hardware Frame Sync Chống Đen Màn (Beta 6.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -322,9 +322,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>HeavyLoadCoolingBeta45</string>
+            <string>HeavyLoadCoolingBeta60</string>
             <key>label</key>
-            <string>Hạ Nhiệt Khi Tải Nặng (Beta 4.5)</string>
+            <string>Hạ Nhiệt Khi Tải Nặng (Beta 6.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -377,9 +377,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>TcpTurboNetworkBeta45</string>
+            <string>TcpTurboNetworkBeta60</string>
             <key>label</key>
-            <string>Tăng Tốc Mạng Socket TCP Turbo (Beta 4.5)</string>
+            <string>Tăng Tốc Mạng Socket TCP Turbo (Beta 6.0)</string>
         </dict>
 
         <dict>
@@ -411,7 +411,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>SmoothiOS V21.5.1 Universal Unlocked Frame Engine&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
+            <string>SmoothiOS V21.5.7 Hyper Frame Sync Engine&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
         </dict>
     </array>
     <key>title</key>
