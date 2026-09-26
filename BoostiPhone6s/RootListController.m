@@ -10,7 +10,7 @@
 extern char **environ;
 
 // ==============================================================================
-// 📱 MINI POPOVER CONTROLLER (CHỐNG VĂNG KHI SAFEMODE & NEO CHUẨN GÓC PHẢI)
+// 📱 MINI POPOVER CONTROLLER (CHỐNG CRASH KHI SAFEMODE & NEO CHUẨN GÓC PHẢI)
 // ==============================================================================
 @interface SmoothMiniPickerVC : UITableViewController
 @property (nonatomic, strong) NSArray *titles;
@@ -71,7 +71,7 @@ extern char **environ;
         @try {
             _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
         } @catch (NSException *e) {
-            _specifiers = [NSMutableArray array]; // SỬA LỖI: Dùng NSMutableArray khớp hoàn toàn kiểu con trỏ
+            _specifiers = [NSMutableArray array];
         }
     }
     return _specifiers;
@@ -104,7 +104,7 @@ extern char **environ;
 }
 
 // ============================================================================
-// LẤY CHỮ HIỂN THỊ ĐỘNG TRỰC TIẾP Ở GÓC PHẢI
+// HIỂN THỊ ĐỘNG TRỰC TIẾP Ở GÓC PHẢI
 // ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
@@ -132,7 +132,7 @@ extern char **environ;
     }
 }
 
-// BẮT BUỘC KHÔNG CHO BIẾN THÀNH SHEET TO TOÀN MÀN HÌNH
+// BẮT BUỘC KHÔNG CHO PHÉP NHẢY SANG BẢNG TO TOÀN MÀN HÌNH
 - (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller {
     return UIModalPresentationNone;
 }
@@ -142,7 +142,7 @@ extern char **environ;
 }
 
 // ============================================================================
-// HIỂN THỊ KHUNG MINI GÓC PHẢI NEO CHUẨN XÁC
+// HIỂN THỊ KHUNG MINI GÓC PHẢI
 // ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     [self presentMiniPopoverForSpecifier:specifier key:@"TargetRefreshRate" suffix:@"Hz"];
@@ -192,8 +192,8 @@ extern char **environ;
 }
 
 // ============================================================================
-// QUẢN LÝ HỆ THỐNG: RESPRING & ĐẶT LẠI
-// ==============================================================================
+// QUẢN LÝ HỆ THỐNG
+// ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
                                                                    message:@"Respring để áp dụng thay đổi?"
@@ -209,7 +209,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V21.4.4?"
+                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V21.5.1?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
