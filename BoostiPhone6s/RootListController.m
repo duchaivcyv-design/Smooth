@@ -9,59 +9,7 @@
 
 extern char **environ;
 
-// ==============================================================================
-// 📱 MINI POPOVER CONTROLLER (CHỐNG CRASH KHI SAFEMODE & NEO CHUẨN GÓC PHẢI)
-// ==============================================================================
-@interface SmoothMiniPickerVC : UITableViewController
-@property (nonatomic, strong) NSArray *titles;
-@property (nonatomic, strong) NSArray *values;
-@property (nonatomic, copy) void (^onSelect)(NSNumber *val);
-@end
-
-@implementation SmoothMiniPickerVC
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.tableView.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    self.tableView.rowHeight = 44.0;
-    self.tableView.separatorInset = UIEdgeInsetsMake(0, 15, 0, 15);
-    self.tableView.showsVerticalScrollIndicator = NO;
-    self.tableView.alwaysBounceVertical = NO;
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.titles ? self.titles.count : 0;
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *cellId = @"SmoothMiniCell";
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellId];
-    if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cellId];
-        cell.backgroundColor = [UIColor clearColor];
-        cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-        cell.textLabel.textColor = [UIColor labelColor];
-    }
-    if (indexPath.row < self.titles.count) {
-        cell.textLabel.text = self.titles[indexPath.row];
-    }
-    return cell;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (self.onSelect && indexPath.row < self.values.count) {
-        self.onSelect(self.values[indexPath.row]);
-    }
-    [self dismissViewControllerAnimated:YES completion:nil];
-}
-
-@end
-
-// ==============================================================================
-// ⚙️ ROOT LIST CONTROLLER
-// ==============================================================================
-@interface RootListController : PSListController <UIPopoverPresentationControllerDelegate>
+@interface RootListController : PSListController
 @end
 
 @implementation RootListController
@@ -104,7 +52,7 @@ extern char **environ;
 }
 
 // ============================================================================
-// HIỂN THỊ ĐỘNG TRỰC TIẾP Ở GÓC PHẢI
+// HIỂN THỊ TRẠNG THÁI HIỆN TẠI RA CELL
 // ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
@@ -113,9 +61,9 @@ extern char **environ;
         if (!enabled) return @"Tắt";
         NSInteger val = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
         if (val == 0) return @"Tự động";
-        return [NSString stringWithFormat:@"%ld Hz", (long)val];
+        return [NSString stringWithFormat:@"Khóa ở %ld Hz", (long)val];
     } @catch (NSException *e) {
-        return @"60 Hz";
+        return @"Khóa ở 60 Hz";
     }
 }
 
@@ -126,73 +74,87 @@ extern char **environ;
         if (!enabled) return @"Tắt";
         NSInteger val = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
         if (val == 0) return @"Tự động";
-        return [NSString stringWithFormat:@"%ld FPS", (long)val];
+        return [NSString stringWithFormat:@"Khóa ở %ld FPS", (long)val];
     } @catch (NSException *e) {
-        return @"60 FPS";
+        return @"Khóa ở 60 FPS";
     }
 }
 
-// BẮT BUỘC KHÔNG CHO PHÉP NHẢY SANG BẢNG TO TOÀN MÀN HÌNH
-- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller {
-    return UIModalPresentationNone;
-}
-
-- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller traitCollection:(UITraitCollection *)traitCollection {
-    return UIModalPresentationNone;
-}
-
 // ============================================================================
-// HIỂN THỊ KHUNG MINI GÓC PHẢI
+// BẢNG ACTION SHEET TỪ ĐÁY MÀN HÌNH (CHUẨN ẢNH 100%)
 // ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    [self presentMiniPopoverForSpecifier:specifier key:@"TargetRefreshRate" suffix:@"Hz"];
+    [self presentActionSheetForSpecifier:specifier 
+                                   title:@"Chọn Tần Số Quét (Hz & FPS)" 
+                                 message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt" 
+                                     key:@"TargetRefreshRate" 
+                                  suffix:@"Hz"];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    [self presentMiniPopoverForSpecifier:specifier key:@"TargetFPSRate" suffix:@"FPS"];
+    [self presentActionSheetForSpecifier:specifier 
+                                   title:@"Chọn Mức Khung Hình Ứng Dụng (FPS)" 
+                                 message:@"Lựa chọn giới hạn FPS render ứng dụng:\n• Tự Động: Theo engine mặc định của app\n• 30 FPS: Tiết kiệm pin, chống quá nhiệt\n• 60 FPS: Mượt mà ổn định chuẩn\n• 90 FPS - 120 FPS - 144 FPS: Đột phá giới hạn cực hạn" 
+                                     key:@"TargetFPSRate" 
+                                  suffix:@"FPS"];
 }
 
-- (void)presentMiniPopoverForSpecifier:(PSSpecifier *)specifier key:(NSString *)prefKey suffix:(NSString *)suffix {
-    SmoothMiniPickerVC *miniVC = [[SmoothMiniPickerVC alloc] initWithStyle:UITableViewStylePlain];
-    miniVC.titles = @[@"Tự Động (Auto)", 
-                      [NSString stringWithFormat:@"30 %@", suffix], 
-                      [NSString stringWithFormat:@"60 %@", suffix], 
-                      [NSString stringWithFormat:@"90 %@", suffix], 
-                      [NSString stringWithFormat:@"120 %@", suffix], 
-                      [NSString stringWithFormat:@"144 %@", suffix]];
-    miniVC.values = @[@0, @30, @60, @90, @120, @144];
-    
-    miniVC.preferredContentSize = CGSizeMake(180, 264);
-    miniVC.modalPresentationStyle = UIModalPresentationPopover;
+- (void)presentActionSheetForSpecifier:(PSSpecifier *)specifier 
+                                 title:(NSString *)title 
+                               message:(NSString *)message 
+                                   key:(NSString *)prefKey 
+                                suffix:(NSString *)suffix {
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:title
+                                                                         message:message
+                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
 
     __weak typeof(self) weakSelf = self;
-    miniVC.onSelect = ^(NSNumber *selectedVal) {
+    void (^saveHandler)(NSNumber *) = ^(NSNumber *val) {
         NSString *path = [weakSelf effectivePrefPath];
         NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
-        prefs[prefKey] = selectedVal;
+        prefs[prefKey] = val;
         [prefs writeToFile:path atomically:YES];
         notify_post(NOTIFY_RELOAD);
         [weakSelf reloadSpecifiers];
     };
 
-    UIPopoverPresentationController *popover = miniVC.popoverPresentationController;
-    if (popover) {
-        popover.delegate = self;
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Tự Động Điều Chỉnh (Dynamic)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        saveHandler(@0);
+    }]];
+
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa ở 30 %@ (Tiết kiệm pin)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        saveHandler(@30);
+    }]];
+
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa ở 60 %@ (Mặc định)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        saveHandler(@60);
+    }]];
+
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa ở 90 %@ (Mượt mà)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        saveHandler(@90);
+    }]];
+
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa ở 120 %@ (Cực mượt)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        saveHandler(@120);
+    }]];
+
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa ở 144 %@ (Cực đại)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        saveHandler(@144);
+    }]];
+
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
         UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
-        popover.sourceView = cell ? cell : self.view;
-        if (cell) {
-            popover.sourceRect = CGRectMake(cell.bounds.size.width - 45, cell.bounds.size.height / 2.0, 1.0, 1.0);
-        } else {
-            popover.sourceRect = CGRectMake(self.view.bounds.size.width - 45, 140, 1.0, 1.0);
-        }
-        popover.permittedArrowDirections = UIPopoverArrowDirectionUp | UIPopoverArrowDirectionDown | UIPopoverArrowDirectionRight;
+        actionSheet.popoverPresentationController.sourceView = cell ? cell : self.view;
+        actionSheet.popoverPresentationController.sourceRect = cell ? cell.bounds : CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1.0, 1.0);
     }
 
-    [self presentViewController:miniVC animated:YES completion:nil];
+    [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
 // ============================================================================
-// QUẢN LÝ HỆ THỐNG
+// HỆ THỐNG
 // ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
@@ -209,7 +171,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V21.5.1?"
+                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V21.5.7?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
