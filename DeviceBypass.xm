@@ -1,3 +1,13 @@
+// ==============================================================================
+// DEVICE BYPASS MODULE v11.1 - TRUE HARDWARE CONTROL ENGINE
+// Target: iOS 14.0 - 26.0.1 | iPhone 6s to 15 Pro Max+
+// Author: TaoJB | Project: Smooth
+// Features: Dynamic Hz, Thermal Bypass, Hardware Spoof (sysctl + uname),
+//           GPU Triple Buffer, Touch Latency Reduction, Battery Timer Clamp
+// Architecture: Rootless-Aware (/var/jb) | HideJB Compatible
+// NOTE: Synchronized with BoostiPhone6sCore v11.1 Unified Performance Engine
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -51,7 +61,7 @@ static inline NSInteger CfgInt(NSString *key) {
 
 // ==============================================================================
 // %hookf Ở FILE SCOPE — TRƯỚC %group DeviceBypassAll
-// ★ FIX: Logos yêu cầu %hookf phải ở file scope, không được trong %group ★
+// ★ FIX v11.1: Logos yêu cầu %hookf phải ở file scope, không được trong %group ★
 // ==============================================================================
 
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
@@ -143,6 +153,30 @@ static inline NSInteger CfgInt(NSString *key) {
     if (CfgBool(@"godModeForce120Hz")) {
         NSInteger targetHz = CfgInt(@"forcedRefreshRate");
         if (isOldDevice() && targetHz > 60) targetHz = 60;
+        
+        // v11.1: Adaptive Thermal FPS Integration
+        if (CfgBool(@"adaptiveThermalFPS")) {
+            CGFloat thermalMul = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
+            if (thermalMul < 1.0) {
+                NSInteger adjustedTarget = (NSInteger)((CGFloat)targetHz * thermalMul);
+                if (adjustedTarget < 30) adjustedTarget = 30;
+                targetHz = adjustedTarget;
+            }
+        }
+        
+        // v11.1: Charging Thermal Guard Integration
+        if (CfgBool(@"chargingThermalGuard")) {
+            UIDeviceBatteryState state = [UIDevice currentDevice].batteryState;
+            if (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull) {
+                CGFloat thermalMul = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
+                if (thermalMul < 0.8) {
+                    NSInteger guardedTarget = (NSInteger)((CGFloat)targetHz * 0.75);
+                    if (guardedTarget < 30) guardedTarget = 30;
+                    targetHz = guardedTarget;
+                }
+            }
+        }
+        
         if (targetHz > 0) return targetHz;
     }
     return %orig;
@@ -336,23 +370,26 @@ static inline NSInteger CfgInt(NSString *key) {
 %end // DeviceBypassAll
 
 // ==============================================================================
-// C-LEVEL CONSTRUCTOR (KHÔNG PHẢI LOGOS %ctor)
+// LOGOS CONSTRUCTOR (SỬA LỖI CÔNG TẮC V11.1)
+// ★ Thay thế __attribute__((constructor)) bằng %ctor chuẩn để đồng bộ với Tweak.xm ★
+// ★ Đảm bảo CFG/IS_ENABLED được load đúng trước khi init hooks ★
 // ==============================================================================
 
-__attribute__((constructor))
-static void deviceBypass_entry(void) {
+%ctor {
     @autoreleasepool {
+        // Kiểm tra trạng thái master switch từ Tweak.xm
         if (!IS_ENABLED) {
-            NSLog(@"[DeviceBypass v10] Disabled by Master Switch.");
+            NSLog(@"[DeviceBypass v11.1] Disabled by Master Switch.");
             return;
         }
 
-        // ★ FIX: Init _ungrouped cho tất cả %hookf ở file scope ★
+        // ★ FIX v11.1: Init _ungrouped cho tất cả %hookf ở file scope ★
         %init(_ungrouped);
-
+        
+        // Init nhóm hooks chính
         %init(DeviceBypassAll);
 
-        NSLog(@"[DeviceBypass v10] ALL ENGINES INITIALIZED | Device: %@ | Spoof: %@ | Thermal: %@",
+        NSLog(@"[DeviceBypass v11.1] ALL ENGINES INITIALIZED | Device: %@ | Spoof: %@ | Thermal: %@",
               isOldDevice() ? @"OLD (6s-8)" : @"NEW (X-15PM)",
               CfgBool(@"spoofModel") ? @"ON" : @"OFF",
               CfgBool(@"disableThermal") ? @"BYPASSED" : @"NORMAL");
