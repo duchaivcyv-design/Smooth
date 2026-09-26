@@ -6,26 +6,12 @@
 #import <fcntl.h>
 #import <unistd.h>
 
+#define PREF_DOMAIN CFSTR("com.duchaivcy.boostiphone6s")
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
 #define NOTIFY_RELOAD "com.duchaivcy.boostiphone6s/ReloadPrefs"
-#define SHARED_MMAP_FILE "/tmp/.smoothios_shared_config.bin"
 
 extern char **environ;
-
-typedef struct {
-    uint32_t magic;
-    uint32_t enabled;
-    uint32_t enableHzControl;
-    uint32_t targetHz;
-    uint32_t enableFPSControl;
-    uint32_t targetFPS;
-    uint32_t forceOverclock144Hz;
-    uint32_t dynamicThermalEngineBeta1;
-    uint32_t zeroLagNeuralBoosterBeta1;
-    uint32_t vsyncAdaptiveBufferBeta1;
-    float animSpeed;
-} __attribute__((packed)) SmoothSharedConfig;
 
 @interface RootListController : PSListController
 @end
@@ -48,35 +34,48 @@ typedef struct {
     return FALLBACK_PREF_PATH;
 }
 
-- (void)broadcastConfigToSharedMemory:(NSDictionary *)prefs {
-    int fd = open(SHARED_MMAP_FILE, O_RDWR | O_CREAT | O_TRUNC, 0666);
-    if (fd >= 0) {
-        SmoothSharedConfig cfg;
-        memset(&cfg, 0, sizeof(SmoothSharedConfig));
-        cfg.magic = 0x534D5448; // "SMTH"
-        cfg.enabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : 1;
-        cfg.enableHzControl = prefs[@"EnableHzControl"] ? [prefs[@"EnableHzControl"] boolValue] : 1;
-        cfg.targetHz = (uint32_t)(prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60);
-        cfg.enableFPSControl = prefs[@"EnableFPSControl"] ? [prefs[@"EnableFPSControl"] boolValue] : 1;
-        cfg.targetFPS = (uint32_t)(prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60);
-        cfg.forceOverclock144Hz = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : 1;
-        cfg.dynamicThermalEngineBeta1 = prefs[@"DynamicThermalEngineBeta1"] ? [prefs[@"DynamicThermalEngineBeta1"] boolValue] : 1;
-        cfg.zeroLagNeuralBoosterBeta1 = prefs[@"ZeroLagNeuralBoosterBeta1"] ? [prefs[@"ZeroLagNeuralBoosterBeta1"] boolValue] : 1;
-        cfg.vsyncAdaptiveBufferBeta1 = prefs[@"VsyncAdaptiveBufferBeta1"] ? [prefs[@"VsyncAdaptiveBufferBeta1"] boolValue] : 1;
-        cfg.animSpeed = prefs[@"AnimSpeed"] ? [prefs[@"AnimSpeed"] floatValue] : 0.82f;
-        
-        write(fd, &cfg, sizeof(SmoothSharedConfig));
-        close(fd);
-        chmod(SHARED_MMAP_FILE, 0666);
-    }
+// Đồng bộ đa tầng: Vừa ghi CFPreferences hệ thống vừa ghi file plist vật lý
+- (void)syncPreferenceValueToSystem:(id)value forKey:(NSString *)key {
+    if (!key) return;
+    
+    // Tầng 1: CoreFoundation Preferences (xuyên thủng Sandbox App con)
+    CFStringRef cfKey = (__bridge CFStringRef)key;
+    CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    
+    // Tầng 2: Ghi file Plist vật lý (Rootless + Rootful fallback)
+    NSString *primaryPath = PREF_PATH;
+    NSString *fallbackPath = FALLBACK_PREF_PATH;
+    
+    NSMutableDictionary *primaryDict = [NSMutableDictionary dictionaryWithContentsOfFile:primaryPath] ?: [NSMutableDictionary dictionary];
+    primaryDict[key] = value;
+    [primaryDict writeToFile:primaryPath atomically:YES];
+    
+    NSMutableDictionary *fallbackDict = [NSMutableDictionary dictionaryWithContentsOfFile:fallbackPath] ?: [NSMutableDictionary dictionary];
+    fallbackDict[key] = value;
+    [fallbackDict writeToFile:fallbackPath atomically:YES];
+    
+    // Tầng 3: Phát tín hiệu Darwin Notification toàn hệ thống
+    notify_post(NOTIFY_RELOAD);
 }
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     @try {
+        NSString *key = specifier.properties[@"key"];
+        if (!key) return specifier.properties[@"default"];
+        
+        // Đọc ưu tiên từ CoreFoundation
+        CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
+        if (val) {
+            return (__bridge_transfer id)val;
+        }
+        
+        // Fallback đọc file vật lý
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
-        if (!prefs) return specifier.properties[@"default"];
-        id val = prefs[specifier.properties[@"key"]];
-        return val ? val : specifier.properties[@"default"];
+        if (prefs && prefs[key]) {
+            return prefs[key];
+        }
+        return specifier.properties[@"default"];
     } @catch (NSException *e) {
         return specifier.properties[@"default"];
     }
@@ -84,26 +83,26 @@ typedef struct {
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     @try {
-        NSString *path = [self effectivePrefPath];
-        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
-        prefs[specifier.properties[@"key"]] = value;
-        [prefs writeToFile:path atomically:YES];
-        
-        // Đồng bộ tức thì ra shared memory để các app con nhận lệnh lập tức
-        [self broadcastConfigToSharedMemory:prefs];
-        notify_post(NOTIFY_RELOAD);
+        NSString *key = specifier.properties[@"key"];
+        [self syncPreferenceValueToSystem:value forKey:key];
     } @catch (NSException *e) {}
 }
 
 // ============================================================================
-// HIỂN THỊ ĐỘNG TRỰC TIẾP TRÊN DANH SÁCH
+// HIỂN THỊ TRẠNG THÁI HIỆN TẠI RA CELL
 // ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
-        BOOL enabled = prefs[@"EnableHzControl"] ? [prefs[@"EnableHzControl"] boolValue] : YES;
+        CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableHzControl"), PREF_DOMAIN);
+        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
+        if (enabledVal) CFRelease(enabledVal);
+        
         if (!enabled) return @"Tắt";
-        NSInteger val = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
+        
+        CFPropertyListRef hzVal = CFPreferencesCopyAppValue(CFSTR("TargetRefreshRate"), PREF_DOMAIN);
+        NSInteger val = hzVal ? [(__bridge id)hzVal integerValue] : 60;
+        if (hzVal) CFRelease(hzVal);
+        
         if (val == 0) return @"Tự động";
         return [NSString stringWithFormat:@"Khóa ở %ld Hz", (long)val];
     } @catch (NSException *e) {
@@ -113,10 +112,16 @@ typedef struct {
 
 - (NSString *)getFPSDisplayValue:(PSSpecifier *)specifier {
     @try {
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
-        BOOL enabled = prefs[@"EnableFPSControl"] ? [prefs[@"EnableFPSControl"] boolValue] : YES;
+        CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableFPSControl"), PREF_DOMAIN);
+        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
+        if (enabledVal) CFRelease(enabledVal);
+        
         if (!enabled) return @"Tắt";
-        NSInteger val = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
+        
+        CFPropertyListRef fpsVal = CFPreferencesCopyAppValue(CFSTR("TargetFPSRate"), PREF_DOMAIN);
+        NSInteger val = fpsVal ? [(__bridge id)fpsVal integerValue] : 60;
+        if (fpsVal) CFRelease(fpsVal);
+        
         if (val == 0) return @"Tự động";
         return [NSString stringWithFormat:@"Khóa ở %ld FPS", (long)val];
     } @catch (NSException *e) {
@@ -125,7 +130,7 @@ typedef struct {
 }
 
 // ============================================================================
-// BẬT ACTION SHEET CHUẨN 100% THEO ẢNH MẪU
+// BẬT BẢNG CHỌN ACTION SHEET CHUẨN 100% THEO ẢNH
 // ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     [self presentActionSheetForSpecifier:specifier 
@@ -154,13 +159,7 @@ typedef struct {
 
     __weak typeof(self) weakSelf = self;
     void (^saveHandler)(NSNumber *) = ^(NSNumber *val) {
-        NSString *path = [weakSelf effectivePrefPath];
-        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
-        prefs[prefKey] = val;
-        [prefs writeToFile:path atomically:YES];
-        
-        [weakSelf broadcastConfigToSharedMemory:prefs];
-        notify_post(NOTIFY_RELOAD);
+        [weakSelf syncPreferenceValueToSystem:val forKey:prefKey];
         [weakSelf reloadSpecifiers];
     };
 
@@ -204,7 +203,7 @@ typedef struct {
 // ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để áp dụng toàn bộ thay đổi cấu hình Titanium Hyper V22.0.1?"
+                                                                   message:@"Respring để đồng bộ toàn diện SmoothiOS V22.2.6?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -217,13 +216,19 @@ typedef struct {
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V22.0.1?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.2.6?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        NSDictionary *dict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        for (id key in dict) {
+            CFPreferencesSetAppValue((__bridge CFStringRef)key, NULL, PREF_DOMAIN);
+        }
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
-        unlink(SHARED_MMAP_FILE);
         notify_post(NOTIFY_RELOAD);
         [self reloadSpecifiers];
     }]];
