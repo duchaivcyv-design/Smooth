@@ -269,6 +269,12 @@ typedef void (*BKSTerminateFunc)(NSString *, NSInteger, BOOL, NSString *);
 static BKSTerminateFunc g_bksTerminate = NULL;
 static dispatch_once_t g_bksTerminate_once;
 
+static void bks_fallback_impl(NSString *bid, NSInteger reason, BOOL report, NSString *desc) {
+    pid_t pid;
+    char *argv[] = {(char *)"/var/jb/bin/launchctl", (char *)"kill", (char *)[bid UTF8String], NULL};
+    posix_spawn(&pid, "/var/jb/bin/launchctl", NULL, NULL, argv, environ);
+}
+
 static void load_bks_terminate(void) {
     dispatch_once(&g_bksTerminate_once, ^{
         void *handle = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_LAZY);
@@ -281,11 +287,7 @@ static void load_bks_terminate(void) {
             g_bksTerminate = (BKSTerminateFunc)dlsym(handle, "BKSTerminateApplicationForReasonAndReportWithDescription");
             if (g_bksTerminate) return;
         }
-        // Fallback cuối cùng: dùng launchctl kill nếu dlsym thất bại hoàn toàn
-        g_bksTerminate = ^(NSString *bid, NSInteger reason, BOOL report, NSString *desc) {
-            char *argv[] = {(char *)"/var/jb/bin/launchctl", (char *)"kill", (char *)[bid UTF8String], NULL};
-            posix_spawn(NULL, "/var/jb/bin/launchctl", NULL, NULL, argv, environ);
-        };
+        g_bksTerminate = &bks_fallback_impl;
     });
 }
 
