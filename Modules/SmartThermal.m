@@ -15,7 +15,10 @@
 
 - (CGFloat)recommendedAnimationMultiplier {
     NSTimeInterval now = CACurrentMediaTime();
-    if (now - _lastReadTime < 2.0) return (_lastTemp > 42.0f ? 0.5f : (_lastTemp > 39.0f ? 0.8f : 1.0f));
+    // Cache reading for 2 seconds to avoid excessive syscalls
+    if (now - _lastReadTime < 2.0) {
+        return (_lastTemp > 42.0f ? 0.5f : (_lastTemp > 39.0f ? 0.8f : 1.0f));
+    }
     
     float temp = 38.0f;
     size_t size = sizeof(float);
