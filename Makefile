@@ -1,5 +1,5 @@
 # ==============================================================
-# ROOT MAKEFILE - KHAI BÁO PLIST CHUẨN XÁC
+# ROOT MAKEFILE - KHAI BÁO BỘ LỌC CHUẨN XÁC THEOS
 # ==============================================================
 
 ARCHS = arm64 arm64e
@@ -24,8 +24,8 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
-# 👉 DÒNG KHAI BÁO QUYẾT ĐỊNH ĐỂ THEO NHẬN DIỆN FILE PLIST CÓ SẴN:
-BoostiPhone6sCore_ETC = BoostiPhone6sCore.plist
+# 👉 BIẾN CHUẨN ĐỂ KHAI BÁO TÊN FILE PLIST LỌC CHO THEOS:
+BoostiPhone6sCore_BUNDLE_FILTER = BoostiPhone6sCore.plist
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
