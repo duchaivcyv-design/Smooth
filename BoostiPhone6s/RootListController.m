@@ -1,74 +1,95 @@
-#import "RootListController.h"
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <spawn.h>
-#import <UIKit/UIKit.h>
-#import <Foundation/Foundation.h>
+#import <notify.h>
+
+#define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
+#define NOTIFY_RELOAD "com.duchaivcy.boostiphone6s/ReloadPrefs"
 
 extern char **environ;
 
+@interface RootListController : PSListController
+@end
+
 @implementation RootListController
 
-- (NSArray<PSSpecifier *> *)specifiers {
+- (NSArray *)specifiers {
     if (!_specifiers) {
         _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
     }
     return _specifiers;
 }
 
-// Hàm Respring siêu tốc (Hỗ trợ cả Rootless và Rootful)
-- (void)performRespring {
-    pid_t pid;
-    const char *args[] = {"killall", "-9", "SpringBoard", NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
-    
-    // Fallback cho Rootful nếu đường dẫn Rootless không tồn tại
-    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
+// ============================================================================
+// POPUP NỔI CHỌN TẦN SỐ QUÉT HZ & FPS (30 - 60 - 90 - 120 - 144)
+// ============================================================================
+- (void)showHzPopupPicker {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Tần Số Quét (Hz & FPS)"
+                                                                   message:@"Chọn mức giới hạn hiển thị hệ thống:\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn iOS\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *hzValues = @[@30, @60, @90, @120, @144];
+    for (NSNumber *hz in hzValues) {
+        NSString *title = [NSString stringWithFormat:@"Khóa ở %@ Hz / FPS", hz];
+        [alert addAction:[UIAlertAction actionWithTitle:title
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(UIAlertAction * _Nonnull action) {
+            [self applyTargetHz:hz.integerValue];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1.0, 1.0);
+    }
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
-// Nút bấm Respring trong Cài đặt (Có hiệu ứng load mượt)
-- (void)respring:(id)sender {
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    [spinner startAnimating];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:spinner];
-    
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self performRespring];
-    });
+- (void)applyTargetHz:(NSInteger)hz {
+    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
+    prefs[@"TargetRefreshRate"] = @(hz);
+    [prefs writeToFile:PREF_PATH atomically:YES];
+    notify_post(NOTIFY_RELOAD);
+    [self reloadSpecifiers];
 }
 
-// Nút bấm Gỡ Safe Mode (Tránh khóa cứng thiết bị khi lỡ bị crash)
-- (void)resetSafeMode:(id)sender {
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Xác nhận thoát Safe Mode"
-                                                                     message:@"Toàn bộ hệ thống tối ưu V20 sẽ được kích hoạt lại.\nMáy sẽ tự động Respring sau khi xác nhận."
-                                                              preferredStyle:UIAlertControllerStyleAlert];
+// ============================================================================
+// CHỨC NĂNG RESPRING HỆ THỐNG
+// ============================================================================
+- (void)respringDevice {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
+                                                                   message:@"Bạn có chắc chắn muốn Respring để áp dụng toàn bộ thay đổi?"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        pid_t pid;
+        const char *argv[] = {"killall", "-9", "SpringBoard", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)argv, environ);
+    }]];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
 
-    UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Đồng ý"
-                                                      style:UIAlertActionStyleDestructive
-                                                    handler:^(UIAlertAction * _Nonnull action) {
-        // Xóa sạch các cờ báo lỗi Safe Mode
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults removeObjectForKey:@"BoostV20_SafeModeActive"];
-        [defaults removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
-        [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
-        [defaults synchronize];
-
-        // Gửi lệnh Reload tới Tweak
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                             CFSTR("com.taojb.boostiphone6s.settings/reload"),
-                                             NULL, NULL, TRUE);
-
+// ============================================================================
+// CHỨC NĂNG ĐẶT LẠI CÀI ĐẶT BAN ĐẦU
+// ============================================================================
+- (void)resetAllSettings {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
+                                                                   message:@"Toàn bộ thiết lập của BoostiPhone6s sẽ được khôi phục về trạng thái xuất xưởng."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
+        notify_post(NOTIFY_RELOAD);
         [self reloadSpecifiers];
-        [self performRespring];
-    }];
-
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Hủy"
-                                                         style:UIAlertActionStyleCancel
-                                                       handler:nil];
-
-    [confirm addAction:yesAction];
-    [confirm addAction:cancelAction];
-    [self presentViewController:confirm animated:YES completion:nil];
+    }]];
+    
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 @end
