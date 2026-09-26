@@ -1,5 +1,5 @@
 # ==============================================================
-# V20 ULTIMATE ROOT MAKEFILE - CHUẨN LAYOUT HỆ THỐNG
+# V20 ULTIMATE ROOT MAKEFILE - CHUẨN XÁC TUYỆT ĐỐI
 # ==============================================================
 
 ARCHS = arm64 arm64e
@@ -64,7 +64,7 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================
-# PART 3: XỬ LÝ GÓI DEBIAN VÀ ĐẢM BẢO PLIST ĐƯỢC CHÉP ĐÚNG CHỖ
+# PART 3: ĐẢM BẢO CHÉP PLIST & ĐÓNG GÓI DEBIAN AN TOÀN
 # ==============================================================
 before-package::
 	@echo ""
@@ -84,12 +84,12 @@ before-package::
 	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
 	fi
 	
-	@# Phòng hờ nếu layout chưa tự chép, script này sẽ bế file plist từ thư mục Layout vào đúng chỗ Staging
-	@if [ -f "BoostiPhone6s/Layout/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist" ]; then \
+	@# Bổ sung lớp bảo vệ: Tự động copy file plist từ thư mục Layout ở gốc vào staging nếu Theos bỏ sót
+	@if [ -f "Layout/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist" ]; then \
 	    mkdir -p $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries; \
-	    cp "BoostiPhone6s/Layout/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist" "$(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"; \
+	    cp "Layout/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist" "$(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"; \
 	    chmod 644 "$(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist"; \
-	    echo "[OK] Đã đồng bộ file plist từ thư mục Layout vào Staging!"; \
+	    echo "[OK] Đã tiêm file plist thành công vào Staging thông qua Layout gốc!"; \
 	fi
 	
 	@echo "Rootless Package V20 Ready!"
