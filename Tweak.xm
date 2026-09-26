@@ -420,6 +420,8 @@ static void BoostApplyUnifiedPerformance(void) {
 %group KernelDeepHooks
 %end
 
+%end
+
 %group FramePacingEngine
 
 %hook CADisplayLink
