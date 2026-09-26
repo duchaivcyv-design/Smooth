@@ -606,7 +606,11 @@ static void BoostApplyUnifiedPerformance(void) {
 
 %hook FBSSystemService
 - (void)openApplication:(id)application withOptions:(id)options {
-    if (!IS_ON) { %orig(application, options); return; }
+    if (!IS_ON) { 
+        %orig(application, options); 
+        return; 
+    }
+    
     if (CFG_PTR.killBgApps && BoostIsSpringBoard()) {
         load_bks_terminate();
         if (g_bksTerminate != NULL) {
@@ -635,11 +639,12 @@ static void BoostApplyUnifiedPerformance(void) {
             }
         }
     }
-    id targetOptions = options;
+
     if (CFG_PTR.turboAppLaunch) {
-        targetOptions = nil;
+        options = nil;
     }
-    %orig(application, targetOptions);
+
+    %orig(application, options);
 }
 %end
 
