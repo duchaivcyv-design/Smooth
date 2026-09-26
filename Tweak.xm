@@ -1,12 +1,12 @@
 // ==============================================================================
 // 🚀 TWEAK.XM - SMOOTHIOS V21 ULTIMATE MONSTER ENGINE
 // 🎯 TARGET: iOS 14.0 -> iOS 18.x (Rootless /var/jb/ & Rootful)
-// 🛠 TẬP TRUNG TOÀN DIỆN: FPS/HZ LOCK, COLOROS CURVE, ANTI-STUTTER, THERMAL & RAM
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
+#import <QuartzCore/CAFrameRateRange.h>
 #import <AVFoundation/AVFoundation.h>
 #import <IOKit/IOKitLib.h>
 #import <mach/mach.h>
@@ -36,22 +36,6 @@ extern char **environ;
 #import "Modules/KernelBypass.h"
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
-
-#ifndef CAFrameRateRangeDefault
-typedef struct {
-    float minimum;
-    float maximum;
-    float preferred;
-} CAFrameRateRange;
-
-static inline CAFrameRateRange CAFrameRateRangeMake(float minimum, float maximum, float preferred) {
-    CAFrameRateRange range;
-    range.minimum = minimum;
-    range.maximum = maximum;
-    range.preferred = preferred;
-    return range;
-}
-#endif
 
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
@@ -159,7 +143,7 @@ static void PMConfigureScrollView(UIScrollView *sv) {
 }
 
 // ==============================================================================
-// 🧠 CẤU HÌNH HỆ THỐNG TOÀN CỤC V21 (KHỚP HOÀN TOÀN CÁC MỤC GIAO DIỆN)
+// 🧠 CẤU HÌNH HỆ THỐNG TOÀN CỤC V21
 // ==============================================================================
 
 @interface BoostConfig : NSObject
@@ -262,13 +246,12 @@ static void PMConfigureScrollView(UIScrollView *sv) {
     });
 }
 
-// Tính toán tần số quét thực tế: Điều phối thông minh hoặc khóa cố định
 - (NSInteger)resolvedTargetHz {
     if (self.powerSaveMode) return 30;
     if (self.targetHz == 0) {
         NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
         if (state >= NSProcessInfoThermalStateSerious) return 45;
-        return 60; // Tự động mặc định điều tiết 60fps mượt mà
+        return 60;
     }
     return self.targetHz;
 }
@@ -313,7 +296,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ON || !name) return %orig(name, oldp, oldlenp, newp, newlen);
     
-    // Ngăn chặn hệ điều hành bóp xung nhịp CPU/GPU khi máy sinh nhiệt
     if (CFG_PTR.antiThermalThrottling && strcmp(name, "kern.thermal.temperature") == 0) {
         float safeTemp = 31.0f;
         if (oldp && oldlenp && *oldlenp >= sizeof(float)) {
@@ -346,7 +328,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 PHẦN 2: ĐIỀU PHỐI MÀN HÌNH & KHÓA CHUẨN FPS/HZ (FIX 30-60-90-120-144)
+// 🖥 PHẦN 2: ĐIỀU PHỐI MÀN HÌNH & KHÓA CHUẨN FPS/HZ
 // ==============================================================================
 %group Group_Display_Hz
 
@@ -362,7 +344,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (IS_ON) {
         float target = (float)[CFG_PTR resolvedTargetHz];
-        // Ghim cố định toàn bộ dải (min=max=preferred) để triệt tiêu biến thiên gây sụt khung hình
         CAFrameRateRange locked = CAFrameRateRangeMake(target, target, target);
         %orig(locked);
     } else {
@@ -372,7 +353,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)setFrameInterval:(NSInteger)interval {
     if (IS_ON && [CFG_PTR resolvedTargetHz] == 30) {
-        // Khóa ép chu kỳ làm tươi ở mức 30 khung hình/giây
         %orig(2);
     } else {
         %orig(1);
@@ -407,14 +387,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Display_Hz
 
 // ==============================================================================
-// 🎨 PHẦN 3: GIAO DIỆN, ĐA NHIỆM & PHẢN HỒI CẢM ỨNG (COLOROS SMOOTHNESS)
+// 🎨 PHẦN 3: GIAO DIỆN, ĐA NHIỆM & PHẢN HỒI CẢM ỨNG
 // ==============================================================================
 %group Group_UI_MultiTask
 
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (IS_ON && CFG_PTR.touchResponseBoost) {
-        // Nâng quyền ưu tiên của luồng nhận diện cảm ứng lên mức cao nhất
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(event);
@@ -447,7 +426,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Tối ưu hóa chuyển cảnh không làm mất hoạt ảnh gốc
 %hook UIView
 + (void)animateWithDuration:(NSTimeInterval)duration animations:(void (^)(void))animations {
     if (IS_ON && CFG_PTR.optimizeAnimTransition) {
@@ -486,7 +464,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Triệt tiêu tình trạng khựng khi thoát ứng dụng nặng đang loading
 %hook SBApplication
 - (void)processDidExit:(id)process {
     %orig(process);
@@ -511,7 +488,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ON && CFG_PTR.metalGraphicsOptimize) {
-        // 3 Buffer ngăn ngừa nghẽn cổ chai khi tải cảnh đồ họa phức tạp
         NSUInteger optimalCount = CFG_PTR.gameFpsStabilizer ? 3 : 2;
         %orig(optimalCount);
     } else {
@@ -521,7 +497,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
     if (IS_ON && CFG_PTR.metalGraphicsOptimize) {
-        // Render bất đồng bộ để bảo vệ luồng giao diện chính
         %orig(NO);
     } else {
         %orig(flag);
@@ -563,7 +538,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Core_Engine
 
 // ==============================================================================
-// ❄️ PHẦN 5: KIỂM SOÁT NHIỆT ĐỘ, TẢN NHIỆT KHI TẢI NẶNG & KHI SẠC
+// ❄️ PHẦN 5: KIỂM SOÁT NHIỆT ĐỘ & PIN
 // ==============================================================================
 %group Group_Thermal_Engine
 
