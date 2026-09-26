@@ -1,7 +1,6 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
-# ROOTLESS NATIVE MODE
 _INSTALL_PATH_TARGET = /var/jb
 
 include $(THEOS)/makefiles/common.mk
@@ -22,7 +21,6 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
-# COMPILER FLAGS
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
@@ -41,7 +39,6 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -IModules \
                            -I.
 
-# FRAMEWORKS
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -53,7 +50,6 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# LINKER FLAGS
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-no_warn_duplicate_libraries \
                             -Wl,-exported_symbol,_init_privilege_escalation
@@ -69,7 +65,6 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 # ==============================================================================
 # PART 3: AUTO-COPY PLIST TO MOBILESUBSTRATE DYNAMICLIBRARIES
 # ==============================================================================
-# Tên file plist filter (phải trùng với tên dylib + .plist)
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
 after-stage::
