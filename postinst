@@ -1,56 +1,25 @@
 #!/bin/bash
+set -e
 
-# ==============================================================================
-# POSTINST - BOOST iPHONE 6s-X v10
-# Target: Rootless (/var/jb) & Rootful
-# ==============================================================================
-
-set +e
-
-echo "[BoostiPhone6s v10] Running post-installation script..."
-
-# 1. Fix permissions cho Rootless paths
 if [ -d "/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then
     chmod -R 755 /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
     chown -R mobile:mobile /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
-    echo "[OK] Fixed permissions for PreferenceBundle."
 fi
 
 if [ -f "/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; then
     chmod 644 /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
     chown mobile:mobile /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
-    echo "[OK] Fixed permissions for PreferenceLoader entry."
 fi
 
 if [ -f "/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib" ]; then
     chmod 755 /var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
-    echo "[OK] Fixed permissions for Dylib."
 fi
 
-# 2. Reset UserDefaults để tránh xung đột config cũ (v9 -> v10)
-# Chỉ xóa nếu cần thiết, hoặc giữ nguyên để user không phải setting lại.
-# Ở đây ta chọn an toàn: không xóa config user, chỉ xóa cache crash guard nếu có.
-if command -v defaults &> /dev/null; then
-    defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null
-    defaults delete com.taojb.boostiphone6s BoostiPhone6s_CrashCount 2>/dev/null
-    echo "[OK] Cleared Safe Mode flags."
-fi
+defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
+defaults delete com.taojb.boostiphone6s BoostiPhone6s_CrashCount 2>/dev/null || true
 
-# 3. Reload daemons
-echo "[INFO] Reloading system daemons..."
-
-# Reload cfprefsd để nhận plist mới
-if pidof cfprefsd > /dev/null 2>&1; then
-    killall -HUP cfprefsd 2>/dev/null
-    echo "[OK] Signaled cfprefsd."
-fi
-
-# Reload UIKit cache (nếu có uicache)
 if command -v uicache &> /dev/null; then
-    uicache -p /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null
-    echo "[OK] Updated UIKit cache."
+    uicache -p /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
 fi
-
-echo "[BoostiPhone6s v10] Installation complete. Please Respring to apply changes."
 
 exit 0
