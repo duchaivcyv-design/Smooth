@@ -490,8 +490,6 @@ static void BoostApplyUnifiedPerformance(void) {
 
 %end
 
-%end
-
 %group ThermalBypassEngine
 
 %hook NSProcessInfo
@@ -517,8 +515,6 @@ static void BoostApplyUnifiedPerformance(void) {
     }
     return base * speed;
 }
-%end
-
 %end
 
 %group GPUEngine
@@ -559,8 +555,6 @@ static void BoostApplyUnifiedPerformance(void) {
     }
     %orig;
 }
-%end
-
 %end
 
 %group MemoryEngine
@@ -640,8 +634,6 @@ static void BoostApplyUnifiedPerformance(void) {
 }
 %end
 
-%end
-
 %group UIEngine
 
 %hook UIView
@@ -689,8 +681,6 @@ static void BoostApplyUnifiedPerformance(void) {
 }
 %end
 
-%end
-
 %group BatteryEngine
 
 %hook NSTimer
@@ -702,8 +692,6 @@ static void BoostApplyUnifiedPerformance(void) {
     if (IS_ON && CFG_PTR.batterySaverMax && r && ti > 0 && ti < 0.033) ti = 0.033;
     return %orig(ti, t, s, u, r);
 }
-%end
-
 %end
 
 %group SystemHooks
@@ -731,8 +719,6 @@ static void BoostApplyUnifiedPerformance(void) {
     }
     %orig;
 }
-%end
-
 %end
 
 #pragma mark - Configuration
