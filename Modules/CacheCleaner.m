@@ -1,21 +1,24 @@
 #import "CacheCleaner.h"
-#import <spawn.h>
-#import <sys/wait.h>
-
-extern char **environ;
+#import <UIKit/UIKit.h>
 
 @implementation CacheCleaner
 
 + (void)forceMemoryPurge {
-    pid_t pid;
-    char *argv[] = {(char *)"/usr/bin/purge", NULL};
-    posix_spawn(&pid, "/usr/bin/purge", NULL, NULL, argv, environ);
+    @autoreleasepool {
+        // Đánh lừa HĐH rằng máy sắp cạn RAM để Apple tự kích hoạt chổi quét rác cực mạnh
+        [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+    }
 }
 
 + (void)forceDeepMemoryPurge {
-    pid_t pid;
-    char *argv[] = {(char *)"/bin/sh", (char *)"-c", (char *)"sync && purge", NULL};
-    posix_spawn(&pid, "/bin/sh", NULL, NULL, argv, environ);
+    @autoreleasepool {
+        [self forceMemoryPurge];
+        @try {
+            [[NSURLCache sharedURLCache] removeAllCachedResponses];
+            [[NSURLCache sharedURLCache] setMemoryCapacity:0];
+            [[NSURLCache sharedURLCache] setDiskCapacity:0];
+        } @catch(NSException *e) {}
+    }
 }
 
 @end
