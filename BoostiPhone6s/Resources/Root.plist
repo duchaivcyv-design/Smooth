@@ -21,17 +21,29 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak V21.3</string>
+            <string>Bật Tweak V21.3.6.2</string>
         </dict>
 
-        <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS HIỂN THỊ SỐ Ở GÓC PHẢI -->
+        <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS RIÊNG BIỆT (HIỆN SỐ GÓC PHẢI + POPUP NHỎ) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
             <string>MÀN HÌNH &amp; TẦN SỐ QUÉT (HZ &amp; FPS)</string>
             <key>footerText</key>
-            <string>Nhấn vào từng mục để mở khung popup nhỏ bên phải chọn: Auto (iOS 27), 30, 60, 90, 120, 144. Giá trị chọn sẽ hiện trực tiếp ra ngoài.</string>
+            <string>Nhấn vào dòng để mở popup nhỏ gọn ngay góc phải. Giá trị chọn (Auto, 30, 60, 90, 120, 144) sẽ hiển thị trực tiếp ở mép ngoài.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>EnableHzControl</string>
+            <key>label</key>
+            <string>Bật khóa tần số quét (Hz)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -41,7 +53,19 @@
             <key>get</key>
             <string>getHzDisplayValue:</string>
             <key>label</key>
-            <string>Chọn tần số quét (Hz)</string>
+            <string>Mức Hz màn hình</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>EnableFPSControl</string>
+            <key>label</key>
+            <string>Bật khóa khung hình (FPS)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -51,7 +75,7 @@
             <key>get</key>
             <string>getFPSDisplayValue:</string>
             <key>label</key>
-            <string>Chọn tốc độ khung hình (FPS)</string>
+            <string>Mức FPS ứng dụng</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -73,7 +97,7 @@
             <key>label</key>
             <string>GIAO DIỆN &amp; ĐA NHIỆM (COLOROS 17)</string>
             <key>footerText</key>
-            <string>Đường cong chuyển động ColorOS mượt hơn 80%, giảm trễ vuốt đa nhiệm và chống treo đen màn hình khi mở App.</string>
+            <string>Tối ưu hóa đường cong chuyển động ColorOS mượt hơn 80%, cách ly bàn phím và tìm kiếm chống treo khựng.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -85,7 +109,7 @@
             <key>key</key>
             <string>ColorOs17SmoothEngine</string>
             <key>label</key>
-            <string>Độ mượt ColorOS 17 từng khung hình</string>
+            <string>Mượt mà ColorOS 17 từng khung hình</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -136,7 +160,7 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & TIẾN TRÌNH THỜI GIAN THỰC -->
+        <!-- KHỐI 4: HIỆU NĂNG LÕI & TIẾN TRÌNH (BETA 2) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -151,9 +175,21 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>Ios27AutoSchedulerBeta</string>
+            <string>Ios27AutoSchedulerBeta2</string>
             <key>label</key>
-            <string>Auto Sắp Xếp Tiến Trình iOS 27 (Beta)</string>
+            <string>Auto Sắp Xếp Tiến Trình iOS 27 (Beta 2)</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>RealtimePriorityBoostBeta2</string>
+            <key>label</key>
+            <string>Ưu Tiên Luồng Realtime (Beta 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -183,6 +219,18 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>AggressiveRamCleanBeta2</string>
+            <key>label</key>
+            <string>Dọn RAM Chuyên Sâu Tăng Cường (Beta 2)</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
             <true/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
@@ -199,9 +247,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>MetalAsynchronousRenderBeta</string>
+            <string>MetalAsyncRenderBeta2</string>
             <key>label</key>
-            <string>Render Bất Đồng Bộ Metal (Beta)</string>
+            <string>Render Bất Đồng Bộ Metal (Beta 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -240,36 +288,12 @@
             <string>Giả lập cấu hình máy mới (iPhone 16 Pro)</string>
         </dict>
 
-        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & QUẢN LÝ SẠC -->
+        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & PIN (BETA 2) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
             <string>NHIỆT ĐỘ CỰC ĐOAN &amp; PIN</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
-            <key>key</key>
-            <string>ExtremeCoolingGamingBeta</string>
-            <key>label</key>
-            <string>Giảm Nhiệt Cực Đoan Khi Chơi Game (Beta)</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <true/>
-            <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
-            <key>key</key>
-            <string>ChargeCoolingProtection</string>
-            <key>label</key>
-            <string>Làm mát sâu chống nóng khi sạc</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -299,6 +323,30 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>HeavyLoadCoolingBeta2</string>
+            <key>label</key>
+            <string>Hạ Nhiệt Khi Tải Nặng (Beta 2)</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>ChargeCoolingProtection</string>
+            <key>label</key>
+            <string>Làm mát sâu chống nóng khi sạc</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
             <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
@@ -308,7 +356,7 @@
             <string>Chế độ tiết kiệm pin (30 FPS/Hz)</string>
         </dict>
 
-        <!-- KHỐI 6: HỆ THỐNG NÂNG CAO -->
+        <!-- KHỐI 6: HỆ THỐNG NÂNG CAO (BETA 2) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -335,12 +383,12 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>TcpTurboNetworkBeta</string>
+            <string>TcpTurboNetworkBeta2</string>
             <key>label</key>
-            <string>Tăng Tốc Mạng Socket TCP Turbo (Beta)</string>
+            <string>Tăng Tốc Mạng Socket TCP Turbo (Beta 2)</string>
         </dict>
 
-        <!-- KHỐI 7: THAO TÁC HỆ THỐNG -->
+        <!-- KHỐI 7: QUẢN LÝ HỆ THỐNG -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -371,7 +419,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>SmoothiOS V21.3 Hyper Engine&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
+            <string>SmoothiOS V21.3.6.2 Hyper Engine&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
         </dict>
     </array>
     <key>title</key>
