@@ -18,10 +18,45 @@ extern char **environ;
 
 @implementation RootListController
 
+- (NSString *)effectivePrefPath {
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) return PREF_PATH;
+    return FALLBACK_PREF_PATH;
+}
+
+// Kiểm tra trạng thái công tắc tổng
+- (BOOL)isMasterEnabled {
+    CFPropertyListRef val = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
+    if (val) {
+        BOOL b = [(__bridge id)val boolValue];
+        CFRelease(val);
+        return b;
+    }
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
+    if (prefs && prefs[@"Enabled"]) {
+        return [prefs[@"Enabled"] boolValue];
+    }
+    return NO; // MẶC ĐỊNH TẮT TỔNG BAN ĐẦU
+}
+
+// Khởi tạo Specifiers và làm xám toàn bộ nếu tắt tổng
 - (NSArray *)specifiers {
     if (!_specifiers) {
         @try {
-            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+            NSMutableArray *specs = [self loadSpecifiersFromPlistName:@"Root" target:self];
+            BOOL masterOn = [self isMasterEnabled];
+            
+            for (PSSpecifier *spec in specs) {
+                NSString *key = spec.properties[@"key"];
+                // Không bao giờ khóa công tắc tổng
+                if ([key isEqualToString:@"Enabled"]) {
+                    [spec setProperty:@YES forKey:@"enabled"];
+                    continue;
+                }
+                
+                // Nếu tắt tổng -> Khóa cứng, làm xám toàn bộ công tắc, nút bấm, menu Hz/FPS
+                [spec setProperty:@(masterOn) forKey:@"enabled"];
+            }
+            _specifiers = specs;
         } @catch (NSException *e) {
             _specifiers = [NSMutableArray array];
         }
@@ -29,21 +64,27 @@ extern char **environ;
     return _specifiers;
 }
 
-- (NSString *)effectivePrefPath {
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) return PREF_PATH;
-    return FALLBACK_PREF_PATH;
+// Cập nhật trạng thái enabled/disabled ngay lập tức trên UI
+- (void)updateSpecifiersStateAnimated:(BOOL)animated {
+    BOOL masterOn = [self isMasterEnabled];
+    for (PSSpecifier *spec in _specifiers) {
+        NSString *key = spec.properties[@"key"];
+        if ([key isEqualToString:@"Enabled"]) continue;
+        [spec setProperty:@(masterOn) forKey:@"enabled"];
+    }
+    [self reloadSpecifiers];
 }
 
-// Đồng bộ đa tầng: Vừa ghi CFPreferences hệ thống vừa ghi file plist vật lý
+// Đồng bộ đa tầng CoreFoundation + Physical Plist + Darwin Notification
 - (void)syncPreferenceValueToSystem:(id)value forKey:(NSString *)key {
     if (!key) return;
     
-    // Tầng 1: CoreFoundation Preferences (xuyên thủng Sandbox App con)
+    // Ghi vào CoreFoundation Domain (xuyên thủng Sandbox App con)
     CFStringRef cfKey = (__bridge CFStringRef)key;
     CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
     
-    // Tầng 2: Ghi file Plist vật lý (Rootless + Rootful fallback)
+    // Ghi vào file Plist vật lý
     NSString *primaryPath = PREF_PATH;
     NSString *fallbackPath = FALLBACK_PREF_PATH;
     
@@ -55,7 +96,7 @@ extern char **environ;
     fallbackDict[key] = value;
     [fallbackDict writeToFile:fallbackPath atomically:YES];
     
-    // Tầng 3: Phát tín hiệu Darwin Notification toàn hệ thống
+    // Phát tín hiệu Darwin toàn hệ thống
     notify_post(NOTIFY_RELOAD);
 }
 
@@ -64,13 +105,22 @@ extern char **environ;
         NSString *key = specifier.properties[@"key"];
         if (!key) return specifier.properties[@"default"];
         
-        // Đọc ưu tiên từ CoreFoundation
+        // Mặc định công tắc tổng là NO
+        if ([key isEqualToString:@"Enabled"]) {
+            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
+            if (val) {
+                BOOL b = [(__bridge id)val boolValue];
+                CFRelease(val);
+                return @(b);
+            }
+            return @NO;
+        }
+        
         CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
         if (val) {
             return (__bridge_transfer id)val;
         }
         
-        // Fallback đọc file vật lý
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
         if (prefs && prefs[key]) {
             return prefs[key];
@@ -85,6 +135,11 @@ extern char **environ;
     @try {
         NSString *key = specifier.properties[@"key"];
         [self syncPreferenceValueToSystem:value forKey:key];
+        
+        // Nếu người dùng vừa gạt công tắc tổng -> Lập tức làm sáng hoặc xám toàn bộ cài đặt
+        if ([key isEqualToString:@"Enabled"]) {
+            [self updateSpecifiersStateAnimated:YES];
+        }
     } @catch (NSException *e) {}
 }
 
@@ -93,6 +148,8 @@ extern char **environ;
 // ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
+        if (![self isMasterEnabled]) return @"Đã khóa";
+        
         CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableHzControl"), PREF_DOMAIN);
         BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
         if (enabledVal) CFRelease(enabledVal);
@@ -112,6 +169,8 @@ extern char **environ;
 
 - (NSString *)getFPSDisplayValue:(PSSpecifier *)specifier {
     @try {
+        if (![self isMasterEnabled]) return @"Đã khóa";
+        
         CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableFPSControl"), PREF_DOMAIN);
         BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
         if (enabledVal) CFRelease(enabledVal);
@@ -133,6 +192,7 @@ extern char **environ;
 // BẬT BẢNG CHỌN ACTION SHEET CHUẨN 100% THEO ẢNH
 // ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
+    if (![self isMasterEnabled]) return; // Chặn bấm nếu tắt tổng
     [self presentActionSheetForSpecifier:specifier 
                                    title:@"Chọn Tần Số Quét (Hz & FPS)" 
                                  message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt" 
@@ -141,6 +201,7 @@ extern char **environ;
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
+    if (![self isMasterEnabled]) return; // Chặn bấm nếu tắt tổng
     [self presentActionSheetForSpecifier:specifier 
                                    title:@"Chọn Mức Khung Hình Ứng Dụng (FPS)" 
                                  message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt" 
@@ -202,8 +263,9 @@ extern char **environ;
 // HỆ THỐNG
 // ============================================================================
 - (void)respringDevice {
+    if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để đồng bộ toàn diện SmoothiOS V22.2.6?"
+                                                                   message:@"Respring để đồng bộ toàn diện SmoothiOS V22.3?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -216,7 +278,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.2.6?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.3?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -230,6 +292,8 @@ extern char **environ;
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
         notify_post(NOTIFY_RELOAD);
+        
+        _specifiers = nil;
         [self reloadSpecifiers];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
