@@ -21,7 +21,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V22.0.1</string>
+            <string>Bật Tweak SmoothiOS V22.2.6</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -443,7 +443,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>SmoothiOS V22.0.1 Titanium Hyper Core&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
+            <string>SmoothiOS V22.2.6 Titanium Hyper Core&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
         </dict>
     </array>
     <key>title</key>
