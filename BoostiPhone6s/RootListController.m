@@ -5,6 +5,8 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 
+extern char **environ;
+
 @implementation RootListController
 
 - (NSArray<PSSpecifier *> *)specifiers {
@@ -14,51 +16,23 @@
     return _specifiers;
 }
 
-- (void)resetSafeMode:(id)sender {
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Xac nhan thoat Safe Mode?"
-                                                                     message:@"Tat ca tinh nang toi uu sau se duoc bat lai.\nMay se tu dong respring sau khi xac nhan."
-                                                              preferredStyle:UIAlertControllerStyleAlert];
-
-    UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Dong y"
-                                                      style:UIAlertActionStyleDestructive
-                                                    handler:^(UIAlertAction * _Nonnull action) {
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
-        [defaults removeObjectForKey:@"BoostiPhone6s_LastCrashReason"];
-        [defaults synchronize];
-
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                             CFSTR("com.taojb.boostiphone6s.settings/reload"),
-                                             NULL, NULL, TRUE);
-
-        [self reloadSpecifiers];
-        [self performRespring];
-    }];
-
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"Huy"
-                                                         style:UIAlertActionStyleCancel
-                                                       handler:nil];
-
-    [confirm addAction:yesAction];
-    [confirm addAction:cancelAction];
-    [self presentViewController:confirm animated:YES completion:nil];
-}
-
 - (void)performRespring {
     pid_t pid;
-    const char *args1[] = {"sbreload", NULL};
-    if (posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL) == 0) return;
-
-    const char *args2[] = {"killall", "-9", "SpringBoard", NULL};
-    if (posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL) == 0) return;
-
-    if (posix_spawn(&pid, "/usr/bin/sbreload", NULL, NULL, (char *const *)args1, NULL) == 0) return;
-
-    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args2, NULL);
+    const char *args[] = {"killall", "-9", "SpringBoard", NULL};
+    posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
+    
+    // Fallback cho Rootful nếu path trên không tồn tại
+    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
 }
 
 - (void)respring:(id)sender {
-    [self performRespring];
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    [spinner startAnimating];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:spinner];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self performRespring];
+    });
 }
 
 @end
