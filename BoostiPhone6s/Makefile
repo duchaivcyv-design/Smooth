@@ -5,23 +5,22 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = BoostiPhone6sPrefs
 
-# Khai báo mã nguồn điều khiển giao diện Cài đặt
+# File thực thi giao diện cài đặt
 BoostiPhone6sPrefs_FILES = RootListController.m
 
-# Khung làm việc bắt buộc cho Preferences UI
+# Chỉ liên kết các framework công khai có sẵn trong SDK
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 
-# Đường dẫn cài đặt Bundle theo chuẩn Theos Rootless
+# Thư mục cài đặt bundle rootless
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
-# Cờ biên dịch: Tối ưu hiệu năng, triệt tiêu cảnh báo deprecated
+# Cờ biên dịch
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
                             -Wno-deprecated-declarations \
                             -Wno-unknown-warning-option
 
-# Cờ liên kết: Khắc phục triệt để lỗi dynamic_lookup & multiply_defined obsolete
-BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip
+# Bỏ qua kiểm tra ký hiệu Preferences lúc link (nạp động khi chạy trên iOS)
+BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip -Wl,-undefined,dynamic_lookup
 
 include $(THEOS_MAKE_PATH)/bundle.mk
