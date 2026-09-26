@@ -22,17 +22,23 @@
 }
 
 - (void)boostCurrentThreadPriority {
-    struct sched_param param;
-    int policy = SCHED_RR;
-    param.sched_priority = sched_get_priority_max(policy);
-    pthread_setschedparam(pthread_self(), policy, &param);
+    @try {
+        struct sched_param param;
+        int policy = SCHED_RR; // Thuật toán Round-Robin siêu ưu tiên
+        param.sched_priority = sched_get_priority_max(policy);
+        pthread_setschedparam(pthread_self(), policy, &param);
+    } @catch (NSException *e) {
+        // Tĩnh lặng bỏ qua nếu tiến trình bị khóa quyền
+    }
 }
 
 - (void)forceMachPurge {
     if (!_ready) return;
-    vm_statistics_data_t stats;
-    mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
-    host_statistics(_hostPort, HOST_VM_INFO, (host_info_t)&stats, &count);
+    @try {
+        vm_statistics_data_t stats;
+        mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+        host_statistics(_hostPort, HOST_VM_INFO, (host_info_t)&stats, &count);
+    } @catch (NSException *e) {}
 }
 
 @end
