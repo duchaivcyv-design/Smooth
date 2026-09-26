@@ -9,7 +9,7 @@
 
 extern char **environ;
 
-@interface RootListController : PSListController
+@interface RootListController : PSListController <UIPopoverPresentationControllerDelegate>
 @end
 
 @implementation RootListController
@@ -22,9 +22,7 @@ extern char **environ;
 }
 
 - (NSString *)effectivePrefPath {
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) {
-        return PREF_PATH;
-    }
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) return PREF_PATH;
     return FALLBACK_PREF_PATH;
 }
 
@@ -44,46 +42,57 @@ extern char **environ;
 }
 
 // ============================================================================
-// LẤY CHỮ HIỂN THỊ TRỰC TIẾP Ở NGOÀI MENU (DETAIL TEXT)
+// LẤY CHỮ HIỂN THỊ TRỰC TIẾP Ở GÓC PHẢI HÀNG
 // ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
+    BOOL enabled = prefs[@"EnableHzControl"] ? [prefs[@"EnableHzControl"] boolValue] : YES;
+    if (!enabled) return @"Tắt";
     NSInteger val = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
-    if (val == 0) return @"Auto (iOS 27)";
+    if (val == 0) return @"Tự động";
     return [NSString stringWithFormat:@"%ld Hz", (long)val];
 }
 
 - (NSString *)getFPSDisplayValue:(PSSpecifier *)specifier {
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
+    BOOL enabled = prefs[@"EnableFPSControl"] ? [prefs[@"EnableFPSControl"] boolValue] : YES;
+    if (!enabled) return @"Tắt";
     NSInteger val = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
-    if (val == 0) return @"Auto (iOS 27)";
+    if (val == 0) return @"Tự động";
     return [NSString stringWithFormat:@"%ld FPS", (long)val];
 }
 
 // ============================================================================
-// POPUP NHỎ BÊN PHẢI NHẢY XUỐNG (POPOVER ANCHOR)
+// BẮT BUỘC POPUP NHỎ GỌN TRÊN IPHONE (KHÔNG CHO PHÉP NHẢY SANG BẢNG TO DƯỚI)
 // ============================================================================
+- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller {
+    return UIModalPresentationNone; // Bắt buộc giữ nguyên popover nhỏ
+}
+
+- (UIModalPresentationStyle)adaptivePresentationStyleForPresentationController:(UIPresentationController *)controller traitCollection:(UITraitCollection *)traitCollection {
+    return UIModalPresentationNone;
+}
+
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    [self presentSmallRightDropdownForSpecifier:specifier title:@"Tần Số Quét (Hz)" key:@"TargetRefreshRate" suffix:@"Hz"];
+    [self presentSmallPopoverAtRightEdgeForSpecifier:specifier title:@"Tần Số Quét" key:@"TargetRefreshRate" suffix:@"Hz"];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    [self presentSmallRightDropdownForSpecifier:specifier title:@"Tốc Độ Khung Hình (FPS)" key:@"TargetFPSRate" suffix:@"FPS"];
+    [self presentSmallPopoverAtRightEdgeForSpecifier:specifier title:@"Tốc Độ Khung Hình" key:@"TargetFPSRate" suffix:@"FPS"];
 }
 
-- (void)presentSmallRightDropdownForSpecifier:(PSSpecifier *)specifier title:(NSString *)title key:(NSString *)prefKey suffix:(NSString *)suffix {
+- (void)presentSmallPopoverAtRightEdgeForSpecifier:(PSSpecifier *)specifier title:(NSString *)title key:(NSString *)prefKey suffix:(NSString *)suffix {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:@"Chọn mốc thiết lập"
+                                                                   message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *titles = @[@"Tự Động (Auto iOS 27)", @"30", @"60", @"90", @"120", @"144"];
+    NSArray *titles = @[@"Tự Động (Auto)", @"30", @"60", @"90", @"120", @"144"];
     NSArray *values = @[@0, @30, @60, @90, @120, @144];
 
     for (NSUInteger i = 0; i < values.count; i++) {
         NSNumber *val = values[i];
-        NSString *actionTitle = (i == 0) ? titles[i] : [NSString stringWithFormat:@"%@ %@", titles[i], suffix];
-        
-        [alert addAction:[UIAlertAction actionWithTitle:actionTitle
+        NSString *btnTitle = (i == 0) ? titles[i] : [NSString stringWithFormat:@"%@ %@", titles[i], suffix];
+        [alert addAction:[UIAlertAction actionWithTitle:btnTitle
                                                  style:UIAlertActionStyleDefault
                                                handler:^(UIAlertAction * _Nonnull action) {
             NSString *path = [self effectivePrefPath];
@@ -91,36 +100,38 @@ extern char **environ;
             prefs[prefKey] = val;
             [prefs writeToFile:path atomically:YES];
             notify_post(NOTIFY_RELOAD);
-            // Tải lại specifiers ngay để chữ ở ngoài đổi lập tức thành số vừa chọn
             [self reloadSpecifiers];
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
 
-    // ÉP POPUP NẰM KHUNG NHỎ BÊN PHẢI NHẢY XUỐNG DƯỚI (POPOVER)
+    // NEO VÀO ĐÚNG MŨI TÊN / CHỮ Ở GÓC PHẢI CELL
     UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
-    if (alert.popoverPresentationController) {
-        alert.popoverPresentationController.sourceView = cell ? cell : self.view;
+    alert.modalPresentationStyle = UIModalPresentationPopover;
+    
+    UIPopoverPresentationController *popover = alert.popoverPresentationController;
+    if (popover) {
+        popover.delegate = self; // Ép dùng UIModalPresentationNone
+        popover.sourceView = cell ? cell : self.view;
         if (cell) {
-            // Neo chính xác vào mép bên phải của hàng vừa chạm
-            CGRect rightRect = CGRectMake(cell.bounds.size.width - 70, cell.bounds.size.height / 2.0, 1.0, 1.0);
-            alert.popoverPresentationController.sourceRect = rightRect;
+            // Đặt điểm neo đúng ngay mép phải mũi tên chevron
+            popover.sourceRect = CGRectMake(cell.bounds.size.width - 45, cell.bounds.size.height / 2.0, 1.0, 1.0);
         } else {
-            alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width - 50, 100, 1.0, 1.0);
+            popover.sourceRect = CGRectMake(self.view.bounds.size.width - 45, 120, 1.0, 1.0);
         }
-        alert.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionUp | UIPopoverArrowDirectionDown;
+        popover.permittedArrowDirections = UIPopoverArrowDirectionUp | UIPopoverArrowDirectionDown | UIPopoverArrowDirectionRight;
     }
 
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 // ============================================================================
-// RESPRING & ĐẶT LẠI
+// HỆ THỐNG: RESPRING & ĐẶT LẠI CÀI ĐẶT
 // ============================================================================
 - (void)respringDevice {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring ngay để áp dụng toàn bộ thiết lập?"
+                                                                   message:@"Respring để áp dụng thay đổi?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -133,7 +144,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục cài đặt gốc của SmoothiOS V21.3?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V21.3.6.2?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
