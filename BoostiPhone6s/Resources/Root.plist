@@ -10,18 +10,20 @@
             <string>PSGroupCell</string>
             <key>label</key>
             <string>TÙY CHỈNH CHUNG</string>
+            <key>footerText</key>
+            <string>Khi TẮT công tắc tổng, toàn bộ thiết lập bên dưới sẽ bị xám và khóa hoàn toàn. Hãy BẬT để bắt đầu sử dụng.</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V22.2.6</string>
+            <string>Bật Tweak SmoothiOS V22.3</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -81,7 +83,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -97,7 +99,7 @@
             <key>label</key>
             <string>GIAO DIỆN &amp; ĐA NHIỆM (COLOROS 17)</string>
             <key>footerText</key>
-            <string>Gia tốc cử chỉ mượt mà, phản hồi cảm ứng nhạy hơn 80%, cách ly tuyệt đối Bàn phím &amp; Spotlight.</string>
+            <string>Tự động kích hoạt khi mở công tắc tổng để mang lại độ mượt mà tối đa.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -160,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 1) -->
+        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 2) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 1)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -175,9 +177,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>ZeroLagNeuralBoosterBeta1</string>
+            <string>ZeroLagNeuralBoosterBeta2</string>
             <key>label</key>
-            <string>Zero-Lag Neural Booster (Beta 1)</string>
+            <string>Zero-Lag Neural Booster (Beta 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -187,9 +189,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>VsyncAdaptiveBufferBeta1</string>
+            <string>VsyncAdaptiveBufferBeta2</string>
             <key>label</key>
-            <string>V-Sync Adaptive Buffer Bypass (Beta 1)</string>
+            <string>V-Sync Adaptive Buffer Bypass (Beta 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -300,7 +302,7 @@
             <string>Auto Giả Lập Thiết Bị (iPhone 16 Pro A18)</string>
         </dict>
 
-        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & TẢN NHIỆT (BETA 1) -->
+        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & TẢN NHIỆT (BETA 2) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -315,9 +317,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>DynamicThermalEngineBeta1</string>
+            <string>DynamicThermalEngineBeta2</string>
             <key>label</key>
-            <string>Dynamic Thermal Engine Tản Nhiệt (Beta 1)</string>
+            <string>Dynamic Thermal Engine Tản Nhiệt (Beta 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -443,7 +445,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>SmoothiOS V22.2.6 Titanium Hyper Core&#xA;By TaoJB | Hỗ trợ bởi : MNH</string>
+            <string>By TaoJB | Hỗ trợ bởi : MNH</string>
         </dict>
     </array>
     <key>title</key>
