@@ -1,14 +1,3 @@
-// ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V22.0.1 TITANIUM HYPER ARCHITECTURE (BETA 1 ECOSYSTEM)
-// 🎯 TARGET: iOS 14.0 -> iOS 18.x (Rootless /var/jb/ & Rootful)
-// 🛠 BẢN NÂNG CẤP ĐẠI PHẪU THUẬT:
-//    1. Khắc phục triệt để lỗi liệt công tắc bằng Darwin Shared Memory IPC Bridge.
-//    2. Ép chuẩn xác tuyệt đối mốc 30 FPS/Hz (mát máy) và 144 FPS/Hz (siêu mượt).
-//    3. Diệt tận gốc 100% lỗi đen app bằng Context Isolation & Deferred Frame Engine.
-//    4. Tích hợp 3 Module thế hệ mới (Beta 1): Dynamic Thermal, Zero-Lag Neural, V-Sync Adaptive.
-//    5. Quy mô code thực thi mở rộng đạt trên 1050 dòng chuẩn quy chuẩn kỹ thuật cao cấp.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -28,6 +17,8 @@
 #import <sys/utsname.h>
 #import <sys/wait.h>
 #import <sys/mman.h>
+#import <sys/stat.h>
+#import <fcntl.h>
 #import <netinet/in.h>
 #import <netinet/tcp.h>
 #import <objc/runtime.h>
