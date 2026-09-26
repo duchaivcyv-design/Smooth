@@ -418,16 +418,13 @@ static void BoostApplyUnifiedPerformance(void) {
 }
 
 %group KernelDeepHooks
-
-%end
-
 %end
 
 %group FramePacingEngine
 
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (!IS_ON || !CFG_PTR.godModeForce120Hz) return %orig;
+    if (!IS_ON || !CFG_PTR.godModeForce120Hz) { %orig(fps); return; }
     NSInteger target = CFG_PTR.forcedRefreshRate;
     if (IS_OLD_DEVICE && target > 60) target = 60;
     
@@ -435,7 +432,7 @@ static void BoostApplyUnifiedPerformance(void) {
         %orig(target);
         return;
     }
-    %orig;
+    %orig(fps);
 }
 
 - (NSInteger)preferredFramesPerSecond {
@@ -449,11 +446,11 @@ static void BoostApplyUnifiedPerformance(void) {
 %hook UIScrollView
 
 - (void)setContentOffset:(CGPoint)offset animated:(BOOL)animated { 
-    %orig; 
+    %orig(offset, animated); 
 }
 
 - (void)_setContentOffset:(CGPoint)offset animated:(BOOL)animated { 
-    %orig; 
+    %orig(offset, animated); 
 }
 
 - (void)didMoveToWindow {
@@ -493,6 +490,8 @@ static void BoostApplyUnifiedPerformance(void) {
 
 %end
 
+%end
+
 %group ThermalBypassEngine
 
 %hook NSProcessInfo
@@ -520,6 +519,8 @@ static void BoostApplyUnifiedPerformance(void) {
 }
 %end
 
+%end
+
 %group GPUEngine
 
 %hook CAMetalLayer
@@ -529,7 +530,7 @@ static void BoostApplyUnifiedPerformance(void) {
         %orig(optimalCount);
         return;
     }
-    %orig;
+    %orig(count);
 }
 - (BOOL)presentsWithTransaction {
     if (IS_ON && CFG_PTR.godModeMetalOverclock) return NO;
@@ -540,31 +541,33 @@ static void BoostApplyUnifiedPerformance(void) {
         %orig(NO);
         return;
     }
-    %orig;
+    %orig(flag);
 }
 %end
 
 %hook MTLTextureDescriptor
 - (void)setPixelFormat:(NSUInteger)pixelFormat {
-    if (!IS_ON) return %orig(pixelFormat);
+    if (!IS_ON) { %orig(pixelFormat); return; }
     if (CFG_PTR.godModeMetalOverclock && pixelFormat == 80) pixelFormat = 75;
     %orig(pixelFormat);
 }
 - (void)setStorageMode:(NSUInteger)storageMode {
-    if (!IS_ON) return %orig(storageMode);
+    if (!IS_ON) { %orig(storageMode); return; }
     if (CFG_PTR.godModeMetalOverclock) {
         %orig(0);
         return;
     }
-    %orig;
+    %orig(storageMode);
 }
+%end
+
 %end
 
 %group MemoryEngine
 
 %hook UIApplication
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
-    if (!IS_ON) return %orig;
+    if (!IS_ON) { %orig(application); return; }
     SEL sel = NSSelectorFromString(@"_purgeMemoryCache");
     if ([self respondsToSelector:sel]) {
         #pragma clang diagnostic push
@@ -583,7 +586,7 @@ static void BoostApplyUnifiedPerformance(void) {
             }
         });
     }
-    %orig;
+    %orig(application);
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
@@ -597,13 +600,13 @@ static void BoostApplyUnifiedPerformance(void) {
             [CacheCleaner forceMemoryPurge];
         });
     }
-    %orig;
+    %orig(application);
 }
 %end
 
 %hook FBSSystemService
 - (void)openApplication:(id)application withOptions:(id)options {
-    if (!IS_ON) return %orig;
+    if (!IS_ON) { %orig(application, options); return; }
     if (CFG_PTR.killBgApps && BoostIsSpringBoard()) {
         load_bks_terminate();
         if (g_bksTerminate != NULL) {
@@ -633,15 +636,17 @@ static void BoostApplyUnifiedPerformance(void) {
         }
     }
     if (CFG_PTR.turboAppLaunch) %orig(application, nil);
-    else %orig;
+    else %orig(application, options);
 }
+%end
+
 %end
 
 %group UIEngine
 
 %hook UIView
 - (void)setAlpha:(CGFloat)alpha {
-    if (!IS_ON) return %orig(alpha);
+    if (!IS_ON) { %orig(alpha); return; }
     if (alpha >= 0.95) alpha = 1.0;
     %orig(alpha);
 }
@@ -649,14 +654,14 @@ static void BoostApplyUnifiedPerformance(void) {
 
 %hook UIVisualEffectView
 - (void)didMoveToSuperview {
-    if (!IS_ON) return %orig;
+    if (!IS_ON) { %orig; return; }
     [self removeFromSuperview];
 }
 %end
 
 %hook UITextView
 - (void)layoutSubviews {
-    if (!IS_ON || !CFG_PTR.enableAIAcceleration) return %orig;
+    if (!IS_ON || !CFG_PTR.enableAIAcceleration) { %orig; return; }
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     %orig;
@@ -666,7 +671,7 @@ static void BoostApplyUnifiedPerformance(void) {
 
 %hook UIKeyboardImpl
 - (void)updateFrame:(CGRect)frame {
-    if (!IS_ON || !CFG_PTR.enableAIAcceleration) return %orig(frame);
+    if (!IS_ON || !CFG_PTR.enableAIAcceleration) { %orig(frame); return; }
     [UIView animateWithDuration:0.0 delay:0.0 options:UIViewAnimationOptionCurveLinear animations:^{
         %orig(frame);
     } completion:nil];
@@ -674,7 +679,7 @@ static void BoostApplyUnifiedPerformance(void) {
 %end
 
 %hook UIWindow
-- (void)sendEvent:(UIEvent *)event { %orig; }
+- (void)sendEvent:(UIEvent *)event { %orig(event); }
 %end
 
 %hook CALayer
@@ -682,6 +687,8 @@ static void BoostApplyUnifiedPerformance(void) {
     if (IS_ON && CFG_PTR.deepImageProcessing) return NO;
     return %orig;
 }
+%end
+
 %end
 
 %group BatteryEngine
@@ -697,18 +704,20 @@ static void BoostApplyUnifiedPerformance(void) {
 }
 %end
 
+%end
+
 %group SystemHooks
 
 %hook ATXAnalyticsManager
 - (void)sendEvent:(id)eventData {
     if (IS_ON && CFG_PTR.blockAnalytics) return;
-    %orig;
+    %orig(eventData);
 }
 %end
 
 %hook SleepManager
 - (void)enterDeepSleep {
-    if (!IS_ON || !CFG_PTR.deepSleepOptimization) return %orig;
+    if (!IS_ON || !CFG_PTR.deepSleepOptimization) { %orig; return; }
     run_posix_cmd_safe("/var/jb/bin/launchctl", "stop", "com.apple.analyticsd");
     %orig;
 }
@@ -720,8 +729,10 @@ static void BoostApplyUnifiedPerformance(void) {
         %orig(3);
         return;
     }
-    %orig;
+    %orig(quality);
 }
+%end
+
 %end
 
 #pragma mark - Configuration
