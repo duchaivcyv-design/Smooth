@@ -1,5 +1,5 @@
 # ==============================================================
-# V20 ULTIMATE ROOT MAKEFILE - SỬ DỤNG FILE PLIST CÓ SẴN
+# ROOT MAKEFILE - KHAI BÁO PLIST CHUẨN XÁC
 # ==============================================================
 
 ARCHS = arm64 arm64e
@@ -23,6 +23,9 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/DeepExploit.c \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
+
+# 👉 DÒNG KHAI BÁO QUYẾT ĐỊNH ĐỂ THEO NHẬN DIỆN FILE PLIST CÓ SẴN:
+BoostiPhone6sCore_ETC = BoostiPhone6sCore.plist
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
