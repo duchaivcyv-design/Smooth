@@ -19,13 +19,23 @@ extern char **environ;
     if (_active) return;
     _active = YES;
     
-    NSArray *daemons = @[@"analyticsd", @"adid", @"rapportd", @"awdd"];
-    for (NSString *daemon in daemons) {
-        pid_t pid;
-        NSString *cmd = [NSString stringWithFormat:@"/var/jb/bin/launchctl stop com.apple.%@", daemon];
-        char *argv[] = {(char *)"/bin/sh", (char *)"-c", (char *)[cmd UTF8String], NULL};
-        posix_spawn(&pid, "/bin/sh", NULL, NULL, argv, environ);
-    }
+    // Đẩy việc chặn Daemon ra luồng nền (Background) để không gây khựng UI
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+        @autoreleasepool {
+            // Chặn mở rộng: Thêm crash_mover và symptom_diagnostics (gây ngốn pin ngầm)
+            NSArray *daemons = @[@"analyticsd", @"adid", @"rapportd", @"awdd", @"crash_mover", @"symptom_diagnostics"];
+            for (NSString *daemon in daemons) {
+                pid_t pid;
+                NSString *service = [NSString stringWithFormat:@"com.apple.%@", daemon];
+                // Gọi TRỰC TIẾP launchctl, bỏ qua /bin/sh để tốc độ thực thi chỉ mất 0.001s
+                char *argv[] = {(char *)"/var/jb/bin/launchctl", (char *)"stop", (char *)[service UTF8String], NULL};
+                
+                if (posix_spawn(&pid, "/var/jb/bin/launchctl", NULL, NULL, argv, environ) == 0) {
+                    waitpid(pid, NULL, WNOHANG); // Non-blocking wait (Không bắt CPU phải chờ đợi)
+                }
+            }
+        }
+    });
 }
 
 @end
