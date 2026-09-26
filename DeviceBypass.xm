@@ -1,13 +1,3 @@
-// ==============================================================================
-// DEVICE BYPASS MODULE v11.1 - TRUE HARDWARE CONTROL ENGINE
-// Target: iOS 14.0 - 26.0.1 | iPhone 6s to 15 Pro Max+
-// Author: TaoJB | Project: Smooth
-// Features: Dynamic Hz, Thermal Bypass, Hardware Spoof (sysctl + uname),
-//           GPU Triple Buffer, Touch Latency Reduction, Battery Timer Clamp
-// Architecture: Rootless-Aware (/var/jb) | HideJB Compatible
-// NOTE: Synchronized with BoostiPhone6sCore v11.1 Unified Performance Engine
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -58,11 +48,6 @@ static inline NSInteger CfgInt(NSString *key) {
     id v = [CFG valueForKey:key];
     return v ? [v integerValue] : 0;
 }
-
-// ==============================================================================
-// %hookf Ở FILE SCOPE — TRƯỚC %group DeviceBypassAll
-// ★ FIX v11.1: Logos yêu cầu %hookf phải ở file scope, không được trong %group ★
-// ==============================================================================
 
 %hookf(int, sysctlbyname, const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     if (!IS_ENABLED) return %orig(name, oldp, oldlenp, newp, newlen);
@@ -134,10 +119,6 @@ static inline NSInteger CfgInt(NSString *key) {
     return ret;
 }
 
-// ==============================================================================
-// GROUP: CHỈ CHỨA %hook (ObjC class hooks) — KHÔNG CÓ %hookf
-// ==============================================================================
-
 %group DeviceBypassAll
 
 %hook UIScreen
@@ -154,7 +135,6 @@ static inline NSInteger CfgInt(NSString *key) {
         NSInteger targetHz = CfgInt(@"forcedRefreshRate");
         if (isOldDevice() && targetHz > 60) targetHz = 60;
         
-        // v11.1: Adaptive Thermal FPS Integration
         if (CfgBool(@"adaptiveThermalFPS")) {
             CGFloat thermalMul = [[SmartThermal sharedInstance] recommendedAnimationMultiplier];
             if (thermalMul < 1.0) {
@@ -164,7 +144,6 @@ static inline NSInteger CfgInt(NSString *key) {
             }
         }
         
-        // v11.1: Charging Thermal Guard Integration
         if (CfgBool(@"chargingThermalGuard")) {
             UIDeviceBatteryState state = [UIDevice currentDevice].batteryState;
             if (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull) {
@@ -367,31 +346,15 @@ static inline NSInteger CfgInt(NSString *key) {
 
 %end
 
-%end // DeviceBypassAll
-
-// ==============================================================================
-// LOGOS CONSTRUCTOR (SỬA LỖI CÔNG TẮC V11.1)
-// ★ Thay thế __attribute__((constructor)) bằng %ctor chuẩn để đồng bộ với Tweak.xm ★
-// ★ Đảm bảo CFG/IS_ENABLED được load đúng trước khi init hooks ★
-// ==============================================================================
+%end
 
 %ctor {
     @autoreleasepool {
-        // Kiểm tra trạng thái master switch từ Tweak.xm
         if (!IS_ENABLED) {
-            NSLog(@"[DeviceBypass v11.1] Disabled by Master Switch.");
             return;
         }
 
-        // ★ FIX v11.1: Init _ungrouped cho tất cả %hookf ở file scope ★
         %init(_ungrouped);
-        
-        // Init nhóm hooks chính
         %init(DeviceBypassAll);
-
-        NSLog(@"[DeviceBypass v11.1] ALL ENGINES INITIALIZED | Device: %@ | Spoof: %@ | Thermal: %@",
-              isOldDevice() ? @"OLD (6s-8)" : @"NEW (X-15PM)",
-              CfgBool(@"spoofModel") ? @"ON" : @"OFF",
-              CfgBool(@"disableThermal") ? @"BYPASSED" : @"NORMAL");
     }
 }
