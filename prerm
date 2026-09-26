@@ -1,54 +1,14 @@
 #!/bin/bash
+set -e
 
-# ==============================================================================
-# PRERM - BOOST iPHONE 6s-X v10
-# Target: Rootless (/var/jb) & Rootful
-# ==============================================================================
+rm -f /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist 2>/dev/null || true
+rm -f /Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist 2>/dev/null || true
 
-set +e
+rm -rf /var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
+rm -rf /var/jb/var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
 
-echo "[BoostiPhone6s v10] Running pre-removal script..."
-
-# 1. Xóa PreferenceLoader entry (để menu Settings biến mất ngay)
-if [ -f "/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; then
-    rm -f /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
-    echo "[OK] Removed PreferenceLoader entry."
-fi
-
-# Fallback rootful
-if [ -f "/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; then
-    rm -f /Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
-    echo "[OK] Removed Rootful PreferenceLoader entry."
-fi
-
-# 2. Xóa Cache và Logs của tweak
-if [ -d "/var/mobile/Library/Caches/com.taojb.boostiphone6s" ]; then
-    rm -rf /var/mobile/Library/Caches/com.taojb.boostiphone6s
-    echo "[OK] Cleared tweak cache."
-fi
-
-if [ -d "/var/jb/var/mobile/Library/Caches/com.taojb.boostiphone6s" ]; then
-    rm -rf /var/jb/var/mobile/Library/Caches/com.taojb.boostiphone6s
-    echo "[OK] Cleared Rootless tweak cache."
-fi
-
-# 3. Reset UserDefaults (Xóa toàn bộ config để máy trở về trạng thái gốc)
-if command -v defaults &> /dev/null; then
-    defaults delete com.taojb.boostiphone6s 2>/dev/null
-    echo "[OK] Wiped UserDefaults domain."
-else
-    # Fallback nếu không có lệnh defaults
-    rm -f /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null
-    rm -f /var/jb/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null
-    echo "[OK] Removed plist files directly."
-fi
-
-# 4. Reload cfprefsd
-if pidof cfprefsd > /dev/null 2>&1; then
-    killall -HUP cfprefsd 2>/dev/null
-    echo "[OK] Signaled cfprefsd to refresh."
-fi
-
-echo "[BoostiPhone6s v10] Uninstallation cleanup complete. Please Respring."
+defaults delete com.taojb.boostiphone6s 2>/dev/null || true
+rm -f /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
+rm -f /var/jb/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 
 exit 0
