@@ -144,6 +144,10 @@ extern char **environ;
     } @catch (NSException *e) {}
 }
 
+// ==============================================================================
+// 🎯 SỬA LỖI DELAY HIỂN THỊ TẠI Ô MŨI TÊN (CẬP NHẬT TỨC THÌ 0 GIÂY)
+// ==============================================================================
+
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
         if (![self isMasterEnabled]) return @"Đã khóa";
@@ -189,8 +193,8 @@ extern char **environ;
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Chọn Tần Số Quét (Hz & FPS)" 
-                                 message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt" 
+                                   title:@"Chọn Tần Số Quét (Hz)" 
+                                 message:@"Cập nhật hiển thị lập tức:\n• Tự Động: Cân bằng tải linh hoạt\n• 30Hz: Tiết kiệm pin tối đa\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tần số siêu mượt" 
                                      key:@"TargetRefreshRate" 
                                   suffix:@"Hz"];
 }
@@ -198,8 +202,8 @@ extern char **environ;
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Chọn Mức Khung Hình Ứng Dụng (FPS)" 
-                                 message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt" 
+                                   title:@"Chọn Mức Khung Hình (FPS)" 
+                                 message:@"Cập nhật hiển thị lập tức:\n• Tự Động: Tối ưu theo ứng dụng\n• 30 FPS: Giảm tải GPU, mát máy\n• 60 FPS: Khung hình chuẩn\n• 90 FPS - 120 FPS - 144 FPS: Khung hình cực đại" 
                                      key:@"TargetFPSRate" 
                                   suffix:@"FPS"];
 }
@@ -215,8 +219,18 @@ extern char **environ;
 
     __weak typeof(self) weakSelf = self;
     void (^saveHandler)(NSNumber *) = ^(NSNumber *val) {
+        // Ghi trực tiếp xuống hệ thống ngay lập tức
         [weakSelf syncPreferenceValueToSystem:val forKey:prefKey];
-        [weakSelf reloadSpecifiers];
+        
+        // TỰ ĐỘNG BẬT CÔNG TẮC ĐIỀU KHIỂN NẾU ĐANG CHỌN MỨC CỤ THỂ
+        NSString *masterSwitchKey = [prefKey isEqualToString:@"TargetRefreshRate"] ? @"EnableHzControl" : @"EnableFPSControl";
+        [weakSelf syncPreferenceValueToSystem:@YES forKey:masterSwitchKey];
+        
+        // CẬP NHẬT TỨC THÌ TRÊN GIAO DIỆN TRÁNH DELAY CHỖ MŨI TÊN
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf reloadSpecifier:specifier animated:YES];
+            [weakSelf reloadSpecifiers];
+        });
     };
 
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"Tự Động Điều Chỉnh (Dynamic)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -257,7 +271,7 @@ extern char **environ;
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để đồng bộ hoàn toàn SmoothiOS V22.9.2?"
+                                                                   message:@"Respring để áp dụng toàn bộ tối ưu SmoothiOS V23.0 (Beta 5)?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -272,7 +286,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.9.2?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V23.0 (Beta 5)?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
