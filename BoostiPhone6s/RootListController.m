@@ -42,7 +42,7 @@ extern char **environ;
             return [prefs[@"Enabled"] boolValue];
         }
     } @catch (NSException *e) {}
-    return YES; // Mặc định lần đầu cài đặt là BẬT
+    return YES;
 }
 
 - (NSArray *)specifiers {
@@ -58,7 +58,6 @@ extern char **environ;
                     [spec setProperty:@YES forKey:@"enabled"];
                     continue;
                 }
-                // Khóa tương tác nếu công tắc tổng bị tắt
                 [spec setProperty:@(masterOn) forKey:@"enabled"];
             }
             _specifiers = specs;
@@ -85,12 +84,10 @@ extern char **environ;
 - (void)syncPreferenceValueToSystem:(id)value forKey:(NSString *)key {
     if (!key) return;
     @try {
-        // Ghi đè trực tiếp xuống daemon Preferences
         CFStringRef cfKey = (__bridge CFStringRef)key;
         CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         
-        // Ghi song song ra cả 2 đường dẫn đĩa để đảm bảo dữ liệu không bị thất thoát
         NSString *primaryPath = PREF_PATH;
         NSString *fallbackPath = FALLBACK_PREF_PATH;
         
@@ -102,7 +99,6 @@ extern char **environ;
         fallbackDict[key] = value;
         [fallbackDict writeToFile:fallbackPath atomically:YES];
         
-        // Phát tín hiệu thông báo cho Tweak.xm áp dụng ngay tức thì
         notify_post(NOTIFY_RELOAD);
     } @catch (NSException *e) {}
 }
@@ -140,7 +136,7 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ TRÊN GIAO DIỆN (ÉP HOẠT ĐỘNG KHÔNG TRỄ)
+// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ (ÉP HOẠT ĐỘNG KHÔNG TRỄ)
 // ==============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
@@ -190,7 +186,7 @@ extern char **environ;
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
                                    title:@"Chọn Tần Số Quét Màn Hình (Hz)" 
-                                 message:@"Ép trực tiếp xuống vi điều khiển phần cứng hiển thị:\n• Tự Động: Hệ thống tự cân đối theo tải GPU\n• 30Hz: Tiết kiệm tối đa thời lượng pin\n• 60Hz: Mức tần số quét tiêu chuẩn\n• 90Hz - 120Hz - 144Hz: Tần số quét cao siêu mượt mà" 
+                                 message:@"Ép trực tiếp xuống phần cứng hiển thị:\n• Tự Động: Tự cân đối theo tải GPU\n• 30Hz: Tiết kiệm tối đa pin\n• 60Hz: Mức chuẩn tiêu chuẩn\n• 90Hz - 120Hz - 144Hz: Siêu mượt mà" 
                                      key:@"TargetRefreshRate" 
                                   suffix:@"Hz"];
 }
@@ -199,7 +195,7 @@ extern char **environ;
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
                                    title:@"Chọn Mức Tốc Độ Khung Hình (FPS)" 
-                                 message:@"Ép trực tiếp vào bộ đệm CADisplayLink ứng dụng:\n• Tự Động: Tối ưu khung hình theo từng app\n• 30 FPS: Giảm tải đồ họa, giữ máy mát mẻ\n• 60 FPS: Khung hình chuẩn định dạng mượt\n• 90 FPS - 120 FPS - 144 FPS: Khung hình đỉnh cao" 
+                                 message:@"Ép trực tiếp vào bộ đệm CADisplayLink:\n• Tự Động: Tối ưu khung hình theo từng app\n• 30 FPS: Giảm tải GPU, máy mát\n• 60 FPS: Chuẩn mượt mà\n• 90 FPS - 120 FPS - 144 FPS: Khung hình cực cao" 
                                      key:@"TargetFPSRate" 
                                   suffix:@"FPS"];
 }
@@ -217,11 +213,9 @@ extern char **environ;
     void (^saveHandler)(NSNumber *) = ^(NSNumber *val) {
         [weakSelf syncPreferenceValueToSystem:val forKey:prefKey];
         
-        // Tự động kích hoạt công tắc điều khiển liên đới
         NSString *masterSwitchKey = [prefKey isEqualToString:@"TargetRefreshRate"] ? @"EnableHzControl" : @"EnableFPSControl";
         [weakSelf syncPreferenceValueToSystem:@YES forKey:masterSwitchKey];
         
-        // Cập nhật lại giao diện ngay tức thì
         dispatch_async(dispatch_get_main_queue(), ^{
             [weakSelf reloadSpecifier:specifier animated:YES];
             [weakSelf reloadSpecifiers];
@@ -266,7 +260,7 @@ extern char **environ;
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại Giao Diện"
-                                                                   message:@"Thực hiện Respring SpringBoard để nạp lại toàn bộ cấu hình SmoothiOS V24.3 Titanium Apex?"
+                                                                   message:@"Thực hiện Respring SpringBoard để nạp lại toàn bộ cấu hình SmoothiOS V23.6.1?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy bỏ" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -281,7 +275,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khôi Phục Mặc Định"
-                                                                   message:@"Đặt lại toàn bộ cấu hình của SmoothiOS V24.3 về trạng thái xuất xưởng mặc định?"
+                                                                   message:@"Đặt lại toàn bộ cấu hình của SmoothiOS V23.6.1 về trạng thái xuất xưởng mặc định?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy bỏ" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Xác nhận đặt lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
