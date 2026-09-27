@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V23.0</string>
+            <string>Bật Tweak SmoothiOS V23.2</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: 2 TÍNH NĂNG MỚI ĐỘT PHÁ (BETA 1) -->
+        <!-- KHỐI 4: 2 TÍNH NĂNG MỚI ĐÃ LÊN BETA 2 -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 1)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -177,9 +177,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>DirectRenderPipeBypassBeta1</string>
+            <string>DirectRenderPipeBypassBeta2</string>
             <key>label</key>
-            <string>Direct Render Pipe Bypass (Beta 1)</string>
+            <string>Direct Render Pipe Bypass (Beta 2)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -189,9 +189,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>QuantumMemoryPredictorBeta1</string>
+            <string>QuantumMemoryPredictorBeta2</string>
             <key>label</key>
-            <string>Quantum Memory Predictor (Beta 1)</string>
+            <string>Quantum Memory Predictor (Beta 2)</string>
         </dict>
 
         <!-- KHỐI 5: TÍNH NĂNG ĐÃ CHUYỂN LÊN CHÍNH THỨC (OFFICIAL) -->
@@ -205,7 +205,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -217,7 +217,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -229,7 +229,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -241,7 +241,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -253,7 +253,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -262,7 +262,7 @@
             <string>V-Sync Adaptive Buffer Bypass</string>
         </dict>
 
-        <!-- KHỐI 6: CÁC TỐI ƯU HỆ THỐNG KHÁC -->
+        <!-- KHỐI 6: CÁC TỐI ƯU HỆ THỐNG (BẬT TOÀN BỘ THEO ẢNH) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -321,7 +321,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <false/>
+            <true/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
