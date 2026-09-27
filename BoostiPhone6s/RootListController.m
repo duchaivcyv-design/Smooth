@@ -12,13 +12,18 @@
 
 extern char **environ;
 
-// Khai báo lớp cha chuẩn của Apple Preferences Bundle
-@interface PSListController : UIViewController
-- (NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
+@interface PSListController : UIViewController {
+    id _specifiers;
+}
+- (id)specifiers;
+- (void)setSpecifiers:(id)specifiers;
+- (id)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
+- (id)loadSpecifiersFromPlistName:(NSString *)name target:(id)target bundle:(NSBundle *)bundle;
 - (void)reloadSpecifiers;
 @end
 
 @interface PSSpecifier : NSObject
++ (instancetype)preferenceSpecifierNamed:(NSString *)title target:(id)target set:(SEL)set get:(SEL)get detail:(Class)detail cell:(NSInteger)cell edit:(Class)edit;
 - (id)propertyForKey:(NSString *)key;
 - (void)setProperty:(id)property forKey:(NSString *)key;
 @end
@@ -26,19 +31,30 @@ extern char **environ;
 @interface RootListController : PSListController
 @end
 
-@implementation RootListController {
-    id _specifiersList;
-}
+@implementation RootListController
 
 // ==============================================================================
-// 1. NẠP TOÀN BỘ CÔNG TẮC TỪ ROOT.PLIST (SỬA LỖI MÀN HÌNH TRẮNG TRƠN)
+// 1. NẠP CHÍNH XÁC ROOT.PLIST TỪ BUNDLE ROOTLESS (SỬA TRIỆT ĐỂ LỖI TRẮNG MÀN)
 // ==============================================================================
 
 - (id)specifiers {
-    if (!_specifiersList) {
-        _specifiersList = [self loadSpecifiersFromPlistName:@"Root" target:self];
+    if (!_specifiers) {
+        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+        if (!bundle) {
+            bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
+        }
+        if (!bundle) {
+            bundle = [NSBundle bundleWithPath:@"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
+        }
+
+        // Ưu tiên nạp kèm Bundle để loadSpecifiers đọc đúng file Root.plist
+        if ([self respondsToSelector:@selector(loadSpecifiersFromPlistName:target:bundle:)]) {
+            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
+        } else {
+            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+        }
     }
-    return _specifiersList;
+    return _specifiers;
 }
 
 - (void)viewDidLoad {
@@ -47,7 +63,7 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 2. BỘ ĐỌC / GHI KEY ĐẢM BẢO 100% CÔNG TẮC HOẠT ĐỘNG
+// 2. BỘ ĐỌC / GHI ĐỒNG BỘ 100% TẤT CẢ CÁC KEY VÀO BỘ NHỚ VÀ ĐĨA
 // ==============================================================================
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
@@ -73,7 +89,6 @@ extern char **environ;
     NSString *targetPath = PREF_PATH;
     NSFileManager *fm = [NSFileManager defaultManager];
     
-    // Tạo sẵn thư mục Preferences nếu chưa có
     NSString *dir = [targetPath stringByDeletingLastPathComponent];
     if (![fm fileExistsAtPath:dir]) {
         [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
@@ -87,11 +102,10 @@ extern char **environ;
     [prefs setObject:value forKey:key];
     [prefs writeToFile:targetPath atomically:YES];
 
-    // Đồng bộ vào CFPreferences để Tweak.xm nhận ngay
+    // Ghi vào CFPreferences IPC cho SpringBoard nhận ngay tức thì
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-    // Bắn thông báo cập nhật
     NSString *notification = [specifier propertyForKey:@"PostNotification"];
     if (notification) {
         notify_post([notification UTF8String]);
@@ -122,7 +136,7 @@ extern char **environ;
 
 - (void)presentSystemActionSheet {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"ĐIỀU KHIỂN HỆ THỐNG V24"
-                                                                   message:@"Khởi động lại tiến trình để tối ưu và áp dụng cấu hình phần cứng"
+                                                                   message:@"Khởi động lại tiến trình để tối ưu và áp dụng cấu hình"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ Respring Nhanh (Giao Diện)"
@@ -170,7 +184,7 @@ extern char **environ;
 
 - (void)confirmResetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Đặt Lại"
-                                                                   message:@"Toàn bộ các cấu hình V23.9 và V24 sẽ được khôi phục về trạng thái tối ưu ban đầu."
+                                                                   message:@"Toàn bộ cấu hình sẽ được khôi phục về trạng thái tối ưu mặc định ban đầu."
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Toàn Bộ"
@@ -207,7 +221,7 @@ extern char **environ;
 
     notify_post(NOTIFY_RELOAD);
 
-    _specifiersList = nil;
+    _specifiers = nil;
     [self reloadSpecifiers];
 }
 
@@ -229,7 +243,7 @@ extern char **environ;
     NSArray *rates = @[@60, @75, @90, @120, @144];
     for (NSNumber *rateNum in rates) {
         NSInteger rate = [rateNum integerValue];
-        NSString *title = [NSString stringWithFormat:@"%ld Hz%@", (long)rate, (rate == 60 ? @" (Mặc định mượt/mát)" : @" (Gia tốc siêu mượt)")];
+        NSString *title = [NSString stringWithFormat:@"%ld Hz%@", (long)rate, (rate == 60 ? @" (Mặc định chuẩn)" : @" (Gia tốc mượt)")];
         
         [alert addAction:[UIAlertAction actionWithTitle:title
                                                  style:UIAlertActionStyleDefault
@@ -242,7 +256,7 @@ extern char **environ;
             [fpsSpec setProperty:@"TargetFPSRate" forKey:@"key"];
             [self setPreferenceValue:@(rate) specifier:fpsSpec];
 
-            _specifiersList = nil;
+            _specifiers = nil;
             [self reloadSpecifiers];
         }]];
     }
@@ -270,7 +284,7 @@ extern char **environ;
     NSArray *rates = @[@30, @60, @75, @90, @120, @144];
     for (NSNumber *fpsNum in rates) {
         NSInteger fps = [fpsNum integerValue];
-        NSString *title = [NSString stringWithFormat:@"%ld FPS%@", (long)fps, (fps == 30 ? @" (Siêu tiết kiệm pin)" : (fps == 60 ? @" (Chuẩn cân bằng)" : @" (Khung hình cao)"))];
+        NSString *title = [NSString stringWithFormat:@"%ld FPS%@", (long)fps, (fps == 30 ? @" (Tiết kiệm pin)" : (fps == 60 ? @" (Chuẩn cân bằng)" : @" (Khung hình cao)"))];
         
         [alert addAction:[UIAlertAction actionWithTitle:title
                                                  style:UIAlertActionStyleDefault
@@ -279,7 +293,7 @@ extern char **environ;
             [fpsSpec setProperty:@"TargetFPSRate" forKey:@"key"];
             [self setPreferenceValue:@(fps) specifier:fpsSpec];
 
-            _specifiersList = nil;
+            _specifiers = nil;
             [self reloadSpecifiers];
         }]];
     }
@@ -298,11 +312,11 @@ extern char **environ;
 // ==============================================================================
 
 - (id)getAuthorName:(PSSpecifier *)specifier {
-    return @"Đức LONG (TaoJB, độc quyền)";
+    return @"Đức LONG (TaoJB)";
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24 BETA ";
+    return @"V24 Beta pro";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
