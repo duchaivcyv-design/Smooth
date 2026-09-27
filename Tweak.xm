@@ -1,14 +1,3 @@
-// ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V22.9.2 TITANIUM COLOSSUS TITAN-MAXIMA (EXPANDED)
-// 🎯 TARGET: iOS 14.0 -> iOS 16.x & iOS 17.x / 18.x+ (Rootless & Rootful)
-// 🛡 TIÊU CHUẨN KỶ LUẬT THÉP V22.9.2 ĐẦY ĐỦ:
-//    1. Mở rộng tường minh toàn bộ cấu trúc hệ thống, đạt chuẩn trên 2500 dòng code.
-//    2. Không tự ý nhảy lên V23. Sửa sạch lỗi SafeMode bắt nguồn từ các nút TẮT.
-//    3. Bóc tách 5 Module Core: Memory, Thread, Graphics, Thermal, Watchdog.
-//    4. Zero-Collision khi các nút đang TẮT (Trả về nguyên thủy %orig 100%).
-//    5. Chống đen màn hình, chống treo thanh cuộn, chống lệch frame rate struct.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
