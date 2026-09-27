@@ -145,7 +145,7 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 🎯 HIỂN THỊ HZ/FPS - CẬP NHẬT TỨC THÌ KHÔNG BỊ TRỄ Ở Ô MŨI TÊN
+// 🎯 HIỂN THỊ HZ/FPS - CẬP NHẬT TỨC THÌ KHÔNG BỊ DELAY Ở Ô MŨI TÊN
 // ==============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
@@ -269,7 +269,7 @@ extern char **environ;
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để áp dụng toàn bộ tối ưu SmoothiOS V23.0?"
+                                                                   message:@"Respring để áp dụng toàn bộ tối ưu SmoothiOS V23.2 (Beta 2)?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -284,7 +284,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V23.0?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V23.2 (Beta 2)?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
