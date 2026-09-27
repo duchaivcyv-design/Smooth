@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V22.9.2</string>
+            <string>Bật Tweak SmoothiOS V23.0</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -33,7 +33,7 @@
             <key>label</key>
             <string>MÀN HÌNH &amp; TẦN SỐ QUÉT (HZ &amp; FPS)</string>
             <key>footerText</key>
-            <string>Bảng chọn Action Sheet mở trực tiếp từ đáy màn hình. Hỗ trợ khóa cứng 30 FPS mát máy hoặc mở khóa 144 FPS cực đại.</string>
+            <string>Cập nhật tức thì không delay: Chạm vào để chọn mức tần số quét hoặc FPS mong muốn.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -99,7 +99,7 @@
             <key>label</key>
             <string>GIAO DIỆN &amp; ĐA NHIỆM (COLOROS 17)</string>
             <key>footerText</key>
-            <string>Tự động kích hoạt khi mở công tắc tổng để mang lại độ mượt mà tối đa.</string>
+            <string>Tối ưu hóa khả năng phản hồi thao tác và triệt tiêu giật khựng.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & 2 KEY MỚI (BETA 1) -->
+        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 5) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 1)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -179,7 +179,7 @@
             <key>key</key>
             <string>HyperThreadIOAcceleratorBeta1</string>
             <key>label</key>
-            <string>HyperThread I/O Accelerator (Beta 1)</string>
+            <string>HyperThread I/O Accelerator (Beta 5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -191,7 +191,7 @@
             <key>key</key>
             <string>QuantumCoreSyncStabilizerBeta1</string>
             <key>label</key>
-            <string>Quantum Core Sync Stabilizer (Beta 1)</string>
+            <string>Quantum Core Sync Stabilizer (Beta 5)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -326,7 +326,7 @@
             <string>Auto Giả Lập Thiết Bị (iPhone 16 Pro A18)</string>
         </dict>
 
-        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN (ĐÃ LÊN CHÍNH THỨC) -->
+        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN (CHÍNH THỨC) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
