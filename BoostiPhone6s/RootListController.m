@@ -1,10 +1,9 @@
-#import <Preferences/PSListController.h>
-#import <Preferences/PSSpecifier.h>
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 #import <spawn.h>
+#import <sys/wait.h>
 #import <notify.h>
-#import <sys/stat.h>
-#import <fcntl.h>
-#import <unistd.h>
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
@@ -13,292 +12,283 @@
 
 extern char **environ;
 
+// Khai báo giao diện tương thích Runtime không cần link cứng Private Framework
+@interface PSListController : UIViewController
+- (id)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
+- (void)reloadSpecifiers;
+- (void)setPreferenceValue:(id)value specifier:(id)specifier;
+- (id)readPreferenceValue:(id)specifier;
+@end
+
 @interface RootListController : PSListController
+@property (nonatomic, strong) id specifiers;
 @end
 
 @implementation RootListController
 
-- (NSString *)effectivePrefPath {
-    @try {
-        NSFileManager *fm = [NSFileManager defaultManager];
-        if ([fm fileExistsAtPath:PREF_PATH]) {
-            return PREF_PATH;
-        }
-    } @catch (NSException *e) {}
-    return FALLBACK_PREF_PATH;
-}
-
-- (BOOL)isMasterEnabled {
-    @try {
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        CFPropertyListRef val = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
-        if (val) {
-            BOOL b = [(__bridge id)val boolValue];
-            CFRelease(val);
-            return b;
-        }
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
-        if (prefs && prefs[@"Enabled"] != nil) {
-            return [prefs[@"Enabled"] boolValue];
-        }
-    } @catch (NSException *e) {}
-    return YES;
-}
-
-- (NSArray *)specifiers {
+- (id)specifiers {
     if (!_specifiers) {
-        @try {
-            NSMutableArray *specs = [self loadSpecifiersFromPlistName:@"Root" target:self];
-            BOOL masterOn = [self isMasterEnabled];
-            
-            for (PSSpecifier *spec in specs) {
-                if (!spec) continue;
-                NSString *key = spec.properties[@"key"];
-                if ([key isEqualToString:@"Enabled"]) {
-                    [spec setProperty:@YES forKey:@"enabled"];
-                    continue;
-                }
-                // Khóa tương tác toàn bộ menu con nếu công tắc tổng bị TẮT
-                [spec setProperty:@(masterOn) forKey:@"enabled"];
-            }
-            _specifiers = specs;
-        } @catch (NSException *e) {
-            _specifiers = [NSMutableArray array];
-        }
+        _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
     }
     return _specifiers;
 }
 
-- (void)updateSpecifiersStateAnimated:(BOOL)animated {
-    @try {
-        BOOL masterOn = [self isMasterEnabled];
-        for (PSSpecifier *spec in _specifiers) {
-            if (!spec) continue;
-            NSString *key = spec.properties[@"key"];
-            if ([key isEqualToString:@"Enabled"]) continue;
-            [spec setProperty:@(masterOn) forKey:@"enabled"];
-        }
-        [self reloadSpecifiers];
-    } @catch (NSException *e) {}
-}
-
-// GHI ĐỒNG BỘ 2 CHIỀU: RAM CFPREFERENCES VÀ FILE ĐĨA VẬT LÝ
-- (void)syncPreferenceValueToSystem:(id)value forKey:(NSString *)key {
-    if (!key) return;
-    @try {
-        // Kênh 1: Ghi trực tiếp vào bộ đệm CFPreferences
-        CFStringRef cfKey = (__bridge CFStringRef)key;
-        CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        
-        // Kênh 2: Ghi trực tiếp ra file đĩa vật lý để Tweak đọc tức thì 0ms
-        NSString *primaryPath = PREF_PATH;
-        NSString *fallbackPath = FALLBACK_PREF_PATH;
-        
-        NSMutableDictionary *primaryDict = [NSMutableDictionary dictionaryWithContentsOfFile:primaryPath] ?: [NSMutableDictionary dictionary];
-        primaryDict[key] = value;
-        [primaryDict writeToFile:primaryPath atomically:YES];
-        
-        NSMutableDictionary *fallbackDict = [NSMutableDictionary dictionaryWithContentsOfFile:fallbackPath] ?: [NSMutableDictionary dictionary];
-        fallbackDict[key] = value;
-        [fallbackDict writeToFile:fallbackPath atomically:YES];
-        
-        // Phát tín hiệu Darwin Notification ép SpringBoard nạp cấu hình mới ngay lập tức
-        notify_post(NOTIFY_RELOAD);
-    } @catch (NSException *e) {}
-}
-
-- (id)readPreferenceValue:(PSSpecifier *)specifier {
-    @try {
-        NSString *key = specifier.properties[@"key"];
-        if (!key) return specifier.properties[@"default"];
-        
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
-        if (val) {
-            return (__bridge_transfer id)val;
-        }
-        
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
-        if (prefs && prefs[key] != nil) {
-            return prefs[key];
-        }
-        return specifier.properties[@"default"];
-    } @catch (NSException *e) {
-        return specifier.properties[@"default"];
-    }
-}
-
-- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
-    @try {
-        NSString *key = specifier.properties[@"key"];
-        [self syncPreferenceValueToSystem:value forKey:key];
-        
-        if ([key isEqualToString:@"Enabled"]) {
-            [self updateSpecifiersStateAnimated:YES];
-        }
-    } @catch (NSException *e) {}
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    [self setupApexNavigationItems];
 }
 
 // ==============================================================================
-// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ (TRỰC QUAN - GIAO DIỆN HIỆN ĐẠI)
+// 1. GIAO DIỆN THANH ĐIỀU HƯỚNG GÓC PHẢI (ACTION MENU & RESET)
 // ==============================================================================
-- (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
-    @try {
-        if (![self isMasterEnabled]) return @"Đã tắt theo công tắc tổng";
-        
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableHzControl"), PREF_DOMAIN);
-        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
-        if (enabledVal) CFRelease(enabledVal);
-        
-        if (!enabled) return @"Chưa kích hoạt";
-        
-        CFPropertyListRef hzVal = CFPreferencesCopyAppValue(CFSTR("TargetRefreshRate"), PREF_DOMAIN);
-        NSInteger val = hzVal ? [(__bridge id)hzVal integerValue] : 60;
-        if (hzVal) CFRelease(hzVal);
-        
-        if (val == 0) return @"Tự động tối ưu";
-        return [NSString stringWithFormat:@"%ld Hz (Đang khóa)", (long)val];
-    } @catch (NSException *e) {
-        return @"60 Hz (Mặc định)";
-    }
+
+- (void)setupApexNavigationItems {
+    // Nút Menu Hành Động (Respring & Userspace Reboot)
+    UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Hành Động"
+                                                                  style:UIBarButtonItemStylePlain
+                                                                 target:self
+                                                                 action:@selector(presentSystemActionSheet)];
+    actionBtn.tintColor = [UIColor systemBlueColor];
+
+    // Nút Đặt Lại Cấu Hình Mặc Định
+    UIBarButtonItem *resetBtn = [[UIBarButtonItem alloc] initWithTitle:@"Đặt Lại"
+                                                                 style:UIBarButtonItemStylePlain
+                                                                target:self
+                                                                action:@selector(confirmResetAllSettings)];
+    resetBtn.tintColor = [UIColor systemRedColor];
+
+    self.navigationItem.rightBarButtonItems = @[actionBtn, resetBtn];
 }
 
-- (NSString *)getFPSDisplayValue:(PSSpecifier *)specifier {
-    @try {
-        if (![self isMasterEnabled]) return @"Đã tắt theo công tắc tổng";
-        
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableFPSControl"), PREF_DOMAIN);
-        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
-        if (enabledVal) CFRelease(enabledVal);
-        
-        if (!enabled) return @"Chưa kích hoạt";
-        
-        CFPropertyListRef fpsVal = CFPreferencesCopyAppValue(CFSTR("TargetFPSRate"), PREF_DOMAIN);
-        NSInteger val = fpsVal ? [(__bridge id)fpsVal integerValue] : 60;
-        if (fpsVal) CFRelease(fpsVal);
-        
-        if (val == 0) return @"Tự động tối ưu";
-        return [NSString stringWithFormat:@"%ld FPS (Đang khóa)", (long)val];
-    } @catch (NSException *e) {
-        return @"60 FPS (Mặc định)";
-    }
-}
+- (void)presentSystemActionSheet {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"ĐIỀU KHIỂN HỆ THỐNG V24"
+                                                                   message:@"Khởi động lại tiến trình để tối ưu và áp dụng cấu hình phần cứng"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
 
-- (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    if (![self isMasterEnabled]) return;
-    [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Tần Số Quét Màn Hình" 
-                                 message:@"Chọn mức tần số quét phần cứng (Hz) mong muốn để ép xung:" 
-                                     key:@"TargetRefreshRate" 
-                                  suffix:@"Hz"];
-}
-
-- (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    if (![self isMasterEnabled]) return;
-    [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Tốc Độ Khung Hình Ứng Dụng" 
-                                 message:@"Chọn mức giới hạn khung hình (FPS) mượt mà:" 
-                                     key:@"TargetFPSRate" 
-                                  suffix:@"FPS"];
-}
-
-- (void)presentActionSheetForSpecifier:(PSSpecifier *)specifier 
-                                 title:(NSString *)title 
-                               message:(NSString *)message 
-                                   key:(NSString *)prefKey 
-                                suffix:(NSString *)suffix {
-    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:title
-                                                                         message:message
-                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
-
-    __weak typeof(self) weakSelf = self;
-    void (^saveHandler)(NSNumber *) = ^(NSNumber *val) {
-        [weakSelf syncPreferenceValueToSystem:val forKey:prefKey];
-        
-        NSString *masterSwitchKey = [prefKey isEqualToString:@"TargetRefreshRate"] ? @"EnableHzControl" : @"EnableFPSControl";
-        [weakSelf syncPreferenceValueToSystem:@YES forKey:masterSwitchKey];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf reloadSpecifier:specifier animated:YES];
-            [weakSelf reloadSpecifiers];
-        });
-    };
-
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Tự động thích ứng (Cân bằng)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        saveHandler(@0);
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ Respring Nhanh (Giao Diện)"
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(UIAlertAction * _Nonnull action) {
+        [self executeApexRespring];
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"30 %@ - Tiết kiệm pin tối đa", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        saveHandler(@30);
+    [sheet addAction:[UIAlertAction actionWithTitle:@"🔥 Khởi Động Không Gian Người Dùng (SReboot)"
+                                             style:UIAlertActionStyleDestructive
+                                           handler:^(UIAlertAction * _Nonnull action) {
+        [self executeApexUserspaceReboot];
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"60 %@ - Tiêu chuẩn ổn định", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        saveHandler(@60);
-    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Hủy Bỏ"
+                                             style:UIAlertActionStyleCancel
+                                           handler:nil]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"90 %@ - Mượt mà nâng cao", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        saveHandler(@90);
-    }]];
-
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"120 %@ - Cực kỳ mượt mà", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        saveHandler(@120);
-    }]];
-
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"144 %@ - Ép xung cực hạn", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        saveHandler(@144);
-    }]];
-
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Đóng menu" style:UIAlertActionStyleCancel handler:nil]];
-
-    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
-        UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
-        actionSheet.popoverPresentationController.sourceView = cell ? cell : self.view;
-        actionSheet.popoverPresentationController.sourceRect = cell ? cell.bounds : CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1.0, 1.0);
+    // Tương thích hiển thị trên iPad
+    if (sheet.popoverPresentationController) {
+        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItems.firstObject;
     }
 
-    [self presentViewController:actionSheet animated:YES completion:nil];
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
-- (void)respringDevice {
-    if (![self isMasterEnabled]) return;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại Giao Diện"
-                                                                   message:@"Respring SpringBoard để nạp lại toàn bộ cấu hình mượt mà?"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Respring ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            pid_t pid;
-            const char *argv[] = {"killall", "-9", "SpringBoard", NULL};
-            posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)argv, environ);
-        });
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
-}
+// ==============================================================================
+// 2. THỰC THI LỆNH HỆ THỐNG CẤP NHỊ PHÂN ROOTLESS (LAUNCHCTL DIRECT EXEC)
+// ==============================================================================
 
-- (void)resetAllSettings {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khôi Phục Mặc Định"
-                                                                   message:@"Đặt lại tất cả thiết lập về trạng thái xuất xưởng ban đầu?"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Xác nhận đặt lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        NSDictionary *dict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        for (id key in dict) {
-            CFPreferencesSetAppValue((__bridge CFStringRef)key, NULL, PREF_DOMAIN);
+- (void)executeApexRespring {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        const char *launchctlPath = NULL;
+        if (access("/var/jb/bin/launchctl", X_OK) == 0) {
+            launchctlPath = "/var/jb/bin/launchctl";
+        } else if (access("/var/jb/usr/bin/launchctl", X_OK) == 0) {
+            launchctlPath = "/var/jb/usr/bin/launchctl";
+        } else {
+            launchctlPath = "/bin/launchctl";
         }
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        
-        [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
-        [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
-        notify_post(NOTIFY_RELOAD);
-        
-        _specifiers = nil;
-        [self reloadSpecifiers];
+
+        pid_t pid;
+        char *argv[] = {(char *)launchctlPath, (char *)"kickstart", (char *)"-k", (char *)"system/com.apple.backboardd", NULL};
+        posix_spawn(&pid, launchctlPath, NULL, NULL, argv, environ);
+        int status;
+        waitpid(pid, &status, 0);
+    });
+}
+
+- (void)executeApexUserspaceReboot {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        const char *launchctlPath = NULL;
+        if (access("/var/jb/bin/launchctl", X_OK) == 0) {
+            launchctlPath = "/var/jb/bin/launchctl";
+        } else if (access("/var/jb/usr/bin/launchctl", X_OK) == 0) {
+            launchctlPath = "/var/jb/usr/bin/launchctl";
+        } else {
+            launchctlPath = "/bin/launchctl";
+        }
+
+        pid_t pid;
+        char *argv[] = {(char *)launchctlPath, (char *)"reboot", (char *)"userspace", NULL};
+        posix_spawn(&pid, launchctlPath, NULL, NULL, argv, environ);
+        int status;
+        waitpid(pid, &status, 0);
+    });
+}
+
+// ==============================================================================
+// 3. ĐẶT LẠI TOÀN BỘ CẤU HÌNH VỀ GỐC (RESET DEFAULTS SẠCH SẼ)
+// ==============================================================================
+
+- (void)confirmResetAllSettings {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Đặt Lại"
+                                                                   message:@"Toàn bộ các khóa cấu hình V23.9 và V24 sẽ được xóa sạch và khôi phục về giá trị mặc định tối ưu nhất."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Toàn Bộ"
+                                             style:UIAlertActionStyleDestructive
+                                           handler:^(UIAlertAction * _Nonnull action) {
+        [self performMasterReset];
     }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy Bỏ"
+                                             style:UIAlertActionStyleCancel
+                                           handler:nil]];
+
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)performMasterReset {
+    // 1. Xóa toàn bộ key trong CFPreferences IPC
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFArrayRef keyList = CFPreferencesCopyKeyList(PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (keyList) {
+        for (CFIndex i = 0; i < CFArrayGetCount(keyList); i++) {
+            CFStringRef key = (CFStringRef)CFArrayGetValueAtIndex(keyList, i);
+            CFPreferencesSetAppValue(key, NULL, PREF_DOMAIN);
+        }
+        CFRelease(keyList);
+    }
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+    // 2. Xóa các tệp plist vật lý lưu trên đĩa Rootless
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm removeItemAtPath:PREF_PATH error:nil];
+    [fm removeItemAtPath:FALLBACK_PREF_PATH error:nil];
+
+    // 3. Xóa cờ SafeMode nếu có
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"BoostiPhone6s_SafeModeActive"];
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"BoostV20_SafeModeActive"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
+    // 4. Phát tín hiệu thông báo cho Tweak.xm tải lại cấu hình gốc
+    notify_post(NOTIFY_RELOAD);
+
+    // 5. Làm mới lại danh sách Specifiers giao diện
+    [self reloadSpecifiers];
+}
+
+// ==============================================================================
+// 4. BỘ CHỌN POPUP HZ & FPS ĐỒNG BỘ 100% CẢ HAI CHIỀU
+// ==============================================================================
+
+- (id)getHzDisplayValue:(id)specifier {
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFPropertyListRef val = CFPreferencesCopyAppValue(CFSTR("TargetRefreshRate"), PREF_DOMAIN);
+    NSInteger rate = 60;
+    if (val) {
+        rate = [(__bridge id)val integerValue];
+        CFRelease(val);
+    }
+    return [NSString stringWithFormat:@"%ld Hz", (long)rate];
+}
+
+- (void)showHzPickerPopup:(id)specifier {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"CHỌN TẦN SỐ QUÉT MÀN HÌNH (HZ)"
+                                                                   message:@"Mức FPS mục tiêu sẽ được tự động đồng bộ khớp chính xác với mức Hz được chọn."
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *rates = @[@60, @75, @90, @120, @144];
+    for (NSNumber *rateNum in rates) {
+        NSInteger rate = [rateNum integerValue];
+        NSString *title = [NSString stringWithFormat:@"%ld Hz%@", (long)rate, (rate == 60 ? @" (Mặc định mượt/mát)" : @" (Gia tốc siêu mượt)")];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:title
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(UIAlertAction * _Nonnull action) {
+            // Ghi nhận Hz
+            CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+            // Tự động đồng bộ sang FPS
+            CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+            notify_post(NOTIFY_RELOAD);
+            [self reloadSpecifiers];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.view;
+    }
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (id)getFPSDisplayValue:(id)specifier {
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFPropertyListRef val = CFPreferencesCopyAppValue(CFSTR("TargetFPSRate"), PREF_DOMAIN);
+    NSInteger fps = 60;
+    if (val) {
+        fps = [(__bridge id)val integerValue];
+        CFRelease(val);
+    }
+    return [NSString stringWithFormat:@"%ld FPS", (long)fps];
+}
+
+- (void)showFPSPickerPopup:(id)specifier {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"CHỌN MỨC KHUNG HÌNH (FPS)"
+                                                                   message:@"Khuyến nghị chọn mức FPS tương đồng với tần số quét (Hz) của máy."
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *rates = @[@30, @60, @75, @90, @120, @144];
+    for (NSNumber *fpsNum in rates) {
+        NSInteger fps = [fpsNum integerValue];
+        NSString *title = [NSString stringWithFormat:@"%ld FPS%@", (long)fps, (fps == 30 ? @" (Siêu tiết kiệm pin)" : (fps == 60 ? @" (Chuẩn cân bằng)" : @" (Khung hình cao)"))];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:title
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(UIAlertAction * _Nonnull action) {
+            CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+            notify_post(NOTIFY_RELOAD);
+            [self reloadSpecifiers];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.view;
+    }
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+// ==============================================================================
+// 5. THÔNG TIN PHÁT TRIỂN & LIÊN KẾT HỖ TRỢ
+// ==============================================================================
+
+- (id)getAuthorName:(id)specifier {
+    return @"Đức LONG (0374288058)";
+}
+
+- (id)getVersionString:(id)specifier {
+    return @"V24 Pro beta";
+}
+
+- (void)openSupportLink:(id)specifier {
+    NSURL *url = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
 }
 
 @end
