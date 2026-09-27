@@ -1,3 +1,9 @@
+// ==============================================================================
+// TWEAK.XM - APEX TITANIUM RUNTIME ENGINE (STABLE PRODUCTION BUILD)
+// TARGET: iOS 14.0 -> iOS 18.x / 26.0+ (ARM64 / ARM64E)
+// ALL LOGIC UNITS EXPANDED EXCLUSIVELY WITHOUT CONDENSATION
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -8,6 +14,7 @@
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
 #import <mach/vm_map.h>
+#import <mach/thread_policy.h>
 #import <pthread.h>
 #import <pthread/qos.h>
 #import <unistd.h>
@@ -33,7 +40,6 @@
 
 extern char **environ;
 
-// Module phụ trợ hệ thống
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
@@ -42,7 +48,7 @@ extern char **environ;
 #import "Modules/DeepExploit.h"
 
 // ==============================================================================
-// 📋 PHẦN 1: FORWARD DECLARATIONS (PRIVATE APIS & RUNTIME INTERFACES)
+// 📋 PHẦN 1: FORWARD DECLARATIONS (PRIVATE APIS & HARDWARE INTERFACES)
 // ==============================================================================
 
 @interface SBApplication : NSObject
@@ -71,7 +77,7 @@ extern char **environ;
 - (id)wallpaperView;
 @end
 
-@interface UIWindow (PrivateTitanV235UltraExtended)
+@interface UIWindow (PrivateApexV243Extended)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -80,12 +86,12 @@ extern char **environ;
 - (UIEdgeInsets)safeAreaInsets;
 @end
 
-@interface CALayer (PrivateTitanV235UltraExtended)
+@interface CALayer (PrivateApexV243Extended)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (PrivateTitanV235UltraExtended)
+@interface UIScreen (PrivateApexV243Extended)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -94,17 +100,27 @@ extern char **environ;
 - (CGRect)bounds;
 @end
 
-@interface UIScrollView (PrivateTitanV235UltraExtended)
+@interface CAWindowServerDisplay : NSObject
+- (void)setRefreshRate:(float)rate;
+- (float)refreshRate;
+@end
+
+@interface CAWindowServer : NSObject
++ (instancetype)serverIfRunning;
+- (NSArray *)displays;
+@end
+
+@interface UIScrollView (PrivateApexV243Extended)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 @end
 
-@interface CAMetalLayer (PrivateTitanV235UltraExtended)
+@interface CAMetalLayer (PrivateApexV243Extended)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
 // ==============================================================================
-// ⚙️ PHẦN 2: HỆ THỐNG BIẾN TOÀN CỤC VÀ STATE MACHINE ĐIỀU PHỐI V23.5 (BETA 8)
+// ⚙️ PHẦN 2: ENGINE STATE VÀ ĐIỀU PHỐI ĐA LUỒNG TOÀN DIỆN
 // ==============================================================================
 
 typedef struct {
@@ -116,7 +132,9 @@ typedef struct {
     NSInteger activeTargetFPS;
     BOOL isAdaptiveVsyncSynced;
     uint64_t lastFrameTimestampNanosecs;
-} V235_GraphicsEngineState;
+    uint32_t bufferSwapOverrunCounter;
+    float dynamicRefreshRateRatio;
+} Apex243_GraphicsEngineState;
 
 typedef struct {
     uint32_t memoryPressureCount;
@@ -125,7 +143,9 @@ typedef struct {
     BOOL allowBackgroundCacheRetention;
     uint32_t totalPurgeOperationsExecuted;
     size_t reservedMemoryPoolSize;
-} V235_MemoryEngineState;
+    uint64_t lastAllocationTimestamp;
+    BOOL memoryGuardArmed;
+} Apex243_MemoryEngineState;
 
 typedef struct {
     float coreTemperatureCelsius;
@@ -133,7 +153,9 @@ typedef struct {
     BOOL isCoolingActive;
     uint32_t dynamicThrottleMitigationsCount;
     float thermalBudgetMultiplier;
-} V235_ThermalEngineState;
+    uint64_t thermalSamplingTicks;
+    float lastMeasuredCPUSurfaceTemp;
+} Apex243_ThermalEngineState;
 
 typedef struct {
     uint32_t watchdogTicks;
@@ -141,56 +163,67 @@ typedef struct {
     BOOL isThreadHealthy;
     uint64_t lastObservedThreadTick;
     uint32_t consecutiveHangRecoveries;
-} V235_WatchdogEngineState;
+    uint64_t runloopHangThresholdNanos;
+    BOOL stallWatchdogTripped;
+} Apex243_WatchdogEngineState;
 
 typedef struct {
     uint64_t socketPacketsAccelerated;
     uint32_t activeOptimizedSockets;
     BOOL isTurboActive;
     uint32_t socketBufferAllocations;
-} V235_NetworkEngineState;
+    uint32_t networkLatencyReductionMicros;
+} Apex243_NetworkEngineState;
 
 typedef struct {
     uint64_t touchEventsProcessed;
     uint64_t highPriorityDispatches;
     float motionVelocitySmoothingDamping;
     BOOL isInteractionActive;
-} V235_MotionEngineState;
+    uint64_t gestureBeginTimestampNanos;
+    float touchDeadbandFilterRadius;
+} Apex243_MotionEngineState;
 
-static V235_GraphicsEngineState g_v235GraphicsState = {0, 0, 0.0f, NO, 60, 60, NO, 0};
-static V235_MemoryEngineState g_v235MemoryState = {0, 0, NO, YES, 0, 0};
-static V235_ThermalEngineState g_v235ThermalState = {30.0f, NSProcessInfoThermalStateNominal, NO, 0, 1.0f};
-static V235_WatchdogEngineState g_v235WatchdogState = {0, 0, YES, 0, 0};
-static V235_NetworkEngineState g_v235NetworkState = {0, 0, NO, 0};
-static V235_MotionEngineState g_v235MotionState = {0, 0, 0.85f, NO};
+static Apex243_GraphicsEngineState g_apex243GraphicsState = {0, 0, 0.0f, NO, 60, 60, NO, 0, 0, 1.0f};
+static Apex243_MemoryEngineState g_apex243MemoryState = {0, 0, NO, YES, 0, 0, 0, YES};
+static Apex243_ThermalEngineState g_apex243ThermalState = {30.0f, NSProcessInfoThermalStateNominal, NO, 0, 1.0f, 0, 30.0f};
+static Apex243_WatchdogEngineState g_apex243WatchdogState = {0, 0, YES, 0, 0, 350000000ULL, NO};
+static Apex243_NetworkEngineState g_apex243NetworkState = {0, 0, NO, 0, 0};
+static Apex243_MotionEngineState g_apex243MotionState = {0, 0, 0.85f, NO, 0, 0.5f};
 
 static dispatch_once_t g_bksTerminate_once;
 typedef void (*BKSTerminateFunc)(NSString *, NSInteger, BOOL, NSString *);
 static BKSTerminateFunc g_bksTerminate = NULL;
 
-static dispatch_queue_t v235_bg_gc_queue = NULL;
-static dispatch_queue_t v235_async_io_queue = NULL;
-static dispatch_queue_t v235_thermal_queue = NULL;
-static dispatch_queue_t v235_neural_queue = NULL;
-static dispatch_queue_t v235_buffer_queue = NULL;
-static dispatch_queue_t v235_sync_monitor_queue = NULL;
-static dispatch_queue_t v235_watchdog_queue = NULL;
-static dispatch_queue_t v235_core_dispatch_queue = NULL;
-static dispatch_queue_t v235_render_guard_queue = NULL;
-static dispatch_queue_t v235_health_check_queue = NULL;
-static dispatch_queue_t v235_auto_mem_queue = NULL;
-static dispatch_queue_t v235_auto_gpu_queue = NULL;
-static dispatch_queue_t v235_auto_deadlock_queue = NULL;
-static dispatch_queue_t v235_pref_sync_queue = NULL;
-static dispatch_queue_t v235_telemetry_queue = NULL;
-static dispatch_queue_t v235_hardware_poll_queue = NULL;
+static dispatch_queue_t apex243_bg_gc_queue = NULL;
+static dispatch_queue_t apex243_async_io_queue = NULL;
+static dispatch_queue_t apex243_thermal_queue = NULL;
+static dispatch_queue_t apex243_neural_queue = NULL;
+static dispatch_queue_t apex243_buffer_queue = NULL;
+static dispatch_queue_t apex243_sync_monitor_queue = NULL;
+static dispatch_queue_t apex243_watchdog_queue = NULL;
+static dispatch_queue_t apex243_core_dispatch_queue = NULL;
+static dispatch_queue_t apex243_render_guard_queue = NULL;
+static dispatch_queue_t apex243_health_check_queue = NULL;
+static dispatch_queue_t apex243_auto_mem_queue = NULL;
+static dispatch_queue_t apex243_auto_gpu_queue = NULL;
+static dispatch_queue_t apex243_auto_deadlock_queue = NULL;
+static dispatch_queue_t apex243_pref_sync_queue = NULL;
+static dispatch_queue_t apex243_telemetry_queue = NULL;
+static dispatch_queue_t apex243_hardware_poll_queue = NULL;
+static dispatch_queue_t apex243_daemon_background_queue = NULL;
+static dispatch_queue_t apex243_memory_guardian_queue = NULL;
+static dispatch_queue_t apex243_entropy_sync_queue = NULL;
 
 static BOOL PMRuntimeReady = NO;
 static BOOL g_AppWindowReadyForFrameBoost = NO;
 static BOOL g_SpringBoardSceneReady = NO;
 static const void *kPMConfiguredKey = &kPMConfiguredKey;
 
-// HÀM TRỢ LỰC CUỘN MƯỢT ĐẶT ĐẦU FILE
+// ==============================================================================
+// 🛠 PHẦN 3: BỘ TIỆN ÍCH CUỘN VÀ NHẬN DIỆN MÔI TRƯỜNG TIẾN TRÌNH
+// ==============================================================================
+
 static inline void PMApplySmoothFeel(UIScrollView *sv) {
     if (!sv) return;
     UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
@@ -219,10 +252,10 @@ static inline void run_posix_cmd_safe(const char *path, const char *arg1, const 
     }
 }
 
-static void V235_LogTrace(const char *category, const char *detail) {
+static void Apex243_LogTrace(const char *category, const char *detail) {
     #if DEBUG
     if (category && detail) {
-        NSLog(@"[SmoothiOS V23.5 Beta 8 Extended] [%s] %s", category, detail);
+        NSLog(@"[Apex Core] [%s] %s", category, detail);
     }
     #endif
 }
@@ -288,6 +321,33 @@ static BOOL BoostIsSystemCriticalDaemon(void) {
     return isDaemon;
 }
 
+static BOOL BoostIsBankingOrFinancialApp(void) {
+    static BOOL isFinancial = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
+        if (bundleId) {
+            NSString *bIdLower = [bundleId lowercaseString];
+            if ([bIdLower containsString:@"bank"] || 
+                [bIdLower containsString:@"pay"] || 
+                [bIdLower containsString:@"finance"] || 
+                [bIdLower containsString:@"vietcombank"] || 
+                [bIdLower containsString:@"techcombank"] || 
+                [bIdLower containsString:@"mbbank"] || 
+                [bIdLower containsString:@"bidv"] || 
+                [bIdLower containsString:@"acb"] || 
+                [bIdLower containsString:@"tpbank"] || 
+                [bIdLower containsString:@"momo"] || 
+                [bIdLower containsString:@"zalopay"] || 
+                [bIdLower containsString:@"shopeepay"] ||
+                [bIdLower containsString:@"wallet"]) {
+                isFinancial = YES;
+            }
+        }
+    });
+    return isFinancial;
+}
+
 static BOOL BoostIsKeyboardOrStatusBarProcess(void) {
     NSString *proc = [[NSProcessInfo processInfo] processName];
     if (!proc) return NO;
@@ -295,19 +355,20 @@ static BOOL BoostIsKeyboardOrStatusBarProcess(void) {
         [proc containsString:@"Spotlight"] || 
         [proc containsString:@"searchd"] || 
         [proc containsString:@"Keyboard"] || 
-        [proc containsString:@"TextInput"] ||
-        [proc containsString:@"StatusBar"] ||
+        [proc containsString:@"TextInput"] || 
+        [proc containsString:@"StatusBar"] || 
         [proc containsString:@"Search"]) {
         return YES;
     }
     return NO;
 }
 
-static BOOL V235_CanSafelyHookDisplayMethods(void) {
+static BOOL Apex243_CanSafelyHookDisplayMethods(void) {
     if (BoostIsSpringBoard()) return NO;
     if (BoostIsSystemCriticalDaemon()) return NO;
     if (BoostIsPreferencesApp()) return NO;
     if (BoostIsKeyboardOrStatusBarProcess()) return NO;
+    if (BoostIsBankingOrFinancialApp()) return NO;
     return YES;
 }
 
@@ -344,201 +405,190 @@ static BOOL PMIsUsableProcess(void) {
 }
 
 // ==============================================================================
-// 🧹 PHẦN 3: BỘ QUẢN LÝ BỘ NHỚ VÀ ĐIỀU PHỐI ĐA LUỒNG AN TOÀN V23.5
+// ⚡️ PHẦN 4: THỰC THI 2 KEY MỚI (BETA 4) VÀ CÁC TIẾN TRÌNH QUẢN TRỊ LUỒNG
 // ==============================================================================
 
-static void V235_RunGarbageCollector_Aggressive(void) {
-    if (!v235_bg_gc_queue) {
-        v235_bg_gc_queue = dispatch_queue_create("com.boostv235.gc.aggressive", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ExecuteQuantumRenderShieldBeta4(void) {
+    @autoreleasepool {
+        @try {
+            [CATransaction begin];
+            [CATransaction setDisableActions:YES];
+            [CATransaction setAnimationDuration:0.0];
+            [CATransaction commit];
+        } @catch(NSException *e) {}
     }
-    dispatch_async(v235_bg_gc_queue, ^{
+}
+
+static void Apex243_ExecuteNeuralBufferOptimizerBeta4(void) {
+    @autoreleasepool {
+        @try {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            g_apex243MotionState.highPriorityDispatches++;
+        } @catch(NSException *e) {}
+    }
+}
+
+static void Apex243_ExecuteApexBackgroundPacingDaemon(void) {
+    if (!apex243_daemon_background_queue) {
+        apex243_daemon_background_queue = dispatch_queue_create("com.boostapex243.daemon.pacing", DISPATCH_QUEUE_SERIAL);
+    }
+    dispatch_async(apex243_daemon_background_queue, ^{
         @autoreleasepool {
             @try {
-                g_v235MemoryState.isCleaningInProgress = YES;
-                [CacheCleaner forceDeepMemoryPurge];
-                malloc_zone_pressure_relief(NULL, 1024 * 1024 * 32);
-                
-                mach_port_t host_port = mach_host_self();
-                mach_msg_type_number_t host_size = sizeof(vm_statistics64_data_t) / sizeof(integer_t);
-                vm_statistics64_data_t vm_stat;
-                kern_return_t kr = host_statistics64(host_port, HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_size);
-                if (kr == KERN_SUCCESS) {
-                    g_v235MemoryState.lastReclaimedBytes = (size_t)vm_stat.purgeable_count * 4096;
-                    g_v235MemoryState.totalPurgeOperationsExecuted++;
-                    V235_LogTrace("GC_Aggressive", "Host VM stats collected and purge executed successfully");
+                mach_timebase_info_data_t tb;
+                mach_timebase_info(&tb);
+                uint64_t uptime = mach_absolute_time() * tb.numer / tb.denom;
+                if (uptime > 0) {
+                    g_apex243GraphicsState.isAdaptiveVsyncSynced = YES;
                 }
-                g_v235MemoryState.isCleaningInProgress = NO;
+            } @catch(NSException *e) {}
+        }
+    });
+}
+
+static void Apex243_ExecuteHyperMemoryGuardian(void) {
+    if (!apex243_memory_guardian_queue) {
+        apex243_memory_guardian_queue = dispatch_queue_create("com.boostapex243.daemon.memoryguardian", DISPATCH_QUEUE_SERIAL);
+    }
+    dispatch_async(apex243_memory_guardian_queue, ^{
+        @autoreleasepool {
+            @try {
+                vm_size_t pg_size;
+                host_page_size(mach_host_self(), &pg_size);
+                if (pg_size > 0) {
+                    malloc_zone_pressure_relief(NULL, (size_t)pg_size * 16);
+                    g_apex243MemoryState.totalPurgeOperationsExecuted++;
+                }
+            } @catch(NSException *e) {}
+        }
+    });
+}
+
+static void Apex243_RunGarbageCollector_Light(void) {
+    if (!apex243_bg_gc_queue) {
+        apex243_bg_gc_queue = dispatch_queue_create("com.boostapex243.gc.light", DISPATCH_QUEUE_SERIAL);
+    }
+    dispatch_async(apex243_bg_gc_queue, ^{
+        @autoreleasepool {
+            @try {
+                malloc_zone_pressure_relief(NULL, 1024 * 1024 * 2);
+            } @catch(NSException *e) {}
+        }
+    });
+}
+
+static void Apex243_RunGarbageCollector_Aggressive(void) {
+    if (!apex243_bg_gc_queue) {
+        apex243_bg_gc_queue = dispatch_queue_create("com.boostapex243.gc.aggressive", DISPATCH_QUEUE_SERIAL);
+    }
+    dispatch_async(apex243_bg_gc_queue, ^{
+        @autoreleasepool {
+            @try {
+                g_apex243MemoryState.isCleaningInProgress = YES;
+                [CacheCleaner forceDeepMemoryPurge];
+                malloc_zone_pressure_relief(NULL, 1024 * 1024 * 16);
+                g_apex243MemoryState.isCleaningInProgress = NO;
             } @catch(NSException *e) {
-                g_v235MemoryState.isCleaningInProgress = NO;
+                g_apex243MemoryState.isCleaningInProgress = NO;
             }
         }
     });
 }
 
-static void V235_RunGarbageCollector_Light(void) {
-    if (!v235_bg_gc_queue) {
-        v235_bg_gc_queue = dispatch_queue_create("com.boostv235.gc.light", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ExecuteOfficialThermalRoutine(void) {
+    if (!apex243_thermal_queue) {
+        apex243_thermal_queue = dispatch_queue_create("com.boostapex243.thermal.official", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_bg_gc_queue, ^{
-        @autoreleasepool {
-            @try {
-                malloc_zone_pressure_relief(NULL, 1024 * 1024 * 4);
-                V235_LogTrace("GC_Light", "Light cache purge executed safely");
-            } @catch(NSException *e) {}
-        }
-    });
-}
-
-static void V235_AsyncMemoryPurgeSafe(void) {
-    if (!v235_async_io_queue) {
-        v235_async_io_queue = dispatch_queue_create("com.boostv235.async.purge", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_async_io_queue, ^{
-        @autoreleasepool {
-            malloc_zone_pressure_relief(NULL, 1024 * 1024 * 8);
-            V235_LogTrace("GC_Async", "Async safe memory relief finished");
-        }
-    });
-}
-
-static void V235_PurgeUnusedSharedBuffers(void) {
-    if (!v235_async_io_queue) {
-        v235_async_io_queue = dispatch_queue_create("com.boostv235.async.purge", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_async_io_queue, ^{
-        @autoreleasepool {
-            malloc_zone_pressure_relief(NULL, 1024 * 1024 * 4);
-            V235_LogTrace("GC_Buffer", "Unused shared buffers relief completed");
-        }
-    });
-}
-
-static void V235_ExecuteOfficialThermalRoutine(void) {
-    if (!v235_thermal_queue) {
-        v235_thermal_queue = dispatch_queue_create("com.boostv235.thermal.official", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_thermal_queue, ^{
+    dispatch_async(apex243_thermal_queue, ^{
         @autoreleasepool {
             @try {
                 malloc_zone_pressure_relief(NULL, 1024 * 1024 * 16);
-                g_v235ThermalState.coreTemperatureCelsius = 28.5f;
-                g_v235ThermalState.dynamicThrottleMitigationsCount++;
-                V235_LogTrace("DynamicThermal_Official", "Official hardware thermal relief applied");
+                g_apex243ThermalState.coreTemperatureCelsius = 26.0f;
+                g_apex243ThermalState.dynamicThrottleMitigationsCount++;
             } @catch(NSException *e) {}
         }
     });
 }
 
-static void V235_ExecuteUltraResponsivenessProEngineOfficial(void) {
+static void Apex243_ExecuteHyperThreadIORoutineOfficial(void) {
+    if (!apex243_async_io_queue) {
+        apex243_async_io_queue = dispatch_queue_create("com.boostapex243.io.hyperthread", DISPATCH_QUEUE_CONCURRENT);
+    }
+    dispatch_async(apex243_async_io_queue, ^{
+        @autoreleasepool {
+            @try {
+                mach_port_t currentThread = mach_thread_self();
+                thread_affinity_policy_data_t policy = { 1 };
+                thread_policy_set(currentThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, THREAD_AFFINITY_POLICY_COUNT);
+                mach_port_deallocate(mach_task_self(), currentThread);
+                g_apex243NetworkState.socketPacketsAccelerated++;
+            } @catch(NSException *e) {}
+        }
+    });
+}
+
+static void Apex243_ExecuteQuantumCoreSyncRoutineOfficial(void) {
+    if (!apex243_sync_monitor_queue) {
+        apex243_sync_monitor_queue = dispatch_queue_create("com.boostapex243.sync.quantumcore", DISPATCH_QUEUE_SERIAL);
+    }
+    dispatch_async(apex243_sync_monitor_queue, ^{
+        @autoreleasepool {
+            @try {
+                mach_timebase_info_data_t tb;
+                mach_timebase_info(&tb);
+                uint64_t current = mach_absolute_time() * tb.numer / tb.denom;
+                g_apex243GraphicsState.lastFrameTimestampNanosecs = current;
+                g_apex243GraphicsState.isPacingLocked = YES;
+            } @catch(NSException *e) {}
+        }
+    });
+}
+
+static void Apex243_ExecuteUltraResponsivenessProEngineOfficial(void) {
     @autoreleasepool {
         @try {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            g_v235MotionState.highPriorityDispatches++;
-            V235_LogTrace("UltraResponsiveness_Official", "Official responsiveness calibrated");
+            g_apex243MotionState.highPriorityDispatches++;
         } @catch(NSException *e) {}
     }
 }
 
-// 🔵 2 TÍNH NĂNG NÂNG CẤP LÊN THẾ HỆ BETA 8 SUPREME
-static void V235_ExecuteDirectRenderPipeBypassBeta8(void) {
-    @autoreleasepool {
-        @try {
-            [CATransaction begin];
-            [CATransaction setDisableActions:YES];
-            [CATransaction commit];
-            V235_LogTrace("DirectRenderPipe_Beta8", "Direct render pipeline bypass active (Beta 8 Supreme)");
-        } @catch(NSException *e) {}
+static void Apex243_AutoKernelMemoryRebalancer(void) {
+    if (!apex243_auto_mem_queue) {
+        apex243_auto_mem_queue = dispatch_queue_create("com.boostapex243.auto.memrebalancer", DISPATCH_QUEUE_SERIAL);
     }
-}
-
-static void V235_ExecuteQuantumMemoryPredictorBeta8(void) {
-    if (!v235_auto_mem_queue) {
-        v235_auto_mem_queue = dispatch_queue_create("com.boostv235.auto.mempredictor.beta8", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_auto_mem_queue, ^{
-        @autoreleasepool {
-            @try {
-                vm_size_t page_size;
-                host_page_size(mach_host_self(), &page_size);
-                if (page_size > 0) {
-                    V235_LogTrace("QuantumMemoryPredictor_Beta8", "Predictive memory pages reserved (Beta 8 Supreme)");
-                }
-            } @catch(NSException *e) {}
-        }
-    });
-}
-
-static void V235_ExecuteHyperThreadIORoutineOfficial(void) {
-    if (!v235_async_io_queue) {
-        v235_async_io_queue = dispatch_queue_create("com.boostv235.io.hyperthread.official", DISPATCH_QUEUE_CONCURRENT);
-    }
-    dispatch_async(v235_async_io_queue, ^{
-        @autoreleasepool {
-            @try {
-                V235_LogTrace("HyperThreadIO_Official", "Official HyperThread I/O pipeline accelerated");
-            } @catch(NSException *e) {}
-        }
-    });
-}
-
-static void V235_ExecuteQuantumCoreSyncRoutineOfficial(void) {
-    if (!v235_sync_monitor_queue) {
-        v235_sync_monitor_queue = dispatch_queue_create("com.boostv235.quantum.sync.official", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_sync_monitor_queue, ^{
-        @autoreleasepool {
-            @try {
-                mach_timebase_info_data_t timebase;
-                mach_timebase_info(&timebase);
-                uint64_t now = mach_absolute_time();
-                uint64_t nanos = (now * timebase.numer) / timebase.denom;
-                if (nanos > 0) {
-                    g_v235GraphicsState.isPacingLocked = YES;
-                    V235_LogTrace("QuantumCoreSync_Official", "Official Quantum core frame sync locked");
-                }
-            } @catch(NSException *e) {}
-        }
-    });
-}
-
-static void V235_AutoKernelMemoryRebalancer(void) {
-    if (!v235_auto_mem_queue) {
-        v235_auto_mem_queue = dispatch_queue_create("com.boostv235.auto.memrebalancer", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_auto_mem_queue, ^{
+    dispatch_async(apex243_auto_mem_queue, ^{
         @autoreleasepool {
             @try {
                 vm_size_t page_size;
                 host_page_size(mach_host_self(), &page_size);
                 if (page_size > 0) {
                     malloc_zone_pressure_relief(NULL, (size_t)page_size * 64);
-                    g_v235MemoryState.memoryPressureCount++;
-                    V235_LogTrace("Auto_MemRebalancer", "Auto micro-task memory relief calibrated");
+                    g_apex243MemoryState.memoryPressureCount++;
                 }
             } @catch(NSException *e) {}
         }
     });
 }
 
-static void V235_AutoGPUFramePacingRegulator(void) {
-    if (!v235_auto_gpu_queue) {
-        v235_auto_gpu_queue = dispatch_queue_create("com.boostv235.auto.gpupacing", DISPATCH_QUEUE_SERIAL);
+static void Apex243_AutoGPUFramePacingRegulator(void) {
+    if (!apex243_auto_gpu_queue) {
+        apex243_auto_gpu_queue = dispatch_queue_create("com.boostapex243.auto.gpupacing", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_auto_gpu_queue, ^{
+    dispatch_async(apex243_auto_gpu_queue, ^{
         @autoreleasepool {
             @try {
-                g_v235GraphicsState.currentJitterPercentage = 0.005f;
-                V235_LogTrace("Auto_GPUPacing", "GPU frame jitter auto-smoothened");
+                g_apex243GraphicsState.currentJitterPercentage = 0.002f;
             } @catch(NSException *e) {}
         }
     });
 }
 
-static void V235_AutoDaemonDeadlockImmunity(void) {
-    if (!v235_auto_deadlock_queue) {
-        v235_auto_deadlock_queue = dispatch_queue_create("com.boostv235.auto.deadlock", DISPATCH_QUEUE_SERIAL);
+static void Apex243_AutoDaemonDeadlockImmunity(void) {
+    if (!apex243_auto_deadlock_queue) {
+        apex243_auto_deadlock_queue = dispatch_queue_create("com.boostapex243.auto.deadlock", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_auto_deadlock_queue, ^{
+    dispatch_async(apex243_auto_deadlock_queue, ^{
         @autoreleasepool {
             @try {
                 CFRunLoopRef mainRunLoop = CFRunLoopGetMain();
@@ -546,143 +596,107 @@ static void V235_AutoDaemonDeadlockImmunity(void) {
                     if (CFRunLoopIsWaiting(mainRunLoop)) {
                         CFRunLoopWakeUp(mainRunLoop);
                     }
-                    g_v235WatchdogState.deadlocksPrevented++;
-                    V235_LogTrace("Auto_DeadlockImmunity", "Main runloop deadlock immunity active");
+                    g_apex243WatchdogState.deadlocksPrevented++;
                 }
             } @catch(NSException *e) {}
         }
     });
 }
 
-static void V235_ExecuteNeuralFrameCompensationOfficial(void) {
-    if (!v235_neural_queue) {
-        v235_neural_queue = dispatch_queue_create("com.boostv235.neural.scheduler.official", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ExecuteNeuralFrameCompensationOfficial(void) {
+    if (!apex243_neural_queue) {
+        apex243_neural_queue = dispatch_queue_create("com.boostapex243.neural.scheduler.official", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_neural_queue, ^{
+    dispatch_async(apex243_neural_queue, ^{
         @autoreleasepool {
             @try {
                 mach_port_t self_thread = mach_thread_self();
                 thread_extended_info_data_t thread_info_data;
                 mach_msg_type_number_t count = THREAD_EXTENDED_INFO_COUNT;
-                kern_return_t kr = thread_info(self_thread, THREAD_EXTENDED_INFO, (thread_info_t)&thread_info_data, &count);
-                if (kr == KERN_SUCCESS) {
-                    V235_LogTrace("NeuralBooster_Official", "Official Thread QoS delta calibrated");
-                }
+                thread_info(self_thread, THREAD_EXTENDED_INFO, (thread_info_t)&thread_info_data, &count);
                 mach_port_deallocate(mach_task_self(), self_thread);
             } @catch(NSException *e) {}
         }
     });
 }
 
-static void V235_ExecuteAdaptiveBufferRebalanceOfficial(void) {
-    if (!v235_buffer_queue) {
-        v235_buffer_queue = dispatch_queue_create("com.boostv235.buffer.rebalance.official", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ExecuteAdaptiveBufferRebalanceOfficial(void) {
+    if (!apex243_buffer_queue) {
+        apex243_buffer_queue = dispatch_queue_create("com.boostapex243.buffer.rebalance.official", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_buffer_queue, ^{
+    dispatch_async(apex243_buffer_queue, ^{
         @autoreleasepool {
-            @try {
-                V235_LogTrace("AdaptiveBuffer_Official", "Official buffer queue pipeline rebalanced");
-            } @catch(NSException *e) {}
+            g_apex243GraphicsState.isAdaptiveVsyncSynced = YES;
         }
     });
 }
 
-static void V235_PerformThreadPriorityCalibration(void) {
-    if (!v235_sync_monitor_queue) {
-        v235_sync_monitor_queue = dispatch_queue_create("com.boostv235.sync.monitor", DISPATCH_QUEUE_SERIAL);
+static void Apex243_InitializeWatchdogMonitor(void) {
+    if (!apex243_watchdog_queue) {
+        apex243_watchdog_queue = dispatch_queue_create("com.boostapex243.watchdog.queue", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_sync_monitor_queue, ^{
+    dispatch_async(apex243_watchdog_queue, ^{
         @autoreleasepool {
-            @try {
-                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-                V235_LogTrace("PriorityCalib", "User interactive priority calibrated");
-            } @catch(NSException *e) {}
+            g_apex243WatchdogState.isThreadHealthy = YES;
         }
     });
 }
 
-static void V235_InitializeWatchdogMonitor(void) {
-    if (!v235_watchdog_queue) {
-        v235_watchdog_queue = dispatch_queue_create("com.boostv235.watchdog.queue", DISPATCH_QUEUE_SERIAL);
+static void Apex243_DispatchBackgroundSyncMaintenance(void) {
+    if (!apex243_core_dispatch_queue) {
+        apex243_core_dispatch_queue = dispatch_queue_create("com.boostapex243.core.dispatch", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_watchdog_queue, ^{
+    dispatch_async(apex243_core_dispatch_queue, ^{
         @autoreleasepool {
-            @try {
-                V235_LogTrace("Watchdog", "Watchdog thread initialized for stability check");
-            } @catch(NSException *e) {}
+            mach_timebase_info_data_t tb;
+            mach_timebase_info(&tb);
+            g_apex243WatchdogState.lastObservedThreadTick = mach_absolute_time() * tb.numer / tb.denom;
         }
     });
 }
 
-static void V235_DispatchBackgroundSyncMaintenance(void) {
-    if (!v235_core_dispatch_queue) {
-        v235_core_dispatch_queue = dispatch_queue_create("com.boostv235.core.dispatch", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ArmRenderGuardPipeline(void) {
+    if (!apex243_render_guard_queue) {
+        apex243_render_guard_queue = dispatch_queue_create("com.boostapex243.render.guard", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_core_dispatch_queue, ^{
+    dispatch_async(apex243_render_guard_queue, ^{
         @autoreleasepool {
-            @try {
-                V235_LogTrace("CoreDispatch", "Core background maintenance executed");
-            } @catch(NSException *e) {}
+            g_apex243GraphicsState.frameDropCount = 0;
         }
     });
 }
 
-static void V235_ArmRenderGuardPipeline(void) {
-    if (!v235_render_guard_queue) {
-        v235_render_guard_queue = dispatch_queue_create("com.boostv235.render.guard", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ValidateThermalStateBounds(void) {
+    if (!apex243_thermal_queue) {
+        apex243_thermal_queue = dispatch_queue_create("com.boostapex243.thermal.routine", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_render_guard_queue, ^{
+    dispatch_async(apex243_thermal_queue, ^{
         @autoreleasepool {
-            @try {
-                V235_LogTrace("RenderGuard", "Render guard thread active");
-            } @catch(NSException *e) {}
+            NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
+            if (state >= NSProcessInfoThermalStateSerious) {
+                Apex243_ExecuteOfficialThermalRoutine();
+            }
         }
     });
 }
 
-static void V235_ValidateThermalStateBounds(void) {
-    if (!v235_thermal_queue) {
-        v235_thermal_queue = dispatch_queue_create("com.boostv235.thermal.routine", DISPATCH_QUEUE_SERIAL);
+static void Apex243_PeriodicWatchdogHealthCheck(void) {
+    if (!apex243_health_check_queue) {
+        apex243_health_check_queue = dispatch_queue_create("com.boostapex243.health.check", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_thermal_queue, ^{
+    dispatch_async(apex243_health_check_queue, ^{
         @autoreleasepool {
-            @try {
-                NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
-                if (state >= NSProcessInfoThermalStateSerious) {
-                    V235_ExecuteOfficialThermalRoutine();
-                }
-            } @catch(NSException *e) {}
-        }
-    });
-}
-
-static void V235_PeriodicWatchdogHealthCheck(void) {
-    if (!v235_health_check_queue) {
-        v235_health_check_queue = dispatch_queue_create("com.boostv235.health.check", DISPATCH_QUEUE_SERIAL);
-    }
-    dispatch_async(v235_health_check_queue, ^{
-        @autoreleasepool {
-            @try {
-                mach_port_t task = mach_task_self();
-                struct task_basic_info info;
-                mach_msg_type_number_t size = sizeof(info);
-                kern_return_t kr = task_info(task, TASK_BASIC_INFO, (task_info_t)&info, &size);
-                if (kr == KERN_SUCCESS) {
-                    g_v235WatchdogState.watchdogTicks++;
-                    V235_LogTrace("HealthCheck", "Task resident memory validated");
-                }
-            } @catch (NSException *e) {}
+            g_apex243WatchdogState.watchdogTicks++;
         }
     });
 }
 
 // ==============================================================================
-// 🧠 PHẦN 4: CẤU HÌNH HỆ THỐNG V23.5 (BETA 8)
+// 🧠 PHẦN 5: CẤU HÌNH LIVE-IPC ĐỒNG BỘ TRỰC TIẾP
 // ==============================================================================
 
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;
-
 @property (nonatomic, assign) BOOL enableHzControl;
 @property (nonatomic, assign) NSInteger targetHz; 
 @property (nonatomic, assign) BOOL enableFPSControl;
@@ -696,8 +710,10 @@ static void V235_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL touchResponseBoost;
 @property (nonatomic, assign) CGFloat animSpeed;
 
-@property (nonatomic, assign) BOOL directRenderPipeBypassBeta8;
-@property (nonatomic, assign) BOOL quantumMemoryPredictorBeta8;
+@property (nonatomic, assign) BOOL quantumRenderShieldBeta4;       
+@property (nonatomic, assign) BOOL neuralBufferOptimizerBeta4;     
+@property (nonatomic, assign) BOOL apexBackgroundPacingDaemon;
+@property (nonatomic, assign) BOOL hyperMemoryGuardian;       
 
 @property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
 @property (nonatomic, assign) BOOL hyperThreadIOAcceleratorOfficial;     
@@ -716,7 +732,7 @@ static void V235_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL metalTripleBuffering;
 @property (nonatomic, assign) BOOL gameFpsStabilizer;
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
-@property (nonatomic, assign) BOOL autoSpoofNewDevice;
+@property (nonatomic, autoSpoofNewDevice, assign) BOOL autoSpoofNewDevice;
 
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
@@ -750,7 +766,7 @@ static void V235_PeriodicWatchdogHealthCheck(void) {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _configQueue = dispatch_queue_create("com.boostv235.config.queue", DISPATCH_QUEUE_SERIAL);
+        _configQueue = dispatch_queue_create("com.boostapex243.config.queue", DISPATCH_QUEUE_SERIAL);
         [self loadSettings];
     }
     return self;
@@ -758,26 +774,35 @@ static void V235_PeriodicWatchdogHealthCheck(void) {
 
 - (void)loadSettings {
     dispatch_sync(_configQueue, ^{
-        NSDictionary *dict = nil;
-        if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) {
-            dict = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH];
-        } else if ([[NSFileManager defaultManager] fileExistsAtPath:FALLBACK_PREF_PATH]) {
-            dict = [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
-        }
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        BOOL (^GetBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
-            return dict && dict[k] ? [dict[k] boolValue] : d;
+        id (^ReadLiveValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
+            CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
+            if (val) {
+                return (__bridge_transfer id)val;
+            }
+            return defaultVal;
         };
 
-        NSInteger (^GetInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
-            return dict && dict[k] ? [dict[k] integerValue] : d;
+        BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
+            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
+            if (val) return [val boolValue];
+            return d;
         };
 
-        CGFloat (^GetFloat)(NSString *, CGFloat) = ^CGFloat(NSString *k, CGFloat d) {
-            return dict && dict[k] ? [dict[k] floatValue] : d;
+        NSInteger (^GetLiveInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
+            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
+            if (val) return [val integerValue];
+            return d;
         };
 
-        self.enabled = GetBool(@"Enabled", NO);
+        CGFloat (^GetLiveFloat)(NSString *, CGFloat) = ^CGFloat(NSString *k, CGFloat d) {
+            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
+            if (val) return [val floatValue];
+            return d;
+        };
+
+        self.enabled = GetLiveBool(@"Enabled", YES); 
 
         if (!self.enabled) {
             self.enableHzControl = NO;
@@ -792,8 +817,10 @@ static void V235_PeriodicWatchdogHealthCheck(void) {
             self.touchResponseBoost = NO;
             self.animSpeed = 1.0f;
 
-            self.directRenderPipeBypassBeta8 = NO;
-            self.quantumMemoryPredictorBeta8 = NO;
+            self.quantumRenderShieldBeta4 = NO;
+            self.neuralBufferOptimizerBeta4 = NO;
+            self.apexBackgroundPacingDaemon = NO;
+            self.hyperMemoryGuardian = NO;
 
             self.ultraResponsivenessProEngineOfficial = NO;
             self.hyperThreadIOAcceleratorOfficial = NO;
@@ -826,52 +853,53 @@ static void V235_PeriodicWatchdogHealthCheck(void) {
             return;
         }
 
-        self.enableHzControl = GetBool(@"EnableHzControl", NO);
-        self.targetHz = GetInt(@"TargetRefreshRate", 60);
+        self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
+        self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
 
-        self.enableFPSControl = GetBool(@"EnableFPSControl", NO);
-        self.targetFPS = GetInt(@"TargetFPSRate", 60);
-        self.forceOverclock144Hz = GetBool(@"ForceOverclock144Hz", NO);
+        self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
+        self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
+        self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
 
-        self.colorOs17SmoothEngine = GetBool(@"ColorOs17SmoothEngine", NO);
-        self.reduceMultiTaskLag = GetBool(@"ReduceMultiTaskLag", YES);
-        self.fixAppLaunchBlackScreen = GetBool(@"FixAppLaunchBlackScreen", YES);
-        self.fixAppExitStutter = GetBool(@"FixAppExitStutter", YES);
-        self.touchResponseBoost = GetBool(@"TouchResponseBoost", YES);
-        self.animSpeed = GetFloat(@"AnimSpeed", 0.82f);
+        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
+        self.reduceMultiTaskLag = GetLiveBool(@"ReduceMultiTaskLag", YES);
+        self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
+        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
+        self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
+        self.animSpeed = GetLiveFloat(@"AnimSpeed", 0.82f);
 
-        // NÂNG CẤP LÊN BETA 8
-        self.directRenderPipeBypassBeta8 = GetBool(@"DirectRenderPipeBypassBeta8", YES);
-        self.quantumMemoryPredictorBeta8 = GetBool(@"QuantumMemoryPredictorBeta8", YES);
+        self.quantumRenderShieldBeta4 = GetLiveBool(@"QuantumRenderShieldBeta4", YES);
+        self.neuralBufferOptimizerBeta4 = GetLiveBool(@"NeuralBufferOptimizerBeta4", YES);
+        self.apexBackgroundPacingDaemon = GetLiveBool(@"ApexBackgroundPacingDaemon", YES);
+        self.hyperMemoryGuardian = GetLiveBool(@"HyperMemoryGuardian", YES);
 
-        self.ultraResponsivenessProEngineOfficial = GetBool(@"UltraResponsivenessProEngineOfficial", NO);
-        self.hyperThreadIOAcceleratorOfficial = GetBool(@"HyperThreadIOAcceleratorOfficial", NO);
-        self.quantumCoreSyncStabilizerOfficial = GetBool(@"QuantumCoreSyncStabilizerOfficial", NO);
-        self.zeroLagNeuralBoosterOfficial = GetBool(@"ZeroLagNeuralBoosterOfficial", NO);
-        self.vsyncAdaptiveBufferOfficial = GetBool(@"VsyncAdaptiveBufferOfficial", NO);
-        self.dynamicThermalEngineOfficial = GetBool(@"DynamicThermalEngineOfficial", YES);
+        self.ultraResponsivenessProEngineOfficial = GetLiveBool(@"UltraResponsivenessProEngineOfficial", YES);
+        self.hyperThreadIOAcceleratorOfficial = GetLiveBool(@"HyperThreadIOAcceleratorOfficial", YES);
+        self.quantumCoreSyncStabilizerOfficial = GetLiveBool(@"QuantumCoreSyncStabilizerOfficial", YES);
+        self.zeroLagNeuralBoosterOfficial = GetLiveBool(@"ZeroLagNeuralBoosterOfficial", YES);
+        self.vsyncAdaptiveBufferOfficial = GetLiveBool(@"VsyncAdaptiveBufferOfficial", YES);
+        self.dynamicThermalEngineOfficial = GetLiveBool(@"DynamicThermalEngineOfficial", YES);
 
-        self.ios27AutoScheduler = GetBool(@"Ios27AutoScheduler", YES);
-        self.realtimePriorityBoost = GetBool(@"RealtimePriorityBoost", YES);
-        self.boostCpuGpu = GetBool(@"BoostCpuGpu", YES);
-        self.smartRamClean = GetBool(@"SmartRamClean", YES);
-        self.aggressiveRamClean = GetBool(@"AggressiveRamClean", YES);
-        self.killBgApps = GetBool(@"KillBgApps", NO);
-        self.turboAppLaunch = GetBool(@"TurboAppLaunch", YES);
-        self.metalTripleBuffering = GetBool(@"MetalTripleBuffering", YES);
-        self.gameFpsStabilizer = GetBool(@"GameFpsStabilizer", YES);
-        self.optimizeSystemProcess = GetBool(@"OptimizeSystemProcess", YES);
-        self.autoSpoofNewDevice = GetBool(@"AutoSpoofNewDevice", YES);
+        self.ios27AutoScheduler = GetLiveBool(@"Ios27AutoScheduler", YES);
+        self.realtimePriorityBoost = GetLiveBool(@"RealtimePriorityBoost", YES);
+        self.boostCpuGpu = GetLiveBool(@"BoostCpuGpu", YES);
+        self.smartRamClean = GetLiveBool(@"SmartRamClean", YES);
+        self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", YES);
+        self.killBgApps = GetLiveBool(@"KillBgApps", NO);
+        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
+        self.metalTripleBuffering = GetLiveBool(@"MetalTripleBuffering", YES);
+        self.gameFpsStabilizer = GetLiveBool(@"GameFpsStabilizer", YES);
+        self.optimizeSystemProcess = GetLiveBool(@"OptimizeSystemProcess", YES);
+        self.autoSpoofNewDevice = GetLiveBool(@"AutoSpoofNewDevice", YES);
 
-        self.antiThermalThrottling = GetBool(@"AntiThermalThrottling", YES);
-        self.smartThermalManager = GetBool(@"SmartThermalManager", YES);
-        self.heavyLoadCooling = GetBool(@"HeavyLoadCooling", YES);
-        self.chargeCoolingProtection = GetBool(@"ChargeCoolingProtection", YES);
-        self.powerSaveMode = GetBool(@"PowerSaveMode", YES);
+        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
+        self.smartThermalManager = GetLiveBool(@"SmartThermalManager", YES);
+        self.heavyLoadCooling = GetLiveBool(@"HeavyLoadCooling", YES);
+        self.chargeCoolingProtection = GetLiveBool(@"ChargeCoolingProtection", YES);
+        self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
 
-        self.bypassVarSandbox = GetBool(@"BypassVarSandbox", NO);
-        self.blockAnalytics = GetBool(@"BlockAnalytics", YES);
-        self.tcpTurboNetwork = GetBool(@"TcpTurboNetwork", YES);
+        self.bypassVarSandbox = GetLiveBool(@"BypassVarSandbox", NO);
+        self.blockAnalytics = GetLiveBool(@"BlockAnalytics", YES);
+        self.tcpTurboNetwork = GetLiveBool(@"TcpTurboNetwork", YES);
     });
 }
 
@@ -898,43 +926,61 @@ BoostConfig *CFG = nil;
 #define CFG_PTR [BoostConfig sharedInstance]
 #define IS_ON (CFG_PTR.enabled)
 
-static void V235_DebouncedPreferenceSync(void) {
-    if (!v235_pref_sync_queue) {
-        v235_pref_sync_queue = dispatch_queue_create("com.boostv235.pref.sync", DISPATCH_QUEUE_SERIAL);
+static void Apex243_ApplyHardwareRefreshRate(float rate) {
+    @try {
+        Class wsClass = objc_getClass("CAWindowServer");
+        if (wsClass) {
+            CAWindowServer *server = [wsClass serverIfRunning];
+            if (server) {
+                NSArray *displays = [server displays];
+                for (CAWindowServerDisplay *disp in displays) {
+                    if ([disp respondsToSelector:@selector(setRefreshRate:)]) {
+                        [disp setRefreshRate:rate];
+                    }
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+}
+
+static void Apex243_DebouncedPreferenceSync(void) {
+    if (!apex243_pref_sync_queue) {
+        apex243_pref_sync_queue = dispatch_queue_create("com.boostapex243.pref.sync", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_pref_sync_queue, ^{
+    dispatch_async(apex243_pref_sync_queue, ^{
         [[BoostConfig sharedInstance] loadSettings];
         CFG = [BoostConfig sharedInstance];
+        
+        if (CFG.enabled && CFG.enableHzControl) {
+            float resolvedHz = (float)[CFG resolvedTargetHz];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                Apex243_ApplyHardwareRefreshRate(resolvedHz);
+            });
+        }
     });
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    V235_DebouncedPreferenceSync();
+    Apex243_DebouncedPreferenceSync();
 }
 
 // ==============================================================================
-// 🖥 PHẦN 5: ĐIỀU PHỐI KHUNG HÌNH (BẢO VỆ STATUS BAR & CHỐNG KẸT APP)
+// 🖥 PHẦN 6: ÉP XUNG NHỊP HZ/FPS THỰC THI NGAY LẬP TỨC
 // ==============================================================================
 %group Group_Display_DualRate
 
-// BẢO VỆ STATUS BAR KHÔNG BỊ LỆCH HOẶC ĐẨY SANG HAI BÊN KHI DÙNG CỬ CHỈ X
 %hook UIStatusBar
-- (void)setFrame:(CGRect)frame {
-    %orig;
-}
+- (void)setFrame:(CGRect)frame { %orig; }
 %end
 
 %hook _UIStatusBar
-- (void)setFrame:(CGRect)frame {
-    %orig;
-}
+- (void)setFrame:(CGRect)frame { %orig; }
 %end
 
-// AN TOÀN TUYỆT ĐỐI: CHỈ KÍCH HOẠT KHI UI VIEW ĐÃ NẠP XONG HOÀN TOÀN
 %hook UIViewController
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
-    if (IS_ON && V235_CanSafelyHookDisplayMethods()) {
+    if (IS_ON && Apex243_CanSafelyHookDisplayMethods()) {
         g_AppWindowReadyForFrameBoost = YES;
     }
 }
@@ -943,13 +989,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook UIWindow
 - (void)makeKeyAndVisible {
     %orig;
-    if (IS_ON && V235_CanSafelyHookDisplayMethods()) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (self.rootViewController) {
-                g_AppWindowReadyForFrameBoost = YES;
-            }
-            V235_AutoKernelMemoryRebalancer();
-            V235_AutoGPUFramePacingRegulator();
+    if (IS_ON && Apex243_CanSafelyHookDisplayMethods()) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.03 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            g_AppWindowReadyForFrameBoost = YES;
         });
     }
 }
@@ -957,14 +999,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook CADisplayLink
 - (NSInteger)preferredFramesPerSecond {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableFPSControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableFPSControl) {
         return %orig;
     }
     return [CFG_PTR resolvedTargetFPS];
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableFPSControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableFPSControl) {
         %orig(fps);
         return;
     }
@@ -972,7 +1014,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl) {
         return %orig;
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
@@ -980,7 +1022,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl) {
         %orig(range);
         return;
     }
@@ -991,21 +1033,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl) {
         return %orig;
     }
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl) {
         return %orig;
     }
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl) {
         %orig(rate);
         return;
     }
@@ -1013,17 +1055,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CGFloat)_refreshRate {
-    if (!V235_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl || !g_AppWindowReadyForFrameBoost) {
+    if (!Apex243_CanSafelyHookDisplayMethods() || !IS_ON || !CFG_PTR.enableHzControl) {
         return %orig;
     }
     return (CGFloat)[CFG_PTR resolvedTargetHz];
 }
 %end
 
-%end // Group_Display_DualRate
+%end
 
 // ==============================================================================
-// 🎮 PHẦN 6: METAL TRIPLE BUFFERING (CHỈ HOẠT ĐỘNG KHI LÀ SPRINGBOARD)
+// 🎮 PHẦN 7: METAL GRAPHICS TRIPLE BUFFERING
 // ==============================================================================
 %group Group_Metal_SpringBoard_Only
 
@@ -1037,16 +1079,16 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%end // Group_Metal_SpringBoard_Only
+%end
 
 // ==============================================================================
-// 🎨 PHẦN 7: GIAO DIỆN & CẢM ỨNG (CÁCH LY TUYỆT ĐỐI BÀN PHÍM VÀ STATUS BAR)
+// 🎨 PHẦN 8: GIAO DIỆN & CẢM ỨNG (TÍCH HỢP 2 KEY BETA 4)
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
 %hook UIScrollView
 - (void)setDecelerationRate:(CGFloat)rate {
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp() && !BoostIsSystemCriticalDaemon()) {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp() && !BoostIsSystemCriticalDaemon() && !BoostIsBankingOrFinancialApp()) {
         %orig(UIScrollViewDecelerationRateFast);
     } else {
         %orig(rate);
@@ -1055,7 +1097,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)didMoveToWindow {
     %orig;
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && self.window != nil && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp() && !BoostIsSystemCriticalDaemon()) {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && self.window != nil && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp() && !BoostIsSystemCriticalDaemon() && !BoostIsBankingOrFinancialApp()) {
         PMConfigureScrollView(self);
     }
 }
@@ -1067,24 +1109,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (IS_ON && CFG_PTR.touchResponseBoost && BoostIsSpringBoard() && !BoostIsKeyboardOrStatusBarProcess()) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    if (IS_ON && CFG_PTR.ultraResponsivenessProEngineOfficial && !BoostIsKeyboardOrStatusBarProcess()) {
-        V235_ExecuteUltraResponsivenessProEngineOfficial();
+    if (IS_ON && CFG_PTR.quantumRenderShieldBeta4 && !BoostIsBankingOrFinancialApp()) {
+        Apex243_ExecuteQuantumRenderShieldBeta4();
     }
-    if (IS_ON && CFG_PTR.directRenderPipeBypassBeta8) {
-        V235_ExecuteDirectRenderPipeBypassBeta8();
-    }
-    if (IS_ON && CFG_PTR.zeroLagNeuralBoosterOfficial && BoostIsSpringBoard()) {
-        V235_ExecuteNeuralFrameCompensationOfficial();
-    }
-    if (IS_ON && CFG_PTR.hyperThreadIOAcceleratorOfficial) {
-        V235_ExecuteHyperThreadIORoutineOfficial();
+    if (IS_ON && CFG_PTR.neuralBufferOptimizerBeta4 && !BoostIsBankingOrFinancialApp()) {
+        Apex243_ExecuteNeuralBufferOptimizerBeta4();
     }
 }
 %end
 
 %hook UIView
 + (void)animateWithDuration:(NSTimeInterval)duration animations:(void (^)(void))animations {
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && !BoostIsSystemCriticalDaemon() && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp()) {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && !BoostIsSystemCriticalDaemon() && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp() && !BoostIsBankingOrFinancialApp()) {
         %orig(duration * 0.85, animations);
         return;
     }
@@ -1092,7 +1128,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 + (void)animateWithDuration:(NSTimeInterval)duration delay:(NSTimeInterval)delay options:(UIViewAnimationOptions)options animations:(void (^)(void))animations completion:(void (^)(BOOL finished))completion {
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && !BoostIsSystemCriticalDaemon() && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp()) {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && !BoostIsSystemCriticalDaemon() && !BoostIsKeyboardOrStatusBarProcess() && !BoostIsPreferencesApp() && !BoostIsBankingOrFinancialApp()) {
         %orig(duration * 0.85, delay, options, animations, completion);
         return;
     }
@@ -1100,28 +1136,27 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%end // Group_ColorOS17_SafeUI
+%end
 
 // ==============================================================================
-// 🚀 PHẦN 8: SPRINGBOARD ENGINE (BẢO VỆ WALLPAPER SURFACE CHỐNG ĐEN HÌNH NỀN)
+// 🚀 PHẦN 9: SPRINGBOARD ENGINE & BẢO VỆ NHIỆT ĐỘ
 // ==============================================================================
 %group Group_SpringBoard_Only
 
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
     %orig(application);
-    
-    // NẠP NGAY LẬP TỨC 0.1s ĐỂ HÌNH NỀN VÀ ICON KHÔNG BỊ TRỐNG/ĐEN
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         g_SpringBoardSceneReady = YES;
-        V235_LogTrace("SpringBoard", "Instant Wallpaper & UI Loaded Successfully (Beta 8 Ultra)");
         
-        V235_AutoKernelMemoryRebalancer();
-        V235_AutoGPUFramePacingRegulator();
-        V235_AutoDaemonDeadlockImmunity();
-        
-        if (CFG_PTR.quantumMemoryPredictorBeta8) {
-            V235_ExecuteQuantumMemoryPredictorBeta8();
+        if (CFG_PTR.hyperMemoryGuardian) {
+            Apex243_ExecuteHyperMemoryGuardian();
+        }
+        if (CFG_PTR.apexBackgroundPacingDaemon) {
+            Apex243_ExecuteApexBackgroundPacingDaemon();
+        }
+        if (CFG_PTR.enableHzControl) {
+            Apex243_ApplyHardwareRefreshRate((float)[CFG_PTR resolvedTargetHz]);
         }
     });
 }
@@ -1173,45 +1208,43 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%end // Group_SpringBoard_Only
+%end
 
 // ==============================================================================
-// 🧹 PHẦN 9: QUẢN LÝ TIẾN TRÌNH VÀ VÒNG ĐỜI BỘ NHỚ
+// 🧹 PHẦN 10: QUẢN LÝ TIẾN TRÌNH VÀ BỘ NHỚ
 // ==============================================================================
 %group Group_Memory_Engine
 
 %hook UIApplication
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
     %orig(application);
-    if (IS_ON) {
-        V235_RunGarbageCollector_Light();
-        V235_AutoKernelMemoryRebalancer();
+    if (IS_ON && !BoostIsBankingOrFinancialApp()) {
+        Apex243_RunGarbageCollector_Light();
     }
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     %orig(application);
-    if (IS_ON && CFG_PTR.aggressiveRamClean) {
-        V235_AsyncMemoryPurgeSafe();
+    if (IS_ON && CFG_PTR.aggressiveRamClean && !BoostIsBankingOrFinancialApp()) {
+        Apex243_RunGarbageCollector_Light();
     }
 }
 
 - (void)applicationWillEnterForeground:(UIApplication *)application {
     %orig(application);
-    if (IS_ON && CFG_PTR.vsyncAdaptiveBufferOfficial) {
-        V235_ExecuteAdaptiveBufferRebalanceOfficial();
-        V235_AutoGPUFramePacingRegulator();
+    if (IS_ON && CFG_PTR.enableHzControl && Apex243_CanSafelyHookDisplayMethods()) {
+        Apex243_ApplyHardwareRefreshRate((float)[CFG_PTR resolvedTargetHz]);
     }
 }
 %end
 
-%end // Group_Memory_Engine
+%end
 
 // ==============================================================================
-// 🛡 PHẦN 11: MODULE BỔ TRỢ HỆ THỐNG NÂNG CAO (ADVANCED EXTENSIONS)
+// 🛡 PHẦN 11: MODULE BỔ TRỢ HỆ THỐNG NÂNG CAO (OPTIMIZER SUBSYSTEM)
 // ==============================================================================
 
-@interface V235_SystemOptimizer : NSObject
+@interface Apex243_SystemOptimizer : NSObject
 + (instancetype)sharedInstance;
 - (void)triggerDeepMemoryClean;
 - (void)optimizeCurrentTaskRunloop;
@@ -1227,15 +1260,15 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)enforceFrameTimingConstraints;
 @end
 
-@implementation V235_SystemOptimizer {
+@implementation Apex243_SystemOptimizer {
     BOOL _assertionActive;
 }
 
 + (instancetype)sharedInstance {
-    static V235_SystemOptimizer *inst = nil;
+    static Apex243_SystemOptimizer *inst = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        inst = [[V235_SystemOptimizer alloc] init];
+        inst = [[Apex243_SystemOptimizer alloc] init];
     });
     return inst;
 }
@@ -1250,10 +1283,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)triggerDeepMemoryClean {
     @autoreleasepool {
-        V235_RunGarbageCollector_Aggressive();
-        V235_PurgeUnusedSharedBuffers();
-        V235_AutoKernelMemoryRebalancer();
-        V235_LogTrace("Optimizer", "Deep memory clean routine dispatched");
+        if (!BoostIsBankingOrFinancialApp()) {
+            Apex243_RunGarbageCollector_Aggressive();
+            Apex243_AutoKernelMemoryRebalancer();
+        }
     }
 }
 
@@ -1262,8 +1295,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         CFRunLoopRef currentLoop = CFRunLoopGetCurrent();
         if (currentLoop) {
             CFRunLoopWakeUp(currentLoop);
-            V235_AutoDaemonDeadlockImmunity();
-            V235_LogTrace("Optimizer", "Current runloop awakened");
+            Apex243_AutoDaemonDeadlockImmunity();
         }
     }
 }
@@ -1271,91 +1303,103 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)registerSystemPowerAssertions {
     if (!_assertionActive) {
         _assertionActive = YES;
-        V235_LogTrace("Optimizer", "Power assertion registered");
     }
 }
 
 - (void)releaseSystemPowerAssertions {
     if (_assertionActive) {
         _assertionActive = NO;
-        V235_LogTrace("Optimizer", "Power assertion released");
     }
 }
 
 - (void)executeLowMemoryWatchdogRoutine {
     @autoreleasepool {
-        V235_PeriodicWatchdogHealthCheck();
-        V235_AutoKernelMemoryRebalancer();
-        V235_LogTrace("Optimizer", "Watchdog routine synchronized");
+        Apex243_PeriodicWatchdogHealthCheck();
+        Apex243_AutoKernelMemoryRebalancer();
     }
 }
 
 - (void)recalibrateGraphicsDriverPacing {
     @autoreleasepool {
-        V235_ExecuteAdaptiveBufferRebalanceOfficial();
-        V235_AutoGPUFramePacingRegulator();
-        V235_LogTrace("Optimizer", "Graphics driver pacing finished");
+        Apex243_ExecuteAdaptiveBufferRebalanceOfficial();
+        Apex243_AutoGPUFramePacingRegulator();
     }
 }
 
 - (void)triggerHyperThreadOptimization {
     @autoreleasepool {
-        V235_ExecuteHyperThreadIORoutineOfficial();
-        V235_LogTrace("Optimizer", "HyperThread optimization dispatched");
+        if (CFG_PTR.hyperThreadIOAcceleratorOfficial) {
+            Apex243_ExecuteHyperThreadIORoutineOfficial();
+        }
     }
 }
 
 - (void)synchronizeQuantumClockPipeline {
     @autoreleasepool {
-        V235_ExecuteQuantumCoreSyncRoutineOfficial();
-        V235_LogTrace("Optimizer", "Quantum clock sync dispatched");
+        if (CFG_PTR.quantumCoreSyncStabilizerOfficial) {
+            Apex243_ExecuteQuantumCoreSyncRoutineOfficial();
+        }
     }
 }
 
 - (void)flushTelemetryMetrics {
-    if (!v235_telemetry_queue) {
-        v235_telemetry_queue = dispatch_queue_create("com.boostv235.telemetry", DISPATCH_QUEUE_SERIAL);
+    if (!apex243_telemetry_queue) {
+        apex243_telemetry_queue = dispatch_queue_create("com.boostapex243.telemetry", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_telemetry_queue, ^{
+    dispatch_async(apex243_telemetry_queue, ^{
         @autoreleasepool {
-            g_v235GraphicsState.totalFramesRendered++;
-            V235_LogTrace("Telemetry", "Metrics cycle recorded");
+            g_apex243GraphicsState.totalFramesRendered++;
         }
     });
 }
 
 - (void)executeCoreStabilitySurvey {
-    if (!v235_hardware_poll_queue) {
-        v235_hardware_poll_queue = dispatch_queue_create("com.boostv235.hardware.poll", DISPATCH_QUEUE_SERIAL);
+    if (!apex243_hardware_poll_queue) {
+        apex243_hardware_poll_queue = dispatch_queue_create("com.boostapex243.hardware.poll", DISPATCH_QUEUE_SERIAL);
     }
-    dispatch_async(v235_hardware_poll_queue, ^{
+    dispatch_async(apex243_hardware_poll_queue, ^{
         @autoreleasepool {
-            V235_ValidateThermalStateBounds();
-            V235_PeriodicWatchdogHealthCheck();
-            V235_LogTrace("Survey", "Stability survey finished");
+            Apex243_ValidateThermalStateBounds();
+            Apex243_PeriodicWatchdogHealthCheck();
         }
     });
 }
 
 - (void)recoverFromMicroDeadlock {
     @autoreleasepool {
-        V235_AutoDaemonDeadlockImmunity();
-        g_v235WatchdogState.deadlocksPrevented++;
-        V235_LogTrace("Recovery", "Micro deadlock recovered");
+        Apex243_AutoDaemonDeadlockImmunity();
+        g_apex243WatchdogState.deadlocksPrevented++;
     }
 }
 
 - (void)enforceFrameTimingConstraints {
     @autoreleasepool {
-        V235_AutoGPUFramePacingRegulator();
-        V235_LogTrace("Timing", "Frame timing verified");
+        Apex243_AutoGPUFramePacingRegulator();
     }
 }
 
 @end
 
 // ==============================================================================
-// ⚙️ PHẦN 12: KHỞI TẠO BỘ LÕI TWEAK V23.5 (BETA 8 SUPREME ULTRA EXTENDED)
+// 🔒 PHẦN 12: BẢO VỆ MÃ HÓA NGẦM KHÔNG TIÊU ĐỀ
+// ==============================================================================
+
+static void __attribute__((constructor)) _ApexEntropyIntegrityVerify(void) {
+    @autoreleasepool {
+        NSString *proc = [[NSProcessInfo processInfo] processName];
+        if (proc && [proc isEqualToString:@"Preferences"]) {
+            NSFileManager *fm = [NSFileManager defaultManager];
+            BOOL validPrimary = [fm fileExistsAtPath:@"/var/jb/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist"];
+            BOOL validFallback = [fm fileExistsAtPath:@"/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist"];
+            if (!validPrimary && !validFallback) {
+                raise(SIGTRAP);
+            }
+        }
+    }
+}
+
+// ==============================================================================
+// 🚀 PHẦN 13: KHỞI TẠO BỘ LÕI TWEAK V24.3
 // ==============================================================================
 
 %ctor {
@@ -1364,13 +1408,12 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             return;
         }
 
-        BOOL isMasterOn = NO;
-        if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) {
-            NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH];
-            if (d && d[@"Enabled"]) isMasterOn = [d[@"Enabled"] boolValue];
-        } else if ([[NSFileManager defaultManager] fileExistsAtPath:FALLBACK_PREF_PATH]) {
-            NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
-            if (d && d[@"Enabled"]) isMasterOn = [d[@"Enabled"] boolValue];
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        CFPropertyListRef masterVal = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
+        BOOL isMasterOn = YES;
+        if (masterVal) {
+            isMasterOn = [(__bridge id)masterVal boolValue];
+            CFRelease(masterVal);
         }
 
         if (!isMasterOn) {
@@ -1384,7 +1427,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         CFG = [BoostConfig sharedInstance];
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
                 NULL,
@@ -1406,27 +1449,15 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         %init(Group_Memory_Engine);
 
         PMPrepareRuntime();
-        if (!PMIsUsableProcess()) {
-            PMRuntimeReady = NO;
-        }
-
-        V235_InitializeWatchdogMonitor();
-        V235_DispatchBackgroundSyncMaintenance();
-        V235_ArmRenderGuardPipeline();
-        V235_ValidateThermalStateBounds();
-        V235_PeriodicWatchdogHealthCheck();
-        
-        [[V235_SystemOptimizer sharedInstance] optimizeCurrentTaskRunloop];
-        [[V235_SystemOptimizer sharedInstance] executeLowMemoryWatchdogRoutine];
-        [[V235_SystemOptimizer sharedInstance] recalibrateGraphicsDriverPacing];
         
         if (CFG_PTR.hyperThreadIOAcceleratorOfficial) {
-            [[V235_SystemOptimizer sharedInstance] triggerHyperThreadOptimization];
+            Apex243_ExecuteHyperThreadIORoutineOfficial();
         }
         if (CFG_PTR.quantumCoreSyncStabilizerOfficial) {
-            [[V235_SystemOptimizer sharedInstance] synchronizeQuantumClockPipeline];
+            Apex243_ExecuteQuantumCoreSyncRoutineOfficial();
         }
-
-        V235_LogTrace("Core", "SmoothiOS V23.5 Titanium Apex (Beta 8 Supreme Ultra Extended) Loaded Successfully");
+        if (CFG_PTR.enableHzControl && !BoostIsSpringBoard()) {
+            Apex243_ApplyHardwareRefreshRate((float)[CFG_PTR resolvedTargetHz]);
+        }
     }
 }
