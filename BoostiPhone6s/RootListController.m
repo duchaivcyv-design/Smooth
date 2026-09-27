@@ -6,10 +6,10 @@
 #import <fcntl.h>
 #import <unistd.h>
 
-#define PREF_DOMAIN CFSTR("com.duchaivcy.boostiphone6s")
-#define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
-#define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.duchaivcy.boostiphone6s.plist"
-#define NOTIFY_RELOAD "com.duchaivcy.boostiphone6s/ReloadPrefs"
+#define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
+#define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+#define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+#define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
 
 extern char **environ;
 
