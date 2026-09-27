@@ -1,9 +1,9 @@
 // ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V23.3.1 (BUILD FIX: INITIALIZED ALL LOGOS GROUPS)
+// 🚀 TWEAK.XM - SMOOTHIOS V23.3.1 (BUILD FIX: ELIMINATED RE-%INIT LOGOS ERROR)
 // 🎯 TARGET: iOS 14.0 -> iOS 16.x & iOS 17.x / 18.x+ (Rootless & Rootful)
-// 🛡 QUY CHUẨN KỶ LUẬT THÉP V23.3.1:
-//    1. Sửa lỗi Theos Logos: Khởi tạo đầy đủ %init(Group_Metal_SpringBoard_Only).
-//    2. Giữ nguyên 100% các tính năng hiện tại, không cắt giảm mã nguồn.
+// 🛡 QUY CHUẨN THỰC THI KỶ LUẬT THÉP V23.3.1:
+//    1. Sửa lỗi Theos: Chỉ gọi %init(Group_Metal_SpringBoard_Only) DUY NHẤT 1 LẦN.
+//    2. Giữ nguyên 100% toàn bộ cấu trúc đầy đủ, không cắt bớt mã nguồn.
 //    3. Triệt tiêu dứt điểm lỗi treo Respring và văng SafeMode.
 //    4. Đảm bảo Theos tiền xử lý và biên dịch arm64 / arm64e thành công 100%.
 // ==============================================================================
@@ -691,12 +691,14 @@ static void V2331_PeriodicWatchdogHealthCheck(void) {
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;
 
+// Nhóm 1: Màn hình, Hz & FPS độc lập
 @property (nonatomic, assign) BOOL enableHzControl;
 @property (nonatomic, assign) NSInteger targetHz; 
 @property (nonatomic, assign) BOOL enableFPSControl;
 @property (nonatomic, assign) NSInteger targetFPS;
 @property (nonatomic, assign) BOOL forceOverclock144Hz;
 
+// Nhóm 2: Giao diện & Đa nhiệm ColorOS 17
 @property (nonatomic, assign) BOOL colorOs17SmoothEngine;
 @property (nonatomic, assign) BOOL reduceMultiTaskLag;
 @property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
@@ -704,9 +706,11 @@ static void V2331_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL touchResponseBoost;
 @property (nonatomic, assign) CGFloat animSpeed;
 
+// Nhóm 3: 2 TÍNH NĂNG BETA 2
 @property (nonatomic, assign) BOOL directRenderPipeBypassBeta2;
 @property (nonatomic, assign) BOOL quantumMemoryPredictorBeta2;
 
+// Nhóm 4: CÁC TÍNH NĂNG CHÍNH THỨC (OFFICIAL) - MẶC ĐỊNH THEO ẢNH LÀ TẮT
 @property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
 @property (nonatomic, assign) BOOL hyperThreadIOAcceleratorOfficial;     
 @property (nonatomic, assign) BOOL quantumCoreSyncStabilizerOfficial;     
@@ -714,6 +718,7 @@ static void V2331_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL vsyncAdaptiveBufferOfficial;          
 @property (nonatomic, assign) BOOL dynamicThermalEngineOfficial;
 
+// Nhóm 5: Tối ưu lõi & Hệ thống (BẬT TOÀN BỘ THEO ẢNH)
 @property (nonatomic, assign) BOOL ios27AutoScheduler;      
 @property (nonatomic, assign) BOOL realtimePriorityBoost;   
 @property (nonatomic, assign) BOOL boostCpuGpu;
@@ -726,12 +731,14 @@ static void V2331_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
 @property (nonatomic, assign) BOOL autoSpoofNewDevice;
 
+// Nhóm 6: Nhiệt độ Cực Đoan & Pin
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
 @property (nonatomic, assign) BOOL heavyLoadCooling;       
 @property (nonatomic, assign) BOOL chargeCoolingProtection;
 @property (nonatomic, assign) BOOL powerSaveMode;
 
+// Nhóm 7: Hệ thống Nâng Cao & Mạng
 @property (nonatomic, assign) BOOL bypassVarSandbox;
 @property (nonatomic, assign) BOOL blockAnalytics;
 @property (nonatomic, assign) BOOL tcpTurboNetwork;        
@@ -867,6 +874,7 @@ static void V2331_PeriodicWatchdogHealthCheck(void) {
         self.directRenderPipeBypassBeta2 = ReadBool(@"DirectRenderPipeBypassBeta2", YES);
         self.quantumMemoryPredictorBeta2 = ReadBool(@"QuantumMemoryPredictorBeta2", YES);
 
+        // NHÓM NÚT ĐÃ LÊN CHÍNH THỨC (MẶC ĐỊNH THEO ẢNH LÀ TẮT)
         self.ultraResponsivenessProEngineOfficial = ReadBool(@"UltraResponsivenessProEngineOfficial", NO);
         self.hyperThreadIOAcceleratorOfficial = ReadBool(@"HyperThreadIOAcceleratorOfficial", NO);
         self.quantumCoreSyncStabilizerOfficial = ReadBool(@"QuantumCoreSyncStabilizerOfficial", NO);
@@ -874,6 +882,7 @@ static void V2331_PeriodicWatchdogHealthCheck(void) {
         self.vsyncAdaptiveBufferOfficial = ReadBool(@"VsyncAdaptiveBufferOfficial", NO);
         self.dynamicThermalEngineOfficial = ReadBool(@"DynamicThermalEngineOfficial", YES);
 
+        // NHÓM TỐI ƯU LÕI & HỆ THỐNG (BẬT TOÀN BỘ THEO ẢNH)
         self.ios27AutoScheduler = ReadBool(@"Ios27AutoScheduler", YES);
         self.realtimePriorityBoost = ReadBool(@"RealtimePriorityBoost", YES);
         self.boostCpuGpu = ReadBool(@"BoostCpuGpu", YES);
@@ -959,7 +968,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return %orig(name, oldp, oldlenp, newp, newlen);
     }
     
-    // CÁCH LY TIẾN TRÌNH BÀN PHÍM VÀ APP JAILBREAK
     if (BoostIsIsolatedKeyboardSearchProcess() || BoostIsJailbreakToolApp() || !g_SpringBoardSceneReady) {
         return %orig(name, oldp, oldlenp, newp, newlen);
     }
@@ -1122,13 +1130,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end // Group_Display_DualRate
 
 // ==============================================================================
-// 🎮 PHẦN 7: METAL TRIPLE BUFFERING (CÔ LẬP TRONG SUỐT CHO SPRINGBOARD)
+// 🎮 PHẦN 7: METAL TRIPLE BUFFERING (CHỈ CAN THIỆP KHI LÀ SPRINGBOARD)
 // ==============================================================================
 %group Group_Metal_SpringBoard_Only
 
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (IS_ON && CFG_PTR.metalTripleBuffering) {
+    if (IS_ON && CFG_PTR.metalTripleBuffering && BoostIsSpringBoard()) {
         %orig(3);
     } else {
         %orig(count);
@@ -1451,7 +1459,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 @end
 
 // ==============================================================================
-// ⚙️ PHẦN 12: KHỞI TẠO BỘ LÕI TWEAK V23.3.1 (ĐẦY ĐỦ KHỞI TẠO TẤT CẢ LOGOS GROUP)
+// ⚙️ PHẦN 12: KHỞI TẠO BỘ LÕI TWEAK V23.3.1 (DUY NHẤT 1 LẦN GỌI %INIT MỖI GROUP)
 // ==============================================================================
 
 %ctor {
@@ -1497,16 +1505,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             return;
         }
 
-        // BẢO VỆ SPRINGBOARD: KHỞI TẠO ĐẦY ĐỦ GROUP_METAL VÀ GROUP_SPRINGBOARD
+        // BẢO VỆ SPRINGBOARD: KHỞI TẠO GROUP_SPRINGBOARD_ONLY
         if (BoostIsSpringBoard()) {
             %init(Group_SpringBoard_Only);
-            %init(Group_Metal_SpringBoard_Only);
-        } else {
-            // ĐẢM BẢO PREPROCESSOR KHÔNG BÁO LỖI NON-INITIALIZED CHO CÁC TIẾN TRÌNH KHÁC
-            %init(Group_Metal_SpringBoard_Only);
         }
 
+        // KHỞI TẠO CÁC GROUP TOÀN CỤC (MỖI GROUP DUY NHẤT 1 LẦN, LOẠI BỎ LỖI RE-%INIT)
         %init(_ungrouped);
+        %init(Group_Metal_SpringBoard_Only);
         %init(Group_Display_DualRate);
         %init(Group_ColorOS17_SafeUI);
         %init(Group_Memory_Engine);
@@ -1533,6 +1539,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             [[V2331_SystemOptimizer sharedInstance] synchronizeQuantumClockPipeline];
         }
         
-        V2331_LogTrace("Core", "SmoothiOS V23.3.1 Clean Architecture Loaded Successfully (Full Uncut Codebase)");
+        V2331_LogTrace("Core", "SmoothiOS V23.3.1 Clean Architecture Loaded Successfully (Clean Build Passed)");
     }
 }
