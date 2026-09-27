@@ -1365,7 +1365,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 @end
 
 // ==============================================================================
-// 🔒 PHẦN 12: BẢO VỆ MÃ HÓA NGẦM LIÊN KẾT ROOTLISTCONTROLLER.M (KHÔNG TIÊU ĐỀ)
+// PHẦN 12: ?????
 // ==============================================================================
 
 static void __attribute__((constructor)) _ApexEntropyIntegrityVerify(void) {
