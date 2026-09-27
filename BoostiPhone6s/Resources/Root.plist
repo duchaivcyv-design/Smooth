@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V23.2</string>
+            <string>Bật Tweak SmoothiOS V23.0</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -92,7 +92,7 @@
             <string>Ép xung cực hạn 144Hz</string>
         </dict>
 
-        <!-- KHỐI 3: GIAO DIỆN & ĐA NHIỆM (ĐỒNG BỘ THEO ẢNH THỰC TẾ) -->
+        <!-- KHỐI 3: GIAO DIỆN & ĐA NHIỆM -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 8) -->
+        <!-- KHỐI 4: 2 TÍNH NĂNG MỚI ĐỘT PHÁ (BETA 1) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 8)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 1)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -177,9 +177,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>UltraResponsivenessProEngineBeta8</string>
+            <string>DirectRenderPipeBypassBeta1</string>
             <key>label</key>
-            <string>Ultra Responsiveness Pro Engine (Beta 8)</string>
+            <string>Direct Render Pipe Bypass (Beta 1)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -189,9 +189,17 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>HyperThreadIOAcceleratorBeta8</string>
+            <string>QuantumMemoryPredictorBeta1</string>
             <key>label</key>
-            <string>HyperThread I/O Accelerator (Beta 8)</string>
+            <string>Quantum Memory Predictor (Beta 1)</string>
+        </dict>
+
+        <!-- KHỐI 5: TÍNH NĂNG ĐÃ CHUYỂN LÊN CHÍNH THỨC (OFFICIAL) -->
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>TÍNH NĂNG ĐÃ LÊN CHÍNH THỨC (OFFICIAL)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -201,9 +209,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>QuantumCoreSyncStabilizerBeta8</string>
+            <string>UltraResponsivenessProEngineOfficial</string>
             <key>label</key>
-            <string>Quantum Core Sync Stabilizer (Beta 8)</string>
+            <string>Ultra Responsiveness Pro Engine</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -213,9 +221,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>ZeroLagNeuralBoosterBeta8</string>
+            <string>HyperThreadIOAcceleratorOfficial</string>
             <key>label</key>
-            <string>Zero-Lag Neural Booster (Beta 8)</string>
+            <string>HyperThread I/O Accelerator</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -225,9 +233,41 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>VsyncAdaptiveBufferBeta8</string>
+            <string>QuantumCoreSyncStabilizerOfficial</string>
             <key>label</key>
-            <string>V-Sync Adaptive Buffer Bypass (Beta 8)</string>
+            <string>Quantum Core Sync Stabilizer</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>ZeroLagNeuralBoosterOfficial</string>
+            <key>label</key>
+            <string>Zero-Lag Neural Booster</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>VsyncAdaptiveBufferOfficial</string>
+            <key>label</key>
+            <string>V-Sync Adaptive Buffer Bypass</string>
+        </dict>
+
+        <!-- KHỐI 6: CÁC TỐI ƯU HỆ THỐNG KHÁC -->
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>TỐI ƯU LÕI &amp; HỆ THỐNG</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -338,7 +378,7 @@
             <string>Auto Giả Lập Thiết Bị (iPhone 16 Pro A18)</string>
         </dict>
 
-        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN (CHÍNH THỨC) -->
+        <!-- KHỐI 7: NHIỆT ĐỘ CỰC ĐOAN (CHÍNH THỨC) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -418,7 +458,7 @@
             <string>Chế độ tiết kiệm pin (30 FPS/Hz)</string>
         </dict>
 
-        <!-- KHỐI 6: HỆ THỐNG NÂNG CAO -->
+        <!-- KHỐI 8: HỆ THỐNG NÂNG CAO -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -450,7 +490,7 @@
             <string>Tăng Tốc Mạng Socket TCP Turbo</string>
         </dict>
 
-        <!-- KHỐI 7: QUẢN LÝ HỆ THỐNG -->
+        <!-- KHỐI 9: QUẢN LÝ HỆ THỐNG -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
