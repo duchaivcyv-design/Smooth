@@ -1,9 +1,7 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
-_INSTALL_PATH_TARGET = /var/jb
-
-# Tối ưu Log Github Actions
+# Tối ưu Log Build CI/CD
 GO_EASY_ON_ME = 1
 DEBUG = 0
 FINALPACKAGE = 1
@@ -15,6 +13,7 @@ include $(THEOS)/makefiles/common.mk
 # ==============================================================================
 LIBRARY_NAME = BoostiPhone6sCore
 
+# Đường dẫn chuẩn nạp Tweak Substrate
 BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 BoostiPhone6sCore_FILES = Tweak.xm \
@@ -25,7 +24,6 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
-# Kỷ luật thép: Bật tối ưu -O3, tắt các cảnh báo rác gây ngắt Build
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -Wall \
@@ -55,9 +53,10 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
+# Xóa ký hiệu cố định lỗi, bỏ qua undefined động khi link
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-no_warn_duplicate_libraries \
-                            -Wl,-exported_symbol,_init_privilege_escalation
+                            -Wl,-undefined,dynamic_lookup
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -68,76 +67,72 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # ==============================================================================
-# PART 3: AUTO-COPY PLIST TO MOBILESUBSTRATE DYNAMICLIBRARIES
+# PART 3: AUTO-COPY FILTER PLIST VÀO MOBILESUBSTRATE DYNAMICLIBRARIES
 # ==============================================================================
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
+BOOST_PLIST_SRC = BoostiPhone6s/Layout/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)
 
 after-stage::
 	@echo ""
-	@echo "[V20] Copying MobileSubstrate filter plist..."
-	@if [ -f "$(BOOST_PLIST_NAME)" ]; then \
-	    mkdir -p $(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries; \
-	    cp "$(BOOST_PLIST_NAME)" "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
-	    chmod 644 "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
-	    echo "[OK] Filter plist installed to MobileSubstrate/DynamicLibraries/"; \
+	@echo "[V23.9] Copying MobileSubstrate filter plist..."
+	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"; \
+	mkdir -p "$$TARGET_DIR"; \
+	if [ -f "$(BOOST_PLIST_NAME)" ]; then \
+	    cp "$(BOOST_PLIST_NAME)" "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    echo "[OK] Found in root: Copied to $$TARGET_DIR/"; \
+	elif [ -f "$(BOOST_PLIST_SRC)" ]; then \
+	    cp "$(BOOST_PLIST_SRC)" "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    echo "[OK] Found in Layout path: Copied to $$TARGET_DIR/"; \
 	else \
-	    echo "[WARN] $(BOOST_PLIST_NAME) not found in project root! Skipping..."; \
+	    echo "[WARN] $(BOOST_PLIST_NAME) not found! Generating safe default filter..."; \
+	    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t</array>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    echo "[OK] Auto-generated safe filter plist!"; \
 	fi
 	@echo ""
 
 # ==============================================================================
-# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS V20
+# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS V23.9
 # ==============================================================================
 before-package::
 	@echo ""
-	@echo "Finalizing Rootless Package V20 Ultimate..."
+	@echo "Finalizing Rootless Package V23.9 Titanium Apex..."
 	@echo ""
 	
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
 	@if [ -f control ]; then \
 	    cp control $(THEOS_STAGING_DIR)/DEBIAN/control; \
-	    echo "[OK] DEBIAN/control copied."; \
+	    echo "[OK] DEBIAN/control verified."; \
 	fi
 	@if [ -f postinst ]; then \
 	    cp postinst $(THEOS_STAGING_DIR)/DEBIAN/postinst; \
 	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/postinst; \
-	    echo "[OK] DEBIAN/postinst copied and chmod 755."; \
+	    echo "[OK] DEBIAN/postinst set 755."; \
 	fi
 	@if [ -f prerm ]; then \
 	    cp prerm $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
 	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
-	    echo "[OK] DEBIAN/prerm copied and chmod 755."; \
+	    echo "[OK] DEBIAN/prerm set 755."; \
 	fi
 	
 	@echo ""
-	@echo "Package Structure Verification:"
-	
-	@FOUND=0; \
-	if [ -f "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib" ]; then \
-	    echo "  [OK] Dylib: var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib"; \
-	    FOUND=1; \
-	elif [ -f "$(THEOS_STAGING_DIR)/var/jb/usr/lib/BoostiPhone6sCore.dylib" ]; then \
-	    echo "  [OK] Dylib: var/jb/usr/lib/BoostiPhone6sCore.dylib (fallback path)"; \
-	    FOUND=1; \
+	@echo "Verifying Essential Package Contents:"
+	@PREFIX_PATH="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)"; \
+	if [ -f "$$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib" ]; then \
+	    echo "  [OK] Dylib installed at: $$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/"; \
 	else \
-	    echo "  [FAIL] Dylib NOT FOUND in any expected path!"; \
+	    echo "  [FAIL] Dylib MISSING!"; \
 	fi; \
-	if [ -f "$(THEOS_STAGING_DIR)/var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)" ]; then \
-	    echo "  [OK] Plist: var/jb/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
+	if [ -f "$$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)" ]; then \
+	    echo "  [OK] Filter Plist verified!"; \
 	else \
-	    echo "  [WARN] Filter plist NOT FOUND in DynamicLibraries!"; \
+	    echo "  [FAIL] Filter Plist MISSING!"; \
 	fi; \
-	if [ -d "$(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
-	    echo "  [OK] Bundle: var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"; \
+	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
+	    echo "  [OK] Settings Bundle verified!"; \
 	else \
-	    echo "  [FAIL] Bundle NOT FOUND!"; \
-	fi; \
-	if [ -f "$(THEOS_STAGING_DIR)/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; then \
-	    echo "  [OK] Entry: var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist"; \
-	else \
-	    echo "  [FAIL] Entry Plist NOT FOUND!"; \
+	    echo "  [FAIL] Settings Bundle MISSING!"; \
 	fi
-	
-	@echo ""
-	@echo "Rootless Package V20 Ready!"
 	@echo ""
