@@ -18,7 +18,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
@@ -39,7 +39,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>EnableHzControl</string>
             <key>label</key>
@@ -61,7 +61,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>EnableFPSControl</string>
             <key>label</key>
@@ -83,7 +83,7 @@
             <key>default</key>
             <false/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>ForceOverclock144Hz</string>
             <key>label</key>
@@ -104,7 +104,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>ColorOs17SmoothEngine</string>
             <key>label</key>
@@ -116,7 +116,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>ReduceMultiTaskLag</string>
             <key>label</key>
@@ -128,7 +128,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>FixAppLaunchBlackScreen</string>
             <key>label</key>
@@ -140,7 +140,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>FixAppExitStutter</string>
             <key>label</key>
@@ -152,7 +152,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>TouchResponseBoost</string>
             <key>label</key>
@@ -173,7 +173,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>QuantumRenderShieldOfficial</string>
             <key>label</key>
@@ -185,7 +185,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>NeuralBufferOptimizerOfficial</string>
             <key>label</key>
@@ -197,7 +197,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>ApexBackgroundPacingDaemon</string>
             <key>label</key>
@@ -209,7 +209,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>UltraResponsivenessProEngineOfficial</string>
             <key>label</key>
@@ -221,7 +221,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>HyperThreadIOAcceleratorOfficial</string>
             <key>label</key>
@@ -233,7 +233,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>QuantumCoreSyncStabilizerOfficial</string>
             <key>label</key>
@@ -245,7 +245,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>ZeroLagNeuralBoosterOfficial</string>
             <key>label</key>
@@ -257,7 +257,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>VsyncAdaptiveBufferOfficial</string>
             <key>label</key>
@@ -269,7 +269,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>MetalTripleBuffering</string>
             <key>label</key>
@@ -281,7 +281,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>GameFpsStabilizer</string>
             <key>label</key>
@@ -300,7 +300,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>Ios27AutoScheduler</string>
             <key>label</key>
@@ -312,7 +312,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>RealtimePriorityBoost</string>
             <key>label</key>
@@ -324,7 +324,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>BoostCpuGpu</string>
             <key>label</key>
@@ -336,7 +336,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>HyperMemoryGuardian</string>
             <key>label</key>
@@ -348,7 +348,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>SmartRamClean</string>
             <key>label</key>
@@ -360,7 +360,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>AggressiveRamClean</string>
             <key>label</key>
@@ -372,7 +372,7 @@
             <key>default</key>
             <false/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>KillBgApps</string>
             <key>label</key>
@@ -384,7 +384,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>TurboAppLaunch</string>
             <key>label</key>
@@ -396,7 +396,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>OptimizeSystemProcess</string>
             <key>label</key>
@@ -408,7 +408,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>AutoSpoofNewDevice</string>
             <key>label</key>
@@ -429,7 +429,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>DynamicThermalEngineOfficial</string>
             <key>label</key>
@@ -441,7 +441,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>AntiThermalThrottling</string>
             <key>label</key>
@@ -453,7 +453,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>SmartThermalManager</string>
             <key>label</key>
@@ -477,7 +477,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>ChargeCoolingProtection</string>
             <key>label</key>
@@ -489,7 +489,7 @@
             <key>default</key>
             <false/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>PowerSaveMode</string>
             <key>label</key>
@@ -508,7 +508,7 @@
             <key>default</key>
             <false/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>BypassVarSandbox</string>
             <key>label</key>
@@ -520,7 +520,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>BlockAnalytics</string>
             <key>label</key>
@@ -532,7 +532,7 @@
             <key>default</key>
             <true/>
             <key>defaults</key>
-            <string>com.duchaivcy.boostiphone6s</string>
+            <string>com.taojb.boostiphone6s</string>
             <key>key</key>
             <string>TcpTurboNetwork</string>
             <key>label</key>
@@ -568,7 +568,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>Bản quyền thuộc về: TaoJB | Hỗ trợ kỹ thuật: MNH</string>
+            <string>Bản quyền thuộc về TaoJB | Hỗ trợ kỹ thuật: MNH</string>
         </dict>
     </array>
     <key>title</key>
