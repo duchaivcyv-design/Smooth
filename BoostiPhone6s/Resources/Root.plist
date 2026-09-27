@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V23.0</string>
+            <string>Bật Tweak SmoothiOS V23.2</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 5) -->
+        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 8) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 5)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 8)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -177,9 +177,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>HyperThreadIOAcceleratorBeta1</string>
+            <string>UltraResponsivenessProEngineBeta8</string>
             <key>label</key>
-            <string>HyperThread I/O Accelerator (Beta 5)</string>
+            <string>Ultra Responsiveness Pro Engine (Beta 8)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -189,9 +189,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>QuantumCoreSyncStabilizerBeta1</string>
+            <string>HyperThreadIOAcceleratorBeta8</string>
             <key>label</key>
-            <string>Quantum Core Sync Stabilizer (Beta 5)</string>
+            <string>HyperThread I/O Accelerator (Beta 8)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -201,9 +201,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>ZeroLagNeuralBoosterBeta31</string>
+            <string>QuantumCoreSyncStabilizerBeta8</string>
             <key>label</key>
-            <string>Zero-Lag Neural Booster</string>
+            <string>Quantum Core Sync Stabilizer (Beta 8)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -213,9 +213,21 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>VsyncAdaptiveBufferBeta31</string>
+            <string>ZeroLagNeuralBoosterBeta8</string>
             <key>label</key>
-            <string>V-Sync Adaptive Buffer Bypass</string>
+            <string>Zero-Lag Neural Booster (Beta 8)</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.duchaivcy.boostiphone6s</string>
+            <key>key</key>
+            <string>VsyncAdaptiveBufferBeta8</string>
+            <key>label</key>
+            <string>V-Sync Adaptive Buffer Bypass (Beta 8)</string>
         </dict>
         <dict>
             <key>cell</key>
