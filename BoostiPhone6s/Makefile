@@ -5,18 +5,21 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = BoostiPhone6sPrefs
 
-# File thực thi giao diện cài đặt
+# File mã nguồn
 BoostiPhone6sPrefs_FILES = RootListController.m
 
-# Chỉ liên kết các framework công khai có sẵn trong SDK
+# Framework công khai và Framework giao diện Settings của Apple
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
+BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 
-# Thư mục cài đặt bundle rootless
+# Đường dẫn cài đặt bundle cho jailbreak Rootless
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
-# Cờ biên dịch
+# Thêm đường dẫn tìm file Header (trỏ ra thư mục Smooth/Headers ở cấp cha)
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
+                            -I../Headers \
+                            -I../ \
                             -Wno-deprecated-declarations \
                             -Wno-unknown-warning-option
 
