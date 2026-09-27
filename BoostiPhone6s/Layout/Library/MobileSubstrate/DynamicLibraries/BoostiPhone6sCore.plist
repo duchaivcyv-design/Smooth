@@ -11,11 +11,6 @@
         <key>Bundles</key>
         <array>
             <string>com.apple.springboard</string>
-            <string>com.apple.UIKit</string>
-            <string>com.apple.WebKit.GPU</string>
-            <string>com.apple.QuartzCore</string>
-            <string>com.apple.BackBoardServices</string>
-            <string>com.apple.frontboard</string>
             <string>com.apple.Preferences</string>
         </array>
     </dict>
