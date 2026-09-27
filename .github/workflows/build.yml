@@ -15,7 +15,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- BƯỚC 1: CÀI ĐẶT TOOL & THIẾT LẬP MÔI TRƯỜNG ROOTLESS ---
+      # --- BƯỚC 1: THIẾT LẬP MÔI TRƯỜNG ROOTLESS & CÀI TOOL CẦN THIẾT ---
       - name: Setup Environment Variables
         run: |
           THEOS_PATH="$HOME/theos"
@@ -24,20 +24,18 @@ jobs:
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          brew install make ldid dpkg coreutils wget curl git xz unzip
+          # Chỉ cài những công cụ Theos thực sự thiếu trên macOS runner để không bị spam cảnh báo vàng
+          brew install make ldid dpkg coreutils
           
           echo "/opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" >> $GITHUB_PATH
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI SDK ---
+      # --- BƯỚC 2: CLONE THEOS & TẢI SDK IPHONEOS 16.5 ---
       - name: Clone Theos & Install SDK via Git Sparse
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           
-          echo "📥 Cloning Theos to $TARGET_DIR..."
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
-
-          echo " Downloading iOS SDK using Git Sparse-Checkout..."
           
           mkdir -p /tmp/sdk_repo
           cd /tmp/sdk_repo
@@ -60,33 +58,29 @@ jobs:
              echo "❌ Error: Failed to move SDK."
              exit 1
           fi
-          
-          echo "✅ SDK Installation Complete."
 
-      # --- BƯỚC 3: BUILD PACKAGE (TẬP TRUNG VÀO DEB) ---
+      # --- BƯỚC 3: DỌN DẸP VÀ BUILD ĐÓNG GÓI .DEB ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
           
           if [ ! -f Makefile ]; then
-            echo "Error: No Makefile found!"
+            echo "❌ Error: No Makefile found!"
             exit 1
           fi
           
           rm -rf packages/ obj/ .theos/
           
-          # Chạy build package với FINALPACKAGE=1
-          # Với cấu trúc SUBPROJECTS + layout/var/jb/, Theos sẽ tự gom 
-          # Library + Bundle Settings vào MỘT file .deb duy nhất.
-          make clean package FINALPACKAGE=1
+          # Đóng gói Rootless dứt điểm
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
           
-          # Kiểm tra xem file deb có được tạo ra không
+          # Kiểm tra file thành phẩm
           ls -lh packages/*.deb || { 
             echo "❌ Build finished but no deb found in packages/"; 
             exit 1; 
           }
 
-      # --- BƯỚC 4: UPLOAD FILE .DEB LÀM ARTIFACT ---
+      # --- BƯỚC 4: XUẤT FILE .DEB THÀNH PHẨM LÊN ARTIFACTS ---
       - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
         with:
