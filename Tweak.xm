@@ -1,15 +1,3 @@
-// ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V23.9 TITANIUM APEX (OFFICIAL EXPANDED CODEBASE)
-// 🎯 TARGET: iOS 14.0 -> iOS 18.x / 26.0+ (ARM64 / ARM64E)
-// 🛡 QUY CHUẨN THỰC THI KỶ LUẬT THÉP V23.9:
-//    - TẬP TRUNG LÀM RIÊNG TWEAK.XM ĐẦY ĐỦ TRÊN 1.600 DÒNG KHÔNG RÚT GỌN.
-//    - CÔNG TẮC BẮT BUỘC HOẠT ĐỘNG 100% (DUAL-CHANNEL IPC SYNC).
-//    - CÔNG TẮC TỔNG TẮT LÀ NGẮT TOÀN DIỆN 0% TÀI NGUYÊN NGẦM NGAY TỪ ĐẦU.
-//    - HẠ NHIỆT TRIỆT ĐỂ KHI RESPRING / USERSPACE REBOOT (DEFERRED 5.0S).
-//    - CHỐNG LỆCH STATUS BAR CHO DÒNG IPHONE NÚT BẤM (HOME BUTTON).
-//    - CÁCH LY 100% APP NGÂN HÀNG (TPBANK, VCB,...) VÀ APP THƯỜNG KHÔNG BỊ ĐEN.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
