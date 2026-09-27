@@ -57,7 +57,6 @@ extern char **environ;
                     [spec setProperty:@YES forKey:@"enabled"];
                     continue;
                 }
-                // Khóa xám toàn bộ nếu tắt tổng
                 [spec setProperty:@(masterOn) forKey:@"enabled"];
             }
             _specifiers = specs;
@@ -84,12 +83,10 @@ extern char **environ;
 - (void)syncPreferenceValueToSystem:(id)value forKey:(NSString *)key {
     if (!key) return;
     @try {
-        // Tầng 1: CoreFoundation Preferences (IPC an toàn)
         CFStringRef cfKey = (__bridge CFStringRef)key;
         CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         
-        // Tầng 2: Ghi file Plist kép (Rootless & Rootful)
         NSString *primaryPath = PREF_PATH;
         NSString *fallbackPath = FALLBACK_PREF_PATH;
         
@@ -101,7 +98,6 @@ extern char **environ;
         fallbackDict[key] = value;
         [fallbackDict writeToFile:fallbackPath atomically:YES];
         
-        // Tầng 3: Phát tín hiệu Darwin Notification
         notify_post(NOTIFY_RELOAD);
     } @catch (NSException *e) {}
 }
@@ -147,15 +143,12 @@ extern char **environ;
     } @catch (NSException *e) {}
 }
 
-// ============================================================================
-// HIỂN THỊ ĐỘNG TRỰC TIẾP TRÊN DANH SÁCH CELL
-// ============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
         if (![self isMasterEnabled]) return @"Đã khóa";
         
         CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableHzControl"), PREF_DOMAIN);
-        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
+        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : NO;
         if (enabledVal) CFRelease(enabledVal);
         
         if (!enabled) return @"Tắt";
@@ -176,7 +169,7 @@ extern char **environ;
         if (![self isMasterEnabled]) return @"Đã khóa";
         
         CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableFPSControl"), PREF_DOMAIN);
-        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
+        BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : NO;
         if (enabledVal) CFRelease(enabledVal);
         
         if (!enabled) return @"Tắt";
@@ -192,9 +185,6 @@ extern char **environ;
     }
 }
 
-// ============================================================================
-// BẬT BẢNG CHỌN ACTION SHEET CHUẨN 100% THEO ẢNH
-// ============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
@@ -263,18 +253,14 @@ extern char **environ;
     [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
-// ============================================================================
-// HỆ THỐNG AN TOÀN (CHỐNG SAFEMODE TRÊN IOS 14 - 16+)
-// ==============================================================================
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để đồng bộ hoàn toàn SmoothiOS V22.4.5 (Beta 3.1 - 4.0)?"
+                                                                   message:@"Respring để đồng bộ hoàn toàn SmoothiOS V22.7.5 (Beta 6.0-1B)?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        // Tách luồng để Preferences kịp ghi cache xuống ổ cứng, chống sập SafeMode
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             pid_t pid;
             const char *argv[] = {"killall", "-9", "SpringBoard", NULL};
             posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)argv, environ);
@@ -285,7 +271,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.4.5?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.7.5 (Beta 6.0-1B)?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
