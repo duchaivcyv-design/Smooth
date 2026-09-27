@@ -1,6 +1,9 @@
 #import "CrashGuard.h"
 
-static void V20_HandleUncaughtException(NSException *exception);
+#define PREF_SUITE @"com.taojb.boostiphone6s"
+#define SAFE_MODE_KEY @"BoostiPhone6s_SafeModeActive"
+
+static void Apex_HandleUncaughtException(NSException *exception);
 
 @implementation CrashGuard {
     GuardStatus _currentStatus;
@@ -10,7 +13,9 @@ static void V20_HandleUncaughtException(NSException *exception);
 + (instancetype)sharedInstance {
     static CrashGuard *instance = nil;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ instance = [[self alloc] init]; });
+    dispatch_once(&onceToken, ^{ 
+        instance = [[self alloc] init]; 
+    });
     return instance;
 }
 
@@ -18,17 +23,23 @@ static void V20_HandleUncaughtException(NSException *exception);
     self = [super init];
     if (self) {
         _currentStatus = GuardStatusNormal;
-        _guardQueue = dispatch_queue_create("com.boostv20.crashguard", DISPATCH_QUEUE_SERIAL);
+        _guardQueue = dispatch_queue_create("com.taojb.boostiphone6s.crashguard", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
 
-- (GuardStatus)currentStatus { return _currentStatus; }
+- (GuardStatus)currentStatus { 
+    return _currentStatus; 
+}
 
 - (void)startMonitoring {
-    NSSetUncaughtExceptionHandler(&V20_HandleUncaughtException);
-    BOOL isSafe = [[NSUserDefaults standardUserDefaults] boolForKey:@"BoostV20_SafeModeActive"];
-    if (isSafe) _currentStatus = GuardStatusSafeMode;
+    NSSetUncaughtExceptionHandler(&Apex_HandleUncaughtException);
+    
+    NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:PREF_SUITE];
+    BOOL isSafe = [prefs boolForKey:SAFE_MODE_KEY];
+    if (isSafe) {
+        _currentStatus = GuardStatusSafeMode;
+    }
 }
 
 - (BOOL)canExecuteHooks {
@@ -37,18 +48,18 @@ static void V20_HandleUncaughtException(NSException *exception);
 
 - (void)resetSafeModeManually {
     dispatch_async(_guardQueue, ^{
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults removeObjectForKey:@"BoostV20_SafeModeActive"];
-        [defaults synchronize];
+        NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:PREF_SUITE];
+        [prefs removeObjectForKey:SAFE_MODE_KEY];
+        [prefs synchronize];
         self->_currentStatus = GuardStatusNormal;
     });
 }
 
 @end
 
-static void V20_HandleUncaughtException(NSException *exception) {
-    NSString *reason = exception.reason ?: @"Unknown Error";
-    NSLog(@"[BoostV20_CrashGuard] FATAL: CAUGHT EXCEPTION: %@", reason);
-    // Luôn reset để phiên sau chạy lại mượt mà, không khóa chết user
-    [[CrashGuard sharedInstance] resetSafeModeManually]; 
+static void Apex_HandleUncaughtException(NSException *exception) {
+    // Khi bi Exception, lap tuc bat co SafeMode de lan sau khong bi treo Respring Loop
+    NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:PREF_SUITE];
+    [prefs setBool:YES forKey:SAFE_MODE_KEY];
+    [prefs synchronize];
 }
