@@ -1,22 +1,27 @@
 #!/bin/bash
 set -e
 
-# Phân quyền chuẩn xác cho thư mục Rootless
+# Phan quyen chuan xac cho thu muc Rootless (them || true tranh loi dung script do set -e)
 if [ -d "/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then
-    chmod -R 755 /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
-    chown -R mobile:mobile /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+    chmod -R 755 /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
+    chown -R mobile:mobile /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
 fi
 
-if [ -f "/var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist" ]; then
-    chmod 644 /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
-    chown mobile:mobile /var/jb/Library/PreferenceLoader/Entries/BoostiPhone6sPrefs.plist
+if [ -f "/var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist" ]; then
+    chmod 644 /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
+    chown mobile:mobile /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
 fi
 
-# Xóa các flag gây dính Safe Mode của bản cũ
+# Xoa cac flag gay dinh Safe Mode cua ca ban cu (duchaivcy) va ban moi (taojb)
 defaults delete com.taojb.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
 defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
+defaults delete com.duchaivcy.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
+defaults delete com.duchaivcy.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
 
-# Refresh UI Cache
+# Lam sach daemon quan ly settings de nhan ngay lap tuc
+killall cfprefsd 2>/dev/null || true
+
+# Refresh UI Cache (neu co lenh uicache)
 if command -v uicache &> /dev/null; then
     uicache -p /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
 fi
