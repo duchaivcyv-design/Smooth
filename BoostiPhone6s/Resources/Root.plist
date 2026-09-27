@@ -23,10 +23,10 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V22.9</string>
+            <string>Bật Tweak SmoothiOS V22.9.2</string>
         </dict>
 
-        <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP (MẶC ĐỊNH TẮT THEO ẢNH) -->
+        <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -92,7 +92,7 @@
             <string>Ép xung cực hạn 144Hz</string>
         </dict>
 
-        <!-- KHỐI 3: GIAO DIỆN & ĐA NHIỆM (3 KEY DƯỚI BẬT THEO ẢNH) -->
+        <!-- KHỐI 3: GIAO DIỆN & ĐA NHIỆM (ĐỒNG BỘ THEO ẢNH THỰC TẾ) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -117,7 +117,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <false/>
+            <true/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -406,7 +406,7 @@
             <string>Chế độ tiết kiệm pin (30 FPS/Hz)</string>
         </dict>
 
-        <!-- KHỐI 6: HỆ THỐNG NÂNG CAO (BYPASSVAR BẬT THEO ẢNH) -->
+        <!-- KHỐI 6: HỆ THỐNG NÂNG CAO -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -417,7 +417,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -429,7 +429,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <false/>
+            <true/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
