@@ -1,9 +1,3 @@
-// ==============================================================================
-// 🚀 ROOTLISTCONTROLLER.M - SMOOTHIOS V23.7.5 TITANIUM APEX
-// 🎯 TARGET: iOS 14.0 -> iOS 18.x / 26.0+ (ARM64 / ARM64E)
-// 🛡 ĐỒNG BỘ HAI CHIỀU LIVE-IPC, KHÓA XÁM TOÀN DIỆN KHI TẮT CÔNG TẮC TỔNG
-// ==============================================================================
-
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <spawn.h>
@@ -88,13 +82,16 @@ extern char **environ;
     } @catch (NSException *e) {}
 }
 
+// GHI ĐỒNG BỘ 2 CHIỀU: RAM CFPREFERENCES VÀ FILE ĐĨA VẬT LÝ
 - (void)syncPreferenceValueToSystem:(id)value forKey:(NSString *)key {
     if (!key) return;
     @try {
+        // Kênh 1: Ghi trực tiếp vào bộ đệm CFPreferences
         CFStringRef cfKey = (__bridge CFStringRef)key;
         CFPreferencesSetAppValue(cfKey, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         
+        // Kênh 2: Ghi trực tiếp ra file đĩa vật lý để Tweak đọc tức thì 0ms
         NSString *primaryPath = PREF_PATH;
         NSString *fallbackPath = FALLBACK_PREF_PATH;
         
@@ -106,6 +103,7 @@ extern char **environ;
         fallbackDict[key] = value;
         [fallbackDict writeToFile:fallbackPath atomically:YES];
         
+        // Phát tín hiệu Darwin Notification ép SpringBoard nạp cấu hình mới ngay lập tức
         notify_post(NOTIFY_RELOAD);
     } @catch (NSException *e) {}
 }
@@ -143,7 +141,7 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ (TRỰC QUAN - DỄ HIỂU)
+// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ (TRỰC QUAN - GIAO DIỆN HIỆN ĐẠI)
 // ==============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
@@ -193,7 +191,7 @@ extern char **environ;
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
                                    title:@"Tần Số Quét Màn Hình" 
-                                 message:@"Chọn tần số quét phần cứng mong muốn để tối ưu hóa hiển thị:" 
+                                 message:@"Chọn mức tần số quét phần cứng (Hz) mong muốn để ép xung:" 
                                      key:@"TargetRefreshRate" 
                                   suffix:@"Hz"];
 }
@@ -201,8 +199,8 @@ extern char **environ;
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Khung Hình Ứng Dụng" 
-                                 message:@"Chọn giới hạn khung hình hiển thị (FPS) mượt mà:" 
+                                   title:@"Tốc Độ Khung Hình Ứng Dụng" 
+                                 message:@"Chọn mức giới hạn khung hình (FPS) mượt mà:" 
                                      key:@"TargetFPSRate" 
                                   suffix:@"FPS"];
 }
@@ -237,7 +235,7 @@ extern char **environ;
         saveHandler(@30);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"60 %@ - Mặc định ổn định", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"60 %@ - Tiêu chuẩn ổn định", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@60);
     }]];
 
@@ -253,7 +251,7 @@ extern char **environ;
         saveHandler(@144);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Đóng menu" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
         UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
@@ -267,9 +265,9 @@ extern char **environ;
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại Giao Diện"
-                                                                   message:@"Respring SpringBoard để nạp lại cấu hình mượt mà?"
+                                                                   message:@"Respring SpringBoard để nạp lại toàn bộ cấu hình mượt mà?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             pid_t pid;
@@ -285,7 +283,7 @@ extern char **environ;
                                                                    message:@"Đặt lại tất cả thiết lập về trạng thái xuất xưởng ban đầu?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt lại ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Xác nhận đặt lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         NSDictionary *dict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         for (id key in dict) {
