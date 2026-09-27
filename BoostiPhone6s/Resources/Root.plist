@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V22.3</string>
+            <string>Bật Tweak SmoothiOS V22.4.5</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -33,7 +33,7 @@
             <key>label</key>
             <string>MÀN HÌNH &amp; TẦN SỐ QUÉT (HZ &amp; FPS)</string>
             <key>footerText</key>
-            <string>Bảng chọn Action Sheet mở trực tiếp từ đáy màn hình. Hỗ trợ khóa cứng 30 FPS mát máy hoặc mở khóa 144 FPS cực đại (TÍNH NĂNG CHƯA ỔN ĐỊNH NÊN CẬN THẬN TRÁNH LỖI).</string>
+            <string>Bảng chọn Action Sheet mở trực tiếp từ đáy màn hình. Hỗ trợ khóa cứng 30 FPS mát máy hoặc mở khóa 144 FPS cực đại.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -45,7 +45,7 @@
             <key>key</key>
             <string>EnableHzControl</string>
             <key>label</key>
-            <string>Bật khóa hz (chưa ổn định)</string>
+            <string>Bật khóa tần số quét (Hz)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -67,7 +67,7 @@
             <key>key</key>
             <string>EnableFPSControl</string>
             <key>label</key>
-            <string>Bật khóa FPS (chưa ổn định)</string>
+            <string>Bật khóa khung hình (FPS)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -89,7 +89,7 @@
             <key>key</key>
             <string>ForceOverclock144Hz</string>
             <key>label</key>
-            <string>Ép xung cực hạn 144Hz(chưa ổn định)</string>
+            <string>Ép xung cực hạn 144Hz</string>
         </dict>
 
         <!-- KHỐI 3: GIAO DIỆN & ĐA NHIỆM (COLOROS 17) -->
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 2) -->
+        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 3.1 - 4.0) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 2)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 3.1 - 4.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -177,9 +177,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>ZeroLagNeuralBoosterBeta2</string>
+            <string>ZeroLagNeuralBoosterBeta31</string>
             <key>label</key>
-            <string>Zero-Lag Neural Booster (Beta 2)</string>
+            <string>Zero-Lag Neural Booster (Beta 3.1 - 4.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -189,9 +189,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>VsyncAdaptiveBufferBeta2</string>
+            <string>VsyncAdaptiveBufferBeta31</string>
             <key>label</key>
-            <string>V-Sync Adaptive Buffer Bypass (Beta 2)</string>
+            <string>V-Sync Adaptive Buffer Bypass (Beta 3.1 - 4.0)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -302,7 +302,7 @@
             <string>Auto Giả Lập Thiết Bị (iPhone 16 Pro A18)</string>
         </dict>
 
-        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & TẢN NHIỆT (BETA 2) -->
+        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & TẢN NHIỆT (BETA 3.1 - 4.0) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -317,9 +317,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>DynamicThermalEngineBeta2</string>
+            <string>DynamicThermalEngineBeta31</string>
             <key>label</key>
-            <string>Dynamic Thermal Engine Tản Nhiệt (Beta 2)</string>
+            <string>Dynamic Thermal Engine Tản Nhiệt (Beta 3.1 - 4.0)</string>
         </dict>
         <dict>
             <key>cell</key>
