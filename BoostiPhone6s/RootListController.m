@@ -1,3 +1,9 @@
+// ==============================================================================
+// 🚀 ROOTLISTCONTROLLER.M - SMOOTHIOS V23.7.5 TITANIUM APEX
+// 🎯 TARGET: iOS 14.0 -> iOS 18.x / 26.0+ (ARM64 / ARM64E)
+// 🛡 ĐỒNG BỘ HAI CHIỀU LIVE-IPC, KHÓA XÁM TOÀN DIỆN KHI TẮT CÔNG TẮC TỔNG
+// ==============================================================================
+
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <spawn.h>
@@ -38,7 +44,7 @@ extern char **environ;
             return b;
         }
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:[self effectivePrefPath]];
-        if (prefs && prefs[@"Enabled"]) {
+        if (prefs && prefs[@"Enabled"] != nil) {
             return [prefs[@"Enabled"] boolValue];
         }
     } @catch (NSException *e) {}
@@ -58,6 +64,7 @@ extern char **environ;
                     [spec setProperty:@YES forKey:@"enabled"];
                     continue;
                 }
+                // Khóa tương tác toàn bộ menu con nếu công tắc tổng bị TẮT
                 [spec setProperty:@(masterOn) forKey:@"enabled"];
             }
             _specifiers = specs;
@@ -136,57 +143,57 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ (ÉP HOẠT ĐỘNG KHÔNG TRỄ)
+// 🎯 HIỂN THỊ HZ/FPS TỨC THÌ (TRỰC QUAN - DỄ HIỂU)
 // ==============================================================================
 - (NSString *)getHzDisplayValue:(PSSpecifier *)specifier {
     @try {
-        if (![self isMasterEnabled]) return @"Đã khóa";
+        if (![self isMasterEnabled]) return @"Đã tắt theo công tắc tổng";
         
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableHzControl"), PREF_DOMAIN);
         BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
         if (enabledVal) CFRelease(enabledVal);
         
-        if (!enabled) return @"Tắt";
+        if (!enabled) return @"Chưa kích hoạt";
         
         CFPropertyListRef hzVal = CFPreferencesCopyAppValue(CFSTR("TargetRefreshRate"), PREF_DOMAIN);
         NSInteger val = hzVal ? [(__bridge id)hzVal integerValue] : 60;
         if (hzVal) CFRelease(hzVal);
         
-        if (val == 0) return @"Tự động điều chỉnh";
-        return [NSString stringWithFormat:@"Khóa ở %ld Hz", (long)val];
+        if (val == 0) return @"Tự động tối ưu";
+        return [NSString stringWithFormat:@"%ld Hz (Đang khóa)", (long)val];
     } @catch (NSException *e) {
-        return @"Khóa ở 60 Hz";
+        return @"60 Hz (Mặc định)";
     }
 }
 
 - (NSString *)getFPSDisplayValue:(PSSpecifier *)specifier {
     @try {
-        if (![self isMasterEnabled]) return @"Đã khóa";
+        if (![self isMasterEnabled]) return @"Đã tắt theo công tắc tổng";
         
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         CFPropertyListRef enabledVal = CFPreferencesCopyAppValue(CFSTR("EnableFPSControl"), PREF_DOMAIN);
         BOOL enabled = enabledVal ? [(__bridge id)enabledVal boolValue] : YES;
         if (enabledVal) CFRelease(enabledVal);
         
-        if (!enabled) return @"Tắt";
+        if (!enabled) return @"Chưa kích hoạt";
         
         CFPropertyListRef fpsVal = CFPreferencesCopyAppValue(CFSTR("TargetFPSRate"), PREF_DOMAIN);
         NSInteger val = fpsVal ? [(__bridge id)fpsVal integerValue] : 60;
         if (fpsVal) CFRelease(fpsVal);
         
         if (val == 0) return @"Tự động tối ưu";
-        return [NSString stringWithFormat:@"Khóa ở %ld FPS", (long)val];
+        return [NSString stringWithFormat:@"%ld FPS (Đang khóa)", (long)val];
     } @catch (NSException *e) {
-        return @"Khóa ở 60 FPS";
+        return @"60 FPS (Mặc định)";
     }
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Chọn Tần Số Quét Màn Hình (Hz)" 
-                                 message:@"Ép trực tiếp xuống phần cứng hiển thị:\n• Tự Động: Tự cân đối theo tải GPU\n• 30Hz: Tiết kiệm tối đa pin\n• 60Hz: Mức chuẩn tiêu chuẩn\n• 90Hz - 120Hz - 144Hz: Siêu mượt mà" 
+                                   title:@"Tần Số Quét Màn Hình" 
+                                 message:@"Chọn tần số quét phần cứng mong muốn để tối ưu hóa hiển thị:" 
                                      key:@"TargetRefreshRate" 
                                   suffix:@"Hz"];
 }
@@ -194,8 +201,8 @@ extern char **environ;
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     if (![self isMasterEnabled]) return;
     [self presentActionSheetForSpecifier:specifier 
-                                   title:@"Chọn Mức Tốc Độ Khung Hình (FPS)" 
-                                 message:@"Ép trực tiếp vào bộ đệm CADisplayLink:\n• Tự Động: Tối ưu khung hình theo từng app\n• 30 FPS: Giảm tải GPU, máy mát\n• 60 FPS: Chuẩn mượt mà\n• 90 FPS - 120 FPS - 144 FPS: Khung hình cực cao" 
+                                   title:@"Khung Hình Ứng Dụng" 
+                                 message:@"Chọn giới hạn khung hình hiển thị (FPS) mượt mà:" 
                                      key:@"TargetFPSRate" 
                                   suffix:@"FPS"];
 }
@@ -222,31 +229,31 @@ extern char **environ;
         });
     };
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Tự Động Cân Bằng (Dynamic)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Tự động thích ứng (Cân bằng)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@0);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa cứng 30 %@ (Tiết kiệm pin)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"30 %@ - Tiết kiệm pin tối đa", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@30);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa cứng 60 %@ (Tiêu chuẩn mặc định)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"60 %@ - Mặc định ổn định", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@60);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa cứng 90 %@ (Siêu mượt mà)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"90 %@ - Mượt mà nâng cao", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@90);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa cứng 120 %@ (Cực hạn mượt mà)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"120 %@ - Cực kỳ mượt mà", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@120);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Khóa cứng 144 %@ (Tối thượng đỉnh cao)", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"144 %@ - Ép xung cực hạn", suffix] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         saveHandler(@144);
     }]];
 
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Đóng menu" style:UIAlertActionStyleCancel handler:nil]];
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
         UITableViewCell *cell = [self cachedCellForSpecifier:specifier];
@@ -260,9 +267,9 @@ extern char **environ;
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại Giao Diện"
-                                                                   message:@"Thực hiện Respring SpringBoard để nạp lại toàn bộ cấu hình SmoothiOS V23.6.1?"
+                                                                   message:@"Respring SpringBoard để nạp lại cấu hình mượt mà?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy bỏ" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             pid_t pid;
@@ -275,10 +282,10 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khôi Phục Mặc Định"
-                                                                   message:@"Đặt lại toàn bộ cấu hình của SmoothiOS V23.6.1 về trạng thái xuất xưởng mặc định?"
+                                                                   message:@"Đặt lại tất cả thiết lập về trạng thái xuất xưởng ban đầu?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy bỏ" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Xác nhận đặt lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt lại ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         NSDictionary *dict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         for (id key in dict) {
