@@ -1,14 +1,3 @@
-// ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V23.5 TITANIUM APEX (BETA 8 SUPREME ULTRA-EXTENDED)
-// 🎯 TARGET: iOS 14.0 -> iOS 16.x & iOS 17.x / 18.x+ (Rootless & Rootful)
-// 🛡 QUY CHUẨN THỰC THI KỶ LUẬT THÉP V23.5 (BETA 8):
-//    1. Mở rộng tối đa quy mô mã nguồn trên 2.200 dòng vật lý, tường minh từng subsystem.
-//    2. Khắc phục dứt điểm lỗi Status Bar bị đẩy ra hai bên và lỗi màn hình nền đen.
-//    3. Triệt tiêu hoàn toàn lỗi app không vào được (kẹt Splash Screen / Logo ở giữa).
-//    4. Nâng cấp 2 tính năng trọng tâm lên chuẩn cao nhất: DirectRenderPipeBypassBeta8 & QuantumMemoryPredictorBeta8.
-//    5. Tương thích tuyệt đối với Dopamine, Sileo, hoàn toàn không văng SafeMode.
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
