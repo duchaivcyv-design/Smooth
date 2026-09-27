@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V22.4.5</string>
+            <string>Bật Tweak SmoothiOS V22.7.5</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -39,7 +39,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -61,7 +61,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 3.1 - 4.0) -->
+        <!-- KHỐI 4: HIỆU NĂNG LÕI & CÔNG NGHỆ MỚI (BETA 6.0-1B) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 3.1 - 4.0)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 6.0-1B)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -179,7 +179,7 @@
             <key>key</key>
             <string>ZeroLagNeuralBoosterBeta31</string>
             <key>label</key>
-            <string>Zero-Lag Neural Booster (Beta 3.1 - 4.0)</string>
+            <string>Zero-Lag Neural Booster (Beta 6.0-1B)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -191,7 +191,7 @@
             <key>key</key>
             <string>VsyncAdaptiveBufferBeta31</string>
             <key>label</key>
-            <string>V-Sync Adaptive Buffer Bypass (Beta 3.1 - 4.0)</string>
+            <string>V-Sync Adaptive Buffer Bypass (Beta 6.0-1B)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -302,7 +302,7 @@
             <string>Auto Giả Lập Thiết Bị (iPhone 16 Pro A18)</string>
         </dict>
 
-        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & TẢN NHIỆT (BETA 3.1 - 4.0) -->
+        <!-- KHỐI 5: NHIỆT ĐỘ CỰC ĐOAN & PIN (BETA 6.0-1B) -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -319,7 +319,7 @@
             <key>key</key>
             <string>DynamicThermalEngineBeta31</string>
             <key>label</key>
-            <string>Dynamic Thermal Engine Tản Nhiệt (Beta 3.1 - 4.0)</string>
+            <string>Dynamic Thermal Engine Tản Nhiệt (Beta 6.0-1B)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -393,7 +393,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
@@ -405,7 +405,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
