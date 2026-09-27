@@ -1,11 +1,11 @@
 // ==============================================================================
-// 🚀 TWEAK.XM - SMOOTHIOS V23.3.1 (BUILD FIX: ELIMINATED RE-%INIT LOGOS ERROR)
+// 🚀 TWEAK.XM - SMOOTHIOS V23.3.1 (BUILD FIX: RESOLVED PMConfigureScrollView)
 // 🎯 TARGET: iOS 14.0 -> iOS 16.x & iOS 17.x / 18.x+ (Rootless & Rootful)
 // 🛡 QUY CHUẨN THỰC THI KỶ LUẬT THÉP V23.3.1:
-//    1. Sửa lỗi Theos: Chỉ gọi %init(Group_Metal_SpringBoard_Only) DUY NHẤT 1 LẦN.
-//    2. Giữ nguyên 100% toàn bộ cấu trúc đầy đủ, không cắt bớt mã nguồn.
+//    1. Sửa lỗi Clang: Đặt định nghĩa PMConfigureScrollView lên trước khi hook.
+//    2. Giữ nguyên 100% cấu trúc đầy đủ, không cắt giảm bất kỳ thành phần nào.
 //    3. Triệt tiêu dứt điểm lỗi treo Respring và văng SafeMode.
-//    4. Đảm bảo Theos tiền xử lý và biên dịch arm64 / arm64e thành công 100%.
+//    4. Đảm bảo Theos biên dịch arm64 và arm64e thành công tuyệt đối.
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -104,7 +104,7 @@ extern char **environ;
 @end
 
 // ==============================================================================
-// ⚙️ PHẦN 2: HỆ THỐNG BIẾN TOÀN CỤC VÀ STATE MACHINE ĐIỀU PHỐI V23.3.1
+// ⚙️ PHẦN 2: HỆ THỐNG BIẾN TOÀN CỤC, CƠ CHẾ CUỘN VÀ STATE MACHINE ĐIỀU PHỐI V23.3.1
 // ==============================================================================
 
 typedef struct {
@@ -184,6 +184,24 @@ static BOOL PMRuntimeReady = NO;
 static BOOL g_AppWindowReadyForFrameBoost = NO;
 static BOOL g_SpringBoardSceneReady = NO;
 static const void *kPMConfiguredKey = &kPMConfiguredKey;
+
+// ĐỊNH NGHĨA HÀM TRỢ LỰC CUỘN MƯỢT NGAY ĐẦU TẬP TIN TRÁNH LỖI UNDECLARED IDENTIFIER
+static inline void PMApplySmoothFeel(UIScrollView *sv) {
+    if (!sv) return;
+    UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
+    if (pan) {
+        pan.delaysTouchesBegan = NO;
+        pan.delaysTouchesEnded = NO;
+    }
+}
+
+static inline void PMConfigureScrollView(UIScrollView *sv) {
+    if (!sv || !sv.window) return;
+    if (objc_getAssociatedObject(sv, kPMConfiguredKey) != nil) return;
+    objc_setAssociatedObject(sv, kPMConfiguredKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    sv.delaysContentTouches = NO;
+    PMApplySmoothFeel(sv);
+}
 
 static inline void run_posix_cmd_safe(const char *path, const char *arg1, const char *arg2) {
     if (!path) return;
@@ -968,6 +986,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return %orig(name, oldp, oldlenp, newp, newlen);
     }
     
+    // CÁCH LY TIẾN TRÌNH BÀN PHÍM VÀ APP JAILBREAK
     if (BoostIsIsolatedKeyboardSearchProcess() || BoostIsJailbreakToolApp() || !g_SpringBoardSceneReady) {
         return %orig(name, oldp, oldlenp, newp, newlen);
     }
@@ -1459,7 +1478,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 @end
 
 // ==============================================================================
-// ⚙️ PHẦN 12: KHỞI TẠO BỘ LÕI TWEAK V23.3.1 (DUY NHẤT 1 LẦN GỌI %INIT MỖI GROUP)
+// ⚙️ PHẦN 12: KHỞI TẠO BỘ LÕI TWEAK V23.3.1 (DUY NHẤT 1 LẦN %INIT MỖI GROUP)
 // ==============================================================================
 
 %ctor {
@@ -1510,7 +1529,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             %init(Group_SpringBoard_Only);
         }
 
-        // KHỞI TẠO CÁC GROUP TOÀN CỤC (MỖI GROUP DUY NHẤT 1 LẦN, LOẠI BỎ LỖI RE-%INIT)
+        // KHỞI TẠO CÁC GROUP TOÀN CỤC (DUY NHẤT 1 LẦN GỌI %INIT MỖI GROUP)
         %init(_ungrouped);
         %init(Group_Metal_SpringBoard_Only);
         %init(Group_Display_DualRate);
