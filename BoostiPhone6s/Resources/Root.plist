@@ -23,7 +23,7 @@
             <key>key</key>
             <string>Enabled</string>
             <key>label</key>
-            <string>Bật Tweak SmoothiOS V23.3</string>
+            <string>Bật Tweak SmoothiOS V23.4</string>
         </dict>
 
         <!-- KHỐI 2: ĐIỀU KHIỂN HZ & FPS ĐỘC LẬP -->
@@ -162,12 +162,12 @@
             <string>Tăng tốc độ phản hồi cảm ứng</string>
         </dict>
 
-        <!-- KHỐI 4: 2 TÍNH NĂNG MỚI ĐÃ LÊN BETA 3 -->
+        <!-- KHỐI 4: 2 TÍNH NĂNG MỚI ĐÃ LÊN BETA 4 -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 3)</string>
+            <string>HIỆU NĂNG LÕI &amp; THẾ HỆ MỚI (BETA 4)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -177,9 +177,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>DirectRenderPipeBypassBeta3</string>
+            <string>DirectRenderPipeBypassBeta4</string>
             <key>label</key>
-            <string>Direct Render Pipe Bypass (Beta 3)</string>
+            <string>Direct Render Pipe Bypass (Beta 4)</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -189,9 +189,9 @@
             <key>defaults</key>
             <string>com.duchaivcy.boostiphone6s</string>
             <key>key</key>
-            <string>QuantumMemoryPredictorBeta3</string>
+            <string>QuantumMemoryPredictorBeta4</string>
             <key>label</key>
-            <string>Quantum Memory Predictor (Beta 3)</string>
+            <string>Quantum Memory Predictor (Beta 4)</string>
         </dict>
 
         <!-- KHỐI 5: TÍNH NĂNG ĐÃ CHUYỂN LÊN CHÍNH THỨC (OFFICIAL) -->
@@ -521,7 +521,7 @@
             <key>footerAlignment</key>
             <integer>1</integer>
             <key>footerText</key>
-            <string>By TaoJB | Hỗ trợ bởi : MNH</string>
+            <string>(TEST)By TaoJB | Hỗ trợ bởi : MNH</string>
         </dict>
     </array>
     <key>title</key>
