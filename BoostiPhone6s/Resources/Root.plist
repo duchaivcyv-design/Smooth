@@ -4,7 +4,6 @@
 <dict>
     <key>items</key>
     <array>
-        <!-- KHỐI 1: CÔNG TẮC TỔNG THỂ -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -26,7 +25,6 @@
             <string>Kích hoạt Tinh chỉnh</string>
         </dict>
 
-        <!-- KHỐI 2: TẦN SỐ QUÉT & MÀN HÌNH -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -92,7 +90,6 @@
             <string>Ép xung cực hạn 144Hz</string>
         </dict>
 
-        <!-- KHỐI 3: TRẢI NGHIỆM VUỐT CHẠM & GIAO DIỆN -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -162,7 +159,6 @@
             <string>Tăng tốc phản hồi cảm ứng 0ms</string>
         </dict>
 
-        <!-- KHỐI 4: TỐI ƯU HÓA HIỂN THỊ ĐỒ HỌA CHÍNH THỨC -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -292,7 +288,6 @@
             <string>Khóa ổn định khung hình chơi Game</string>
         </dict>
 
-        <!-- KHỐI 5: TÀI NGUYÊN PHẦN CỨNG & BỘ NHỚ RAM -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -420,14 +415,13 @@
             <string>Định danh máy thế hệ mới (Mở khóa tính năng)</string>
         </dict>
 
-        <!-- KHỐI 6: NHIỆT ĐỘ & THỜI LƯỢNG PIN -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
             <string>LÀM MÁT HỆ THỐNG &amp; BẢO VỆ PIN</string>
             <key>footerText</key>
-            <string>Bảo vệ CPU không bị bóp nghẽn và giữ máy mát mẻ khi sạc hoặc chơi game.</string>
+            <string>Bộ đệm khởi động 5.0 giây giúp máy luôn mát mẻ, 0% giật khựng sau khi Respring/Sreboot.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -502,7 +496,6 @@
             <string>Chế độ tiết kiệm pin (Khóa 30 FPS/Hz)</string>
         </dict>
 
-        <!-- KHỐI 7: MẠNG & AN TOÀN HỆ THỐNG -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -546,7 +539,6 @@
             <string>Tăng tốc socket mạng TCP Turbo</string>
         </dict>
 
-        <!-- KHỐI 8: THAO TÁC BẢO TRÌ & THỰC THI -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -570,7 +562,6 @@
             <string>Đặt lại toàn bộ về mặc định</string>
         </dict>
 
-        <!-- KHỐI 9: THÔNG TIN BẢN QUYỀN -->
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
