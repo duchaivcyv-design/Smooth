@@ -1,7 +1,6 @@
 // ==============================================================================
-// TWEAK.XM - APEX TITANIUM RUNTIME ENGINE (STABLE PRODUCTION BUILD)
+// TWEAK.XM - APEX TITANIUM RUNTIME ENGINE (STABLE PRODUCTION BUILD V24.3)
 // TARGET: iOS 14.0 -> iOS 18.x / 26.0+ (ARM64 / ARM64E)
-// ALL LOGIC UNITS EXPANDED EXCLUSIVELY WITHOUT CONDENSATION
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -213,7 +212,6 @@ static dispatch_queue_t apex243_telemetry_queue = NULL;
 static dispatch_queue_t apex243_hardware_poll_queue = NULL;
 static dispatch_queue_t apex243_daemon_background_queue = NULL;
 static dispatch_queue_t apex243_memory_guardian_queue = NULL;
-static dispatch_queue_t apex243_entropy_sync_queue = NULL;
 
 static BOOL PMRuntimeReady = NO;
 static BOOL g_AppWindowReadyForFrameBoost = NO;
@@ -732,7 +730,7 @@ static void Apex243_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL metalTripleBuffering;
 @property (nonatomic, assign) BOOL gameFpsStabilizer;
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
-@property (nonatomic, autoSpoofNewDevice, assign) BOOL autoSpoofNewDevice;
+@property (nonatomic, assign) BOOL autoSpoofNewDevice;
 
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
@@ -970,11 +968,15 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %group Group_Display_DualRate
 
 %hook UIStatusBar
-- (void)setFrame:(CGRect)frame { %orig; }
+- (void)setFrame:(CGRect)frame {
+    %orig(frame);
+}
 %end
 
 %hook _UIStatusBar
-- (void)setFrame:(CGRect)frame { %orig; }
+- (void)setFrame:(CGRect)frame {
+    %orig(frame);
+}
 %end
 
 %hook UIViewController
