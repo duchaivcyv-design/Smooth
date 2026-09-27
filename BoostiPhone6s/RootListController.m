@@ -57,6 +57,7 @@ extern char **environ;
                     [spec setProperty:@YES forKey:@"enabled"];
                     continue;
                 }
+                // Khóa xám toàn bộ tương tác nếu tắt công tắc tổng
                 [spec setProperty:@(masterOn) forKey:@"enabled"];
             }
             _specifiers = specs;
@@ -256,7 +257,7 @@ extern char **environ;
 - (void)respringDevice {
     if (![self isMasterEnabled]) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Khởi Động Lại SpringBoard"
-                                                                   message:@"Respring để đồng bộ hoàn toàn SmoothiOS V22.7.5 (Beta 6.0-1B)?"
+                                                                   message:@"Respring để đồng bộ hoàn toàn SmoothiOS V22.9 Olympus Apex?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -271,7 +272,7 @@ extern char **environ;
 
 - (void)resetAllSettings {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình"
-                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.7.5 (Beta 6.0-1B)?"
+                                                                   message:@"Khôi phục toàn bộ cài đặt gốc của SmoothiOS V22.9?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
