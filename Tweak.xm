@@ -692,7 +692,7 @@ static void Apex2375_PeriodicWatchdogHealthCheck(void) {
 @property (nonatomic, assign) BOOL metalTripleBuffering;
 @property (nonatomic, assign) BOOL gameFpsStabilizer;
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
-@property (nonatomic, autoSpoofNewDevice, assign) BOOL autoSpoofNewDevice;
+@property (nonatomic, assign) BOOL autoSpoofNewDevice;
 
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
@@ -1348,8 +1348,6 @@ static void __attribute__((constructor)) _ApexEntropyIntegrityVerify(void) {
             return;
         }
 
-        // BẢO VỆ TUYỆT ĐỐI KHÔNG GIAN ỨNG DỤNG BÊN THỨ BA:
-        // Nếu tiến trình không phải SpringBoard hay Settings -> Thoát ngay từ đầu!
         if (!BoostIsSpringBoard() && !BoostIsPreferencesApp()) {
             return;
         }
