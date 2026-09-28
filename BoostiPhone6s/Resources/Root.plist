@@ -28,7 +28,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== 3 TÍNH NĂNG MỚI AN TOÀN TUYỆT ĐỐI ==================== -->
+		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V24 ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -683,7 +683,7 @@
 			<key>label</key>
 			<string>Tác Giả</string>
 			<key>get</key>
-			<string>TaoJB:</string>
+			<string>getAuthorName:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -691,7 +691,7 @@
 			<key>label</key>
 			<string>Phiên Bản</string>
 			<key>get</key>
-			<string>4.3.0-1a:</string>
+			<string>getVersionString:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -699,7 +699,7 @@
 			<key>label</key>
 			<string>Tham Gia Nhóm Hỗ Trợ (Mở Trình Duyệt)</string>
 			<key>action</key>
-			<string>https://zalo.me/g/qjd56ltkraiih88ps6ui:</string>
+			<string>openSupportLink:</string>
 		</dict>
 	</array>
 	<key>title</key>
