@@ -1173,7 +1173,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook SBFluidSwitcherAnimationSettings
 - (void)setDefaultValues {
     %orig;
-    [self setOpacityMinimumDistanceThreshold:0.0];
+    if ([self respondsToSelector:@selector(setOpacityMinimumDistanceThreshold:)]) {
+        [self setOpacityMinimumDistanceThreshold:0.0];
+    }
 }
 %end
 
@@ -1198,24 +1200,30 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook UIView
 - (void)layoutSubviews {
     %orig;
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine) {
+    if (g_Enabled && g_ColorOs17SmoothEngine) {
         NSString *cls = NSStringFromClass([self class]);
         if ([cls containsString:@"AppSwitcher"] || [cls containsString:@"FluidSwitcher"] || [cls containsString:@"SBHomeScreenOverlayView"]) {
             self.layer.shouldRasterize = NO;
             self.layer.drawsAsynchronously = YES;
-            self.layer.allowsGroupOpacity = NO;
+            if ([self.layer respondsToSelector:@selector(setAllowsGroupOpacity:)]) {
+                self.layer.allowsGroupOpacity = NO;
+            }
         }
     }
 }
 %end
 
-%hook CAAnimation
-- (void)setDuration:(NSTimeInterval)duration {
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && duration > 0.35) {
-        %orig(duration * 0.85);
-    } else {
-        %orig(duration);
+%end
+
+// Tối ưu an toàn cho Backdrop không bao giờ ném ngoại lệ
+%group Group_ColorOS17_SafeUI
+
+%hook _UIVisualEffectBackdropView
+- (void)applySettings:(id)arg1 {
+    if (g_Enabled && g_HeavyEffectAntiLagV3) {
+        self.layer.drawsAsynchronously = YES;
     }
+    %orig(arg1);
 }
 %end
 
