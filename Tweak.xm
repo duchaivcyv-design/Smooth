@@ -89,6 +89,8 @@ extern char **environ;
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag;
 @end
 
+@class CADisplay;
+
 @interface UIScreen (ApexEngine)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
@@ -1851,7 +1853,7 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
 
 @implementation Titanium_RunLoopHangGuard {
     dispatch_source_t _hangTimer;
-    atomic_uint_fast64_t _lastPingTimestamp;
+    volatile uint64_t _lastPingTimestamp;
     BOOL _isMonitoring;
 }
 
