@@ -8,9 +8,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.8 APEX SUPREME</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.8.7 APEX SUPREME</string>
 			<key>footerText</key>
-			<string>Tắt công tắc này sẽ lập tức ẩn toàn bộ cấu hình con và vô hiệu hóa mọi can thiệp.</string>
+			<string>Khi tắt công tắc tổng, toàn bộ các phím chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -31,9 +31,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V24.8 (MỚI)</string>
+			<string>ĐẶC QUYỀN NÂNG CẤP V24.8.7 (TIÊM TRỄ AN TOÀN)</string>
 			<key>footerText</key>
-			<string>ProMotion Beta 5 tự động điều phối nhịp cảm ứng. Liquid Glass Beta 4 giảm tải GPU. Bàn phím 0ms gõ không trễ.</string>
+			<string>ProMotion Beta 5 tự động đồng bộ nhịp chạm khi tương tác. Liquid Glass Beta 4 giảm tải GPU. Bàn phím 0ms gõ cực nhạy.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -84,7 +84,7 @@
 			<key>label</key>
 			<string>ĐIỀU PHỐI TẦN SỐ QUÉT &amp; KHUNG HÌNH (HZ / FPS)</string>
 			<key>footerText</key>
-			<string>Bấm để mở bảng chọn mức tần số quét và mức khung hình dạng Popup Card.</string>
+			<string>Đồng bộ xung nhịp hiển thị qua cơ chế Lazy Injection, hỗ trợ khóa nhịp mượt mà cả trong ứng dụng lẫn SpringBoard.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -153,9 +153,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>TỐI ƯU HÓA &amp; CÁCH LY ỨNG DỤNG BÊN THỨ 3 (UIKIT)</string>
+			<string>CƠ CHẾ TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (LAZY SYNC)</string>
 			<key>footerText</key>
-			<string>Cách ly hoàn toàn các hook giao diện hệ thống khỏi app bên thứ 3, khử giật xé hình và triệt tiêu lỗi màn hình đen.</string>
+			<string>Chờ ứng dụng dựng xong toàn bộ UIWindow và rootViewController trước khi nạp mô-đun, loại bỏ nguy cơ đen màn hình và kẹt render.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -165,9 +165,9 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>UIKitIsolatedSmooth</string>
+			<string>AppLazyInjectionSync</string>
 			<key>label</key>
-			<string>Cách Ly An Toàn &amp; Mượt Ứng Dụng UIKit</string>
+			<string>Đồng Bộ Độ Trễ Tiêm Ứng Dụng</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
@@ -179,23 +179,9 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>UIKitAsyncImageDecoders</string>
+			<string>AppRenderShieldIsolation</string>
 			<key>label</key>
-			<string>Giải Mã Hình Ảnh Bất Đồng Bộ (Async Render)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>UIKitAntiStallPacing</string>
-			<key>label</key>
-			<string>Bộ Chống Khựng Khung Hình Ứng Dụng (Anti-Stall)</string>
+			<string>Cách Ly Render Pipeline App Gốc</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
@@ -666,7 +652,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>BẢO MẬT &amp; GIA TỐC MẠNG TCP</string>
+			<string>BẢO MẬT &amp; QUYỀN RIÊNG TƯ</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -696,20 +682,6 @@
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>TcpTurboNetwork</string>
-			<key>label</key>
-			<string>Tối Ưu Cửa Sổ Mạng TCP Turbo</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
 
 		<dict>
 			<key>cell</key>
@@ -717,7 +689,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V24.8 Apex Supreme - Bản quyền thuộc về ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V24.8.7DEBUG  - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -745,6 +717,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V24.8</string>
+	<string>BoostiPhone6s V24.8.7</string>
 </dict>
 </plist>
