@@ -786,7 +786,7 @@ static void Titanium_StartPassiveRamDaemon(void) {
         vm_statistics64_data_t vm_stat;
         mach_msg_type_number_t host_size = sizeof(vm_statistics64_data_t) / sizeof(integer_t);
         if (host_statistics64(host_port, HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_size) == KERN_SUCCESS) {
-            int64_free_mem = ((int64_t)vm_stat.free_count * (int64_t)pagesize) / (1024 * 1024);
+            int64_t free_mem = ((int64_t)vm_stat.free_count * (int64_t)pagesize) / (1024 * 1024);
             if (free_mem < 140) {
                 Titanium_RunGarbageCollector_Light();
             }
@@ -1431,22 +1431,45 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
     dispatch_async(titanium_app_engine_queue, ^{
         @autoreleasepool {
             @try {
-                // 1. CrashGuard: Giám sát ổn định và chống văng app
-                [[CrashGuard sharedInstance] startMonitoring];
+                // 1. CrashGuard
+                Class crashGuardCls = NSClassFromString(@"CrashGuard");
+                if (crashGuardCls && [crashGuardCls respondsToSelector:@selector(sharedInstance)]) {
+                    id guard = [crashGuardCls performSelector:@selector(sharedInstance)];
+                    if ([guard respondsToSelector:@selector(startMonitoring)]) {
+                        [guard performSelector:@selector(startMonitoring)];
+                    }
+                }
 
-                // 2. CacheCleaner: Dọn dẹp RAM và giải phóng bộ đệm rác sau khi mở app
-                [CacheCleaner forceDeepMemoryPurge];
+                // 2. CacheCleaner
+                Class cacheCls = NSClassFromString(@"CacheCleaner");
+                if (cacheCls && [cacheCls respondsToSelector:@selector(forceDeepMemoryPurge)]) {
+                    [cacheCls performSelector:@selector(forceDeepMemoryPurge)];
+                }
                 malloc_zone_pressure_relief(NULL, 1024 * 1024 * 4);
 
-                // 3. SmartThermal: Thiết lập cơ chế chống bóp xung do nhiệt độ trong app
-                [SmartThermal setupThermalThrottlingProtection];
+                // 3. SmartThermal
+                Class thermalCls = NSClassFromString(@"SmartThermal");
+                if (thermalCls) {
+                    if ([thermalCls respondsToSelector:@selector(setupThermalThrottlingProtection)]) {
+                        [thermalCls performSelector:@selector(setupThermalThrottlingProtection)];
+                    } else if ([thermalCls respondsToSelector:@selector(sharedInstance)]) {
+                        id th = [thermalCls performSelector:@selector(sharedInstance)];
+                        if ([th respondsToSelector:@selector(startMonitoring)]) {
+                            [th performSelector:@selector(startMonitoring)];
+                        }
+                    }
+                }
 
-                // 4. DeepExploit & KernelBypass: Tối ưu hoá luồng Mach và vượt rào Sandbox an toàn
-                [DeepExploit engageExploitOptimizations];
-                [KernelBypass applySandboxBypassPatches];
+                // 4. KernelBypass & SystemBlocker
+                Class kbCls = NSClassFromString(@"KernelBypass");
+                if (kbCls && [kbCls respondsToSelector:@selector(applySandboxBypassPatches)]) {
+                    [kbCls performSelector:@selector(applySandboxBypassPatches)];
+                }
 
-                // 5. SystemBlocker: Chặn thu thập dữ liệu ngầm và telemetry bên trong app
-                [SystemBlocker blockSystemTracking];
+                Class sbCls = NSClassFromString(@"SystemBlocker");
+                if (sbCls && [sbCls respondsToSelector:@selector(blockSystemTracking)]) {
+                    [sbCls performSelector:@selector(blockSystemTracking)];
+                }
             } @catch(NSException *e) {}
         }
     });
