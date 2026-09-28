@@ -347,7 +347,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.7.1 Apex Supreme";
+    return @"4.5.2-1-Debug";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
