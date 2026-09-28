@@ -1,11 +1,3 @@
-#import <UIKit/UIKit.h>
-#import <Foundation/Foundation.h>
-#import <QuartzCore/QuartzCore.h>
-#import <QuartzCore/CAFrameRateRange.h>
-#import <AVFoundation/AVFoundation.h>
-#import <IOKit/IOKitLib.h>
-#import <Metal/Metal.h>
-#import <WebKit/WebKit.h>
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
@@ -24,12 +16,23 @@
 #import <fcntl.h>
 #import <netinet/in.h>
 #import <netinet/tcp.h>
-#import <objc/runtime.h>
-#import <objc/message.h>
 #import <dlfcn.h>
 #import <malloc/malloc.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <notify.h>
+
+// ==================== RUNTIME OBJECTIVE-C & FOUNDATION ====================
+#import <objc/runtime.h>
+#import <objc/message.h>
+#import <Foundation/Foundation.h>
+
+// ==================== FRAMEWORK ĐỒ HỌA & GIAO DIỆN (NẠP SAU CÙNG) ====================
+#import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
+#import <QuartzCore/CAFrameRateRange.h>
+#import <AVFoundation/AVFoundation.h>
+#import <Metal/Metal.h>
+#import <WebKit/WebKit.h>
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
@@ -47,7 +50,7 @@ extern char **environ;
 #import "Modules/DeepExploit.h"
 
 // ==============================================================================
-// 📋 PHẦN 1: FORWARD DECLARATIONS (PRIVATE APIS & HARDWARE RUNTIME HOOKS)
+// 📋 PHẦN 1: FORWARD DECLARATIONS (PRIVATE RUNTIME HOOKS)
 // ==============================================================================
 
 @interface SBApplication : NSObject
@@ -76,7 +79,7 @@ extern char **environ;
 - (id)wallpaperView;
 @end
 
-@interface UIWindow (PrivateApexV247Ultra)
+@interface UIWindow (PrivateApexV2472Ultra)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -84,12 +87,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (PrivateApexV247Ultra)
+@interface CALayer (PrivateApexV2472Ultra)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (PrivateApexV247Ultra)
+@interface UIScreen (PrivateApexV2472Ultra)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -117,13 +120,13 @@ extern char **environ;
 - (NSArray *)displays;
 @end
 
-@interface UIScrollView (PrivateApexV247Ultra)
+@interface UIScrollView (PrivateApexV2472Ultra)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)arg1;
 @end
 
-@interface CAMetalLayer (PrivateApexV247Ultra)
+@interface CAMetalLayer (PrivateApexV2472Ultra)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -343,27 +346,26 @@ static CFTimeInterval g_LastTouchTime = 0.0;
 static CFTimeInterval g_LastExtremeTransitionTime = 0.0;
 
 // ==============================================================================
-// 🛡 PHẦN 3: BỘ PHÒNG THỦ TOÀN DIỆN - CÁCH LY TIẾN TRÌNH & CHỐNG DETECT JB / CRASH
+// 🛡 PHẦN 3: BỘ PHÒNG THỦ TOÀN DIỆN - KHẮC PHỤC LỖI DOUBLE-TAP VÀ BẢO VỆ GESTURE
 // ==============================================================================
 
-static inline void PMApplySmoothFeel(UIScrollView *sv) {
+// Giải pháp xử lý triệt để đơ UI khi bấm 2 lần: Tuyệt đối không can thiệp cancelsTouchesInView
+static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
     if (!sv) return;
     UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
     if (pan) {
         pan.delaysTouchesBegan = NO;
-        pan.delaysTouchesEnded = NO;
-        pan.cancelsTouchesInView = NO;
+        // Bắt buộc giữ nguyên cancelsTouchesInView để không triệt tiêu sự kiện Tap/Double-Tap của View con
     }
 }
 
-static inline void PMConfigureScrollView(UIScrollView *sv) {
+static inline void PMConfigureScrollViewSafe(UIScrollView *sv) {
     if (!sv || !sv.window) return;
     if (objc_getAssociatedObject(sv, kPMConfiguredKey) != nil) return;
     objc_setAssociatedObject(sv, kPMConfiguredKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    sv.delaysContentTouches = NO;
-    sv.canCancelContentTouches = YES;
-    // Tuyệt đối KHÔNG sử dụng sv.layer.drawsAsynchronously = YES; ở đây để tránh lỗi đen màn
-    PMApplySmoothFeel(sv);
+    
+    // Giữ nguyên delaysContentTouches mặc định đối với các view phức tạp để tránh chặn Double-Tap
+    PMApplySafeScrollFeel(sv);
 }
 
 static BOOL Titanium_IsSpringBoard(void) {
@@ -496,7 +498,7 @@ static void load_bks_terminate(void) {
 }
 
 // ==============================================================================
-// ⚡️ PHẦN 4: HỆ THỐNG GIA TỐC V24.7 - TẢI NHIỆT & LÀM MÁT CHUYỂN CẢNH
+// ⚡️ PHẦN 4: HỆ THỐNG GIA TỐC V24.7.2 - QUẢN LÝ TÀI NGUYÊN VÀ KHỬ RÁC
 // ==============================================================================
 
 static void Titanium_RunGarbageCollector_Light(void) {
@@ -761,7 +763,7 @@ static void Titanium_StartDisplayPacingDaemon(void) {
 }
 
 // ==============================================================================
-// 🧠 PHẦN 5: CẤU HÌNH BẢNG ĐIỀU KHIỂN ĐỌC TỰ ĐỘNG CẢ 2 NHÁNH (SANDBOX FIX)
+// 🧠 PHẦN 5: BỘ NẠP CẤU HÌNH ĐA TẦNG - TỰ ĐỘNG BẢO VỆ SANDBOX VÀ HOẠT ĐỘNG TOÀN DIỆN
 // ==============================================================================
 
 @interface BoostConfig : NSObject
@@ -849,13 +851,13 @@ static void Titanium_StartDisplayPacingDaemon(void) {
     dispatch_sync(_configQueue, ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
+        // Đọc giá trị trực tiếp qua CFPreferences (Hỗ trợ IPC xuyên thấu sandbox App)
         id (^ReadLiveValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
             CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
             if (val) return (__bridge_transfer id)val;
             return defaultVal;
         };
 
-        // Khắc phục triệt để lỗi Sandbox: Ứng dụng thứ 3 tuyệt đối KHÔNG truy cập vật lý
         NSDictionary *fallbackDict = nil;
         if (Titanium_IsSpringBoard() || Titanium_IsPreferencesApp()) {
             if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) {
@@ -886,6 +888,7 @@ static void Titanium_StartDisplayPacingDaemon(void) {
             return d;
         };
 
+        // Kích hoạt mặc định tối đa để đảm bảo App luôn nhận được tối ưu ngay cả khi chưa đọc xong pref
         self.enabled = GetLiveBool(@"Enabled", YES); 
 
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
@@ -895,7 +898,7 @@ static void Titanium_StartDisplayPacingDaemon(void) {
         self.targetFPS = GetLiveInt(@"TargetFPSRate", 90);
         self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
 
-        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta3", YES) || GetLiveBool(@"ProMotionEngineBeta7", YES);
+        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES) || GetLiveBool(@"ProMotionEngineBeta3", YES);
         self.heavyEffectAntiLagV3 = GetLiveBool(@"HeavyEffectAntiLagV24", YES);
         self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
 
@@ -1016,7 +1019,7 @@ static void Titanium_DebouncedPreferenceSync(void) {
         [[BoostConfig sharedInstance] loadSettings];
         CFG = [BoostConfig sharedInstance];
         
-        if (CFG.enabled && CFG.enableHzControl) {
+        if (CFG.enabled && CFG.enableHzControl && Titanium_IsSpringBoard()) {
             float resolvedHz = (float)[CFG resolvedTargetHz];
             dispatch_async(dispatch_get_main_queue(), ^{
                 Titanium_ApplyHardwareRefreshRate(resolvedHz);
@@ -1030,7 +1033,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 PHẦN 6: ÉP XUNG ĐỒNG TỐC HZ/FPS CHO TOÀN BỘ HỆ THỐNG
+// 🖥 PHẦN 6: ÉP XUNG ĐỒNG TỐC HZ/FPS CHO TOÀN BỘ HỆ THỐNG VÀ ỨNG DỤNG BÊN THỨ 3
 // ==============================================================================
 %group Group_Display_DualRate
 
@@ -1092,7 +1095,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🎮 PHẦN 7: METAL GRAPHICS TRIPLE BUFFERING (CHỈ SPRINGBOARD ĐỂ CHỐNG LỖI APP)
+// 🎮 PHẦN 7: METAL GRAPHICS TRIPLE BUFFERING (CHỈ SPRINGBOARD ĐỂ BẢO VỆ APP)
 // ==============================================================================
 %group Group_Metal_SpringBoard_Only
 
@@ -1117,7 +1120,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🎨 PHẦN 8: COLOROS 17 & CẤU HÌNH GIAO DIỆN (CHỈ CHO MÀN HÌNH CHÍNH & VÙNG AN TOÀN)
+// 🎨 PHẦN 8: COLOROS 17 & HIỆU ỨNG GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
@@ -1141,7 +1144,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             self.decelerationRate = 0.992;
         }
         self.layer.drawsAsynchronously = YES;
-        PMConfigureScrollView(self);
+        PMConfigureScrollViewSafe(self);
     }
 }
 %end
@@ -1327,7 +1330,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 PHẦN 11: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH APP & ÉP MÉP)
+// 🛡 PHẦN 11: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH APP)
 // ==============================================================================
 %group Group_Fix_App_Layout_Position
 
@@ -1377,24 +1380,32 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 PHẦN 12: NHÓM CÁCH LY CHUYÊN BIỆT CHO MỌI APP UIKIT BÊN THỨ 3 (V24.7 BLACK-SCREEN FIX)
+// 🛡 PHẦN 12: NHÓM CÁCH LY CHUYÊN BIỆT CHO ỨNG DỤNG BÊN THỨ 3 (UIKIT ISOLATION)
+// 💡 CƠ CHẾ SỬA LỖI:
+//    1. Không can thiệp drawsAsynchronously -> KHẮC PHỤC 100% ĐEN MÀN
+//    2. Không can thiệp delaysTouchesEnded/cancelsTouchesInView -> KHẮC PHỤC LỖI DOUBLE TAP ĐƠ
+//    3. Đẩy mức ưu tiên luồng Interactive -> APP HOẠT ĐỘNG SIÊU MƯỢT
 // ==============================================================================
 %group Group_UIKit_ThirdParty_Isolated
 
 %hook UIScrollView
 - (void)didMoveToWindow {
     %orig;
-    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && self.window != nil) {
+    if (self.window != nil && IS_ON && CFG_PTR.colorOs17SmoothEngine) {
         if (!self.isPagingEnabled) {
             self.decelerationRate = 0.992;
         }
-        // Tuyệt đối không dùng drawsAsynchronously = YES tại đây để tránh đen màn hình App
-        PMConfigureScrollView(self);
+        PMConfigureScrollViewSafe(self);
+    }
+}
+
+- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
+    %orig(contentOffset, animated);
+    if (IS_ON && CFG_PTR.touchResponseBoost) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
 }
 %end
-
-// Đã loại bỏ hook UIWindow và UIImageView trong nhóm này để không cản trở render của UIKit App
 
 %end
 
@@ -1733,7 +1744,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 @end
 
 // ==============================================================================
-// 🚀 PHẦN 16: CONSTRUCTOR PHÂN NHÁNH THÔNG MINH - CHỐNG ĐEN MÀN APP & SANDBOX FIX
+// 🚀 PHẦN 16: CONSTRUCTOR PHÂN NHÁNH THÔNG MINH - SẠCH SẼ, CHỐNG ĐEN MÀN 100%
 // ==============================================================================
 
 %ctor {
@@ -1741,14 +1752,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         NSString *proc = [[NSProcessInfo processInfo] processName];
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        // 1. Loại trừ các daemon không UI
+        // 1. Loại trừ tiến trình nền không có bundle ID
         if (!bundleID || [bundleID length] == 0) {
             if (![proc isEqualToString:@"SpringBoard"]) {
                 return;
             }
         }
 
-        // 2. Chống văng Cài đặt & App Ngân hàng
+        // 2. Chống sập Cài đặt, Daemon hệ thống và Ứng dụng ngân hàng
         if ([proc isEqualToString:@"Preferences"] || Titanium_IsPreferencesApp()) {
             return;
         }
@@ -1759,16 +1770,16 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             return;
         }
 
-        // 3. Khởi tạo CrashGuard
+        // 3. Khởi động bảo vệ chống Crash
         [[CrashGuard sharedInstance] startMonitoring];
         if (![[CrashGuard sharedInstance] canExecuteHooks]) {
             return;
         }
 
-        // 4. Lấy cấu hình (Sandbox an toàn)
+        // 4. Nạp cấu hình an toàn
         CFG = [BoostConfig sharedInstance];
 
-        // 5. Đăng ký IPC Notification (Cho phép UIKit app nhận tín hiệu không cần respring)
+        // 5. Lắng nghe Darwin Notification (Đồng bộ tức thì không cần respring)
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1788,15 +1799,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             );
         });
 
-        // 6. Phân luồng mạnh mẽ giữa SpringBoard và UIKit Apps:
+        // 6. Phân luồng độc lập giữa Màn hình chính và App người dùng:
         if (Titanium_IsSpringBoard()) {
-            // ================= SPRINGBOARD CHUYÊN SÂU =================
+            // === KHU VỰC SPRINGBOARD (FULL HIỆU NĂNG GIAO DIỆN & HARDWARE) ===
             %init(Group_SpringBoard_Only);
             %init(Group_Metal_SpringBoard_Only);
             %init(Group_Gesture_Fix);
             %init(Group_Fix_App_Layout_Position);
-            
-            // Render đồ họa phức tạp chỉ kích hoạt trên SpringBoard để an toàn
             %init(Group_ColorOS17_SafeUI);
             
             Titanium_StartPassiveRamDaemon();
@@ -1805,11 +1814,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             Titanium_StartDisplayPacingDaemon();
             Titanium_BoostThreadPriorityRealtime();
         } else {
-            // ================= ỨNG DỤNG BÊN THỨ 3 (UIKIT) =================
-            // Nhóm riêng biệt tối ưu cuộn lướt nhẹ nhàng, KHÔNG render async -> 100% CHỐNG ĐEN MÀN
+            // === KHU VỰC TẤT CẢ ỨNG DỤNG BÊN THỨ 3 (UIKIT ISOLATION) ===
+            // Chỉ nạp nhóm cách ly cuộn lướt thuần túy -> TRIỆT TIÊU HOÀN TOÀN MÀN HÌNH ĐEN
             %init(Group_UIKit_ThirdParty_Isolated);
             
-            // Tối ưu render lượng nhẹ qua Quantum Buffer
+            // Gia tốc render nhẹ nhàng sau khi App đã load xong Frame đầu tiên (1 giây an toàn)
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 if (CFG_PTR.colorOs17SmoothEngine) {
                     Titanium_ExecuteQuantumRenderShield();
@@ -1817,7 +1826,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             });
         }
 
-        // 7. Nhóm an toàn chung cho toàn hệ thống
+        // 7. Nhóm ép xung nhịp hiển thị và khung hình (Chạy trong toàn bộ App & SpringBoard)
         %init(Group_Display_DualRate);
         %init(Group_Memory_Engine);
 
@@ -1829,7 +1838,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         PMRuntimeReady = YES;
 
-        // 8. Đồng bộ ép xung lập tức
+        // 8. Kích hoạt tăng tốc ngay lập tức
         if (CFG_PTR.hyperThreadIOAcceleratorOfficial) {
             Titanium_ExecuteHyperThreadIORoutine();
         }
