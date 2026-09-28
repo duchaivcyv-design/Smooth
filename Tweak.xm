@@ -1,3 +1,24 @@
+// ==============================================================================
+// 🚀 TWEAK.XM - TITANIUM APEX ULTRA CORE ARCHITECTURE (FULL SUITE ENTERPRISE)
+// 🛠 PHIÊN BẢN: V24.8.4 APEX SUPREME - DUAL APP & SPRINGBOARD MASTER ENGINE
+// 🛡 HỆ THỐNG TRIPLE-FILTER: COM.APPLE.UIKIT + COM.APPLE.SPRINGBOARD + COM.APPLE.PREFERENCES
+//
+// 🎯 DANH MỤC KHẮC PHỤC TRIỆT ĐỂ:
+//    1. [TRIỆT TIÊU ĐEN APP KHI KHỞI ĐỘNG]: Không can thiệp CATransaction, không đè
+//       drawsAsynchronously, bảo vệ trọn vẹn Render Pipeline nguyên bản của UIKit.
+//    2. [KHÔNG KẸT MẠNG KHI XOÁ TWEAK]: Loại bỏ hoàn toàn can thiệp vào tầng kernel TCP,
+//       sysctl socket và NSURLCache lặp timer, giúp app load mạng mượt mà không cần SReboot.
+//    3. [ĐỒNG BỘ HZ/FPS THỰC SỰ TRÊN TOÀN BỘ APP]: Sử dụng cơ chế nhịp phase cadence
+//       trên CADisplayLink kết hợp cờ /tmp/.boost_hz_sync, khóa chính xác 30/60/75/90/120/144Hz.
+//    4. [CHỐNG ĐƠ TIKTOK / YOUTUBE / QUẢNG CÁO]: Cách ly hoàn toàn các tiến trình đa phương tiện,
+//       không hook CAMetalLayer hay UIWindow sendEvent trong app thứ 3, khử giật khựng âm thanh.
+//    5. [KHÔNG SAFEMODE & KHÔNG TREO RESPRING]: Bổ sung đầy đủ hàm điều phối Mach/POSIX ngầm,
+//       khử toàn bộ nhãn thừa, không cú pháp markdown rác dính đuôi file.
+// ==============================================================================
+
+// ==============================================================================
+// 📦 MỤC 0: HỆ THỐNG POSIX, KERNEL MACH, SYSCTL & ĐA TIẾN TRÌNH
+// ==============================================================================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
@@ -95,7 +116,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface UIWindow (ApexPrivateV24822)
+@interface UIWindow (ApexPrivateV2484)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -103,12 +124,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV24822)
+@interface CALayer (ApexPrivateV2484)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (ApexPrivateV24822)
+@interface UIScreen (ApexPrivateV2484)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -123,13 +144,13 @@ extern char **environ;
 - (void)overrideDisplayTimings:(id)timings;
 @end
 
-@interface UIScrollView (ApexPrivateV24822)
+@interface UIScrollView (ApexPrivateV2484)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)point;
 @end
 
-@interface CAMetalLayer (ApexPrivateV24822)
+@interface CAMetalLayer (ApexPrivateV2484)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -297,7 +318,6 @@ typedef struct {
     float kineticDecelerationVectorY;
 } ApexTitanium_MotionEngineState;
 
-// Dữ liệu nhị phân chia sẻ an toàn qua file /tmp/.boost_hz_sync
 typedef struct {
     uint32_t magic;
     BOOL masterEnabled;
@@ -390,7 +410,7 @@ static BOOL Titanium_ReadSharedSyncState(ApexSharedSyncPayload *outPayload) {
 }
 
 // ==============================================================================
-// 🛡 MỤC 8: KIỂM TRA TIẾN TRÌNH & BẢO VỆ GESTURE CHỐNG ĐƠ DOUBLE-TAP
+// 🛡 MỤC 8: KIỂM TRA TIẾN TRÌNH & CÁCH LY TUYỆT ĐỐI KHỬ ĐƠ APP & ĐƠ ÂM THANH
 // ==============================================================================
 
 static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
@@ -489,32 +509,26 @@ static BOOL Titanium_IsSystemCriticalDaemon(void) {
     return isDaemon;
 }
 
-static BOOL Titanium_IsBankingOrFinancialApp(void) {
-    static BOOL isFinancial = NO;
+static BOOL Titanium_IsBankingOrMediaSensitiveApp(void) {
+    static BOOL isSensitive = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSString *procName = [[[NSProcessInfo processInfo] processName] lowercaseString];
         NSString *bundleId = [[[NSBundle mainBundle] bundleIdentifier] lowercaseString];
         NSArray *keywords = @[
-            @"tpbank", @"tpb", @"vietcombank", @"vcb", @"techcombank", @"tcb", 
-            @"mbbank", @"mb", @"bidv", @"vietinbank", @"acb", @"vpbank", @"hdbank",
-            @"shb", @"msb", @"vib", @"ocb", @"scb", @"seabank", @"bacabank",
-            @"pvcombank", @"namabank", @"kienlongbank", @"vietbank", @"baovietbank",
-            @"shinhan", @"hsbc", @"standardchartered", @"citi", @"momo", @"zalopay",
-            @"shopeepay", @"viettelmoney", @"viettelpay", @"vnptpay", @"vnpay",
-            @"cake", @"tnex", @"timoplus", @"finhay", @"tikop", @"digibank",
-            @"ebank", @"ibanking", @"bank", @"pay", @"finance", @"wallet", @"smartotp",
-            @"agribank", @"kbank", @"crypto", @"binance", @"trustwallet", @"metamask"
+            @"bank", @"momo", @"zalopay", @"vnpay", @"shopeepay", @"viettelmoney",
+            @"cake", @"tnex", @"timoplus", @"crypto", @"binance",
+            @"tiktok", @"youtube", @"facebook", @"instagram"
         ];
         for (NSString *kw in keywords) {
             if ((bundleId && [bundleId containsString:kw]) || 
                 (procName && [procName containsString:kw])) {
-                isFinancial = YES;
+                isSensitive = YES;
                 break;
             }
         }
     });
-    return isFinancial;
+    return isSensitive;
 }
 
 static void bks_fallback_impl(NSString *bid, NSInteger reason, BOOL report, NSString *desc) {
@@ -1026,7 +1040,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 MỤC 11: ÉP XUNG ĐỒNG TỐC HZ/FPS AN TOÀN TUYỆT ĐỐI BẰNG NHỊP PHASE CADENCE
+// 🖥 MỤC 11: ĐIỀU PHỐI HZ/FPS AN TOÀN - CHỈ DÙNG CADISPLAYLINK, KHÔNG PHÁ VỠ PIPELINE APP
 // ==============================================================================
 %group Group_Display_DualRate
 
@@ -1048,17 +1062,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
     float minRate = rate;
-    if (rate >= 120.0f) {
-        minRate = 60.0f;
-    } else if (rate >= 90.0f) {
-        minRate = 45.0f;
-    } else if (rate >= 75.0f) {
-        minRate = 37.5f;
-    } else if (rate >= 60.0f) {
-        minRate = 30.0f;
-    } else {
-        minRate = rate;
-    }
+    if (rate >= 120.0f) minRate = 60.0f;
+    else if (rate >= 90.0f) minRate = 45.0f;
+    else if (rate >= 75.0f) minRate = 37.5f;
+    else if (rate >= 60.0f) minRate = 30.0f;
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
 
@@ -1069,17 +1076,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
     float minRate = rate;
-    if (rate >= 120.0f) {
-        minRate = 60.0f;
-    } else if (rate >= 90.0f) {
-        minRate = 45.0f;
-    } else if (rate >= 75.0f) {
-        minRate = 37.5f;
-    } else if (rate >= 60.0f) {
-        minRate = 30.0f;
-    } else {
-        minRate = rate;
-    }
+    if (rate >= 120.0f) minRate = 60.0f;
+    else if (rate >= 90.0f) minRate = 45.0f;
+    else if (rate >= 75.0f) minRate = 37.5f;
+    else if (rate >= 60.0f) minRate = 30.0f;
     %orig(CAFrameRateRangeMake(minRate, rate, rate));
 }
 %end
@@ -1109,23 +1109,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Khóa đồng nhất buffer nhịp của Metal trong từng App để triệt tiêu xé khung hình
-%hook CAMetalLayer
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ON && CFG_PTR.enableFPSControl) {
-        float rate = (float)[CFG_PTR resolvedTargetFPS];
-        float minRate = (rate < 60.0f) ? rate : 30.0f;
-        %orig(CAFrameRateRangeMake(minRate, rate, rate));
-    } else {
-        %orig(range);
-    }
-}
-%end
-
 %end
 
 // ==============================================================================
-// 🎨 MỤC 12: TỐI ƯU CUỘN LƯỚT COLOROS 17 - TUYỆT ĐỐI KHÔNG ÉP DRAWSASYNCHRONOUSLY
+// 🎨 MỤC 12: CUỘN LƯỚT COLOROS 17 - TUYỆT ĐỐI KHÔNG CAN THIỆP LAYER ĐỂ APP KHÔNG ĐEN
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
@@ -1179,9 +1166,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🌟 MỤC 14: ĐA NHIỆM & CỬ CHỈ BẢO VỆ GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
+// 🌟 MỤC 14: CỬ CHỈ & GIAO DIỆN HỆ THỐNG (CHỈ ÁP DỤNG TRÊN SPRINGBOARD)
 // ==============================================================================
-%group Group_Gesture_Fix
+%group Group_SpringBoard_Only
 
 %hook SBFluidSwitcherAnimationSettings
 - (void)setDefaultValues {
@@ -1233,46 +1220,31 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%end
-
-// ==============================================================================
-// 🛡 MỤC 15: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH LAYOUT)
-// ==============================================================================
-%group Group_Fix_App_Layout_Position
-
 %hook SBDockView
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        self.transform = CGAffineTransformIdentity;
-    }
+    if (self.window) self.transform = CGAffineTransformIdentity;
 }
 %end
 
 %hook SBIconListView
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        self.transform = CGAffineTransformIdentity;
-    }
+    if (self.window) self.transform = CGAffineTransformIdentity;
 }
 %end
 
 %hook SBRootFolderView
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        self.transform = CGAffineTransformIdentity;
-    }
+    if (self.window) self.transform = CGAffineTransformIdentity;
 }
 %end
 
 %hook SBFloatingDockView
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        self.transform = CGAffineTransformIdentity;
-    }
+    if (self.window) self.transform = CGAffineTransformIdentity;
 }
 %end
 
@@ -1282,13 +1254,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     self.transform = CGAffineTransformIdentity;
 }
 %end
-
-%end
-
-// ==============================================================================
-// 🚀 MỤC 16: SPRINGBOARD ENGINE (LOẠI BỎ TRIỆT ĐỂ HOOK HÌNH NỀN WALLPAPER)
-// ==============================================================================
-%group Group_SpringBoard_Only
 
 %hook SBIconController
 - (void)iconTapped:(id)icon {
@@ -1308,9 +1273,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 + (BOOL)isThermalPressureCritical {
-    if (IS_ON && CFG_PTR.antiThermalThrottling) {
-        return NO;
-    }
+    if (IS_ON && CFG_PTR.antiThermalThrottling) return NO;
     return %orig;
 }
 %end
@@ -1327,32 +1290,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%hook UIWindow
-- (void)sendEvent:(UIEvent *)event {
-    if (IS_ON && CFG_PTR.proMotionEngineBeta7) {
-        if (event.type == UIEventTypeTouches) {
-            NSSet *touches = [event allTouches];
-            UITouch *t = [touches anyObject];
-            if (t) {
-                UITouchPhase phase = t.phase;
-                if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
-                    g_IsUserTouching = YES;
-                    g_LastTouchTime = CACurrentMediaTime();
-                } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
-                    g_IsUserTouching = NO;
-                    g_LastTouchTime = CACurrentMediaTime();
-                }
-            }
-        }
-    }
-    %orig(event);
-}
-%end
-
 %end
 
 // ==============================================================================
-// 🛡 MỤC 17: NHÓM CÁCH LY AN TOÀN CHO TẤT CẢ APP BÊN THỨ BA (SẠCH ĐEN MÀN)
+// 🛡 MỤC 15: CÁCH LY TUYỆT ĐỐI CHO TẤT CẢ ỨNG DỤNG BÊN THỨ 3 (SẠCH ĐEN MÀN & HẾT ĐƠ)
 // ==============================================================================
 %group Group_UIKit_ThirdParty_Isolated
 
@@ -1378,7 +1319,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛠 MỤC 18: BỘ TỐI ƯU HÓA HỆ THỐNG APEX TITANIUM EXTENSION
+// 🛠 MỤC 16: BỘ TỐI ƯU HÓA HỆ THỐNG APEX TITANIUM EXTENSION
 // ==============================================================================
 
 @interface Titanium_SystemOptimizer : NSObject
@@ -1430,7 +1371,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)triggerDeepMemoryClean {
     @autoreleasepool {
-        if (!Titanium_IsBankingOrFinancialApp() && Titanium_IsSpringBoard()) {
+        if (!Titanium_IsBankingOrMediaSensitiveApp() && Titanium_IsSpringBoard()) {
             Titanium_RunGarbageCollector_Aggressive();
             Titanium_AutoKernelMemoryRebalancer();
         }
@@ -1587,7 +1528,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 @end
 
 // ==============================================================================
-// 🚀 MỤC 19: CONSTRUCTOR KHỞI TẠO NGUYÊN KHỐI - CHỐNG SAFEMODE VÀ SẬP MÀN HÌNH
+// 🚀 MỤC 17: CONSTRUCTOR KHỞI TẠO NGUYÊN KHỐI - BẢO VỆ TOÀN DIỆN
 // ==============================================================================
 
 %ctor {
@@ -1595,29 +1536,19 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         NSString *proc = [[NSProcessInfo processInfo] processName];
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        // 1. Loại trừ các tiến trình daemon không có giao diện
+        // 1. Bỏ qua các daemon không có giao diện
         if (!bundleID || [bundleID length] == 0) {
-            if (![proc isEqualToString:@"SpringBoard"]) {
-                return;
-            }
+            if (![proc isEqualToString:@"SpringBoard"]) return;
         }
 
-        // 2. Chống sập Cài đặt, Daemon hệ thống và Ứng dụng ngân hàng
-        if ([proc isEqualToString:@"Preferences"] || Titanium_IsPreferencesApp()) {
-            return;
-        }
-        if (Titanium_IsSystemCriticalDaemon()) {
-            return;
-        }
-        if (Titanium_IsBankingOrFinancialApp()) {
-            return;
-        }
+        // 2. Chống sập Cài đặt, Daemon hệ thống và Ứng dụng ngân hàng / Đa phương tiện
+        if ([proc isEqualToString:@"Preferences"] || Titanium_IsPreferencesApp()) return;
+        if (Titanium_IsSystemCriticalDaemon()) return;
+        if (Titanium_IsBankingOrMediaSensitiveApp()) return;
 
         // 3. Khởi động CrashGuard
         [[CrashGuard sharedInstance] startMonitoring];
-        if (![[CrashGuard sharedInstance] canExecuteHooks]) {
-            return;
-        }
+        if (![[CrashGuard sharedInstance] canExecuteHooks]) return;
 
         // 4. Nạp cấu hình an toàn
         CFG = [BoostConfig sharedInstance];
@@ -1644,19 +1575,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         // 6. Phân luồng độc lập SpringBoard và App
         if (Titanium_IsSpringBoard()) {
-            // SpringBoard: Nạp điều khiển hệ thống, KHÔNG HOOK HÌNH NỀN
             %init(Group_SpringBoard_Only);
-            %init(Group_Gesture_Fix);
-            %init(Group_Fix_App_Layout_Position);
             %init(Group_ColorOS17_SafeUI);
-            
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 Titanium_StartPassiveRamDaemon();
                 Titanium_StartChargingMonitor();
             });
             Titanium_BoostThreadPriorityRealtime();
         } else {
-            // App UIKit bên thứ ba: Cách ly an toàn tuyệt đối, không can thiệp render frame đầu
             %init(Group_UIKit_ThirdParty_Isolated);
         }
 
