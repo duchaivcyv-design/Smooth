@@ -1,4 +1,3 @@
-#!/bin/bash
 set -e
 
 rm -f /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
