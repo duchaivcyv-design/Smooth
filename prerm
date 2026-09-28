@@ -1,21 +1,17 @@
 #!/bin/bash
 set -e
 
-# Xoa entry PreferenceLoader
 rm -f /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
 rm -f /Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
 
-# Xoa Cache
 rm -rf /var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
 rm -rf /var/jb/var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
 
-# Xoa cau hinh Preferences (Bao quat tat ca cac duong dan Rootless & Rootful)
 defaults delete com.taojb.boostiphone6s 2>/dev/null || true
 rm -f /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 rm -f /var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 rm -f /var/jb/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 
-# Xoa bo nho dem cfprefsd de khong bi luu cache cu
 killall cfprefsd 2>/dev/null || true
 
 exit 0
