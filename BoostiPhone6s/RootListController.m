@@ -9,8 +9,6 @@
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
-
-// Tín hiệu đồng bộ tức thì cho tầng ứng dụng UIKit bên thứ 3
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 
 extern char **environ;
@@ -66,7 +64,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 // Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ song hành cho cả SpringBoard và App
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
-    BOOL isDynamic = prefs[@"ProMotionEngineBeta3"] ? [prefs[@"ProMotionEngineBeta3"] boolValue] : YES;
+    BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : (prefs[@"ProMotionEngineBeta3"] ? [prefs[@"ProMotionEngineBeta3"] boolValue] : YES);
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 90;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 90;
 
@@ -113,6 +111,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
             @"Enabled": @YES,
+            @"ProMotionEngineBeta7": @YES,
             @"ProMotionEngineBeta3": @YES,
             @"HeavyEffectAntiLagV24": @YES,
             @"KeyboardZeroLagV24": @YES,
@@ -254,6 +253,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
                 NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
                 [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
                 [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
+                [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
                 [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
                 [prefs writeToFile:targetPath atomically:YES];
                 chmod([targetPath UTF8String], 0644);
@@ -261,6 +261,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
             CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+            CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta7"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
@@ -306,6 +307,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
                 NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
                 [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
                 [prefs setObject:@(fps) forKey:@"TargetRefreshRate"];
+                [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
                 [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
                 [prefs writeToFile:targetPath atomically:YES];
                 chmod([targetPath UTF8String], 0644);
@@ -313,6 +315,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
             CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
+            CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta7"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
@@ -341,7 +344,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V23.4.4.2 Apex Ultra";
+    return @"V24.5 Apex Supreme";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
