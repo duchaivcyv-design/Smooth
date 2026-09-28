@@ -828,10 +828,10 @@ static void Apex244_StartDisplayPacingDaemon(void) {
         self.enabled = GetLiveBool(@"Enabled", YES); 
 
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
-        self.targetHz = GetLiveInt(@"TargetRefreshRate", 90);
+        self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
 
         self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
-        self.targetFPS = GetLiveInt(@"TargetFPSRate", 90);
+        self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
         self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
 
         self.proMotionEngineBeta4 = GetLiveBool(@"ProMotionEngineBeta3", YES);
