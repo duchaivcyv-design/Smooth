@@ -1,8 +1,4 @@
-// ==============================================================================
-// 🚀 TWEAK.XM - TITANIUM APEX ULTRA CORE ARCHITECTURE (FULL SUITE ENTERPRISE)
-// 🛠 PHIÊN BẢN: V24.8.9 APEX SUPREME - DUAL APP & SPRINGBOARD MASTER ENGINE
-// 🛡 TRIPLE BUNDLE FILTER: COM.APPLE.UIKIT + COM.APPLE.SPRINGBOARD + COM.APPLE.PREFERENCES
-//
+// =============================================================================
 // 🎯 DANH MỤC SỬA LỖI & TỐI ƯU TOÀN DIỆN V24.8.9:
 //    1. [ZERO THEOS RE-%INIT ERROR]: Tách biệt hoàn toàn `%group Group_Display_SpringBoard` 
 //       và `%group Group_Display_App_Lazy`, tuyệt đối không trùng lặp tên group giữa các 
