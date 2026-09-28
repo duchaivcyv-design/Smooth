@@ -30,7 +30,7 @@
 #import <notify.h>
 
 // ==============================================================================
-// 📦 MỤC 1: OBJECTIVE-C RUNTIME, CORE FOUNDATION & FOUNDATION
+// MỤC 1: OBJECTIVE-C RUNTIME, CORE FOUNDATION & FOUNDATION
 // ==============================================================================
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -38,7 +38,7 @@
 #import <Foundation/Foundation.h>
 
 // ==============================================================================
-// 📦 MỤC 2: FRAMEWORK GIAO DIỆN, QUARTZCORE & ĐỒ HỌA METAL
+//  MỤC 2: FRAMEWORK GIAO DIỆN, QUARTZCORE & ĐỒ HỌA METAL
 // ==============================================================================
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -48,7 +48,7 @@
 #import <WebKit/WebKit.h>
 
 // ==============================================================================
-// ⚙️ MỤC 3: CÁC ĐỊNH DANH CẤU HÌNH & TÍN HIỆU IPC
+//  MỤC 3: CÁC ĐỊNH DANH CẤU HÌNH & TÍN HIỆU IPC
 // ==============================================================================
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
@@ -62,7 +62,7 @@
 extern char **environ;
 
 // ==============================================================================
-// 🛡 MỤC 4: NẠP CÁC PHÂN HỆ LÕI (TITANIUM SUBMODULES)
+//  MỤC 4: NẠP CÁC PHÂN HỆ LÕI (TITANIUM SUBMODULES)
 // ==============================================================================
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
@@ -72,7 +72,7 @@ extern char **environ;
 #import "Modules/DeepExploit.h"
 
 // ==============================================================================
-// 📋 MỤC 5: KHAI BÁO TIỀN TỆ (FORWARD DECLARATIONS & PRIVATE METHODS)
+//  MỤC 5: KHAI BÁO TIỀN TỆ (FORWARD DECLARATIONS & PRIVATE METHODS)
 // ==============================================================================
 
 @interface SBApplication : NSObject
@@ -186,7 +186,7 @@ extern char **environ;
 @end
 
 // ==============================================================================
-// ⚙️ MỤC 6: CÁC KHỐI CẤU TRÚC ĐIỀU PHỐI ĐA LUỒNG & BỘ ĐỆM TELEMETRY
+//  MỤC 6: CÁC KHỐI CẤU TRÚC ĐIỀU PHỐI ĐA LUỒNG & BỘ ĐỆM TELEMETRY
 // ==============================================================================
 
 typedef struct {
@@ -356,7 +356,7 @@ static CFTimeInterval g_LastTouchTime = 0.0;
 static CFTimeInterval g_LastExtremeTransitionTime = 0.0;
 
 // ==============================================================================
-// 📡 MỤC 7: CƠ CHẾ ĐỒNG BỘ DỮ LIỆU XUYÊN THẤU SANDBOX APP BẰNG SHARED FILE
+//  MỤC 7: CƠ CHẾ ĐỒNG BỘ DỮ LIỆU XUYÊN THẤU SANDBOX APP BẰNG SHARED FILE
 // ==============================================================================
 
 static void Titanium_WriteSharedSyncState(BOOL enabled, int32_t hz, int32_t fps, BOOL dynamicMode) {
@@ -389,7 +389,7 @@ static BOOL Titanium_ReadSharedSyncState(ApexSharedSyncPayload *outPayload) {
 }
 
 // ==============================================================================
-// 🛡 MỤC 8: KIỂM TRA TIẾN TRÌNH & BẢO VỆ GESTURE CHỐNG ĐƠ DOUBLE-TAP
+//  MỤC 8: KIỂM TRA TIẾN TRÌNH & BẢO VỆ GESTURE CHỐNG ĐƠ DOUBLE-TAP
 // ==============================================================================
 
 static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
@@ -538,7 +538,7 @@ static void load_bks_terminate(void) {
 }
 
 // ==============================================================================
-// ⚡️ MỤC 9: TIẾN TRÌNH DỌN DẸP BỘ NHỚ VÀ ĐIỀU PHỐI ĐA LUỒNG AN TOÀN
+//  MỤC 9: TIẾN TRÌNH DỌN DẸP BỘ NHỚ VÀ ĐIỀU PHỐI ĐA LUỒNG AN TOÀN
 // ==============================================================================
 
 static void Titanium_RunGarbageCollector_Light(void) {
@@ -783,7 +783,7 @@ static void Titanium_StartChargingMonitor(void) {
 }
 
 // ==============================================================================
-// 🧠 MỤC 10: BỘ NẠP CẤU HÌNH ĐA TẦNG - TỰ ĐỘNG BẢO VỆ SANDBOX VÀ HOẠT ĐỘNG TOÀN DIỆN
+//  MỤC 10: BỘ NẠP CẤU HÌNH ĐA TẦNG - TỰ ĐỘNG BẢO VỆ SANDBOX VÀ HOẠT ĐỘNG TOÀN DIỆN
 // ==============================================================================
 
 @interface BoostConfig : NSObject
@@ -1024,7 +1024,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 MỤC 11A: ĐIỀU PHỐI HZ/FPS CHO SPRINGBOARD (NHÓM 1)
+//  MỤC 11A: ĐIỀU PHỐI HZ/FPS CHO SPRINGBOARD (NHÓM 1)
 // ==============================================================================
 %group Group_Display_SpringBoard
 
@@ -1110,7 +1110,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🖥 MỤC 11B: ĐIỀU PHỐI HZ/FPS TIÊM TRỄ CHO APP CON (NHÓM 2 - TÁCH BIỆT LOGOS)
+//  MỤC 11B: ĐIỀU PHỐI HZ/FPS TIÊM TRỄ CHO APP CON (NHÓM 2 - TÁCH BIỆT LOGOS)
 // ==============================================================================
 %group Group_Display_App_Lazy
 
@@ -1183,7 +1183,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🎨 MỤC 12: TỐI ƯU CUỘN LƯỚT COLOROS 17 AN TOÀN
+//  MỤC 12: TỐI ƯU FAKE COLOROS 17 AN TOÀN
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
@@ -1214,7 +1214,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// ⌨️ MỤC 13: BÀN PHÍM 0MS
+//  MỤC 13: BÀN PHÍM 0MS ĐỘ TRỄ
 // ==============================================================================
 %group Group_Keyboard_And_Text
 
@@ -1237,7 +1237,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🌟 MỤC 14: ĐA NHIỆM & CỬ CHỈ BẢO VỆ GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
+//  MỤC 14: ĐA NHIỆM & CỬ CHỈ BẢO VỆ GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
 // ==============================================================================
 %group Group_Gesture_Fix
 
@@ -1294,7 +1294,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 MỤC 15: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH LAYOUT)
+//  MỤC 15: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH LAYOUT)
 // ==============================================================================
 %group Group_Fix_App_Layout_Position
 
@@ -1336,7 +1336,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🚀 MỤC 16: SPRINGBOARD ENGINE (KHÔNG CAN THIỆP HÌNH NỀN WALLPAPER)
+//  MỤC 16: SPRINGBOARD ENGINE (KHÔNG CAN THIỆP HÌNH NỀN WALLPAPER)
 // ==============================================================================
 %group Group_SpringBoard_Only
 
@@ -1400,7 +1400,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 MỤC 17: NHÓM CÁCH LY AN TOÀN CHO TẤT CẢ APP BÊN THỨ BA (SẠCH ĐEN MÀN)
+//  MỤC 17: NHÓM CÁCH LY AN TOÀN CHO TẤT CẢ APP BÊN THỨ BA (SẠCH ĐEN MÀN)
 // ==============================================================================
 %group Group_UIKit_ThirdParty_Isolated
 
@@ -1426,7 +1426,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🚀 MỤC 18: CONSTRUCTOR KHỞI TẠO BẰNG TIÊM TRỄ LAZY INJECTION
+//  MỤC 18: CONSTRUCTOR KHỞI TẠO BẰNG TIÊM TRỄ LAZY INJECTION
 // ==============================================================================
 
 %ctor {
