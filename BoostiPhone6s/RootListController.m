@@ -36,6 +36,7 @@ extern char **environ;
         if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
         _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
+        [self updateDynamicTitles];
     }
     return _specifiers;
 }
@@ -47,11 +48,28 @@ extern char **environ;
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self updateDynamicTitles];
     [self reloadSpecifiers];
 }
 
+// Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ
+- (void)updateDynamicTitles {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
+    NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 90;
+    NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 90;
+
+    for (PSSpecifier *spec in (NSArray *)_specifiers) {
+        NSString *key = [spec propertyForKey:@"key"];
+        if ([key isEqualToString:@"TargetRefreshRate"]) {
+            spec.name = [NSString stringWithFormat:@"Chọn Mức Tần Số Quét: %ld Hz", (long)hz];
+        } else if ([key isEqualToString:@"TargetFPSRate"]) {
+            spec.name = [NSString stringWithFormat:@"Chọn Mức Khung Hình: %ld FPS", (long)fps];
+        }
+    }
+}
+
 // ==============================================================================
-// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH PHÂN BỔ TỐI ƯU
+// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH
 // ==============================================================================
 - (void)ensureDefaultSettingsExist {
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -61,7 +79,6 @@ extern char **environ;
             [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
         }
 
-        // Khởi tạo các giá trị mặc định tối ưu sẵn
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
             @"Enabled": @YES,
             @"ProMotionEngineBeta3": @YES,
@@ -109,7 +126,6 @@ extern char **environ;
         }];
 
         [defaults writeToFile:PREF_PATH atomically:YES];
-        
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
         }
@@ -154,14 +170,100 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 3. THÔNG TIN PHÁT TRIỂN & MỞ LIÊN KẾT NHÓM
+// 3. POPUP TAB DẠNG CARD CHUẨN XÁC NHƯ HÌNH ĐÍNH KÈM
+// ==============================================================================
+- (void)showHzPickerPopup:(PSSpecifier *)specifier {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Tần Số Quét (Hz)"
+                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 60Hz: Mặc định chuẩn cân bằng\n• 75Hz - 90Hz: Tối ưu cảm ứng mượt mà\n• 120Hz - 144Hz: Tần số quét cực đại"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *options = @[
+        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"rate": @0},
+        @{@"title": @"Khóa ở 60 Hz (Mặc định)", @"rate": @60},
+        @{@"title": @"Khóa ở 75 Hz (Mượt mà)", @"rate": @75},
+        @{@"title": @"Khóa ở 90 Hz (Mượt mà)", @"rate": @90},
+        @{@"title": @"Khóa ở 120 Hz (Cực mượt)", @"rate": @120},
+        @{@"title": @"Khóa ở 144 Hz (Cực đại)", @"rate": @144}
+    ];
+
+    for (NSDictionary *opt in options) {
+        [alert addAction:[UIAlertAction actionWithTitle:opt[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            NSInteger rate = [opt[@"rate"] integerValue];
+            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
+            [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
+            if (rate > 0) {
+                [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
+            }
+            [prefs writeToFile:PREF_PATH atomically:YES];
+
+            CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+            if (rate > 0) {
+                CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+            }
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+            notify_post(NOTIFY_RELOAD);
+            [self updateDynamicTitles];
+            [self reloadSpecifiers];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.view;
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showFPSPickerPopup:(PSSpecifier *)specifier {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Khung Hình Ứng Dụng (FPS)"
+                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *options = @[
+        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"fps": @0},
+        @{@"title": @"Khóa ở 30 FPS (Tiết kiệm pin)", @"fps": @30},
+        @{@"title": @"Khóa ở 60 FPS (Mặc định)", @"fps": @60},
+        @{@"title": @"Khóa ở 75 FPS (Nâng cao)", @"fps": @75},
+        @{@"title": @"Khóa ở 90 FPS (Mượt mà)", @"fps": @90},
+        @{@"title": @"Khóa ở 120 FPS (Cực mượt)", @"fps": @120},
+        @{@"title": @"Khóa ở 144 FPS (Cực đại)", @"fps": @144}
+    ];
+
+    for (NSDictionary *opt in options) {
+        [alert addAction:[UIAlertAction actionWithTitle:opt[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            NSInteger fps = [opt[@"fps"] integerValue];
+            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
+            [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
+            [prefs writeToFile:PREF_PATH atomically:YES];
+
+            CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+            notify_post(NOTIFY_RELOAD);
+            [self updateDynamicTitles];
+            [self reloadSpecifiers];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.view;
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+// ==============================================================================
+// 4. THÔNG TIN PHÁT TRIỂN & LIÊN KẾT NHÓM
 // ==============================================================================
 - (id)getAuthorName:(PSSpecifier *)specifier {
     return @"ĐỨC LONG";
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.4 Apex Ultra";
+    return @"V24.4.1 Apex Ultra";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -172,7 +274,7 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 4. THANH HÀNH ĐỘNG GÓC PHẢI
+// 5. THANH ĐIỀU HƯỚNG GÓC PHẢI
 // ==============================================================================
 - (void)setupNavigationItems {
     UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Hành Động"
@@ -236,6 +338,7 @@ extern char **environ;
 
         notify_post(NOTIFY_RELOAD);
         [self ensureDefaultSettingsExist];
+        [self updateDynamicTitles];
         [self reloadSpecifiers];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
