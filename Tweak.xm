@@ -98,6 +98,26 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
+@interface SBApplication : NSObject
+- (NSString *)bundleIdentifier;
+- (id)processState;
+@end
+
+@interface SBApplicationController : NSObject
++ (instancetype)sharedInstance;
+- (NSArray *)allApplications;
+- (SBApplication *)applicationWithBundleIdentifier:(NSString *)bundleIdentifier;
+@end
+
+@interface FBProcessState : NSObject
+- (int)pid;
+- (BOOL)isRunning;
+- (BOOL)isForeground;
+@end
+
+@interface SBWindowScene : NSObject
+@end
+
 @interface UIWindow (ApexPrivateV2481)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
@@ -123,13 +143,13 @@ extern char **environ;
 @property (nonatomic, retain) id currentMode;
 @property (nonatomic, copy) NSString *colorMode;
 @property (nonatomic) NSInteger preferredFPS;
-- (void)overrideDisplayTimings:(id)1;
+- (void)overrideDisplayTimings:(id)timings;
 @end
 
 @interface UIScrollView (ApexPrivateV2481)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
-- (void)_setContentOffsetPinned:(CGPoint)1;
+- (void)_setContentOffsetPinned:(CGPoint)point;
 @end
 
 @interface CAMetalLayer (ApexPrivateV2481)
@@ -143,19 +163,19 @@ extern char **environ;
 @end
 
 @interface _UIVisualEffectBackdropView : UIView
-- (void)applySettings:(id)1;
+- (void)applySettings:(id)settings;
 @end
 
 @interface SBFluidSwitcherAnimationSettings : NSObject
-- (void)setOpacityMinimumDistanceThreshold:(double)1;
+- (void)setOpacityMinimumDistanceThreshold:(double)threshold;
 @end
 
 @interface SBAppSwitcherSettings : NSObject
-- (void)setShouldSimplifyForOptions:(long long)1;
+- (void)setShouldSimplifyForOptions:(long long)options;
 @end
 
 @interface SBHomeGestureSettings : NSObject
-- (void)setTouchUpDelay:(double)1;
+- (void)setTouchUpDelay:(double)delay;
 @end
 
 @interface SBFluidSwitcherViewController : UIViewController
@@ -180,8 +200,8 @@ extern char **environ;
 
 @interface UIKeyboardImpl : UIView
 + (instancetype)activeInstance;
-- (void)handleKeyWithString:(id)1 forKeyEvent:(id)2 executionContext:(id)3;
-- (void)addInputString:(id)1 withFlags:(NSUInteger)2 executionContext:(id)3;
+- (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
+- (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 @end
 
 @interface ATXAnalyticsManager : NSObject
