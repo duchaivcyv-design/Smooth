@@ -1259,39 +1259,40 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 // ==============================================================================
 %group Group_Fix_App_Layout_Position
 
+// 1. Tuyệt đối không can thiệp đè frame dock/icon, gọi %orig chuẩn và chỉnh transform về gốc
 %hook SBDockView
-- (void)setFrame:(CGRect)frame {
-    %orig(frame);
-}
-
-- (void)layoutSubviews {
+- (void)didMoveToWindow {
     %orig;
+    if (self.window) {
+        self.transform = CGAffineTransformIdentity;
+    }
 }
 %end
 
 %hook SBIconListView
-- (void)setFrame:(CGRect)frame {
-    %orig(frame);
-}
-
-- (void)layoutSubviews {
+- (void)didMoveToWindow {
     %orig;
+    if (self.window) {
+        self.transform = CGAffineTransformIdentity;
+    }
 }
 %end
 
 %hook SBRootFolderView
-- (void)setFrame:(CGRect)frame {
-    %orig(frame);
-}
-
-- (void)layoutSubviews {
+- (void)didMoveToWindow {
     %orig;
+    if (self.window) {
+        self.transform = CGAffineTransformIdentity;
+    }
 }
 %end
 
-%hook SBFloatingDockView
-- (void)setFrame:(CGRect)frame {
-    %orig(frame);
+// 2. Chống đẩy dạt biểu tượng Status Bar (giờ, sóng, wifi, pin) ra 2 bên mép viền
+%hook _UIStatusBar
+- (void)layoutSubviews {
+    %orig;
+    // Giữ nguyên lề chuẩn hệ thống, triệt tiêu việc bị ép sát góc
+    self.transform = CGAffineTransformIdentity;
 }
 %end
 
@@ -1365,22 +1366,25 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Bắt cảm ứng toàn diện phục vụ ProMotion Engine Beta 5
+// Bắt cảm ứng toàn diện phục vụ ProMotion Engine Beta 5 mà không làm lệch thanh trạng thái
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (IS_ON && CFG_PTR.proMotionEngineBeta5) {
         if (event.type == UIEventTypeTouches) {
             NSSet *touches = [event allTouches];
-            UITouchPhase phase = ((UITouch *)[touches anyObject]).phase;
-            if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
-                g_IsUserTouching = YES;
-                g_LastTouchTime = CACurrentMediaTime();
-                if (CFG_PTR.touchResponseBoost) {
-                    Apex245_BoostThreadPriorityRealtime();
+            UITouch *t = [touches anyObject];
+            if (t) {
+                UITouchPhase phase = t.phase;
+                if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
+                    g_IsUserTouching = YES;
+                    g_LastTouchTime = CACurrentMediaTime();
+                    if (CFG_PTR.touchResponseBoost) {
+                        Apex245_BoostThreadPriorityRealtime();
+                    }
+                } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
+                    g_IsUserTouching = NO;
+                    g_LastTouchTime = CACurrentMediaTime();
                 }
-            } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
-                g_IsUserTouching = NO;
-                g_LastTouchTime = CACurrentMediaTime();
             }
         }
     }
