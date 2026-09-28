@@ -9,7 +9,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V23.9.5.1 APEX SUPREME</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V23.9.5.1 BETA</string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
@@ -29,37 +29,13 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<string>auto</string>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>SelectedLanguage</string>
+			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Ngôn Ngữ (Language)</string>
-			<key>detail</key>
-			<string>PSListItemsController</string>
-			<key>validTitles</key>
-			<array>
-				<string>🌐 Tự Động / Auto (Theo Máy)</string>
-				<string>🇻🇳 Tiếng Việt</string>
-				<string>🇺🇸 English</string>
-				<string>🇨🇳 中文 (Chinese)</string>
-				<string>🇷🇺 Русский (Russian)</string>
-				<string>🇮🇳 हिन्दी (Hindi)</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<string>auto</string>
-				<string>vi</string>
-				<string>en</string>
-				<string>zh</string>
-				<string>ru</string>
-				<string>hi</string>
-			</array>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+			<key>action</key>
+			<string>showLanguagePickerPopup:</string>
+			<key>key</key>
+			<string>SelectedLanguage</string>
 		</dict>
 
 		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 ==================== -->
@@ -733,7 +709,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V23.9.5.1 BETA  - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V23.9.5.1 Beta - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -761,6 +737,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V23.9.5.1 BETA</string>
+	<string>BoostiPhone6s V23.9.5.1</string>
 </dict>
 </plist>
