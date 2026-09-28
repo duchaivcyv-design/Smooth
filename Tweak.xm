@@ -1,6 +1,3 @@
-// ==============================================================================
-// 📦 MỤC 0: HỆ THỐNG POSIX, KERNEL MACH, SYSCTL & TRUYỀN THÔNG MẠNG
-// ==============================================================================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
@@ -59,6 +56,8 @@
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+#define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
+
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
@@ -66,7 +65,7 @@
 extern char **environ;
 
 // ==============================================================================
-// 🛡 MỤC 4: NẠP CÁC MODULE CON HỆ THỐNG
+// 🛡 MỤC 4: NẠP CÁC PHÂN HỆ LÕI (TITANIUM SUBMODULES)
 // ==============================================================================
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
@@ -99,7 +98,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface UIWindow (ApexPrivateV24731)
+@interface UIWindow (ApexPrivateV248)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -107,12 +106,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV24731)
+@interface CALayer (ApexPrivateV248)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (ApexPrivateV24731)
+@interface UIScreen (ApexPrivateV248)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -127,13 +126,13 @@ extern char **environ;
 - (void)overrideDisplayTimings:(id)arg1;
 @end
 
-@interface UIScrollView (ApexPrivateV24731)
+@interface UIScrollView (ApexPrivateV248)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)arg1;
 @end
 
-@interface CAMetalLayer (ApexPrivateV24731)
+@interface CAMetalLayer (ApexPrivateV248)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -314,6 +313,18 @@ typedef struct {
     float kineticDecelerationVectorY;
 } ApexTitanium_MotionEngineState;
 
+// Dữ liệu đồng bộ chia sẻ qua tệp nhị phân cho Sandbox
+typedef struct {
+    uint32_t magic;
+    BOOL masterEnabled;
+    int32_t targetHz;
+    int32_t targetFPS;
+    BOOL isDynamic;
+    uint64_t updateSeq;
+} ApexSharedSyncPayload;
+
+#define APEX_SYNC_MAGIC 0x41504558 // 'APEX'
+
 static ApexTitanium_GraphicsEngineState g_titaniumGraphicsState = {
     0, 0, 0.0f, NO, 60, 60, YES, 0, 0, 1.0f, 0, 16666666ULL, YES, 0, 0, 0, 0, 0.992f, YES, 0, 0, 0, NO, 0, 0, NO
 };
@@ -365,7 +376,40 @@ static CFTimeInterval g_LastTouchTime = 0.0;
 static CFTimeInterval g_LastExtremeTransitionTime = 0.0;
 
 // ==============================================================================
-// 🛡 MỤC 7: CÁCH LY TIẾN TRÌNH & BẢO VỆ GESTURE CHỐNG ĐƠ DOUBLE-TAP
+// 📡 MỤC 7: CƠ CHẾ ĐỒNG BỘ DỮ LIỆU XUYÊN THẤU SANDBOX APP BẰNG SHARED FILE
+// ==============================================================================
+
+static void Titanium_WriteSharedSyncState(BOOL enabled, int32_t hz, int32_t fps, BOOL dynamicMode) {
+    ApexSharedSyncPayload payload;
+    payload.magic = APEX_SYNC_MAGIC;
+    payload.masterEnabled = enabled;
+    payload.targetHz = hz;
+    payload.targetFPS = fps;
+    payload.isDynamic = dynamicMode;
+    payload.updateSeq = (uint64_t)mach_absolute_time();
+
+    int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd >= 0) {
+        write(fd, &payload, sizeof(payload));
+        close(fd);
+        chmod([SHARED_SYNC_FILE UTF8String], 0666);
+    }
+}
+
+static BOOL Titanium_ReadSharedSyncState(ApexSharedSyncPayload *outPayload) {
+    if (!outPayload) return NO;
+    int fd = open([SHARED_SYNC_FILE UTF8String], O_RDONLY);
+    if (fd < 0) return NO;
+    ssize_t bytesRead = read(fd, outPayload, sizeof(ApexSharedSyncPayload));
+    close(fd);
+    if (bytesRead == sizeof(ApexSharedSyncPayload) && outPayload->magic == APEX_SYNC_MAGIC) {
+        return YES;
+    }
+    return NO;
+}
+
+// ==============================================================================
+// 🛡 MỤC 8: KIỂM TRA TIẾN TRÌNH & BẢO VỆ GESTURE CHỐNG ĐƠ DOUBLE-TAP
 // ==============================================================================
 
 static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
@@ -373,8 +417,7 @@ static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
     UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
     if (pan) {
         pan.delaysTouchesBegan = NO;
-        // Bắt buộc giữ nguyên cancelsTouchesInView mặc định của iOS
-        // để không triệt tiêu các sự kiện Tap, Double-Tap và Long Press của View con
+        // Bắt buộc giữ nguyên cancelsTouchesInView để không triệt tiêu các sự kiện nhấp đúp (Double-Tap)
     }
 }
 
@@ -516,7 +559,7 @@ static void load_bks_terminate(void) {
 }
 
 // ==============================================================================
-// ⚡️ MỤC 8: CÁC TIẾN TRÌNH GIA TỐC VÀ DỌN DẸP BỘ NHỚ AN TOÀN
+// ⚡️ MỤC 9: TIẾN TRÌNH DỌN DẸP BỘ NHỚ VÀ ĐIỀU PHỐI ĐA LUỒNG AN TOÀN
 // ==============================================================================
 
 static void Titanium_RunGarbageCollector_Light(void) {
@@ -762,7 +805,7 @@ static void Titanium_StartChargingMonitor(void) {
 }
 
 // ==============================================================================
-// 🧠 MỤC 9: BỘ NẠP CẤU HÌNH ĐA TẦNG - HOẠT ĐỘNG HOÀN TOÀN TRONG SANDBOX APP
+// 🧠 MỤC 10: BỘ NẠP CẤU HÌNH ĐA TẦNG - TỰ ĐỘNG BẢO VỆ SANDBOX VÀ HOẠT ĐỘNG TOÀN DIỆN
 // ==============================================================================
 
 @interface BoostConfig : NSObject
@@ -850,7 +893,7 @@ static void Titanium_StartChargingMonitor(void) {
     dispatch_sync(_configQueue, ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        // Đọc trực tiếp từ cfprefsd giúp vượt qua Sandbox của mọi App UIKit
+        // Đọc giá trị trực tiếp qua CFPreferences (Hỗ trợ IPC xuyên thấu sandbox App)
         id (^ReadLiveValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
             CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
             if (val) return (__bridge_transfer id)val;
@@ -887,11 +930,10 @@ static void Titanium_StartChargingMonitor(void) {
             return d;
         };
 
+        // Kích hoạt mặc định và kiểm tra payload từ Shared File Sync nếu là App thứ 3
         self.enabled = GetLiveBool(@"Enabled", YES); 
-
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
-
         self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
         self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
         self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
@@ -940,6 +982,19 @@ static void Titanium_StartChargingMonitor(void) {
         self.bypassVarSandbox = GetLiveBool(@"BypassVarSandbox", NO);
         self.blockAnalytics = GetLiveBool(@"BlockAnalytics", YES);
         self.tcpTurboNetwork = GetLiveBool(@"TcpTurboNetwork", YES);
+
+        // Đọc bổ sung từ shared sync file cho ứng dụng bên thứ 3 trong Sandbox
+        if (!Titanium_IsSpringBoard() && !Titanium_IsPreferencesApp()) {
+            ApexSharedSyncPayload sharedPayload;
+            if (Titanium_ReadSharedSyncState(&sharedPayload)) {
+                self.enabled = sharedPayload.masterEnabled;
+                self.targetHz = sharedPayload.targetHz;
+                self.targetFPS = sharedPayload.targetFPS;
+                self.proMotionEngineBeta7 = sharedPayload.isDynamic;
+            }
+        } else if (Titanium_IsSpringBoard()) {
+            Titanium_WriteSharedSyncState(self.enabled, (int32_t)self.targetHz, (int32_t)self.targetFPS, self.proMotionEngineBeta7);
+        }
     });
 }
 
@@ -996,7 +1051,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 MỤC 10: ÉP XUNG ĐỒNG TỐC HZ/FPS AN TOÀN VÀO TOÀN BỘ APP LẪN SPRINGBOARD
+// 🖥 MỤC 11: ÉP XUNG ĐỒNG TỐC HZ/FPS CHO TOÀN BỘ HỆ THỐNG VÀ ỨNG DỤNG BÊN THỨ 3
 // ==============================================================================
 %group Group_Display_DualRate
 
@@ -1073,7 +1128,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🎨 MỤC 11: TỐI ƯU CUỘN LƯỚT COLOROS 17 - TUYỆT ĐỐI KHÔNG ÉP DRAWSASYNCHRONOUSLY
+// 🎨 MỤC 12: TỐI ƯU CUỘN LƯỚT COLOROS 17 - TUYỆT ĐỐI KHÔNG ÉP DRAWSASYNCHRONOUSLY
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
@@ -1104,7 +1159,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// ⌨️ MỤC 12: BÀN PHÍM 0MS - KHÔNG GÂY LỖI KẸT GÕ PHÍM TRONG APP
+// ⌨️ MỤC 13: BÀN PHÍM 0MS - KHÔNG GÂY LỖI KẸT GÕ PHÍM TRONG APP
 // ==============================================================================
 %group Group_Keyboard_And_Text
 
@@ -1127,7 +1182,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🌟 MỤC 13: ĐA NHIỆM & CỬ CHỈ BẢO VỆ GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
+// 🌟 MỤC 14: ĐA NHIỆM & CỬ CHỈ BẢO VỆ GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
 // ==============================================================================
 %group Group_Gesture_Fix
 
@@ -1184,7 +1239,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 MỤC 14: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH LAYOUT)
+// 🛡 MỤC 15: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH LAYOUT)
 // ==============================================================================
 %group Group_Fix_App_Layout_Position
 
@@ -1234,7 +1289,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🚀 MỤC 15: SPRINGBOARD ENGINE (LOẠI BỎ TRIỆT ĐỂ HOOK HÌNH NỀN WALLPAPER)
+// 🚀 MỤC 16: SPRINGBOARD ENGINE (LOẠI BỎ TRIỆT ĐỂ HOOK HÌNH NỀN WALLPAPER)
 // ==============================================================================
 %group Group_SpringBoard_Only
 
@@ -1300,7 +1355,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 MỤC 16: NHÓM CÁCH LY AN TOÀN CHO TẤT CẢ APP BÊN THỨ BA (SẠCH ĐEN MÀN)
+// 🛡 MỤC 17: NHÓM CÁCH LY AN TOÀN CHO TẤT CẢ APP BÊN THỨ BA (SẠCH ĐEN MÀN)
 // ==============================================================================
 %group Group_UIKit_ThirdParty_Isolated
 
@@ -1326,7 +1381,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛠 MỤC 17: BỘ TỐI ƯU HÓA HỆ THỐNG APEX TITANIUM EXTENSION
+// 🛠 MỤC 18: BỘ TỐI ƯU HÓA HỆ THỐNG APEX TITANIUM EXTENSION
 // ==============================================================================
 
 @interface Titanium_SystemOptimizer : NSObject
@@ -1535,7 +1590,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 @end
 
 // ==============================================================================
-// 🚀 MỤC 18: CONSTRUCTOR KHỞI TẠO NGUYÊN KHỐI - CHỐNG SAFEMODE VÀ SẬP MÀN HÌNH
+// 🚀 MỤC 19: CONSTRUCTOR KHỞI TẠO NGUYÊN KHỐI - CHỐNG SAFEMODE VÀ SẬP MÀN HÌNH
 // ==============================================================================
 
 %ctor {
@@ -1621,3 +1676,5 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         PMRuntimeReady = YES;
     }
 }
+
+```
