@@ -1,7 +1,6 @@
 #import <Foundation/Foundation.h>
 
 void ThermalMitigationEngine_Official_ProcessV20(void) {
-    // Luong dieu phoi nhiet
 }
 
 @interface SmartThermalManager : NSObject
