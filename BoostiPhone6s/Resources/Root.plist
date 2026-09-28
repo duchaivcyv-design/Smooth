@@ -4,12 +4,11 @@
 <dict>
 	<key>items</key>
 	<array>
-		<!-- ==================== CÔNG TẮC TỔNG ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.9.2 </string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.9.5 BETA</string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các phím chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
@@ -28,14 +27,13 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V24.9.2 ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string> NÂNG CẤP V24.9.2 (ĐỘNG CƠ THÔNG MINH)</string>
+			<string>NÂNG CẤP V24.9.5 (ĐỘNG CƠ THÔNG MINH)</string>
 			<key>footerText</key>
-			<string>ProMotion Engine Beta 5 tự động đồng bộ cảm biến nhiệt độ hệ thống, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.</string>
+			<string>ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -47,7 +45,7 @@
 			<key>key</key>
 			<string>ProMotionEngineBeta7</string>
 			<key>label</key>
-			<string>ProMotion Engine Beta 5 (Quét Nhiệt Độ)</string>
+			<string>ProMotion Engine (Quét Nhiệt Độ Tự Động)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -61,7 +59,7 @@
 			<key>key</key>
 			<string>HeavyEffectAntiLagV24</string>
 			<key>label</key>
-			<string>Chống Lag Liquid Glass (Beta 4)</string>
+			<string>Chống Lag Liquid Glass</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -75,19 +73,18 @@
 			<key>key</key>
 			<string>KeyboardZeroLagV24</string>
 			<key>label</key>
-			<string>Bàn Phím 0ms &amp; Chat AI (Beta 4)</string>
+			<string>Bàn Phím 0ms &amp; Chat AI</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐIỀU PHỐI HZ & FPS (3 NHÓM CHỌN) ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>ĐIỀU PHỐI HZ &amp; FPS (PHÂN NHÁNH 3 MỤC)</string>
 			<key>footerText</key>
-			<string>Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động sẽ dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.</string>
+			<string>Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -152,7 +149,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐIỀU PHỐI ĐỘ TRỄ TIÊM ỨNG DỤNG (LAZY INJECTION) ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -190,7 +186,6 @@
 			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
 
-		<!-- ==================== GIA TỐC GIAO DIỆN & VẬT LÝ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -268,7 +263,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== LÕI ĐIỀU PHỐI ĐỒ HỌA CHUYÊN SÂU ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -416,7 +410,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐIỀU PHỐI BỘ NHỚ RAM & CPU ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -433,7 +426,7 @@
 			<key>key</key>
 			<string>Ios27AutoScheduler</string>
 			<key>label</key>
-			<string>Bộ Điều Phối iOS 27 Scheduler</string>
+			<string>Bộ Điều Phối iOS Scheduler</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -578,7 +571,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== QUẢN LÝ NHIỆT ĐỘ & NGUỒN ĐIỆN ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -656,7 +648,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== BẢO MẬT & QUYỀN RIÊNG TƯ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -692,14 +683,13 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== THÔNG TIN PHÁT TRIỂN & HỖ TRỢ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V24.9.2 - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V24.9.5 BETA - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -727,6 +717,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V24.9.2</string>
+	<string>BoostiPhone6s V24.9.5 BETA</string>
 </dict>
 </plist>
