@@ -1,20 +1,3 @@
-// =============================================================================
-// 🎯 DANH MỤC SỬA LỖI & TỐI ƯU TOÀN DIỆN V24.8.9:
-//    1. [ZERO THEOS RE-%INIT ERROR]: Tách biệt hoàn toàn `%group Group_Display_SpringBoard` 
-//       và `%group Group_Display_App_Lazy`, tuyệt đối không trùng lặp tên group giữa các 
-//       nhánh phân nhánh, giải quyết triệt để lỗi biên dịch Theos.
-//    2. [LAZY INJECTION CHỐNG ĐEN APP 100%]: Ứng dụng bên thứ ba (YouTube, TikTok, Facebook...)
-//       hoãn nạp hoàn toàn các nhóm hook cho đến khi nhận được thông báo 
-//       `UIApplicationDidFinishLaunchingNotification`, đảm bảo giao diện dựng xong sáng trưng mới tiêm.
-//    3. [ĐỒNG BỘ HZ/FPS ĐỈNH CAO]: Khoá nhịp CADisplayLink và UIScreen chuẩn xác phase cadence 
-//       trên cả SpringBoard lẫn App người dùng (30 / 60 / 75 / 90 / 120 / 144Hz).
-//    4. [KHÔNG KẸT MẠNG KHI GỠ TWEAK]: Không can thiệp tầng kernel socket hay NSURLCache lặp.
-//    5. [KHÔNG SAFEMODE & SẠCH CẢNH BÁO]: Khai báo chuẩn cú pháp C/Objective-C, không nhãn rác.
-// ==============================================================================
-
-// ==============================================================================
-// 📦 MỤC 0: HỆ THỐNG POSIX, KERNEL MACH, SYSCTL & TRUYỀN THÔNG MẠNG
-// ==============================================================================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
