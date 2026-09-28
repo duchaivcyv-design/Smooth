@@ -75,7 +75,7 @@ extern char **environ;
 #import "Modules/DeepExploit.h"
 
 // ==============================================================================
-// 📋 MỤC 5: KHAI BÁO TIỀN TỆ (DUY NHẤT 1 BẢN - CHUẨN CÚ PHÁP TÊN THAM SỐ)
+// 📋 MỤC 5: KHAI BÁO TIỀN TỆ (FORWARD DECLARATIONS & PRIVATE METHODS)
 // ==============================================================================
 
 @interface SBApplication : NSObject
@@ -98,7 +98,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface UIWindow (ApexPrivateV24811)
+@interface UIWindow (ApexPrivateV24821)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -106,12 +106,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV24811)
+@interface CALayer (ApexPrivateV24821)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (ApexPrivateV24811)
+@interface UIScreen (ApexPrivateV24821)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -126,13 +126,13 @@ extern char **environ;
 - (void)overrideDisplayTimings:(id)timings;
 @end
 
-@interface UIScrollView (ApexPrivateV24811)
+@interface UIScrollView (ApexPrivateV24821)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)point;
 @end
 
-@interface CAMetalLayer (ApexPrivateV24811)
+@interface CAMetalLayer (ApexPrivateV24821)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -322,7 +322,7 @@ typedef struct {
     uint64_t updateSeq;
 } ApexSharedSyncPayload;
 
-#define APEX_SYNC_MAGIC 0x41504558
+#define APEX_SYNC_MAGIC 0x41504558 // 'APEX'
 
 static ApexTitanium_GraphicsEngineState g_titaniumGraphicsState = {
     0, 0, 0.0f, NO, 60, 60, YES, 0, 0, 1.0f, 0, 16666666ULL, YES, 0, 0, 0, 0, 0.992f, YES, 0, 0, 0, NO, 0, 0, NO
@@ -416,7 +416,7 @@ static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
     UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
     if (pan) {
         pan.delaysTouchesBegan = NO;
-        // Giữ nguyên cancelsTouchesInView để không triệt tiêu các sự kiện nhấp đúp (Double-Tap)
+        // Bắt buộc giữ nguyên cancelsTouchesInView để không triệt tiêu các sự kiện nhấp đúp (Double-Tap)
     }
 }
 
@@ -784,6 +784,7 @@ static void Titanium_StartPassiveRamDaemon(void) {
         vm_statistics64_data_t vm_stat;
         mach_msg_type_number_t host_size = sizeof(vm_statistics64_data_t) / sizeof(integer_t);
         if (host_statistics64(host_port, HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_size) == KERN_SUCCESS) {
+            int64_free_mem: ;
             int64_t free_mem = ((int64_t)vm_stat.free_count * (int64_t)pagesize) / (1024 * 1024);
             if (free_mem < 140) {
                 Titanium_RunGarbageCollector_Light();
@@ -1642,6 +1643,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         // 6. Phân luồng độc lập SpringBoard và App
         if (Titanium_IsSpringBoard()) {
+            // SpringBoard: Nạp điều khiển hệ thống, KHÔNG HOOK HÌNH NỀN
             %init(Group_SpringBoard_Only);
             %init(Group_Gesture_Fix);
             %init(Group_Fix_App_Layout_Position);
