@@ -8,7 +8,7 @@
 		<key>TITLE_MAIN</key>
 		<string>BoostiPhone6s V24.9.5</string>
 		<key>GROUP_MASTER</key>
-		<string>MASTER SYSTEM SWITCH V24.9.5 APEX SUPREME</string>
+		<string>MASTER SYSTEM SWITCH V24.9.5 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>Disabling the master switch will hide all options below and restore original system hooks.</string>
 		<key>GROUP_SPECIAL</key>
@@ -36,7 +36,7 @@
 		<key>GROUP_DEV</key>
 		<string>DEVELOPER INFO &amp; SUPPORT</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V24.9.5 Apex Supreme - Engineered by DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V24.9.5 Beta - Engineered by DUC LONG.</string>
 
 		<!-- Keys -->
 		<key>Enabled</key>
@@ -161,7 +161,7 @@
 		<key>TITLE_MAIN</key>
 		<string>BoostiPhone6s V24.9.5</string>
 		<key>GROUP_MASTER</key>
-		<string>V24.9.5 APEX SUPREME 系统总开关</string>
+		<string>V24.9.5 BETA 系统总开关</string>
 		<key>FOOTER_MASTER</key>
 		<string>关闭总开关后，下方所有功能选项将自动隐藏并完全恢复系统原始状态。</string>
 		<key>GROUP_SPECIAL</key>
@@ -189,7 +189,7 @@
 		<key>GROUP_DEV</key>
 		<string>开发信息与交流反馈</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V24.9.5 Apex Supreme - 由 DUC LONG 优化重构。</string>
+		<string>© 2026 BoostiPhone6s V24.9.5 BETA - 由 DUC LONG 优化重构。</string>
 
 		<!-- Keys -->
 		<key>Enabled</key>
@@ -342,7 +342,7 @@
 		<key>GROUP_DEV</key>
 		<string>О РАЗРАБОТЧИКЕ И ПОДДЕРЖКА</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V24.9.5 Apex Supreme - Разработано DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V24.9.5 BETA - Разработано DUC LONG.</string>
 
 		<!-- Keys -->
 		<key>Enabled</key>
@@ -467,7 +467,7 @@
 		<key>TITLE_MAIN</key>
 		<string>BoostiPhone6s V24.9.5</string>
 		<key>GROUP_MASTER</key>
-		<string>मास्टर सिस्टम स्विच V24.9.5 APEX SUPREME</string>
+		<string>मास्टर सिस्टम स्विच V24.9.5 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>मास्टर स्विच बंद करने पर नीचे के सभी विकल्प छिप जाएंगे और सिस्टम सामान्य हो जाएगा।</string>
 		<key>GROUP_SPECIAL</key>
@@ -495,7 +495,7 @@
 		<key>GROUP_DEV</key>
 		<string>डेवलपर जानकारी और सहायता</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V24.9.5 Apex Supreme - DUC LONG द्वारा निर्मित।</string>
+		<string>© 2026 BoostiPhone6s V24.9.5 BETA - DUC LONG द्वारा निर्मित।</string>
 
 		<!-- Keys -->
 		<key>Enabled</key>
