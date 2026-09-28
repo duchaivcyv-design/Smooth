@@ -1082,49 +1082,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     }
 }
 %end
-
-// GIẢM TẢI TRIỆT ĐỂ CHO LIQUID (GL)ASS & CÁC LỚP BLUR NẶNG (BETA 3)
-%hook UIVisualEffectView
-- (void)layoutSubviews {
-    %orig;
-    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
-        self.layer.shouldRasterize = YES;
-        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
-    }
-}
-%end
-
-%hook _UIVisualEffectBackdropView
-- (void)applySettings:(id)arg1 {
-    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
-        self.layer.drawsAsynchronously = YES;
-    }
-    %orig(arg1);
-}
-%end
-
-%hook _UIBarBackground
-- (void)layoutSubviews {
-    %orig;
-    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
-        self.layer.shouldRasterize = YES;
-        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
-    }
-}
-%end
-
-%hook NCNotificationShortLookView
-- (void)didMoveToWindow {
-    %orig;
-    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
-        self.layer.shouldRasterize = YES;
-        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
-    }
-}
-%end
-
-%end
-
 // ==============================================================================
 // ⌨️ PHẦN 9: BÀN PHÍM 0MS & CHỐNG GIẬT TEXT DÀI VỚI AI (BETA 3)
 // ==============================================================================
@@ -1200,7 +1157,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook UIView
 - (void)layoutSubviews {
     %orig;
-    if (g_Enabled && g_ColorOs17SmoothEngine) {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine) {
         NSString *cls = NSStringFromClass([self class]);
         if ([cls containsString:@"AppSwitcher"] || [cls containsString:@"FluidSwitcher"] || [cls containsString:@"SBHomeScreenOverlayView"]) {
             self.layer.shouldRasterize = NO;
@@ -1213,22 +1170,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-%end
-
-// Tối ưu an toàn cho Backdrop không bao giờ ném ngoại lệ
-%group Group_ColorOS17_SafeUI
-
-%hook _UIVisualEffectBackdropView
-- (void)applySettings:(id)arg1 {
-    if (g_Enabled && g_HeavyEffectAntiLagV3) {
-        self.layer.drawsAsynchronously = YES;
+%hook CAAnimation
+- (void)setDuration:(NSTimeInterval)duration {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine && duration > 0.35) {
+        %orig(duration * 0.85);
+    } else {
+        %orig(duration);
     }
-    %orig(arg1);
 }
 %end
 
 %end
-
 // ==============================================================================
 // 🚀 PHẦN 11: SPRINGBOARD ENGINE & BẮT CỬ CHỈ PROMOTION BETA 4
 // ==============================================================================
