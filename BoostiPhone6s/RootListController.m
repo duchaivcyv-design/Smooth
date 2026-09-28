@@ -60,6 +60,72 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     return alert;
 }
 
+// ==============================================================================
+// 🌐 BỘ NẠP VÀ TRUY XUẤT TỪ ĐIỂN LOCALIZATION.PLIST ĐA NGÔN NGỮ
+// ==============================================================================
+static NSDictionary *g_LocDict = nil;
+
+static void PM_LoadLocalizationIfNeeded(void) {
+    if (g_LocDict) return;
+    
+    NSBundle *bundle = [NSBundle bundleForClass:[RootListController class]];
+    NSString *path = [bundle pathForResource:@"Localization" ofType:@"plist"];
+    
+    if (!path) {
+        NSArray *possiblePaths = @[
+            @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
+            @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist",
+            @"/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
+            @"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"
+        ];
+        for (NSString *p in possiblePaths) {
+            if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+                path = p;
+                break;
+            }
+        }
+    }
+    
+    if (path) {
+        g_LocDict = [NSDictionary dictionaryWithContentsOfFile:path];
+    }
+}
+
+static inline NSString *PM_GetCurrentLanguageCode(void) {
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFPropertyListRef val = CFPreferencesCopyAppValue(CFSTR("SelectedLanguage"), PREF_DOMAIN);
+    NSString *selected = val ? (__bridge_transfer NSString *)val : @"auto";
+    
+    if (![selected isEqualToString:@"auto"]) {
+        return selected;
+    }
+    
+    NSString *sysLang = [[NSLocale preferredLanguages] firstObject] ?: @"vi";
+    if ([sysLang hasPrefix:@"zh"]) return @"zh";
+    if ([sysLang hasPrefix:@"ru"]) return @"ru";
+    if ([sysLang hasPrefix:@"hi"]) return @"hi";
+    if ([sysLang hasPrefix:@"en"]) return @"en";
+    return @"vi";
+}
+
+static inline NSString *PM_Text(NSString *key) {
+    PM_LoadLocalizationIfNeeded();
+    if (!g_LocDict || !key) return nil;
+
+    NSString *langCode = PM_GetCurrentLanguageCode();
+    if ([langCode isEqualToString:@"vi"]) {
+        return nil; // Tiếng Việt giữ nguyên text gốc trong Root.plist
+    }
+
+    NSDictionary *langSection = g_LocDict[langCode];
+    if (langSection && langSection[key]) {
+        return langSection[key];
+    }
+    
+    NSDictionary *enSection = g_LocDict[@"en"];
+    return enSection ? enSection[key] : nil;
+}
+
 @implementation RootListController
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
@@ -87,9 +153,21 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
         NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+        if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
         if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
         _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
+
+        // Quét và dịch tự động toàn bộ Specifiers theo ngôn ngữ được chọn
+        for (PSSpecifier *spec in _allSavedSpecifiers) {
+            NSString *key = [spec propertyForKey:@"key"];
+            if (key) {
+                NSString *translated = PM_Text(key);
+                if (translated) {
+                    spec.name = translated;
+                }
+            }
+        }
     }
 
     NSDictionary *prefs = [self getMergedPreferences];
@@ -97,9 +175,10 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
     if (!isMasterEnabled) {
         NSMutableArray *minimalSpecifiers = [NSMutableArray array];
-        if (_allSavedSpecifiers.count >= 2) {
+        if (_allSavedSpecifiers.count >= 3) {
             [minimalSpecifiers addObject:_allSavedSpecifiers[0]];
             [minimalSpecifiers addObject:_allSavedSpecifiers[1]];
+            [minimalSpecifiers addObject:_allSavedSpecifiers[2]];
         }
         _specifiers = minimalSpecifiers;
     } else {
@@ -126,14 +205,19 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
 
+    NSString *hzAutoText = PM_Text(@"DYNAMIC_HZ_TITLE") ?: @"Tần Số Quét: Tự Động (Max %ld Hz)";
+    NSString *hzLockText = PM_Text(@"LOCK_HZ_TITLE") ?: @"Tần Số Quét: Khóa %ld Hz";
+    NSString *fpsAutoText = PM_Text(@"DYNAMIC_FPS_TITLE") ?: @"Khung Hình App: Tự Động (Max %ld FPS)";
+    NSString *fpsLockText = PM_Text(@"LOCK_FPS_TITLE") ?: @"Khung Hình App: Khóa %ld FPS";
+
     for (PSSpecifier *spec in (NSArray *)_specifiers) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
-            spec.name = isDynamic ? [NSString stringWithFormat:@"Tần Số Quét: Tự Động (Max %ld Hz)", (long)hz]
-                                  : [NSString stringWithFormat:@"Tần Số Quét: Khóa %ld Hz", (long)hz];
+            spec.name = isDynamic ? [NSString stringWithFormat:hzAutoText, (long)hz]
+                                  : [NSString stringWithFormat:hzLockText, (long)hz];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
-            spec.name = isDynamic ? [NSString stringWithFormat:@"Khung Hình App: Tự Động (Max %ld FPS)", (long)fps]
-                                  : [NSString stringWithFormat:@"Khung Hình App: Khóa %ld FPS", (long)fps];
+            spec.name = isDynamic ? [NSString stringWithFormat:fpsAutoText, (long)fps]
+                                  : [NSString stringWithFormat:fpsLockText, (long)fps];
         }
     }
 }
@@ -159,6 +243,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
             @"Enabled": @YES,
+            @"SelectedLanguage": @"auto",
             @"ProMotionEngineBeta7": @YES,
             @"HeavyEffectAntiLagV24": @YES,
             @"KeyboardZeroLagV24": @YES,
@@ -272,7 +357,8 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     notify_post(NOTIFY_UIKIT_RELOAD);
     notify_post(NOTIFY_HARDWARE_SYNC);
 
-    if ([key isEqualToString:@"Enabled"]) {
+    if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"SelectedLanguage"]) {
+        _allSavedSpecifiers = nil; // Tự động xóa bộ nhớ đệm để nạp lại giao diện theo ngôn ngữ mới
         [self reloadSpecifiers];
     }
 }
@@ -307,25 +393,22 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
 - (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:[NSString stringWithFormat:@"Lựa chọn mức thông số cụ thể (%@):", unit]
+                                                                   message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSString *lockPrefix = PM_Text(@"LOCK_AT") ?: @"Khóa ở";
+    NSString *backText = PM_Text(@"BACK") ?: @"Quay lại";
 
     for (NSNumber *r in rates) {
         NSInteger val = [r integerValue];
-        NSString *tag = @"";
-        if (val <= 30) tag = @" - Siêu tiết kiệm";
-        else if (val == 60) tag = @" - Cân bằng chuẩn";
-        else if (val == 90 || val == 120) tag = @" - Cực mượt";
-        else if (val == 144) tag = @" - Tối đa phần cứng";
-
-        NSString *actionTitle = [NSString stringWithFormat:@"Khóa ở %ld %@%@", (long)val, unit, tag];
+        NSString *actionTitle = [NSString stringWithFormat:@"%@ %ld %@", lockPrefix, (long)val, unit];
 
         [alert addAction:[UIAlertAction actionWithTitle:actionTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [self applyRateValue:val isDynamic:NO isFPS:isFPS];
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"Quay lại" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:backText style:UIAlertActionStyleCancel handler:nil]];
     if (alert.popoverPresentationController) {
         alert.popoverPresentationController.sourceView = self.view;
     }
@@ -333,30 +416,37 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:@"CHỌN TẦN SỐ QUÉT HỆ THỐNG (HZ)"
-                                                                       message:@"Vui lòng chọn phân khúc mong muốn:"
+    NSString *alertTitle = PM_Text(@"TITLE_HZ") ?: @"CHỌN TẦN SỐ QUÉT HỆ THỐNG (HZ)";
+    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle
+                                                                       message:nil
                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🌟 Tự Động Quét Nhiệt (Dynamic 30Hz - 144Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    NSString *dynText = PM_Text(@"DYNAMIC") ?: @"🌟 Tự Động Quét Nhiệt (Dynamic 30Hz - 144Hz)";
+    NSString *saveText = PM_Text(@"BATTERY_SAVER") ?: @"🟢 1. TIẾT KIỆM PIN (15Hz - 40Hz)";
+    NSString *balText = PM_Text(@"BALANCED") ?: @"🟡 2. BÌNH THƯỜNG (45Hz - 80Hz)";
+    NSString *maxText = PM_Text(@"MAX_PERF") ?: @"🔴 3. CAO NHẤT (85Hz - 144Hz)";
+    NSString *closeText = PM_Text(@"CLOSE") ?: @"Đóng";
+
+    [mainAlert addAction:[UIAlertAction actionWithTitle:dynText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self applyRateValue:60 isDynamic:YES isFPS:NO];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟢 1. TIẾT KIỆM PIN (15Hz - 40Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [mainAlert addAction:[UIAlertAction actionWithTitle:saveText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@15, @20, @25, @30, @35, @40];
-        [self showSubMenuWithOptions:rates title:@"PHÂN KHÚC: TIẾT KIỆM PIN" unit:@"Hz" isFPS:NO];
+        [self showSubMenuWithOptions:rates title:saveText unit:@"Hz" isFPS:NO];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟡 2. BÌNH THƯỜNG (45Hz - 80Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [mainAlert addAction:[UIAlertAction actionWithTitle:balText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@45, @50, @55, @60, @65, @70, @75, @80];
-        [self showSubMenuWithOptions:rates title:@"PHÂN KHÚC: BÌNH THƯỜNG" unit:@"Hz" isFPS:NO];
+        [self showSubMenuWithOptions:rates title:balText unit:@"Hz" isFPS:NO];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🔴 3. CAO NHẤT (85Hz - 144Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [mainAlert addAction:[UIAlertAction actionWithTitle:maxText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
-        [self showSubMenuWithOptions:rates title:@"PHÂN KHÚC: CAO NHẤT" unit:@"Hz" isFPS:NO];
+        [self showSubMenuWithOptions:rates title:maxText unit:@"Hz" isFPS:NO];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [mainAlert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
     if (mainAlert.popoverPresentationController) {
         mainAlert.popoverPresentationController.sourceView = self.view;
     }
@@ -364,30 +454,37 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:@"CHỌN KHUNG HÌNH APP (FPS)"
-                                                                       message:@"Vui lòng chọn phân khúc mong muốn:"
+    NSString *alertTitle = PM_Text(@"TITLE_FPS") ?: @"CHỌN KHUNG HÌNH APP (FPS)";
+    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle
+                                                                       message:nil
                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🌟 Tự Động Quét Nhiệt (Dynamic FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    NSString *dynText = PM_Text(@"DYNAMIC") ?: @"🌟 Tự Động Quét Nhiệt (Dynamic FPS)";
+    NSString *saveText = PM_Text(@"BATTERY_SAVER") ?: @"🟢 1. TIẾT KIỆM PIN (15 FPS - 40 FPS)";
+    NSString *balText = PM_Text(@"BALANCED") ?: @"🟡 2. BÌNH THƯỜNG (45 FPS - 80 FPS)";
+    NSString *maxText = PM_Text(@"MAX_PERF") ?: @"🔴 3. CAO NHẤT (85 FPS - 144 FPS)";
+    NSString *closeText = PM_Text(@"CLOSE") ?: @"Đóng";
+
+    [mainAlert addAction:[UIAlertAction actionWithTitle:dynText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self applyRateValue:60 isDynamic:YES isFPS:YES];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟢 1. TIẾT KIỆM PIN (15 FPS - 40 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [mainAlert addAction:[UIAlertAction actionWithTitle:saveText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@15, @20, @25, @30, @35, @40];
-        [self showSubMenuWithOptions:rates title:@"PHÂN KHÚC: TIẾT KIỆM PIN" unit:@"FPS" isFPS:YES];
+        [self showSubMenuWithOptions:rates title:saveText unit:@"FPS" isFPS:YES];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟡 2. BÌNH THƯỜNG (45 FPS - 80 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [mainAlert addAction:[UIAlertAction actionWithTitle:balText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@45, @50, @55, @60, @65, @70, @75, @80];
-        [self showSubMenuWithOptions:rates title:@"PHÂN KHÚC: BÌNH THƯỜNG" unit:@"FPS" isFPS:YES];
+        [self showSubMenuWithOptions:rates title:balText unit:@"FPS" isFPS:YES];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🔴 3. CAO NHẤT (85 FPS - 144 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [mainAlert addAction:[UIAlertAction actionWithTitle:maxText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
-        [self showSubMenuWithOptions:rates title:@"PHÂN KHÚC: CAO NHẤT" unit:@"FPS" isFPS:YES];
+        [self showSubMenuWithOptions:rates title:maxText unit:@"FPS" isFPS:YES];
     }]];
 
-    [mainAlert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [mainAlert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
     if (mainAlert.popoverPresentationController) {
         mainAlert.popoverPresentationController.sourceView = self.view;
     }
@@ -399,7 +496,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.9.5 BETA";
+    return @"V23.9.5.1 Apex Supreme";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -426,7 +523,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (void)setupNavigationItems {
-    UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Tác Vụ"
+    UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Hành Động"
                                                                   style:UIBarButtonItemStylePlain
                                                                  target:self
                                                                  action:@selector(presentActions)];
@@ -492,6 +589,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
+        _allSavedSpecifiers = nil;
         [self reloadSpecifiers];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
