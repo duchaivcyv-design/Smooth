@@ -1,10 +1,3 @@
-// ==============================================================================
-// 🚀 TWEAK.XM - TITANIUM APEX ULTRA CORE ENTERPRISE ARCHITECTURE
-// 🛠 PHIÊN BẢN V23.4.4.1 APEX SUPREME - DUAL PROCESS SPLIT & MULTI-FILTER ISOLATION
-// 🛡 HỆ THỐNG PHÒNG THỦ: CRASHGUARD REALTIME + BANKING DISARM + SAFEMODE SHIELD
-// ⚡️ TỐI ƯU HÓA: 144HZ HARDWARE SYNC + COLOROS FLUID + THERMAL EMERGENCY BYPASS
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -42,6 +35,7 @@
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
+#define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 
 extern char **environ;
 
@@ -82,7 +76,7 @@ extern char **environ;
 - (id)wallpaperView;
 @end
 
-@interface UIWindow (PrivateApexV23441Ultra)
+@interface UIWindow (PrivateApexV245Ultra)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -90,12 +84,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (PrivateApexV23441Ultra)
+@interface CALayer (PrivateApexV245Ultra)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (PrivateApexV23441Ultra)
+@interface UIScreen (PrivateApexV245Ultra)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -123,13 +117,13 @@ extern char **environ;
 - (NSArray *)displays;
 @end
 
-@interface UIScrollView (PrivateApexV23441Ultra)
+@interface UIScrollView (PrivateApexV245Ultra)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)arg1;
 @end
 
-@interface CAMetalLayer (PrivateApexV23441Ultra)
+@interface CAMetalLayer (PrivateApexV245Ultra)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -449,6 +443,7 @@ static BOOL Titanium_IsSystemCriticalDaemon(void) {
     return isDaemon;
 }
 
+// BẢO VỆ TUYỆT ĐỐI KHỎI BỊ CRASH VÀ CHỐNG PHÁT HIỆN TẠI TẤT CẢ APP NGÂN HÀNG & VÍ ĐIỆN TỬ
 static BOOL Titanium_IsBankingOrFinancialApp(void) {
     static BOOL isFinancial = NO;
     static dispatch_once_t onceToken;
@@ -501,7 +496,7 @@ static void load_bks_terminate(void) {
 }
 
 // ==============================================================================
-// ⚡️ PHẦN 4: HỆ THỐNG GIA TỐC V23.4.4.1 - TẢI NHIỆT & LÀM MÁT CHUYỂN CẢNH
+// ⚡️ PHẦN 4: HỆ THỐNG GIA TỐC V24.5 - TẢI NHIỆT & LÀM MÁT CHUYỂN CẢNH
 // ==============================================================================
 
 static void Titanium_RunGarbageCollector_Light(void) {
@@ -777,7 +772,7 @@ static void Titanium_StartDisplayPacingDaemon(void) {
 @property (nonatomic, assign) NSInteger targetFPS;
 @property (nonatomic, assign) BOOL forceOverclock144Hz;
 
-@property (nonatomic, assign) BOOL proMotionEngineBeta5;
+@property (nonatomic, assign) BOOL proMotionEngineBeta7;
 @property (nonatomic, assign) BOOL heavyEffectAntiLagV3;
 @property (nonatomic, assign) BOOL keyboardZeroLagV3;
 
@@ -897,7 +892,7 @@ static void Titanium_StartDisplayPacingDaemon(void) {
         self.targetFPS = GetLiveInt(@"TargetFPSRate", 90);
         self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
 
-        self.proMotionEngineBeta5 = GetLiveBool(@"ProMotionEngineBeta3", YES);
+        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta3", YES) || GetLiveBool(@"ProMotionEngineBeta7", YES);
         self.heavyEffectAntiLagV3 = GetLiveBool(@"HeavyEffectAntiLagV24", YES);
         self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
 
@@ -950,9 +945,9 @@ static void Titanium_StartDisplayPacingDaemon(void) {
     if (self.forceOverclock144Hz) return 144;
     if (g_IsDeviceCharging && self.chargeCoolingProtection) return 60;
     
-    if (self.proMotionEngineBeta5) {
+    if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
-        if (g_IsUserTouching || (now - g_LastTouchTime < 0.65)) {
+        if (g_IsUserTouching || (now - g_LastTouchTime < 0.75)) {
             return (self.enableHzControl && self.targetHz > 0) ? self.targetHz : 120;
         } else {
             return 60;
@@ -969,7 +964,7 @@ static void Titanium_StartDisplayPacingDaemon(void) {
     if (self.forceOverclock144Hz) return 144;
     if (g_IsDeviceCharging && self.chargeCoolingProtection) return 60;
     
-    if (self.proMotionEngineBeta5) {
+    if (self.proMotionEngineBeta7) {
         return [self resolvedTargetHz];
     }
     
@@ -1051,13 +1046,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
-    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta5)) return %orig;
+    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
     return CAFrameRateRangeMake(rate >= 60.0f ? 60.0f : 30.0f, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta5)) {
+    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) {
         %orig(range);
         return;
     }
@@ -1068,17 +1063,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
-    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta5)) return %orig;
+    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta5)) return %orig;
+    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta5)) {
+    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) {
         %orig(rate);
         return;
     }
@@ -1086,7 +1081,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CGFloat)_refreshRate {
-    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta5)) return %orig;
+    if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return (CGFloat)[CFG_PTR resolvedTargetHz];
 }
 %end
@@ -1415,7 +1410,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🚀 PHẦN 13: SPRINGBOARD ENGINE & BẮT CỬ CHỈ PROMOTION BETA 5
+// 🚀 PHẦN 13: SPRINGBOARD ENGINE & BẮT CỬ CHỈ PROMOTION BETA 7
 // ==============================================================================
 %group Group_SpringBoard_Only
 
@@ -1484,7 +1479,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
-    if (IS_ON && CFG_PTR.proMotionEngineBeta5) {
+    if (IS_ON && CFG_PTR.proMotionEngineBeta7) {
         if (event.type == UIEventTypeTouches) {
             NSSet *touches = [event allTouches];
             UITouch *t = [touches anyObject];
@@ -1788,6 +1783,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
                 NULL,
                 reloadPrefsNotification,
                 CFSTR(NOTIFY_RELOAD),
+                NULL,
+                CFNotificationSuspensionBehaviorCoalesce
+            );
+            CFNotificationCenterAddObserver(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                NULL,
+                reloadPrefsNotification,
+                CFSTR(NOTIFY_UIKIT_RELOAD),
                 NULL,
                 CFNotificationSuspensionBehaviorCoalesce
             );
