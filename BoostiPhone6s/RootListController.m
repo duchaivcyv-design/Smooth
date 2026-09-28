@@ -1,14 +1,8 @@
-// ==============================================================================
-// 🚀 ROOTLISTCONTROLLER.M - ENTERPRISE MULTI-TARGET PREFERENCE CONTROLLER
-// 🛠 PHIÊN BẢN V24.4.4 APEX SUPREME - DUAL APP & SPRINGBOARD SYNCHRONIZER
-// 📡 TRUYỀN PHÁT: DARWIN IPC NOTIFICATION (SYSTEM + UIKIT APPCORE)
-// 🛡 AN TOÀN: ĐỒNG BỘ ĐỒNG THỜI CẢ CFPREFERENCES VÀ TỆP PLIST DISK VẬT LÝ
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <spawn.h>
 #import <sys/wait.h>
+#import <sys/stat.h>
 #import <notify.h>
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
@@ -37,6 +31,13 @@ extern char **environ;
 
 @interface RootListController : PSListController
 @end
+
+static inline UIAlertController *alertPresentationControllerHelper(UIAlertController *alert, UIViewController *vc) {
+    if (alert.popoverPresentationController && vc.navigationItem.rightBarButtonItems.count > 0) {
+        alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItems.firstObject;
+    }
+    return alert;
+}
 
 @implementation RootListController
 
@@ -154,7 +155,6 @@ extern char **environ;
             @"BypassVarSandbox": @NO,
             @"BlockAnalytics": @YES,
             @"TcpTurboNetwork": @YES,
-            // Các thuộc tính chuyên biệt cho nhánh ứng dụng UIKit
             @"UIKitIsolatedSmooth": @YES,
             @"UIKitAsyncImageDecoders": @YES,
             @"UIKitAntiStallPacing": @YES
@@ -175,7 +175,6 @@ extern char **environ;
         }
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        // Bắn tín hiệu nạp cho cả hệ thống SpringBoard và toàn bộ ứng dụng UIKit
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
     }
@@ -188,14 +187,12 @@ extern char **environ;
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return [specifier propertyForKey:@"default"];
 
-    // 1. Đọc từ CFPreferences (Bộ nhớ chia sẻ hệ thống)
     CFPreferencesAppSynchronize(PREF_DOMAIN);
     CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
     if (val) {
         return (__bridge_transfer id)val;
     }
 
-    // 2. Dự phòng đọc trực tiếp file Plist cho các ứng dụng UIKit chạy trong Sandbox
     NSDictionary *prefs = [self getMergedPreferences];
     if (prefs && prefs[key] != nil) {
         return prefs[key];
@@ -208,11 +205,9 @@ extern char **environ;
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return;
 
-    // 1. Ghi đồng bộ vào CFPreferences
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-    // 2. Ghi đè trực tiếp tệp Plist vật lý (Rootless + Fallback) để app UIKit không bị Sandbox chặn đọc
     NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
     NSFileManager *fm = [NSFileManager defaultManager];
     for (NSString *targetPath in targets) {
@@ -227,7 +222,6 @@ extern char **environ;
         chmod([targetPath UTF8String], 0644);
     }
 
-    // 3. BẮN TÍN HIỆU ĐỒNG THỜI CHO CẢ TWEAK SYSTEM LẪN TWEAK UIKIT APP
     notify_post(NOTIFY_RELOAD);
     notify_post(NOTIFY_UIKIT_RELOAD);
 }
@@ -270,7 +264,6 @@ extern char **environ;
             CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-            // Bắn tín hiệu đến cả hai dylib
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_UIKIT_RELOAD);
             notify_post("com.taojb.boostiphone6s/HardwareSync");
@@ -323,7 +316,6 @@ extern char **environ;
             CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-            // Bắn tín hiệu đến cả hai dylib
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_UIKIT_RELOAD);
             notify_post("com.taojb.boostiphone6s/HardwareSync");
@@ -349,7 +341,7 @@ extern char **environ;
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.4.4 Apex Ultra";
+    return @"V23.4.4.2 Apex Ultra";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -399,17 +391,9 @@ extern char **environ;
         });
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    if (sheet.popoverPresentationController) {
-        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItems.firstObject;
-    }
-    [self presentViewController:alertPresentationControllerHelper(sheet, self)];
-}
-
-static inline UIAlertController *alertPresentationControllerHelper(UIAlertController *alert, UIViewController *vc) {
-    if (alert.popoverPresentationController && vc.navigationItem.rightBarButtonItems.count > 0) {
-        alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItems.firstObject;
-    }
-    return alert;
+    
+    UIAlertController *configuredSheet = alertPresentationControllerHelper(sheet, self);
+    [self presentViewController:configuredSheet animated:YES completion:nil];
 }
 
 - (void)resetSettings {
@@ -429,7 +413,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         }
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        // Bắn tín hiệu reset đồng bộ cho cả hai dylib
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
 
