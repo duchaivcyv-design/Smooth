@@ -1,7 +1,6 @@
-```objc
 // ==============================================================================
 // 🚀 TWEAK.XM - TITANIUM APEX ULTRA CORE ENTERPRISE ARCHITECTURE
-// 🛠 PHIÊN BẢN V24.4.4 APEX SUPREME - DUAL PROCESS SPLIT & MULTI-FILTER ISOLATION
+// 🛠 PHIÊN BẢN V23.4.4.1 APEX SUPREME - DUAL PROCESS SPLIT & MULTI-FILTER ISOLATION
 // 🛡 HỆ THỐNG PHÒNG THỦ: CRASHGUARD REALTIME + BANKING DISARM + SAFEMODE SHIELD
 // ⚡️ TỐI ƯU HÓA: 144HZ HARDWARE SYNC + COLOROS FLUID + THERMAL EMERGENCY BYPASS
 // ==============================================================================
@@ -83,7 +82,7 @@ extern char **environ;
 - (id)wallpaperView;
 @end
 
-@interface UIWindow (PrivateApexV2444Ultra)
+@interface UIWindow (PrivateApexV23441Ultra)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -91,12 +90,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (PrivateApexV2444Ultra)
+@interface CALayer (PrivateApexV23441Ultra)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (PrivateApexV2444Ultra)
+@interface UIScreen (PrivateApexV23441Ultra)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -124,13 +123,13 @@ extern char **environ;
 - (NSArray *)displays;
 @end
 
-@interface UIScrollView (PrivateApexV2444Ultra)
+@interface UIScrollView (PrivateApexV23441Ultra)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)arg1;
 @end
 
-@interface CAMetalLayer (PrivateApexV2444Ultra)
+@interface CAMetalLayer (PrivateApexV23441Ultra)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -450,7 +449,6 @@ static BOOL Titanium_IsSystemCriticalDaemon(void) {
     return isDaemon;
 }
 
-// BẢO VỆ TUYỆT ĐỐI KHỎI BỊ CRASH VÀ CHỐNG PHÁT HIỆN TẠI TẤT CẢ APP NGÂN HÀNG & VÍ ĐIỆN TỬ
 static BOOL Titanium_IsBankingOrFinancialApp(void) {
     static BOOL isFinancial = NO;
     static dispatch_once_t onceToken;
@@ -503,7 +501,7 @@ static void load_bks_terminate(void) {
 }
 
 // ==============================================================================
-// ⚡️ PHẦN 4: HỆ THỐNG GIA TỐC V24.4.4 - TẢI NHIỆT & LÀM MÁT CHUYỂN CẢNH
+// ⚡️ PHẦN 4: HỆ THỐNG GIA TỐC V23.4.4.1 - TẢI NHIỆT & LÀM MÁT CHUYỂN CẢNH
 // ==============================================================================
 
 static void Titanium_RunGarbageCollector_Light(void) {
@@ -852,7 +850,6 @@ static void Titanium_StartDisplayPacingDaemon(void) {
     return self;
 }
 
-// BỘ ĐỌC NẠP KÉP: ĐỌC TỰ ĐỘNG CẢ TỪ CFPREFERENCES LẪN TRUY XUẤT TRỰC TIẾP FILE PLIST
 - (void)loadSettings {
     dispatch_sync(_configQueue, ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -1409,7 +1406,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Chống đè Frame sai lệch lên UIWindow của ứng dụng
 %hook UIWindow
 - (void)setFrame:(CGRect)frame {
     %orig(frame);
@@ -1761,29 +1757,24 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         NSString *proc = [[NSProcessInfo processInfo] processName];
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        // 1. CÁCH LY TUYỆT ĐỐI CÁC DAEMON HỆ THỐNG KHÔNG CÓ GIAO DIỆN (CHỐNG TREO MÁY / SAFEMODE)
         if (!bundleID || [bundleID length] == 0) {
             if (![proc isEqualToString:@"SpringBoard"]) {
                 return;
             }
         }
 
-        // 2. CÁCH LY ỨNG DỤNG CÀI ĐẶT (PREFERENCES)
         if ([proc isEqualToString:@"Preferences"] || Titanium_IsPreferencesApp()) {
             return;
         }
 
-        // 3. CÁCH LY TIẾN TRÌNH HỆ THỐNG QUAN TRỌNG
         if (Titanium_IsSystemCriticalDaemon()) {
             return;
         }
 
-        // 4. PHÒNG THỦ CAO CẤP: CÁCH LY 100% TOÀN BỘ APP NGÂN HÀNG & TÀI CHÍNH (CHỐNG VĂNG/VÔ HIỆU HÓA HOOK)
         if (Titanium_IsBankingOrFinancialApp()) {
             return;
         }
 
-        // 5. KHỞI TẠO BẢO VỆ CHỐNG SAFEMODE
         [[CrashGuard sharedInstance] startMonitoring];
         if (![[CrashGuard sharedInstance] canExecuteHooks]) {
             return;
@@ -1791,7 +1782,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         CFG = [BoostConfig sharedInstance];
 
-        // 6. ĐĂNG KÝ IPC LẮNG NGHE ĐỔI CÀI ĐẶT
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1803,9 +1793,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             );
         });
 
-        // 7. PHÂN LUỒNG NẠP HOOKS AN TOÀN THEO TỪNG VÙNG ỨNG DỤNG:
         if (Titanium_IsSpringBoard()) {
-            // Nhánh SpringBoard: Kích hoạt toàn bộ các hook hệ thống, dock, cử chỉ, layout
             %init(Group_SpringBoard_Only);
             %init(Group_Metal_SpringBoard_Only);
             %init(Group_Gesture_Fix);
@@ -1817,10 +1805,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             Titanium_StartDisplayPacingDaemon();
             Titanium_BoostThreadPriorityRealtime();
         } else {
-            // Nhánh Toàn bộ App UIKit bên thứ 3: Nạp nhóm cách ly riêng biệt, tuyệt đối không đụng vào layout/dock
             %init(Group_UIKit_ThirdParty_Isolated);
             
-            // Khởi tạo trễ an toàn khi mở app để triệt tiêu hiện tượng đen màn hình (Black Screen / Infinite Loading)
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 if (CFG_PTR.colorOs17SmoothEngine) {
                     Titanium_ExecuteQuantumRenderShield();
@@ -1828,7 +1814,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             });
         }
 
-        // 8. CÁC NHÓM GIA TỐC KHUNG HÌNH VÀ BỘ NHỚ AN TOÀN TOÀN HỆ THỐNG:
         %init(Group_Display_DualRate);
         %init(Group_ColorOS17_SafeUI);
         %init(Group_Memory_Engine);
@@ -1841,7 +1826,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         PMRuntimeReady = YES;
 
-        // 9. ĐỒNG BỘ ÉP XUNG NHỊP MÀN HÌNH TỨC THÌ
         if (CFG_PTR.hyperThreadIOAcceleratorOfficial) {
             Titanium_ExecuteHyperThreadIORoutine();
         }
@@ -1853,5 +1837,3 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         }
     }
 }
-
-```
