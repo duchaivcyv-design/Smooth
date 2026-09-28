@@ -1,8 +1,3 @@
-// ==============================================================================
-// 🚀 ROOTLISTCONTROLLER.M - DYNAMIC MASTER SWITCH & LAZY SYNC CONTROLLER
-// 🛠 PHIÊN BẢN V24.8.7 APEX SUPREME - ĐỒNG BỘ ĐỘ TRỄ NẠP VÀ ẨN/HIỆN PHÍM TỰ ĐỘNG
-// ==============================================================================
-
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <spawn.h>
@@ -160,10 +155,10 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         }
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
-            @"Enabled": @YES,
+            @"Enabled": @NO,
             @"ProMotionEngineBeta7": @YES,
-            @"HeavyEffectAntiLagV24": @YES,
-            @"KeyboardZeroLagV24": @YES,
+            @"HeavyEffectAntiLagV24": @NO,
+            @"KeyboardZeroLagV24": @NO,
             @"EnableHzControl": @YES,
             @"TargetRefreshRate": @60,
             @"EnableFPSControl": @YES,
@@ -182,17 +177,17 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
             @"HyperMemoryGuardian": @YES,
             @"UltraResponsivenessProEngineOfficial": @YES,
             @"HyperThreadIOAcceleratorOfficial": @YES,
-            @"QuantumCoreSyncStabilizerOfficial": @YES,
+            @"QuantumCoreSyncStabilizerOfficial": @NO,
             @"ZeroLagNeuralBoosterOfficial": @YES,
-            @"VsyncAdaptiveBufferOfficial": @YES,
+            @"VsyncAdaptiveBufferOfficial": @NO,
             @"DynamicThermalEngineOfficial": @YES,
             @"Ios27AutoScheduler": @YES,
             @"RealtimePriorityBoost": @YES,
-            @"BoostCpuGpu": @YES,
-            @"SmartRamClean": @YES,
+            @"BoostCpuGpu": @NO,
+            @"SmartRamClean": @NO,
             @"AggressiveRamClean": @NO,
             @"KillBgApps": @NO,
-            @"TurboAppLaunch": @YES,
+            @"TurboAppLaunch": @NO,
             @"MetalTripleBuffering": @YES,
             @"GameFpsStabilizer": @YES,
             @"OptimizeSystemProcess": @YES,
@@ -283,7 +278,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *options = @[
-        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"rate": @60, @"dynamic": @YES},
+        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"rate": @90, @"dynamic": @YES},
         @{@"title": @"Khóa ở 30 Hz (Tiết kiệm pin)", @"rate": @30, @"dynamic": @NO},
         @{@"title": @"Khóa ở 60 Hz (Mặc định)", @"rate": @60, @"dynamic": @NO},
         @{@"title": @"Khóa ở 75 Hz (Mượt mà)", @"rate": @75, @"dynamic": @NO},
@@ -335,7 +330,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *options = @[
-        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"fps": @60, @"dynamic": @YES},
+        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"fps": @90, @"dynamic": @YES},
         @{@"title": @"Khóa ở 30 FPS (Tiết kiệm pin)", @"fps": @30, @"dynamic": @NO},
         @{@"title": @"Khóa ở 60 FPS (Mặc định)", @"fps": @60, @"dynamic": @NO},
         @{@"title": @"Khóa ở 75 FPS (Nâng cao)", @"fps": @75, @"dynamic": @NO},
@@ -424,7 +419,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 - (void)presentActions {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"HÀNH ĐỘNG HỆ THỐNG" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ Respring Nhanh" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@" Respring Nhanh" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
             pid_t pid;
@@ -434,7 +429,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         });
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"🔥 Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
             pid_t pid;
@@ -444,7 +439,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         });
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"♻️ Đặt Lại Cấu Hình Mặc Định" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Cấu Hình Mặc Định" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [self executeResetConfiguration];
     }]];
 
