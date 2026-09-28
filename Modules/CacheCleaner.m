@@ -5,7 +5,6 @@
 
 + (void)forceMemoryPurge {
     @autoreleasepool {
-        // Đánh lừa HĐH rằng máy sắp cạn RAM để Apple tự kích hoạt chổi quét rác cực mạnh
         [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidReceiveMemoryWarningNotification object:nil];
     }
 }
