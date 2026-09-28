@@ -21,13 +21,10 @@ extern char **environ;
     if (_active) return;
     _active = YES;
     
-    // Day viec chan Daemon ra luong nen utility tranh anh huong den Main Thread
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         @autoreleasepool {
-            // Danh sach daemons thu thap chan ngam
             NSArray *daemons = @[@"analyticsd", @"adid", @"rapportd", @"awdd", @"crash_mover", @"symptom_diagnostics"];
             
-            // Xac dinh duong dan launchctl hop le
             const char *launchctlPath = NULL;
             if (access("/var/jb/bin/launchctl", X_OK) == 0) {
                 launchctlPath = "/var/jb/bin/launchctl";
