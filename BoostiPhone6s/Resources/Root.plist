@@ -9,7 +9,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.5 APEX SUPREME</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.7.1 APEX SUPREME</string>
 			<key>footerText</key>
 			<string>Kích hoạt toàn bộ giải thuật tăng tốc, điều phối phần cứng và động cơ làm mượt ứng dụng.</string>
 		</dict>
@@ -28,14 +28,14 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V24.5 ==================== -->
+		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V24.7.1 ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V24.5 (MỚI)</string>
+			<string>ĐẶC QUYỀN NÂNG CẤP V24.7.1 (MỚI)</string>
 			<key>footerText</key>
-			<string>ProMotion Beta 7 tự động đẩy xung nhịp cực nhạy khi ngón tay vừa chạm và tự hạ nhiệt khi đứng yên. Chống lag Liquid Glass giảm tải Metal GPU. Bàn phím 0ms triệt tiêu độ trễ khi gõ và làm việc với văn bản AI dài.</string>
+			<string>ProMotion Beta 8 tự động đẩy xung nhịp cực nhạy khi ngón tay vừa chạm và tự hạ nhiệt khi đứng yên. Chống lag Liquid Glass giảm tải Metal GPU. Bàn phím 0ms triệt tiêu độ trễ khi gõ và làm việc với văn bản AI dài.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -47,7 +47,7 @@
 			<key>key</key>
 			<string>ProMotionEngineBeta7</string>
 			<key>label</key>
-			<string>ProMotion Engine Beta 7</string>
+			<string>ProMotion Engine Beta 8 Core</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -727,7 +727,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V24.5 BETA - Bản quyền thuộc về ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V24.7 Debug - Bản quyền thuộc về ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -749,12 +749,12 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>Tham Gia Nhóm Hỗ Trợ</string>
+			<string>Tham Gia Nhóm Hỗ Trợ Zalo</string>
 			<key>action</key>
-			<string>OPENLINK:</string>
+			<string>openSupportLink:</string>
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V24.5</string>
+	<string>BoostiPhone6s V24.7.1</string>
 </dict>
 </plist>
