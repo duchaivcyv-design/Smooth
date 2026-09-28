@@ -157,8 +157,8 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
             @"Enabled": @NO,
             @"ProMotionEngineBeta7": @YES,
-            @"HeavyEffectAntiLagV24": @NO,
-            @"KeyboardZeroLagV24": @NO,
+            @"HeavyEffectAntiLagV24": @YES,
+            @"KeyboardZeroLagV24": @YES,
             @"EnableHzControl": @YES,
             @"TargetRefreshRate": @60,
             @"EnableFPSControl": @YES,
@@ -177,17 +177,17 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
             @"HyperMemoryGuardian": @YES,
             @"UltraResponsivenessProEngineOfficial": @YES,
             @"HyperThreadIOAcceleratorOfficial": @YES,
-            @"QuantumCoreSyncStabilizerOfficial": @NO,
+            @"QuantumCoreSyncStabilizerOfficial": @YES,
             @"ZeroLagNeuralBoosterOfficial": @YES,
-            @"VsyncAdaptiveBufferOfficial": @NO,
+            @"VsyncAdaptiveBufferOfficial": @YES,
             @"DynamicThermalEngineOfficial": @YES,
             @"Ios27AutoScheduler": @YES,
             @"RealtimePriorityBoost": @YES,
-            @"BoostCpuGpu": @NO,
-            @"SmartRamClean": @NO,
+            @"BoostCpuGpu": @YES,
+            @"SmartRamClean": @YES,
             @"AggressiveRamClean": @NO,
             @"KillBgApps": @NO,
-            @"TurboAppLaunch": @NO,
+            @"TurboAppLaunch": @YES,
             @"MetalTripleBuffering": @YES,
             @"GameFpsStabilizer": @YES,
             @"OptimizeSystemProcess": @YES,
@@ -272,108 +272,135 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     }
 }
 
-- (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Tần Số Quét (Hz)"
-                                                                   message:@"Lựa chọn mức hiển thị cho Hệ thống và toàn bộ ứng dụng:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn cân bằng\n• 75Hz - 90Hz: Tối ưu cảm ứng mượt mà\n• 120Hz - 144Hz: Tần số quét cực đại"
+// ==============================================================================
+//  HÀM CẬP NHẬT GIÁ TRỊ VÀ ĐỒNG BỘ CHO CẢ HỆ THỐNG LẪN APP
+// ==============================================================================
+- (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)dynamicMode isFPS:(BOOL)isFPS {
+    NSString *primaryKey = isFPS ? @"TargetFPSRate" : @"TargetRefreshRate";
+    NSString *secondaryKey = isFPS ? @"TargetRefreshRate" : @"TargetFPSRate";
+
+    NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+    for (NSString *targetPath in targets) {
+        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
+        [prefs setObject:@(rate) forKey:primaryKey];
+        [prefs setObject:@(rate) forKey:secondaryKey];
+        [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
+        [prefs writeToFile:targetPath atomically:YES];
+        chmod([targetPath UTF8String], 0644);
+    }
+
+    CFPreferencesSetAppValue((__bridge CFStringRef)primaryKey, (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+    CFPreferencesSetAppValue((__bridge CFStringRef)secondaryKey, (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+    CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta7"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+    [self syncSharedMemoryFile:YES];
+    notify_post(NOTIFY_RELOAD);
+    notify_post(NOTIFY_UIKIT_RELOAD);
+    notify_post("com.taojb.boostiphone6s/HardwareSync");
+
+    [self updateDynamicTitles];
+    [self reloadSpecifiers];
+}
+
+// ==============================================================================
+//  HỘP THOẠI CON HIỂN THỊ DANH SÁCH CHI TIẾT
+// ==============================================================================
+- (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:[NSString stringWithFormat:@"Chọn thông số cụ thể (%@):", unit]
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *options = @[
-        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"rate": @90, @"dynamic": @YES},
-        @{@"title": @"Khóa ở 30 Hz (Tiết kiệm pin)", @"rate": @30, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 60 Hz (Mặc định)", @"rate": @60, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 75 Hz (Mượt mà)", @"rate": @75, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 90 Hz (Mượt mà)", @"rate": @90, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 120 Hz (Cực mượt)", @"rate": @120, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 144 Hz (Cực đại)", @"rate": @144, @"dynamic": @NO}
-    ];
+    for (NSNumber *r in rates) {
+        NSInteger val = [r integerValue];
+        NSString *actionTitle = [NSString stringWithFormat:@"Khóa ở %ld %@", (long)val, unit];
 
-    for (NSDictionary *opt in options) {
-        [alert addAction:[UIAlertAction actionWithTitle:opt[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            NSInteger rate = [opt[@"rate"] integerValue];
-            BOOL dynamicMode = [opt[@"dynamic"] boolValue];
-
-            NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
-            for (NSString *targetPath in targets) {
-                NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
-                [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
-                [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
-                [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
-                [prefs writeToFile:targetPath atomically:YES];
-                chmod([targetPath UTF8String], 0644);
-            }
-
-            CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
-            CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
-            CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta7"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
-            CFPreferencesAppSynchronize(PREF_DOMAIN);
-
-            [self syncSharedMemoryFile:YES];
-            notify_post(NOTIFY_RELOAD);
-            notify_post(NOTIFY_UIKIT_RELOAD);
-            notify_post("com.taojb.boostiphone6s/HardwareSync");
-
-            [self updateDynamicTitles];
-            [self reloadSpecifiers];
+        [alert addAction:[UIAlertAction actionWithTitle:actionTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [self applyRateValue:val isDynamic:NO isFPS:isFPS];
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Quay lại" style:UIAlertActionStyleCancel handler:nil]];
     if (alert.popoverPresentationController) {
         alert.popoverPresentationController.sourceView = self.view;
     }
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+// ==============================================================================
+//  POPUP CHÍNH CHỌN HZ - PHÂN RA 3 MỤC RÕ RÀNG
+// ==============================================================================
+- (void)showHzPickerPopup:(PSSpecifier *)specifier {
+    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:@"CHỌN TẦN SỐ QUÉT (HZ)"
+                                                                       message:@"Vui lòng chọn chế độ mong muốn:"
+                                                                preferredStyle:UIAlertControllerStyleActionSheet];
+
+    // Mục Tự Động
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🌟 Tự Động (Dynamic 30Hz - 120Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:YES isFPS:NO];
+    }]];
+
+    // MỤC 1: TIẾT KIỆM PIN (15Hz -> 40Hz)
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟢 1. TIẾT KIỆM PIN (15Hz - 40Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSArray *rates = @[@15, @20, @25, @30, @35, @40];
+        [self showSubMenuWithOptions:rates title:@"MỤC: TIẾT KIỆM PIN" unit:@"Hz" isFPS:NO];
+    }]];
+
+    // MỤC 2: BÌNH THƯỜNG / CÂN BẰNG (45Hz -> 80Hz)
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟡 2. BÌNH THƯỜNG (45Hz - 80Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSArray *rates = @[@45, @50, @55, @60, @65, @70, @75, @80];
+        [self showSubMenuWithOptions:rates title:@"MỤC: BÌNH THƯỜNG" unit:@"Hz" isFPS:NO];
+    }]];
+
+    // MỤC 3: CAO NHẤT / CỰC ĐẠI (85Hz -> 144Hz)
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🔴 3. CAO NHẤT (85Hz - 144Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSArray *rates = @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
+        [self showSubMenuWithOptions:rates title:@"MỤC: CAO NHẤT" unit:@"Hz" isFPS:NO];
+    }]];
+
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    if (mainAlert.popoverPresentationController) {
+        mainAlert.popoverPresentationController.sourceView = self.view;
+    }
+    [self presentViewController:mainAlert animated:YES completion:nil];
+}
+
+// ==============================================================================
+// 📋 POPUP CHÍNH CHỌN FPS - PHÂN RA 3 MỤC RÕ RÀNG
+// ==============================================================================
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Khung Hình Ứng Dụng (FPS)"
-                                                                   message:@"Lựa chọn mức hiển thị cho Hệ thống và toàn bộ ứng dụng:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30 FPS: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60 FPS: Mặc định chuẩn cân bằng\n• 75 FPS - 90 FPS: Khung hình nâng cao mượt mà\n• 120 FPS - 144 FPS: Khung hình cực đại"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:@"CHỌN KHUNG HÌNH ỨNG DỤNG (FPS)"
+                                                                       message:@"Vui lòng chọn chế độ mong muốn:"
+                                                                preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *options = @[
-        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"fps": @90, @"dynamic": @YES},
-        @{@"title": @"Khóa ở 30 FPS (Tiết kiệm pin)", @"fps": @30, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 60 FPS (Mặc định)", @"fps": @60, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 75 FPS (Nâng cao)", @"fps": @75, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 90 FPS (Mượt mà)", @"fps": @90, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 120 FPS (Cực mượt)", @"fps": @120, @"dynamic": @NO},
-        @{@"title": @"Khóa ở 144 FPS (Cực đại)", @"fps": @144, @"dynamic": @NO}
-    ];
+    // Mục Tự Động
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🌟 Tự Động (Dynamic Khung Hình)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:YES isFPS:YES];
+    }]];
 
-    for (NSDictionary *opt in options) {
-        [alert addAction:[UIAlertAction actionWithTitle:opt[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            NSInteger fps = [opt[@"fps"] integerValue];
-            BOOL dynamicMode = [opt[@"dynamic"] boolValue];
+    // MỤC 1: TIẾT KIỆM PIN (15 FPS -> 40 FPS)
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟢 1. TIẾT KIỆM PIN (15 FPS - 40 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSArray *rates = @[@15, @20, @25, @30, @35, @40];
+        [self showSubMenuWithOptions:rates title:@"MỤC: TIẾT KIỆM PIN" unit:@"FPS" isFPS:YES];
+    }]];
 
-            NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
-            for (NSString *targetPath in targets) {
-                NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
-                [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
-                [prefs setObject:@(fps) forKey:@"TargetRefreshRate"];
-                [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
-                [prefs writeToFile:targetPath atomically:YES];
-                chmod([targetPath UTF8String], 0644);
-            }
+    // MỤC 2: BÌNH THƯỜNG / CÂN BẰNG (45 FPS -> 80 FPS)
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🟡 2. BÌNH THƯỜNG (45 FPS - 80 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSArray *rates = @[@45, @50, @55, @60, @65, @70, @75, @80];
+        [self showSubMenuWithOptions:rates title:@"MỤC: BÌNH THƯỜNG" unit:@"FPS" isFPS:YES];
+    }]];
 
-            CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
-            CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
-            CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta7"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
-            CFPreferencesAppSynchronize(PREF_DOMAIN);
+    // MỤC 3: CAO NHẤT / CỰC ĐẠI (85 FPS -> 144 FPS)
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"🔴 3. CAO NHẤT (85 FPS - 144 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSArray *rates = @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
+        [self showSubMenuWithOptions:rates title:@"MỤC: CAO NHẤT" unit:@"FPS" isFPS:YES];
+    }]];
 
-            [self syncSharedMemoryFile:YES];
-            notify_post(NOTIFY_RELOAD);
-            notify_post(NOTIFY_UIKIT_RELOAD);
-            notify_post("com.taojb.boostiphone6s/HardwareSync");
-
-            [self updateDynamicTitles];
-            [self reloadSpecifiers];
-        }]];
+    [mainAlert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    if (mainAlert.popoverPresentationController) {
+        mainAlert.popoverPresentationController.sourceView = self.view;
     }
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    if (alert.popoverPresentationController) {
-        alert.popoverPresentationController.sourceView = self.view;
-    }
-    [self presentViewController:alert animated:YES completion:nil];
+    [self presentViewController:mainAlert animated:YES completion:nil];
 }
 
 - (id)getAuthorName:(PSSpecifier *)specifier {
@@ -381,7 +408,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.8.7 DEBUG";
+    return @"V24.9.2 Apex Supreme";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -429,7 +456,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         });
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@" Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
             pid_t pid;
@@ -439,7 +466,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         });
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Cấu Hình Mặc Định" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@" Đặt Lại Cấu Hình Mặc Định" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [self executeResetConfiguration];
     }]];
 
