@@ -23,10 +23,7 @@
 #import <sys/mman.h>
 #import <sys/stat.h>
 #import <sys/types.h>
-#import <sys/socket.h>
 #import <fcntl.h>
-#import <netinet/in.h>
-#import <netinet/tcp.h>
 #import <dlfcn.h>
 #import <malloc/malloc.h>
 #import <CommonCrypto/CommonDigest.h>
@@ -98,7 +95,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface UIWindow (ApexPrivateV24821)
+@interface UIWindow (ApexPrivateV24822)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -106,12 +103,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV24821)
+@interface CALayer (ApexPrivateV24822)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (ApexPrivateV24821)
+@interface UIScreen (ApexPrivateV24822)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -126,13 +123,13 @@ extern char **environ;
 - (void)overrideDisplayTimings:(id)timings;
 @end
 
-@interface UIScrollView (ApexPrivateV24821)
+@interface UIScrollView (ApexPrivateV24822)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)point;
 @end
 
-@interface CAMetalLayer (ApexPrivateV24821)
+@interface CAMetalLayer (ApexPrivateV24822)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -282,19 +279,6 @@ typedef struct {
 } ApexTitanium_WatchdogEngineState;
 
 typedef struct {
-    uint64_t socketPacketsAccelerated;
-    uint32_t activeOptimizedSockets;
-    BOOL isTurboActive;
-    uint32_t socketBufferAllocations;
-    uint32_t networkLatencyReductionMicros;
-    uint64_t totalBytesThroughputOptimized;
-    uint32_t tcpWindowScaleFactor;
-    uint32_t fastOpenAttempts;
-    uint32_t pipeBufferBurstAllocations;
-    uint32_t roundTripTimeSlicesSaved;
-} ApexTitanium_NetworkEngineState;
-
-typedef struct {
     uint64_t touchEventsProcessed;
     uint64_t highPriorityDispatches;
     float motionVelocitySmoothingDamping;
@@ -313,6 +297,7 @@ typedef struct {
     float kineticDecelerationVectorY;
 } ApexTitanium_MotionEngineState;
 
+// Dữ liệu nhị phân chia sẻ an toàn qua file /tmp/.boost_hz_sync
 typedef struct {
     uint32_t magic;
     BOOL masterEnabled;
@@ -335,9 +320,6 @@ static ApexTitanium_ThermalEngineState g_titaniumThermalState = {
 };
 static ApexTitanium_WatchdogEngineState g_titaniumWatchdogState = {
     0, 0, YES, 0, 0, 350000000ULL, NO, 0, 0, 0, 0, 0, 0, 0
-};
-static ApexTitanium_NetworkEngineState g_titaniumNetworkState = {
-    0, 0, NO, 0, 0, 0, 65535, 0, 0, 0
 };
 static ApexTitanium_MotionEngineState g_titaniumMotionState = {
     0, 0, 0.85f, NO, 0, 0.5f, 120, 0, 0, 0.992f, NO, 0, 0, 0, 0.0f, 0.0f
@@ -681,7 +663,6 @@ static void Titanium_ExecuteHyperThreadIORoutine(void) {
                 thread_affinity_policy_data_t policy = { 1 };
                 thread_policy_set(currentThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, THREAD_AFFINITY_POLICY_COUNT);
                 mach_port_deallocate(mach_task_self(), currentThread);
-                g_titaniumNetworkState.socketPacketsAccelerated++;
             } @catch(NSException *e) {}
         }
     });
@@ -858,7 +839,6 @@ static void Titanium_StartChargingMonitor(void) {
 
 @property (nonatomic, assign) BOOL bypassVarSandbox;
 @property (nonatomic, assign) BOOL blockAnalytics;
-@property (nonatomic, assign) BOOL tcpTurboNetwork;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -978,7 +958,6 @@ static void Titanium_StartChargingMonitor(void) {
 
         self.bypassVarSandbox = GetLiveBool(@"BypassVarSandbox", NO);
         self.blockAnalytics = GetLiveBool(@"BlockAnalytics", YES);
-        self.tcpTurboNetwork = GetLiveBool(@"TcpTurboNetwork", YES);
 
         if (!Titanium_IsSpringBoard() && !Titanium_IsPreferencesApp()) {
             ApexSharedSyncPayload sharedPayload;
@@ -1047,7 +1026,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 // ==============================================================================
-// 🖥 MỤC 11: ÉP XUNG ĐỒNG TỐC HZ/FPS CHO TOÀN BỘ HỆ THỐNG VÀ ỨNG DỤNG BÊN THỨ 3
+// 🖥 MỤC 11: ÉP XUNG ĐỒNG TỐC HZ/FPS AN TOÀN TUYỆT ĐỐI BẰNG NHỊP PHASE CADENCE
 // ==============================================================================
 %group Group_Display_DualRate
 
@@ -1068,7 +1047,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = (rate < 60.0f) ? rate : 30.0f;
+    float minRate = rate;
+    if (rate >= 120.0f) {
+        minRate = 60.0f;
+    } else if (rate >= 90.0f) {
+        minRate = 45.0f;
+    } else if (rate >= 75.0f) {
+        minRate = 37.5f;
+    } else if (rate >= 60.0f) {
+        minRate = 30.0f;
+    } else {
+        minRate = rate;
+    }
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
 
@@ -1078,7 +1068,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return;
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = (rate < 60.0f) ? rate : 30.0f;
+    float minRate = rate;
+    if (rate >= 120.0f) {
+        minRate = 60.0f;
+    } else if (rate >= 90.0f) {
+        minRate = 45.0f;
+    } else if (rate >= 75.0f) {
+        minRate = 37.5f;
+    } else if (rate >= 60.0f) {
+        minRate = 30.0f;
+    } else {
+        minRate = rate;
+    }
     %orig(CAFrameRateRangeMake(minRate, rate, rate));
 }
 %end
@@ -1108,6 +1109,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
+// Khóa đồng nhất buffer nhịp của Metal trong từng App để triệt tiêu xé khung hình
 %hook CAMetalLayer
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (IS_ON && CFG_PTR.enableFPSControl) {
@@ -1654,6 +1656,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             });
             Titanium_BoostThreadPriorityRealtime();
         } else {
+            // App UIKit bên thứ ba: Cách ly an toàn tuyệt đối, không can thiệp render frame đầu
             %init(Group_UIKit_ThirdParty_Isolated);
         }
 
