@@ -344,11 +344,11 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.5 Apex Supreme";
+    return @"4.5.0-1DEBUG";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
-    NSURL *url = [NSURL URLWithString:@"https://github.com/duchaivcyv-design/Smooth"];
+    NSURL *url = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
         [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
     });
