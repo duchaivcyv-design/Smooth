@@ -58,7 +58,6 @@ static void Apex_HandleUncaughtException(NSException *exception);
 @end
 
 static void Apex_HandleUncaughtException(NSException *exception) {
-    // Khi bi Exception, lap tuc bat co SafeMode de lan sau khong bi treo Respring Loop
     NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:PREF_SUITE];
     [prefs setBool:YES forKey:SAFE_MODE_KEY];
     [prefs synchronize];
