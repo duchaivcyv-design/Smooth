@@ -1,7 +1,6 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
-# Tối ưu hóa Log Build CI/CD và tắt cảnh báo rác
 DEBUG = 0
 FINALPACKAGE = 1
 
@@ -91,7 +90,7 @@ after-stage::
 	@echo ""
 
 # ==============================================================================
-# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS V24.7.1
+# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS V??
 # ==============================================================================
 before-package::
 	@echo ""
