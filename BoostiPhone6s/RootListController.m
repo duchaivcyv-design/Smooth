@@ -60,9 +60,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     return alert;
 }
 
-// ==============================================================================
-// 🌐 BỘ NẠP VÀ TRUY XUẤT TỪ ĐIỂN LOCALIZATION.PLIST ĐA NGÔN NGỮ
-// ==============================================================================
 static NSDictionary *g_LocDict = nil;
 
 static void PM_LoadLocalizationIfNeeded(void) {
@@ -87,7 +84,7 @@ static void PM_LoadLocalizationIfNeeded(void) {
     }
     
     if (path) {
-        g_LocDict = [NSDictionary dictionaryWithContentsOfFile:path];
+        g_LocDict = [[NSDictionary alloc] initWithContentsOfFile:path];
     }
 }
 
@@ -104,6 +101,13 @@ static inline NSString *PM_GetCurrentLanguageCode(void) {
     if ([sysLang hasPrefix:@"zh"]) return @"zh";
     if ([sysLang hasPrefix:@"ru"]) return @"ru";
     if ([sysLang hasPrefix:@"hi"]) return @"hi";
+    if ([sysLang hasPrefix:@"ja"]) return @"ja";
+    if ([sysLang hasPrefix:@"ko"]) return @"ko";
+    if ([sysLang hasPrefix:@"es"]) return @"es";
+    if ([sysLang hasPrefix:@"pt"]) return @"pt";
+    if ([sysLang hasPrefix:@"fr"]) return @"fr";
+    if ([sysLang hasPrefix:@"de"]) return @"de";
+    if ([sysLang hasPrefix:@"ar"]) return @"ar";
     if ([sysLang hasPrefix:@"en"]) return @"en";
     return @"vi";
 }
@@ -114,7 +118,7 @@ static inline NSString *PM_Text(NSString *key) {
 
     NSString *langCode = PM_GetCurrentLanguageCode();
     if ([langCode isEqualToString:@"vi"]) {
-        return nil; // Tiếng Việt giữ nguyên text gốc trong Root.plist
+        return nil;
     }
 
     NSDictionary *langSection = g_LocDict[langCode];
@@ -158,7 +162,6 @@ static inline NSString *PM_Text(NSString *key) {
         _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
 
-        // Quét và dịch tự động toàn bộ Specifiers theo ngôn ngữ được chọn
         for (PSSpecifier *spec in _allSavedSpecifiers) {
             NSString *key = [spec propertyForKey:@"key"];
             if (key) {
@@ -210,6 +213,15 @@ static inline NSString *PM_Text(NSString *key) {
     NSString *fpsAutoText = PM_Text(@"DYNAMIC_FPS_TITLE") ?: @"Khung Hình App: Tự Động (Max %ld FPS)";
     NSString *fpsLockText = PM_Text(@"LOCK_FPS_TITLE") ?: @"Khung Hình App: Khóa %ld FPS";
 
+    NSString *langCode = PM_GetCurrentLanguageCode();
+    NSDictionary *langNames = @{
+        @"vi": @"Tiếng Việt", @"en": @"English", @"zh": @"中文", @"ru": @"Русский",
+        @"hi": @"हिन्दी", @"ja": @"日本語", @"ko": @"한국어", @"es": @"Español",
+        @"pt": @"Português", @"fr": @"Français", @"de": @"Deutsch", @"ar": @"العربية"
+    };
+    NSString *currentLangName = langNames[langCode] ?: @"Auto";
+    NSString *langLabelFormat = PM_Text(@"LANGUAGE_BTN_FORMAT") ?: @"Ngôn Ngữ: %@";
+
     for (PSSpecifier *spec in (NSArray *)_specifiers) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
@@ -218,6 +230,8 @@ static inline NSString *PM_Text(NSString *key) {
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
             spec.name = isDynamic ? [NSString stringWithFormat:fpsAutoText, (long)fps]
                                   : [NSString stringWithFormat:fpsLockText, (long)fps];
+        } else if ([key isEqualToString:@"SelectedLanguage"]) {
+            spec.name = [NSString stringWithFormat:langLabelFormat, currentLangName];
         }
     }
 }
@@ -358,7 +372,7 @@ static inline NSString *PM_Text(NSString *key) {
     notify_post(NOTIFY_HARDWARE_SYNC);
 
     if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"SelectedLanguage"]) {
-        _allSavedSpecifiers = nil; // Tự động xóa bộ nhớ đệm để nạp lại giao diện theo ngôn ngữ mới
+        _allSavedSpecifiers = nil;
         [self reloadSpecifiers];
     }
 }
@@ -391,6 +405,58 @@ static inline NSString *PM_Text(NSString *key) {
     [self reloadSpecifiers];
 }
 
+- (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
+    NSString *title = PM_Text(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *langs = @[
+        @{@"code": @"auto", @"name": @"🌐 Tự Động / Auto (Theo Máy)"},
+        @{@"code": @"vi",   @"name": @"🇻🇳 Tiếng Việt"},
+        @{@"code": @"en",   @"name": @"🇺🇸 English"},
+        @{@"code": @"zh",   @"name": @"🇨🇳 中文 (Chinese)"},
+        @{@"code": @"ru",   @"name": @"🇷🇺 Русский (Russian)"},
+        @{@"code": @"hi",   @"name": @"🇮🇳 हिन्दी (Hindi)"},
+        @{@"code": @"ja",   @"name": @"🇯🇵 日本語 (Japanese)"},
+        @{@"code": @"ko",   @"name": @"🇰🇷 한국어 (Korean)"},
+        @{@"code": @"es",   @"name": @"🇪🇸 Español (Spanish)"},
+        @{@"code": @"pt",   @"name": @"🇧🇷 Português (Portuguese)"},
+        @{@"code": @"fr",   @"name": @"🇫🇷 Français (French)"},
+        @{@"code": @"de",   @"name": @"🇩🇪 Deutsch (German)"},
+        @{@"code": @"ar",   @"name": @"🇸🇦 العربية (Arabic)"}
+    ];
+
+    for (NSDictionary *item in langs) {
+        [alert addAction:[UIAlertAction actionWithTitle:item[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            NSString *code = item[@"code"];
+            CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+            NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+            for (NSString *targetPath in targets) {
+                NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
+                prefs[@"SelectedLanguage"] = code;
+                [prefs writeToFile:targetPath atomically:YES];
+                chmod([targetPath UTF8String], 0644);
+            }
+
+            notify_post(NOTIFY_RELOAD);
+            _allSavedSpecifiers = nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self reloadSpecifiers];
+            });
+        }]];
+    }
+
+    NSString *closeText = PM_Text(@"CLOSE") ?: @"Đóng";
+    [alert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.view;
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                    message:nil
@@ -401,7 +467,13 @@ static inline NSString *PM_Text(NSString *key) {
 
     for (NSNumber *r in rates) {
         NSInteger val = [r integerValue];
-        NSString *actionTitle = [NSString stringWithFormat:@"%@ %ld %@", lockPrefix, (long)val, unit];
+        NSString *tag = @"";
+        if (val <= 30) tag = PM_Text(@"TAG_SAVER") ?: @" - Siêu tiết kiệm";
+        else if (val == 60) tag = PM_Text(@"TAG_BALANCED") ?: @" - Cân bằng chuẩn";
+        else if (val == 90 || val == 120) tag = PM_Text(@"TAG_ULTRA") ?: @" - Cực mượt";
+        else if (val == 144) tag = PM_Text(@"TAG_MAX") ?: @" - Tối đa phần cứng";
+
+        NSString *actionTitle = [NSString stringWithFormat:@"%@ %ld %@%@", lockPrefix, (long)val, unit, tag];
 
         [alert addAction:[UIAlertAction actionWithTitle:actionTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [self applyRateValue:val isDynamic:NO isFPS:isFPS];
@@ -496,7 +568,7 @@ static inline NSString *PM_Text(NSString *key) {
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V23.9.5.1 Apex Supreme";
+    return @"V23.9.5.1 BETA";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -532,9 +604,15 @@ static inline NSString *PM_Text(NSString *key) {
 }
 
 - (void)presentActions {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"HÀNH ĐỘNG HỆ THỐNG" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *title = PM_Text(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG";
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@" Respring Nhanh" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    NSString *respringText = PM_Text(@"RESPRING") ?: @" Respring Nhanh";
+    NSString *srebootText = PM_Text(@"SREBOOT") ?: @" Khởi Động Không Gian Người Dùng (SReboot)";
+    NSString *resetText = PM_Text(@"RESET") ?: @" Đặt Lại Cấu Hình Mặc Định";
+    NSString *closeText = PM_Text(@"CLOSE") ?: @"Đóng";
+
+    [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
             pid_t pid;
@@ -544,7 +622,7 @@ static inline NSString *PM_Text(NSString *key) {
         });
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@" Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:srebootText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
             pid_t pid;
@@ -554,19 +632,24 @@ static inline NSString *PM_Text(NSString *key) {
         });
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@" Đặt Lại Cấu Hình Mặc Định" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:resetText style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [self executeResetConfiguration];
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
 
     UIAlertController *configuredSheet = alertPresentationControllerHelper(sheet, self);
     [self presentViewController:configuredSheet animated:YES completion:nil];
 }
 
 - (void)executeResetConfiguration {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Đặt Lại" message:@"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu nhất." preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    NSString *confirmTitle = PM_Text(@"RESET_CONFIRM_TITLE") ?: @"Xác Nhận Đặt Lại";
+    NSString *confirmMsg = PM_Text(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu nhất.";
+    NSString *resetNowText = PM_Text(@"RESET_NOW") ?: @"Đặt Lại Ngay";
+    NSString *cancelText = PM_Text(@"BACK") ?: @"Hủy";
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:confirmTitle message:confirmMsg preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:resetNowText style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:SHARED_SYNC_FILE error:nil];
@@ -592,7 +675,7 @@ static inline NSString *PM_Text(NSString *key) {
         _allSavedSpecifiers = nil;
         [self reloadSpecifiers];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:cancelText style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
