@@ -6,12 +6,8 @@ FINALPACKAGE = 1
 
 include $(THEOS)/makefiles/common.mk
 
-# ==============================================================================
-# PART 1: BUILD MAIN LIBRARY (TWEAK CORE LOGIC V24.7.1 APEX)
-# ==============================================================================
 LIBRARY_NAME = BoostiPhone6sCore
 
-# Đường dẫn cài đặt dylib vào MobileSubstrate
 BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 BoostiPhone6sCore_FILES = Tweak.xm \
@@ -50,21 +46,14 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# Tối ưu liên kết dylib bỏ qua cảnh báo deprecated
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# ==============================================================================
-# PART 2: SUBPROJECT SETTINGS UI
-# ==============================================================================
 SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
-# ==============================================================================
-# PART 3: AUTO-COPY FILTER PLIST VÀO MOBILESUBSTRATE (UIKIT + SB + PREFS)
-# ==============================================================================
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 BOOST_PLIST_SRC = BoostiPhone6s/Layout/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)
 
@@ -89,12 +78,9 @@ after-stage::
 	fi
 	@echo ""
 
-# ==============================================================================
-# PART 4: PACKAGING SCRIPT CHUẨN ROOTLESS V??
-# ==============================================================================
 before-package::
 	@echo ""
-	@echo "Finalizing Rootless Package V24.7.1 Titanium Apex..."
+	@echo "Finalizing Rootless Package NEXT UPDATE DEBUG..."
 	@echo ""
 	
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
