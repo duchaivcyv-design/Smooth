@@ -33,6 +33,7 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wno-implicit-function-declaration \
                            -Wno-deprecated-non-prototype \
                            -Wno-macro-redefined \
+                           -Wno-module-import-in-extern-c \
                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
