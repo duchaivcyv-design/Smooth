@@ -1668,5 +1668,3 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         PMRuntimeReady = YES;
     }
 }
-
-```
