@@ -1,3 +1,10 @@
+// ==============================================================================
+// 🚀 ROOTLISTCONTROLLER.M - ENTERPRISE MULTI-TARGET PREFERENCE CONTROLLER
+// 🛠 PHIÊN BẢN V24.4.4 APEX SUPREME - DUAL APP & SPRINGBOARD SYNCHRONIZER
+// 📡 TRUYỀN PHÁT: DARWIN IPC NOTIFICATION (SYSTEM + UIKIT APPCORE)
+// 🛡 AN TOÀN: ĐỒNG BỘ ĐỒNG THỜI CẢ CFPREFERENCES VÀ TỆP PLIST DISK VẬT LÝ
+// ==============================================================================
+
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <spawn.h>
@@ -8,6 +15,9 @@
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
+
+// Tín hiệu đồng bộ tức thì cho tầng ứng dụng UIKit bên thứ 3
+#define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 
 extern char **environ;
 
@@ -52,9 +62,9 @@ extern char **environ;
     [self reloadSpecifiers];
 }
 
-// Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ song hành
+// Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ song hành cho cả SpringBoard và App
 - (void)updateDynamicTitles {
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
+    NSDictionary *prefs = [self getMergedPreferences];
     BOOL isDynamic = prefs[@"ProMotionEngineBeta3"] ? [prefs[@"ProMotionEngineBeta3"] boolValue] : YES;
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 90;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 90;
@@ -77,15 +87,27 @@ extern char **environ;
     }
 }
 
+// Helper gom dữ liệu đồng nhất giữa CFPreferences và Disk Plist
+- (NSDictionary *)getMergedPreferences {
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    NSDictionary *diskDict = nil;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) {
+        diskDict = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH];
+    } else if ([[NSFileManager defaultManager] fileExistsAtPath:FALLBACK_PREF_PATH]) {
+        diskDict = [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
+    }
+    return diskDict ?: [NSDictionary dictionary];
+}
+
 // ==============================================================================
-// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH PHÂN BỔ TỐI ƯU
+// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH (TỐI ƯU CẢ SPRINGBOARD VÀ UIKIT)
 // ==============================================================================
 - (void)ensureDefaultSettingsExist {
     NSFileManager *fm = [NSFileManager defaultManager];
     if (![fm fileExistsAtPath:PREF_PATH] && ![fm fileExistsAtPath:FALLBACK_PREF_PATH]) {
         NSString *dir = [PREF_PATH stringByDeletingLastPathComponent];
         if (![fm fileExistsAtPath:dir]) {
-            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
         }
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -131,29 +153,54 @@ extern char **environ;
             @"PowerSaveMode": @NO,
             @"BypassVarSandbox": @NO,
             @"BlockAnalytics": @YES,
-            @"TcpTurboNetwork": @YES
+            @"TcpTurboNetwork": @YES,
+            // Các thuộc tính chuyên biệt cho nhánh ứng dụng UIKit
+            @"UIKitIsolatedSmooth": @YES,
+            @"UIKitAsyncImageDecoders": @YES,
+            @"UIKitAntiStallPacing": @YES
         }];
 
-        [defaults writeToFile:PREF_PATH atomically:YES];
+        NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+        for (NSString *tPath in targets) {
+            NSString *tDir = [tPath stringByDeletingLastPathComponent];
+            if (![fm fileExistsAtPath:tDir]) {
+                [fm createDirectoryAtPath:tDir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
+            }
+            [defaults writeToFile:tPath atomically:YES];
+            chmod([tPath UTF8String], 0644);
+        }
+
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
         }
         CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+        // Bắn tín hiệu nạp cho cả hệ thống SpringBoard và toàn bộ ứng dụng UIKit
         notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_UIKIT_RELOAD);
     }
 }
 
 // ==============================================================================
-// 2. BỘ ĐỌC / GHI ĐỒNG BỘ 100% IPC VÀ FILE PLIST
+// 2. BỘ ĐỌC / GHI ĐỒNG BỘ KÉP (CFPREFERENCES + TỆP PLIST DISK CHO UIKIT APP CONTAINER)
 // ==============================================================================
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
-    if (!key) return nil;
+    if (!key) return [specifier propertyForKey:@"default"];
 
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
+    // 1. Đọc từ CFPreferences (Bộ nhớ chia sẻ hệ thống)
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
+    if (val) {
+        return (__bridge_transfer id)val;
+    }
+
+    // 2. Dự phòng đọc trực tiếp file Plist cho các ứng dụng UIKit chạy trong Sandbox
+    NSDictionary *prefs = [self getMergedPreferences];
     if (prefs && prefs[key] != nil) {
         return prefs[key];
     }
+
     return [specifier propertyForKey:@"default"];
 }
 
@@ -161,29 +208,36 @@ extern char **environ;
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return;
 
-    NSString *targetPath = PREF_PATH;
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSString *dir = [targetPath stringByDeletingLastPathComponent];
-    if (![fm fileExistsAtPath:dir]) {
-        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
-    }
-
-    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
-    [prefs setObject:value forKey:key];
-    [prefs writeToFile:targetPath atomically:YES];
-
+    // 1. Ghi đồng bộ vào CFPreferences
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
+    // 2. Ghi đè trực tiếp tệp Plist vật lý (Rootless + Fallback) để app UIKit không bị Sandbox chặn đọc
+    NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    for (NSString *targetPath in targets) {
+        NSString *dir = [targetPath stringByDeletingLastPathComponent];
+        if (![fm fileExistsAtPath:dir]) {
+            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
+        }
+
+        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
+        [prefs setObject:value forKey:key];
+        [prefs writeToFile:targetPath atomically:YES];
+        chmod([targetPath UTF8String], 0644);
+    }
+
+    // 3. BẮN TÍN HIỆU ĐỒNG THỜI CHO CẢ TWEAK SYSTEM LẪN TWEAK UIKIT APP
     notify_post(NOTIFY_RELOAD);
+    notify_post(NOTIFY_UIKIT_RELOAD);
 }
 
 // ==============================================================================
-// 3. POPUP TAB DẠNG CARD CHUẨN XÁC KÈM MỨC 30 HZ VÀ ĐỒNG BỘ HZ & FPS
+// 3. POPUP TAB DẠNG CARD KÈM MỨC 30 HZ & ĐỒNG BỘ TOÀN DIỆN CHO MỌI ỨNG DỤNG
 // ==============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Tần Số Quét (Hz)"
-                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn cân bằng\n• 75Hz - 90Hz: Tối ưu cảm ứng mượt mà\n• 120Hz - 144Hz: Tần số quét cực đại"
+                                                                   message:@"Lựa chọn mức hiển thị cho Hệ thống và toàn bộ ứng dụng:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn cân bằng\n• 75Hz - 90Hz: Tối ưu cảm ứng mượt mà\n• 120Hz - 144Hz: Tần số quét cực đại"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *options = @[
@@ -201,18 +255,26 @@ extern char **environ;
             NSInteger rate = [opt[@"rate"] integerValue];
             BOOL dynamicMode = [opt[@"dynamic"] boolValue];
 
-            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
-            [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
-            [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
-            [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
-            [prefs writeToFile:PREF_PATH atomically:YES];
+            NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+            for (NSString *targetPath in targets) {
+                NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
+                [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
+                [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
+                [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
+                [prefs writeToFile:targetPath atomically:YES];
+                chmod([targetPath UTF8String], 0644);
+            }
 
             CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
+            // Bắn tín hiệu đến cả hai dylib
             notify_post(NOTIFY_RELOAD);
+            notify_post(NOTIFY_UIKIT_RELOAD);
+            notify_post("com.taojb.boostiphone6s/HardwareSync");
+
             [self updateDynamicTitles];
             [self reloadSpecifiers];
         }]];
@@ -228,7 +290,7 @@ extern char **environ;
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Khung Hình Ứng Dụng (FPS)"
-                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30 FPS: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60 FPS: Mặc định chuẩn cân bằng\n• 75 FPS - 90 FPS: Khung hình nâng cao mượt mà\n• 120 FPS - 144 FPS: Khung hình cực đại"
+                                                                   message:@"Lựa chọn mức hiển thị cho Hệ thống và toàn bộ ứng dụng:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30 FPS: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60 FPS: Mặc định chuẩn cân bằng\n• 75 FPS - 90 FPS: Khung hình nâng cao mượt mà\n• 120 FPS - 144 FPS: Khung hình cực đại"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *options = @[
@@ -246,18 +308,26 @@ extern char **environ;
             NSInteger fps = [opt[@"fps"] integerValue];
             BOOL dynamicMode = [opt[@"dynamic"] boolValue];
 
-            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
-            [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
-            [prefs setObject:@(fps) forKey:@"TargetRefreshRate"];
-            [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
-            [prefs writeToFile:PREF_PATH atomically:YES];
+            NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+            for (NSString *targetPath in targets) {
+                NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
+                [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
+                [prefs setObject:@(fps) forKey:@"TargetRefreshRate"];
+                [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
+                [prefs writeToFile:targetPath atomically:YES];
+                chmod([targetPath UTF8String], 0644);
+            }
 
             CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
             CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
+            // Bắn tín hiệu đến cả hai dylib
             notify_post(NOTIFY_RELOAD);
+            notify_post(NOTIFY_UIKIT_RELOAD);
+            notify_post("com.taojb.boostiphone6s/HardwareSync");
+
             [self updateDynamicTitles];
             [self reloadSpecifiers];
         }]];
@@ -279,7 +349,7 @@ extern char **environ;
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.4.1 Apex Ultra";
+    return @"V24.4.4 Apex Ultra";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -290,7 +360,7 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 5. THANH ĐIỀU HƯỚNG GÓC PHẢI
+// 5. THANH ĐIỀU HƯỚNG GÓC PHẢI & THAO TÁC HỆ THỐNG
 // ==============================================================================
 - (void)setupNavigationItems {
     UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Hành Động"
@@ -332,11 +402,18 @@ extern char **environ;
     if (sheet.popoverPresentationController) {
         sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItems.firstObject;
     }
-    [self presentViewController:sheet animated:YES completion:nil];
+    [self presentViewController:alertPresentationControllerHelper(sheet, self)];
+}
+
+static inline UIAlertController *alertPresentationControllerHelper(UIAlertController *alert, UIViewController *vc) {
+    if (alert.popoverPresentationController && vc.navigationItem.rightBarButtonItems.count > 0) {
+        alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItems.firstObject;
+    }
+    return alert;
 }
 
 - (void)resetSettings {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình" message:@"Khôi phục toàn bộ về giá trị mặc định tối ưu." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình" message:@"Khôi phục toàn bộ về giá trị mặc định tối ưu cho cả SpringBoard và UIKit App." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
@@ -352,7 +429,10 @@ extern char **environ;
         }
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
+        // Bắn tín hiệu reset đồng bộ cho cả hai dylib
         notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_UIKIT_RELOAD);
+
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
         [self reloadSpecifiers];
