@@ -10,7 +10,6 @@
 #import <mach/task.h>
 #import <mach/task_info.h>
 #import <mach/clock.h>
-
 #import <pthread.h>
 #import <pthread/qos.h>
 #import <sched.h>
@@ -28,18 +27,10 @@
 #import <malloc/malloc.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <notify.h>
-
-// ==============================================================================
-//  MỤC 1: OBJECTIVE-C RUNTIME, CORE FOUNDATION & FOUNDATION
-// ==============================================================================
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
-
-// ==============================================================================
-//  MỤC 2: FRAMEWORK GIAO DIỆN, QUARTZCORE & ĐỒ HỌA METAL
-// ==============================================================================
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <QuartzCore/CAFrameRateRange.h>
@@ -47,33 +38,22 @@
 #import <Metal/Metal.h>
 #import <WebKit/WebKit.h>
 
-// ==============================================================================
-// ⚙️MỤC 3: CÁC ĐỊNH DANH CẤU HÌNH & TÍN HIỆU IPC
-// ==============================================================================
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
 #define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
-
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 
 extern char **environ;
 
-// ==============================================================================
-//  MỤC 4: NẠP ĐẦY ĐỦ 6 PHÂN HỆ LÕI (TITANIUM SUBMODULES)
-// ==============================================================================
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
 #import "Modules/KernelBypass.h"
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
-
-// ==============================================================================
-//  MỤC 5: KHAI BÁO TIỀN TỆ (FORWARD DECLARATIONS & PRIVATE METHODS)
-// ==============================================================================
 
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
@@ -95,7 +75,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface UIWindow (ApexPrivateV2493)
+@interface UIWindow (ApexEngine)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -103,15 +83,17 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV2493)
+@interface CALayer (ApexEngine)
 - (id)context;
 - (void)setContext:(id)arg1;
+- (void)setAllowsEdgeAntialiasing:(BOOL)flag;
 @end
 
-@interface UIScreen (ApexPrivateV2493)
+@interface UIScreen (ApexEngine)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
+- (CADisplay *)_display;
 @end
 
 @interface CADisplay : NSObject
@@ -123,13 +105,16 @@ extern char **environ;
 - (void)overrideDisplayTimings:(id)timings;
 @end
 
-@interface UIScrollView (ApexPrivateV2493)
+@interface UIScrollView (ApexEngine)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)point;
+- (void)_setInterruptionImpulse:(CGPoint)impulse;
+- (void)_forcePanGestureToEndImmediately;
+- (CGPoint)_touchPositionForTouches:(id)touches;
 @end
 
-@interface CAMetalLayer (ApexPrivateV2493)
+@interface CAMetalLayer (ApexEngine)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -179,15 +164,15 @@ extern char **environ;
 + (instancetype)activeInstance;
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
+- (void)clearAnimations;
+- (void)setReturnKeyEnabled:(BOOL)arg1;
+- (void)updateReturnKey:(BOOL)arg1;
+- (void)hardwareKeyboardAvailabilityChanged;
 @end
 
 @interface ATXAnalyticsManager : NSObject
 - (void)sendEvent:(id)eventData;
 @end
-
-// ==============================================================================
-//  MỤC 6: CÁC KHỐI CẤU TRÚC ĐIỀU PHỐI ĐA LUỒNG & BỘ ĐỆM TELEMETRY
-// ==============================================================================
 
 typedef struct {
     uint64_t totalFramesRendered;
@@ -216,7 +201,7 @@ typedef struct {
     uint32_t microStallCorrections;
     uint64_t compositorLatchNanos;
     BOOL dynamicClockModulationActive;
-} ApexTitanium_GraphicsEngineState;
+} ApexGraphicsEngineState;
 
 typedef struct {
     uint32_t memoryPressureCount;
@@ -238,7 +223,7 @@ typedef struct {
     size_t transientLayerPoolRelieved;
     uint32_t extremeSurgeReclaims;
     size_t deadZonePagePrunes;
-} ApexTitanium_MemoryEngineState;
+} ApexMemoryEngineState;
 
 typedef struct {
     float coreTemperatureCelsius;
@@ -259,7 +244,7 @@ typedef struct {
     uint64_t extremeCooldownLastTimestamp;
     uint32_t thermalDissipationCycles;
     float thermalJunctionDelta;
-} ApexTitanium_ThermalEngineState;
+} ApexThermalEngineState;
 
 typedef struct {
     uint32_t watchdogTicks;
@@ -276,7 +261,7 @@ typedef struct {
     uint32_t compositorThreadLockBypasses;
     uint32_t safeModeTripsEvaded;
     uint32_t mainRunloopStallBypassed;
-} ApexTitanium_WatchdogEngineState;
+} ApexWatchdogEngineState;
 
 typedef struct {
     uint64_t touchEventsProcessed;
@@ -295,7 +280,7 @@ typedef struct {
     uint64_t lastTouchReleaseTimestampNanos;
     float kineticDecelerationVectorX;
     float kineticDecelerationVectorY;
-} ApexTitanium_MotionEngineState;
+} ApexMotionEngineState;
 
 typedef struct {
     uint32_t magic;
@@ -306,21 +291,21 @@ typedef struct {
     uint64_t updateSeq;
 } ApexSharedSyncPayload;
 
-#define APEX_SYNC_MAGIC 0x41504558 // 'APEX'
+#define APEX_SYNC_MAGIC 0x41504558
 
-static ApexTitanium_GraphicsEngineState g_titaniumGraphicsState = {
+static ApexGraphicsEngineState g_titaniumGraphicsState = {
     0, 0, 0.0f, NO, 60, 60, YES, 0, 0, 1.0f, 0, 16666666ULL, YES, 0, 0, 0, 0, 0.992f, YES, 0, 0, 0, NO, 0, 0, NO
 };
-static ApexTitanium_MemoryEngineState g_titaniumMemoryState = {
+static ApexMemoryEngineState g_titaniumMemoryState = {
     0, 0, NO, YES, 0, 0, 0, YES, 0, 60000000000ULL, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
-static ApexTitanium_ThermalEngineState g_titaniumThermalState = {
+static ApexThermalEngineState g_titaniumThermalState = {
     25.0f, NSProcessInfoThermalStateNominal, NO, 0, 1.0f, 0, 25.0f, NO, 5000000000ULL, 25.0f, 0, 1.0f, NO, 0, 0, 0, 0, 0.0f
 };
-static ApexTitanium_WatchdogEngineState g_titaniumWatchdogState = {
+static ApexWatchdogEngineState g_titaniumWatchdogState = {
     0, 0, YES, 0, 0, 350000000ULL, NO, 0, 0, 0, 0, 0, 0, 0
 };
-static ApexTitanium_MotionEngineState g_titaniumMotionState = {
+static ApexMotionEngineState g_titaniumMotionState = {
     0, 0, 0.85f, NO, 0, 0.5f, 120, 0, 0, 0.992f, NO, 0, 0, 0, 0.0f, 0.0f
 };
 
@@ -357,10 +342,6 @@ static CFTimeInterval g_LastTouchTime = 0.0;
 static CFTimeInterval g_LastExtremeTransitionTime = 0.0;
 static NSProcessInfoThermalState g_LiveThermalState = NSProcessInfoThermalStateNominal;
 
-// ==============================================================================
-//  MỤC 7: CƠ CHẾ ĐỒNG BỘ DỮ LIỆU XUYÊN THẤU SANDBOX APP BẰNG SHARED FILE
-// ==============================================================================
-
 static void Titanium_WriteSharedSyncState(BOOL enabled, int32_t hz, int32_t fps, BOOL dynamicMode) {
     ApexSharedSyncPayload payload;
     payload.magic = APEX_SYNC_MAGIC;
@@ -390,10 +371,6 @@ static BOOL Titanium_ReadSharedSyncState(ApexSharedSyncPayload *outPayload) {
     return NO;
 }
 
-// ==============================================================================
-//  MỤC 8: BỘ ĐIỀU PHỐI QUÉT CẢM BIẾN NHIỆT ĐỘ HỆ THỐNG THỜI GIAN THỰC
-// ==============================================================================
-
 static void Titanium_StartThermalWatchdogTimer(void) {
     static dispatch_source_t thermalTimer = NULL;
     static dispatch_once_t onceToken;
@@ -411,15 +388,12 @@ static void Titanium_StartThermalWatchdogTimer(void) {
     });
 }
 
-// ==============================================================================
-//  MỤC 9: KIỂM TRA TIẾN TRÌNH & BẢO VỆ GESTURE CHỐNG ĐƠ DOUBLE-TAP
-// ==============================================================================
-
 static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
     if (!sv) return;
     UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
     if (pan) {
         pan.delaysTouchesBegan = NO;
+        pan.cancelsTouchesInView = NO;
     }
 }
 
@@ -560,10 +534,6 @@ static void load_bks_terminate(void) {
     });
 }
 
-// ==============================================================================
-//  MỤC 10: TIẾN TRÌNH DỌN DẸP BỘ NHỚ VÀ ĐIỀU PHỐI ĐA LUỒNG AN TOÀN
-// ==============================================================================
-
 static void Titanium_RunGarbageCollector_Light(void) {
     if (!titanium_bg_gc_queue) {
         titanium_bg_gc_queue = dispatch_queue_create("com.titaniumapex.gc.light", DISPATCH_QUEUE_SERIAL);
@@ -586,7 +556,10 @@ static void Titanium_RunGarbageCollector_Aggressive(void) {
         @autoreleasepool {
             @try {
                 g_titaniumMemoryState.isCleaningInProgress = YES;
-                [CacheCleaner forceDeepMemoryPurge];
+                Class cacheCls = NSClassFromString(@"CacheCleaner");
+                if (cacheCls && [cacheCls respondsToSelector:@selector(forceDeepMemoryPurge)]) {
+                    [cacheCls performSelector:@selector(forceDeepMemoryPurge)];
+                }
                 malloc_zone_pressure_relief(NULL, 1024 * 1024 * 16);
                 g_titaniumMemoryState.lastReclaimedBytes += (1024 * 1024 * 16);
                 g_titaniumMemoryState.isCleaningInProgress = NO;
@@ -805,10 +778,6 @@ static void Titanium_StartChargingMonitor(void) {
     });
 }
 
-// ==============================================================================
-//  MỤC 11: BỘ NẠP CẤU HÌNH ĐA TẦNG - TỰ ĐỘNG BẢO VỆ SANDBOX VÀ ĐỒNG BỘ TOÀN DIỆN
-// ==============================================================================
-
 @interface BoostConfig : NSObject
 @property (nonatomic, assign) BOOL enabled;
 @property (nonatomic, assign) BOOL enableHzControl;
@@ -816,30 +785,25 @@ static void Titanium_StartChargingMonitor(void) {
 @property (nonatomic, assign) BOOL enableFPSControl;
 @property (nonatomic, assign) NSInteger targetFPS;
 @property (nonatomic, assign) BOOL forceOverclock144Hz;
-
 @property (nonatomic, assign) BOOL proMotionEngineBeta7;
 @property (nonatomic, assign) BOOL heavyEffectAntiLagV3;
 @property (nonatomic, assign) BOOL keyboardZeroLagV3;
-
 @property (nonatomic, assign) BOOL colorOs17SmoothEngine;
 @property (nonatomic, assign) BOOL reduceMultiTaskLag;
 @property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
 @property (nonatomic, assign) BOOL fixAppExitStutter;
 @property (nonatomic, assign) BOOL touchResponseBoost;
 @property (nonatomic, assign) CGFloat animSpeed;
-
 @property (nonatomic, assign) BOOL quantumRenderShieldOfficial;       
 @property (nonatomic, assign) BOOL neuralBufferOptimizerOfficial;     
 @property (nonatomic, assign) BOOL apexBackgroundPacingDaemon;
 @property (nonatomic, assign) BOOL hyperMemoryGuardian;       
-
 @property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
 @property (nonatomic, assign) BOOL hyperThreadIOAcceleratorOfficial;     
 @property (nonatomic, assign) BOOL quantumCoreSyncStabilizerOfficial;     
 @property (nonatomic, assign) BOOL zeroLagNeuralBoosterOfficial;         
 @property (nonatomic, assign) BOOL vsyncAdaptiveBufferOfficial;          
 @property (nonatomic, assign) BOOL dynamicThermalEngineOfficial;
-
 @property (nonatomic, assign) BOOL ios27AutoScheduler;      
 @property (nonatomic, assign) BOOL realtimePriorityBoost;   
 @property (nonatomic, assign) BOOL boostCpuGpu;
@@ -851,13 +815,11 @@ static void Titanium_StartChargingMonitor(void) {
 @property (nonatomic, assign) BOOL gameFpsStabilizer;
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
 @property (nonatomic, assign) BOOL autoSpoofNewDevice;
-
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL smartThermalManager;
 @property (nonatomic, assign) BOOL heavyLoadCooling;       
 @property (nonatomic, assign) BOOL chargeCoolingProtection;
 @property (nonatomic, assign) BOOL powerSaveMode;
-
 @property (nonatomic, assign) BOOL bypassVarSandbox;
 @property (nonatomic, assign) BOOL blockAnalytics;
 
@@ -1000,28 +962,23 @@ static void Titanium_StartChargingMonitor(void) {
     if (self.forceOverclock144Hz) return 144;
     if (g_IsDeviceCharging && self.chargeCoolingProtection) return 60;
 
-    //  CHẾ ĐỘ TỰ ĐỘNG QUÉT NHIỆT ĐỘ PHẦN CỨNG (DYNAMIC THERMAL DISPATCH)
     if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
         BOOL isInteracting = g_IsUserTouching || (now - g_LastTouchTime < 0.75);
 
-        // A. Máy rất nóng (Critical): Khóa 30Hz hạ nhiệt cấp tốc
         if (g_LiveThermalState == NSProcessInfoThermalStateCritical) {
             return isInteracting ? 30 : 15;
         }
 
-        // B. Máy bắt đầu nóng (Serious): Giới hạn 60Hz
         if (g_LiveThermalState == NSProcessInfoThermalStateSerious) {
             return isInteracting ? 60 : 30;
         }
 
-        // C. Máy ấm nhẹ (Fair): Vuốt chạm 90Hz, nghỉ hạ 45Hz
         if (g_LiveThermalState == NSProcessInfoThermalStateFair) {
             NSInteger maxCap = (self.targetHz > 90 || self.targetHz == 0) ? 90 : self.targetHz;
             return isInteracting ? maxCap : 45;
         }
 
-        // D. Máy mát mẻ (Nominal): Bung hết hiệu năng mức người dùng đã cấu hình (120Hz/144Hz)
         NSInteger peakHz = (self.targetHz > 0) ? self.targetHz : 120;
         return isInteracting ? peakHz : 60;
     }
@@ -1063,9 +1020,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     Titanium_DebouncedPreferenceSync();
 }
 
-// ==============================================================================
-//  MỤC 12A: ĐIỀU PHỐI HZ/FPS CHO SPRINGBOARD (NHÓM 1 - ĐỘC LẬP THEOS)
-// ==============================================================================
 %group Group_Display_SpringBoard
 
 %hook CADisplayLink
@@ -1085,7 +1039,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate >= 60.0f ? 30.0f : rate;
+    float minRate = rate;
+    if (rate >= 120.0f) {
+        minRate = 60.0f;
+    } else if (rate >= 90.0f) {
+        minRate = 45.0f;
+    } else if (rate >= 75.0f) {
+        minRate = 37.5f;
+    } else if (rate >= 60.0f) {
+        minRate = 30.0f;
+    } else {
+        minRate = rate;
+    }
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
 
@@ -1095,7 +1060,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return;
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate >= 60.0f ? 30.0f : rate;
+    float minRate = rate;
+    if (rate >= 120.0f) {
+        minRate = 60.0f;
+    } else if (rate >= 90.0f) {
+        minRate = 45.0f;
+    } else if (rate >= 75.0f) {
+        minRate = 37.5f;
+    } else if (rate >= 60.0f) {
+        minRate = 30.0f;
+    } else {
+        minRate = rate;
+    }
     %orig(CAFrameRateRangeMake(minRate, rate, rate));
 }
 %end
@@ -1127,9 +1103,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// ==============================================================================
-//  MỤC 12B: ĐIỀU PHỐI HZ/FPS TIÊM TRỄ CHO APP CON (NHÓM 2 - ĐỘC LẬP THEOS)
-// ==============================================================================
 %group Group_Display_App_Lazy
 
 %hook CADisplayLink
@@ -1149,7 +1122,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate >= 60.0f ? 30.0f : rate;
+    float minRate = rate;
+    if (rate >= 120.0f) {
+        minRate = 60.0f;
+    } else if (rate >= 90.0f) {
+        minRate = 45.0f;
+    } else if (rate >= 75.0f) {
+        minRate = 37.5f;
+    } else if (rate >= 60.0f) {
+        minRate = 30.0f;
+    } else {
+        minRate = rate;
+    }
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
 
@@ -1159,7 +1143,18 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return;
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate >= 60.0f ? 30.0f : rate;
+    float minRate = rate;
+    if (rate >= 120.0f) {
+        minRate = 60.0f;
+    } else if (rate >= 90.0f) {
+        minRate = 45.0f;
+    } else if (rate >= 75.0f) {
+        minRate = 37.5f;
+    } else if (rate >= 60.0f) {
+        minRate = 30.0f;
+    } else {
+        minRate = rate;
+    }
     %orig(CAFrameRateRangeMake(minRate, rate, rate));
 }
 %end
@@ -1178,9 +1173,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// ==============================================================================
-//  MỤC 13: TỐI ƯU CUỘN LƯỚT COLOROS 17 AN TOÀN
-// ==============================================================================
 %group Group_ColorOS17_SafeUI
 
 %hook UIScrollView
@@ -1205,13 +1197,19 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         PMConfigureScrollViewSafe(self);
     }
 }
+
+- (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine) {
+        CGPoint calibratedVelocity = CGPointMake(velocity.x * 0.985f, velocity.y * 0.985f);
+        %orig(calibratedVelocity, targetContentOffset);
+        return;
+    }
+    %orig(velocity, targetContentOffset);
+}
 %end
 
 %end
 
-// ==============================================================================
-//  MỤC 14: BÀN PHÍM 0MS - KHÔNG GÂY LỖI KẸT GÕ PHÍM TRONG APP
-// ==============================================================================
 %group Group_Keyboard_And_Text
 
 %hook UIKeyboardImpl
@@ -1228,13 +1226,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     }
     %orig;
 }
+
+- (void)clearAnimations {
+    if (IS_ON && CFG_PTR.keyboardZeroLagV3) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
 %end
 
 %end
 
-// ==============================================================================
-//  MỤC 15: ĐA NHIỆM & CỬ CHỈ GIAO DIỆN (CHỈ DÀNH CHO SPRINGBOARD)
-// ==============================================================================
 %group Group_Gesture_Fix
 
 %hook SBFluidSwitcherAnimationSettings
@@ -1289,9 +1291,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// ==============================================================================
-//  MỤC 16: BẢO VỆ TỌA ĐỘ MÀN HÌNH CHÍNH & STATUS BAR (CHỐNG LỆCH LAYOUT)
-// ==============================================================================
 %group Group_Fix_App_Layout_Position
 
 %hook SBDockView
@@ -1331,9 +1330,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// ==============================================================================
-//  MỤC 17: SPRINGBOARD ENGINE (KHÔNG CAN THIỆP HÌNH NỀN WALLPAPER)
-// ==============================================================================
 %group Group_SpringBoard_Only
 
 %hook SBIconController
@@ -1395,9 +1391,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %end
 
-// ==============================================================================
-//  MỤC 18: NHÓM CÁCH LY AN TOÀN CHO TẤT CẢ APP BÊN THỨ BA (SẠCH ĐEN MÀN)
-// ==============================================================================
 %group Group_UIKit_ThirdParty_Isolated
 
 %hook UIScrollView
@@ -1417,13 +1410,19 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
 }
+
+- (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
+    if (IS_ON && CFG_PTR.colorOs17SmoothEngine) {
+        CGPoint calibratedVelocity = CGPointMake(velocity.x * 0.985f, velocity.y * 0.985f);
+        %orig(calibratedVelocity, targetContentOffset);
+        return;
+    }
+    %orig(velocity, targetContentOffset);
+}
 %end
 
 %end
 
-// ==============================================================================
-//  MỤC 19: HÀM KHỞI CHẠY AN TOÀN TOÀN BỘ 6 MÔ-ĐUN TRONG APP BÊN THỨ BA
-// ==============================================================================
 static void Titanium_LaunchAllModulesInsideApp(void) {
     if (!titanium_app_engine_queue) {
         titanium_app_engine_queue = dispatch_queue_create("com.titaniumapex.app.engine", DISPATCH_QUEUE_SERIAL);
@@ -1431,7 +1430,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
     dispatch_async(titanium_app_engine_queue, ^{
         @autoreleasepool {
             @try {
-                // 1. CrashGuard
                 Class crashGuardCls = NSClassFromString(@"CrashGuard");
                 if (crashGuardCls && [crashGuardCls respondsToSelector:@selector(sharedInstance)]) {
                     id guard = [crashGuardCls performSelector:@selector(sharedInstance)];
@@ -1440,14 +1438,12 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
                     }
                 }
 
-                // 2. CacheCleaner
                 Class cacheCls = NSClassFromString(@"CacheCleaner");
                 if (cacheCls && [cacheCls respondsToSelector:@selector(forceDeepMemoryPurge)]) {
                     [cacheCls performSelector:@selector(forceDeepMemoryPurge)];
                 }
                 malloc_zone_pressure_relief(NULL, 1024 * 1024 * 4);
 
-                // 3. SmartThermal
                 Class thermalCls = NSClassFromString(@"SmartThermal");
                 if (thermalCls) {
                     if ([thermalCls respondsToSelector:@selector(setupThermalThrottlingProtection)]) {
@@ -1460,7 +1456,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
                     }
                 }
 
-                // 4. KernelBypass & SystemBlocker
                 Class kbCls = NSClassFromString(@"KernelBypass");
                 if (kbCls && [kbCls respondsToSelector:@selector(applySandboxBypassPatches)]) {
                     [kbCls performSelector:@selector(applySandboxBypassPatches)];
@@ -1474,10 +1469,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
         }
     });
 }
-
-// ==============================================================================
-//  MỤC 20: BỘ TỐI ƯU HÓA HỆ THỐNG APEX TITANIUM EXTENSION
-// ==============================================================================
 
 @interface Titanium_SystemOptimizer : NSObject
 + (instancetype)sharedInstance;
@@ -1503,6 +1494,11 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
 - (void)purgeGPUTransientFramebuffers;
 - (void)neutralizeExtremeFlingThermalSurge;
 - (void)enforceSubsecondPacingEquilibrium;
+- (void)smoothCadenceDispatchInterception;
+- (void)mitigateDisplayCadenceTearing;
+- (void)stabilizeFrameIntervalMomentum;
+- (void)pruneTransientTextureCacheLines;
+- (void)clampInteractiveGesturePhaseJitter;
 @end
 
 @implementation Titanium_SystemOptimizer {
@@ -1682,25 +1678,248 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
     }
 }
 
+- (void)smoothCadenceDispatchInterception {
+    @autoreleasepool {
+        g_titaniumGraphicsState.frameTimingCorrections++;
+        g_titaniumGraphicsState.dynamicRefreshRateRatio = 1.0f;
+    }
+}
+
+- (void)mitigateDisplayCadenceTearing {
+    @autoreleasepool {
+        g_titaniumGraphicsState.isPacingLocked = YES;
+        g_titaniumGraphicsState.bufferSwapOverrunCounter = 0;
+    }
+}
+
+- (void)stabilizeFrameIntervalMomentum {
+    @autoreleasepool {
+        g_titaniumGraphicsState.frameSmoothingMomentum = 0.995f;
+    }
+}
+
+- (void)pruneTransientTextureCacheLines {
+    @autoreleasepool {
+        malloc_zone_pressure_relief(NULL, 1024 * 1024 * 2);
+    }
+}
+
+- (void)clampInteractiveGesturePhaseJitter {
+    @autoreleasepool {
+        g_titaniumMotionState.motionVelocitySmoothingDamping = 0.92f;
+    }
+}
+
 @end
 
-// ==============================================================================
-//  MỤC 21: CONSTRUCTOR KHỞI TẠO NGUYÊN KHỐI BẰNG TIÊM TRỄ (LAZY INJECTION)
-// ==============================================================================
+@interface Titanium_TouchVelocityPredictor : NSObject
++ (instancetype)sharedPredictor;
+- (void)recordTouchPoint:(CGPoint)pt timestamp:(NSTimeInterval)ts;
+- (CGPoint)predictedNextPointWithDamping:(CGFloat)damping;
+- (void)reset;
+@end
+
+@implementation Titanium_TouchVelocityPredictor {
+    CGPoint _points[16];
+    NSTimeInterval _timestamps[16];
+    NSInteger _count;
+}
+
++ (instancetype)sharedPredictor {
+    static Titanium_TouchVelocityPredictor *inst = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        inst = [[Titanium_TouchVelocityPredictor alloc] init];
+    });
+    return inst;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _count = 0;
+    }
+    return self;
+}
+
+- (void)recordTouchPoint:(CGPoint)pt timestamp:(NSTimeInterval)ts {
+    if (_count < 16) {
+        _points[_count] = pt;
+        _timestamps[_count] = ts;
+        _count++;
+    } else {
+        for (int i = 0; i < 15; i++) {
+            _points[i] = _points[i+1];
+            _timestamps[i] = _timestamps[i+1];
+        }
+        _points[15] = pt;
+        _timestamps[15] = ts;
+    }
+}
+
+- (CGPoint)predictedNextPointWithDamping:(CGFloat)damping {
+    if (_count < 2) {
+        return _count == 1 ? _points[0] : CGPointZero;
+    }
+    CGPoint last = _points[_count - 1];
+    CGPoint prev = _points[_count - 2];
+    NSTimeInterval dt = _timestamps[_count - 1] - _timestamps[_count - 2];
+    if (dt <= 0.0001) return last;
+    CGFloat vx = (last.x - prev.x) / dt;
+    CGFloat vy = (last.y - prev.y) / dt;
+    CGFloat step = 0.016667f;
+    return CGPointMake(last.x + vx * step * damping, last.y + vy * step * damping);
+}
+
+- (void)reset {
+    _count = 0;
+}
+
+@end
+
+@interface Titanium_FrameCadenceMonitor : NSObject
++ (instancetype)sharedMonitor;
+- (void)registerFrameRenderTime:(uint64_t)nanos;
+- (float)calculateCadenceDriftPercentage;
+- (BOOL)shouldTriggerDynamicThrottling;
+@end
+
+@implementation Titanium_FrameCadenceMonitor {
+    uint64_t _frameTimes[32];
+    NSInteger _frameIndex;
+    uint64_t _lastRenderNanos;
+}
+
++ (instancetype)sharedMonitor {
+    static Titanium_FrameCadenceMonitor *m = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        m = [[Titanium_FrameCadenceMonitor alloc] init];
+    });
+    return m;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _frameIndex = 0;
+        _lastRenderNanos = 0;
+        memset(_frameTimes, 0, sizeof(_frameTimes));
+    }
+    return self;
+}
+
+- (void)registerFrameRenderTime:(uint64_t)nanos {
+    _frameTimes[_frameIndex % 32] = nanos;
+    _frameIndex++;
+    _lastRenderNanos = nanos;
+}
+
+- (float)calculateCadenceDriftPercentage {
+    if (_frameIndex < 4) return 0.0f;
+    uint64_t totalDelta = 0;
+    int count = _frameIndex > 32 ? 32 : (int)_frameIndex;
+    for (int i = 1; i < count; i++) {
+        if (_frameTimes[i] > _frameTimes[i-1]) {
+            totalDelta += (_frameTimes[i] - _frameTimes[i-1]);
+        }
+    }
+    uint64_t avg = totalDelta / (count - 1);
+    if (avg == 0) return 0.0f;
+    uint64_t variance = 0;
+    for (int i = 1; i < count; i++) {
+        if (_frameTimes[i] > _frameTimes[i-1]) {
+            uint64_t d = _frameTimes[i] - _frameTimes[i-1];
+            variance += (d > avg) ? (d - avg) : (avg - d);
+        }
+    }
+    return (float)variance / (float)(avg * (count - 1));
+}
+
+- (BOOL)shouldTriggerDynamicThrottling {
+    return [self calculateCadenceDriftPercentage] > 0.15f;
+}
+
+@end
+
+@interface Titanium_RunLoopHangGuard : NSObject
++ (instancetype)sharedGuard;
+- (void)startHangMonitoring;
+- (void)stopHangMonitoring;
+- (void)pingFromMainThread;
+@end
+
+@implementation Titanium_RunLoopHangGuard {
+    dispatch_source_t _hangTimer;
+    atomic_uint_fast64_t _lastPingTimestamp;
+    BOOL _isMonitoring;
+}
+
++ (instancetype)sharedGuard {
+    static Titanium_RunLoopHangGuard *g = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        g = [[Titanium_RunLoopHangGuard alloc] init];
+    });
+    return g;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _isMonitoring = NO;
+        _lastPingTimestamp = 0;
+    }
+    return self;
+}
+
+- (void)pingFromMainThread {
+    _lastPingTimestamp = mach_absolute_time();
+}
+
+- (void)startHangMonitoring {
+    if (_isMonitoring) return;
+    _isMonitoring = YES;
+    _lastPingTimestamp = mach_absolute_time();
+    _hangTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+    dispatch_source_set_timer(_hangTimer, dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), 1 * NSEC_PER_SEC, 200 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(_hangTimer, ^{
+        mach_timebase_info_data_t tb;
+        mach_timebase_info(&tb);
+        uint64_t current = mach_absolute_time();
+        uint64_t elapsedNanos = (current - _lastPingTimestamp) * tb.numer / tb.denom;
+        if (elapsedNanos > 3500000000ULL) {
+            CFRunLoopRef mainRL = CFRunLoopGetMain();
+            if (mainRL && CFRunLoopIsWaiting(mainRL)) {
+                CFRunLoopWakeUp(mainRL);
+            }
+        }
+    });
+    dispatch_resume(_hangTimer);
+}
+
+- (void)stopHangMonitoring {
+    if (!_isMonitoring) return;
+    if (_hangTimer) {
+        dispatch_source_cancel(_hangTimer);
+        _hangTimer = NULL;
+    }
+    _isMonitoring = NO;
+}
+
+@end
 
 %ctor {
     @autoreleasepool {
         NSString *proc = [[NSProcessInfo processInfo] processName];
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        // 1. Bỏ qua các daemon không có giao diện
         if (!bundleID || [bundleID length] == 0) {
             if (![proc isEqualToString:@"SpringBoard"]) {
                 return;
             }
         }
 
-        // 2. Chống can thiệp vào Settings, Daemon hệ thống và Ứng dụng ngân hàng
         if ([proc isEqualToString:@"Preferences"] || Titanium_IsPreferencesApp()) {
             return;
         }
@@ -1711,19 +1930,21 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             return;
         }
 
-        // 3. Khởi động CrashGuard
-        [[CrashGuard sharedInstance] startMonitoring];
-        if (![[CrashGuard sharedInstance] canExecuteHooks]) {
-            return;
+        Class crashGuardCls = NSClassFromString(@"CrashGuard");
+        if (crashGuardCls && [crashGuardCls respondsToSelector:@selector(sharedInstance)]) {
+            id guard = [crashGuardCls performSelector:@selector(sharedInstance)];
+            if ([guard respondsToSelector:@selector(startMonitoring)]) {
+                [guard performSelector:@selector(startMonitoring)];
+            }
+            if ([guard respondsToSelector:@selector(canExecuteHooks)]) {
+                BOOL canExecute = ((BOOL (*)(id, SEL))objc_msgSend)(guard, @selector(canExecuteHooks));
+                if (!canExecute) return;
+            }
         }
 
-        // 4. Nạp cấu hình an toàn
         CFG = [BoostConfig sharedInstance];
-
-        // 5. Khởi động daemon quét cảm biến nhiệt độ hệ thống ngầm
         Titanium_StartThermalWatchdogTimer();
 
-        // 6. Đăng ký thông báo đồng bộ kép giữa SpringBoard và App
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1743,9 +1964,7 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             );
         });
 
-        // 7. PHÂN NHÁNH VÀ TIÊM TRỌN BỘ MÔ-ĐUN:
         if (Titanium_IsSpringBoard()) {
-            // SpringBoard nạp đầy đủ ngay từ đầu
             %init(Group_SpringBoard_Only);
             %init(Group_Gesture_Fix);
             %init(Group_Fix_App_Layout_Position);
@@ -1758,10 +1977,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             });
             Titanium_BoostThreadPriorityRealtime();
         } else {
-            //  TIÊM TRỌN VẸN TOÀN BỘ MÔ-ĐUN VÀO APP BÊN THỨ BA (LAZY INJECTION):
-            // Chờ app dựng xong UIWindow và khung cảnh ban đầu mới kích hoạt:
-            // -> Triệt tiêu 100% lỗi đen màn hình
-            // -> Toàn bộ mô-đun (Hz/FPS, Cache, Thermal, Guard) hoạt động đầy đủ trong app
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                               object:nil
                                                                queue:[NSOperationQueue mainQueue]
