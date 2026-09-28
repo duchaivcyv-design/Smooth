@@ -1,5 +1,3 @@
-tweak.xm
-```objc
 // ==============================================================================
 // 🚀 TWEAK.XM - TITANIUM APEX ULTRA CORE ARCHITECTURE (FULL SUITE ENTERPRISE)
 // 🛠 PHIÊN BẢN: V24.8.9 APEX SUPREME - DUAL APP & SPRINGBOARD MASTER ENGINE
@@ -1537,5 +1535,3 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         PMRuntimeReady = YES;
     }
 }
-
-```
