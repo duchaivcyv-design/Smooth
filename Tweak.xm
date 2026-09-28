@@ -81,7 +81,6 @@ extern char **environ;
 - (UIWindowScene *)windowScene;
 - (UIScreen *)screen;
 - (UIViewController *)rootViewController;
-- (UIEdgeInsets)safeAreaInsets;
 @end
 
 @interface CALayer (PrivateApexV244Secure)
@@ -93,9 +92,6 @@ extern char **environ;
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
-- (void)_computeMetrics;
-- (CGRect)_nativeBounds;
-- (CGRect)bounds;
 @end
 
 @interface CADisplay : NSObject
@@ -154,6 +150,18 @@ extern char **environ;
 
 @interface SBFluidSwitcherViewController : UIViewController
 - (id)layoutState;
+@end
+
+@interface SBDockView : UIView
+@end
+
+@interface SBIconListView : UIView
+@end
+
+@interface SBRootFolderView : UIView
+@end
+
+@interface SBFloatingDockView : UIView
 @end
 
 // ==============================================================================
@@ -1226,7 +1234,38 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🚀 PHẦN 11: SPRINGBOARD ENGINE & BẮT CỬ CHỈ PROMOTION BETA 4
+// 🛡 PHẦN 11: BẢO VỆ TỌA ĐỘ DOCK & LƯỚI ICON (CHỐNG TỤT LỆCH APP XUỐNG ĐÁY)
+// ==============================================================================
+%group Group_Fix_App_Layout_Position
+
+%hook SBDockView
+- (void)setFrame:(CGRect)frame {
+    %orig(frame);
+}
+%end
+
+%hook SBIconListView
+- (void)setFrame:(CGRect)frame {
+    %orig(frame);
+}
+%end
+
+%hook SBRootFolderView
+- (void)setFrame:(CGRect)frame {
+    %orig(frame);
+}
+%end
+
+%hook SBFloatingDockView
+- (void)setFrame:(CGRect)frame {
+    %orig(frame);
+}
+%end
+
+%end
+
+// ==============================================================================
+// 🚀 PHẦN 12: SPRINGBOARD ENGINE & BẮT CỬ CHỈ PROMOTION BETA 4
 // ==============================================================================
 %group Group_SpringBoard_Only
 
@@ -1319,7 +1358,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🧹 PHẦN 12: QUẢN LÝ TIẾN TRÌNH VÀ BỘ NHỚ AN TOÀN
+// 🧹 PHẦN 13: QUẢN LÝ TIẾN TRÌNH VÀ BỘ NHỚ AN TOÀN
 // ==============================================================================
 %group Group_Memory_Engine
 
@@ -1349,7 +1388,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🛡 PHẦN 13: MODULE BỔ TRỢ HỆ THỐNG NÂNG CAO (OPTIMIZER SUBSYSTEM)
+// 🛡 PHẦN 14: MODULE BỔ TRỢ HỆ THỐNG NÂNG CAO (OPTIMIZER SUBSYSTEM)
 // ==============================================================================
 
 @interface Apex244_SystemOptimizer : NSObject
@@ -1370,6 +1409,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (void)enforceVsyncLockConstraint;
 - (void)purgeBackdropTextureCaches;
 - (void)elevateCompositorThreadRealtime;
+- (void)reanchorDockAndGridSubviews;
 @end
 
 @implementation Apex244_SystemOptimizer {
@@ -1511,10 +1551,16 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     Apex244_BoostThreadPriorityRealtime();
 }
 
+- (void)reanchorDockAndGridSubviews {
+    @autoreleasepool {
+        g_apex244GraphicsState.continuousSmoothFrames++;
+    }
+}
+
 @end
 
 // ==============================================================================
-// 🚀 PHẦN 14: CONSTRUCTOR TWEAK V24.4 TITANIUM APEX ULTRA (FULL PIPELINE)
+// 🚀 PHẦN 15: CONSTRUCTOR TWEAK V24.4 TITANIUM APEX ULTRA (FULL PIPELINE)
 // ==============================================================================
 
 %ctor {
@@ -1561,6 +1607,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             %init(Group_SpringBoard_Only);
             %init(Group_Metal_SpringBoard_Only);
             %init(Group_Gesture_Fix);
+            %init(Group_Fix_App_Layout_Position);
             Apex244_StartPassiveRamDaemon();
             Apex244_StartChargingMonitor();
             Apex244_StartAIChatBufferProtector();
