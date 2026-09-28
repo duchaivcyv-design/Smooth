@@ -13,6 +13,11 @@
 
 extern char **environ;
 
+@interface LSApplicationWorkspace : NSObject
++ (instancetype)defaultWorkspace;
+- (BOOL)openURL:(NSURL *)url;
+@end
+
 @interface PSListController : UIViewController {
     id _specifiers;
 }
@@ -31,8 +36,8 @@ extern char **environ;
 @end
 
 static inline UIAlertController *alertPresentationControllerHelper(UIAlertController *alert, UIViewController *vc) {
-    if (alert.popoverPresentationController && vc.navigationItem.rightBarButtonItems.count > 0) {
-        alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItems.firstObject;
+    if (alert.popoverPresentationController && vc.navigationItem.rightBarButtonItem) {
+        alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItem;
     }
     return alert;
 }
@@ -61,7 +66,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     [self reloadSpecifiers];
 }
 
-// Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ song hành cho cả SpringBoard và App
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : (prefs[@"ProMotionEngineBeta3"] ? [prefs[@"ProMotionEngineBeta3"] boolValue] : YES);
@@ -86,7 +90,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     }
 }
 
-// Helper gom dữ liệu đồng nhất giữa CFPreferences và Disk Plist
 - (NSDictionary *)getMergedPreferences {
     CFPreferencesAppSynchronize(PREF_DOMAIN);
     NSDictionary *diskDict = nil;
@@ -99,7 +102,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 // ==============================================================================
-// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH (TỐI ƯU CẢ SPRINGBOARD VÀ UIKIT)
+// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH
 // ==============================================================================
 - (void)ensureDefaultSettingsExist {
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -180,7 +183,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 // ==============================================================================
-// 2. BỘ ĐỌC / GHI ĐỒNG BỘ KÉP (CFPREFERENCES + TỆP PLIST DISK CHO UIKIT APP CONTAINER)
+// 2. BỘ ĐỌC / GHI ĐỒNG BỘ KÉP
 // ==============================================================================
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
@@ -226,7 +229,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 // ==============================================================================
-// 3. POPUP TAB DẠNG CARD KÈM MỨC 30 HZ & ĐỒNG BỘ TOÀN DIỆN CHO MỌI ỨNG DỤNG
+// 3. POPUP TAB DẠNG CARD KÈM MỨC 30 HZ & ĐỒNG BỘ TOÀN DIỆN
 // ==============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Tần Số Quét (Hz)"
@@ -337,25 +340,41 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 // ==============================================================================
-// 4. THÔNG TIN PHÁT TRIỂN & LIÊN KẾT NHÓM
+// 4. THÔNG TIN PHÁT TRIỂN & LIÊN KẾT NHÓM ZALO (MỞ TỰ ĐỘNG CHUẨN XÁC)
 // ==============================================================================
 - (id)getAuthorName:(PSSpecifier *)specifier {
     return @"ĐỨC LONG";
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"4.5.0-1DEBUG";
+    return @"V24.7.1 Apex Supreme";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
-    NSURL *url = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
+    NSURL *webURL = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
-        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+        Class workspaceClass = objc_getClass("LSApplicationWorkspace");
+        if (workspaceClass && [workspaceClass respondsToSelector:@selector(defaultWorkspace)]) {
+            LSApplicationWorkspace *workspace = [workspaceClass defaultWorkspace];
+            if ([workspace respondsToSelector:@selector(openURL:)]) {
+                if ([workspace openURL:webURL]) return;
+            }
+        }
+        
+        UIApplication *app = [UIApplication sharedApplication];
+        if ([app respondsToSelector:@selector(openURL:options:completionHandler:)]) {
+            [app openURL:webURL options:@{} completionHandler:nil];
+        } else {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            [app openURL:webURL];
+            #pragma clang diagnostic pop
+        }
     });
 }
 
 // ==============================================================================
-// 5. THANH ĐIỀU HƯỚNG GÓC PHẢI & THAO TÁC HỆ THỐNG
+// 5. THANH ĐIỀU HƯỚNG GÓC PHẢI & THAO TÁC HỆ THỐNG (ĐẶT LẠI GỘP CHUNG VÀO ĐÂY)
 // ==============================================================================
 - (void)setupNavigationItems {
     UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Hành Động"
@@ -363,18 +382,12 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
                                                                  target:self
                                                                  action:@selector(presentActions)];
     actionBtn.tintColor = [UIColor systemBlueColor];
-
-    UIBarButtonItem *resetBtn = [[UIBarButtonItem alloc] initWithTitle:@"Đặt Lại"
-                                                                 style:UIBarButtonItemStylePlain
-                                                                target:self
-                                                                action:@selector(resetSettings)];
-    resetBtn.tintColor = [UIColor systemRedColor];
-
-    self.navigationItem.rightBarButtonItems = @[actionBtn, resetBtn];
+    self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
 - (void)presentActions {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"HÀNH ĐỘNG HỆ THỐNG" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    
     [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ Respring Nhanh" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
@@ -384,7 +397,8 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
             waitpid(pid, NULL, 0);
         });
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"🔥 Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    
+    [sheet addAction:[UIAlertAction actionWithTitle:@"🔥 Khởi Động Không Gian Người Dùng (SReboot)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
             pid_t pid;
@@ -393,15 +407,20 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
             waitpid(pid, NULL, 0);
         });
     }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"♻️ Đặt Lại Cấu Hình Mặc Định" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        [self executeResetConfiguration];
+    }]];
+
     [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
     
     UIAlertController *configuredSheet = alertPresentationControllerHelper(sheet, self);
     [self presentViewController:configuredSheet animated:YES completion:nil];
 }
 
-- (void)resetSettings {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Đặt Lại Cấu Hình" message:@"Khôi phục toàn bộ về giá trị mặc định tối ưu cho cả SpringBoard và UIKit App." preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+- (void)executeResetConfiguration {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Đặt Lại" message:@"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu nhất." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
         
