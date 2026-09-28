@@ -1041,7 +1041,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 // ==============================================================================
-// 🎨 PHẦN 8: COLOROS 17 & KHẮC PHỤC LIQUID (GL)ASS NẶNG (BETA 3)
+// 🎨 PHẦN 8: COLOROS 17 & KHẮC PHỤC LIQUID (GL)ASS NẶNG (BETA 3 AN TOÀN)
 // ==============================================================================
 %group Group_ColorOS17_SafeUI
 
@@ -1082,6 +1082,49 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     }
 }
 %end
+
+// GIẢM TẢI TRIỆT ĐỂ CHO LIQUID (GL)ASS & CÁC LỚP BLUR NẶNG (AN TOÀN CHỐNG SAFE MODE)
+%hook UIVisualEffectView
+- (void)layoutSubviews {
+    %orig;
+    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
+        self.layer.shouldRasterize = YES;
+        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
+    }
+}
+%end
+
+%hook _UIVisualEffectBackdropView
+- (void)applySettings:(id)arg1 {
+    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
+        self.layer.drawsAsynchronously = YES;
+    }
+    %orig(arg1);
+}
+%end
+
+%hook _UIBarBackground
+- (void)layoutSubviews {
+    %orig;
+    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
+        self.layer.shouldRasterize = YES;
+        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
+    }
+}
+%end
+
+%hook NCNotificationShortLookView
+- (void)didMoveToWindow {
+    %orig;
+    if (IS_ON && CFG_PTR.heavyEffectAntiLagV3) {
+        self.layer.shouldRasterize = YES;
+        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
+    }
+}
+%end
+
+%end
+
 // ==============================================================================
 // ⌨️ PHẦN 9: BÀN PHÍM 0MS & CHỐNG GIẬT TEXT DÀI VỚI AI (BETA 3)
 // ==============================================================================
@@ -1181,6 +1224,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %end
 
 %end
+
 // ==============================================================================
 // 🚀 PHẦN 11: SPRINGBOARD ENGINE & BẮT CỬ CHỈ PROMOTION BETA 4
 // ==============================================================================
