@@ -98,7 +98,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface UIWindow (ApexPrivateV248)
+@interface UIWindow (ApexPrivateV2481)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -106,12 +106,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV248)
+@interface CALayer (ApexPrivateV2481)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (ApexPrivateV248)
+@interface UIScreen (ApexPrivateV2481)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -123,16 +123,16 @@ extern char **environ;
 @property (nonatomic, retain) id currentMode;
 @property (nonatomic, copy) NSString *colorMode;
 @property (nonatomic) NSInteger preferredFPS;
-- (void)overrideDisplayTimings:(id)arg1;
+- (void)overrideDisplayTimings:(id)1;
 @end
 
-@interface UIScrollView (ApexPrivateV248)
+@interface UIScrollView (ApexPrivateV2481)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
-- (void)_setContentOffsetPinned:(CGPoint)arg1;
+- (void)_setContentOffsetPinned:(CGPoint)1;
 @end
 
-@interface CAMetalLayer (ApexPrivateV248)
+@interface CAMetalLayer (ApexPrivateV2481)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -143,19 +143,19 @@ extern char **environ;
 @end
 
 @interface _UIVisualEffectBackdropView : UIView
-- (void)applySettings:(id)arg1;
+- (void)applySettings:(id)1;
 @end
 
 @interface SBFluidSwitcherAnimationSettings : NSObject
-- (void)setOpacityMinimumDistanceThreshold:(double)arg1;
+- (void)setOpacityMinimumDistanceThreshold:(double)1;
 @end
 
 @interface SBAppSwitcherSettings : NSObject
-- (void)setShouldSimplifyForOptions:(long long)arg1;
+- (void)setShouldSimplifyForOptions:(long long)1;
 @end
 
 @interface SBHomeGestureSettings : NSObject
-- (void)setTouchUpDelay:(double)arg1;
+- (void)setTouchUpDelay:(double)1;
 @end
 
 @interface SBFluidSwitcherViewController : UIViewController
@@ -180,8 +180,8 @@ extern char **environ;
 
 @interface UIKeyboardImpl : UIView
 + (instancetype)activeInstance;
-- (void)handleKeyWithString:(id)arg1 forKeyEvent:(id)arg2 executionContext:(id)arg3;
-- (void)addInputString:(id)arg1 withFlags:(NSUInteger)arg2 executionContext:(id)arg3;
+- (void)handleKeyWithString:(id)1 forKeyEvent:(id)2 executionContext:(id)3;
+- (void)addInputString:(id)1 withFlags:(NSUInteger)2 executionContext:(id)3;
 @end
 
 @interface ATXAnalyticsManager : NSObject
@@ -1676,5 +1676,3 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         PMRuntimeReady = YES;
     }
 }
-
-```
