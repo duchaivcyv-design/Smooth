@@ -75,7 +75,7 @@ extern char **environ;
 #import "Modules/DeepExploit.h"
 
 // ==============================================================================
-// 📋 MỤC 5: KHAI BÁO TIỀN TỆ (FORWARD DECLARATIONS & PRIVATE METHODS)
+// 📋 MỤC 5: KHAI BÁO TIỀN TỆ (DUY NHẤT 1 BẢN - CHUẨN CÚ PHÁP TÊN THAM SỐ)
 // ==============================================================================
 
 @interface SBApplication : NSObject
@@ -98,27 +98,7 @@ extern char **environ;
 @interface SBWindowScene : NSObject
 @end
 
-@interface SBApplication : NSObject
-- (NSString *)bundleIdentifier;
-- (id)processState;
-@end
-
-@interface SBApplicationController : NSObject
-+ (instancetype)sharedInstance;
-- (NSArray *)allApplications;
-- (SBApplication *)applicationWithBundleIdentifier:(NSString *)bundleIdentifier;
-@end
-
-@interface FBProcessState : NSObject
-- (int)pid;
-- (BOOL)isRunning;
-- (BOOL)isForeground;
-@end
-
-@interface SBWindowScene : NSObject
-@end
-
-@interface UIWindow (ApexPrivateV2481)
+@interface UIWindow (ApexPrivateV24811)
 - (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
@@ -126,12 +106,12 @@ extern char **environ;
 - (UIViewController *)rootViewController;
 @end
 
-@interface CALayer (ApexPrivateV2481)
+@interface CALayer (ApexPrivateV24811)
 - (id)context;
 - (void)setContext:(id)arg1;
 @end
 
-@interface UIScreen (ApexPrivateV2481)
+@interface UIScreen (ApexPrivateV24811)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
@@ -146,13 +126,13 @@ extern char **environ;
 - (void)overrideDisplayTimings:(id)timings;
 @end
 
-@interface UIScrollView (ApexPrivateV2481)
+@interface UIScrollView (ApexPrivateV24811)
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
 - (void)_setContentOffsetPinned:(CGPoint)point;
 @end
 
-@interface CAMetalLayer (ApexPrivateV2481)
+@interface CAMetalLayer (ApexPrivateV24811)
 - (void)setLowLatencyMode:(BOOL)flag;
 @end
 
@@ -333,7 +313,6 @@ typedef struct {
     float kineticDecelerationVectorY;
 } ApexTitanium_MotionEngineState;
 
-// Dữ liệu đồng bộ chia sẻ qua tệp nhị phân cho Sandbox
 typedef struct {
     uint32_t magic;
     BOOL masterEnabled;
@@ -343,7 +322,7 @@ typedef struct {
     uint64_t updateSeq;
 } ApexSharedSyncPayload;
 
-#define APEX_SYNC_MAGIC 0x41504558 // 'APEX'
+#define APEX_SYNC_MAGIC 0x41504558
 
 static ApexTitanium_GraphicsEngineState g_titaniumGraphicsState = {
     0, 0, 0.0f, NO, 60, 60, YES, 0, 0, 1.0f, 0, 16666666ULL, YES, 0, 0, 0, 0, 0.992f, YES, 0, 0, 0, NO, 0, 0, NO
@@ -437,7 +416,7 @@ static inline void PMApplySafeScrollFeel(UIScrollView *sv) {
     UIPanGestureRecognizer *pan = sv.panGestureRecognizer;
     if (pan) {
         pan.delaysTouchesBegan = NO;
-        // Bắt buộc giữ nguyên cancelsTouchesInView để không triệt tiêu các sự kiện nhấp đúp (Double-Tap)
+        // Giữ nguyên cancelsTouchesInView để không triệt tiêu các sự kiện nhấp đúp (Double-Tap)
     }
 }
 
@@ -913,7 +892,6 @@ static void Titanium_StartChargingMonitor(void) {
     dispatch_sync(_configQueue, ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        // Đọc giá trị trực tiếp qua CFPreferences (Hỗ trợ IPC xuyên thấu sandbox App)
         id (^ReadLiveValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
             CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
             if (val) return (__bridge_transfer id)val;
@@ -950,7 +928,6 @@ static void Titanium_StartChargingMonitor(void) {
             return d;
         };
 
-        // Kích hoạt mặc định và kiểm tra payload từ Shared File Sync nếu là App thứ 3
         self.enabled = GetLiveBool(@"Enabled", YES); 
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
@@ -1003,7 +980,6 @@ static void Titanium_StartChargingMonitor(void) {
         self.blockAnalytics = GetLiveBool(@"BlockAnalytics", YES);
         self.tcpTurboNetwork = GetLiveBool(@"TcpTurboNetwork", YES);
 
-        // Đọc bổ sung từ shared sync file cho ứng dụng bên thứ 3 trong Sandbox
         if (!Titanium_IsSpringBoard() && !Titanium_IsPreferencesApp()) {
             ApexSharedSyncPayload sharedPayload;
             if (Titanium_ReadSharedSyncState(&sharedPayload)) {
@@ -1132,7 +1108,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
-// Ép pipeline Metal của tất cả ứng dụng tuân thủ đúng mức khung hình đã chọn
 %hook CAMetalLayer
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (IS_ON && CFG_PTR.enableFPSControl) {
@@ -1667,20 +1642,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
         // 6. Phân luồng độc lập SpringBoard và App
         if (Titanium_IsSpringBoard()) {
-            // SpringBoard: Nạp điều khiển hệ thống, KHÔNG HOOK HÌNH NỀN
             %init(Group_SpringBoard_Only);
             %init(Group_Gesture_Fix);
             %init(Group_Fix_App_Layout_Position);
             %init(Group_ColorOS17_SafeUI);
             
-            // Chạy ngầm các daemon dọn dẹp sau 8 giây để hình nền và SpringBoard load xong hoàn chỉnh
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 Titanium_StartPassiveRamDaemon();
                 Titanium_StartChargingMonitor();
             });
             Titanium_BoostThreadPriorityRealtime();
         } else {
-            // App UIKit bên thứ ba: Cách ly an toàn tuyệt đối, không can thiệp render frame đầu
             %init(Group_UIKit_ThirdParty_Isolated);
         }
 
@@ -1696,3 +1668,5 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         PMRuntimeReady = YES;
     }
 }
+
+```
