@@ -4,13 +4,14 @@
 <dict>
 	<key>items</key>
 	<array>
+		<!-- ==================== CÔNG TẮC TỔNG & NGÔN NGỮ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.9.5 BETA</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V23.9.5.1 APEX SUPREME</string>
 			<key>footerText</key>
-			<string>Khi tắt công tắc tổng, toàn bộ các phím chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
+			<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -26,12 +27,47 @@
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>default</key>
+			<string>auto</string>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>SelectedLanguage</string>
+			<key>label</key>
+			<string>Ngôn Ngữ (Language)</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>validTitles</key>
+			<array>
+				<string>🌐 Tự Động / Auto (Theo Máy)</string>
+				<string>🇻🇳 Tiếng Việt</string>
+				<string>🇺🇸 English</string>
+				<string>🇨🇳 中文 (Chinese)</string>
+				<string>🇷🇺 Русский (Russian)</string>
+				<string>🇮🇳 हिन्दी (Hindi)</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>auto</string>
+				<string>vi</string>
+				<string>en</string>
+				<string>zh</string>
+				<string>ru</string>
+				<string>hi</string>
+			</array>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
 
+		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>NÂNG CẤP V24.9.5 (ĐỘNG CƠ THÔNG MINH)</string>
+			<string>ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 (ĐỘNG CƠ THÔNG MINH)</string>
 			<key>footerText</key>
 			<string>ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.</string>
 		</dict>
@@ -78,6 +114,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== ĐIỀU PHỐI HZ & FPS ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -149,6 +186,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -186,6 +224,7 @@
 			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
 
+		<!-- ==================== GIA TỐC GIAO DIỆN & VẬT LÝ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -263,6 +302,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== LÕI ĐIỀU PHỐI ĐỒ HỌA CHUYÊN SÂU ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -410,6 +450,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== ĐIỀU PHỐI BỘ NHỚ RAM & TIẾN TRÌNH CPU ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -571,6 +612,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== QUẢN LÝ NHIỆT ĐỘ & NGUỒN ĐIỆN ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -648,6 +690,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== BẢO MẬT & QUYỀN RIÊNG TƯ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -683,13 +726,14 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- ==================== THÔNG TIN PHÁT TRIỂN & HỖ TRỢ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V24.9.5 BETA - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V23.9.5.1 BETA  - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -717,6 +761,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V24.9.5 BETA</string>
+	<string>BoostiPhone6s V23.9.5.1 BETA</string>
 </dict>
 </plist>
