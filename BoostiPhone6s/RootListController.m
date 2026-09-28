@@ -52,24 +52,33 @@ extern char **environ;
     [self reloadSpecifiers];
 }
 
-// Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ
+// Cập nhật giá trị hiển thị rõ ràng ra ngoài dòng chữ song hành
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
+    BOOL isDynamic = prefs[@"ProMotionEngineBeta3"] ? [prefs[@"ProMotionEngineBeta3"] boolValue] : YES;
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 90;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 90;
 
     for (PSSpecifier *spec in (NSArray *)_specifiers) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
-            spec.name = [NSString stringWithFormat:@"Chọn Mức Tần Số Quét: %ld Hz", (long)hz];
+            if (isDynamic) {
+                spec.name = [NSString stringWithFormat:@"Chọn Mức Tần Số Quét: Tự Động (Max %ld Hz)", (long)hz];
+            } else {
+                spec.name = [NSString stringWithFormat:@"Chọn Mức Tần Số Quét: Khóa %ld Hz", (long)hz];
+            }
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
-            spec.name = [NSString stringWithFormat:@"Chọn Mức Khung Hình: %ld FPS", (long)fps];
+            if (isDynamic) {
+                spec.name = [NSString stringWithFormat:@"Chọn Mức Khung Hình: Tự Động (Max %ld FPS)", (long)fps];
+            } else {
+                spec.name = [NSString stringWithFormat:@"Chọn Mức Khung Hình: Khóa %ld FPS", (long)fps];
+            }
         }
     }
 }
 
 // ==============================================================================
-// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH
+// 1. TỰ ĐỘNG KHỞI TẠO CẤU HÌNH MẶC ĐỊNH PHÂN BỔ TỐI ƯU
 // ==============================================================================
 - (void)ensureDefaultSettingsExist {
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -170,36 +179,37 @@ extern char **environ;
 }
 
 // ==============================================================================
-// 3. POPUP TAB DẠNG CARD CHUẨN XÁC NHƯ HÌNH ĐÍNH KÈM
+// 3. POPUP TAB DẠNG CARD CHUẨN XÁC KÈM MỨC 30 HZ VÀ ĐỒNG BỘ HZ & FPS
 // ==============================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Tần Số Quét (Hz)"
-                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 60Hz: Mặc định chuẩn cân bằng\n• 75Hz - 90Hz: Tối ưu cảm ứng mượt mà\n• 120Hz - 144Hz: Tần số quét cực đại"
+                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn cân bằng\n• 75Hz - 90Hz: Tối ưu cảm ứng mượt mà\n• 120Hz - 144Hz: Tần số quét cực đại"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *options = @[
-        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"rate": @0},
-        @{@"title": @"Khóa ở 60 Hz (Mặc định)", @"rate": @60},
-        @{@"title": @"Khóa ở 75 Hz (Mượt mà)", @"rate": @75},
-        @{@"title": @"Khóa ở 90 Hz (Mượt mà)", @"rate": @90},
-        @{@"title": @"Khóa ở 120 Hz (Cực mượt)", @"rate": @120},
-        @{@"title": @"Khóa ở 144 Hz (Cực đại)", @"rate": @144}
+        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"rate": @90, @"dynamic": @YES},
+        @{@"title": @"Khóa ở 30 Hz (Tiết kiệm pin)", @"rate": @30, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 60 Hz (Mặc định)", @"rate": @60, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 75 Hz (Mượt mà)", @"rate": @75, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 90 Hz (Mượt mà)", @"rate": @90, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 120 Hz (Cực mượt)", @"rate": @120, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 144 Hz (Cực đại)", @"rate": @144, @"dynamic": @NO}
     ];
 
     for (NSDictionary *opt in options) {
         [alert addAction:[UIAlertAction actionWithTitle:opt[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             NSInteger rate = [opt[@"rate"] integerValue];
+            BOOL dynamicMode = [opt[@"dynamic"] boolValue];
+
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
             [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
-            if (rate > 0) {
-                [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
-            }
+            [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
+            [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
             [prefs writeToFile:PREF_PATH atomically:YES];
 
             CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
-            if (rate > 0) {
-                CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
-            }
+            CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+            CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
             notify_post(NOTIFY_RELOAD);
@@ -218,27 +228,33 @@ extern char **environ;
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chọn Mức Khung Hình Ứng Dụng (FPS)"
-                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30Hz: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60Hz: Mặc định chuẩn\n• 90Hz - 120Hz - 144Hz: Tối ưu cảm ứng siêu mượt"
+                                                                   message:@"Lựa chọn mức hiển thị hệ thống:\n• Tự Động: Tự cân bằng theo nhiệt độ & tải\n• 30 FPS: Tiết kiệm pin tối đa, giảm sinh nhiệt\n• 60 FPS: Mặc định chuẩn cân bằng\n• 75 FPS - 90 FPS: Khung hình nâng cao mượt mà\n• 120 FPS - 144 FPS: Khung hình cực đại"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *options = @[
-        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"fps": @0},
-        @{@"title": @"Khóa ở 30 FPS (Tiết kiệm pin)", @"fps": @30},
-        @{@"title": @"Khóa ở 60 FPS (Mặc định)", @"fps": @60},
-        @{@"title": @"Khóa ở 75 FPS (Nâng cao)", @"fps": @75},
-        @{@"title": @"Khóa ở 90 FPS (Mượt mà)", @"fps": @90},
-        @{@"title": @"Khóa ở 120 FPS (Cực mượt)", @"fps": @120},
-        @{@"title": @"Khóa ở 144 FPS (Cực đại)", @"fps": @144}
+        @{@"title": @"Tự Động Điều Chỉnh (Dynamic)", @"fps": @90, @"dynamic": @YES},
+        @{@"title": @"Khóa ở 30 FPS (Tiết kiệm pin)", @"fps": @30, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 60 FPS (Mặc định)", @"fps": @60, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 75 FPS (Nâng cao)", @"fps": @75, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 90 FPS (Mượt mà)", @"fps": @90, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 120 FPS (Cực mượt)", @"fps": @120, @"dynamic": @NO},
+        @{@"title": @"Khóa ở 144 FPS (Cực đại)", @"fps": @144, @"dynamic": @NO}
     ];
 
     for (NSDictionary *opt in options) {
         [alert addAction:[UIAlertAction actionWithTitle:opt[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             NSInteger fps = [opt[@"fps"] integerValue];
+            BOOL dynamicMode = [opt[@"dynamic"] boolValue];
+
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREF_PATH] ?: [NSMutableDictionary dictionary];
             [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
+            [prefs setObject:@(fps) forKey:@"TargetRefreshRate"];
+            [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta3"];
             [prefs writeToFile:PREF_PATH atomically:YES];
 
             CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
+            CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
+            CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta3"), (__bridge CFPropertyListRef)@(dynamicMode), PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
             notify_post(NOTIFY_RELOAD);
