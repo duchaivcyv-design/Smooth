@@ -8,7 +8,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.8.7 APEX SUPREME</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.8.7 DEBUG </string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các phím chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
@@ -31,7 +31,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V24.8.7 (TIÊM TRỄ AN TOÀN)</string>
+			<string>NÂNG CẤP V24.8.7 (TIÊM TRỄ AN TOÀN)</string>
 			<key>footerText</key>
 			<string>ProMotion Beta 5 tự động đồng bộ nhịp chạm khi tương tác. Liquid Glass Beta 4 giảm tải GPU. Bàn phím 0ms gõ cực nhạy.</string>
 		</dict>
@@ -202,7 +202,7 @@
 			<key>key</key>
 			<string>ColorOs17SmoothEngine</string>
 			<key>label</key>
-			<string>Động Cơ Cuộn ColorOS 17</string>
+			<string>Fake ColorOS 17</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -230,7 +230,7 @@
 			<key>key</key>
 			<string>FixAppLaunchBlackScreen</string>
 			<key>label</key>
-			<string>Chống Đen Màn Mở Ứng Dụng</string>
+			<string>Chống Đen khi Mở Ứng Dụng</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -717,6 +717,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V24.8.7</string>
+	<string>BoostiPhone6s V24.8.7 DEBUG</string>
 </dict>
 </plist>
