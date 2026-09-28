@@ -9,7 +9,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.4 APEX</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V24.4.1 APEX</string>
 			<key>footerText</key>
 			<string>Kích hoạt toàn bộ giải thuật tăng tốc và điều phối phần cứng.</string>
 		</dict>
@@ -28,7 +28,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V24 ==================== -->
+		<!-- ==================== 3 TÍNH NĂNG MỚI AN TOÀN TUYỆT ĐỐI ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -87,7 +87,7 @@
 			<key>label</key>
 			<string>ĐIỀU PHỐI TẦN SỐ QUÉT &amp; KHUNG HÌNH (HZ / FPS)</string>
 			<key>footerText</key>
-			<string>Chọn mức tần số quét và FPS tương ứng để hệ thống đồng bộ trực tiếp ra phần cứng.</string>
+			<string>Bấm để mở bảng chọn mức tần số quét và mức khung hình dạng Popup Card.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -105,35 +105,13 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<integer>90</integer>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>TargetRefreshRate</string>
+			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Chọn Mức Tần Số Quét (Hz)</string>
-			<key>detail</key>
-			<string>PSListItemsController</string>
-			<key>validTitles</key>
-			<array>
-				<string>60 Hz (Mặc định chuẩn)</string>
-				<string>75 Hz (Mượt mà cân bằng)</string>
-				<string>90 Hz (Tốc độ cao mượt mà)</string>
-				<string>120 Hz (Siêu mượt ProMotion)</string>
-				<string>144 Hz (Ép xung cực hạn)</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<integer>60</integer>
-				<integer>75</integer>
-				<integer>90</integer>
-				<integer>120</integer>
-				<integer>144</integer>
-			</array>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+			<key>action</key>
+			<string>showHzPickerPopup:</string>
+			<key>key</key>
+			<string>TargetRefreshRate</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -151,37 +129,13 @@
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSLinkListCell</string>
-			<key>default</key>
-			<integer>90</integer>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>TargetFPSRate</string>
+			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Chọn Mức Khung Hình (FPS)</string>
-			<key>detail</key>
-			<string>PSListItemsController</string>
-			<key>validTitles</key>
-			<array>
-				<string>30 FPS (Tiết kiệm pin)</string>
-				<string>60 FPS (Chuẩn cân bằng)</string>
-				<string>75 FPS (Khung hình nâng cao)</string>
-				<string>90 FPS (Khung hình tốc độ)</string>
-				<string>120 FPS (Tối đa mượt mà)</string>
-				<string>144 FPS (Ép xung cực hạn)</string>
-			</array>
-			<key>validValues</key>
-			<array>
-				<integer>30</integer>
-				<integer>60</integer>
-				<integer>75</integer>
-				<integer>90</integer>
-				<integer>120</integer>
-				<integer>144</integer>
-			</array>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+			<key>action</key>
+			<string>showFPSPickerPopup:</string>
+			<key>key</key>
+			<string>TargetFPSRate</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -721,7 +675,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V24.4 BETA - Bản quyền thuộc về ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V24.4.1 Apex Ultra - Bản quyền thuộc về ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -729,7 +683,7 @@
 			<key>label</key>
 			<string>Tác Giả</string>
 			<key>get</key>
-			<string>TaoJB, NMH</string>
+			<string>TaoJB:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -737,7 +691,7 @@
 			<key>label</key>
 			<string>Phiên Bản</string>
 			<key>get</key>
-			<string>4.3.0-1a</string>
+			<string>4.3.0-1a:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -745,7 +699,7 @@
 			<key>label</key>
 			<string>Tham Gia Nhóm Hỗ Trợ (Mở Trình Duyệt)</string>
 			<key>action</key>
-			<string>https://zalo.me/g/qjd56ltkraiih88ps6ui</string>
+			<string>https://zalo.me/g/qjd56ltkraiih88ps6ui:</string>
 		</dict>
 	</array>
 	<key>title</key>
