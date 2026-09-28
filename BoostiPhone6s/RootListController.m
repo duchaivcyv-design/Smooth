@@ -60,6 +60,9 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     return alert;
 }
 
+// ==============================================================================
+// 🌐 BỘ ĐỌC LOCALIZATION.PLIST VÀ ÁNH XẠ NGÔN NGỮ
+// ==============================================================================
 static NSDictionary *g_LocDict = nil;
 
 static void PM_LoadLocalizationIfNeeded(void) {
@@ -118,7 +121,7 @@ static inline NSString *PM_Text(NSString *key) {
 
     NSString *langCode = PM_GetCurrentLanguageCode();
     if ([langCode isEqualToString:@"vi"]) {
-        return nil;
+        return nil; // Tiếng Việt giữ nguyên text gốc
     }
 
     NSDictionary *langSection = g_LocDict[langCode];
@@ -154,6 +157,76 @@ static inline NSString *PM_Text(NSString *key) {
     }
 }
 
+// ==============================================================================
+// 🛠 HÀM ÉP DỊCH TỪNG TIÊU ĐỀ CHỮ NHỎ (GROUP HEADER) & FOOTER
+// ==============================================================================
+- (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
+    NSDictionary *headerMap = @{
+        @"CÔNG TẮC TỔNG HỆ THỐNG V23.9.5.1 BETA": @"GROUP_MASTER",
+        @"ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 (ĐỘNG CƠ THÔNG MINH)": @"GROUP_SPECIAL",
+        @"ĐIỀU PHỐI HZ & FPS (PHÂN NHÁNH 3 MỤC)": @"GROUP_HZ_FPS",
+        @"TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)": @"GROUP_LAZY",
+        @"GIA TỐC GIAO DIỆN & HIỆU ỨNG VẬT LÝ": @"GROUP_UI",
+        @"LÕI ĐIỀU PHỐI ĐỒ HỌA & PHẦN CỨNG CHUYÊN SÂU": @"GROUP_GRAPHICS",
+        @"ĐIỀU PHỐI BỘ NHỚ RAM & TIẾN TRÌNH CPU": @"GROUP_RAM_CPU",
+        @"QUẢN LÝ NHIỆT ĐỘ & NGUỒN ĐIỆN": @"GROUP_THERMAL",
+        @"BẢO MẬT & QUYỀN RIÊNG TƯ": @"GROUP_SECURITY",
+        @"THÔNG TIN PHÁT TRIỂN & HỖ TRỢ": @"GROUP_DEV"
+    };
+
+    NSDictionary *footerMap = @{
+        @"Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.": @"FOOTER_MASTER",
+        @"ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.": @"FOOTER_SPECIAL",
+        @"Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.": @"FOOTER_HZ_FPS",
+        @"Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ hoạ.": @"FOOTER_LAZY",
+        @"© 2026 BoostiPhone6s V23.9.5.1 BETA - Tối ưu hoàn chỉnh bởi ĐỨC LONG.": @"FOOTER_DEV"
+    };
+
+    for (PSSpecifier *spec in specs) {
+        // 1. Dịch Tiêu đề nhóm (Group Header)
+        NSString *header = [spec propertyForKey:@"label"];
+        if (header && headerMap[header]) {
+            NSString *transHeader = PM_Text(headerMap[header]);
+            if (transHeader) {
+                [spec setProperty:transHeader forKey:@"label"];
+                spec.name = transHeader;
+            }
+        }
+        
+        // 2. Dịch Chân trang chú thích (Footer Text)
+        NSString *footer = [spec propertyForKey:@"footerText"];
+        if (footer && footerMap[footer]) {
+            NSString *transFooter = PM_Text(footerMap[footer]);
+            if (transFooter) {
+                [spec setProperty:transFooter forKey:@"footerText"];
+            }
+        }
+
+        // 3. Dịch các Key chức năng bình thường
+        NSString *key = [spec propertyForKey:@"key"];
+        if (key) {
+            NSString *translated = PM_Text(key);
+            if (translated) {
+                spec.name = translated;
+                [spec setProperty:translated forKey:@"label"];
+            }
+        } else {
+            // Dịch các nút bấm tĩnh
+            NSString *lbl = [spec propertyForKey:@"label"];
+            if ([lbl isEqualToString:@"Tác Giả"]) {
+                NSString *t = PM_Text(@"Author");
+                if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
+            } else if ([lbl isEqualToString:@"Phiên Bản"]) {
+                NSString *t = PM_Text(@"Version");
+                if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
+            } else if ([lbl isEqualToString:@"Tham Gia Nhóm Hỗ Trợ Zalo"]) {
+                NSString *t = PM_Text(@"SupportLink");
+                if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
+            }
+        }
+    }
+}
+
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
         NSBundle *bundle = [NSBundle bundleForClass:[self class]];
@@ -162,15 +235,8 @@ static inline NSString *PM_Text(NSString *key) {
         _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
 
-        for (PSSpecifier *spec in _allSavedSpecifiers) {
-            NSString *key = [spec propertyForKey:@"key"];
-            if (key) {
-                NSString *translated = PM_Text(key);
-                if (translated) {
-                    spec.name = translated;
-                }
-            }
-        }
+        // Quét và dịch toàn bộ giao diện: Header, Footer, Nút, Switch
+        [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
     }
 
     NSDictionary *prefs = [self getMergedPreferences];
@@ -199,9 +265,11 @@ static inline NSString *PM_Text(NSString *key) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self setupNavigationItems];
     [self reloadSpecifiers];
 }
 
+// Cập nhật nhãn động (Tần số quét, FPS, và nút chọn ngôn ngữ)
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
@@ -227,11 +295,14 @@ static inline NSString *PM_Text(NSString *key) {
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             spec.name = isDynamic ? [NSString stringWithFormat:hzAutoText, (long)hz]
                                   : [NSString stringWithFormat:hzLockText, (long)hz];
+            [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
             spec.name = isDynamic ? [NSString stringWithFormat:fpsAutoText, (long)fps]
                                   : [NSString stringWithFormat:fpsLockText, (long)fps];
+            [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"SelectedLanguage"]) {
             spec.name = [NSString stringWithFormat:langLabelFormat, currentLangName];
+            [spec setProperty:spec.name forKey:@"label"];
         }
     }
 }
@@ -373,6 +444,7 @@ static inline NSString *PM_Text(NSString *key) {
 
     if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"SelectedLanguage"]) {
         _allSavedSpecifiers = nil;
+        [self setupNavigationItems];
         [self reloadSpecifiers];
     }
 }
@@ -405,6 +477,9 @@ static inline NSString *PM_Text(NSString *key) {
     [self reloadSpecifiers];
 }
 
+// ==============================================================================
+// 🌐 POPUP CHỌN NGÔN NGỮ ACTIONSHEET
+// ==============================================================================
 - (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
     NSString *title = PM_Text(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
@@ -444,6 +519,7 @@ static inline NSString *PM_Text(NSString *key) {
             notify_post(NOTIFY_RELOAD);
             _allSavedSpecifiers = nil;
             dispatch_async(dispatch_get_main_queue(), ^{
+                [self setupNavigationItems];
                 [self reloadSpecifiers];
             });
         }]];
@@ -594,8 +670,12 @@ static inline NSString *PM_Text(NSString *key) {
     });
 }
 
+// ==============================================================================
+// 🔘 ĐỔI TIẾNG CHO NÚT "HÀNH ĐỘNG" TRÊN GÓC PHẢI
+// ==============================================================================
 - (void)setupNavigationItems {
-    UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:@"Hành Động"
+    NSString *btnTitle = PM_Text(@"NAV_ACTIONS") ?: @"Hành Động";
+    UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:btnTitle
                                                                   style:UIBarButtonItemStylePlain
                                                                  target:self
                                                                  action:@selector(presentActions)];
@@ -671,8 +751,8 @@ static inline NSString *PM_Text(NSString *key) {
         notify_post(NOTIFY_HARDWARE_SYNC);
 
         [self ensureDefaultSettingsExist];
-        [self updateDynamicTitles];
         _allSavedSpecifiers = nil;
+        [self setupNavigationItems];
         [self reloadSpecifiers];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:cancelText style:UIAlertActionStyleCancel handler:nil]];
