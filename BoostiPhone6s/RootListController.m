@@ -1,6 +1,6 @@
 // ==============================================================================
-// 🚀 ROOTLISTCONTROLLER.M - DYNAMIC MASTER SWITCH CONTROLLER
-// 🛠 PHIÊN BẢN V24.8 APEX SUPREME - TỰ ĐỘNG ẨN/HIỆN PHÍM CẤU HÌNH THEO CÔNG TẮC CHÍNH
+// 🚀 ROOTLISTCONTROLLER.M - DYNAMIC MASTER SWITCH & LAZY SYNC CONTROLLER
+// 🛠 PHIÊN BẢN V24.8.7 APEX SUPREME - ĐỒNG BỘ ĐỘ TRỄ NẠP VÀ ẨN/HIỆN PHÍM TỰ ĐỘNG
 // ==============================================================================
 
 #import <UIKit/UIKit.h>
@@ -100,7 +100,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     BOOL isMasterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
     if (!isMasterEnabled) {
-        // Tắt công tắc tổng: Chỉ giữ lại Group 1 và Switch Enabled, ẩn toàn bộ key bên dưới
         NSMutableArray *minimalSpecifiers = [NSMutableArray array];
         if (_allSavedSpecifiers.count >= 2) {
             [minimalSpecifiers addObject:_allSavedSpecifiers[0]];
@@ -108,7 +107,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
         }
         _specifiers = minimalSpecifiers;
     } else {
-        // Bật công tắc tổng: Hiển thị đầy đủ toàn bộ specifiers
         _specifiers = [_allSavedSpecifiers mutableCopy];
         [self updateDynamicTitles];
     }
@@ -171,6 +169,8 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
             @"EnableFPSControl": @YES,
             @"TargetFPSRate": @60,
             @"ForceOverclock144Hz": @NO,
+            @"AppLazyInjectionSync": @YES,
+            @"AppRenderShieldIsolation": @YES,
             @"ColorOs17SmoothEngine": @YES,
             @"ReduceMultiTaskLag": @YES,
             @"FixAppLaunchBlackScreen": @YES,
@@ -203,11 +203,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
             @"ChargeCoolingProtection": @YES,
             @"PowerSaveMode": @NO,
             @"BypassVarSandbox": @NO,
-            @"BlockAnalytics": @YES,
-            @"TcpTurboNetwork": @YES,
-            @"UIKitIsolatedSmooth": @YES,
-            @"UIKitAsyncImageDecoders": @YES,
-            @"UIKitAntiStallPacing": @YES
+            @"BlockAnalytics": @YES
         }];
 
         NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
@@ -277,7 +273,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     notify_post(NOTIFY_UIKIT_RELOAD);
 
     if ([key isEqualToString:@"Enabled"]) {
-        // Tắt/Bật công tắc chính: lập tức reload để ẩn hoặc hiện toàn bộ các key còn lại
         [self reloadSpecifiers];
     }
 }
@@ -391,7 +386,7 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V24.8 Apex Supreme";
+    return @"V24.8.7 DEBUG";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
