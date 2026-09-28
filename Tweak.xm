@@ -784,7 +784,6 @@ static void Titanium_StartPassiveRamDaemon(void) {
         vm_statistics64_data_t vm_stat;
         mach_msg_type_number_t host_size = sizeof(vm_statistics64_data_t) / sizeof(integer_t);
         if (host_statistics64(host_port, HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_size) == KERN_SUCCESS) {
-            int64_free_mem: ;
             int64_t free_mem = ((int64_t)vm_stat.free_count * (int64_t)pagesize) / (1024 * 1024);
             if (free_mem < 140) {
                 Titanium_RunGarbageCollector_Light();
