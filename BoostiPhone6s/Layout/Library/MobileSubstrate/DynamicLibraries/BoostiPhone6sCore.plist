@@ -4,12 +4,9 @@
 <dict>
 	<key>Filter</key>
 	<dict>
-		<key>Executables</key>
-		<array>
-			<string>SpringBoard</string>
-		</array>
 		<key>Bundles</key>
 		<array>
+			<string>com.apple.UIKit</string>
 			<string>com.apple.springboard</string>
 			<string>com.apple.Preferences</string>
 		</array>
