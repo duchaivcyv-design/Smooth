@@ -2891,8 +2891,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %end // <-- Dấu %end này đóng cho %hook CAMetalLayer ở trên
 
-%end
-
 %hook CALayer
 - (void)setContentsScale:(CGFloat)scale {
     if (Titanium_IsSpringBoard()) {
@@ -2997,8 +2995,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)layoutIfNeeded {
     %orig;
 }
-%end
-
 %end
 
 %hook CAContext
