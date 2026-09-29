@@ -120,6 +120,12 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
     return NO;
 }
 
+@interface BoostConfigV261 : NSObject
++ (instancetype)sharedInstance;
+- (void)loadSettings;
+- (BOOL)isCustomHzEnabled;
+@end
+
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
 - (id)processState;
@@ -2909,7 +2915,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
     if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
         // Ép kiểu (id) để vượt qua bộ kiểm tra interface của Clang compiler
-        if (IS_ACTIVE && [(id)CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [(id)CFG261 isCustomHzEnabled]) {
+        if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && ((BOOL (*)(id, SEL))objc_msgSend)(CFG261, @selector(isCustomHzEnabled))) {
             self.preferredFramesPerSecond = 60; 
         }
     }
