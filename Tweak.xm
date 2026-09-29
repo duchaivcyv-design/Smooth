@@ -203,8 +203,8 @@ extern char **environ;
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 - (void)clearAnimations;
-- (void)setReturnKeyEnabled:(BOOL)1;
-- (void)updateReturnKey:(BOOL)1;
+- (void)setReturnKeyEnabled:(BOOL)arg1;
+- (void)updateReturnKey:(BOOL)arg1;
 - (void)hardwareKeyboardAvailabilityChanged;
 @end
 
