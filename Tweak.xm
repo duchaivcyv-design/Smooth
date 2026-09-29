@@ -3492,7 +3492,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
         %init(Group_FastLaunch_SuperEngineV261);
-        %init(Group_Transition_Keyboard_OptV261);
         %init(Group_ScrollPerformance_SuperEngineV261);
         %init(Group_V261_FloatingWindow_PiP);
         %init(_ungrouped);
