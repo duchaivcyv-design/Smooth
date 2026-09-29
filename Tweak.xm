@@ -747,6 +747,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 @property (nonatomic, assign) BOOL touchResponseBoost;
 @property (nonatomic, assign) BOOL colorOs17SmoothEngine;
 @property (nonatomic, assign) BOOL keyboardZeroLagV24;
+@property (nonatomic, assign) BOOL keyboardZeroLagV3;
+@property (nonatomic, assign) BOOL reduceMultitaskLag;
 @property (nonatomic, assign) BOOL metalHexBuffering;
 @property (nonatomic, assign) BOOL fixAppExitStutter;
 @property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
@@ -818,7 +820,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             return d;
         };
 
-        self.enabled = GetLiveBool(@"Enabled", YES);
+                self.enabled = GetLiveBool(@"Enabled", YES);
         self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
@@ -829,9 +831,12 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
         self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
         self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
+        self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
         self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
+        self.reduceMultitaskLag = GetLiveBool(@"ReduceMultiTaskLag", YES);
+        self.reduceMultiTaskLag = self.reduceMultitaskLag;
         self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
         self.turboLaunch = self.turboAppLaunch;
         self.ultraResponsiveness = self.touchResponseBoost;
@@ -2400,8 +2405,9 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 %end
 
 %hook SBAppSwitcherSettings
+
 - (void)setDeckSwitcherPageScale:(double)scaleValue {
-    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.reduceMultitaskLag)) {
+    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         %orig(1.0);
         return;
     }
@@ -2409,7 +2415,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (double)deckSwitcherPageScale {
-    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.reduceMultitaskLag)) {
+    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         return 1.0;
     }
     return %orig;
@@ -2430,7 +2436,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         thread_t currentMachThread = mach_thread_self();
         Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
@@ -2440,7 +2446,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         thread_t currentMachThread = mach_thread_self();
         Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
@@ -2450,7 +2456,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (void)clearAnimations {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         %orig;
         return;
     }
@@ -2458,7 +2464,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         %orig(NO);
         return;
     }
@@ -2466,21 +2472,21 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (void)updateReturnKey:(BOOL)arg1 {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1);
 }
 
 - (void)hardwareKeyboardAvailabilityChanged {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 
 - (void)setReturnKeyEnabled:(BOOL)enabled {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         %orig(YES);
         return;
     }
@@ -2488,35 +2494,35 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (BOOL)returnKeyEnabled {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         return YES;
     }
     return %orig;
 }
 
 - (void)setInputMode:(id)inputMode {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(inputMode);
 }
 
 - (void)setDelegate:(id)delegate {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(delegate);
 }
 
 - (void)textChanged:(id)arg1 {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1);
 }
 
 - (void)deleteFromInput {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2527,7 +2533,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (void)showKeyboard {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2540,28 +2546,28 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %hook UITextInputController
 - (void)_insertText:(id)text {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(text);
 }
 
 - (void)deleteBackward {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 
 - (void)replaceRange:(id)range withText:(id)text {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(range, text);
 }
 
 - (void)setMarkedText:(id)markedText selectedRange:(NSRange)selectedRange {
-    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(markedText, selectedRange);
