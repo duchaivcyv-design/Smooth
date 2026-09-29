@@ -2750,6 +2750,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 %end
 
+%end
+
 %group Group_MetalGraphics_OptV261
 
 %hook CAMetalLayer
