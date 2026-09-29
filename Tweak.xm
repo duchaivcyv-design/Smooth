@@ -2814,7 +2814,9 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(allow);
 }
-%end // Đóng %hook CAMetalLayer
+%end
+
+%end
 
 %group Group_MetalGraphics_OptV261
 
