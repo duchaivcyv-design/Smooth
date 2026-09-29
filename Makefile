@@ -24,13 +24,14 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wall \
                            -Wno-error \
                            -Wno-unused-variable \
-                           -Wno-unguarded-availability-new -Wno-unguarded-availability
                            -Wno-deprecated-declarations \
                            -Wno-unused-function \
                            -Wno-implicit-function-declaration \
                            -Wno-deprecated-non-prototype \
                            -Wno-macro-redefined \
                            -Wno-module-import-in-extern-c \
+                           -Wno-unguarded-availability-new \
+                           -Wno-unguarded-availability \
                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
@@ -41,12 +42,13 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
                                AVFoundation \
-                               IOKit \
                                Foundation \
                                Metal \
                                CoreVideo \
                                Accelerate \
                                CoreServices
+
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
 # CẤU HÌNH LDFLAGS ĐẶC TRỊ PHÂN VÙNG ROOTHIDE & ROOTLESS
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
