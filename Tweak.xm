@@ -926,110 +926,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     });
 }
 
-        BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
-            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
-            if (val != nil) return [val boolValue];
-            if (diskDict && diskDict[k] != nil) return [diskDict[k] boolValue];
-            return d;
-        };
-        NSInteger (^GetLiveInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
-            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
-            if (val != nil) return [val integerValue];
-            if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
-            return d;
-        };
-        NSString * (^GetLiveString)(NSString *, NSString *) = ^NSString *(NSString *k, NSString *d) {
-            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
-            if (val != nil && [val isKindOfClass:[NSString class]]) return (NSString *)val;
-            if (diskDict && diskDict[k] != nil && [diskDict[k] isKindOfClass:[NSString class]]) return (NSString *)diskDict[k];
-            return d;
-        };
-
-        self.enabled = GetLiveBool(@"Enabled", YES);
-        self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
-        self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
-        self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
-        self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
-        self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
-        self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
-        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES);
-        self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
-        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
-        self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
-        self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
-        self.neuralBufferOpt = self.metalHexBuffering;
-        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
-        self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
-        self.quantumRenderShield = self.fixAppExitStutter;
-        self.autoCloseBackgroundApp = self.fixAppExitStutter;
-        self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
-        self.syncModuleDelay = self.fixAppLaunchBlackScreen;
-        self.isolateRenderPipeline = self.fixAppLaunchBlackScreen;
-        self.antiBlackScreenLaunch = self.fixAppLaunchBlackScreen;
-        self.reduceMultitaskLag = GetLiveBool(@"ReduceMultiTaskLag", YES);
-        self.reduceMultiTaskLag = self.reduceMultitaskLag;
-        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
-        self.turboLaunch = self.turboAppLaunch;
-        self.ultraResponsiveness = self.touchResponseBoost;
-        self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
-        self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
-        self.periodicRamClean = self.aggressiveRamClean;
-        self.machVMPurgeRam = self.aggressiveRamClean;
-        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
-        self.antiThermalThrottle = self.antiThermalThrottling;
-        self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
-
-        if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-            Titanium_ReloadSharedSyncStateV261();
-            self.enabled = g_syncPayloadV261.masterEnabled;
-            self.targetHz = g_syncPayloadV261.targetHz;
-            self.targetFPS = g_syncPayloadV261.targetFPS;
-            self.forceOverclock144Hz = g_syncPayloadV261.forceOverclock;
-            self.proMotionEngineBeta7 = g_syncPayloadV261.dynamicInterpolation ? YES : NO;
-            self.touchResponseBoost = g_syncPayloadV261.zeroLatencyTouch ? YES : NO;
-            self.ultraResponsiveness = self.touchResponseBoost;
-            self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
-            self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
-            self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
-            self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel == 6) ? YES : NO;
-            self.neuralBufferOpt = self.metalHexBuffering;
-            self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
-            self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
-            self.quantumRenderShield = self.fixAppExitStutter;
-            self.autoCloseBackgroundApp = self.fixAppExitStutter;
-            self.reduceMultitaskLag = self.fixAppExitStutter;
-            self.reduceMultiTaskLag = self.fixAppExitStutter;
-            self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
-            self.turboLaunch = self.turboAppLaunch;
-            self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
-            self.periodicRamClean = self.aggressiveRamClean;
-            self.machVMPurgeRam = self.aggressiveRamClean;
-            self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
-            self.antiThermalThrottle = self.antiThermalThrottling;
-        } else if (Titanium_IsSpringBoard()) {
-            ApexV261Payload p;
-            memset(&p, 0, sizeof(ApexV261Payload));
-            p.masterEnabled = self.enabled ? 1 : 0;
-            p.targetHz = (int32_t)self.targetHz;
-            p.targetFPS = (int32_t)self.targetFPS;
-            p.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
-            p.pipSyncEnabled = 1;
-            p.thermalShield = self.antiThermalThrottling ? 1 : 0;
-            p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = self.metalHexBuffering ? 6 : 4;
-            p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
-            p.shaderOptimization = 1;
-            p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
-            p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
-            p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
-            p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
-            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
-            Titanium_WriteSyncPayloadV261(&p);
-        }
-    });
-}
-
 - (NSInteger)resolvedTargetHz {
     if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
         Titanium_ReloadSharedSyncStateV261();
@@ -1071,7 +967,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (self.proMotionEngineBeta7) return [self resolvedTargetHz];
     return (self.targetFPS > 0) ? self.targetFPS : 60;
 }
-@end 
+@end
+
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
