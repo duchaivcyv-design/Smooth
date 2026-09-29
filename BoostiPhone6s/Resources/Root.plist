@@ -4,6 +4,7 @@
 <dict>
 	<key>items</key>
 	<array>
+		<!-- NHÓM 1: CÔNG TẮC TỔNG -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -23,8 +24,6 @@
 			<string>Enabled</string>
 			<key>label</key>
 			<string>Kích Hoạt Tweak</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -37,6 +36,7 @@
 			<string>SelectedLanguage</string>
 		</dict>
 
+		<!-- NHÓM 2: ĐẶC QUYỀN NÂNG CẤP V26 -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -56,8 +56,6 @@
 			<string>ProMotionEngineBeta7</string>
 			<key>label</key>
 			<string>ProMotion Engine (Quét Nhiệt Độ Tự Động)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -70,8 +68,6 @@
 			<string>MetalHexBuffering</string>
 			<key>label</key>
 			<string>Metal Hex Buffering (6 Tầng Đệm)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -84,10 +80,9 @@
 			<string>KeyboardZeroLagV24</string>
 			<key>label</key>
 			<string>Bàn Phím 0ms &amp; Chat AI</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- NHÓM 3: ĐIỀU PHỐI HZ & FPS -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -107,8 +102,6 @@
 			<string>EnableHzControl</string>
 			<key>label</key>
 			<string>Kiểm Soát Tần Số Quét (Hz)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -131,8 +124,6 @@
 			<string>EnableFPSControl</string>
 			<key>label</key>
 			<string>Kiểm Soát Khung Hình (FPS)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -155,10 +146,9 @@
 			<string>ForceOverclock144Hz</string>
 			<key>label</key>
 			<string>Ép Xung Cực Đại 144Hz Toàn Máy</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- NHÓM 4: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -178,8 +168,6 @@
 			<string>AppLazyInjectionSync</string>
 			<key>label</key>
 			<string>Đồng Bộ Độ Trễ Tiêm Mô-Đun</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -192,10 +180,9 @@
 			<string>AppRenderShieldIsolation</string>
 			<key>label</key>
 			<string>Cách Ly Render Pipeline App Gốc</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
 
+		<!-- NHÓM 5: GIA TỐC GIAO DIỆN & VẬT LÝ -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -213,8 +200,6 @@
 			<string>ColorOs17SmoothEngine</string>
 			<key>label</key>
 			<string>Động Cơ Cuộn ColorOS 17</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -227,8 +212,6 @@
 			<string>ReduceMultiTaskLag</string>
 			<key>label</key>
 			<string>Giảm Lag Đa Nhiệm</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -241,8 +224,6 @@
 			<string>FixAppLaunchBlackScreen</string>
 			<key>label</key>
 			<string>Chống Đen Màn Mở Ứng Dụng</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -255,8 +236,6 @@
 			<string>FixAppExitStutter</string>
 			<key>label</key>
 			<string>Chống Khựng Khi Thoát App (0ms Switcher)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -269,10 +248,9 @@
 			<string>TouchResponseBoost</string>
 			<key>label</key>
 			<string>Tăng Phản Hồi Cảm Ứng (Overdrive)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- NHÓM 6: LÕI ĐIỀU PHỐI ĐỒ HỌA & PHẦN CỨNG CHUYÊN SÂU -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -290,8 +268,6 @@
 			<string>QuantumRenderShieldOfficial</string>
 			<key>label</key>
 			<string>Quantum Render Shield</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -304,8 +280,6 @@
 			<string>NeuralBufferOptimizerOfficial</string>
 			<key>label</key>
 			<string>Neural Buffer Optimizer</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -318,8 +292,6 @@
 			<string>ApexBackgroundPacingDaemon</string>
 			<key>label</key>
 			<string>Background Pacing Daemon</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -332,8 +304,6 @@
 			<string>HyperMemoryGuardian</string>
 			<key>label</key>
 			<string>Hyper Memory Guardian</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -346,8 +316,6 @@
 			<string>UltraResponsivenessProEngineOfficial</string>
 			<key>label</key>
 			<string>Ultra Responsiveness Pro</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -360,8 +328,6 @@
 			<string>HyperThreadIOAcceleratorOfficial</string>
 			<key>label</key>
 			<string>HyperThread I/O Accelerator</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -374,8 +340,6 @@
 			<string>QuantumCoreSyncStabilizerOfficial</string>
 			<key>label</key>
 			<string>Quantum Core Sync Stabilizer</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -388,8 +352,6 @@
 			<string>ZeroLagNeuralBoosterOfficial</string>
 			<key>label</key>
 			<string>Zero-Lag Neural Booster</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -402,8 +364,6 @@
 			<string>VsyncAdaptiveBufferOfficial</string>
 			<key>label</key>
 			<string>V-Sync Adaptive Buffer</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -416,10 +376,9 @@
 			<string>DynamicThermalEngineOfficial</string>
 			<key>label</key>
 			<string>Dynamic Thermal Engine</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- NHÓM 7: ĐIỀU PHỐI BỘ NHỚ RAM & CPU -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -437,8 +396,6 @@
 			<string>Ios27AutoScheduler</string>
 			<key>label</key>
 			<string>Bộ Điều Phối iOS Scheduler</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -451,8 +408,6 @@
 			<string>RealtimePriorityBoost</string>
 			<key>label</key>
 			<string>Ưu Tiên Luồng Realtime (SCHED_RR)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -465,8 +420,6 @@
 			<string>BoostCpuGpu</string>
 			<key>label</key>
 			<string>Tối Ưu Xung Nhịp CPU/GPU</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -479,8 +432,6 @@
 			<string>SmartRamClean</string>
 			<key>label</key>
 			<string>Dọn RAM Tự Động Định Kỳ</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -493,8 +444,6 @@
 			<string>AggressiveRamClean</string>
 			<key>label</key>
 			<string>Dọn RAM Chuyên Sâu Cấp Mach VM</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -507,8 +456,6 @@
 			<string>KillBgApps</string>
 			<key>label</key>
 			<string>Đóng Ứng Dụng Nền Tự Động</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -521,8 +468,6 @@
 			<string>TurboAppLaunch</string>
 			<key>label</key>
 			<string>Khởi Động App Cực Nhanh (Turbo)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -535,8 +480,6 @@
 			<string>GameFpsStabilizer</string>
 			<key>label</key>
 			<string>Ổn Định Khung Hình Chơi Game</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -549,8 +492,6 @@
 			<string>OptimizeSystemProcess</string>
 			<key>label</key>
 			<string>Tối Ưu Tiến Trình Hệ Thống</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -563,10 +504,9 @@
 			<string>AutoSpoofNewDevice</string>
 			<key>label</key>
 			<string>Giả Lập Thiết Bị Đời Mới</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- NHÓM 8: QUẢN LÝ NHIỆT ĐỘ & NGUỒN ĐIỆN -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -584,8 +524,6 @@
 			<string>AntiThermalThrottling</string>
 			<key>label</key>
 			<string>Chống Bóp Hiệu Năng Khi Ấm Máy</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -598,8 +536,6 @@
 			<string>SmartThermalManager</string>
 			<key>label</key>
 			<string>Điều Phối Nhiệt Độ Thông Minh</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -612,8 +548,6 @@
 			<string>HeavyLoadCooling</string>
 			<key>label</key>
 			<string>Làm Mát Khi Xử Lý Tải Nặng</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -626,8 +560,6 @@
 			<string>ChargeCoolingProtection</string>
 			<key>label</key>
 			<string>Bảo Vệ Hạ Nhiệt Khi Cắm Sạc</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -640,10 +572,9 @@
 			<string>PowerSaveMode</string>
 			<key>label</key>
 			<string>Chế Độ Tiết Kiệm Pin Cực Đại (30Hz)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
-	
+
+		<!-- NHÓM 9: BẢO MẬT & QUYỀN RIÊNG TƯ -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -661,8 +592,6 @@
 			<string>BypassVarSandbox</string>
 			<key>label</key>
 			<string>Vượt Qua Sandbox Thư Mục Var</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -675,10 +604,9 @@
 			<string>BlockAnalytics</string>
 			<key>label</key>
 			<string>Chặn Thu Thập Dữ Liệu Ngầm</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
+		<!-- NHÓM 10: THÔNG TIN PHÁT TRIỂN & HỖ TRỢ -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
