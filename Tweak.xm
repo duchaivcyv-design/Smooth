@@ -2957,6 +2957,19 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 %end
 
 %hook CALayer
+- (void)setContentsScale:(CGFloat)scale {
+    if (Titanium_IsSpringBoard()) {
+        %orig;
+        return;
+    }
+
+    if (IS_ACTIVE && CFG261.metalHexBuffering) {
+        %orig(scale > 0 ? scale : 2.0);
+        return;
+    }
+    %orig;
+}
+
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
     if (IS_ACTIVE) {
         %orig(YES);
