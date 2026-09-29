@@ -91,10 +91,9 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
-    // Đồng bộ chính xác tên domain plist là com.titanium.boostiphone6s
-    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.titanium.boostiphone6s.plist", root];
+    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist", root];
     if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
-    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.titanium.boostiphone6s.plist";
+    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
     return p1;
 }
@@ -929,7 +928,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetHz {
-    // Đọc trực tiếp file plist hệ thống để các app bên thứ ba nhận diện tức thì
+    // 🌟 Ép đọc thẳng file plist hệ thống chuẩn xác 100% cho mọi tiến trình (SpringBoard, LockScreen, App)
     NSString *resolvedPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
         NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
@@ -947,15 +946,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         }
     }
     
-    // Dự phòng qua cơ chế payload hiện tại
-    Titanium_ReloadSharedSyncStateV261();
-    if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.masterEnabled) {
-        if (g_syncPayloadV261.forceOverclock) return 144;
-        if (g_syncPayloadV261.targetHz >= 15 && g_syncPayloadV261.targetHz <= 144) {
-            return g_syncPayloadV261.targetHz;
-        }
-    }
-    
     if (!self.enabled || !self.enableHzControl) return 60;
     if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
@@ -964,6 +954,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetFPS {
+    // 🌟 Ép đọc thẳng file plist hệ thống chuẩn xác 100% cho FPS của App và hiệu ứng
     NSString *resolvedPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
         NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
@@ -978,13 +969,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             }
             if (dict[@"ForceOverclock144Hz"] && [dict[@"ForceOverclock144Hz"] boolValue]) return 144;
             if (dict[@"PowerSaveMode"] && [dict[@"PowerSaveMode"] boolValue]) return 15;
-        }
-    }
-    
-    Titanium_ReloadSharedSyncStateV261();
-    if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.masterEnabled) {
-        if (g_syncPayloadV261.targetFPS >= 15 && g_syncPayloadV261.targetFPS <= 144) {
-            return g_syncPayloadV261.targetFPS;
         }
     }
     
