@@ -10,7 +10,6 @@ elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
 elif [ -d "/var/jb" ]; then
     JB_ROOT="/var/jb"
 else
-    # Quét phân vùng ngẫu nhiên dạng /var/jb-xxxxxxxx của RootHide
     ROOTHIDE_DIR=$(find /var -maxdepth 1 -type d -name "jb-*" 2>/dev/null | head -n 1)
     if [ -n "$ROOTHIDE_DIR" ] && [ -d "$ROOTHIDE_DIR" ]; then
         JB_ROOT="$ROOTHIDE_DIR"
@@ -31,8 +30,9 @@ for B_PATH in $BUNDLE_PATHS; do
     if [ -d "$B_PATH" ]; then
         chmod -R 755 "$B_PATH" 2>/dev/null || true
         chown -R mobile:mobile "$B_PATH" 2>/dev/null || true
+        # Đưa uicache chạy ngầm độc lập hoàn toàn để không bao giờ bị kẹt thanh loading Sileo
         if command -v uicache &> /dev/null; then
-            uicache -p "$B_PATH" 2>/dev/null || true
+            nohup uicache -p "$B_PATH" >/dev/null 2>&1 &
         fi
     fi
 done
