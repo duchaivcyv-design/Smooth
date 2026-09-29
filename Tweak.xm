@@ -2231,7 +2231,10 @@ static void Titanium_LaunchAllModulesInsideAppV26(void) {
 }
 
 @end
-// Đặt hàm này ở ngoài cùng, không nằm trong %ctor
+
+// ----------------------------------------------------
+// HÀM CHỐNG BOOTLOOP NẰM ĐỘC LẬP TRƯỚC %CTOR
+// ----------------------------------------------------
 static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     NSString *bootCountPath = @"/tmp/.boost_boot_counter";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -2269,11 +2272,13 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
-// Khối %ctor đứng riêng bên dưới và gọi hàm ở dòng đầu tiên
+// ----------------------------------------------------
+// KHỐI %CTOR CHUẨN XÁC ĐÃ TRIỆT TIÊU LỖI RE-%INIT
+// ----------------------------------------------------
 %ctor {
     @autoreleasepool {
         if (!Titanium_CheckAndPreventBootloopUniversal()) {
-            return; 
+            return;
         }
 
         NSString *proc = [[NSProcessInfo processInfo] processName];
@@ -2329,103 +2334,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             );
         });
 
-        %init(Group_FastLaunch_SuperEngineV26);
-        %init(Group_V26_FloatingWindow_PiP);
-
-        if (Titanium_IsSpringBoardV26()) {
-            %init(Group_SpringBoard_OnlyV26);
-            %init(Group_Gesture_FixV26);
-            %init(Group_Fix_App_Layout_PositionV26);
-            %init(Group_ColorOS17_SafeUIV26);
-            %init(Group_Display_SpringBoardV26);
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                Titanium_StartPassiveRamDaemonV26();
-                Titanium_StartChargingMonitorV26();
-            });
-            Titanium_BoostThreadPriorityRealtimeV26();
-        } else {
-            [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                              object:nil
-                                                               queue:[NSOperationQueue mainQueue]
-                                                          usingBlock:^(NSNotification *note) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    %init(Group_UIKit_ThirdParty_IsolatedV26);
-                    %init(Group_Display_App_LazyV26);
-                    Titanium_LaunchAllModulesInsideAppV26();
-                });
-            }];
-        }
-
-        if (Titanium_IsSpringBoardV26() || [proc containsString:@"inputhost"] || [proc containsString:@"Keyboard"]) {
-            %init(Group_Keyboard_And_TextV26);
-        }
-
-        %init(_ungrouped);
-
-        PMRuntimeReadyV26 = YES;
-    }
-}
-
-%ctor {
-    @autoreleasepool {
-        if (!Titanium_CheckAndPreventBootloopUniversal()) {
-            return; 
-        }
-
-        NSString *proc = [[NSProcessInfo processInfo] processName];
-        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-
-        if (!bundleID || [bundleID length] == 0) {
-            if (![proc isEqualToString:@"SpringBoard"]) {
-                return;
-            }
-        }
-
-        if ([proc isEqualToString:@"Preferences"] || Titanium_IsPreferencesAppV26()) {
-            return;
-        }
-        if (Titanium_IsSystemCriticalDaemonV26()) {
-            return;
-        }
-        if (Titanium_IsBankingAppV26()) {
-            return;
-        }
-
-        Class crashGuardCls = NSClassFromString(@"CrashGuard");
-        if (crashGuardCls && [crashGuardCls respondsToSelector:@selector(sharedInstance)]) {
-            id guard = [crashGuardCls performSelector:@selector(sharedInstance)];
-            if ([guard respondsToSelector:@selector(startMonitoring)]) {
-                [guard performSelector:@selector(startMonitoring)];
-            }
-            if ([guard respondsToSelector:@selector(canExecuteHooks)]) {
-                BOOL canExecute = ((BOOL (*)(id, SEL))objc_msgSend)(guard, @selector(canExecuteHooks));
-                if (!canExecute) return;
-            }
-        }
-
-        CFGV26 = [BoostConfigV26 sharedInstance];
-        Titanium_StartThermalWatchdogTimerV26();
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            CFNotificationCenterAddObserver(
-                CFNotificationCenterGetDarwinNotifyCenter(),
-                NULL,
-                reloadPrefsNotificationV26,
-                CFSTR(NOTIFY_RELOAD),
-                NULL,
-                CFNotificationSuspensionBehaviorCoalesce
-            );
-            CFNotificationCenterAddObserver(
-                CFNotificationCenterGetDarwinNotifyCenter(),
-                NULL,
-                reloadPrefsNotificationV26,
-                CFSTR(NOTIFY_UIKIT_RELOAD),
-                NULL,
-                CFNotificationSuspensionBehaviorCoalesce
-            );
-        });
-
+        // KHỞI TẠO MỘT LẦN DUY NHẤT Ở ĐÂY CHO TẤT CẢ
         %init(Group_FastLaunch_SuperEngineV26);
         %init(Group_V26_FloatingWindow_PiP);
 
