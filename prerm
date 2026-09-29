@@ -1,16 +1,56 @@
+#!/bin/sh
 set -e
 
+# TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ROOTLESS / ROOTHIDE)
+JB_ROOT=""
+if [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
+    JB_ROOT="$ROOTLESS_PATH"
+elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
+    JB_ROOT="$JB_ROOT_PATH"
+elif [ -d "/var/jb" ]; then
+    JB_ROOT="/var/jb"
+else
+    ROOTHIDE_DIR=$(find /var -maxdepth 1 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    if [ -n "$ROOTHIDE_DIR" ] && [ -d "$ROOTHIDE_DIR" ]; then
+        JB_ROOT="$ROOTHIDE_DIR"
+    else
+        JB_ROOT=""
+    fi
+fi
+
+# XÓA FILE CẤU HÌNH TẢI PREFERENCELOADER
+rm -f "$JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist" 2>/dev/null || true
+rm -f "$JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist" 2>/dev/null || true
+rm -f "$JB_ROOT/Library/PreferenceLoader/BoostiPhone6sPrefs.plist" 2>/dev/null || true
+rm -f "$JB_ROOT/Library/PreferenceLoader/BoostiPhone6s.plist" 2>/dev/null || true
+rm -f /var/jb/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist 2>/dev/null || true
 rm -f /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
+rm -f /Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist 2>/dev/null || true
 rm -f /Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
 
+# XÓA TOÀN BỘ FILE ĐỒNG BỘ BỘ NHỚ CHIA SẺ & BẢO VỆ TREO TÁO
+rm -f /tmp/.boost_hz_sync 2>/dev/null || true
+rm -f /tmp/.boost_boot_counter 2>/dev/null || true
+
+# XÓA CACHE ỨNG DỤNG & CẤU HÌNH TRÊN MỌI PHÂN VÙNG
 rm -rf /var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
+rm -rf "$JB_ROOT/var/mobile/Library/Caches/com.taojb.boostiphone6s" 2>/dev/null || true
 rm -rf /var/jb/var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
 
 defaults delete com.taojb.boostiphone6s 2>/dev/null || true
 rm -f /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
+rm -f "$JB_ROOT/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
+rm -f "$JB_ROOT/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
 rm -f /var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 rm -f /var/jb/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 
-killall cfprefsd 2>/dev/null || true
+# GỬI TÍN HIỆU NHẢ TOÀN BỘ HOOK VỀ MẶC ĐỊNH TRƯỚC KHI THÁO DỞ
+if command -v notifyutil &> /dev/null; then
+    notifyutil -p com.taojb.boostiphone6s/ReloadPrefs 2>/dev/null || true
+    notifyutil -p com.taojb.boostiphone6s/ReloadUIKitPrefs 2>/dev/null || true
+fi
+
+# TÁI TẠO BỘ NHỚ ĐỆM PREFERENCES
+killall -9 cfprefsd 2>/dev/null || true
 
 exit 0
