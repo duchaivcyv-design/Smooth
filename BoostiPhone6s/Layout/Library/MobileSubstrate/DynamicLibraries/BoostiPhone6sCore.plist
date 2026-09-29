@@ -9,12 +9,10 @@
 			<string>com.apple.UIKit</string>
 			<string>com.apple.springboard</string>
 			<string>com.apple.Preferences</string>
-			<string>com.apple.CoreFoundation</string>
 		</array>
 		<key>Executables</key>
 		<array>
 			<string>SpringBoard</string>
-			<string>backboardd</string>
 			<string>Preferences</string>
 		</array>
 		<key>Mode</key>
