@@ -64,6 +64,9 @@ extern char **environ;
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
 
+// ========================================================
+// HỖ TRỢ ĐƯỜNG DẪN TƯƠNG THÍCH ROOTLESS & ROOTHIDE
+// ========================================================
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
     static dispatch_once_t onceToken;
@@ -87,6 +90,17 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
         }
     });
     return cachedJbRoot;
+}
+
+static inline NSString *Titanium_GetPrefPath(NSString *path) {
+    if (!path) return @"";
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    if ([root isEqualToString:@"/var/jb"] && ![[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
+        // Môi trường Rootful cũ
+        return path;
+    }
+    // Môi trường Rootless / RootHide
+    return [root stringByAppendingPathComponent:path];
 }
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
@@ -3280,6 +3294,59 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %end
 
+%group Group_ScrollPerformance_SuperEngineV261
+
+%hook UIScrollView
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    %orig(newWindow);
+    if (newWindow && IS_ACTIVE) {
+        // Hủy bỏ độ trễ nhận diện vuốt/chạm
+        self.delaysContentTouches = NO;
+        self.canCancelContentTouches = YES;
+        self.decelerationRate = UIScrollViewDecelerationRateNormal;
+        self.layer.drawsAsynchronously = YES;
+    }
+}
+
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(arg1, arg2);
+}
+%end
+
+%hook UITextView
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    %orig(newWindow);
+    if (newWindow && IS_ACTIVE) {
+        self.layer.drawsAsynchronously = YES;
+        // Bật dựng bố cục không liền kề để lướt file code dài không bị sụt FPS
+        if ([self respondsToSelector:@selector(setLayoutManager:)]) {
+            self.layoutManager.allowsNonContiguousLayout = YES;
+        }
+    }
+}
+%end
+
+%hook UIGestureRecognizer
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(touches, event);
+}
+
+- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(touches, event);
+}
+%end
+
+%end
+
 static void Titanium_StartThermalWatchdogTimerV261(void) {
     static dispatch_source_t timerSource = nil;
     static dispatch_once_t onceToken;
@@ -3365,74 +3432,161 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 %ctor {
     @autoreleasepool {
+        const char *progName = getprogname();
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
         NSString *processName = [[NSProcessInfo processInfo] processName];
-        NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
 
+        // 1. KIỂM TRA BẢO VỆ CHỐNG BOOTLOOP & SÀNG LỌC TIẾN TRÌNH NGUY HIỂM
+        if (!Titanium_CheckAndPreventBootloopUniversal()) {
+            return;
+        }
+
+        if (!Titanium_IsProcessEligible(bundleID, progName)) {
+            return;
+        }
+
+        // Bỏ qua tuyệt đối đối với ứng dụng ngân hàng / tài chính để tránh văng app do bảo mật
         if (Titanium_IsSecureBankingApp()) {
             return;
         }
 
-        // 1. Khởi tạo cấu hình Singleton trên luồng nền
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            Class configClass = NSClassFromString(@"BoostConfigV261");
-            if (configClass) {
-                CFG261 = [configClass sharedInstance];
-                [CFG261 loadSettings];
-            } else {
-                CFG261 = [BoostConfigV261 sharedInstance];
-            }
-        });
+        // 2. ÉP BUỘC CHÍNH SÁCH ĐIỀU PHỐI THỜI GIAN THỰC LÊN NHÂN MACH KERNEL
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        mach_port_t currentThread = mach_thread_self();
+        thread_time_constraint_policy_data_t timeConstraint;
+        timeConstraint.period = 1000000;         // 1ms danh nghĩa
+        timeConstraint.computation = 60000;      // 60us xử lý đồ họa
+        timeConstraint.constraint = 250000;      // 250us giới hạn tối đa
+        timeConstraint.preemptible = 1;
+        thread_policy_set(currentThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+        mach_port_deallocate(mach_task_self(), currentThread);
 
-        // 2. Khởi tạo các nhóm Hook với độ trễ an toàn để tránh Watchdog Timeout
+        // 3. NẠP CẤU HÌNH TỨC THÌ (DÒ TÌM TRỰC TIẾP TỪ RUNTIME ĐA NỀN TẢNG)
+        Class configClass = NSClassFromString(@"BoostConfigV261");
+        if (!configClass) {
+            int classCount = objc_getClassList(NULL, 0);
+            if (classCount > 0) {
+                Class *allClassList = (Class *)malloc(sizeof(Class) * classCount);
+                if (allClassList) {
+                    classCount = objc_getClassList(allClassList, classCount);
+                    for (int i = 0; i < classCount; i++) {
+                        const char *currentClassName = class_getName(allClassList[i]);
+                        if (currentClassName && strcmp(currentClassName, "BoostConfigV261") == 0) {
+                            configClass = allClassList[i];
+                            break;
+                        }
+                    }
+                    free(allClassList);
+                }
+            }
+        }
+
+        if (configClass) {
+            CFG261 = [configClass sharedInstance];
+            if ([CFG261 respondsToSelector:@selector(loadSettings)]) {
+                [CFG261 loadSettings];
+            }
+        }
+
+        // 4. ÉP NẠP CƯỠNG BỨC TOÀN BỘ CORE ENGINE VÀO TẤT CẢ TIẾN TRÌNH
+        %init(Group_MetalGraphics_OptV261);
+        %init(Group_ZeroLatencyTouch_PhysicsV261);
+        %init(Group_FastLaunch_SuperEngineV261);
+        %init(Group_Transition_Keyboard_OptV261);
+        %init(Group_ScrollPerformance_SuperEngineV261);
+        %init(Group_V261_FloatingWindow_PiP);
+        %init(_ungrouped);
+
+        // 5. ĐỊNH TUYẾN CHUYÊN SÂU TẦNG GIAO DIỆN HỆ THỐNG SPRINGBOARD
+        if (Titanium_IsSpringBoard()) {
+            // Sửa triệt để phình to đa nhiệm App Switcher & Giám sát tiến trình SpringBoard
+            %init(Group_Display_SpringBoardV261);
+            %init(Group_SpringBoard_ProcessManagerV261);
+
+            // Màn hình khóa (LockScreen) & Trung tâm thông báo (CoverSheet)
+            Class csClass = NSClassFromString(@"CSCoverSheetViewController");
+            if (csClass) {
+                %init(Group_CoverSheet_LockScreenV261, CoverSheet = csClass);
+            }
+
+            // Trung tâm điều khiển (Control Center)
+            Class ccClass = NSClassFromString(@"CCUIModularControlCenterOverlayViewController");
+            if (ccClass) {
+                %init(Group_ControlCenter_OptV261, ControlCenter = ccClass);
+            }
+
+            // Thanh danh sách thông báo (Notification Center)
+            Class notifClass = NSClassFromString(@"NCNotificationCombinedListViewController");
+            if (notifClass) {
+                %init(Group_ControlCenter_OptV261, NotificationCenter = notifClass);
+            }
+
+            // Video PIP (Picture in Picture)
+            Class pipClass = NSClassFromString(@"SBPIPController");
+            if (pipClass) {
+                %init(Group_PIP_VideoOptV261, PIPController = pipClass);
+            }
+        } else {
+            // Ép nạp tầng UIKit cách ly cho toàn bộ 100% ứng dụng bên thứ 3 và Game
+            %init(Group_UIKit_ThirdParty_IsolatedV261);
+        }
+
+        // 6. ÉP NẠP BÀN PHÍM HỆ THỐNG VÀ TIẾN TRÌNH INPUT RỜI
+        BOOL isKeyboardExtension = NO;
+        if (bundleID) {
+            isKeyboardExtension = [bundleID containsString:@"TextInputUI"] || 
+                                  [bundleID containsString:@"InputUI"] || 
+                                  [bundleID containsString:@"keyboard"];
+        }
+        if (Titanium_IsSpringBoard() || isKeyboardExtension || 
+            (progName && (strstr(progName, "inputhost") || strstr(progName, "Keyboard")))) {
+            %init(Group_Keyboard_And_TextV261);
+        }
+
+        // 7. ÉP NẠP NÚT HOME ẢO (ASSISTIVETOUCH)
+        if ((bundleID && ([bundleID isEqualToString:@"com.apple.Accessibility"] || 
+                          [bundleID isEqualToString:@"com.apple.assistivetouchd"])) ||
+            (progName && strstr(progName, "assistivetouchd"))) {
+            %init(Group_AssistiveTouch_OptV261);
+        }
+
+        // 8. BẮT SỰ KIỆN NẠP TRỄ CỦA UIKIT (CHỐNG LỖI CÁC APP NẶNG & ENGINE GAME RIÊNG)
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            if (!Titanium_IsSpringBoard()) {
+                %init(Group_UIKit_ThirdParty_IsolatedV261);
+                %init(Group_ScrollPerformance_SuperEngineV261);
+            }
+        }];
+
+        // 9. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION (CHỐNG TREO WATCHDOG TIMEOUT)
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                // Kích hoạt giám sát nhiệt độ
                 Titanium_StartThermalWatchdogTimerV261();
 
-                // Đăng ký nhận thông báo reload cấu hình từ PreferenceLoader / Prefs
-                CFNotificationCenterAddObserver(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    NULL,
-                    reloadPrefsNotificationV261,
-                    CFSTR("com.taojb.boostiphone6s/ReloadPrefs"),
-                    NULL,
-                    CFNotificationSuspensionBehaviorDeliverImmediately
-                );
-                CFNotificationCenterAddObserver(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    NULL,
-                    reloadPrefsNotificationV261,
-                    CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"),
-                    NULL,
-                    CFNotificationSuspensionBehaviorDeliverImmediately
-                );
+                // Lắng nghe thông báo thay đổi cài đặt từ Darwin Notify Center
+                CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+                if (darwinCenter) {
+                    CFNotificationCenterAddObserver(darwinCenter, NULL, reloadPrefsNotificationV261,
+                        CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    // Nạp các nhóm tối ưu chung toàn hệ thống
-                    %init(Group_FastLaunch_SuperEngineV261);
-                    %init(Group_V261_FloatingWindow_PiP);
-                    %init(Group_ZeroLatencyTouch_PhysicsV261);
-                    %init(Group_MetalGraphics_OptV261);
+                    CFNotificationCenterAddObserver(darwinCenter, NULL, reloadPrefsNotificationV261,
+                        CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
-                    if (Titanium_IsSpringBoard()) {
-                        // Nhóm chuyên biệt cho SpringBoard và ép xung Hz/FPS màn hình chính
-                        %init(Group_Display_SpringBoardV261);
-                        %init(Group_SpringBoard_ProcessManagerV261);
+                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)Titanium_ReloadPreferencesV261,
+                        CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+                }
 
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            Titanium_StartPassiveRamDaemonV261();
-                        });
-                    } else {
-                        // SỬA TRIỆT ĐỂ LỖI KHÔNG TIÊM APP: Kích hoạt trực tiếp nhóm UIKit cho ứng dụng bên thứ 3 ngay lập tức thay vì đợi thông báo rườm rà
-                        %init(Group_UIKit_ThirdParty_IsolatedV261);
-                    }
-
-                    if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
-                        %init(Group_Keyboard_And_TextV261);
-                    }
-
-                    %init(_ungrouped);
-                });
+                // Dọn dẹp RAM nền định kỳ 90s cho SpringBoard sau 15 giây ổn định hệ thống
+                if (Titanium_IsSpringBoard()) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        Titanium_StartPassiveRamDaemonV261();
+                    });
+                }
             });
         });
     }
