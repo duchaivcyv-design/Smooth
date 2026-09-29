@@ -960,7 +960,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         return (self.targetHz > 0) ? self.targetHz : 60;
     }
     
-    if (self.proMotionEngineBeta7) {
+        if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
         BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
         if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 30;
@@ -3246,7 +3246,7 @@ static void Titanium_StartPassiveRamDaemonV261(void) {
     if (!Titanium_IsSpringBoard()) return;
     dispatch_queue_t daemonQueue = dispatch_queue_create("com.titanium.v261.ramdaemon", DISPATCH_QUEUE_SERIAL);
     dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
-    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 15.0 * NSEC_PER_SEC), 15.0 * NSEC_PER_SEC, 2.0 * NSEC_PER_SEC);
+    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 20.0 * NSEC_PER_SEC), 20.0 * NSEC_PER_SEC, 5.0 * NSEC_PER_SEC);
     dispatch_source_set_event_handler(ramTimerSource, ^{
         if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
             Titanium_PurgeProcessMemoryAggressively();
@@ -3289,7 +3289,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         return NO;
     }
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if ([fileManager fileExistsAtPath:bootCounterFilePath]) {
             [fileManager removeItemAtPath:bootCounterFilePath error:nil];
         }
@@ -3333,10 +3333,15 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             }
         }
 
-        CFG261 = [BoostConfigV261 sharedInstance];
-        Titanium_StartThermalWatchdogTimerV261();
+        // Khởi tạo cấu hình trên luồng nền để tránh block Main Thread của SpringBoard
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            CFG261 = [BoostConfigV261 sharedInstance];
+        });
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Trì hoãn việc nạp Hook và theo dõi nhiệt độ sang 1.2 giây sau để SpringBoard khởi động mượt mà trước
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            Titanium_StartThermalWatchdogTimerV261();
+
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetDarwinNotifyCenter(),
                 NULL,
@@ -3353,35 +3358,35 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
                 NULL,
                 CFNotificationSuspensionBehaviorCoalesce
             );
-        });
 
-        %init(Group_FastLaunch_SuperEngineV261);
-        %init(Group_V261_FloatingWindow_PiP);
-        %init(Group_ZeroLatencyTouch_PhysicsV261);
-        %init(Group_MetalGraphics_OptV261);
+            %init(Group_FastLaunch_SuperEngineV261);
+            %init(Group_V261_FloatingWindow_PiP);
+            %init(Group_ZeroLatencyTouch_PhysicsV261);
+            %init(Group_MetalGraphics_OptV261);
 
-        if (Titanium_IsSpringBoard()) {
-            %init(Group_Display_SpringBoardV261);
-            %init(Group_SpringBoard_ProcessManagerV261);
+            if (Titanium_IsSpringBoard()) {
+                %init(Group_Display_SpringBoardV261);
+                %init(Group_SpringBoard_ProcessManagerV261);
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                Titanium_StartPassiveRamDaemonV261();
-            });
-        } else {
-            [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                              object:nil
-                                                               queue:[NSOperationQueue mainQueue]
-                                                          usingBlock:^(NSNotification *notificationObserver) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    %init(Group_UIKit_ThirdParty_IsolatedV261);
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    Titanium_StartPassiveRamDaemonV261();
                 });
-            }];
-        }
+            } else {
+                [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                                  object:nil
+                                                                   queue:[NSOperationQueue mainQueue]
+                                                              usingBlock:^(NSNotification *notificationObserver) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        %init(Group_UIKit_ThirdParty_IsolatedV261);
+                    });
+                }];
+            }
 
-        if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
-            %init(Group_Keyboard_And_TextV261);
-        }
+            if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
+                %init(Group_Keyboard_And_TextV261);
+            }
 
-        %init(_ungrouped);
+            %init(_ungrouped);
+        });
     }
 }
