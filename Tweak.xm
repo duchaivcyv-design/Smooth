@@ -2816,18 +2816,43 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 %end // Đóng %hook CAMetalLayer
 
-%end // Đóng %group Group_MetalGraphics_OptV261
+%group Group_MetalGraphics_OptV261
 
 %hook CADisplayLink
+- (void)setPaused:(BOOL)paused {
+    %orig(paused);
+}
+
+- (void)setFrameInterval:(NSInteger)interval {
+    // Đảm bảo không ép giá trị interval quá thấp gây nghẽn khung hình lúc mở app
+    if (interval < 1) interval = 1;
+    %orig(interval);
+}
+
 - (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
-    if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
-        self.preferredFramesPerSecond = 60; 
+    if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
+        if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [CFG261 isCustomHzEnabled]) {
+            // Cho phép nhận mức Hz tùy chỉnh từ công tắc của đồng chí
+            self.preferredFramesPerSecond = 60; 
+        }
     }
     %orig;
 }
-%end // Đóng %hook CADisplayLink ở đây
+%end
 
-%end // Đóng %group Group_MetalGraphics_OptV261 ở cuối cùng
+// Tối ưu hóa CALayer có kiểm soát để chống giật khi bấm mở app, không bị tình trạng khựng khung hình
+%hook CALayer
+- (void)setShouldRasterize:(BOOL)rasterize {
+    // Chỉ bật rasterize khi thực sự cần thiết để tránh làm chậm tiến trình render lúc chạm mở app
+    if (IS_ACTIVE && CFG261 && CFG261.aggressiveRamClean) {
+        %orig(NO); // Tắt bớt ép buộc rasterize bừa bãi gây giật khung hình mở app
+        return;
+    }
+    %orig(rasterize);
+}
+%end
+
+%end
 
 %hook CAMetalLayer // <-- Đảm bảo dòng này nằm ở TRÊN CÙNG của nhóm method này
 
