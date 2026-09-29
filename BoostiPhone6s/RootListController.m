@@ -19,6 +19,12 @@
 
 extern char **environ;
 
+// Khai báo giao diện cho BoostConfigV261 để triệt tiêu lỗi thiếu class method sharedInstance
+@interface BoostConfigV261 : NSObject
++ (instancetype)sharedInstance;
+- (void)loadSettings;
+@end
+
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
     static dispatch_once_t onceToken;
@@ -420,7 +426,7 @@ static inline NSString *PM_TextV26(NSString *key) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isOverclock) {
-                spec.name = @"⚡️ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
+                spec.name = @"⚡️️ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
             } else {
                 spec.name = isDynamic ? [NSString stringWithFormat:hzAutoText, (long)hz]
                                       : [NSString stringWithFormat:hzLockText, (long)hz];
