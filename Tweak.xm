@@ -1004,6 +1004,8 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+%end   // <--- Đảm bảo khối %hook FBApplicationProcess phải được đóng bằng %end ở đây!
+%end   // <--- Và đóng cả %group nếu cần hoặc kiểm tra lại tổng thể group
 
 - (void)_finishInit {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
