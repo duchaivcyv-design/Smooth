@@ -2232,9 +2232,6 @@ static void Titanium_LaunchAllModulesInsideAppV26(void) {
 
 @end
 
-// ----------------------------------------------------
-// HÀM CHỐNG BOOTLOOP NẰM ĐỘC LẬP TRƯỚC %CTOR
-// ----------------------------------------------------
 static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     NSString *bootCountPath = @"/tmp/.boost_boot_counter";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -2272,9 +2269,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
-// ----------------------------------------------------
-// KHỐI %CTOR CHUẨN XÁC ĐÃ TRIỆT TIÊU LỖI RE-%INIT
-// ----------------------------------------------------
 %ctor {
     @autoreleasepool {
         if (!Titanium_CheckAndPreventBootloopUniversal()) {
@@ -2334,7 +2328,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             );
         });
 
-        // KHỞI TẠO MỘT LẦN DUY NHẤT Ở ĐÂY CHO TẤT CẢ
+        // Khởi tạo một lần duy nhất cho toàn bộ vòng đời tiến trình
         %init(Group_FastLaunch_SuperEngineV26);
         %init(Group_V26_FloatingWindow_PiP);
 
