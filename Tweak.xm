@@ -228,6 +228,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate;
 - (void)viewWillLayoutSubviews;
 - (void)viewDidLayoutSubviews;
+- (id)model;
 @end
 
 @interface SBFloatingDockController : NSObject
@@ -261,12 +262,15 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @interface SBHomeHardwareButtonActions : NSObject
 - (void)performSinglePressAction;
 - (void)performDoublePressAction;
+- (void)performTriplePressAction;
+- (void)performLongPressCancelled;
 @end
 
 @interface SBLockScreenManager : NSObject
 + (instancetype)sharedInstance;
 - (BOOL)isUILocked;
 - (void)unlockUIFromSource:(int)source withOptions:(id)options;
+- (void)lockUIFromSource:(int)source withOptions:(id)options;
 @end
 
 @interface SBControlCenterController : NSObject
@@ -296,22 +300,26 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @interface SBFolderView : UIView
 - (void)layoutSubviews;
 - (void)scrollViewDidScroll:(id)scrollView;
+- (void)willAnimate;
 @end
 
 @interface SBIconListView : UIView
 - (void)layoutIconsNow;
 - (void)layoutSubviews;
+- (void)setAlphaForAllIcons:(double)alpha;
 @end
 
 @interface SBIconView : UIView
 - (void)setIconImageInfo:(id)info;
 - (void)setHighlighted:(BOOL)highlighted;
 - (void)setTouchDownInIcon:(BOOL)touchDown;
+- (void)setAllowsCloseBox:(BOOL)allows;
 @end
 
 @interface SBFluidSwitcherViewController : UIViewController
 - (void)viewWillLayoutSubviews;
 - (void)viewDidLayoutSubviews;
+- (id)layoutState;
 @end
 
 @interface SBAppSwitcherSettings : NSObject
@@ -325,11 +333,13 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface FBScene : NSObject
 - (id)identifier;
+- (id)settings;
 @end
 
 @interface FBProcess : NSObject
 - (int)pid;
 - (id)workspace;
+- (id)bundleIdentifier;
 @end
 
 @interface RBSProcessIdentity : NSObject
@@ -358,6 +368,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface UIStatusBar : UIView
 - (void)requestStyle:(long long)style animated:(BOOL)animated;
+- (void)forceUpdateData:(BOOL)animated;
 @end
 
 @interface UIStatusBarStyleAttributes : NSObject
@@ -394,10 +405,12 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface SBWindow : UIWindow
 - (BOOL)_isSecure;
+- (void)setHidden:(BOOL)hidden;
 @end
 
 @interface SBRootFolderView : UIView
 - (void)layoutSubviews;
+- (void)setNeedsLayout;
 @end
 
 @interface SBSwitcherAppSuggestionViewController : UIViewController
@@ -463,6 +476,36 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (BOOL)isLocked;
 - (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
+@end
+
+@interface SBAttentionAwarenessClient : NSObject
+- (void)setAttentionAwarenessConfiguration:(id)config;
+- (void)resume;
+- (void)suspend;
+@end
+
+@interface SBIdleTimerGlobalCoordinator : NSObject
++ (instancetype)sharedInstance;
+- (void)resetIdleTimer;
+@end
+
+@interface SBAppLayout : NSObject
+- (id)allItems;
+- (long long)type;
+@end
+
+@interface SBFluidSwitcherGesture : NSObject
+- (long long)type;
+- (long long)state;
+@end
+
+@interface SBIconModel : NSObject
+- (id)allInstalledApplications;
+@end
+
+@interface SBApplicationInfo : NSObject
+- (NSString *)bundleIdentifier;
+- (NSString *)displayName;
 @end
 
 #define APEX_SYNC_MAGIC_V261 0x56323631
@@ -581,6 +624,52 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
             g_syncPayloadV261.targetFPS = (val > 0) ? val : 60;
             CFRelease(fpsVal);
         }
+        CFPropertyListRef overVal = CFPreferencesCopyAppValue(CFSTR("ForceOverclock144Hz"), PREF_DOMAIN);
+        if (overVal) {
+            g_syncPayloadV261.forceOverclock = CFBooleanGetValue((CFBooleanRef)overVal) ? 1 : 0;
+            CFRelease(overVal);
+        }
+        CFPropertyListRef dynVal = CFPreferencesCopyAppValue(CFSTR("ProMotionEngineBeta7"), PREF_DOMAIN);
+        if (dynVal) {
+            g_syncPayloadV261.dynamicInterpolation = CFBooleanGetValue((CFBooleanRef)dynVal) ? 1 : 0;
+            CFRelease(dynVal);
+        }
+        CFPropertyListRef touchVal = CFPreferencesCopyAppValue(CFSTR("TouchResponseBoost"), PREF_DOMAIN);
+        if (touchVal) {
+            g_syncPayloadV261.zeroLatencyTouch = CFBooleanGetValue((CFBooleanRef)touchVal) ? 1 : 0;
+            CFRelease(touchVal);
+        }
+        CFPropertyListRef keyVal = CFPreferencesCopyAppValue(CFSTR("KeyboardZeroLagV24"), PREF_DOMAIN);
+        if (keyVal) {
+            g_syncPayloadV261.keyboardZeroLagV3 = CFBooleanGetValue((CFBooleanRef)keyVal) ? 1 : 0;
+            CFRelease(keyVal);
+        }
+        CFPropertyListRef metalVal = CFPreferencesCopyAppValue(CFSTR("MetalHexBuffering"), PREF_DOMAIN);
+        if (metalVal) {
+            g_syncPayloadV261.smartBufferingLevel = CFBooleanGetValue((CFBooleanRef)metalVal) ? 6 : 4;
+            CFRelease(metalVal);
+        }
+        CFPropertyListRef exitVal = CFPreferencesCopyAppValue(CFSTR("FixAppExitStutter"), PREF_DOMAIN);
+        if (exitVal) {
+            g_syncPayloadV261.antiStutterExit = CFBooleanGetValue((CFBooleanRef)exitVal) ? 1 : 0;
+            CFRelease(exitVal);
+        }
+        CFPropertyListRef launchVal = CFPreferencesCopyAppValue(CFSTR("TurboAppLaunch"), PREF_DOMAIN);
+        if (launchVal) {
+            g_syncPayloadV261.fastAppLaunch = CFBooleanGetValue((CFBooleanRef)launchVal) ? 1 : 0;
+            CFRelease(launchVal);
+        }
+        CFPropertyListRef ramVal = CFPreferencesCopyAppValue(CFSTR("AggressiveRamClean"), PREF_DOMAIN);
+        if (ramVal) {
+            g_syncPayloadV261.aggressiveRamCleaner = CFBooleanGetValue((CFBooleanRef)ramVal) ? 1 : 0;
+            CFRelease(ramVal);
+        }
+        CFPropertyListRef thermVal = CFPreferencesCopyAppValue(CFSTR("AntiThermalThrottling"), PREF_DOMAIN);
+        if (thermVal) {
+            g_syncPayloadV261.thermalShield = CFBooleanGetValue((CFBooleanRef)thermVal) ? 1 : 0;
+            g_syncPayloadV261.lockFixedFpsWhenThermal = g_syncPayloadV261.thermalShield;
+            CFRelease(thermVal);
+        }
     }
     pthread_mutex_unlock(&g_syncLockV261);
 }
@@ -648,22 +737,22 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 @interface BoostConfigV261 : NSObject
 @property (nonatomic, assign) BOOL enabled;
+@property (nonatomic, strong) NSString *selectedLanguage;
 @property (nonatomic, assign) BOOL enableHzControl;
 @property (nonatomic, assign) NSInteger targetHz;
 @property (nonatomic, assign) BOOL enableFPSControl;
 @property (nonatomic, assign) NSInteger targetFPS;
 @property (nonatomic, assign) BOOL forceOverclock144Hz;
 @property (nonatomic, assign) BOOL proMotionEngineBeta7;
-@property (nonatomic, assign) BOOL keyboardZeroLagV3;
-@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
-@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
-@property (nonatomic, assign) BOOL fixAppExitStutter;
 @property (nonatomic, assign) BOOL touchResponseBoost;
-@property (nonatomic, assign) CGFloat animSpeed;
-@property (nonatomic, assign) BOOL turboAppLaunch;
+@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
+@property (nonatomic, assign) BOOL keyboardZeroLagV24;
 @property (nonatomic, assign) BOOL metalHexBuffering;
-@property (nonatomic, assign) BOOL antiThermalThrottling;
+@property (nonatomic, assign) BOOL fixAppExitStutter;
+@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
+@property (nonatomic, assign) BOOL turboAppLaunch;
 @property (nonatomic, assign) BOOL aggressiveRamClean;
+@property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL powerSaveMode;
 
 + (instancetype)sharedInstance;
@@ -719,24 +808,30 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
             return d;
         };
+        NSString * (^GetLiveString)(NSString *, NSString *) = ^NSString *(NSString *k, NSString *d) {
+            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
+            if (val != nil && [val isKindOfClass:[NSString class]]) return (NSString *)val;
+            if (diskDict && diskDict[k] != nil && [diskDict[k] isKindOfClass:[NSString class]]) return (NSString *)diskDict[k];
+            return d;
+        };
 
         self.enabled = GetLiveBool(@"Enabled", YES);
+        self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
         self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
         self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
         self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
         self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES);
-        self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
-        self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
-        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
         self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
-        self.animSpeed = 0.80f;
-        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
+        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
+        self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
-        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
+        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
+        self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
+        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
         self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
+        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
 
         if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
@@ -745,6 +840,14 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             self.targetHz = g_syncPayloadV261.targetHz;
             self.targetFPS = g_syncPayloadV261.targetFPS;
             self.forceOverclock144Hz = g_syncPayloadV261.forceOverclock;
+            self.proMotionEngineBeta7 = g_syncPayloadV261.dynamicInterpolation ? YES : NO;
+            self.touchResponseBoost = g_syncPayloadV261.zeroLatencyTouch ? YES : NO;
+            self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
+            self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel == 6) ? YES : NO;
+            self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
+            self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
+            self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
+            self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
         } else if (Titanium_IsSpringBoard()) {
             ApexV261Payload p;
             memset(&p, 0, sizeof(ApexV261Payload));
@@ -760,8 +863,9 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.shaderOptimization = 1;
             p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
             p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
-            p.keyboardZeroLagV3 = self.keyboardZeroLagV3 ? 1 : 0;
+            p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
             p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
+            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
             Titanium_WriteSyncPayloadV261(&p);
         }
     });
@@ -827,6 +931,13 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+
+- (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
+    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+        Titanium_PurgeProcessMemoryAggressively();
+    }
+    %orig(reason, report, description, completion);
+}
 %end
 
 %hook RBSLaunchRequest
@@ -847,6 +958,13 @@ static BoostConfigV261 *CFG261 = nil;
         mach_port_deallocate(mach_task_self(), curr);
     }
     %orig(scene, context, completion);
+}
+
+- (BOOL)_handleDelegateCallbacksWithOptions:(id)options isSuspended:(BOOL)suspended restoreState:(BOOL)restoreState {
+    if (IS_ACTIVE && CFG261.turboAppLaunch) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    return %orig(options, suspended, restoreState);
 }
 %end
 %end
@@ -877,6 +995,17 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart {
     %orig(shouldStart);
 }
+
+- (BOOL)isStartingStoppingOrCancellingPictureInPicture {
+    return %orig;
+}
+
+- (void)setSuspended:(BOOL)suspended {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(suspended);
+}
 %end
 
 %hook SBPIPController
@@ -896,6 +1025,20 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (UIEdgeInsets)pictureInPictureWindowMargin {
     return %orig;
+}
+
+- (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(pid, sceneId, animated, completion);
+}
+
+- (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(pid, sceneId);
 }
 %end
 
@@ -923,6 +1066,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)isPictureInPictureSuspended {
+    return %orig;
+}
+
+- (void)setRequiresLinearPlayback:(BOOL)requiresLinearPlayback {
+    %orig(requiresLinearPlayback);
+}
+
+- (BOOL)canStopPictureInPicture {
     return %orig;
 }
 %end
@@ -971,6 +1122,10 @@ static BoostConfigV261 *CFG261 = nil;
 - (CFTimeInterval)targetTimestamp {
     return %orig;
 }
+
+- (CFTimeInterval)timestamp {
+    return %orig;
+}
 %end
 
 %hook UIScreen
@@ -1013,6 +1168,15 @@ static BoostConfigV261 *CFG261 = nil;
 - (CGRect)nativeBounds {
     return %orig;
 }
+
+- (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
+    CADisplayLink *link = %orig(target, sel);
+    if (IS_ACTIVE && CFG261.enableHzControl) {
+        float r = (float)[CFG261 resolvedTargetHz];
+        [link setPreferredFrameRateRange:CAFrameRateRangeMake(r, r, r)];
+    }
+    return link;
+}
 %end
 
 %hook CADisplay
@@ -1041,6 +1205,13 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig(cadence);
 }
+
+- (BOOL)supportsDynamicRefresh {
+    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) {
+        return YES;
+    }
+    return %orig;
+}
 %end
 
 %hook SBIconController
@@ -1067,6 +1238,20 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+
+- (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(folder, animated, completion);
+}
+
+- (void)closeFolderAnimated:(BOOL)animated completion:(id)completion {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated, completion);
+}
 %end
 
 %hook SBFloatingDockController
@@ -1078,6 +1263,13 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)dismissFloatingDockIfPresentedAnimated:(BOOL)animated completionHandler:(id)completion {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated, completion);
+}
+
+- (void)presentFloatingDockIfPossible:(BOOL)animated completionHandler:(id)completion {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -1099,6 +1291,27 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig(scrollView);
 }
+
+- (void)willAnimate {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)prepareToOpen {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)cleanupAfterClose {
+    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+        Titanium_PurgeProcessMemoryAggressively();
+    }
+    %orig;
+}
 %end
 
 %hook SBIconListView
@@ -1114,6 +1327,17 @@ static BoostConfigV261 *CFG261 = nil;
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
+}
+
+- (void)setAlphaForAllIcons:(double)alpha {
+    %orig(alpha);
+}
+
+- (void)fadeInIcon:(id)icon {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(icon);
 }
 %end
 
@@ -1137,6 +1361,14 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig(touchDown);
 }
+
+- (void)setAllowsCloseBox:(BOOL)allows {
+    %orig(allows);
+}
+
+- (void)prepareForReuse {
+    %orig;
+}
 %end
 
 %hook SBFluidSwitcherViewController
@@ -1152,6 +1384,13 @@ static BoostConfigV261 *CFG261 = nil;
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
+}
+
+- (void)handleFluidSwitcherGesture:(id)gesture {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(gesture);
 }
 %end
 
@@ -1179,6 +1418,14 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)endRequiringWithReason:(id)reason {
     %orig(reason);
 }
+
+- (void)suspendWallpaperAnimationForReason:(id)reason {
+    %orig(reason);
+}
+
+- (void)resumeWallpaperAnimationForReason:(id)reason {
+    %orig(reason);
+}
 %end
 
 %hook SBBacklightController
@@ -1188,6 +1435,13 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (float)backlightFactor {
     return %orig;
+}
+
+- (void)animateBacklightToFactor:(float)factor duration:(double)duration source:(long long)source completion:(id)completion {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(factor, duration, source, completion);
 }
 %end
 
@@ -1205,6 +1459,10 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+
+- (void)cancelVolumeEvent {
+    %orig;
+}
 %end
 
 %hook SBMediaController
@@ -1214,6 +1472,27 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (BOOL)isPaused {
     return %orig;
+}
+
+- (BOOL)playForEventSource:(long long)source {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    return %orig(source);
+}
+
+- (BOOL)pauseForEventSource:(long long)source {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    return %orig(source);
+}
+
+- (BOOL)togglePlayPauseForEventSource:(long long)source {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    return %orig(source);
 }
 %end
 
@@ -1231,6 +1510,17 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+
+- (void)performTriplePressAction {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)performLongPressCancelled {
+    %orig;
+}
 %end
 
 %hook SBLockScreenManager
@@ -1243,6 +1533,20 @@ static BoostConfigV261 *CFG261 = nil;
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(source, options);
+}
+
+- (void)lockUIFromSource:(int)source withOptions:(id)options {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(source, options);
+}
+
+- (BOOL)attemptUnlockWithPasscode:(id)passcode finishUIUnlock:(BOOL)finish {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    return %orig(passcode, finish);
 }
 %end
 
@@ -1296,6 +1600,10 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)requestStyle:(long long)style animated:(BOOL)animated {
     %orig(style, animated);
 }
+
+- (void)forceUpdateData:(BOOL)animated {
+    %orig(animated);
+}
 %end
 
 %hook SBReachabilityManager
@@ -1306,11 +1614,22 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)deactivateReachabilityMode {
     %orig;
 }
+
+- (void)triggerReachability {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
 %end
 
 %hook SBWindow
 - (BOOL)_isSecure {
     return %orig;
+}
+
+- (void)setHidden:(BOOL)hidden {
+    %orig(hidden);
 }
 %end
 
@@ -1321,6 +1640,10 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+
+- (void)setNeedsLayout {
+    %orig;
+}
 %end
 
 %hook SBSwitcherAppSuggestionViewController
@@ -1328,6 +1651,10 @@ static BoostConfigV261 *CFG261 = nil;
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
+    %orig(animated);
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
 }
 %end
@@ -1360,6 +1687,10 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)setContentAlpha:(double)alpha {
     %orig(alpha);
 }
+
+- (void)prepareForReuse {
+    %orig;
+}
 %end
 
 %hook SBHomeScreenViewController
@@ -1391,6 +1722,35 @@ static BoostConfigV261 *CFG261 = nil;
 }
 %end
 
+%hook SBDisplayPowerLogReporter
+- (void)reportPowerLogEvent {
+    %orig;
+}
+%end
+
+%hook SBAttentionAwarenessClient
+- (void)setAttentionAwarenessConfiguration:(id)config {
+    %orig(config);
+}
+
+- (void)resume {
+    %orig;
+}
+
+- (void)suspend {
+    %orig;
+}
+%end
+
+%hook SBIdleTimerGlobalCoordinator
+- (void)resetIdleTimer {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
+    }
+    %orig;
+}
+%end
+
 %hook SBUIController
 - (BOOL)isAppSwitcherShowing {
     return %orig;
@@ -1409,6 +1769,13 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+
+- (void)lockFromSource:(int)source {
+    if (IS_ACTIVE) {
+        Titanium_PurgeProcessMemoryAggressively();
+    }
+    %orig(source);
+}
 %end
 
 %hook SpringBoard
@@ -1418,6 +1785,14 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (BOOL)isLocked {
     return %orig;
+}
+
+- (void)_reboot:(BOOL)arg1 {
+    %orig(arg1);
+}
+
+- (void)_relaunchSpringBoardNow {
+    %orig;
 }
 %end
 %end
@@ -1460,14 +1835,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setRootViewController:(UIViewController *)rootViewController {
-    if (IS_ACTIVE && CFG261.turboAppLaunch) {
+    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(rootViewController);
 }
 
 - (void)makeKeyAndVisible {
-    if (IS_ACTIVE && CFG261.turboAppLaunch) {
+    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -1487,14 +1862,14 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UITouch
 - (NSTimeInterval)timestamp {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         return CACurrentMediaTime();
     }
     return %orig;
 }
 
 - (CGPoint)preciseLocationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1502,7 +1877,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)precisePreviousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1511,7 +1886,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         if (currentTouchPhase == UITouchPhaseBegan || currentTouchPhase == UITouchPhaseMoved) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
@@ -1555,7 +1930,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)locationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1563,7 +1938,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)previousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1581,7 +1956,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIGestureRecognizer
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1593,7 +1968,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1601,21 +1976,21 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
 }
 
 - (void)setState:(UIGestureRecognizerState)state {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         if (state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
@@ -1642,14 +2017,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)delaysTouchesBegan {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         return NO;
     }
     return %orig;
 }
 
 - (BOOL)delaysTouchesEnded {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         return NO;
     }
     return %orig;
@@ -1678,7 +2053,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIPanGestureRecognizer
 - (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         %orig(NO);
         return;
     }
@@ -1686,7 +2061,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         %orig(NO);
         return;
     }
@@ -1737,7 +2112,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIScreenEdgePanGestureRecognizer
 - (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         %orig(NO);
         return;
     }
@@ -1745,7 +2120,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         %orig(NO);
         return;
     }
@@ -1780,7 +2155,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)_touchPositionForTouches:(id)touches {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -2003,7 +2378,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook SBAppSwitcherSettings
 - (void)setDeckSwitcherPageScale:(double)scaleValue {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.reduceMultitaskLag)) {
         %orig(1.0);
         return;
     }
@@ -2011,7 +2386,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (double)deckSwitcherPageScale {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.reduceMultitaskLag)) {
         return 1.0;
     }
     return %orig;
@@ -2032,7 +2407,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         thread_t currentMachThread = mach_thread_self();
         Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
@@ -2042,7 +2417,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         thread_t currentMachThread = mach_thread_self();
         Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
@@ -2052,7 +2427,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)clearAnimations {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         %orig;
         return;
     }
@@ -2060,7 +2435,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         %orig(NO);
         return;
     }
@@ -2068,21 +2443,21 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)updateReturnKey:(BOOL)arg1 {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1);
 }
 
 - (void)hardwareKeyboardAvailabilityChanged {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 
 - (void)setReturnKeyEnabled:(BOOL)enabled {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         %orig(YES);
         return;
     }
@@ -2090,35 +2465,35 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)returnKeyEnabled {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         return YES;
     }
     return %orig;
 }
 
 - (void)setInputMode:(id)inputMode {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(inputMode);
 }
 
 - (void)setDelegate:(id)delegate {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(delegate);
 }
 
 - (void)textChanged:(id)arg1 {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1);
 }
 
 - (void)deleteFromInput {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2129,7 +2504,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)showKeyboard {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2142,35 +2517,35 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UITextInputController
 - (void)_insertText:(id)text {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(text);
 }
 
 - (void)deleteBackward {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 
 - (void)replaceRange:(id)range withText:(id)text {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(range, text);
 }
 
 - (void)setMarkedText:(id)markedText selectedRange:(NSRange)selectedRange {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(markedText, selectedRange);
 }
 
 - (void)unmarkText {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2179,28 +2554,28 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UITextView
 - (void)insertText:(id)text {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(text);
 }
 
 - (void)deleteBackward {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 
 - (void)setContentOffset:(CGPoint)contentOffset {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(contentOffset);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(attributedText);
@@ -2229,28 +2604,28 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UITextField
 - (void)insertText:(id)text {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(text);
 }
 
 - (void)deleteBackward {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 
 - (void)setText:(NSString *)text {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(text);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV3) {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(attributedText);
@@ -2283,7 +2658,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (IS_ACTIVE && CFG261.metalHexBuffering) {
+    if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         %orig(6);
         return;
     }
@@ -2291,14 +2666,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (NSUInteger)maximumDrawableCount {
-    if (IS_ACTIVE && CFG261.metalHexBuffering) {
+    if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         return 6;
     }
     return %orig;
 }
 
 - (void)setLowLatencyMode:(BOOL)flag {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         %orig(YES);
         return;
     }
@@ -2306,14 +2681,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)lowLatencyMode {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         return YES;
     }
     return %orig;
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.vsyncAdaptiveBuffer)) {
         %orig(YES);
         return;
     }
@@ -2321,7 +2696,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)displaySyncEnabled {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.vsyncAdaptiveBuffer)) {
         return YES;
     }
     return %orig;
@@ -2343,7 +2718,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.quantumRenderShield)) {
         %orig(NO);
         return;
     }
@@ -2351,14 +2726,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)presentsWithTransaction {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.quantumRenderShield)) {
         return NO;
     }
     return %orig;
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)flag {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.quantumRenderShield)) {
         %orig(NO);
         return;
     }
@@ -2366,7 +2741,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)serverPresentsWithTransaction {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.quantumRenderShield)) {
         return NO;
     }
     return %orig;
@@ -2389,7 +2764,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (id)nextDrawable {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     return %orig;
@@ -2474,7 +2849,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)display {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2537,7 +2912,9 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        if (CFG261.syncModuleDelay || CFG261.isolateRenderPipeline) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        }
     }
     %orig(animated);
 }
@@ -2555,7 +2932,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+    if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             Titanium_PurgeProcessMemoryAggressively();
         });
@@ -2596,7 +2973,7 @@ static BoostConfigV261 *CFG261 = nil;
 %hook UIApplication
 - (void)_applicationDidEnterBackground {
     %orig;
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
             malloc_zone_pressure_relief(NULL, 0);
         });
@@ -2632,7 +3009,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIWindowScene
 - (void)_readySceneForDisplay {
-    if (IS_ACTIVE && CFG261.fixAppLaunchBlackScreen) {
+    if (IS_ACTIVE && (CFG261.fixAppLaunchBlackScreen || CFG261.antiBlackScreenLaunch)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2653,7 +3030,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook SBApplication
 - (void)setProcessState:(id)state {
-    if (IS_ACTIVE && CFG261.turboAppLaunch) {
+    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(state);
@@ -2680,7 +3057,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)didExitWithContext:(id)context {
-    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+    if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             Titanium_PurgeProcessMemoryAggressively();
         });
@@ -2691,7 +3068,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook SBMainWorkspace
 - (void)_handleApplicationProcessExited:(id)processDescription {
-    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+    if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             Titanium_PurgeProcessMemoryAggressively();
         });
@@ -2700,7 +3077,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)handleApplicationLaunch:(id)application {
-    if (IS_ACTIVE && CFG261.turboAppLaunch) {
+    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         thread_t currentMachThread = mach_thread_self();
         Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
@@ -2710,7 +3087,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)handleApplicationSuspended:(id)application {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
             malloc_zone_pressure_relief(NULL, 0);
         });
@@ -2722,7 +3099,7 @@ static BoostConfigV261 *CFG261 = nil;
 %hook SBAppSwitcherController
 - (void)switcherContentController:(id)contentController deletedItem:(id)deletedItem {
     %orig(contentController, deletedItem);
-    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+    if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             Titanium_PurgeProcessMemoryAggressively();
         });
@@ -2738,7 +3115,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+    if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             Titanium_PurgeProcessMemoryAggressively();
         });
@@ -2759,7 +3136,7 @@ static void Titanium_StartThermalWatchdogTimerV261(void) {
             if (!IS_ACTIVE) return;
             NSProcessInfoThermalState currentThermalState = [[NSProcessInfo processInfo] thermalState];
             g_liveThermalStateV261 = currentThermalState;
-            if (currentThermalState == NSProcessInfoThermalStateCritical && !CFG261.antiThermalThrottling) {
+            if (currentThermalState == NSProcessInfoThermalStateCritical && !CFG261.antiThermalThrottling && !CFG261.antiThermalThrottle) {
                 Titanium_PurgeProcessMemoryAggressively();
             }
         });
@@ -2773,7 +3150,7 @@ static void Titanium_StartPassiveRamDaemonV261(void) {
     dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
     dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 15.0 * NSEC_PER_SEC), 15.0 * NSEC_PER_SEC, 2.0 * NSEC_PER_SEC);
     dispatch_source_set_event_handler(ramTimerSource, ^{
-        if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+        if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.periodicRamClean || CFG261.machVMPurgeRam)) {
             Titanium_PurgeProcessMemoryAggressively();
         }
     });
