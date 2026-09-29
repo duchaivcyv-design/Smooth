@@ -940,11 +940,8 @@ static BoostConfigV261 *CFG261 = nil;
 }
 %end
 
-%hook RBSLaunchRequest
-- (BOOL)execute:(out id *)outContext error:(out id *)outError {
-    if (IS_ACTIVE && CFG261.turboAppLaunch) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
+%%hook RBSLaunchRequest
+- (BOOL)execute:(id *)outContext error:(id *)outError {
     return %orig(outContext, outError);
 }
 %end
@@ -1855,7 +1852,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setRootViewController:(UIViewController *)rootViewController {
-    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
+    if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(rootViewController);
@@ -1882,14 +1879,14 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UITouch
 - (NSTimeInterval)timestamp {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         return CACurrentMediaTime();
     }
     return %orig;
 }
 
 - (CGPoint)preciseLocationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1897,7 +1894,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)precisePreviousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1906,7 +1903,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         if (currentTouchPhase == UITouchPhaseBegan || currentTouchPhase == UITouchPhaseMoved) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
@@ -1950,7 +1947,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)locationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1958,7 +1955,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)previousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1976,7 +1973,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIGestureRecognizer
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1988,7 +1985,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1996,7 +1993,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
