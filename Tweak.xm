@@ -960,7 +960,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         return (self.targetHz > 0) ? self.targetHz : 60;
     }
     
-        if (self.proMotionEngineBeta7) {
+            if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
         BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
         if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 30;
@@ -1004,15 +1004,8 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
-%end   // <--- Đảm bảo khối %hook FBApplicationProcess phải được đóng bằng %end ở đây!
-%end   // <--- Và đóng cả %group nếu cần hoặc kiểm tra lại tổng thể group
-
-- (void)_finishInit {
-    if (IS_ACTIVE && CFG261.turboAppLaunch) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
+%end
+%end
 
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
