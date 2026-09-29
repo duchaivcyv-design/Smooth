@@ -2783,6 +2783,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 // Mở hook cho class tiếp theo (ví dụ CAMetalLayer hoặc class chứa các method dưới đây)
 %hook TênClassChứaMetalHoặcLayer 
 
+// Đảm bảo ở trên cùng có dòng: %hook CAMetalLayer (hoặc tên class tương ứng)
+
 - (NSUInteger)maximumDrawableCount {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         return 6;
@@ -2804,8 +2806,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     return %orig;
 }
-
-%end
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.vsyncAdaptiveBuffer)) {
@@ -2829,6 +2829,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(allow);
 }
+
+%end
 
 - (BOOL)allowsNextDrawableTimeout {
     if (IS_ACTIVE) {
