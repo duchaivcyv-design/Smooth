@@ -18,16 +18,30 @@
 
 extern char **environ;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t magic;
-    BOOL masterEnabled;
-    int32_t targetHz;
-    int32_t targetFPS;
-    BOOL isDynamic;
+    uint32_t masterEnabled;
+    int32_t  targetHz;
+    int32_t  targetFPS;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t tripleBuffering;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
     uint64_t updateSeq;
-} ApexSharedSyncPayload;
+    uint64_t lastHeartbeat;
+    char reserved[32];
+} ApexV25CorePayload;
 
-#define APEX_SYNC_MAGIC 0x41504558
+#define APEX_SYNC_MAGIC 0x56323530
 
 @interface LSApplicationWorkspace : NSObject
 + (instancetype)defaultWorkspace;
@@ -60,9 +74,6 @@ static inline UIAlertController *alertPresentationControllerHelper(UIAlertContro
     return alert;
 }
 
-// ==============================================================================
-// 🌐 BỘ ĐỌC LOCALIZATION.PLIST VÀ ÁNH XẠ NGÔN NGỮ
-// ==============================================================================
 static NSDictionary *g_LocDict = nil;
 
 static void PM_LoadLocalizationIfNeeded(void) {
@@ -121,7 +132,7 @@ static inline NSString *PM_Text(NSString *key) {
 
     NSString *langCode = PM_GetCurrentLanguageCode();
     if ([langCode isEqualToString:@"vi"]) {
-        return nil; // Tiếng Việt giữ nguyên text gốc
+        return nil;
     }
 
     NSDictionary *langSection = g_LocDict[langCode];
@@ -141,12 +152,20 @@ static inline NSString *PM_Text(NSString *key) {
     int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
     BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
 
-    ApexSharedSyncPayload payload;
+    ApexV25CorePayload payload;
+    memset(&payload, 0, sizeof(ApexV25CorePayload));
     payload.magic = APEX_SYNC_MAGIC;
-    payload.masterEnabled = enabled;
+    payload.masterEnabled = enabled ? 1 : 0;
     payload.targetHz = hz;
     payload.targetFPS = fps;
-    payload.isDynamic = dyn;
+    payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
+    payload.pipSyncEnabled = 1;
+    payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
+    payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
+    payload.tripleBuffering = prefs[@"MetalTripleBuffering"] ? ([prefs[@"MetalTripleBuffering"] boolValue] ? 1 : 0) : 1;
+    payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
+    payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+    payload.dynamicInterpolation = dyn ? 1 : 0;
     payload.updateSeq = (uint64_t)mach_absolute_time();
 
     int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -157,13 +176,10 @@ static inline NSString *PM_Text(NSString *key) {
     }
 }
 
-// ==============================================================================
-// 🛠 HÀM ÉP DỊCH TỪNG TIÊU ĐỀ CHỮ NHỎ (GROUP HEADER) & FOOTER
-// ==============================================================================
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
     NSDictionary *headerMap = @{
-        @"CÔNG TẮC TỔNG HỆ THỐNG V23.9.5.1 BETA": @"GROUP_MASTER",
-        @"ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 (ĐỘNG CƠ THÔNG MINH)": @"GROUP_SPECIAL",
+        @"CÔNG TẮC TỔNG HỆ THỐNG V25 SUPREME": @"GROUP_MASTER",
+        @"ĐẶC QUYỀN NÂNG CẤP V25 (ĐỘNG CƠ THÔNG MINH)": @"GROUP_SPECIAL",
         @"ĐIỀU PHỐI HZ & FPS (PHÂN NHÁNH 3 MỤC)": @"GROUP_HZ_FPS",
         @"TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)": @"GROUP_LAZY",
         @"GIA TỐC GIAO DIỆN & HIỆU ỨNG VẬT LÝ": @"GROUP_UI",
@@ -179,11 +195,10 @@ static inline NSString *PM_Text(NSString *key) {
         @"ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.": @"FOOTER_SPECIAL",
         @"Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.": @"FOOTER_HZ_FPS",
         @"Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ hoạ.": @"FOOTER_LAZY",
-        @"© 2026 BoostiPhone6s V23.9.5.1 BETA - Tối ưu hoàn chỉnh bởi ĐỨC LONG.": @"FOOTER_DEV"
+        @"© 2026 BoostiPhone6s V25 SUPREME - Tối ưu hoàn chỉnh bởi ĐỨC LONG.": @"FOOTER_DEV"
     };
 
     for (PSSpecifier *spec in specs) {
-        // 1. Dịch Tiêu đề nhóm (Group Header)
         NSString *header = [spec propertyForKey:@"label"];
         if (header && headerMap[header]) {
             NSString *transHeader = PM_Text(headerMap[header]);
@@ -193,7 +208,6 @@ static inline NSString *PM_Text(NSString *key) {
             }
         }
         
-        // 2. Dịch Chân trang chú thích (Footer Text)
         NSString *footer = [spec propertyForKey:@"footerText"];
         if (footer && footerMap[footer]) {
             NSString *transFooter = PM_Text(footerMap[footer]);
@@ -202,7 +216,6 @@ static inline NSString *PM_Text(NSString *key) {
             }
         }
 
-        // 3. Dịch các Key chức năng bình thường
         NSString *key = [spec propertyForKey:@"key"];
         if (key) {
             NSString *translated = PM_Text(key);
@@ -211,7 +224,6 @@ static inline NSString *PM_Text(NSString *key) {
                 [spec setProperty:translated forKey:@"label"];
             }
         } else {
-            // Dịch các nút bấm tĩnh
             NSString *lbl = [spec propertyForKey:@"label"];
             if ([lbl isEqualToString:@"Tác Giả"]) {
                 NSString *t = PM_Text(@"Author");
@@ -219,7 +231,7 @@ static inline NSString *PM_Text(NSString *key) {
             } else if ([lbl isEqualToString:@"Phiên Bản"]) {
                 NSString *t = PM_Text(@"Version");
                 if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
-            } else if ([lbl isEqualToString:@"Tham Gia Nhóm Hỗ Trợ Zalo"]) {
+            } else if ([lbl isEqualToString:@"Tham Gia Nhóm Hỗ TrỢ Zalo"]) {
                 NSString *t = PM_Text(@"SupportLink");
                 if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
             }
@@ -234,8 +246,6 @@ static inline NSString *PM_Text(NSString *key) {
         if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
         _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
-
-        // Quét và dịch toàn bộ giao diện: Header, Footer, Nút, Switch
         [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
     }
 
@@ -269,12 +279,12 @@ static inline NSString *PM_Text(NSString *key) {
     [self reloadSpecifiers];
 }
 
-// Cập nhật nhãn động (Tần số quét, FPS, và nút chọn ngôn ngữ)
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
+    BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : NO;
 
     NSString *hzAutoText = PM_Text(@"DYNAMIC_HZ_TITLE") ?: @"Tần Số Quét: Tự Động (Max %ld Hz)";
     NSString *hzLockText = PM_Text(@"LOCK_HZ_TITLE") ?: @"Tần Số Quét: Khóa %ld Hz";
@@ -293,8 +303,12 @@ static inline NSString *PM_Text(NSString *key) {
     for (PSSpecifier *spec in (NSArray *)_specifiers) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
-            spec.name = isDynamic ? [NSString stringWithFormat:hzAutoText, (long)hz]
-                                  : [NSString stringWithFormat:hzLockText, (long)hz];
+            if (isOverclock) {
+                spec.name = @"⚡️ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
+            } else {
+                spec.name = isDynamic ? [NSString stringWithFormat:hzAutoText, (long)hz]
+                                      : [NSString stringWithFormat:hzLockText, (long)hz];
+            }
             [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
             spec.name = isDynamic ? [NSString stringWithFormat:fpsAutoText, (long)fps]
@@ -442,7 +456,7 @@ static inline NSString *PM_Text(NSString *key) {
     notify_post(NOTIFY_UIKIT_RELOAD);
     notify_post(NOTIFY_HARDWARE_SYNC);
 
-    if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"SelectedLanguage"]) {
+    if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"]) {
         _allSavedSpecifiers = nil;
         [self setupNavigationItems];
         [self reloadSpecifiers];
@@ -477,9 +491,6 @@ static inline NSString *PM_Text(NSString *key) {
     [self reloadSpecifiers];
 }
 
-// ==============================================================================
-// 🌐 POPUP CHỌN NGÔN NGỮ ACTIONSHEET
-// ==============================================================================
 - (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
     NSString *title = PM_Text(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
@@ -564,7 +575,7 @@ static inline NSString *PM_Text(NSString *key) {
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    NSString *alertTitle = PM_Text(@"TITLE_HZ") ?: @"CHỌN TẦN SỐ QUÉT HỆ THỐNG (HZ)";
+    NSString *alertTitle = PM_Text(@"TITLE_HZ") ?: @"CHỌN TẦN SỐ QUÉT HỆ THỐNG & PIP (HZ)";
     UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle
                                                                        message:nil
                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
@@ -644,7 +655,7 @@ static inline NSString *PM_Text(NSString *key) {
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V23.9.5.1 BETA";
+    return @"V25 SUPREME";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -670,9 +681,6 @@ static inline NSString *PM_Text(NSString *key) {
     });
 }
 
-// ==============================================================================
-// 🔘 ĐỔI TIẾNG CHO NÚT "HÀNH ĐỘNG" TRÊN GÓC PHẢI
-// ==============================================================================
 - (void)setupNavigationItems {
     NSString *btnTitle = PM_Text(@"NAV_ACTIONS") ?: @"Hành Động";
     UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:btnTitle
@@ -687,9 +695,9 @@ static inline NSString *PM_Text(NSString *key) {
     NSString *title = PM_Text(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *respringText = PM_Text(@"RESPRING") ?: @" Respring Nhanh";
-    NSString *srebootText = PM_Text(@"SREBOOT") ?: @" Khởi Động Không Gian Người Dùng (SReboot)";
-    NSString *resetText = PM_Text(@"RESET") ?: @" Đặt Lại Cấu Hình Mặc Định";
+    NSString *respringText = PM_Text(@"RESPRING") ?: @"⚡️ Respring Nhanh";
+    NSString *srebootText = PM_Text(@"SREBOOT") ?: @"🔥 Khởi Động Không Gian Người Dùng (SReboot)";
+    NSString *resetText = PM_Text(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định";
     NSString *closeText = PM_Text(@"CLOSE") ?: @"Đóng";
 
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -751,6 +759,7 @@ static inline NSString *PM_Text(NSString *key) {
         notify_post(NOTIFY_HARDWARE_SYNC);
 
         [self ensureDefaultSettingsExist];
+        [self updateDynamicTitles];
         _allSavedSpecifiers = nil;
         [self setupNavigationItems];
         [self reloadSpecifiers];
