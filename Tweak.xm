@@ -1161,7 +1161,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 %end
 
-%hook TênClassCầnHook // Phải có khai báo hook lớp ở đây
+%hook TênClassCầnHook // Thay tên class chính xác vào đây nhé
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     Titanium_ReloadSharedSyncStateV261();
@@ -1191,8 +1191,6 @@ static BoostConfigV261 *CFG261 = nil;
     %orig(CAFrameRateRangeMake(rate, rate, rate));
 }
 
-%end
-
 - (BOOL)isPaused {
     return %orig;
 }
@@ -1212,6 +1210,7 @@ static BoostConfigV261 *CFG261 = nil;
 - (CFTimeInterval)timestamp {
     return %orig;
 }
+
 %end
 
 %hook UIScreen
