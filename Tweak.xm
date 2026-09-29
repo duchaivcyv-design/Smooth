@@ -1005,7 +1005,6 @@ static BoostConfigV261 *CFG261 = nil;
     %orig;
 }
 %end
-%end
 
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
