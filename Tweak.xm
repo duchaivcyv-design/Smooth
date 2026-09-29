@@ -3307,6 +3307,15 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 %ctor {
     @autoreleasepool {
+        // Chống phình to đa nhiệm / ép reset layout switcher về chuẩn gốc
+        if (Titanium_IsSpringBoard()) {
+            [[NSNotificationCenter defaultCenter] addObserverForName:@"SBAppSwitcherVisibilityChangedNotification" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+                // Ép buộc làm mới toàn bộ cửa sổ chính của SpringBoard để xóa sạch trạng thái kẹt khung hình, phóng to
+                [[[UIApplication sharedApplication] keyWindow] setNeedsLayout];
+                [[[UIApplication sharedApplication] keyWindow] layoutIfNeeded];
+            }];
+        }
+
         NSString *processName = [[NSProcessInfo processInfo] processName];
         NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
 
