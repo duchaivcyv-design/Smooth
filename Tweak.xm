@@ -3339,9 +3339,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately
         );
-
-        // Khởi động các group hook của tweak
-        %init(Group_FastLaunch_SuperEngineV261);
     }
 }
 
