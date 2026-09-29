@@ -12,7 +12,7 @@ TWEAK_NAME = BoostiPhone6s
 BUNDLE_NAME = BoostiPhone6sPrefs
 
 # Mã nguồn Tweak chính
-BoostiPhone6s_FILES = Tweak.xm
+BoostiPhone6s_FILES = RootListController.m
 BoostiPhone6s_CFLAGS = -fobjc-arc -O3 -Wall -Wno-error -Wno-deprecated-declarations -Wno-unknown-warning-option -Wno-unused-variable -Wno-unused-function -Wno-implicit-function-declaration -Wno-deprecated-non-prototype -fno-autolink
 BoostiPhone6s_FRAMEWORKS = UIKit Foundation CoreGraphics Metal QuartzCore
 BoostiPhone6s_LDFLAGS = -Wl,-dead_strip -Wl,-undefined,dynamic_lookup
