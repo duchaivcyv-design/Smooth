@@ -3430,6 +3430,29 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
+static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName) {
+    if (!progName) return NO;
+    if (strstr(progName, "ReportCrash") || strstr(progName, "crashreporterd") || 
+        strstr(progName, "panic_report") || strstr(progName, "analyticsd") ||
+        strstr(progName, "symptomsd") || strstr(progName, "logd")) {
+        return NO;
+    }
+    if (bundleID) {
+        if ([bundleID hasPrefix:@"com.apple.crashreport"] || 
+            [bundleID hasPrefix:@"com.apple.ReportCrash"] ||
+            [bundleID isEqualToString:@"com.apple.CoreAuthUI"]) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+static void Titanium_ReloadPreferencesV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
+        [CFG261 loadSettings];
+    }
+}
+
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
