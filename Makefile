@@ -3,6 +3,7 @@ TARGET := iphone:clang:latest:15.0
 
 DEBUG = 0
 FINALPACKAGE = 1
+THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
@@ -46,8 +47,16 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
+# CẤU HÌNH LDFLAGS ĐẶC TRỊ PHÂN VÙNG ROOTHIDE & ROOTLESS
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
-                            -Wl,-undefined,dynamic_lookup
+                            -Wl,-undefined,dynamic_lookup \
+                            -Wl,-install_name,@rpath/BoostiPhone6sCore.dylib \
+                            -Wl,-rpath,/Library/Frameworks \
+                            -Wl,-rpath,/var/jb/Library/Frameworks \
+                            -Wl,-rpath,/usr/lib \
+                            -Wl,-rpath,/var/jb/usr/lib \
+                            -Wl,-rpath,/Library/MobileSubstrate/DynamicLibraries \
+                            -Wl,-rpath,/var/jb/Library/MobileSubstrate/DynamicLibraries
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -59,7 +68,7 @@ BOOST_PLIST_SRC = BoostiPhone6s/Layout/Library/MobileSubstrate/DynamicLibraries/
 
 after-stage::
 	@echo ""
-	@echo "[V24.7.1] Synchronizing MobileSubstrate filter plist..."
+	@echo "[V26.1] Synchronizing MobileSubstrate filter plist for Dual-Environment..."
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"; \
 	mkdir -p "$$TARGET_DIR"; \
 	if [ -f "$(BOOST_PLIST_NAME)" ]; then \
@@ -80,7 +89,7 @@ after-stage::
 
 before-package::
 	@echo ""
-	@echo "Finalizing Rootless Package NEXT UPDATE DEBUG..."
+	@echo "Finalizing Universal Package (Rootless + RootHide)..."
 	@echo ""
 	
 	@mkdir -p $(THEOS_STAGING_DIR)/DEBIAN
@@ -112,7 +121,7 @@ before-package::
 	else \
 	    echo "  [FAIL] Filter Plist MISSING!"; \
 	fi; \
-	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
+	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6s.bundle" ] || [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
 	    echo "  [OK] Settings Bundle verified!"; \
 	else \
 	    echo "  [FAIL] Settings Bundle MISSING!"; \
