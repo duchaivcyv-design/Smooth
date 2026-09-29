@@ -1151,14 +1151,20 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (CGFloat)_refreshRate {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return %orig;
+    }
     return (CGFloat)[CFG261 resolvedTargetHz];
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) { %orig(rate); return; }
-    %orig((CGFloat)[CFG261 resolvedTargetHz]);
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        %orig(rate);
+        return;
+    }
+    CGFloat targetRate = (CGFloat)[CFG261 resolvedTargetHz];
+    %orig(targetRate);
 }
 
 - (CGRect)bounds {
