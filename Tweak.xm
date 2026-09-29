@@ -981,12 +981,14 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (self.proMotionEngineBeta7) return [self resolvedTargetHz];
     return (self.targetFPS > 0) ? self.targetFPS : 60;
 }
-@end
+@end // Kết thúc lớp Objective-C của BoostConfigV261
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 
+// Bắt đầu Group
 %group Group_FastLaunch_SuperEngineV261
+
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
@@ -1004,6 +1006,8 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+%end
+
 %end
 
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
