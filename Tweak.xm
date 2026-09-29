@@ -1151,12 +1151,15 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 
 %group Group_Display_SpringBoardV261
-%hook CADisplayLink
-- (NSInteger)preferredFramesPerSecond {
-    Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || !CFG261.enableFPSControl) return %orig;
-    return [CFG261 resolvedTargetFPS];
+%hook SBAppSwitcherController
+- (void)viewDidLayoutSubviews {
+    %orig;
+    if ([self respondsToSelector:@selector(view)]) {
+        UIView *switcherView = [self view];
+        switcherView.transform = CGAffineTransformIdentity;
+    }
 }
+%end
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     Titanium_ReloadSharedSyncStateV261();
@@ -2757,6 +2760,25 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     %orig(count);
 }
 
+- (void)didMoveToSuperlayer {
+    %orig;
+    if (self.respondsToSelector(@selector(setAllowsGroupOpacity:))) {
+        self.allowsGroupOpacity = NO; // Tắt bão hòa nhóm mờ không cần thiết để tăng tốc độ render GPU
+    }
+}
+%end
+
+%hook CADisplayLink
+- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
+    if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
+        self.preferredFramesPerSecond = 60; // Đảm bảo giữ cứng nhịp 60FPS mượt mà cho iPhone 6s
+    }
+    %orig;
+}
+%end
+
+%end
+
 - (NSUInteger)maximumDrawableCount {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         return 6;
@@ -3251,9 +3273,17 @@ static void Titanium_StartThermalWatchdogTimerV261(void) {
 
 static void Titanium_StartPassiveRamDaemonV261(void) {
     if (!Titanium_IsSpringBoard()) return;
+    
+    // Dùng static để giữ lại source timer, tránh bị thu hồi bộ nhớ khi thoát hàm
+    static dispatch_source_t ramTimerSource = nil;
+    if (ramTimerSource) return; // Tránh khởi tạo lặp lại nhiều lần
+
     dispatch_queue_t daemonQueue = dispatch_queue_create("com.titanium.v261.ramdaemon", DISPATCH_QUEUE_SERIAL);
-    dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
-    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 20.0 * NSEC_PER_SEC), 20.0 * NSEC_PER_SEC, 5.0 * NSEC_PER_SEC);
+    ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
+    
+    // Ép giãn chu kỳ lên 90.0 giây (1 phút rưỡi) thay vì 20 giây để chip A9 có thời gian nghỉ (idle), hạ nhiệt hoàn toàn
+    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 90.0 * NSEC_PER_SEC), 90.0 * NSEC_PER_SEC, 15.0 * NSEC_PER_SEC);
+    
     dispatch_source_set_event_handler(ramTimerSource, ^{
         if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
             Titanium_PurgeProcessMemoryAggressively();
@@ -3307,15 +3337,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 %ctor {
     @autoreleasepool {
-        // Chống phình to đa nhiệm / ép reset layout switcher về chuẩn gốc
-        if (Titanium_IsSpringBoard()) {
-            [[NSNotificationCenter defaultCenter] addObserverForName:@"SBAppSwitcherVisibilityChangedNotification" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-                // Ép buộc làm mới toàn bộ cửa sổ chính của SpringBoard để xóa sạch trạng thái kẹt khung hình, phóng to
-                [[[UIApplication sharedApplication] keyWindow] setNeedsLayout];
-                [[[UIApplication sharedApplication] keyWindow] layoutIfNeeded];
-            }];
-        }
-
         NSString *processName = [[NSProcessInfo processInfo] processName];
         NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
 
@@ -3323,7 +3344,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             return;
         }
 
-        // 1. Khởi tạo cấu hình Singleton trên luồng nền (Giữ nguyên cả 2 cách viết của đồng chí)
+        // 1. Khởi tạo cấu hình Singleton trên luồng nền
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             Class configClass = NSClassFromString(@"BoostConfigV261");
             if (configClass) {
@@ -3334,14 +3355,13 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             }
         });
 
-        // 2. Tăng độ trễ lên 3.5 giây để SpringBoard check-in hoàn toàn với hệ thống, triệt tiêu 100% lỗi Watchdog Timeout 180s
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 2. Khởi tạo các nhóm Hook với độ trễ an toàn để tránh Watchdog Timeout
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             
-            // Đẩy toàn bộ quá trình %init sang hàng đợi ngầm để bảo vệ tuyệt đối Main Thread không bị block
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
                 Titanium_StartThermalWatchdogTimerV261();
 
-                // Đăng ký toàn bộ các thông báo reload từ cả 2 khối
+                // Đăng ký nhận thông báo reload cấu hình từ PreferenceLoader / Prefs
                 CFNotificationCenterAddObserver(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     NULL,
@@ -3358,46 +3378,25 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
                     NULL,
                     CFNotificationSuspensionBehaviorDeliverImmediately
                 );
-                CFNotificationCenterAddObserver(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    NULL,
-                    reloadPrefsNotificationV261,
-                    CFSTR(NOTIFY_RELOAD),
-                    NULL,
-                    CFNotificationSuspensionBehaviorCoalesce
-                );
-                CFNotificationCenterAddObserver(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    NULL,
-                    reloadPrefsNotificationV261,
-                    CFSTR(NOTIFY_UIKIT_RELOAD),
-                    NULL,
-                    CFNotificationSuspensionBehaviorCoalesce
-                );
 
-                // Thực thi nạp toàn bộ nhóm Hook an toàn (Được gom làm một lần duy nhất để tránh lỗi re-%init)
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    // Nạp các nhóm tối ưu chung toàn hệ thống
                     %init(Group_FastLaunch_SuperEngineV261);
                     %init(Group_V261_FloatingWindow_PiP);
                     %init(Group_ZeroLatencyTouch_PhysicsV261);
                     %init(Group_MetalGraphics_OptV261);
 
                     if (Titanium_IsSpringBoard()) {
+                        // Nhóm chuyên biệt cho SpringBoard và ép xung Hz/FPS màn hình chính
                         %init(Group_Display_SpringBoardV261);
                         %init(Group_SpringBoard_ProcessManagerV261);
 
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             Titanium_StartPassiveRamDaemonV261();
                         });
                     } else {
-                        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                                          object:nil
-                                                                           queue:[NSOperationQueue mainQueue]
-                                                                      usingBlock:^(NSNotification *notificationObserver) {
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                                %init(Group_UIKit_ThirdParty_IsolatedV261);
-                            });
-                        }];
+                        // SỬA TRIỆT ĐỂ LỖI KHÔNG TIÊM APP: Kích hoạt trực tiếp nhóm UIKit cho ứng dụng bên thứ 3 ngay lập tức thay vì đợi thông báo rườm rà
+                        %init(Group_UIKit_ThirdParty_IsolatedV261);
                     }
 
                     if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
