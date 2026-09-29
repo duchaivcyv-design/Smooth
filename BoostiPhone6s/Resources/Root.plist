@@ -9,7 +9,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V25 SUPREME</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V26 BETA</string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
@@ -38,14 +38,14 @@
 			<string>SelectedLanguage</string>
 		</dict>
 
-		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP ĐỘNG CƠ THÔNG MINH ==================== -->
+		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V26 (HEX BUFFERING) ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V25 (ĐỘNG CƠ THÔNG MINH)</string>
+			<string>ĐẶC QUYỀN NÂNG CẤP V26 (HEX BUFFERING 6 TẦNG)</string>
 			<key>footerText</key>
-			<string>ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.</string>
+			<string>ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và kích hoạt Hex Buffering (6 tầng Metal) thông minh.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -69,9 +69,9 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>HeavyEffectAntiLagV24</string>
+			<string>MetalHexBuffering</string>
 			<key>label</key>
-			<string>Chống Lag Liquid Glass</string>
+			<string>Metal Hex Buffering (6 Tầng Đệm)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -539,20 +539,6 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>MetalTripleBuffering</string>
-			<key>label</key>
-			<string>Metal Triple Buffering</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
 			<string>GameFpsStabilizer</string>
 			<key>label</key>
 			<string>Ổn Định Khung Hình Chơi Game</string>
@@ -677,7 +663,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -709,7 +695,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V25 SUPREME - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V26 BETA - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -737,6 +723,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V25 SUPREME</string>
+	<string>BoostiPhone6s V26 SUPREME</string>
 </dict>
 </plist>
