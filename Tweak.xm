@@ -2754,8 +2754,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %group Group_MetalGraphics_OptV261
 
-%group Group_MetalGraphics_OptV261
-
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
