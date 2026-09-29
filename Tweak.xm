@@ -91,9 +91,10 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
-    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist", root];
+    // Đồng bộ chính xác tên domain plist là com.titanium.boostiphone6s
+    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.titanium.boostiphone6s.plist", root];
     if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
-    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.titanium.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
     return p1;
 }
@@ -928,6 +929,25 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetHz {
+    // Đọc trực tiếp file plist hệ thống để các app bên thứ ba nhận diện tức thì
+    NSString *resolvedPath = Titanium_ResolvePrefPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
+        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
+        if (dict) {
+            BOOL masterOn = dict[@"Enabled"] ? [dict[@"Enabled"] boolValue] : YES;
+            if (!masterOn) return 60;
+            
+            BOOL hzCtrl = dict[@"EnableHzControl"] ? [dict[@"EnableHzControl"] boolValue] : YES;
+            if (hzCtrl && dict[@"TargetRefreshRate"]) {
+                NSInteger val = [dict[@"TargetRefreshRate"] integerValue];
+                if (val >= 15 && val <= 144) return val;
+            }
+            if (dict[@"ForceOverclock144Hz"] && [dict[@"ForceOverclock144Hz"] boolValue]) return 144;
+            if (dict[@"PowerSaveMode"] && [dict[@"PowerSaveMode"] boolValue]) return 15;
+        }
+    }
+    
+    // Dự phòng qua cơ chế payload hiện tại
     Titanium_ReloadSharedSyncStateV261();
     if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.masterEnabled) {
         if (g_syncPayloadV261.forceOverclock) return 144;
@@ -939,27 +959,28 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (!self.enabled || !self.enableHzControl) return 60;
     if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
-    
-    if (self.targetHz >= 15 && self.targetHz <= 144) {
-        return self.targetHz;
-    }
-    
-    if (self.antiThermalThrottling) {
-        return 60;
-    }
-    
-    if (self.proMotionEngineBeta7) {
-        CFTimeInterval now = CACurrentMediaTime();
-        BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
-        if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 15;
-        if (g_liveThermalStateV261 == NSProcessInfoThermalStateSerious) return isInteracting ? 60 : 30;
-        NSInteger peakHz = (self.targetHz >= 15 && self.targetHz <= 144) ? self.targetHz : 120;
-        return isInteracting ? peakHz : 30;
-    }
-    return (self.targetHz >= 15 && self.targetHz <= 144) ? self.targetHz : 60;
+    if (self.targetHz >= 15 && self.targetHz <= 144) return self.targetHz;
+    return 60;
 }
 
 - (NSInteger)resolvedTargetFPS {
+    NSString *resolvedPath = Titanium_ResolvePrefPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
+        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
+        if (dict) {
+            BOOL masterOn = dict[@"Enabled"] ? [dict[@"Enabled"] boolValue] : YES;
+            if (!masterOn) return 60;
+            
+            BOOL fpsCtrl = dict[@"EnableFPSControl"] ? [dict[@"EnableFPSControl"] boolValue] : YES;
+            if (fpsCtrl && dict[@"TargetFPSRate"]) {
+                NSInteger val = [dict[@"TargetFPSRate"] integerValue];
+                if (val >= 15 && val <= 144) return val;
+            }
+            if (dict[@"ForceOverclock144Hz"] && [dict[@"ForceOverclock144Hz"] boolValue]) return 144;
+            if (dict[@"PowerSaveMode"] && [dict[@"PowerSaveMode"] boolValue]) return 15;
+        }
+    }
+    
     Titanium_ReloadSharedSyncStateV261();
     if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.masterEnabled) {
         if (g_syncPayloadV261.targetFPS >= 15 && g_syncPayloadV261.targetFPS <= 144) {
@@ -970,16 +991,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (!self.enabled || !self.enableFPSControl) return 60;
     if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
-    
-    if (self.targetFPS >= 15 && self.targetFPS <= 144) {
-        return self.targetFPS;
-    }
-    
-    if (self.antiThermalThrottling) {
-        return 60;
-    }
-    if (self.proMotionEngineBeta7) return [self resolvedTargetHz];
-    return (self.targetFPS >= 15 && self.targetFPS <= 144) ? self.targetFPS : 60;
+    if (self.targetFPS >= 15 && self.targetFPS <= 144) return self.targetFPS;
+    return 60;
 }
 @end
 
