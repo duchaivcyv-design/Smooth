@@ -2234,6 +2234,11 @@ static void Titanium_LaunchAllModulesInsideAppV26(void) {
 
 %ctor {
     @autoreleasepool {
+        // --- TÍCH HỢP CHỐNG TREO RESPRING / BOOTLOOP CHO MỌI ĐỜI MÁY (6s - 15Prm) ---
+        if (!Titanium_CheckAndPreventBootloopUniversal()) {
+            return; // Kẹt vòng lặp respring -> Tự ngắt tweak để cứu máy ngay lập tức
+        }
+
         NSString *proc = [[NSProcessInfo processInfo] processName];
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
