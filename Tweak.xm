@@ -995,6 +995,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %end
 
+%hook FBProcess
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         Titanium_PurgeProcessMemoryAggressively();
@@ -1026,7 +1027,6 @@ static BoostConfigV261 *CFG261 = nil;
     }
     return %orig(options, suspended, restoreState);
 }
-%end
 %end
 
 %group Group_V261_FloatingWindow_PiP
