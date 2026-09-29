@@ -80,10 +80,10 @@ after-stage::
 	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	    echo "[OK] Found in Layout path: Copied to $$TARGET_DIR/"; \
 	else \
-	    echo "[WARN] $(BOOST_PLIST_NAME) not found! Generating safe 3-bundle filter..."; \
-	    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    echo "[WARN] $(BOOST_PLIST_NAME) not found! Generating safe 3-bundle filter (No backboardd/CoreFoundation)..."; \
+	    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t\t<string>Preferences</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	    echo "[OK] Auto-generated safe 3-bundle filter plist!"; \
+	    echo "[OK] Auto-generated safe filter plist!"; \
 	fi
 	@echo ""
 
