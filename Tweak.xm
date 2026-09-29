@@ -3502,12 +3502,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             %init(Group_Display_SpringBoardV261);
             %init(Group_SpringBoard_ProcessManagerV261);
 
-            // Màn hình khóa (LockScreen) & Trung tâm thông báo (CoverSheet)
-            Class csClass = NSClassFromString(@"CSCoverSheetViewController");
-            if (csClass) {
-                %init(Group_CoverSheet_LockScreenV261, CoverSheet = csClass);
-            }
-
             // Trung tâm điều khiển (Control Center)
             Class ccClass = NSClassFromString(@"CCUIModularControlCenterOverlayViewController");
             if (ccClass) {
