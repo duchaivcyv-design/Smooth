@@ -1,22 +1,75 @@
+#!/bin/sh
 set -e
 
-if [ -d "/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then
-    chmod -R 755 /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
-    chown -R mobile:mobile /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
+# TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ROOTLESS / ROOTHIDE)
+JB_ROOT=""
+if [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
+    JB_ROOT="$ROOTLESS_PATH"
+elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
+    JB_ROOT="$JB_ROOT_PATH"
+elif [ -d "/var/jb" ]; then
+    JB_ROOT="/var/jb"
+else
+    # Quét phân vùng ngẫu nhiên dạng /var/jb-xxxxxxxx của RootHide
+    ROOTHIDE_DIR=$(find /var -maxdepth 1 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    if [ -n "$ROOTHIDE_DIR" ] && [ -d "$ROOTHIDE_DIR" ]; then
+        JB_ROOT="$ROOTHIDE_DIR"
+    else
+        JB_ROOT=""
+    fi
 fi
 
-if [ -f "/var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist" ]; then
-    chmod 644 /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
-    chown mobile:mobile /var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist 2>/dev/null || true
+# PHÂN QUYỀN BUNDLE CÀI ĐẶT
+BUNDLE_PATHS="
+$JB_ROOT/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+$JB_ROOT/Library/PreferenceBundles/BoostiPhone6s.bundle
+/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle
+"
+
+for B_PATH in $BUNDLE_PATHS; do
+    if [ -d "$B_PATH" ]; then
+        chmod -R 755 "$B_PATH" 2>/dev/null || true
+        chown -R mobile:mobile "$B_PATH" 2>/dev/null || true
+        if command -v uicache &> /dev/null; then
+            uicache -p "$B_PATH" 2>/dev/null || true
+        fi
+    fi
+done
+
+# PHÂN QUYỀN PREFERENCELOADER PLIST
+PLIST_PATHS="
+$JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
+$JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist
+$JB_ROOT/Library/PreferenceLoader/BoostiPhone6sPrefs.plist
+/var/jb/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
+/var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist
+"
+
+for P_PATH in $PLIST_PATHS; do
+    if [ -f "$P_PATH" ]; then
+        chmod 644 "$P_PATH" 2>/dev/null || true
+        chown mobile:mobile "$P_PATH" 2>/dev/null || true
+    fi
+done
+
+# KHỞI TẠO THƯ MỤC CHỨA CẤU HÌNH MOBILE
+PREF_DIR="$JB_ROOT/var/mobile/Library/Preferences"
+if [ -n "$JB_ROOT" ] && [ ! -d "$PREF_DIR" ]; then
+    mkdir -p "$PREF_DIR" 2>/dev/null || true
+    chmod 755 "$PREF_DIR" 2>/dev/null || true
+    chown mobile:mobile "$PREF_DIR" 2>/dev/null || true
 fi
 
+# XÓA TRẠNG THÁI SAFE MODE CŨ NẾU CÓ
 defaults delete com.taojb.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
 defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
 
-killall cfprefsd 2>/dev/null || true
+# LÀM SẠCH BỘ NHỚ ĐỆM CẤU HÌNH & GỬI TÍN HIỆU ĐỒNG BỘ
+killall -9 cfprefsd 2>/dev/null || true
 
-if command -v uicache &> /dev/null; then
-    uicache -p /var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle 2>/dev/null || true
+if command -v notifyutil &> /dev/null; then
+    notifyutil -p com.taojb.boostiphone6s/ReloadPrefs 2>/dev/null || true
 fi
 
 exit 0
