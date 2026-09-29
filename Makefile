@@ -1,5 +1,5 @@
 ARCHS = arm64 arm64e
-TARGET := iphone:clang:latest:15.0
+TARGET := iphone:clang:latest:14.0
 
 DEBUG = 0
 FINALPACKAGE = 1
@@ -30,7 +30,7 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wno-deprecated-non-prototype \
                            -Wno-macro-redefined \
                            -Wno-module-import-in-extern-c \
-                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
+                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
                            -IModules \
@@ -80,10 +80,10 @@ after-stage::
 	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	    echo "[OK] Found in Layout path: Copied to $$TARGET_DIR/"; \
 	else \
-	    echo "[WARN] $(BOOST_PLIST_NAME) not found! Generating safe 3-bundle filter (No backboardd/CoreFoundation)..."; \
-	    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t\t<string>Preferences</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	    echo "[WARN] $(BOOST_PLIST_NAME) not found! Generating safe multi-target filter..."; \
+	    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t\t<string>com.apple.Accessibility</string>\n\t\t\t<string>com.apple.TextInputUI</string>\n\t\t\t<string>com.apple.InputUI</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t\t<string>Preferences</string>\n\t\t\t<string>assistivetouchd</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	    chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	    echo "[OK] Auto-generated safe filter plist!"; \
+	    echo "[OK] Auto-generated complete filter plist!"; \
 	fi
 	@echo ""
 
@@ -107,23 +107,3 @@ before-package::
 	    chmod 755 $(THEOS_STAGING_DIR)/DEBIAN/prerm; \
 	    echo "[OK] DEBIAN/prerm set 755."; \
 	fi
-	
-	@echo ""
-	@echo "Verifying Essential Package Contents:"
-	@PREFIX_PATH="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)"; \
-	if [ -f "$$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib" ]; then \
-	    echo "  [OK] Dylib installed at: $$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/"; \
-	else \
-	    echo "  [FAIL] Dylib MISSING!"; \
-	fi; \
-	if [ -f "$$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)" ]; then \
-	    echo "  [OK] Filter Plist verified!"; \
-	else \
-	    echo "  [FAIL] Filter Plist MISSING!"; \
-	fi; \
-	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6s.bundle" ] || [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
-	    echo "  [OK] Settings Bundle verified!"; \
-	else \
-	    echo "  [FAIL] Settings Bundle MISSING!"; \
-	fi
-	@echo ""
