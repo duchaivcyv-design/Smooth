@@ -927,6 +927,31 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetHz {
+    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        Titanium_ReloadSharedSyncStateV261();
+        if (!g_syncPayloadV261.masterEnabled || !g_syncPayloadV261.dynamicInterpolation) return 60;
+        if (g_syncPayloadV261.forceOverclock) return 144;
+        if (g_syncPayloadV261.targetHz >= 30 && g_syncPayloadV261.targetHz <= 144) return g_syncPayloadV261.targetHz;
+    }
+    if (!self.enabled || !self.enableHzControl) return 60;
+    if (self.forceOverclock144Hz) return 144;
+    if (self.targetHz >= 30 && self.targetHz <= 144) return self.targetHz;
+    return 60;
+}
+
+- (NSInteger)resolvedTargetFPS {
+    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        Titanium_ReloadSharedSyncStateV261();
+        if (!g_syncPayloadV261.masterEnabled) return 60;
+        if (g_syncPayloadV261.targetFPS >= 30 && g_syncPayloadV261.targetFPS <= 144) return g_syncPayloadV261.targetFPS;
+    }
+    if (!self.enabled || !self.enableFPSControl) return 60;
+    if (self.targetFPS >= 30 && self.targetFPS <= 144) return self.targetFPS;
+    return 60;
+}
+@end
+
+- (NSInteger)resolvedTargetHz {
     if (!self.enabled) return 60;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
