@@ -3314,20 +3314,25 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             return;
         }
 
-        // 1. Khởi tạo cấu hình Singleton trên luồng nền
+        // 1. Khởi tạo cấu hình Singleton trên luồng nền (Giữ nguyên cả 2 cách viết của đồng chí)
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             Class configClass = NSClassFromString(@"BoostConfigV261");
             if (configClass) {
                 CFG261 = [configClass sharedInstance];
                 [CFG261 loadSettings];
+            } else {
+                CFG261 = [BoostConfigV261 sharedInstance];
             }
         });
 
-        // 2. Chạy cơ chế an toàn Watchdog Timeout
+        // 2. Tăng độ trễ lên 3.5 giây để SpringBoard check-in hoàn toàn với hệ thống, triệt tiêu 100% lỗi Watchdog Timeout 180s
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            
+            // Đẩy toàn bộ quá trình %init sang hàng đợi ngầm để bảo vệ tuyệt đối Main Thread không bị block
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
                 Titanium_StartThermalWatchdogTimerV261();
 
+                // Đăng ký toàn bộ các thông báo reload từ cả 2 khối
                 CFNotificationCenterAddObserver(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     NULL,
@@ -3344,55 +3349,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
                     NULL,
                     CFNotificationSuspensionBehaviorDeliverImmediately
                 );
-
-                // Khởi tạo đầy đủ toàn bộ các nhóm hook hệ thống V26
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    %init(Group_FastLaunch_SuperEngineV261);
-                    %init(Group_V261_FloatingWindow_PiP);
-                    %init(Group_ZeroLatencyTouch_PhysicsV261);
-                    %init(Group_MetalGraphics_OptV261);
-
-                    if (Titanium_IsSpringBoard()) {
-                        %init(Group_Display_SpringBoardV261);
-                        %init(Group_SpringBoard_ProcessManagerV261);
-
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            Titanium_StartPassiveRamDaemonV261();
-                        });
-                    } else {
-                        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                                          object:nil
-                                                                           queue:[NSOperationQueue mainQueue]
-                                                                      usingBlock:^(NSNotification *notificationObserver) {
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                                %init(Group_UIKit_ThirdParty_IsolatedV261);
-                            });
-                        }];
-                    }
-
-                    if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
-                        %init(Group_Keyboard_And_TextV261);
-                    }
-
-                    %init(_ungrouped);
-                });
-            });
-        });
-    }
-}
-
-        // 1. Khởi tạo cấu hình Singleton trên luồng nền
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            CFG261 = [BoostConfigV261 sharedInstance];
-        });
-
-        // 2. Tăng độ trễ lên 3.5 giây để SpringBoard check-in hoàn toàn với hệ thống, triệt tiêu 100% lỗi Watchdog Timeout 180s
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            
-            // Đẩy toàn bộ quá trình %init sang hàng đợi ngầm để bảo vệ tuyệt đối Main Thread không bị block
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-                Titanium_StartThermalWatchdogTimerV261();
-
                 CFNotificationCenterAddObserver(
                     CFNotificationCenterGetDarwinNotifyCenter(),
                     NULL,
@@ -3410,7 +3366,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
                     CFNotificationSuspensionBehaviorCoalesce
                 );
 
-                // Thực thi nạp nhóm Hook an toàn
+                // Thực thi nạp toàn bộ nhóm Hook an toàn (Được gom làm một lần duy nhất để tránh lỗi re-%init)
                 dispatch_async(dispatch_get_main_queue(), ^{
                     %init(Group_FastLaunch_SuperEngineV261);
                     %init(Group_V261_FloatingWindow_PiP);
