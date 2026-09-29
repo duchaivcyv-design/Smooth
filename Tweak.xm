@@ -3307,38 +3307,77 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 %ctor {
     @autoreleasepool {
-        // Vô hiệu hóa việc chặn ngặt nghèo để đảm bảo tweak luôn kích hoạt trên mọi thiết trình
-        // if (!Titanium_IsRootlessOrRootHideEnvironment()) { return; }
-
         NSString *processName = [[NSProcessInfo processInfo] processName];
         NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
-
-        if (!bundleIdentifier || [bundleIdentifier length] == 0) {
-            if ([processName isEqualToString:@"SpringBoard"]) {
-                // Cho phép qua
-            }
-        }
 
         if (Titanium_IsSecureBankingApp()) {
             return;
         }
 
-        // 🌟 Khởi tạo singleton cấu hình và load ngay lập tức
-        Class configClass = NSClassFromString(@"BoostConfigV261");
-        if (configClass) {
-            CFG261 = [configClass sharedInstance];
-            [CFG261 loadSettings];
-        }
+        // 1. Khởi tạo cấu hình Singleton trên luồng nền
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            Class configClass = NSClassFromString(@"BoostConfigV261");
+            if (configClass) {
+                CFG261 = [configClass sharedInstance];
+                [CFG261 loadSettings];
+            }
+        });
 
-        // 🌟 Đăng ký lắng nghe thông báo thay đổi cấu hình từ Cài đặt theo đúng chuẩn domain com.taojb.boostiphone6s
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            NULL,
-            reloadPrefsNotificationV261,
-            CFSTR("com.taojb.boostiphone6s/ReloadPrefs"),
-            NULL,
-            CFNotificationSuspensionBehaviorDeliverImmediately
-        );
+        // 2. Chạy cơ chế an toàn Watchdog Timeout
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                Titanium_StartThermalWatchdogTimerV261();
+
+                CFNotificationCenterAddObserver(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    NULL,
+                    reloadPrefsNotificationV261,
+                    CFSTR("com.taojb.boostiphone6s/ReloadPrefs"),
+                    NULL,
+                    CFNotificationSuspensionBehaviorDeliverImmediately
+                );
+                CFNotificationCenterAddObserver(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    NULL,
+                    reloadPrefsNotificationV261,
+                    CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"),
+                    NULL,
+                    CFNotificationSuspensionBehaviorDeliverImmediately
+                );
+
+                // Khởi tạo đầy đủ toàn bộ các nhóm hook hệ thống V26
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    %init(Group_FastLaunch_SuperEngineV261);
+                    %init(Group_V261_FloatingWindow_PiP);
+                    %init(Group_ZeroLatencyTouch_PhysicsV261);
+                    %init(Group_MetalGraphics_OptV261);
+
+                    if (Titanium_IsSpringBoard()) {
+                        %init(Group_Display_SpringBoardV261);
+                        %init(Group_SpringBoard_ProcessManagerV261);
+
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            Titanium_StartPassiveRamDaemonV261();
+                        });
+                    } else {
+                        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                                          object:nil
+                                                                           queue:[NSOperationQueue mainQueue]
+                                                                      usingBlock:^(NSNotification *notificationObserver) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                %init(Group_UIKit_ThirdParty_IsolatedV261);
+                            });
+                        }];
+                    }
+
+                    if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
+                        %init(Group_Keyboard_And_TextV261);
+                    }
+
+                    %init(_ungrouped);
+                });
+            });
+        });
     }
 }
 
