@@ -960,7 +960,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         return (self.targetHz > 0) ? self.targetHz : 60;
     }
     
-            if (self.proMotionEngineBeta7) {
+     if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
         BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
         if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 30;
@@ -982,10 +982,12 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     return (self.targetFPS > 0) ? self.targetFPS : 60;
 }
 @end
+// KẾT THÚC HOÀN TOÀN OBJECTIVE-C Ở ĐÂY. KHÔNG CÓ BẤT KỲ CHỮ "%END" NÀO TẠI ĐÂY CẢ.
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 
+// Bắt đầu vùng Logos thuần túy
 %group Group_FastLaunch_SuperEngineV261
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
@@ -1004,6 +1006,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
+%end
 %end
 
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
