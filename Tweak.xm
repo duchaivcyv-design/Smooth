@@ -934,25 +934,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         if (g_syncPayloadV261.targetHz >= 30 && g_syncPayloadV261.targetHz <= 144) return g_syncPayloadV261.targetHz;
     }
     if (!self.enabled || !self.enableHzControl) return 60;
-    if (self.forceOverclock144Hz) return 144;
-    if (self.targetHz >= 30 && self.targetHz <= 144) return self.targetHz;
-    return 60;
-}
-
-- (NSInteger)resolvedTargetFPS {
-    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-        Titanium_ReloadSharedSyncStateV261();
-        if (!g_syncPayloadV261.masterEnabled) return 60;
-        if (g_syncPayloadV261.targetFPS >= 30 && g_syncPayloadV261.targetFPS <= 144) return g_syncPayloadV261.targetFPS;
-    }
-    if (!self.enabled || !self.enableFPSControl) return 60;
-    if (self.targetFPS >= 30 && self.targetFPS <= 144) return self.targetFPS;
-    return 60;
-}
-@end
-
-- (NSInteger)resolvedTargetHz {
-    if (!self.enabled) return 60;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
     
@@ -960,7 +941,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         return (self.targetHz > 0) ? self.targetHz : 60;
     }
     
-     if (self.proMotionEngineBeta7) {
+    if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
         BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
         if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 30;
@@ -972,7 +953,12 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetFPS {
-    if (!self.enabled) return 60;
+    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        Titanium_ReloadSharedSyncStateV261();
+        if (!g_syncPayloadV261.masterEnabled) return 60;
+        if (g_syncPayloadV261.targetFPS >= 30 && g_syncPayloadV261.targetFPS <= 144) return g_syncPayloadV261.targetFPS;
+    }
+    if (!self.enabled || !self.enableFPSControl) return 60;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
     if (self.antiThermalThrottling) {
@@ -981,12 +967,11 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (self.proMotionEngineBeta7) return [self resolvedTargetHz];
     return (self.targetFPS > 0) ? self.targetFPS : 60;
 }
-@end // Kết thúc lớp Objective-C của BoostConfigV261
+@end 
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 
-// Bắt đầu Group
 %group Group_FastLaunch_SuperEngineV261
 
 %hook FBApplicationProcess
