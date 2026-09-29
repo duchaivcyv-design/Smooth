@@ -1,24 +1,26 @@
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:15.0
 
-# Tat log rac, toi uu hoa goi bundle cho moi truong Production
+# Tắt log rác, tối ưu hóa gói bundle cho môi trường Production
 DEBUG = 0
 FINALPACKAGE = 1
 
 include $(THEOS)/makefiles/common.mk
 
+# Định nghĩa Tweak chính và Giao diện Cài đặt (Prefs)
+TWEAK_NAME = BoostiPhone6s
 BUNDLE_NAME = BoostiPhone6sPrefs
 
-# File ma nguon giao dien cai dat V24.7.1 Apex Supreme
+# Mã nguồn Tweak chính
+BoostiPhone6s_FILES = Tweak.xm
+BoostiPhone6s_CFLAGS = -fobjc-arc -O3 -Wall -Wno-error -Wno-deprecated-declarations -Wno-unknown-warning-option -Wno-unused-variable -Wno-unused-function -Wno-implicit-function-declaration -Wno-deprecated-non-prototype -fno-autolink
+BoostiPhone6s_FRAMEWORKS = UIKit Foundation CoreGraphics Metal QuartzCore
+BoostiPhone6s_LDFLAGS = -Wl,-dead_strip -Wl,-undefined,dynamic_lookup
+
+# Mã nguồn Giao diện Cài đặt V26 SUPREME
 BoostiPhone6sPrefs_FILES = RootListController.m
-
-# Frameworks cong khai can thiet
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-
-# Thu muc cai dat bundle Rootless tieu chuan
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
-
-# Co Clang: Khong dung auto-link Preferences va triet tieu toan bo warning bien dich
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
                             -Wall \
@@ -35,8 +37,12 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I../ \
                             -I.
 
-# Bat buoc dung dynamic_lookup de bo qua kiem tra ky hieu PSListController luc link
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup
 
+include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
+
+# Tự động dọn dẹp bộ nhớ đệm sau khi build xong
+after-package::
+	rm -rf .theos/ _/
