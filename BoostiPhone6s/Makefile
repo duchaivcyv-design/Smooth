@@ -1,5 +1,5 @@
 ARCHS = arm64 arm64e
-TARGET := iphone:clang:latest:15.0
+TARGET := iphone:clang:latest:14.0
 
 DEBUG = 0
 FINALPACKAGE = 1
@@ -11,6 +11,7 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
+BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
@@ -25,6 +26,7 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -Wno-deprecated-non-prototype \
                             -fno-autolink \
                             -I$(THEOS)/include \
+                            -I$(THEOS)/vendor/include \
                             -I../Headers \
                             -I../Modules \
                             -I../ \
