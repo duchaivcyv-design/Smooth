@@ -3518,14 +3518,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // 7. ÉP NẠP NÚT HOME ẢO (ASSISTIVETOUCH)
-        if ((bundleID && ([bundleID isEqualToString:@"com.apple.Accessibility"] || 
-                          [bundleID isEqualToString:@"com.apple.assistivetouchd"])) ||
-            (progName && strstr(progName, "assistivetouchd"))) {
-            %init(Group_AssistiveTouch_OptV261);
-        }
-
-        // 8. BẮT SỰ KIỆN NẠP TRỄ CỦA UIKIT (CHỐNG LỖI CÁC APP NẶNG & ENGINE GAME RIÊNG)
+        // 7. BẮT SỰ KIỆN NẠP TRỄ CỦA UIKIT (CHỐNG LỖI CÁC APP NẶNG & ENGINE GAME RIÊNG)
         [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                           object:nil
                                                            queue:[NSOperationQueue mainQueue]
@@ -3537,7 +3530,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             }
         }];
 
-        // 9. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION (CHỐNG TREO WATCHDOG TIMEOUT)
+        // 8. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION (CHỐNG TREO WATCHDOG TIMEOUT)
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
                 // Kích hoạt giám sát nhiệt độ
