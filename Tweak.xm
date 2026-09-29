@@ -2750,8 +2750,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 %end
 
-%end
-
 %group Group_MetalGraphics_OptV261
 
 %hook CAMetalLayer
@@ -2765,25 +2763,10 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 - (void)didMoveToSuperlayer {
     %orig;
-    if (self.respondsToSelector(@selector(setAllowsGroupOpacity:))) {
-        self.allowsGroupOpacity = NO; // Tắt bão hòa nhóm mờ không cần thiết để tăng tốc độ render GPU
+    if ([self respondsToSelector:@selector(setAllowsGroupOpacity:)]) {
+        [self setAllowsGroupOpacity:NO]; // Tắt bão hòa nhóm mờ không cần thiết để tăng tốc độ render GPU
     }
 }
-%end
-
-%hook CADisplayLink
-- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
-    if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
-        self.preferredFramesPerSecond = 60; 
-    }
-    %orig;
-}
-%end // Đóng hook cho CADisplayLink ở đây là chuẩn
-
-// Mở hook cho class tiếp theo (ví dụ CAMetalLayer hoặc class chứa các method dưới đây)
-%hook TênClassChứaMetalHoặcLayer 
-
-// Đảm bảo ở trên cùng có dòng: %hook CAMetalLayer (hoặc tên class tương ứng)
 
 - (NSUInteger)maximumDrawableCount {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
@@ -2799,6 +2782,18 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(flag);
 }
+%end
+
+%hook CADisplayLink
+- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
+    if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
+        self.preferredFramesPerSecond = 60; 
+    }
+    %orig;
+}
+%end
+
+%end // Đóng %group Group_MetalGraphics_OptV261
 
 - (BOOL)lowLatencyMode {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
