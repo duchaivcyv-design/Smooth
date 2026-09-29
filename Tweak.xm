@@ -39,6 +39,16 @@
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
 
+#ifndef UIWindowSceneActivationState_DEFINED
+#define UIWindowSceneActivationState_DEFINED
+typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
+    UIWindowSceneActivationStateUnspecified = -1,
+    UIWindowSceneActivationStateForegroundActive = 0,
+    UIWindowSceneActivationStateForegroundInactive = 1,
+    UIWindowSceneActivationStateBackground = 2
+};
+#endif
+
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
 #define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
@@ -749,14 +759,23 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 @property (nonatomic, assign) BOOL keyboardZeroLagV24;
 @property (nonatomic, assign) BOOL keyboardZeroLagV3;
 @property (nonatomic, assign) BOOL reduceMultitaskLag;
+@property (nonatomic, assign) BOOL reduceMultiTaskLag;
 @property (nonatomic, assign) BOOL metalHexBuffering;
+@property (nonatomic, assign) BOOL neuralBufferOpt;
 @property (nonatomic, assign) BOOL fixAppExitStutter;
+@property (nonatomic, assign) BOOL vsyncAdaptiveBuffer;
+@property (nonatomic, assign) BOOL quantumRenderShield;
+@property (nonatomic, assign) BOOL autoCloseBackgroundApp;
 @property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
+@property (nonatomic, assign) BOOL syncModuleDelay;
+@property (nonatomic, assign) BOOL isolateRenderPipeline;
+@property (nonatomic, assign) BOOL antiBlackScreenLaunch;
 @property (nonatomic, assign) BOOL turboAppLaunch;
 @property (nonatomic, assign) BOOL turboLaunch;
 @property (nonatomic, assign) BOOL ultraResponsiveness;
 @property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
 @property (nonatomic, assign) BOOL aggressiveRamClean;
+@property (nonatomic, assign) BOOL machVMPurgeRam;
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL powerSaveMode;
 
@@ -820,7 +839,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             return d;
         };
 
-                self.enabled = GetLiveBool(@"Enabled", YES);
+                        self.enabled = GetLiveBool(@"Enabled", YES);
         self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
@@ -833,8 +852,15 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
         self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
+        self.neuralBufferOpt = self.metalHexBuffering;
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
+        self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
+        self.quantumRenderShield = self.fixAppExitStutter;
+        self.autoCloseBackgroundApp = self.fixAppExitStutter;
         self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
+        self.syncModuleDelay = self.fixAppLaunchBlackScreen;
+        self.isolateRenderPipeline = self.fixAppLaunchBlackScreen;
+        self.antiBlackScreenLaunch = self.fixAppLaunchBlackScreen;
         self.reduceMultitaskLag = GetLiveBool(@"ReduceMultiTaskLag", YES);
         self.reduceMultiTaskLag = self.reduceMultitaskLag;
         self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
@@ -842,6 +868,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.ultraResponsiveness = self.touchResponseBoost;
         self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
         self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
+        self.machVMPurgeRam = self.aggressiveRamClean;
         self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
 
@@ -853,11 +880,22 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             self.forceOverclock144Hz = g_syncPayloadV261.forceOverclock;
             self.proMotionEngineBeta7 = g_syncPayloadV261.dynamicInterpolation ? YES : NO;
             self.touchResponseBoost = g_syncPayloadV261.zeroLatencyTouch ? YES : NO;
+            self.ultraResponsiveness = self.touchResponseBoost;
+            self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
             self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
+            self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
             self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel == 6) ? YES : NO;
+            self.neuralBufferOpt = self.metalHexBuffering;
             self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
+            self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
+            self.quantumRenderShield = self.fixAppExitStutter;
+            self.autoCloseBackgroundApp = self.fixAppExitStutter;
+            self.reduceMultitaskLag = self.fixAppExitStutter;
+            self.reduceMultiTaskLag = self.fixAppExitStutter;
             self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
+            self.turboLaunch = self.turboAppLaunch;
             self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
+            self.machVMPurgeRam = self.aggressiveRamClean;
             self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
         } else if (Titanium_IsSpringBoard()) {
             ApexV261Payload p;
