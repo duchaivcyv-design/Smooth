@@ -1089,20 +1089,28 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || !CFG261.enableFPSControl) { %orig(fps); return; }
+    if (!IS_ACTIVE || !CFG261.enableFPSControl) {
+        %orig(fps);
+        return;
+    }
     %orig([CFG261 resolvedTargetFPS]);
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return %orig;
+    }
     float rate = (float)[CFG261 resolvedTargetHz];
     return CAFrameRateRangeMake(rate, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) { %orig(range); return; }
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        %orig(range);
+        return;
+    }
     float rate = (float)[CFG261 resolvedTargetHz];
     %orig(CAFrameRateRangeMake(rate, rate, rate));
 }
