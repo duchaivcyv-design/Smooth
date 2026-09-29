@@ -852,7 +852,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
         self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
         self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
+        self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
         self.neuralBufferOpt = self.metalHexBuffering;
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
@@ -895,7 +895,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             self.quantumRenderShield = self.fixAppExitStutter;
             self.autoCloseBackgroundApp = self.fixAppExitStutter;
             self.reduceMultitaskLag = self.fixAppExitStutter;
-            self.reduceMultiTaskLag = self.fixAppExitStutter;
+            self.reduceMultiTaskLag = self.reduceMultitaskLag;
             self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
             self.turboLaunch = self.turboAppLaunch;
             self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
