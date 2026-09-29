@@ -150,24 +150,51 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
-    int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
-    int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
-    BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
-
+    
     ApexV26CorePayload payload;
     memset(&payload, 0, sizeof(ApexV26CorePayload));
     payload.magic = APEX_V26_SYNC_MAGIC;
     payload.masterEnabled = enabled ? 1 : 0;
-    payload.targetHz = hz;
-    payload.targetFPS = fps;
-    payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
-    payload.pipSyncEnabled = 1;
-    payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
-    payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
-    payload.hexBuffering = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
-    payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
-    payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
-    payload.dynamicInterpolation = dyn ? 1 : 0;
+
+    if (!enabled) {
+        // KHI TẮT TỔNG: ÉP TOÀN BỘ VỀ MẶC ĐỊNH HỆ THỐNG
+        payload.targetHz = 60;
+        payload.targetFPS = 60;
+        payload.forceOverclock = 0;
+        payload.pipSyncEnabled = 0;
+        payload.thermalShield = 0;
+        payload.antiStutterExit = 0;
+        payload.hexBuffering = 3;
+        payload.zeroLatencyTouch = 0;
+        payload.fastAppLaunch = 0;
+        payload.dynamicInterpolation = 0;
+        payload.shaderOptimization = 0;
+        payload.lowLatencyAudio = 0;
+        payload.memoryPressureRelief = 0;
+        payload.metalPacingEnabled = 0;
+        payload.runloopHangGuard = 0;
+    } else {
+        int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
+        int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
+        BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
+
+        payload.targetHz = hz;
+        payload.targetFPS = fps;
+        payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
+        payload.pipSyncEnabled = 1;
+        payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
+        payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
+        payload.hexBuffering = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
+        payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
+        payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+        payload.dynamicInterpolation = dyn ? 1 : 0;
+        payload.shaderOptimization = 1;
+        payload.lowLatencyAudio = 1;
+        payload.memoryPressureRelief = 1;
+        payload.metalPacingEnabled = 1;
+        payload.runloopHangGuard = 1;
+    }
+
     payload.updateSeq = (uint64_t)mach_absolute_time();
 
     int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -189,7 +216,8 @@ static inline NSString *PM_TextV26(NSString *key) {
         @"ĐIỀU PHỐI BỘ NHỚ RAM & TIẾN TRÌNH CPU": @"GROUP_RAM_CPU",
         @"QUẢN LÝ NHIỆT ĐỘ & NGUỒN ĐIỆN": @"GROUP_THERMAL",
         @"BẢO MẬT & QUYỀN RIÊNG TƯ": @"GROUP_SECURITY",
-        @"THÔNG TIN PHÁT TRIỂN & HỖ TRỢ": @"GROUP_DEV"
+        @"THÔNG TIN PHÁT TRIỂN & HỖ TRỢ": @"GROUP_DEV",
+        @"CÀI ĐẶT NGÔN NGỮ": @"GROUP_LANGUAGE"
     };
 
     NSDictionary *footerMap = @{
@@ -255,18 +283,67 @@ static inline NSString *PM_TextV26(NSString *key) {
     BOOL isMasterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
     if (!isMasterEnabled) {
+        // TẮT TỔNG: CHỈ GIỮ NHÓM CÔNG TẮC VÀ MỤC NGÔN NGỮ, ẨN TOÀN BỘ CÁC MỤC KHÁC
         NSMutableArray *minimalSpecifiers = [NSMutableArray array];
-        if (_allSavedSpecifiers.count >= 3) {
-            [minimalSpecifiers addObject:_allSavedSpecifiers[0]];
-            [minimalSpecifiers addObject:_allSavedSpecifiers[1]];
-            [minimalSpecifiers addObject:_allSavedSpecifiers[2]];
+        PSSpecifier *langGroupSpecifier = nil;
+        PSSpecifier *langCellSpecifier = nil;
+
+        // Tìm kiếm chính xác specifier ngôn ngữ
+        for (NSInteger i = 0; i < (NSInteger)_allSavedSpecifiers.count; i++) {
+            PSSpecifier *s = _allSavedSpecifiers[i];
+            NSString *k = [s propertyForKey:@"key"];
+            if ([k isEqualToString:@"SelectedLanguage"]) {
+                langCellSpecifier = s;
+                // Nếu phía trước có nhóm (Group cell) cho ngôn ngữ thì lấy luôn nhóm đó
+                if (i > 0) {
+                    PSSpecifier *prev = _allSavedSpecifiers[i - 1];
+                    NSString *cellType = [prev propertyForKey:@"cell"];
+                    if ([cellType isEqualToString:@"PSGroupCell"]) {
+                        langGroupSpecifier = prev;
+                    }
+                }
+                break;
+            }
         }
+
+        // Lấy nhóm đầu tiên (Chứa nút Switch Enabled)
+        for (PSSpecifier *s in _allSavedSpecifiers) {
+            NSString *k = [s propertyForKey:@"key"];
+            NSString *cellType = [s propertyForKey:@"cell"];
+            
+            if ([cellType isEqualToString:@"PSGroupCell"] && minimalSpecifiers.count == 0) {
+                [minimalSpecifiers addObject:s];
+            } else if ([k isEqualToString:@"Enabled"]) {
+                [minimalSpecifiers addObject:s];
+                break;
+            }
+        }
+
+        // Thêm mục chọn ngôn ngữ vào danh sách hiển thị tối giản
+        if (langGroupSpecifier && ![minimalSpecifiers containsObject:langGroupSpecifier]) {
+            [minimalSpecifiers addObject:langGroupSpecifier];
+        } else if (!langGroupSpecifier) {
+            // Tạo nhóm ngăn cách cho mục ngôn ngữ nếu không có sẵn
+            PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:(PM_TextV26(@"GROUP_LANGUAGE") ?: @"CÀI ĐẶT NGÔN NGỮ")
+                                                                target:self
+                                                                   set:nil
+                                                                   get:nil
+                                                                detail:nil
+                                                                  cell:PSGroupCell
+                                                                  edit:nil];
+            [minimalSpecifiers addObject:group];
+        }
+
+        if (langCellSpecifier) {
+            [minimalSpecifiers addObject:langCellSpecifier];
+        }
+
         _specifiers = minimalSpecifiers;
     } else {
         _specifiers = [_allSavedSpecifiers mutableCopy];
-        [self updateDynamicTitles];
     }
 
+    [self updateDynamicTitles];
     return _specifiers;
 }
 
@@ -458,7 +535,10 @@ static inline NSString *PM_TextV26(NSString *key) {
     notify_post(NOTIFY_UIKIT_RELOAD);
     notify_post(NOTIFY_HARDWARE_SYNC);
 
-    if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"]) {
+    if ([key isEqualToString:@"Enabled"]) {
+        // CẬP NHẬT TRỰC TIẾP GIAO DIỆN MƯỢT MÀ KHI BẬT/TẮT TỔNG
+        [self reloadSpecifiers];
+    } else if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"]) {
         _allSavedSpecifiers = nil;
         [self setupNavigationItems];
         [self reloadSpecifiers];
