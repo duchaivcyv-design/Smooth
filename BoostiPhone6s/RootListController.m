@@ -188,59 +188,62 @@ static inline NSString *PM_TextV26(NSString *key) {
 @implementation RootListController
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
-    NSDictionary *prefs = [self getMergedPreferences];
-    
-    ApexV26CorePayload payload;
-    memset(&payload, 0, sizeof(ApexV26CorePayload));
-    payload.magic = APEX_V26_SYNC_MAGIC;
-    payload.masterEnabled = enabled ? 1 : 0;
+    // Chạy hoàn toàn trên background queue với QOS thấp nhất để chống nghẽn UI/Sileo
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+        NSDictionary *prefs = [self getMergedPreferences];
+        
+        ApexV26CorePayload payload;
+        memset(&payload, 0, sizeof(ApexV26CorePayload));
+        payload.magic = APEX_V26_SYNC_MAGIC;
+        payload.masterEnabled = enabled ? 1 : 0;
 
-    if (!enabled) {
-        payload.targetHz = 60;
-        payload.targetFPS = 60;
-        payload.forceOverclock = 0;
-        payload.pipSyncEnabled = 0;
-        payload.thermalShield = 0;
-        payload.antiStutterExit = 0;
-        payload.hexBuffering = 3;
-        payload.zeroLatencyTouch = 0;
-        payload.fastAppLaunch = 0;
-        payload.dynamicInterpolation = 0;
-        payload.shaderOptimization = 0;
-        payload.lowLatencyAudio = 0;
-        payload.memoryPressureRelief = 0;
-        payload.metalPacingEnabled = 0;
-        payload.runloopHangGuard = 0;
-    } else {
-        int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
-        int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
-        BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
+        if (!enabled) {
+            payload.targetHz = 60;
+            payload.targetFPS = 60;
+            payload.forceOverclock = 0;
+            payload.pipSyncEnabled = 0;
+            payload.thermalShield = 0;
+            payload.antiStutterExit = 0;
+            payload.hexBuffering = 3;
+            payload.zeroLatencyTouch = 0;
+            payload.fastAppLaunch = 0;
+            payload.dynamicInterpolation = 0;
+            payload.shaderOptimization = 0;
+            payload.lowLatencyAudio = 0;
+            payload.memoryPressureRelief = 0;
+            payload.metalPacingEnabled = 0;
+            payload.runloopHangGuard = 0;
+        } else {
+            int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
+            int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
+            BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
 
-        payload.targetHz = hz;
-        payload.targetFPS = fps;
-        payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
-        payload.pipSyncEnabled = 1;
-        payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
-        payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
-        payload.hexBuffering = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
-        payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
-        payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
-        payload.dynamicInterpolation = dyn ? 1 : 0;
-        payload.shaderOptimization = 1;
-        payload.lowLatencyAudio = 1;
-        payload.memoryPressureRelief = 1;
-        payload.metalPacingEnabled = 1;
-        payload.runloopHangGuard = 1;
-    }
+            payload.targetHz = hz;
+            payload.targetFPS = fps;
+            payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
+            payload.pipSyncEnabled = 1;
+            payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
+            payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
+            payload.hexBuffering = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
+            payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
+            payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+            payload.dynamicInterpolation = dyn ? 1 : 0;
+            payload.shaderOptimization = 1;
+            payload.lowLatencyAudio = 1;
+            payload.memoryPressureRelief = 1;
+            payload.metalPacingEnabled = 1;
+            payload.runloopHangGuard = 1;
+        }
 
-    payload.updateSeq = (uint64_t)mach_absolute_time();
+        payload.updateSeq = (uint64_t)mach_absolute_time();
 
-    int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd >= 0) {
-        write(fd, &payload, sizeof(payload));
-        close(fd);
-        chmod([SHARED_SYNC_FILE UTF8String], 0666);
-    }
+        int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd >= 0) {
+            write(fd, &payload, sizeof(payload));
+            close(fd);
+            chmod([SHARED_SYNC_FILE UTF8String], 0666);
+        }
+    });
 }
 
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
@@ -547,16 +550,23 @@ static inline NSString *PM_TextV26(NSString *key) {
     BOOL currentEnabled = [key isEqualToString:@"Enabled"] ? [value boolValue] : ([self getMergedPreferences][@"Enabled"] ? [[self getMergedPreferences][@"Enabled"] boolValue] : YES);
     [self syncSharedMemoryFile:currentEnabled];
 
-    notify_post(NOTIFY_RELOAD);
-    notify_post(NOTIFY_UIKIT_RELOAD);
-    notify_post(NOTIFY_HARDWARE_SYNC);
+    // Trì hoãn gửi thông báo post qua background để tránh nghẽn thread giao diện trên mọi đời máy
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_UIKIT_RELOAD);
+        notify_post(NOTIFY_HARDWARE_SYNC);
+    });
 
     if ([key isEqualToString:@"Enabled"]) {
-        [self reloadSpecifiers];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self reloadSpecifiers];
+        });
     } else if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"]) {
         _allSavedSpecifiers = nil;
-        [self setupNavigationItems];
-        [self reloadSpecifiers];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setupNavigationItems];
+            [self reloadSpecifiers];
+        });
     }
 }
 
@@ -799,7 +809,6 @@ static inline NSString *PM_TextV26(NSString *key) {
             pid_t pid;
             char *argv[] = {(char *)path, (char *)"kickstart", (char *)"-k", (char *)"system/com.apple.backboardd", NULL};
             posix_spawn(&pid, path, NULL, NULL, argv, environ);
-            waitpid(pid, NULL, 0);
         });
     }]];
 
@@ -809,7 +818,6 @@ static inline NSString *PM_TextV26(NSString *key) {
             pid_t pid;
             char *argv[] = {(char *)path, (char *)"reboot", (char *)"userspace", NULL};
             posix_spawn(&pid, path, NULL, NULL, argv, environ);
-            waitpid(pid, NULL, 0);
         });
     }]];
 
