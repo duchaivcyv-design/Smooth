@@ -2754,6 +2754,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %group Group_MetalGraphics_OptV261
 
+%group Group_MetalGraphics_OptV261
+
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
@@ -2766,7 +2768,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)didMoveToSuperlayer {
     %orig;
     if ([self respondsToSelector:@selector(setAllowsGroupOpacity:)]) {
-        [self setAllowsGroupOpacity:NO]; // Tắt bão hòa nhóm mờ không cần thiết để tăng tốc độ render GPU
+        [self setAllowsGroupOpacity:NO]; 
     }
 }
 
@@ -2784,18 +2786,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(flag);
 }
-%end
-
-%hook CADisplayLink
-- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
-    if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
-        self.preferredFramesPerSecond = 60; 
-    }
-    %orig;
-}
-%end
-
-%end // Đóng %group Group_MetalGraphics_OptV261
 
 - (BOOL)lowLatencyMode {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
@@ -2826,8 +2816,18 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(allow);
 }
+%end // Đóng %hook CAMetalLayer ở đây
 
-%end
+%hook CADisplayLink
+- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
+    if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
+        self.preferredFramesPerSecond = 60; 
+    }
+    %orig;
+}
+%end // Đóng %hook CADisplayLink ở đây
+
+%end // Đóng %group Group_MetalGraphics_OptV261 ở cuối cùng
 
 %hook CAMetalLayer // <-- Đảm bảo dòng này nằm ở TRÊN CÙNG của nhóm method này
 
@@ -2892,6 +2892,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 %end // <-- Dấu %end này đóng cho %hook CAMetalLayer ở trên
+
+%end
 
 %hook CALayer
 - (void)setContentsScale:(CGFloat)scale {
@@ -2997,6 +2999,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)layoutIfNeeded {
     %orig;
 }
+%end
+
 %end
 
 %hook CAContext
