@@ -2832,6 +2832,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %end
 
+%hook CAMetalLayer // <-- Đảm bảo dòng này nằm ở TRÊN CÙNG của nhóm method này
+
 - (BOOL)allowsNextDrawableTimeout {
     if (IS_ACTIVE) {
         return NO;
@@ -2891,7 +2893,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     return %orig;
 }
-%end
+
+%end // <-- Dấu %end này đóng cho %hook CAMetalLayer ở trên
 
 %hook CALayer
 - (void)setContentsScale:(CGFloat)scale {
