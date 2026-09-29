@@ -2426,10 +2426,10 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             );
         });
 
+        %init(Group_FastLaunch_SuperEngineV26);
+        %init(Group_V26_FloatingWindow_PiP);
+
         if (Titanium_IsSpringBoardV26()) {
-            // Khởi tạo các nhóm dành riêng cho SpringBoard
-            %init(Group_FastLaunch_SuperEngineV26);
-            %init(Group_V26_FloatingWindow_PiP);
             %init(Group_SpringBoard_OnlyV26);
             %init(Group_Gesture_FixV26);
             %init(Group_Fix_App_Layout_PositionV26);
@@ -2442,14 +2442,11 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             });
             Titanium_BoostThreadPriorityRealtimeV26();
         } else {
-            // Khởi tạo các nhóm dành riêng cho App bên thứ ba khi đã load xong UIApplication
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                               object:nil
                                                                queue:[NSOperationQueue mainQueue]
                                                           usingBlock:^(NSNotification *note) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    %init(Group_FastLaunch_SuperEngineV26);
-                    %init(Group_V26_FloatingWindow_PiP);
                     %init(Group_UIKit_ThirdParty_IsolatedV26);
                     %init(Group_Display_App_LazyV26);
                     Titanium_LaunchAllModulesInsideAppV26();
