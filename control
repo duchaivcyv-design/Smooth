@@ -1,6 +1,6 @@
 Package: com.taojb.boostiphone6s
 Name: SmoothIOS
-Version: 4.7.0-BETA
+Version: 4.7.0
 Architecture: iphoneos-arm64
 Description: Next update ( hỗ trợ ios 14.0-26.0.1 iPhone 6s-15prm tuỳ máy và ios )
 Maintainer: TaoJB, NMH
