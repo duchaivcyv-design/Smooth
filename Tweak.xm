@@ -3502,18 +3502,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             %init(Group_Display_SpringBoardV261);
             %init(Group_SpringBoard_ProcessManagerV261);
 
-            // Trung tâm điều khiển (Control Center)
-            Class ccClass = NSClassFromString(@"CCUIModularControlCenterOverlayViewController");
-            if (ccClass) {
-                %init(Group_ControlCenter_OptV261, ControlCenter = ccClass);
-            }
-
-            // Thanh danh sách thông báo (Notification Center)
-            Class notifClass = NSClassFromString(@"NCNotificationCombinedListViewController");
-            if (notifClass) {
-                %init(Group_ControlCenter_OptV261, NotificationCenter = notifClass);
-            }
-
             // Video PIP (Picture in Picture)
             Class pipClass = NSClassFromString(@"SBPIPController");
             if (pipClass) {
@@ -3584,3 +3572,4 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         });
     }
 }
+
