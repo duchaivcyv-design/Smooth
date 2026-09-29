@@ -1196,14 +1196,20 @@ static BoostConfigV261 *CFG261 = nil;
 %hook CADisplay
 - (NSInteger)preferredFPS {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return %orig;
+    }
     return [CFG261 resolvedTargetHz];
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
     Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) { %orig(fps); return; }
-    %orig([CFG261 resolvedTargetHz]);
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        %orig(fps);
+        return;
+    }
+    NSInteger targetHz = [CFG261 resolvedTargetHz];
+    %orig(targetHz);
 }
 
 - (void)overrideDisplayTimings:(id)timings {
