@@ -188,7 +188,6 @@ static inline NSString *PM_TextV26(NSString *key) {
 @implementation RootListController
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
-    // Chạy hoàn toàn trên background queue với QOS thấp nhất để chống nghẽn UI/Sileo
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
         NSDictionary *prefs = [self getMergedPreferences];
         
@@ -204,7 +203,7 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.pipSyncEnabled = 0;
             payload.thermalShield = 0;
             payload.antiStutterExit = 0;
-            payload.hexBuffering = 3;
+            payload.hexBuffering = 4;
             payload.zeroLatencyTouch = 0;
             payload.fastAppLaunch = 0;
             payload.dynamicInterpolation = 0;
@@ -216,18 +215,18 @@ static inline NSString *PM_TextV26(NSString *key) {
         } else {
             int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
             int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
-            BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
+            BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : NO;
 
-            payload.targetHz = hz;
-            payload.targetFPS = fps;
+            payload.targetHz = (hz >= 15 && hz <= 144) ? hz : 60;
+            payload.targetFPS = (fps >= 15 && fps <= 144) ? fps : 60;
             payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
+            payload.dynamicInterpolation = dyn ? 1 : 0;
             payload.pipSyncEnabled = 1;
             payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
             payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
             payload.hexBuffering = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
             payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
             payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
-            payload.dynamicInterpolation = dyn ? 1 : 0;
             payload.shaderOptimization = 1;
             payload.lowLatencyAudio = 1;
             payload.memoryPressureRelief = 1;
@@ -242,6 +241,14 @@ static inline NSString *PM_TextV26(NSString *key) {
             write(fd, &payload, sizeof(payload));
             close(fd);
             chmod([SHARED_SYNC_FILE UTF8String], 0666);
+        }
+        
+        Class configClass = NSClassFromString(@"BoostConfigV261");
+        if (configClass && [configClass respondsToSelector:@selector(sharedInstance)]) {
+            id cfg = [configClass sharedInstance];
+            if ([cfg respondsToSelector:@selector(loadSettings)]) {
+                [cfg performSelector:@selector(loadSettings)];
+            }
         }
     });
 }
@@ -390,7 +397,7 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
-    BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
+    BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : NO;
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
     BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : NO;
@@ -550,7 +557,6 @@ static inline NSString *PM_TextV26(NSString *key) {
     BOOL currentEnabled = [key isEqualToString:@"Enabled"] ? [value boolValue] : ([self getMergedPreferences][@"Enabled"] ? [[self getMergedPreferences][@"Enabled"] boolValue] : YES);
     [self syncSharedMemoryFile:currentEnabled];
 
-    // Trì hoãn gửi thông báo post qua background để tránh nghẽn thread giao diện trên mọi đời máy
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
@@ -588,6 +594,7 @@ static inline NSString *PM_TextV26(NSString *key) {
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
     [self syncSharedMemoryFile:YES];
+    
     notify_post(NOTIFY_RELOAD);
     notify_post(NOTIFY_UIKIT_RELOAD);
     notify_post(NOTIFY_HARDWARE_SYNC);
