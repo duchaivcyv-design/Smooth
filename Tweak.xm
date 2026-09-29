@@ -3037,8 +3037,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 %end
 
-%end
-
 %group Group_UIKit_ThirdParty_IsolatedV261
 
 %hook UIViewController
