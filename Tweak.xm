@@ -2754,7 +2754,9 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 %group Group_MetalGraphics_OptV261
 
+// --- 1. HOOK CAMetalLayer ---
 %hook CAMetalLayer
+
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         %orig(6);
@@ -2814,47 +2816,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(allow);
 }
-%end
-
-%end
-
-%group Group_MetalGraphics_OptV261
-
-%hook CADisplayLink
-- (void)setPaused:(BOOL)paused {
-    %orig(paused);
-}
-
-- (void)setFrameInterval:(NSInteger)interval {
-    // Đảm bảo không ép giá trị interval quá thấp gây nghẽn khung hình lúc mở app
-    if (interval < 1) interval = 1;
-    %orig(interval);
-}
-
-- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
-    if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
-        if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [CFG261 isCustomHzEnabled]) {
-            // Cho phép nhận mức Hz tùy chỉnh từ công tắc của đồng chí
-            self.preferredFramesPerSecond = 60; 
-        }
-    }
-    %orig;
-}
-%end
-
-// Tối ưu hóa CALayer có kiểm soát để chống giật khi bấm mở app, không bị tình trạng khựng khung hình
-%hook CALayer
-- (void)setShouldRasterize:(BOOL)rasterize {
-    // Chỉ bật rasterize khi thực sự cần thiết để tránh làm chậm tiến trình render lúc chạm mở app
-    if (IS_ACTIVE && CFG261 && CFG261.aggressiveRamClean) {
-        %orig(NO); // Tắt bớt ép buộc rasterize bừa bãi gây giật khung hình mở app
-        return;
-    }
-    %orig(rasterize);
-}
-%end
-
-%hook CAMetalLayer // <-- Đảm bảo dòng này nằm ở TRÊN CÙNG của nhóm method này
 
 - (BOOL)allowsNextDrawableTimeout {
     if (IS_ACTIVE) {
@@ -2916,9 +2877,37 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     return %orig;
 }
 
-%end // <-- Dấu %end này đóng cho %hook CAMetalLayer ở trên
+%end
 
+
+// --- 2. HOOK CADisplayLink ---
+%hook CADisplayLink
+
+- (void)setPaused:(BOOL)paused {
+    %orig(paused);
+}
+
+- (void)setFrameInterval:(NSInteger)interval {
+    if (interval < 1) interval = 1;
+    %orig(interval);
+}
+
+- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
+    if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
+        // Ép kiểu (id) để vượt qua bộ kiểm tra interface của Clang compiler
+        if (IS_ACTIVE && [(id)CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [(id)CFG261 isCustomHzEnabled]) {
+            self.preferredFramesPerSecond = 60; 
+        }
+    }
+    %orig;
+}
+
+%end
+
+
+// --- 3. HOOK CALayer ---
 %hook CALayer
+
 - (void)setContentsScale:(CGFloat)scale {
     if (Titanium_IsSpringBoard()) {
         %orig;
@@ -2985,7 +2974,12 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     return %orig;
 }
 
+// Gom lại duy nhất 1 phương thức setShouldRasterize để triệt tiêu lỗi Redefinition
 - (void)setShouldRasterize:(BOOL)shouldRasterize {
+    if (IS_ACTIVE && CFG261 && CFG261.aggressiveRamClean) {
+        %orig(NO);
+        return;
+    }
     %orig(shouldRasterize);
 }
 
@@ -3022,6 +3016,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)layoutIfNeeded {
     %orig;
 }
+
 %end
 
 %hook CAContext
