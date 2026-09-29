@@ -751,6 +751,9 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 @property (nonatomic, assign) BOOL fixAppExitStutter;
 @property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
 @property (nonatomic, assign) BOOL turboAppLaunch;
+@property (nonatomic, assign) BOOL turboLaunch;
+@property (nonatomic, assign) BOOL ultraResponsiveness;
+@property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
 @property (nonatomic, assign) BOOL aggressiveRamClean;
 @property (nonatomic, assign) BOOL antiThermalThrottling;
 @property (nonatomic, assign) BOOL powerSaveMode;
@@ -830,6 +833,9 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
         self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
         self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
+        self.turboLaunch = self.turboAppLaunch;
+        self.ultraResponsiveness = self.touchResponseBoost;
+        self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
         self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
         self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
@@ -940,7 +946,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 %end
 
-%%hook RBSLaunchRequest
+%hook RBSLaunchRequest
 - (BOOL)execute:(id *)outContext error:(id *)outError {
     return %orig(outContext, outError);
 }
@@ -1859,7 +1865,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)makeKeyAndVisible {
-    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
+if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -1879,14 +1885,14 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UITouch
 - (NSTimeInterval)timestamp {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         return CACurrentMediaTime();
     }
     return %orig;
 }
 
 - (CGPoint)preciseLocationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1894,7 +1900,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)precisePreviousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1903,7 +1909,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         if (currentTouchPhase == UITouchPhaseBegan || currentTouchPhase == UITouchPhaseMoved) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
@@ -1947,7 +1953,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)locationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1955,7 +1961,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (CGPoint)previousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1973,7 +1979,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIGestureRecognizer
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1985,7 +1991,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
@@ -1993,21 +1999,21 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsivenessProEngineOfficial)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
 }
 
 - (void)setState:(UIGestureRecognizerState)state {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         if (state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
@@ -2034,14 +2040,14 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)delaysTouchesBegan {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         return NO;
     }
     return %orig;
 }
 
 - (BOOL)delaysTouchesEnded {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         return NO;
     }
     return %orig;
@@ -2070,7 +2076,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIPanGestureRecognizer
 - (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         %orig(NO);
         return;
     }
@@ -2078,7 +2084,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         %orig(NO);
         return;
     }
@@ -2129,7 +2135,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIScreenEdgePanGestureRecognizer
 - (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         %orig(NO);
         return;
     }
@@ -2137,7 +2143,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
         %orig(NO);
         return;
     }
