@@ -775,8 +775,10 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 @property (nonatomic, assign) BOOL ultraResponsiveness;
 @property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
 @property (nonatomic, assign) BOOL aggressiveRamClean;
+@property (nonatomic, assign) BOOL periodicRamClean;
 @property (nonatomic, assign) BOOL machVMPurgeRam;
 @property (nonatomic, assign) BOOL antiThermalThrottling;
+@property (nonatomic, assign) BOOL antiThermalThrottle;
 @property (nonatomic, assign) BOOL powerSaveMode;
 
 + (instancetype)sharedInstance;
@@ -839,7 +841,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             return d;
         };
 
-                        self.enabled = GetLiveBool(@"Enabled", YES);
+        self.enabled = GetLiveBool(@"Enabled", YES);
         self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
@@ -868,8 +870,10 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.ultraResponsiveness = self.touchResponseBoost;
         self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
         self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
+        self.periodicRamClean = self.aggressiveRamClean;
         self.machVMPurgeRam = self.aggressiveRamClean;
         self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
+        self.antiThermalThrottle = self.antiThermalThrottling;
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
 
         if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
@@ -895,8 +899,10 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
             self.turboLaunch = self.turboAppLaunch;
             self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
+            self.periodicRamClean = self.aggressiveRamClean;
             self.machVMPurgeRam = self.aggressiveRamClean;
             self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
+            self.antiThermalThrottle = self.antiThermalThrottling;
         } else if (Titanium_IsSpringBoard()) {
             ApexV261Payload p;
             memset(&p, 0, sizeof(ApexV261Payload));
@@ -3203,7 +3209,7 @@ static void Titanium_StartThermalWatchdogTimerV261(void) {
             if (!IS_ACTIVE) return;
             NSProcessInfoThermalState currentThermalState = [[NSProcessInfo processInfo] thermalState];
             g_liveThermalStateV261 = currentThermalState;
-            if (currentThermalState == NSProcessInfoThermalStateCritical && !CFG261.antiThermalThrottling && !CFG261.antiThermalThrottle) {
+            if (currentThermalState == NSProcessInfoThermalStateCritical && !CFG261.antiThermalThrottling) {
                 Titanium_PurgeProcessMemoryAggressively();
             }
         });
@@ -3217,7 +3223,7 @@ static void Titanium_StartPassiveRamDaemonV261(void) {
     dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
     dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 15.0 * NSEC_PER_SEC), 15.0 * NSEC_PER_SEC, 2.0 * NSEC_PER_SEC);
     dispatch_source_set_event_handler(ramTimerSource, ^{
-        if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.periodicRamClean || CFG261.machVMPurgeRam)) {
+        if (IS_ACTIVE && (CFG261.aggressiveRamClean || CFG261.machVMPurgeRam)) {
             Titanium_PurgeProcessMemoryAggressively();
         }
     });
