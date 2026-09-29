@@ -16,15 +16,18 @@
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
+#define NOTIFY_TITANIUM_CHANGED "com.titanium.v261.prefschanged"
 
 extern char **environ;
 
-// Khai báo giao diện cho BoostConfigV261 để triệt tiêu lỗi thiếu class method sharedInstance
 @interface BoostConfigV261 : NSObject
 + (instancetype)sharedInstance;
 - (void)loadSettings;
 @end
 
+// ============================================================================
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG (ROOTHIDE & ROOTLESS UNIVERSAL RESOLVER)
+// ============================================================================
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
     static dispatch_once_t onceToken;
@@ -52,13 +55,35 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
-    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist", root];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
-    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
-    NSString *p3 = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:p3]) return p3;
-    return p1;
+    if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
+        NSString *jbPath = [root stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        return jbPath;
+    }
+    return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+}
+
+// Tìm binary thực thi bất kể Rootless hay RootHide
+static inline const char *Titanium_FindExecutable(const char *name) {
+    static char resolvedPath[PATH_MAX];
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    
+    NSArray *searchPrefixes = @[
+        [root stringByAppendingPathComponent:@"usr/bin"],
+        [root stringByAppendingPathComponent:@"bin"],
+        @"/var/jb/usr/bin",
+        @"/var/jb/bin",
+        @"/usr/bin",
+        @"/bin"
+    ];
+
+    for (NSString *prefix in searchPrefixes) {
+        NSString *candidate = [prefix stringByAppendingPathComponent:[NSString stringWithUTF8String:name]];
+        if (access([candidate UTF8String], X_OK) == 0) {
+            strlcpy(resolvedPath, [candidate UTF8String], sizeof(resolvedPath));
+            return resolvedPath;
+        }
+    }
+    return name;
 }
 
 typedef struct __attribute__((packed)) {
@@ -134,8 +159,8 @@ static void PM_LoadLocalizationIfNeededV26(void) {
     
     NSString *root = Titanium_GetRootHidePrefixPath();
     NSArray *possiblePaths = @[
-        [NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist", root],
-        [NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist", root],
+        [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist"],
+        [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"],
         @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
         @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist",
         @"/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
@@ -193,8 +218,11 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 @implementation RootListController
 
+// ============================================================================
+// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & BẮN CƯỠNG BỨC TOÀN BỘ NOTIFICATION CHANNELS
+// ============================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         NSDictionary *prefs = [self getMergedPreferences];
         
         ApexV26CorePayload payload;
@@ -242,7 +270,8 @@ static inline NSString *PM_TextV26(NSString *key) {
 
         payload.updateSeq = (uint64_t)mach_absolute_time();
 
-        int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        // Ghi đồng bộ tức thì với cờ O_SYNC, cấp quyền 0666 cho toàn bộ Apps đọc được
+        int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, 0666);
         if (fd >= 0) {
             write(fd, &payload, sizeof(payload));
             close(fd);
@@ -256,6 +285,12 @@ static inline NSString *PM_TextV26(NSString *key) {
                 [cfg performSelector:@selector(loadSettings)];
             }
         }
+
+        // Bắn đồng loạt 4 kênh Notify để toàn bộ SpringBoard, UIKit và Daemons cập nhật ngay
+        notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_UIKIT_RELOAD);
+        notify_post(NOTIFY_HARDWARE_SYNC);
+        notify_post(NOTIFY_TITANIUM_CHANGED);
     });
 }
 
@@ -323,9 +358,9 @@ static inline NSString *PM_TextV26(NSString *key) {
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
         NSString *root = Titanium_GetRootHidePrefixPath();
-        NSString *bundlePath = [NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6s.bundle", root];
+        NSString *bundlePath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"];
         NSBundle *bundle = [NSBundle bundleWithPath:bundlePath];
-        if (!bundle) bundle = [NSBundle bundleWithPath:[NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle", root]];
+        if (!bundle) bundle = [NSBundle bundleWithPath:[root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"]];
         if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
         if (!bundle) bundle = [NSBundle bundleForClass:[self class]];
 
@@ -426,7 +461,7 @@ static inline NSString *PM_TextV26(NSString *key) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isOverclock) {
-                spec.name = @"⚡️️ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
+                spec.name = @"⚡ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
             } else {
                 spec.name = isDynamic ? [NSString stringWithFormat:hzAutoText, (long)hz]
                                       : [NSString stringWithFormat:hzLockText, (long)hz];
@@ -458,7 +493,7 @@ static inline NSString *PM_TextV26(NSString *key) {
     if (![fm fileExistsAtPath:prefPath]) {
         NSString *dir = [prefPath stringByDeletingLastPathComponent];
         if (![fm fileExistsAtPath:dir]) {
-            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
+            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
         }
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -509,7 +544,7 @@ static inline NSString *PM_TextV26(NSString *key) {
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
-        chmod([prefPath UTF8String], 0644);
+        chmod([prefPath UTF8String], 0666); // Cấp quyền đọc ghi toàn diện
 
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
@@ -517,9 +552,6 @@ static inline NSString *PM_TextV26(NSString *key) {
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
         [self syncSharedMemoryFile:YES];
-        notify_post(NOTIFY_RELOAD);
-        notify_post(NOTIFY_UIKIT_RELOAD);
-        notify_post(NOTIFY_HARDWARE_SYNC);
     }
 }
 
@@ -552,22 +584,16 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dir = [prefPath stringByDeletingLastPathComponent];
     if (![fm fileExistsAtPath:dir]) {
-        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
+        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
     }
 
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
     [prefs setObject:value forKey:key];
     [prefs writeToFile:prefPath atomically:YES];
-    chmod([prefPath UTF8String], 0644);
+    chmod([prefPath UTF8String], 0666);
 
     BOOL currentEnabled = [key isEqualToString:@"Enabled"] ? [value boolValue] : ([self getMergedPreferences][@"Enabled"] ? [[self getMergedPreferences][@"Enabled"] boolValue] : YES);
     [self syncSharedMemoryFile:currentEnabled];
-
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        notify_post(NOTIFY_RELOAD);
-        notify_post(NOTIFY_UIKIT_RELOAD);
-        notify_post(NOTIFY_HARDWARE_SYNC);
-    });
 
     if ([key isEqualToString:@"Enabled"]) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -592,7 +618,7 @@ static inline NSString *PM_TextV26(NSString *key) {
     [prefs setObject:@(rate) forKey:secondaryKey];
     [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
     [prefs writeToFile:prefPath atomically:YES];
-    chmod([prefPath UTF8String], 0644);
+    chmod([prefPath UTF8String], 0666);
 
     CFPreferencesSetAppValue((__bridge CFStringRef)primaryKey, (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
     CFPreferencesSetAppValue((__bridge CFStringRef)secondaryKey, (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
@@ -600,11 +626,6 @@ static inline NSString *PM_TextV26(NSString *key) {
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
     [self syncSharedMemoryFile:YES];
-    
-    notify_post(NOTIFY_RELOAD);
-    notify_post(NOTIFY_UIKIT_RELOAD);
-    notify_post(NOTIFY_HARDWARE_SYNC);
-
     [self updateDynamicTitles];
     [self reloadSpecifiers];
 }
@@ -641,9 +662,10 @@ static inline NSString *PM_TextV26(NSString *key) {
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
             prefs[@"SelectedLanguage"] = code;
             [prefs writeToFile:prefPath atomically:YES];
-            chmod([prefPath UTF8String], 0644);
+            chmod([prefPath UTF8String], 0666);
 
             notify_post(NOTIFY_RELOAD);
+            notify_post(NOTIFY_TITANIUM_CHANGED);
             _allSavedSpecifiers = nil;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self setupNavigationItems];
@@ -807,6 +829,9 @@ static inline NSString *PM_TextV26(NSString *key) {
     self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
+// ============================================================================
+// HỆ THỐNG THỰC THI LỆNH HỆ THỐNG ĐA TẦNG (CẢI TIẾN TOÀN DIỆN CHO A9 - A17)
+// ============================================================================
 - (void)presentActions {
     NSString *title = PM_TextV26(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -816,21 +841,38 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSString *resetText = PM_TextV26(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định";
     NSString *closeText = PM_TextV26(@"CLOSE") ?: @"Đóng";
 
+    // 1. RESPRING CHUẨN XÁC: Ưu tiên sbreload -> Fallback killall đa tiến trình
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-            const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
             pid_t pid;
-            char *argv[] = {(char *)path, (char *)"kickstart", (char *)"-k", (char *)"system/com.apple.backboardd", NULL};
-            posix_spawn(&pid, path, NULL, NULL, argv, environ);
+            
+            // Ưu tiên sbreload của Dopamine / RootHide
+            const char *sbreloadBin = Titanium_FindExecutable("sbreload");
+            if (access(sbreloadBin, X_OK) == 0) {
+                char *argv[] = {(char *)sbreloadBin, NULL};
+                posix_spawn(&pid, sbreloadBin, NULL, NULL, argv, environ);
+                waitpid(pid, NULL, 0);
+                return;
+            }
+
+            // Fallback: Kill cả SpringBoard và backboardd để làm mới toàn diện
+            const char *killallBin = Titanium_FindExecutable("killall");
+            char *argv[] = {(char *)killallBin, (char *)"-9", (char *)"SpringBoard", (char *)"backboardd", NULL};
+            posix_spawn(&pid, killallBin, NULL, NULL, argv, environ);
+            waitpid(pid, NULL, 0);
         });
     }]];
 
+    // 2. SREBOOT: Tìm đường dẫn launchctl động thay vì hardcode
     [sheet addAction:[UIAlertAction actionWithTitle:srebootText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-            const char *path = access("/var/jb/bin/launchctl", X_OK) == 0 ? "/var/jb/bin/launchctl" : "/bin/launchctl";
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
             pid_t pid;
-            char *argv[] = {(char *)path, (char *)"reboot", (char *)"userspace", NULL};
-            posix_spawn(&pid, path, NULL, NULL, argv, environ);
+            const char *launchctlBin = Titanium_FindExecutable("launchctl");
+            char *argv[] = {(char *)launchctlBin, (char *)"reboot", (char *)"userspace", NULL};
+            posix_spawn(&pid, launchctlBin, NULL, NULL, argv, environ);
+            waitpid(pid, NULL, 0);
         });
     }]];
 
@@ -868,9 +910,11 @@ static inline NSString *PM_TextV26(NSString *key) {
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
         [self syncSharedMemoryFile:YES];
+        
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
+        notify_post(NOTIFY_TITANIUM_CHANGED);
 
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
