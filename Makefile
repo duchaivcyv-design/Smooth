@@ -24,6 +24,7 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wall \
                            -Wno-error \
                            -Wno-unused-variable \
+                           -Wno-unguarded-availability-new -Wno-unguarded-availability
                            -Wno-deprecated-declarations \
                            -Wno-unused-function \
                            -Wno-implicit-function-declaration \
