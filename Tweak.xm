@@ -934,44 +934,90 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
             if (!g_syncPayloadV261.masterEnabled || !g_syncPayloadV261.dynamicInterpolation) return 60;
             if (g_syncPayloadV261.forceOverclock) return 144;
-            if (g_syncPayloadV261.targetHz >= 30 && g_syncPayloadV261.targetHz <= 144) return g_syncPayloadV261.targetHz;
+            if (g_syncPayloadV261.targetHz >= 15 && g_syncPayloadV261.targetHz <= 144) return g_syncPayloadV261.targetHz;
         }
     }
     if (!self.enabled || !self.enableHzControl) return 60;
-    if (self.powerSaveMode) return 30;
+    if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
     
+    // Ưu tiên trả về chính xác mức Hz người dùng kéo chọn (từ 15 đến 144)
+    if (self.targetHz >= 15 && self.targetHz <= 144) {
+        return self.targetHz;
+    }
+    
     if (self.antiThermalThrottling) {
-        return (self.targetHz > 0) ? self.targetHz : 60;
+        return 60;
     }
     
     if (self.proMotionEngineBeta7) {
         CFTimeInterval now = CACurrentMediaTime();
         BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
-        if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 30;
-        if (g_liveThermalStateV261 == NSProcessInfoThermalStateSerious) return isInteracting ? 60 : 40;
-        NSInteger peakHz = (self.targetHz > 0) ? self.targetHz : 120;
-        return isInteracting ? peakHz : 60;
+        if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 15;
+        if (g_liveThermalStateV261 == NSProcessInfoThermalStateSerious) return isInteracting ? 60 : 30;
+        NSInteger peakHz = (self.targetHz >= 15 && self.targetHz <= 144) ? self.targetHz : 120;
+        return isInteracting ? peakHz : 30;
     }
-    return (self.targetHz > 0) ? self.targetHz : 60;
+    return (self.targetHz >= 15 && self.targetHz <= 144) ? self.targetHz : 60;
+}
+
+- (NSInteger)resolvedTargetHz {
+    // 🌟 Đọc và ép buộc mọi tiến trình (SpringBoard, LockScreen, App) phải nhận chuẩn Hz đã chọn
+    Titanium_ReloadSharedSyncStateV261();
+    if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.masterEnabled) {
+        if (g_syncPayloadV261.forceOverclock) return 144;
+        if (g_syncPayloadV261.targetHz >= 15 && g_syncPayloadV261.targetHz <= 144) {
+            return g_syncPayloadV261.targetHz;
+        }
+    }
+    
+    if (!self.enabled || !self.enableHzControl) return 60;
+    if (self.powerSaveMode) return 15;
+    if (self.forceOverclock144Hz) return 144;
+    
+    // Ép trả về chính xác mức Hz đang bật
+    if (self.targetHz >= 15 && self.targetHz <= 144) {
+        return self.targetHz;
+    }
+    
+    if (self.antiThermalThrottling) {
+        return 60;
+    }
+    
+    if (self.proMotionEngineBeta7) {
+        CFTimeInterval now = CACurrentMediaTime();
+        BOOL isInteracting = g_isUserTouchingV261 || (now - g_lastTouchMediaTimeV261 < 0.85);
+        if (g_liveThermalStateV261 == NSProcessInfoThermalStateCritical) return isInteracting ? 45 : 15;
+        if (g_liveThermalStateV261 == NSProcessInfoThermalStateSerious) return isInteracting ? 60 : 30;
+        NSInteger peakHz = (self.targetHz >= 15 && self.targetHz <= 144) ? self.targetHz : 120;
+        return isInteracting ? peakHz : 30;
+    }
+    return (self.targetHz >= 15 && self.targetHz <= 144) ? self.targetHz : 60;
 }
 
 - (NSInteger)resolvedTargetFPS {
-    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-        Titanium_ReloadSharedSyncStateV261();
-        if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
-            if (!g_syncPayloadV261.masterEnabled) return 60;
-            if (g_syncPayloadV261.targetFPS >= 30 && g_syncPayloadV261.targetFPS <= 144) return g_syncPayloadV261.targetFPS;
+    // 🌟 Ép toàn bộ khung hình FPS của App, LockScreen và hiệu ứng theo đúng cấu hình
+    Titanium_ReloadSharedSyncStateV261();
+    if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.masterEnabled) {
+        if (g_syncPayloadV261.targetFPS >= 15 && g_syncPayloadV261.targetFPS <= 144) {
+            return g_syncPayloadV261.targetFPS;
         }
     }
+    
     if (!self.enabled || !self.enableFPSControl) return 60;
-    if (self.powerSaveMode) return 30;
+    if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
+    
+    // Ép trả về chính xác mức FPS đang bật
+    if (self.targetFPS >= 15 && self.targetFPS <= 144) {
+        return self.targetFPS;
+    }
+    
     if (self.antiThermalThrottling) {
-        return (self.targetFPS > 0) ? self.targetFPS : 60;
+        return 60;
     }
     if (self.proMotionEngineBeta7) return [self resolvedTargetHz];
-    return (self.targetFPS > 0) ? self.targetFPS : 60;
+    return (self.targetFPS >= 15 && self.targetFPS <= 144) ? self.targetFPS : 60;
 }
 @end
 
