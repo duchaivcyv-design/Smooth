@@ -9,13 +9,13 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = BoostiPhone6s
 BUNDLE_NAME = BoostiPhone6sPrefs
 
-# Khai báo file giả lập để Theos không bị lỗi path traversal (..)
-BoostiPhone6s_FILES =
+# Dùng file Tweak.m nằm ngay trong thư mục con, không dùng dấu ../
+BoostiPhone6s_FILES = Tweak.m
 BoostiPhone6s_CFLAGS = -fobjc-arc -O3 -Wall -Wno-error -Wno-deprecated-declarations -Wno-unknown-warning-option -Wno-unused-variable -Wno-unused-function -Wno-implicit-function-declaration -Wno-deprecated-non-prototype -fno-autolink
 BoostiPhone6s_FRAMEWORKS = UIKit Foundation CoreGraphics Metal QuartzCore
-BoostiPhone6s_LDFLAGS = -Wl,-dead_strip -Wl,-undefined,dynamic_lookup -L../.theos/obj -lBoostiPhone6sCore
+BoostiPhone6s_LDFLAGS = -Wl,-dead_strip -Wl,-undefined,dynamic_lookup
 
-# Mã nguồn Giao diện Cài đặt
+# Mã nguồn Giao diện Cài đặt (Prefs)
 BoostiPhone6sPrefs_FILES = RootListController.m
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
