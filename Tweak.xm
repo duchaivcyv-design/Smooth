@@ -3496,13 +3496,12 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         %init(Group_V261_FloatingWindow_PiP);
         %init(_ungrouped);
 
-        // 5. ĐỊNH TUYẾN CHUYÊN SÂU TẦNG GIAO DIỆN HỆ THỐNG SPRINGBOARD
+        // 5. ĐỊNH TUYẾN CHUYÊN SÂU TẦNG GIAO DIỆN HỆ THỐNG SPRINGBOARD VS APP NGOÀI
         if (Titanium_IsSpringBoard()) {
-            // Sửa triệt để phình to đa nhiệm App Switcher & Giám sát tiến trình SpringBoard
             %init(Group_Display_SpringBoardV261);
             %init(Group_SpringBoard_ProcessManagerV261);
         } else {
-            // Ép nạp tầng UIKit cách ly cho toàn bộ 100% ứng dụng bên thứ 3 và Game
+            // Ép nạp duy nhất một lần tại đây cho ứng dụng bên thứ 3
             %init(Group_UIKit_ThirdParty_IsolatedV261);
         }
 
@@ -3518,16 +3517,12 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // 7. BẮT SỰ KIỆN NẠP TRỄ CỦA UIKIT (CHỐNG LỖI CÁC APP NẶNG & ENGINE GAME RIÊNG)
+        // 7. GIA TỐC RUNTIME CHO GIAI ĐOẠN APP HOÀN TẤT KHỞI ĐỘNG (KHÔNG RE-%INIT)
         [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                           object:nil
                                                            queue:[NSOperationQueue mainQueue]
                                                       usingBlock:^(NSNotification * _Nonnull note) {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            if (!Titanium_IsSpringBoard()) {
-                %init(Group_UIKit_ThirdParty_IsolatedV261);
-                %init(Group_ScrollPerformance_SuperEngineV261);
-            }
         }];
 
         // 8. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION (CHỐNG TREO WATCHDOG TIMEOUT)
