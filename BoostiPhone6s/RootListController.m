@@ -6,12 +6,11 @@
 #import <fcntl.h>
 #import <unistd.h>
 #import <notify.h>
+#import <dlfcn.h>
 #import <mach/mach.h>
 #import <mach/mach_time.h>
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
-#define PREF_PATH @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
-#define FALLBACK_PREF_PATH @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
 #define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
 
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
@@ -19,6 +18,42 @@
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 
 extern char **environ;
+
+static inline NSString *Titanium_GetRootHidePrefixPath(void) {
+    static NSString *cachedJbRoot = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        Dl_info info;
+        if (dladdr((const void *)Titanium_GetRootHidePrefixPath, &info) && info.dli_fname) {
+            NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
+            NSRange range = [dylibPath rangeOfString:@"/var/jb"];
+            if (range.location != NSNotFound) {
+                NSRange sub = [dylibPath rangeOfString:@"/" options:0 range:NSMakeRange(range.location + 7, dylibPath.length - (range.location + 7))];
+                if (sub.location != NSNotFound) {
+                    cachedJbRoot = [dylibPath substringToIndex:sub.location];
+                } else {
+                    cachedJbRoot = @"/var/jb";
+                }
+            } else {
+                cachedJbRoot = @"/var/jb";
+            }
+        } else {
+            cachedJbRoot = @"/var/jb";
+        }
+    });
+    return cachedJbRoot;
+}
+
+static inline NSString *Titanium_ResolvePrefPath(void) {
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist", root];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
+    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
+    NSString *p3 = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p3]) return p3;
+    return p1;
+}
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -91,26 +126,20 @@ static NSDictionary *g_LocDictV26 = nil;
 static void PM_LoadLocalizationIfNeededV26(void) {
     if (g_LocDictV26) return;
     
-    NSBundle *bundle = [NSBundle bundleForClass:[RootListController class]];
-    NSString *path = [bundle pathForResource:@"Localization" ofType:@"plist"];
-    
-    if (!path) {
-        NSArray *possiblePaths = @[
-            @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
-            @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist",
-            @"/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
-            @"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"
-        ];
-        for (NSString *p in possiblePaths) {
-            if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
-                path = p;
-                break;
-            }
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    NSArray *possiblePaths = @[
+        [NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist", root],
+        [NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist", root],
+        @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
+        @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist",
+        @"/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
+        @"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"
+    ];
+    for (NSString *p in possiblePaths) {
+        if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+            g_LocDictV26 = [[NSDictionary alloc] initWithContentsOfFile:p];
+            break;
         }
-    }
-    
-    if (path) {
-        g_LocDictV26 = [[NSDictionary alloc] initWithContentsOfFile:path];
     }
 }
 
@@ -216,7 +245,7 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
     NSDictionary *headerMap = @{
-        @"CÔNG TẮC TỔNG HỆ THỐNG V26 SUPREME": @"GROUP_MASTER",
+        @"CÔNG TẮC TỔNG HỆ THỐNG V26 BETA": @"GROUP_MASTER",
         @"ĐẶC QUYỀN NÂNG CẤP V26 (HEX BUFFERING 6 TẦNG)": @"GROUP_SPECIAL",
         @"ĐIỀU PHỐI HZ & FPS (PHÂN NHÁNH 3 MỤC)": @"GROUP_HZ_FPS",
         @"TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)": @"GROUP_LAZY",
@@ -231,9 +260,9 @@ static inline NSString *PM_TextV26(NSString *key) {
 
     NSDictionary *footerMap = @{
         @"Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.": @"FOOTER_MASTER",
-        @"ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.": @"FOOTER_SPECIAL",
+        @"ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và kích hoạt Hex Buffering (6 tầng Metal) thông minh.": @"FOOTER_SPECIAL",
         @"Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.": @"FOOTER_HZ_FPS",
-        @"Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ hoạ.": @"FOOTER_LAZY",
+        @"Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ họa.": @"FOOTER_LAZY",
         @"© 2026 BoostiPhone6s V26 SUPREME - Tối ưu hoàn chỉnh bởi ĐỨC LONG.": @"FOOTER_DEV"
     };
 
@@ -270,9 +299,6 @@ static inline NSString *PM_TextV26(NSString *key) {
             } else if ([lbl isEqualToString:@"Phiên Bản"]) {
                 NSString *t = PM_TextV26(@"Version");
                 if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
-            } else if ([lbl isEqualToString:@"Tham Gia Nhóm Hỗ TrỢ Zalo"]) {
-                NSString *t = PM_TextV26(@"SupportLink");
-                if (t) { spec.name = t; [spec setProperty:t forKey:@"label"]; }
             }
         }
     }
@@ -280,9 +306,13 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
-        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+        NSString *root = Titanium_GetRootHidePrefixPath();
+        NSString *bundlePath = [NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6s.bundle", root];
+        NSBundle *bundle = [NSBundle bundleWithPath:bundlePath];
+        if (!bundle) bundle = [NSBundle bundleWithPath:[NSString stringWithFormat:@"%@/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle", root]];
         if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
-        if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
+        if (!bundle) bundle = [NSBundle bundleForClass:[self class]];
+
         _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
         [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
@@ -399,19 +429,18 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 - (NSDictionary *)getMergedPreferences {
     CFPreferencesAppSynchronize(PREF_DOMAIN);
-    NSDictionary *diskDict = nil;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREF_PATH]) {
-        diskDict = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH];
-    } else if ([[NSFileManager defaultManager] fileExistsAtPath:FALLBACK_PREF_PATH]) {
-        diskDict = [NSDictionary dictionaryWithContentsOfFile:FALLBACK_PREF_PATH];
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+        return [NSDictionary dictionaryWithContentsOfFile:prefPath];
     }
-    return diskDict ?: [NSDictionary dictionary];
+    return [NSDictionary dictionary];
 }
 
 - (void)ensureDefaultSettingsExist {
+    NSString *prefPath = Titanium_ResolvePrefPath();
     NSFileManager *fm = [NSFileManager defaultManager];
-    if (![fm fileExistsAtPath:PREF_PATH] && ![fm fileExistsAtPath:FALLBACK_PREF_PATH]) {
-        NSString *dir = [PREF_PATH stringByDeletingLastPathComponent];
+    if (![fm fileExistsAtPath:prefPath]) {
+        NSString *dir = [prefPath stringByDeletingLastPathComponent];
         if (![fm fileExistsAtPath:dir]) {
             [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
         }
@@ -419,60 +448,52 @@ static inline NSString *PM_TextV26(NSString *key) {
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
             @"Enabled": @YES,
             @"SelectedLanguage": @"auto",
-            @"ProMotionEngineBeta7": @YES,
-            @"HeavyEffectAntiLagV24": @YES,
+            @"ProMotionEngineBeta7": @NO,
+            @"MetalHexBuffering": @YES,
             @"KeyboardZeroLagV24": @YES,
             @"EnableHzControl": @YES,
-            @"TargetRefreshRate": @60,
+            @"TargetRefreshRate": @144,
             @"EnableFPSControl": @YES,
-            @"TargetFPSRate": @60,
+            @"TargetFPSRate": @144,
             @"ForceOverclock144Hz": @NO,
-            @"AppLazyInjectionSync": @YES,
-            @"AppRenderShieldIsolation": @YES,
+            @"SyncModuleDelay": @YES,
+            @"IsolateRenderPipeline": @YES,
             @"ColorOs17SmoothEngine": @YES,
-            @"ReduceMultiTaskLag": @YES,
-            @"FixAppLaunchBlackScreen": @YES,
+            @"ReduceMultitaskLag": @YES,
+            @"AntiBlackScreenLaunch": @YES,
             @"FixAppExitStutter": @YES,
             @"TouchResponseBoost": @YES,
-            @"QuantumRenderShieldOfficial": @YES,
-            @"NeuralBufferOptimizerOfficial": @YES,
-            @"ApexBackgroundPacingDaemon": @YES,
+            @"QuantumRenderShield": @YES,
+            @"NeuralBufferOpt": @YES,
+            @"BackgroundPacingDaemon": @YES,
             @"HyperMemoryGuardian": @YES,
-            @"UltraResponsivenessProEngineOfficial": @YES,
-            @"HyperThreadIOAcceleratorOfficial": @YES,
-            @"QuantumCoreSyncStabilizerOfficial": @YES,
-            @"ZeroLagNeuralBoosterOfficial": @YES,
-            @"VsyncAdaptiveBufferOfficial": @YES,
-            @"DynamicThermalEngineOfficial": @YES,
-            @"Ios27AutoScheduler": @YES,
-            @"RealtimePriorityBoost": @YES,
-            @"BoostCpuGpu": @YES,
-            @"SmartRamClean": @YES,
-            @"AggressiveRamClean": @NO,
-            @"KillBgApps": @NO,
-            @"TurboAppLaunch": @YES,
-            @"MetalHexBuffering": @YES,
-            @"GameFpsStabilizer": @YES,
-            @"OptimizeSystemProcess": @YES,
-            @"AutoSpoofNewDevice": @YES,
-            @"AntiThermalThrottling": @YES,
-            @"SmartThermalManager": @YES,
+            @"UltraResponsiveness": @YES,
+            @"HyperThreadIO": @YES,
+            @"QuantumCoreSync": @YES,
+            @"ZeroLagNeuralBooster": @YES,
+            @"VsyncAdaptiveBuffer": @YES,
+            @"DynamicThermalEngine": @YES,
+            @"IOSchedulerEngine": @YES,
+            @"RealtimeThreadSched": @YES,
+            @"CPUGPUFreqOptimizer": @YES,
+            @"PeriodicRamClean": @YES,
+            @"MachVMPurgeRam": @YES,
+            @"AutoCloseBackgroundApp": @NO,
+            @"TurboLaunch": @YES,
+            @"GameFPSStabilizer": @YES,
+            @"SystemProcessOpt": @YES,
+            @"DeviceSpoofer": @YES,
+            @"AntiThermalThrottle": @YES,
+            @"SmartThermalDispatch": @YES,
             @"HeavyLoadCooling": @YES,
-            @"ChargeCoolingProtection": @YES,
+            @"ChargeThermalProtection": @YES,
             @"PowerSaveMode": @NO,
             @"BypassVarSandbox": @YES,
-            @"BlockAnalytics": @YES
+            @"BlockBackgroundTelemetry": @YES
         }];
 
-        NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
-        for (NSString *tPath in targets) {
-            NSString *tDir = [tPath stringByDeletingLastPathComponent];
-            if (![fm fileExistsAtPath:tDir]) {
-                [fm createDirectoryAtPath:tDir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
-            }
-            [defaults writeToFile:tPath atomically:YES];
-            chmod([tPath UTF8String], 0644);
-        }
+        [defaults writeToFile:prefPath atomically:YES];
+        chmod([prefPath UTF8String], 0644);
 
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
@@ -511,19 +532,17 @@ static inline NSString *PM_TextV26(NSString *key) {
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-    NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
+    NSString *prefPath = Titanium_ResolvePrefPath();
     NSFileManager *fm = [NSFileManager defaultManager];
-    for (NSString *targetPath in targets) {
-        NSString *dir = [targetPath stringByDeletingLastPathComponent];
-        if (![fm fileExistsAtPath:dir]) {
-            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
-        }
-
-        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
-        [prefs setObject:value forKey:key];
-        [prefs writeToFile:targetPath atomically:YES];
-        chmod([targetPath UTF8String], 0644);
+    NSString *dir = [prefPath stringByDeletingLastPathComponent];
+    if (![fm fileExistsAtPath:dir]) {
+        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
     }
+
+    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
+    [prefs setObject:value forKey:key];
+    [prefs writeToFile:prefPath atomically:YES];
+    chmod([prefPath UTF8String], 0644);
 
     BOOL currentEnabled = [key isEqualToString:@"Enabled"] ? [value boolValue] : ([self getMergedPreferences][@"Enabled"] ? [[self getMergedPreferences][@"Enabled"] boolValue] : YES);
     [self syncSharedMemoryFile:currentEnabled];
@@ -545,15 +564,13 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSString *primaryKey = isFPS ? @"TargetFPSRate" : @"TargetRefreshRate";
     NSString *secondaryKey = isFPS ? @"TargetRefreshRate" : @"TargetFPSRate";
 
-    NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
-    for (NSString *targetPath in targets) {
-        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
-        [prefs setObject:@(rate) forKey:primaryKey];
-        [prefs setObject:@(rate) forKey:secondaryKey];
-        [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
-        [prefs writeToFile:targetPath atomically:YES];
-        chmod([targetPath UTF8String], 0644);
-    }
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
+    [prefs setObject:@(rate) forKey:primaryKey];
+    [prefs setObject:@(rate) forKey:secondaryKey];
+    [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
+    [prefs writeToFile:prefPath atomically:YES];
+    chmod([prefPath UTF8String], 0644);
 
     CFPreferencesSetAppValue((__bridge CFStringRef)primaryKey, (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
     CFPreferencesSetAppValue((__bridge CFStringRef)secondaryKey, (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
@@ -597,13 +614,11 @@ static inline NSString *PM_TextV26(NSString *key) {
             CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-            NSArray *targets = @[PREF_PATH, FALLBACK_PREF_PATH];
-            for (NSString *targetPath in targets) {
-                NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:targetPath] ?: [NSMutableDictionary dictionary];
-                prefs[@"SelectedLanguage"] = code;
-                [prefs writeToFile:targetPath atomically:YES];
-                chmod([targetPath UTF8String], 0644);
-            }
+            NSString *prefPath = Titanium_ResolvePrefPath();
+            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
+            prefs[@"SelectedLanguage"] = code;
+            [prefs writeToFile:prefPath atomically:YES];
+            chmod([prefPath UTF8String], 0644);
 
             notify_post(NOTIFY_RELOAD);
             _allSavedSpecifiers = nil;
@@ -816,8 +831,8 @@ static inline NSString *PM_TextV26(NSString *key) {
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:confirmTitle message:confirmMsg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:resetNowText style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-        [[NSFileManager defaultManager] removeItemAtPath:PREF_PATH error:nil];
-        [[NSFileManager defaultManager] removeItemAtPath:FALLBACK_PREF_PATH error:nil];
+        NSString *prefPath = Titanium_ResolvePrefPath();
+        [[NSFileManager defaultManager] removeItemAtPath:prefPath error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:SHARED_SYNC_FILE error:nil];
 
         CFPreferencesAppSynchronize(PREF_DOMAIN);
