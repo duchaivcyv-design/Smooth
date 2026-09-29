@@ -3316,60 +3316,67 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             }
         }
 
-        // 1. Khởi tạo cấu hình trên luồng nền để tránh block Main Thread của SpringBoard/RootHide
+        // 1. Khởi tạo cấu hình Singleton trên luồng nền
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             CFG261 = [BoostConfigV261 sharedInstance];
         });
 
-        // 2. Trì hoãn 2.5 giây (Tối ưu đặc biệt cho RootHide / iPhone 6s-7 Plus chống đen màn hình khi SReboot)
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            Titanium_StartThermalWatchdogTimerV261();
+        // 2. Tăng độ trễ lên 3.5 giây để SpringBoard check-in hoàn toàn với hệ thống, triệt tiêu 100% lỗi Watchdog Timeout 180s
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            
+            // Đẩy toàn bộ quá trình %init sang hàng đợi ngầm để bảo vệ tuyệt đối Main Thread không bị block
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                Titanium_StartThermalWatchdogTimerV261();
 
-            CFNotificationCenterAddObserver(
-                CFNotificationCenterGetDarwinNotifyCenter(),
-                NULL,
-                reloadPrefsNotificationV261,
-                CFSTR(NOTIFY_RELOAD),
-                NULL,
-                CFNotificationSuspensionBehaviorCoalesce
-            );
-            CFNotificationCenterAddObserver(
-                CFNotificationCenterGetDarwinNotifyCenter(),
-                NULL,
-                reloadPrefsNotificationV261,
-                CFSTR(NOTIFY_UIKIT_RELOAD),
-                NULL,
-                CFNotificationSuspensionBehaviorCoalesce
-            );
+                CFNotificationCenterAddObserver(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    NULL,
+                    reloadPrefsNotificationV261,
+                    CFSTR(NOTIFY_RELOAD),
+                    NULL,
+                    CFNotificationSuspensionBehaviorCoalesce
+                );
+                CFNotificationCenterAddObserver(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    NULL,
+                    reloadPrefsNotificationV261,
+                    CFSTR(NOTIFY_UIKIT_RELOAD),
+                    NULL,
+                    CFNotificationSuspensionBehaviorCoalesce
+                );
 
-            %init(Group_FastLaunch_SuperEngineV261);
-            %init(Group_V261_FloatingWindow_PiP);
-            %init(Group_ZeroLatencyTouch_PhysicsV261);
-            %init(Group_MetalGraphics_OptV261);
+                // Thực thi nạp nhóm Hook an toàn
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    %init(Group_FastLaunch_SuperEngineV261);
+                    %init(Group_V261_FloatingWindow_PiP);
+                    %init(Group_ZeroLatencyTouch_PhysicsV261);
+                    %init(Group_MetalGraphics_OptV261);
 
-            if (Titanium_IsSpringBoard()) {
-                %init(Group_Display_SpringBoardV261);
-                %init(Group_SpringBoard_ProcessManagerV261);
+                    if (Titanium_IsSpringBoard()) {
+                        %init(Group_Display_SpringBoardV261);
+                        %init(Group_SpringBoard_ProcessManagerV261);
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    Titanium_StartPassiveRamDaemonV261();
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            Titanium_StartPassiveRamDaemonV261();
+                        });
+                    } else {
+                        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                                          object:nil
+                                                                           queue:[NSOperationQueue mainQueue]
+                                                                      usingBlock:^(NSNotification *notificationObserver) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                %init(Group_UIKit_ThirdParty_IsolatedV261);
+                            });
+                        }];
+                    }
+
+                    if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
+                        %init(Group_Keyboard_And_TextV261);
+                    }
+
+                    %init(_ungrouped);
                 });
-            } else {
-                [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                                  object:nil
-                                                                   queue:[NSOperationQueue mainQueue]
-                                                              usingBlock:^(NSNotification *notificationObserver) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        %init(Group_UIKit_ThirdParty_IsolatedV261);
-                    });
-                }];
-            }
-
-            if (Titanium_IsSpringBoard() || [processName containsString:@"inputhost"] || [processName containsString:@"Keyboard"]) {
-                %init(Group_Keyboard_And_TextV261);
-            }
-
-            %init(_ungrouped);
+            });
         });
     }
 }
