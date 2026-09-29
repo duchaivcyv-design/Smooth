@@ -3316,13 +3316,13 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             }
         }
 
-        // Khởi tạo cấu hình trên luồng nền để tránh block Main Thread của SpringBoard
+        // 1. Khởi tạo cấu hình trên luồng nền để tránh block Main Thread của SpringBoard/RootHide
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             CFG261 = [BoostConfigV261 sharedInstance];
         });
 
-        // Trì hoãn việc nạp Hook và theo dõi nhiệt độ sang 1.2 giây sau để SpringBoard khởi động mượt mà trước
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 2. Trì hoãn 2.5 giây (Tối ưu đặc biệt cho RootHide / iPhone 6s-7 Plus chống đen màn hình khi SReboot)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             Titanium_StartThermalWatchdogTimerV261();
 
             CFNotificationCenterAddObserver(
@@ -3351,7 +3351,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
                 %init(Group_Display_SpringBoardV261);
                 %init(Group_SpringBoard_ProcessManagerV261);
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     Titanium_StartPassiveRamDaemonV261();
                 });
             } else {
