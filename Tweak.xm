@@ -2852,8 +2852,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 %end
 
-%end
-
 %hook CAMetalLayer // <-- Đảm bảo dòng này nằm ở TRÊN CÙNG của nhóm method này
 
 - (BOOL)allowsNextDrawableTimeout {
