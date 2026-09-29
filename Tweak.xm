@@ -656,7 +656,7 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
         }
         CFPropertyListRef metalVal = CFPreferencesCopyAppValue(CFSTR("MetalHexBuffering"), PREF_DOMAIN);
         if (metalVal) {
-            g_syncPayloadV261.smartBufferingLevel = CFBooleanGetValue((CFBooleanRef)metalVal) ? 6 : 4;[span_2](start_span)[span_2](end_span)
+            g_syncPayloadV261.smartBufferingLevel = CFBooleanGetValue((CFBooleanRef)metalVal) ? 6 : 4;
             CFRelease(metalVal);
         }
         CFPropertyListRef exitVal = CFPreferencesCopyAppValue(CFSTR("FixAppExitStutter"), PREF_DOMAIN);
