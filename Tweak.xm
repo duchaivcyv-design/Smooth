@@ -851,7 +851,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
         self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
         self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
+        self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
         self.neuralBufferOpt = self.metalHexBuffering;
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
@@ -875,27 +875,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.antiThermalThrottle = self.antiThermalThrottling;
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
 
-        // 🌟 Đồng bộ hóa trạng thái cho cả SpringBoard và App bên ngoài đọc chung dữ liệu
-        if (Titanium_IsSpringBoard()) {
-            ApexV261Payload p;
-            memset(&p, 0, sizeof(ApexV261Payload));
-            p.masterEnabled = self.enabled ? 1 : 0;
-            p.targetHz = (int32_t)self.targetHz;
-            p.targetFPS = (int32_t)self.targetFPS;
-            p.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
-            p.pipSyncEnabled = 1;
-            p.thermalShield = self.antiThermalThrottling ? 1 : 0;
-            p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = self.metalHexBuffering ? 6 : 4;
-            p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
-            p.shaderOptimization = 1;
-            p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
-            p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
-            p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
-            p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
-            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
-            Titanium_WriteSyncPayloadV261(&p);
-        } else {
+        if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
             Titanium_ReloadSharedSyncStateV261();
             if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
                 self.enabled = g_syncPayloadV261.masterEnabled;
@@ -924,6 +904,25 @@ static BOOL Titanium_IsSecureBankingApp(void) {
                 self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
                 self.antiThermalThrottle = self.antiThermalThrottling;
             }
+        } else if (Titanium_IsSpringBoard()) {
+            ApexV261Payload p;
+            memset(&p, 0, sizeof(ApexV261Payload));
+            p.masterEnabled = self.enabled ? 1 : 0;
+            p.targetHz = (int32_t)self.targetHz;
+            p.targetFPS = (int32_t)self.targetFPS;
+            p.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
+            p.pipSyncEnabled = 1;
+            p.thermalShield = self.antiThermalThrottling ? 1 : 0;
+            p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
+            p.smartBufferingLevel = self.metalHexBuffering ? 6 : 4;
+            p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
+            p.shaderOptimization = 1;
+            p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
+            p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
+            p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
+            p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
+            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
+            Titanium_WriteSyncPayloadV261(&p);
         }
     });
 }
