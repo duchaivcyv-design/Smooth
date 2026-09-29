@@ -2814,7 +2814,9 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     %orig(allow);
 }
-%end // Đóng %hook CAMetalLayer ở đây
+%end // Đóng %hook CAMetalLayer
+
+%end // Đóng %group Group_MetalGraphics_OptV261
 
 %hook CADisplayLink
 - (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
