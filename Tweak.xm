@@ -3501,12 +3501,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             // Sửa triệt để phình to đa nhiệm App Switcher & Giám sát tiến trình SpringBoard
             %init(Group_Display_SpringBoardV261);
             %init(Group_SpringBoard_ProcessManagerV261);
-
-            // Video PIP (Picture in Picture)
-            Class pipClass = NSClassFromString(@"SBPIPController");
-            if (pipClass) {
-                %init(Group_PIP_VideoOptV261, PIPController = pipClass);
-            }
         } else {
             // Ép nạp tầng UIKit cách ly cho toàn bộ 100% ứng dụng bên thứ 3 và Game
             %init(Group_UIKit_ThirdParty_IsolatedV261);
@@ -3572,4 +3566,3 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         });
     }
 }
-
