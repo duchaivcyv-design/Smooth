@@ -816,7 +816,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             return defaultVal;
         };
         
-        // Đã mở khóa cho phép mọi tiến trình (cả app ngoài) đều đọc trực tiếp được file plist
         NSDictionary *diskDict = nil;
         NSString *resolvedPath = Titanium_ResolvePrefPath();
         if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
@@ -852,7 +851,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
         self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
         self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
+        self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
         self.neuralBufferOpt = self.metalHexBuffering;
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
@@ -876,34 +875,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.antiThermalThrottle = self.antiThermalThrottling;
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
 
-        if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-            Titanium_ReloadSharedSyncStateV261();
-            self.enabled = g_syncPayloadV261.masterEnabled;
-            self.targetHz = g_syncPayloadV261.targetHz;
-            self.targetFPS = g_syncPayloadV261.targetFPS;
-            self.forceOverclock144Hz = g_syncPayloadV261.forceOverclock;
-            self.proMotionEngineBeta7 = g_syncPayloadV261.dynamicInterpolation ? YES : NO;
-            self.touchResponseBoost = g_syncPayloadV261.zeroLatencyTouch ? YES : NO;
-            self.ultraResponsiveness = self.touchResponseBoost;
-            self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
-            self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
-            self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
-            self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel == 6) ? YES : NO;
-            self.neuralBufferOpt = self.metalHexBuffering;
-            self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
-            self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
-            self.quantumRenderShield = self.fixAppExitStutter;
-            self.autoCloseBackgroundApp = self.fixAppExitStutter;
-            self.reduceMultitaskLag = self.fixAppExitStutter;
-            self.reduceMultiTaskLag = self.reduceMultitaskLag;
-            self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
-            self.turboLaunch = self.turboAppLaunch;
-            self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
-            self.periodicRamClean = self.aggressiveRamClean;
-            self.machVMPurgeRam = self.aggressiveRamClean;
-            self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
-            self.antiThermalThrottle = self.antiThermalThrottling;
-        } else if (Titanium_IsSpringBoard()) {
+        // 🌟 Đồng bộ hóa trạng thái cho cả SpringBoard và App bên ngoài đọc chung dữ liệu
+        if (Titanium_IsSpringBoard()) {
             ApexV261Payload p;
             memset(&p, 0, sizeof(ApexV261Payload));
             p.masterEnabled = self.enabled ? 1 : 0;
@@ -922,6 +895,35 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
             p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
             Titanium_WriteSyncPayloadV261(&p);
+        } else {
+            Titanium_ReloadSharedSyncStateV261();
+            if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
+                self.enabled = g_syncPayloadV261.masterEnabled;
+                self.targetHz = g_syncPayloadV261.targetHz;
+                self.targetFPS = g_syncPayloadV261.targetFPS;
+                self.forceOverclock144Hz = g_syncPayloadV261.forceOverclock;
+                self.proMotionEngineBeta7 = g_syncPayloadV261.dynamicInterpolation ? YES : NO;
+                self.touchResponseBoost = g_syncPayloadV261.zeroLatencyTouch ? YES : NO;
+                self.ultraResponsiveness = self.touchResponseBoost;
+                self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
+                self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
+                self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
+                self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel == 6) ? YES : NO;
+                self.neuralBufferOpt = self.metalHexBuffering;
+                self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
+                self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
+                self.quantumRenderShield = self.fixAppExitStutter;
+                self.autoCloseBackgroundApp = self.fixAppExitStutter;
+                self.reduceMultitaskLag = self.fixAppExitStutter;
+                self.reduceMultiTaskLag = self.reduceMultitaskLag;
+                self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
+                self.turboLaunch = self.turboAppLaunch;
+                self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
+                self.periodicRamClean = self.aggressiveRamClean;
+                self.machVMPurgeRam = self.aggressiveRamClean;
+                self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
+                self.antiThermalThrottle = self.antiThermalThrottling;
+            }
         }
     });
 }
@@ -929,9 +931,11 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 - (NSInteger)resolvedTargetHz {
     if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
         Titanium_ReloadSharedSyncStateV261();
-        if (!g_syncPayloadV261.masterEnabled || !g_syncPayloadV261.dynamicInterpolation) return 60;
-        if (g_syncPayloadV261.forceOverclock) return 144;
-        if (g_syncPayloadV261.targetHz >= 30 && g_syncPayloadV261.targetHz <= 144) return g_syncPayloadV261.targetHz;
+        if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
+            if (!g_syncPayloadV261.masterEnabled || !g_syncPayloadV261.dynamicInterpolation) return 60;
+            if (g_syncPayloadV261.forceOverclock) return 144;
+            if (g_syncPayloadV261.targetHz >= 30 && g_syncPayloadV261.targetHz <= 144) return g_syncPayloadV261.targetHz;
+        }
     }
     if (!self.enabled || !self.enableHzControl) return 60;
     if (self.powerSaveMode) return 30;
@@ -955,8 +959,10 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 - (NSInteger)resolvedTargetFPS {
     if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
         Titanium_ReloadSharedSyncStateV261();
-        if (!g_syncPayloadV261.masterEnabled) return 60;
-        if (g_syncPayloadV261.targetFPS >= 30 && g_syncPayloadV261.targetFPS <= 144) return g_syncPayloadV261.targetFPS;
+        if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
+            if (!g_syncPayloadV261.masterEnabled) return 60;
+            if (g_syncPayloadV261.targetFPS >= 30 && g_syncPayloadV261.targetFPS <= 144) return g_syncPayloadV261.targetFPS;
+        }
     }
     if (!self.enabled || !self.enableFPSControl) return 60;
     if (self.powerSaveMode) return 30;
@@ -968,7 +974,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     return (self.targetFPS > 0) ? self.targetFPS : 60;
 }
 @end
-
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
