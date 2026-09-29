@@ -1,3 +1,4 @@
+
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
@@ -329,7 +330,7 @@ typedef struct __attribute__((packed)) {
     uint32_t pipSyncEnabled;
     uint32_t thermalShield;
     uint32_t antiStutterExit;
-    uint32_t tripleBuffering;
+    uint32_t quadBuffering;
     uint32_t zeroLatencyTouch;
     uint32_t shaderOptimization;
     uint32_t dynamicInterpolation;
@@ -361,7 +362,7 @@ static ApexMotionEngineState g_titaniumMotionState = {
     0, 0, 0.85f, NO, 0, 0.5f, 120, 0, 0, 0.992f, NO, 0, 0, 0, 0.0f, 0.0f
 };
 static ApexV25CorePayload g_coreSync = {
-    APEX_SYNC_MAGIC, 1, 60, 60, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
+    APEX_SYNC_MAGIC, 1, 60, 60, 0, 1, 1, 1, 4, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
 };
 
 static pthread_mutex_t g_syncLock = PTHREAD_MUTEX_INITIALIZER;
@@ -472,7 +473,7 @@ static inline void Apex_SetThreadRealtimeConstraint(thread_t thread, uint32_t ta
     uint32_t framePeriodNs = 1000000000 / hz;
     thread_time_constraint_policy_data_t timeConstraint;
     timeConstraint.period = framePeriodNs;
-    timeConstraint.computation = framePeriodNs * 7 / 10;
+    timeConstraint.computation = framePeriodNs * 8 / 10;
     timeConstraint.constraint = framePeriodNs;
     timeConstraint.preemptible = 1;
     thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
@@ -921,7 +922,7 @@ static void Titanium_StartChargingMonitor(void) {
 @property (nonatomic, assign) BOOL aggressiveRamClean;     
 @property (nonatomic, assign) BOOL killBgApps;
 @property (nonatomic, assign) BOOL turboAppLaunch;
-@property (nonatomic, assign) BOOL metalTripleBuffering;
+@property (nonatomic, assign) BOOL metalQuadBuffering;
 @property (nonatomic, assign) BOOL gameFpsStabilizer;
 @property (nonatomic, assign) BOOL optimizeSystemProcess;
 @property (nonatomic, assign) BOOL autoSpoofNewDevice;
@@ -1038,7 +1039,7 @@ static void Titanium_StartChargingMonitor(void) {
         self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
         self.killBgApps = GetLiveBool(@"KillBgApps", NO);
         self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
-        self.metalTripleBuffering = GetLiveBool(@"MetalTripleBuffering", YES);
+        self.metalQuadBuffering = GetLiveBool(@"MetalQuadBuffering", YES) || GetLiveBool(@"MetalTripleBuffering", YES);
         self.gameFpsStabilizer = GetLiveBool(@"GameFpsStabilizer", YES);
         self.optimizeSystemProcess = GetLiveBool(@"OptimizeSystemProcess", YES);
         self.autoSpoofNewDevice = GetLiveBool(@"AutoSpoofNewDevice", YES);
@@ -1070,7 +1071,7 @@ static void Titanium_StartChargingMonitor(void) {
             outP.pipSyncEnabled = 1;
             outP.thermalShield = self.antiThermalThrottling ? 1 : 0;
             outP.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            outP.tripleBuffering = self.metalTripleBuffering ? 1 : 0;
+            outP.quadBuffering = self.metalQuadBuffering ? 4 : 3;
             outP.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
             outP.shaderOptimization = 1;
             outP.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
@@ -1189,11 +1190,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook CADisplayLink
 - (NSInteger)preferredFramesPerSecond {
+    V25_ReadSyncMemory();
     if (!IS_ON || !CFG_PTR.enableFPSControl) return %orig;
     return [CFG_PTR resolvedTargetFPS];
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    V25_ReadSyncMemory();
     if (!IS_ON || !CFG_PTR.enableFPSControl) {
         %orig(fps);
         return;
@@ -1202,12 +1205,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
     return CAFrameRateRangeMake(rate, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) {
         %orig(range);
         return;
@@ -1219,16 +1224,19 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (NSInteger)_maximumFramesPerSecond {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) {
         %orig(rate);
         return;
@@ -1237,6 +1245,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CGFloat)_refreshRate {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return (CGFloat)[CFG_PTR resolvedTargetHz];
 }
@@ -1270,11 +1279,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook CAContext
 - (void)orderAbove:(uint32_t)arg1 {
     %orig;
+    V25_ReadSyncMemory();
     if (!IS_ON) return;
     [self setCommitPriority:1];
 }
 
 - (void)setDesiredDynamicRange:(float)arg1 {
+    V25_ReadSyncMemory();
     if (IS_ON && [CFG_PTR resolvedTargetHz] <= 30) {
         %orig(1.0f);
         return;
@@ -1291,26 +1302,22 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (void)_updatePreferredContentSize {
     %orig;
-    if (!IS_ON) return;
     V25_ReadSyncMemory();
+    if (!IS_ON) return;
 }
 %end
 
 %hook SBFloatingDockViewController
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
-    if (IS_ON) {
-        V25_ReadSyncMemory();
-    }
+    V25_ReadSyncMemory();
 }
 %end
 
 %hook SBPIPController
 - (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
     %orig;
-    if (IS_ON) {
-        V25_ReadSyncMemory();
-    }
+    V25_ReadSyncMemory();
 }
 %end
 
@@ -1320,11 +1327,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook CADisplayLink
 - (NSInteger)preferredFramesPerSecond {
+    V25_ReadSyncMemory();
     if (!IS_ON || !CFG_PTR.enableFPSControl) return %orig;
     return [CFG_PTR resolvedTargetFPS];
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    V25_ReadSyncMemory();
     if (!IS_ON || !CFG_PTR.enableFPSControl) {
         %orig(fps);
         return;
@@ -1333,12 +1342,14 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
     return CAFrameRateRangeMake(rate, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) {
         %orig(range);
         return;
@@ -1350,11 +1361,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
 }
 
 - (NSInteger)_maximumFramesPerSecond {
+    V25_ReadSyncMemory();
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
 }
@@ -1363,9 +1376,10 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 %hook CAMetalLayer
 - (void)setFramebufferOnly:(BOOL)arg1 {
     %orig;
+    V25_ReadSyncMemory();
     if (!IS_ON) return;
-    if (CFG_PTR.metalTripleBuffering && [self respondsToSelector:@selector(setMaximumDrawableCount:)]) {
-        [self setMaximumDrawableCount:3];
+    if (CFG_PTR.metalQuadBuffering && [self respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+        [self setMaximumDrawableCount:4];
     }
     if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
         [self setAllowsNextDrawableTimeout:NO];
@@ -1373,6 +1387,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)arg1 {
+    V25_ReadSyncMemory();
     if (IS_ON && CFG_PTR.forceOverclock144Hz) {
         %orig(NO);
         return;
@@ -1382,6 +1397,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 - (id)nextDrawable {
     id drawable = %orig;
+    V25_ReadSyncMemory();
     if (IS_ON && drawable) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -1389,6 +1405,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 
 - (void)setPresentsWithTransaction:(BOOL)arg1 {
+    V25_ReadSyncMemory();
     if (IS_ON && CFG_PTR.forceOverclock144Hz) {
         %orig(NO);
         return;
@@ -2243,7 +2260,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             );
         });
 
-        // Khởi tạo một lần duy nhất dùng chung cho toàn tiến trình
         %init(Group_FastLaunch_SuperEngine);
         %init(Group_V25_FloatingWindow_PiP);
 
@@ -2281,3 +2297,5 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
         PMRuntimeReady = YES;
     }
 }
+
+
