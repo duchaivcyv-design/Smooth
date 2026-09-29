@@ -4,7 +4,6 @@
 <dict>
 	<key>items</key>
 	<array>
-		<!-- ==================== CÔNG TẮC TỔNG & NGÔN NGỮ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -38,7 +37,6 @@
 			<string>SelectedLanguage</string>
 		</dict>
 
-		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V26 (HEX BUFFERING) ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -90,7 +88,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐIỀU PHỐI HZ & FPS ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -162,7 +159,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -200,7 +196,6 @@
 			<string>com.taojb.boostiphone6s/ReloadUIKitPrefs</string>
 		</dict>
 
-		<!-- ==================== GIA TỐC GIAO DIỆN & VẬT LÝ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -278,7 +273,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== LÕI ĐIỀU PHỐI ĐỒ HỌA CHUYÊN SÂU ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -426,7 +420,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== ĐIỀU PHỐI BỘ NHỚ RAM & TIẾN TRÌNH CPU ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -574,7 +567,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== QUẢN LÝ NHIỆT ĐỘ & NGUỒN ĐIỆN ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -651,8 +643,7 @@
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
-
-		<!-- ==================== BẢO MẬT & QUYỀN RIÊNG TƯ ==================== -->
+	
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -688,7 +679,6 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- ==================== THÔNG TIN PHÁT TRIỂN & HỖ TRỢ ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
