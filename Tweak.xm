@@ -72,6 +72,10 @@ extern char **environ;
 - (BOOL)isForeground;
 @end
 
+@interface FBApplicationProcess : NSObject
+- (void)bootstrapWithContext:(id)context completion:(id)completion;
+@end
+
 @interface SBWindowScene : NSObject
 @end
 
@@ -104,7 +108,27 @@ extern char **environ;
 @property (nonatomic, retain) id currentMode;
 @property (nonatomic, copy) NSString *colorMode;
 @property (nonatomic) NSInteger preferredFPS;
+@property (nonatomic) NSInteger preferredModeIndex;
 - (void)overrideDisplayTimings:(id)timings;
+- (void)overrideDisplayCadence:(id)cadence;
+@end
+
+@interface CAContext : NSObject
++ (NSArray *)allContexts;
++ (id)remoteContextWithOptions:(id)arg1;
+- (uint32_t)contextId;
+- (void)setCommitPriority:(uint32_t)priority;
+- (void)setDesiredDynamicRange:(float)range;
+- (void)orderAbove:(uint32_t)contextId;
+@end
+
+@interface PGPictureInPictureRemoteObject : NSObject
+- (void)_updatePreferredContentSize;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)arg1;
+@end
+
+@interface SBPIPController : NSObject
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
 @end
 
 @interface UIScrollView (ApexEngine)
@@ -118,6 +142,10 @@ extern char **environ;
 
 @interface CAMetalLayer (ApexEngine)
 - (void)setLowLatencyMode:(BOOL)flag;
+- (void)setMaximumDrawableCount:(NSUInteger)count;
+- (void)setDisplaySyncEnabled:(BOOL)enabled;
+- (void)setAllowsNextDrawableTimeout:(BOOL)allow;
+- (void)setPresentsWithTransaction:(BOOL)arg1;
 @end
 
 @interface NCNotificationShortLookView : UIView
@@ -147,6 +175,11 @@ extern char **environ;
 - (void)handleFluidSwitcherGesture:(id)gesture;
 @end
 
+@interface SBFluidSwitcherGestureWorkspaceTransaction : NSObject
+- (void)_beginWithGesture:(id)arg1;
+- (void)_didComplete;
+@end
+
 @interface SBDockView : UIView
 @end
 
@@ -159,6 +192,9 @@ extern char **environ;
 @interface SBFloatingDockView : UIView
 @end
 
+@interface SBFloatingDockViewController : UIViewController
+@end
+
 @interface _UIStatusBar : UIView
 @end
 
@@ -167,8 +203,8 @@ extern char **environ;
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 - (void)clearAnimations;
-- (void)setReturnKeyEnabled:(BOOL)arg1;
-- (void)updateReturnKey:(BOOL)arg1;
+- (void)setReturnKeyEnabled:(BOOL)1;
+- (void)updateReturnKey:(BOOL)1;
 - (void)hardwareKeyboardAvailabilityChanged;
 @end
 
@@ -284,16 +320,30 @@ typedef struct {
     float kineticDecelerationVectorY;
 } ApexMotionEngineState;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t magic;
-    BOOL masterEnabled;
+    uint32_t masterEnabled;
     int32_t targetHz;
     int32_t targetFPS;
-    BOOL isDynamic;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t tripleBuffering;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
     uint64_t updateSeq;
-} ApexSharedSyncPayload;
+    uint64_t lastHeartbeat;
+    char reserved[32];
+} ApexV25CorePayload;
 
-#define APEX_SYNC_MAGIC 0x41504558
+#define APEX_SYNC_MAGIC 0x56323530
 
 static ApexGraphicsEngineState g_titaniumGraphicsState = {
     0, 0, 0.0f, NO, 60, 60, YES, 0, 0, 1.0f, 0, 16666666ULL, YES, 0, 0, 0, 0, 0.992f, YES, 0, 0, 0, NO, 0, 0, NO
@@ -310,6 +360,12 @@ static ApexWatchdogEngineState g_titaniumWatchdogState = {
 static ApexMotionEngineState g_titaniumMotionState = {
     0, 0, 0.85f, NO, 0, 0.5f, 120, 0, 0, 0.992f, NO, 0, 0, 0, 0.0f, 0.0f
 };
+static ApexV25CorePayload g_coreSync = {
+    APEX_SYNC_MAGIC, 1, 60, 60, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
+};
+
+static pthread_mutex_t g_syncLock = PTHREAD_MUTEX_INITIALIZER;
+static volatile uint64_t g_lastSyncTimestamp = 0;
 
 static dispatch_once_t g_bksTerminate_once;
 typedef void (*BKSTerminateFunc)(NSString *, NSInteger, BOOL, NSString *);
@@ -318,13 +374,7 @@ static BKSTerminateFunc g_bksTerminate = NULL;
 static dispatch_queue_t titanium_bg_gc_queue = NULL;
 static dispatch_queue_t titanium_async_io_queue = NULL;
 static dispatch_queue_t titanium_thermal_queue = NULL;
-static dispatch_queue_t titanium_neural_queue = NULL;
-static dispatch_queue_t titanium_buffer_queue = NULL;
 static dispatch_queue_t titanium_sync_monitor_queue = NULL;
-static dispatch_queue_t titanium_watchdog_queue = NULL;
-static dispatch_queue_t titanium_core_dispatch_queue = NULL;
-static dispatch_queue_t titanium_render_guard_queue = NULL;
-static dispatch_queue_t titanium_health_check_queue = NULL;
 static dispatch_queue_t titanium_auto_mem_queue = NULL;
 static dispatch_queue_t titanium_auto_gpu_queue = NULL;
 static dispatch_queue_t titanium_auto_deadlock_queue = NULL;
@@ -334,6 +384,7 @@ static dispatch_queue_t titanium_hardware_poll_queue = NULL;
 static dispatch_queue_t titanium_daemon_background_queue = NULL;
 static dispatch_queue_t titanium_memory_guardian_queue = NULL;
 static dispatch_queue_t titanium_app_engine_queue = NULL;
+static dispatch_queue_t titanium_health_check_queue = NULL;
 
 static BOOL PMRuntimeReady = NO;
 static const void *kPMConfiguredKey = &kPMConfiguredKey;
@@ -344,33 +395,90 @@ static CFTimeInterval g_LastTouchTime = 0.0;
 static CFTimeInterval g_LastExtremeTransitionTime = 0.0;
 static NSProcessInfoThermalState g_LiveThermalState = NSProcessInfoThermalStateNominal;
 
-static void Titanium_WriteSharedSyncState(BOOL enabled, int32_t hz, int32_t fps, BOOL dynamicMode) {
-    ApexSharedSyncPayload payload;
-    payload.magic = APEX_SYNC_MAGIC;
-    payload.masterEnabled = enabled;
-    payload.targetHz = hz;
-    payload.targetFPS = fps;
-    payload.isDynamic = dynamicMode;
-    payload.updateSeq = (uint64_t)mach_absolute_time();
+static void Titanium_WriteSharedSyncState(ApexV25CorePayload *payload) {
+    if (!payload) return;
+    payload->magic = APEX_SYNC_MAGIC;
+    payload->updateSeq = (uint64_t)mach_absolute_time();
 
     int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd >= 0) {
-        write(fd, &payload, sizeof(payload));
+        write(fd, payload, sizeof(ApexV25CorePayload));
         close(fd);
         chmod([SHARED_SYNC_FILE UTF8String], 0666);
     }
 }
 
-static BOOL Titanium_ReadSharedSyncState(ApexSharedSyncPayload *outPayload) {
+static BOOL Titanium_ReadSharedSyncState(ApexV25CorePayload *outPayload) {
     if (!outPayload) return NO;
     int fd = open([SHARED_SYNC_FILE UTF8String], O_RDONLY);
     if (fd < 0) return NO;
-    ssize_t bytesRead = read(fd, outPayload, sizeof(ApexSharedSyncPayload));
+    ssize_t bytesRead = read(fd, outPayload, sizeof(ApexV25CorePayload));
     close(fd);
-    if (bytesRead == sizeof(ApexSharedSyncPayload) && outPayload->magic == APEX_SYNC_MAGIC) {
+    if (bytesRead == sizeof(ApexV25CorePayload) && outPayload->magic == APEX_SYNC_MAGIC) {
         return YES;
     }
     return NO;
+}
+
+static inline void V25_ReadSyncMemory(void) {
+    pthread_mutex_lock(&g_syncLock);
+    int fd = open([SHARED_SYNC_FILE UTF8String], O_RDONLY);
+    if (fd >= 0) {
+        ApexV25CorePayload temp;
+        ssize_t r = read(fd, &temp, sizeof(temp));
+        if (r == sizeof(temp) && temp.magic == APEX_SYNC_MAGIC) {
+            if (temp.updateSeq != g_coreSync.updateSeq) {
+                g_coreSync = temp;
+                g_lastSyncTimestamp = mach_absolute_time();
+            }
+        }
+        close(fd);
+    } else {
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        CFPropertyListRef enVal = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
+        if (enVal) {
+            g_coreSync.masterEnabled = CFBooleanGetValue((CFBooleanRef)enVal) ? 1 : 0;
+            CFRelease(enVal);
+        }
+        CFPropertyListRef hzVal = CFPreferencesCopyAppValue(CFSTR("TargetRefreshRate"), PREF_DOMAIN);
+        if (hzVal) {
+            int val = 60;
+            CFNumberGetValue((CFNumberRef)hzVal, kCFNumberIntType, &val);
+            g_coreSync.targetHz = (val > 0) ? val : 60;
+            CFRelease(hzVal);
+        }
+        CFPropertyListRef fpsVal = CFPreferencesCopyAppValue(CFSTR("TargetFPSRate"), PREF_DOMAIN);
+        if (fpsVal) {
+            int val = 60;
+            CFNumberGetValue((CFNumberRef)fpsVal, kCFNumberIntType, &val);
+            g_coreSync.targetFPS = (val > 0) ? val : 60;
+            CFRelease(fpsVal);
+        }
+        CFPropertyListRef ovVal = CFPreferencesCopyAppValue(CFSTR("ForceOverclock144Hz"), PREF_DOMAIN);
+        if (ovVal) {
+            g_coreSync.forceOverclock = CFBooleanGetValue((CFBooleanRef)ovVal) ? 1 : 0;
+            CFRelease(ovVal);
+        }
+    }
+    pthread_mutex_unlock(&g_syncLock);
+}
+
+static inline void Apex_SetThreadRealtimeConstraint(thread_t thread, uint32_t targetHz) {
+    if (!thread) return;
+    thread_extended_policy_data_t extendedPolicy;
+    extendedPolicy.timeshare = 0;
+    thread_policy_set(thread, THREAD_EXTENDED_POLICY, (thread_policy_t)&extendedPolicy, THREAD_EXTENDED_POLICY_COUNT);
+    uint32_t hz = (targetHz > 0) ? targetHz : 60;
+    uint32_t framePeriodNs = 1000000000 / hz;
+    thread_time_constraint_policy_data_t timeConstraint;
+    timeConstraint.period = framePeriodNs;
+    timeConstraint.computation = framePeriodNs * 7 / 10;
+    timeConstraint.constraint = framePeriodNs;
+    timeConstraint.preemptible = 1;
+    thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+    thread_affinity_policy_data_t affinity;
+    affinity.affinity_tag = 1;
+    thread_policy_set(thread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 }
 
 static void Titanium_StartThermalWatchdogTimer(void) {
@@ -945,15 +1053,29 @@ static void Titanium_StartChargingMonitor(void) {
         self.blockAnalytics = GetLiveBool(@"BlockAnalytics", YES);
 
         if (!Titanium_IsSpringBoard() && !Titanium_IsPreferencesApp()) {
-            ApexSharedSyncPayload sharedPayload;
+            ApexV25CorePayload sharedPayload;
             if (Titanium_ReadSharedSyncState(&sharedPayload)) {
                 self.enabled = sharedPayload.masterEnabled;
                 self.targetHz = sharedPayload.targetHz;
                 self.targetFPS = sharedPayload.targetFPS;
-                self.proMotionEngineBeta7 = sharedPayload.isDynamic;
+                self.forceOverclock144Hz = sharedPayload.forceOverclock;
             }
         } else if (Titanium_IsSpringBoard()) {
-            Titanium_WriteSharedSyncState(self.enabled, (int32_t)self.targetHz, (int32_t)self.targetFPS, self.proMotionEngineBeta7);
+            ApexV25CorePayload outP;
+            memset(&outP, 0, sizeof(ApexV25CorePayload));
+            outP.masterEnabled = self.enabled ? 1 : 0;
+            outP.targetHz = (int32_t)self.targetHz;
+            outP.targetFPS = (int32_t)self.targetFPS;
+            outP.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
+            outP.pipSyncEnabled = 1;
+            outP.thermalShield = self.antiThermalThrottling ? 1 : 0;
+            outP.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
+            outP.tripleBuffering = self.metalTripleBuffering ? 1 : 0;
+            outP.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
+            outP.shaderOptimization = 1;
+            outP.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
+            outP.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
+            Titanium_WriteSharedSyncState(&outP);
         }
     });
 }
@@ -1022,6 +1144,47 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
     Titanium_DebouncedPreferenceSync();
 }
 
+%group Group_FastLaunch_SuperEngine
+
+%hook FBApplicationProcess
+- (void)bootstrapWithContext:(id)context completion:(id)completion {
+    if (IS_ON && CFG_PTR.turboAppLaunch) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        thread_t currentThread = mach_thread_self();
+        Apex_SetThreadRealtimeConstraint(currentThread, 120);
+        mach_port_deallocate(mach_task_self(), currentThread);
+    }
+    %orig(context, completion);
+}
+%end
+
+%hook UIApplication
+- (void)_applicationOpenURLAction:(id)action payload:(id)payload origin:(id)origin {
+    if (IS_ON && CFG_PTR.turboAppLaunch) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(action, payload, origin);
+}
+%end
+
+%hook UIViewController
+- (void)loadViewIfNeeded {
+    if (IS_ON && CFG_PTR.turboAppLaunch) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)viewDidLoad {
+    if (IS_ON && CFG_PTR.turboAppLaunch) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+%end
+
+%end
+
 %group Group_Display_SpringBoard
 
 %hook CADisplayLink
@@ -1041,19 +1204,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate;
-    if (rate >= 120.0f) {
-        minRate = 60.0f;
-    } else if (rate >= 90.0f) {
-        minRate = 45.0f;
-    } else if (rate >= 75.0f) {
-        minRate = 37.5f;
-    } else if (rate >= 60.0f) {
-        minRate = 30.0f;
-    } else {
-        minRate = rate;
-    }
-    return CAFrameRateRangeMake(minRate, rate, rate);
+    return CAFrameRateRangeMake(rate, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
@@ -1062,19 +1213,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return;
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate;
-    if (rate >= 120.0f) {
-        minRate = 60.0f;
-    } else if (rate >= 90.0f) {
-        minRate = 45.0f;
-    } else if (rate >= 75.0f) {
-        minRate = 37.5f;
-    } else if (rate >= 60.0f) {
-        minRate = 30.0f;
-    } else {
-        minRate = rate;
-    }
-    %orig(CAFrameRateRangeMake(minRate, rate, rate));
+    %orig(CAFrameRateRangeMake(rate, rate, rate));
 }
 %end
 
@@ -1103,6 +1242,78 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
+%hook CADisplay
+- (NSInteger)preferredModeIndex {
+    V25_ReadSyncMemory();
+    if (IS_ON && CFG_PTR.targetHz > 60) {
+        NSArray *modes = [self availableModes];
+        if (modes && [modes count] > 0) {
+            return (NSInteger)([modes count] - 1);
+        }
+    }
+    return %orig;
+}
+
+- (void)overrideDisplayCadence:(id)cadence {
+    V25_ReadSyncMemory();
+    if (IS_ON && CFG_PTR.forceOverclock144Hz) {
+        return;
+    }
+    %orig(cadence);
+}
+%end
+
+%end
+
+%group Group_V25_FloatingWindow_PiP
+
+%hook CAContext
+- (void)orderAbove:(uint32_t)arg1 {
+    %orig;
+    if (!IS_ON) return;
+    [self setCommitPriority:1];
+}
+
+- (void)setDesiredDynamicRange:(float)arg1 {
+    if (IS_ON && [CFG_PTR resolvedTargetHz] <= 30) {
+        %orig(1.0f);
+        return;
+    }
+    %orig(arg1);
+}
+%end
+
+%hook PGPictureInPictureRemoteObject
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)arg1 {
+    %orig;
+    V25_ReadSyncMemory();
+}
+
+- (void)_updatePreferredContentSize {
+    %orig;
+    if (!IS_ON) return;
+    V25_ReadSyncMemory();
+}
+%end
+
+%hook SBFloatingDockViewController
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    if (IS_ON) {
+        V25_ReadSyncMemory();
+    }
+}
+%end
+
+%hook SBPIPController
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
+    %orig;
+    if (IS_ON) {
+        V25_ReadSyncMemory();
+    }
+}
+%end
+
 %end
 
 %group Group_Display_App_Lazy
@@ -1124,19 +1335,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate;
-    if (rate >= 120.0f) {
-        minRate = 60.0f;
-    } else if (rate >= 90.0f) {
-        minRate = 45.0f;
-    } else if (rate >= 75.0f) {
-        minRate = 37.5f;
-    } else if (rate >= 60.0f) {
-        minRate = 30.0f;
-    } else {
-        minRate = rate;
-    }
-    return CAFrameRateRangeMake(minRate, rate, rate);
+    return CAFrameRateRangeMake(rate, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
@@ -1145,19 +1344,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return;
     }
     float rate = (float)[CFG_PTR resolvedTargetHz];
-    float minRate = rate;
-    if (rate >= 120.0f) {
-        minRate = 60.0f;
-    } else if (rate >= 90.0f) {
-        minRate = 45.0f;
-    } else if (rate >= 75.0f) {
-        minRate = 37.5f;
-    } else if (rate >= 60.0f) {
-        minRate = 30.0f;
-    } else {
-        minRate = rate;
-    }
-    %orig(CAFrameRateRangeMake(minRate, rate, rate));
+    %orig(CAFrameRateRangeMake(rate, rate, rate));
 }
 %end
 
@@ -1170,6 +1357,43 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 - (NSInteger)_maximumFramesPerSecond {
     if (!IS_ON || (!CFG_PTR.enableHzControl && !CFG_PTR.proMotionEngineBeta7)) return %orig;
     return [CFG_PTR resolvedTargetHz];
+}
+%end
+
+%hook CAMetalLayer
+- (void)setFramebufferOnly:(BOOL)arg1 {
+    %orig;
+    if (!IS_ON) return;
+    if (CFG_PTR.metalTripleBuffering && [self respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+        [self setMaximumDrawableCount:3];
+    }
+    if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+        [self setAllowsNextDrawableTimeout:NO];
+    }
+}
+
+- (void)setDisplaySyncEnabled:(BOOL)arg1 {
+    if (IS_ON && CFG_PTR.forceOverclock144Hz) {
+        %orig(NO);
+        return;
+    }
+    %orig(arg1);
+}
+
+- (id)nextDrawable {
+    id drawable = %orig;
+    if (IS_ON && drawable) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    return drawable;
+}
+
+- (void)setPresentsWithTransaction:(BOOL)arg1 {
+    if (IS_ON && CFG_PTR.forceOverclock144Hz) {
+        %orig(NO);
+        return;
+    }
+    %orig(arg1);
 }
 %end
 
@@ -1278,6 +1502,22 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 }
 %end
 
+%hook SBFluidSwitcherGestureWorkspaceTransaction
+- (void)_beginWithGesture:(id)arg1 {
+    if (IS_ON && CFG_PTR.fixAppExitStutter) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)_didComplete {
+    if (IS_ON && CFG_PTR.fixAppExitStutter) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+%end
+
 %hook SBFluidSwitcherViewController
 - (void)handleFluidSwitcherGesture:(id)gesture {
     %orig(gesture);
@@ -1287,6 +1527,13 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
             Titanium_RunGarbageCollector_Light();
         }
         g_LastExtremeTransitionTime = now;
+    }
+}
+
+- (void)viewDidLoad {
+    %orig;
+    if (IS_ON) {
+        V25_ReadSyncMemory();
     }
 }
 %end
@@ -1371,23 +1618,44 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
 
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
-    if (IS_ON && CFG_PTR.proMotionEngineBeta7) {
+    if (IS_ON) {
         if (event.type == UIEventTypeTouches) {
-            NSSet *touches = [event allTouches];
-            UITouch *t = [touches anyObject];
-            if (t) {
-                UITouchPhase phase = t.phase;
-                if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
-                    g_IsUserTouching = YES;
-                    g_LastTouchTime = CACurrentMediaTime();
-                } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
-                    g_IsUserTouching = NO;
-                    g_LastTouchTime = CACurrentMediaTime();
+            if (CFG_PTR.touchResponseBoost) {
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            }
+            if (CFG_PTR.proMotionEngineBeta7) {
+                NSSet *touches = [event allTouches];
+                UITouch *t = [touches anyObject];
+                if (t) {
+                    UITouchPhase phase = t.phase;
+                    if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
+                        g_IsUserTouching = YES;
+                        g_LastTouchTime = CACurrentMediaTime();
+                    } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
+                        g_IsUserTouching = NO;
+                        g_LastTouchTime = CACurrentMediaTime();
+                    }
                 }
             }
         }
     }
     %orig(event);
+}
+%end
+
+%hook UIGestureRecognizer
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    if (IS_ON && CFG_PTR.touchResponseBoost) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(touches, event);
+}
+
+- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+    if (IS_ON && CFG_PTR.touchResponseBoost && [CFG_PTR resolvedTargetHz] > 60) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(touches, event);
 }
 %end
 
@@ -1420,6 +1688,15 @@ static void reloadPrefsNotification(CFNotificationCenterRef center, void *observ
         return;
     }
     %orig(velocity, targetContentOffset);
+}
+%end
+
+%hook UIApplication
+- (void)_run {
+    if (IS_ON) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
 }
 %end
 
@@ -1967,11 +2244,13 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
         });
 
         if (Titanium_IsSpringBoard()) {
+            %init(Group_FastLaunch_SuperEngine);
             %init(Group_SpringBoard_Only);
             %init(Group_Gesture_Fix);
             %init(Group_Fix_App_Layout_Position);
             %init(Group_ColorOS17_SafeUI);
             %init(Group_Display_SpringBoard);
+            %init(Group_V25_FloatingWindow_PiP);
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 Titanium_StartPassiveRamDaemon();
@@ -1979,6 +2258,7 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             });
             Titanium_BoostThreadPriorityRealtime();
         } else {
+            %init(Group_FastLaunch_SuperEngine);
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                               object:nil
                                                                queue:[NSOperationQueue mainQueue]
@@ -1986,6 +2266,7 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     %init(Group_UIKit_ThirdParty_Isolated);
                     %init(Group_Display_App_Lazy);
+                    %init(Group_V25_FloatingWindow_PiP);
                     Titanium_LaunchAllModulesInsideApp();
                 });
             }];
