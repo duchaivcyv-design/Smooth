@@ -1,10 +1,27 @@
 #import "CacheCleaner.h"
+#import <UIKit/UIKit.h>
 #import <mach/mach.h>
-#import <mach/mach_vm.h>
 #import <mach/vm_map.h>
 #import <malloc/malloc.h>
 #import <dlfcn.h>
 #import <sys/stat.h>
+
+// Khai báo extern an toàn cho vm_purgable_control thay vì import mach_vm.h
+#ifndef VM_PURGABLE_PURGE_ALL
+#define VM_PURGABLE_PURGE_ALL 3
+#endif
+
+#ifndef VM_FLAGS_PURGABLE
+#define VM_FLAGS_PURGABLE 0x0001
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+kern_return_t vm_purgable_control(vm_map_t target_task, vm_address_t address, vm_purgable_t control, int *state);
+#ifdef __cplusplus
+}
+#endif
 
 static inline NSString *CacheCleaner_GetJbRoot(void) {
     static NSString *cachedRoot = nil;
@@ -48,12 +65,13 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
     malloc_zone_pressure_relief(NULL, 0);
     mach_port_t selfTask = mach_task_self();
 
-    #if defined(VM_FLAGS_PURGABLE)
-    vm_purgable_control(selfTask, 0, VM_PURGABLE_PURGE_ALL, NULL);
-    #endif
+    int purgeState = 0;
+    vm_purgable_control(selfTask, 0, VM_PURGABLE_PURGE_ALL, &purgeState);
 
-    // Bắn thông báo giải phóng bộ nhớ mức hệ thống
-    [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+    // Phát thông báo cảnh báo bộ nhớ an toàn trên main thread
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+    });
 }
 
 + (void)cleanAppTemporaryCaches {
@@ -62,14 +80,12 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
         NSString *tmpDir = NSTemporaryDirectory();
         NSArray *tmpFiles = [fm contentsOfDirectoryAtPath:tmpDir error:nil];
         for (NSString *file in tmpFiles) {
-            // Không xóa file đồng bộ shm của tweak
             if ([file isEqualToString:@".boost_hz_sync"] || [file isEqualToString:@".boost_boot_counter"]) {
                 continue;
             }
             [fm removeItemAtPath:[tmpDir stringByAppendingPathComponent:file] error:nil];
         }
 
-        // Dọn cache thư mục Caches của app
         NSArray *cacheDirs = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
         if (cacheDirs.count > 0) {
             NSString *cacheDir = cacheDirs.firstObject;
