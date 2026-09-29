@@ -2243,8 +2243,9 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             );
         });
 
-        // Khởi tạo một lần duy nhất cho nhóm FastLaunch
+        // Khởi tạo một lần duy nhất dùng chung cho toàn tiến trình
         %init(Group_FastLaunch_SuperEngine);
+        %init(Group_V25_FloatingWindow_PiP);
 
         if (Titanium_IsSpringBoard()) {
             %init(Group_SpringBoard_Only);
@@ -2252,7 +2253,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             %init(Group_Fix_App_Layout_Position);
             %init(Group_ColorOS17_SafeUI);
             %init(Group_Display_SpringBoard);
-            %init(Group_V25_FloatingWindow_PiP);
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 Titanium_StartPassiveRamDaemon();
@@ -2267,7 +2267,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     %init(Group_UIKit_ThirdParty_Isolated);
                     %init(Group_Display_App_Lazy);
-                    %init(Group_V25_FloatingWindow_PiP);
                     Titanium_LaunchAllModulesInsideApp();
                 });
             }];
