@@ -2774,13 +2774,14 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 %hook CADisplayLink
 - (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
     if ([mode isEqualToString:NSRunLoopCommonModes] || [mode isEqualToString:UITrackingRunLoopMode]) {
-        self.preferredFramesPerSecond = 60; // Đảm bảo giữ cứng nhịp 60FPS mượt mà cho iPhone 6s
+        self.preferredFramesPerSecond = 60; 
     }
     %orig;
 }
-%end
+%end // Đóng hook cho CADisplayLink ở đây là chuẩn
 
-%end
+// Mở hook cho class tiếp theo (ví dụ CAMetalLayer hoặc class chứa các method dưới đây)
+%hook TênClassChứaMetalHoặcLayer 
 
 - (NSUInteger)maximumDrawableCount {
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
@@ -2803,6 +2804,8 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     }
     return %orig;
 }
+
+%end
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.vsyncAdaptiveBuffer)) {
