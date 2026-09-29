@@ -45,6 +45,14 @@ typedef struct __attribute__((packed)) {
 
 #define APEX_V26_SYNC_MAGIC 0x56323630
 
+enum PSCellType {
+    PSGroupCell = 0,
+    PSLinkCell = 1,
+    PSLinkListCell = 2,
+    PSSwitchCell = 6,
+    PSButtonCell = 13
+};
+
 @interface LSApplicationWorkspace : NSObject
 + (instancetype)defaultWorkspace;
 - (BOOL)openURL:(NSURL *)url;
@@ -60,6 +68,8 @@ typedef struct __attribute__((packed)) {
 
 @interface PSSpecifier : NSObject
 @property (nonatomic, strong) NSString *name;
++ (instancetype)preferenceSpecifierNamed:(NSString *)name target:(id)target set:(SEL)set get:(SEL)get detail:(Class)detail cell:(NSInteger)cell edit:(Class)edit;
++ (instancetype)groupSpecifierWithName:(NSString *)name;
 - (id)propertyForKey:(NSString *)key;
 - (void)setProperty:(id)property forKey:(NSString *)key;
 @end
@@ -157,7 +167,6 @@ static inline NSString *PM_TextV26(NSString *key) {
     payload.masterEnabled = enabled ? 1 : 0;
 
     if (!enabled) {
-        // KHI TẮT TỔNG: ÉP TOÀN BỘ VỀ MẶC ĐỊNH HỆ THỐNG
         payload.targetHz = 60;
         payload.targetFPS = 60;
         payload.forceOverclock = 0;
@@ -283,18 +292,15 @@ static inline NSString *PM_TextV26(NSString *key) {
     BOOL isMasterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
     if (!isMasterEnabled) {
-        // TẮT TỔNG: CHỈ GIỮ NHÓM CÔNG TẮC VÀ MỤC NGÔN NGỮ, ẨN TOÀN BỘ CÁC MỤC KHÁC
         NSMutableArray *minimalSpecifiers = [NSMutableArray array];
         PSSpecifier *langGroupSpecifier = nil;
         PSSpecifier *langCellSpecifier = nil;
 
-        // Tìm kiếm chính xác specifier ngôn ngữ
         for (NSInteger i = 0; i < (NSInteger)_allSavedSpecifiers.count; i++) {
             PSSpecifier *s = _allSavedSpecifiers[i];
             NSString *k = [s propertyForKey:@"key"];
             if ([k isEqualToString:@"SelectedLanguage"]) {
                 langCellSpecifier = s;
-                // Nếu phía trước có nhóm (Group cell) cho ngôn ngữ thì lấy luôn nhóm đó
                 if (i > 0) {
                     PSSpecifier *prev = _allSavedSpecifiers[i - 1];
                     NSString *cellType = [prev propertyForKey:@"cell"];
@@ -306,7 +312,6 @@ static inline NSString *PM_TextV26(NSString *key) {
             }
         }
 
-        // Lấy nhóm đầu tiên (Chứa nút Switch Enabled)
         for (PSSpecifier *s in _allSavedSpecifiers) {
             NSString *k = [s propertyForKey:@"key"];
             NSString *cellType = [s propertyForKey:@"cell"];
@@ -319,18 +324,10 @@ static inline NSString *PM_TextV26(NSString *key) {
             }
         }
 
-        // Thêm mục chọn ngôn ngữ vào danh sách hiển thị tối giản
         if (langGroupSpecifier && ![minimalSpecifiers containsObject:langGroupSpecifier]) {
             [minimalSpecifiers addObject:langGroupSpecifier];
         } else if (!langGroupSpecifier) {
-            // Tạo nhóm ngăn cách cho mục ngôn ngữ nếu không có sẵn
-            PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:(PM_TextV26(@"GROUP_LANGUAGE") ?: @"CÀI ĐẶT NGÔN NGỮ")
-                                                                target:self
-                                                                   set:nil
-                                                                   get:nil
-                                                                detail:nil
-                                                                  cell:PSGroupCell
-                                                                  edit:nil];
+            PSSpecifier *group = [PSSpecifier groupSpecifierWithName:(PM_TextV26(@"GROUP_LANGUAGE") ?: @"CÀI ĐẶT NGÔN NGỮ")];
             [minimalSpecifiers addObject:group];
         }
 
@@ -536,7 +533,6 @@ static inline NSString *PM_TextV26(NSString *key) {
     notify_post(NOTIFY_HARDWARE_SYNC);
 
     if ([key isEqualToString:@"Enabled"]) {
-        // CẬP NHẬT TRỰC TIẾP GIAO DIỆN MƯỢT MÀ KHI BẬT/TẮT TỔNG
         [self reloadSpecifiers];
     } else if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"]) {
         _allSavedSpecifiers = nil;
