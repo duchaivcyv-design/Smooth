@@ -9,7 +9,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V23.9.5.1 BETA</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V25 SUPREME</string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		</dict>
@@ -38,12 +38,12 @@
 			<string>SelectedLanguage</string>
 		</dict>
 
-		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 ==================== -->
+		<!-- ==================== ĐẶC QUYỀN NÂNG CẤP ĐỘNG CƠ THÔNG MINH ==================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V23.9.5.1 (ĐỘNG CƠ THÔNG MINH)</string>
+			<string>ĐẶC QUYỀN NÂNG CẤP V25 (ĐỘNG CƠ THÔNG MINH)</string>
 			<key>footerText</key>
 			<string>ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và hạ nhịp khi máy ấm để làm mát.</string>
 		</dict>
@@ -259,7 +259,7 @@
 			<key>key</key>
 			<string>FixAppExitStutter</string>
 			<key>label</key>
-			<string>Chống Khựng Khi Thoát App</string>
+			<string>Chống Khựng Khi Thoát App (0ms Switcher)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -273,7 +273,7 @@
 			<key>key</key>
 			<string>TouchResponseBoost</string>
 			<key>label</key>
-			<string>Tăng Phản Hồi Cảm Ứng</string>
+			<string>Tăng Phản Hồi Cảm Ứng (Overdrive)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -709,7 +709,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V23.9.5.1 Beta - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V25 SUPREME - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -737,6 +737,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V23.9.5.1</string>
+	<string>BoostiPhone6s V25 SUPREME</string>
 </dict>
 </plist>
