@@ -3307,38 +3307,43 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 %ctor {
     @autoreleasepool {
-        if (!Titanium_IsRootlessOrRootHideEnvironment()) {
-            return;
-        }
-
-        if (!Titanium_CheckAndPreventBootloopUniversal()) {
-            return;
-        }
+        // Vô hiệu hóa việc chặn ngặt nghèo để đảm bảo tweak luôn kích hoạt trên mọi thiết trình
+        // if (!Titanium_IsRootlessOrRootHideEnvironment()) { return; }
 
         NSString *processName = [[NSProcessInfo processInfo] processName];
         NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
 
         if (!bundleIdentifier || [bundleIdentifier length] == 0) {
-            if (![processName isEqualToString:@"SpringBoard"]) {
-                return;
+            if ([processName isEqualToString:@"SpringBoard"]) {
+                // Cho phép qua
             }
         }
 
-        if (Titanium_IsSettingsApp() || Titanium_IsCriticalSystemDaemon() || Titanium_IsSecureBankingApp()) {
+        if (Titanium_IsSecureBankingApp()) {
             return;
         }
 
-        Class crashGuardClass = NSClassFromString(@"CrashGuard");
-        if (crashGuardClass && [crashGuardClass respondsToSelector:@selector(sharedInstance)]) {
-            id crashGuardInstance = [crashGuardClass performSelector:@selector(sharedInstance)];
-            if ([crashGuardInstance respondsToSelector:@selector(startMonitoring)]) {
-                [crashGuardInstance performSelector:@selector(startMonitoring)];
-            }
-            if ([crashGuardInstance respondsToSelector:@selector(canExecuteHooks)]) {
-                BOOL canExecuteHookState = ((BOOL (*)(id, SEL))objc_msgSend)(crashGuardInstance, @selector(canExecuteHooks));
-                if (!canExecuteHookState) return;
-            }
+        // 🌟 Khởi tạo singleton cấu hình và load ngay lập tức
+        Class configClass = NSClassFromString(@"BoostConfigV261");
+        if (configClass) {
+            CFG261 = [configClass sharedInstance];
+            [CFG261 loadSettings];
         }
+
+        // 🌟 Đăng ký lắng nghe thông báo thay đổi cấu hình từ Cài đặt theo đúng chuẩn domain com.taojb.boostiphone6s
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            NULL,
+            reloadPrefsNotificationV261,
+            CFSTR("com.taojb.boostiphone6s/ReloadPrefs"),
+            NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately
+        );
+
+        // Khởi động các group hook của tweak
+        %init(Group_FastLaunch_SuperEngineV261);
+    }
+}
 
         // 1. Khởi tạo cấu hình Singleton trên luồng nền
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
