@@ -2243,8 +2243,10 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             );
         });
 
+        // Khởi tạo một lần duy nhất cho nhóm FastLaunch
+        %init(Group_FastLaunch_SuperEngine);
+
         if (Titanium_IsSpringBoard()) {
-            %init(Group_FastLaunch_SuperEngine);
             %init(Group_SpringBoard_Only);
             %init(Group_Gesture_Fix);
             %init(Group_Fix_App_Layout_Position);
@@ -2258,7 +2260,6 @@ static void Titanium_LaunchAllModulesInsideApp(void) {
             });
             Titanium_BoostThreadPriorityRealtime();
         } else {
-            %init(Group_FastLaunch_SuperEngine);
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                               object:nil
                                                                queue:[NSOperationQueue mainQueue]
