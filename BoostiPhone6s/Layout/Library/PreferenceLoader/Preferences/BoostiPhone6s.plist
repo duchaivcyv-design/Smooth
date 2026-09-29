@@ -15,9 +15,11 @@
         <key>isController</key>
         <true/>
         <key>label</key>
-        <string>SmoothIOS</string>
+        <string>BoostiPhone6s V26</string>
         <key>defaults</key>
         <string>com.taojb.boostiphone6s</string>
+        <key>PostNotification</key>
+        <string>com.taojb.boostiphone6s/ReloadPrefs</string>
     </dict>
 </dict>
 </plist>
