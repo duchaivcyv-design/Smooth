@@ -3,195 +3,195 @@
 <plist version="1.0">
 <dict>
 	<!-- ========================================== -->
-	<!-- 🇪🇸 1. TIẾNG TÂY BAN NHA (SPANISH - es)     -->
+	<!-- 🇻🇳 1. TIẾNG VIỆT (VIETNAMESE - vi)         -->
 	<!-- ========================================== -->
-	<key>es</key>
+	<key>vi</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
-		<string>Acciones</string>
+		<string>Tác Vụ</string>
 		<key>GROUP_MASTER</key>
-		<string>INTERRUPTOR MAESTRO V23.9.5.1 BETA</string>
+		<string>CÔNG TẮC TỔNG HỆ THỐNG V26 BETA</string>
 		<key>FOOTER_MASTER</key>
-		<string>Al desactivar el interruptor maestro, se ocultarán todas las opciones y se restaurarán los ganchos originales.</string>
+		<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>EXCLUSIVO V23.9.5.1 (MOTOR INTELIGENTE)</string>
+		<string>ĐẶC QUYỀN NÂNG CẤP V26 (HEX BUFFERING 6 TẦNG)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>ProMotion Engine sincroniza con sensores térmicos, aumentando la fluidez al tocar y enfriando al calentarse.</string>
+		<string>ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và kích hoạt Hex Buffering (6 tầng Metal) thông minh.</string>
 		<key>GROUP_HZ_FPS</key>
-		<string>CONTROL DE HZ Y FPS (3 NIVELES)</string>
+		<string>ĐIỀU PHỐI HZ &amp; FPS (PHÂN NHÁNH 3 MỤC)</string>
 		<key>FOOTER_HZ_FPS</key>
-		<string>Toque para elegir: Ahorro de batería (15-40), Equilibrado (45-80), Rendimiento máximo (85-144). El modo dinámico se adapta a la temperatura.</string>
+		<string>Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.</string>
 		<key>GROUP_LAZY</key>
-		<string>INYECCIÓN DIFERIDA EN APPS (FIX PANTALLA NEGRA)</string>
+		<string>TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)</string>
 		<key>FOOTER_LAZY</key>
-		<string>Inyecta módulos tras el inicio de UIApplication, garantizando cero pantallas negras y sin bloqueos.</string>
+		<string>Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ hoạ.</string>
 		<key>GROUP_UI</key>
-		<string>ACELERACIÓN DE UI Y DINÁMICA FÍSICA</string>
+		<string>GIA TỐC GIAO DIỆN &amp; HIỆU ỨNG VẬT LÝ</string>
 		<key>GROUP_GRAPHICS</key>
-		<string>MOTOR PROFUNDO DE GRÁFICOS Y HARDWARE</string>
+		<string>LÕI ĐIỀU PHỐI ĐỒ HỌA &amp; PHẦN CỨNG CHUYÊN SÂU</string>
 		<key>GROUP_RAM_CPU</key>
-		<string>GESTIÓN DE RAM Y HILOS DE CPU</string>
+		<string>ĐIỀU PHỐI BỘ NHỚ RAM &amp; TIẾN TRÌNH CPU</string>
 		<key>GROUP_THERMAL</key>
-		<string>GESTIÓN TÉRMICA Y ENERGÉTICA</string>
+		<string>QUẢN LÝ NHIỆT ĐỘ &amp; NGUỒN ĐIỆN</string>
 		<key>GROUP_SECURITY</key>
-		<string>SEGURIDAD Y PRIVACIDAD</string>
+		<string>BẢO MẬT &amp; QUYỀN RIÊNG TƯ</string>
 		<key>GROUP_DEV</key>
-		<string>INFORMACIÓN DEL DESARROLLADOR Y SOPORTE</string>
+		<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>CÀI ĐẶT NGÔN NGỮ</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - Optimizado por DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 
 		<key>Enabled</key>
-		<string>Activar Tweak</string>
+		<string>Kích Hoạt Tweak</string>
 		<key>SelectedLanguage</key>
-		<string>Idioma (Language)</string>
+		<string>Ngôn Ngữ (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotion Engine (Control térmico)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Anti-Lag Liquid Glass</string>
+		<string>ProMotion Engine (Quét Nhiệt Độ Tự Động)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Tầng Đệm)</string>
 		<key>KeyboardZeroLagV24</key>
-		<string>Teclado 0ms y Chat de IA sin lag</string>
+		<string>Bàn Phím 0ms &amp; Chat AI</string>
 		<key>EnableHzControl</key>
-		<string>Control de frecuencia de pantalla (Hz)</string>
+		<string>Kiểm Soát Tần Số Quét (Hz)</string>
 		<key>TargetRefreshRate</key>
-		<string>Seleccionar frecuencia (Hz)</string>
+		<string>Chọn Mức Tần Số Quét (Hz)</string>
 		<key>EnableFPSControl</key>
-		<string>Control de FPS en aplicaciones</string>
+		<string>Kiểm Soát Khung Hình (FPS)</string>
 		<key>TargetFPSRate</key>
-		<string>Seleccionar FPS de apps</string>
+		<string>Chọn Mức Khung Hình (FPS)</string>
 		<key>ForceOverclock144Hz</key>
-		<string>Forzar Overclock a 144Hz global</string>
+		<string>Ép Xung Cực Đại 144Hz Toàn Máy</string>
 		<key>AppLazyInjectionSync</key>
-		<string>Sincronización de inyección diferida</string>
+		<string>Đồng Bộ Độ Trễ Tiêm Mô-Đun</string>
 		<key>AppRenderShieldIsolation</key>
-		<string>Aislamiento del pipeline de render</string>
+		<string>Cách Ly Render Pipeline App Gốc</string>
 		<key>ColorOs17SmoothEngine</key>
-		<string>Motor de desplazamiento ColorOS 17</string>
+		<string>Động Cơ Cuộn ColorOS 17</string>
 		<key>ReduceMultiTaskLag</key>
-		<string>Reducir lag en multitarea</string>
+		<string>Giảm Lag Đa Nhiệm</string>
 		<key>FixAppLaunchBlackScreen</key>
-		<string>Corregir pantalla negra al abrir app</string>
+		<string>Chống Đen Màn Mở Ứng Dụng</string>
 		<key>FixAppExitStutter</key>
-		<string>Corregir tirones al salir de app</string>
+		<string>Chống Khựng Khi Thoát App (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>Aceleración de respuesta táctil</string>
+		<string>Tăng Phản Hồi Cảm Ứng (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
-		<string>Optimizador de búfer neural</string>
+		<string>Neural Buffer Optimizer</string>
 		<key>ApexBackgroundPacingDaemon</key>
-		<string>Daemon de ritmo en segundo plano</string>
+		<string>Background Pacing Daemon</string>
 		<key>HyperMemoryGuardian</key>
 		<string>Hyper Memory Guardian</string>
 		<key>UltraResponsivenessProEngineOfficial</key>
 		<string>Ultra Responsiveness Pro</string>
 		<key>HyperThreadIOAcceleratorOfficial</key>
-		<string>Acelerador de E/S HyperThread</string>
+		<string>HyperThread I/O Accelerator</string>
 		<key>QuantumCoreSyncStabilizerOfficial</key>
-		<string>Estabilizador de núcleo Quantum</string>
+		<string>Quantum Core Sync Stabilizer</string>
 		<key>ZeroLagNeuralBoosterOfficial</key>
-		<string>Optimizador neural Zero-Lag</string>
+		<string>Zero-Lag Neural Booster</string>
 		<key>VsyncAdaptiveBufferOfficial</key>
-		<string>Búfer adaptable V-Sync</string>
+		<string>V-Sync Adaptive Buffer</string>
 		<key>DynamicThermalEngineOfficial</key>
-		<string>Motor térmico dinámico</string>
+		<string>Dynamic Thermal Engine</string>
 		<key>Ios27AutoScheduler</key>
-		<string>Planificador automático de iOS</string>
+		<string>Bộ Điều Phối iOS Scheduler</string>
 		<key>RealtimePriorityBoost</key>
-		<string>Prioridad en tiempo real (SCHED_RR)</string>
+		<string>Ưu Tiên Luồng Realtime (SCHED_RR)</string>
 		<key>BoostCpuGpu</key>
-		<string>Optimización de frecuencia CPU/GPU</string>
+		<string>Tối Ưu Xung Nhịp CPU/GPU</string>
 		<key>SmartRamClean</key>
-		<string>Limpieza inteligente de RAM</string>
+		<string>Dọn RAM Tự Động Định Kỳ</string>
 		<key>AggressiveRamClean</key>
-		<string>Liberación profunda de Mach VM</string>
+		<string>Dọn RAM Chuyên Sâu Cấp Mach VM</string>
 		<key>KillBgApps</key>
-		<string>Cerrar apps en segundo plano</string>
+		<string>Đóng Ứng Dụng Nền Tự Động</string>
 		<key>TurboAppLaunch</key>
-		<string>Inicio turbo de aplicaciones</string>
-		<key>MetalTripleBuffering</key>
-		<string>Triple búfer Metal</string>
+		<string>Khởi Động App Cực Nhanh (Turbo)</string>
 		<key>GameFpsStabilizer</key>
-		<string>Estabilizador de FPS en juegos</string>
+		<string>Ổn Định Khung Hình Chơi Game</string>
 		<key>OptimizeSystemProcess</key>
-		<string>Optimización de daemons del sistema</string>
+		<string>Tối Ưu Tiến Trình Hệ Thống</string>
 		<key>AutoSpoofNewDevice</key>
-		<string>Simular dispositivo moderno</string>
+		<string>Giả Lập Thiết Bị Đời Mới</string>
 		<key>AntiThermalThrottling</key>
-		<string>Evitar estrangulamiento térmico</string>
+		<string>Chống Bóp Hiệu Năng Khi Ấm Máy</string>
 		<key>SmartThermalManager</key>
-		<string>Gestor térmico inteligente</string>
+		<string>Điều Phối Nhiệt Độ Thông Minh</string>
 		<key>HeavyLoadCooling</key>
-		<string>Refrigeración bajo carga pesada</string>
+		<string>Làm Mát Khi Xử Lý Tải Nặng</string>
 		<key>ChargeCoolingProtection</key>
-		<string>Protección contra calentamiento al cargar</string>
+		<string>Bảo Vệ Hạ Nhiệt Khi Cắm Sạc</string>
 		<key>PowerSaveMode</key>
-		<string>Modo ultra ahorro de batería (30Hz)</string>
+		<string>Chế Độ Tiết Kiệm Pin Cực Đại (30Hz)</string>
 		<key>BypassVarSandbox</key>
-		<string>Omitir sandbox de directorio Var</string>
+		<string>Vượt Qua Sandbox Thư Mục Var</string>
 		<key>BlockAnalytics</key>
-		<string>Bloquear telemetría y análisis</string>
+		<string>Chặn Thu Thập Dữ Liệu Ngầm</string>
 		<key>Author</key>
-		<string>Autor</string>
+		<string>Tác Giả</string>
 		<key>Version</key>
-		<string>Versión</string>
+		<string>Phiên Bản</string>
 		<key>SupportLink</key>
-		<string>Unirse al grupo de soporte</string>
+		<string>Tham Gia Nhóm Hỗ Trợ Zalo</string>
 
-		<!-- Popups & Dynamic Labels -->
+		<!-- Cửa sổ bật lên và nhãn động -->
 		<key>POPUP_LANG_TITLE</key>
-		<string>SELECCIONAR IDIOMA</string>
+		<string>CHỌN NGÔN NGỮ (LANGUAGE)</string>
 		<key>LANGUAGE_BTN_FORMAT</key>
-		<string>Idioma: %@</string>
+		<string>Ngôn Ngữ: %@</string>
 		<key>TITLE_HZ</key>
-		<string>FRECUENCIA DE PANTALLA (HZ)</string>
+		<string>TẦN SỐ QUÉT MÀN HÌNH VÀ PIP (HZ)</string>
 		<key>TITLE_FPS</key>
-		<string>FPS EN APLICACIONES</string>
+		<string>KHUNG HÌNH ỨNG DỤNG (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
-		<string>Frecuencia: Dinámica (Máx %ld Hz)</string>
+		<string>Tần Số Quét: Tự Động (Tối Đa %ld Hz)</string>
 		<key>LOCK_HZ_TITLE</key>
-		<string>Frecuencia: Bloqueada a %ld Hz</string>
+		<string>Tần Số Quét: Khóa %ld Hz</string>
 		<key>DYNAMIC_FPS_TITLE</key>
-		<string>FPS Apps: Dinámico (Máx %ld FPS)</string>
+		<string>Khung Hình App: Tự Động (Tối Đa %ld FPS)</string>
 		<key>LOCK_FPS_TITLE</key>
-		<string>FPS Apps: Bloqueado a %ld FPS</string>
+		<string>Khung Hình App: Khóa %ld FPS</string>
 		<key>DYNAMIC</key>
-		<string>🌟 Modo dinámico inteligente (Auto)</string>
+		<string>🌟 Quét Nhiệt Độ Tự Động (Co Giãn 30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
-		<string>🟢 1. Ahorro de batería (15Hz - 40Hz)</string>
+		<string>🟢 1. TIẾT KIỆM PIN (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
-		<string>🟡 2. Equilibrado estándar (45Hz - 80Hz)</string>
+		<string>🟡 2. BÌNH THƯỜNG (45Hz - 80Hz)</string>
 		<key>MAX_PERF</key>
-		<string>🔴 3. Rendimiento máximo (85Hz - 144Hz)</string>
+		<string>🔴 3. CAO NHẤT (85Hz - 144Hz)</string>
 		<key>LOCK_AT</key>
-		<string>Fijar en</string>
+		<string>Khóa cố định mức</string>
 		<key>BACK</key>
-		<string>Volver</string>
+		<string>Quay Lại</string>
 		<key>CLOSE</key>
-		<string>Cerrar</string>
+		<string>Đóng</string>
 		<key>TAG_SAVER</key>
-		<string> - Ahorro</string>
+		<string> - Tiết Kiệm Pin</string>
 		<key>TAG_BALANCED</key>
-		<string> - Equilibrado</string>
+		<string> - Tiêu Chuẩn</string>
 		<key>TAG_ULTRA</key>
-		<string> - Ultra fluido</string>
+		<string> - Siêu Mượt</string>
 		<key>TAG_MAX</key>
-		<string> - Máximo</string>
+		<string> - Cực Hạn Phần Cứng</string>
 		<key>ACTION_TITLE</key>
-		<string>ACCIONES DEL SISTEMA</string>
+		<string>TÁC VỤ HỆ THỐNG CAO CẤP</string>
 		<key>RESPRING</key>
-		<string>⚡️ Respring rápido</string>
+		<string>⚡️ Khởi Động Lại SpringBoard (Respring)</string>
 		<key>SREBOOT</key>
-		<string>🔥 Reinicio de Userspace (SReboot)</string>
+		<string>🔥 Khởi Động Lại Userspace (SReboot)</string>
 		<key>RESET</key>
-		<string>♻️ Restaurar ajustes por defecto</string>
+		<string>♻️ Đặt Lại Cấu Hình Về Mặc Định</string>
 		<key>RESET_CONFIRM_TITLE</key>
-		<string>Confirmar restablecimiento</string>
+		<string>Xác Nhận Khôi Phục</string>
 		<key>RESET_CONFIRM_MSG</key>
-		<string>Todos los ajustes se restablecerán a los valores predeterminados óptimos.</string>
+		<string>Toàn bộ thiết lập sẽ được đưa về giá trị khuyến nghị chuẩn của nhà phát triển.</string>
 		<key>RESET_NOW</key>
-		<string>Restablecer ahora</string>
+		<string>Khôi Phục Ngay</string>
 	</dict>
 
 	<!-- ========================================== -->
@@ -200,17 +200,17 @@
 	<key>en</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>Actions</string>
 		<key>GROUP_MASTER</key>
-		<string>MASTER SYSTEM SWITCH V23.9.5.1 BETA</string>
+		<string>MASTER SYSTEM SWITCH V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>Disabling the master switch will hide all options below and restore original system hooks.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>V23.9.5.1 EXCLUSIVE (INTELLIGENT ENGINE)</string>
+		<string>V26 EXCLUSIVE PRIVILEGE (6-LAYER HEX BUFFERING)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>ProMotion Engine syncs with thermal sensors, boosting fluidity on touch and scaling down when warm.</string>
+		<string>ProMotion Engine syncs with thermal sensors, boosting fluidity on touch and enabling Metal Hex Buffering (6 layers).</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>HZ &amp; FPS DISPATCH (3-TIER SYSTEM)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -218,30 +218,32 @@
 		<key>GROUP_LAZY</key>
 		<string>3RD-PARTY LAZY INJECTION (FIX BLACK SCREEN)</string>
 		<key>FOOTER_LAZY</key>
-		<string>Injects all modules after UIApplication launch completes, ensuring zero black screens.</string>
+		<string>Injects all modules after UIApplication launch completes, ensuring zero black screens or graphic deadlocks.</string>
 		<key>GROUP_UI</key>
 		<string>UI ACCELERATION &amp; PHYSICS DYNAMICS</string>
 		<key>GROUP_GRAPHICS</key>
-		<string>DEEP HARDWARE &amp; GRAPHICS ENGINE</string>
+		<string>DEEP GRAPHICS DISPATCH &amp; HARDWARE CORE</string>
 		<key>GROUP_RAM_CPU</key>
-		<string>RAM DISPATCH &amp; CPU SCHEDULING</string>
+		<string>RAM DISPATCH &amp; CPU PROCESS SCHEDULING</string>
 		<key>GROUP_THERMAL</key>
 		<string>THERMAL &amp; POWER MANAGEMENT</string>
 		<key>GROUP_SECURITY</key>
 		<string>SECURITY &amp; PRIVACY</string>
 		<key>GROUP_DEV</key>
 		<string>DEVELOPER INFO &amp; SUPPORT</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>LANGUAGE SETTINGS</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - Engineered by DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Engineered by DUC LONG.</string>
 
 		<key>Enabled</key>
 		<string>Enable Tweak</string>
 		<key>SelectedLanguage</key>
 		<string>Language</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotion Engine (Dynamic Thermals)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Anti-Lag Liquid Glass</string>
+		<string>ProMotion Engine (Auto Thermal Scan)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Buffer Layers)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>0ms Zero-Lag Keyboard &amp; AI Chat</string>
 		<key>EnableHzControl</key>
@@ -257,7 +259,7 @@
 		<key>AppLazyInjectionSync</key>
 		<string>App Lazy Injection Sync</string>
 		<key>AppRenderShieldIsolation</key>
-		<string>App Render Shield Isolation</string>
+		<string>Native App Render Pipeline Isolation</string>
 		<key>ColorOs17SmoothEngine</key>
 		<string>ColorOS 17 Smooth Scroll Engine</string>
 		<key>ReduceMultiTaskLag</key>
@@ -265,9 +267,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>Fix App Launch Black Screen</string>
 		<key>FixAppExitStutter</key>
-		<string>Fix App Exit Stutter</string>
+		<string>Fix App Exit Stutter (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>Touch Response Boost</string>
+		<string>Touch Response Boost (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -302,12 +304,10 @@
 		<string>Auto-Terminate Background Apps</string>
 		<key>TurboAppLaunch</key>
 		<string>Turbo App Launch</string>
-		<key>MetalTripleBuffering</key>
-		<string>Metal Triple Buffering</string>
 		<key>GameFpsStabilizer</key>
 		<string>Game FPS Stabilizer</string>
 		<key>OptimizeSystemProcess</key>
-		<string>System Daemon Optimizer</string>
+		<string>System Process Optimizer</string>
 		<key>AutoSpoofNewDevice</key>
 		<string>Device Spoofing Emulation</string>
 		<key>AntiThermalThrottling</key>
@@ -323,13 +323,13 @@
 		<key>BypassVarSandbox</key>
 		<string>Bypass Var Directory Sandbox</string>
 		<key>BlockAnalytics</key>
-		<string>Block Telemetry &amp; Analytics</string>
+		<string>Block Background Telemetry</string>
 		<key>Author</key>
 		<string>Author</string>
 		<key>Version</key>
 		<string>Version</string>
 		<key>SupportLink</key>
-		<string>Join Community Support</string>
+		<string>Join Zalo Support Group</string>
 
 		<!-- Popups & Dynamic Labels -->
 		<key>POPUP_LANG_TITLE</key>
@@ -337,7 +337,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>Language: %@</string>
 		<key>TITLE_HZ</key>
-		<string>SELECT REFRESH RATE (HZ)</string>
+		<string>SELECT REFRESH RATE &amp; PIP (HZ)</string>
 		<key>TITLE_FPS</key>
 		<string>SELECT APP FRAME RATE (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -349,13 +349,13 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>App Frame Rate: Lock %ld FPS</string>
 		<key>DYNAMIC</key>
-		<string>🌟 Dynamic Smart Engine (Auto)</string>
+		<string>🌟 Auto Thermal Scan (Dynamic 30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
-		<string>🟢 1. Battery Saver (15Hz - 40Hz)</string>
+		<string>🟢 1. BATTERY SAVER (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
-		<string>🟡 2. Balanced Standard (45Hz - 80Hz)</string>
+		<string>🟡 2. BALANCED (45Hz - 80Hz)</string>
 		<key>MAX_PERF</key>
-		<string>🔴 3. Ultra Performance (85Hz - 144Hz)</string>
+		<string>🔴 3. MAX PERFORMANCE (85Hz - 144Hz)</string>
 		<key>LOCK_AT</key>
 		<string>Lock at</string>
 		<key>BACK</key>
@@ -387,22 +387,214 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇨🇳 3. TIẾNG TRUNG (CHINESE - zh)           -->
+	<!-- 🇪🇸 3. TIẾNG TÂY BAN NHA (SPANISH - es)     -->
+	<!-- ========================================== -->
+	<key>es</key>
+	<dict>
+		<key>TITLE_MAIN</key>
+		<string>BoostiPhone6s V26 SUPREME</string>
+		<key>NAV_ACTIONS</key>
+		<string>Acciones</string>
+		<key>GROUP_MASTER</key>
+		<string>INTERRUPTOR MAESTRO V26 BETA</string>
+		<key>FOOTER_MASTER</key>
+		<string>Al desactivar el interruptor maestro, se ocultarán todas las opciones y se restaurarán los ganchos originales.</string>
+		<key>GROUP_SPECIAL</key>
+		<string>EXCLUSIVO V26 (HEX BUFFERING DE 6 NIVELES)</string>
+		<key>FOOTER_SPECIAL</key>
+		<string>ProMotion Engine sincroniza con sensores térmicos, aumentando la fluidez al tocar y activando Hex Buffering (6 capas Metal).</string>
+		<key>GROUP_HZ_FPS</key>
+		<string>CONTROL DE HZ Y FPS (3 NIVELES)</string>
+		<key>FOOTER_HZ_FPS</key>
+		<string>Toque para elegir: Ahorro de batería (15-40), Equilibrado (45-80), Rendimiento máximo (85-144). El modo dinámico se adapta a la temperatura.</string>
+		<key>GROUP_LAZY</key>
+		<string>INYECCIÓN DIFERIDA EN APPS (FIX PANTALLA NEGRA)</string>
+		<key>FOOTER_LAZY</key>
+		<string>Inyecta módulos tras el inicio de UIApplication, garantizando cero pantallas negras y sin bloqueos.</string>
+		<key>GROUP_UI</key>
+		<string>ACELERACIÓN DE UI Y DINÁMICA FÍSICA</string>
+		<key>GROUP_GRAPHICS</key>
+		<string>LÓGICA GRÁFICA PROFUNDA Y HARDWARE AVANZADO</string>
+		<key>GROUP_RAM_CPU</key>
+		<string>GESTIÓN DE RAM Y HILOS DE CPU</string>
+		<key>GROUP_THERMAL</key>
+		<string>GESTIÓN TÉRMICA Y ENERGÉTICA</string>
+		<key>GROUP_SECURITY</key>
+		<string>SEGURIDAD Y PRIVACIDAD</string>
+		<key>GROUP_DEV</key>
+		<string>INFORMACIÓN DEL DESARROLLADOR Y SOPORTE</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>AJUSTES DE IDIOMA</string>
+		<key>FOOTER_DEV</key>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Optimizado por DUC LONG.</string>
+
+		<key>Enabled</key>
+		<string>Activar Tweak</string>
+		<key>SelectedLanguage</key>
+		<string>Idioma (Language)</string>
+		<key>ProMotionEngineBeta7</key>
+		<string>ProMotion Engine (Escaneo térmico automático)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Capas de Búfer)</string>
+		<key>KeyboardZeroLagV24</key>
+		<string>Teclado 0ms y Chat de IA sin lag</string>
+		<key>EnableHzControl</key>
+		<string>Control de frecuencia de pantalla (Hz)</string>
+		<key>TargetRefreshRate</key>
+		<string>Seleccionar frecuencia (Hz)</string>
+		<key>EnableFPSControl</key>
+		<string>Control de FPS en aplicaciones</string>
+		<key>TargetFPSRate</key>
+		<string>Seleccionar FPS de apps</string>
+		<key>ForceOverclock144Hz</key>
+		<string>Forzar Overclock a 144Hz global</string>
+		<key>AppLazyInjectionSync</key>
+		<string>Sincronización de inyección diferida</string>
+		<key>AppRenderShieldIsolation</key>
+		<string>Aislamiento del pipeline de render nativo</string>
+		<key>ColorOs17SmoothEngine</key>
+		<string>Motor de desplazamiento ColorOS 17</string>
+		<key>ReduceMultiTaskLag</key>
+		<string>Reducir lag en multitarea</string>
+		<key>FixAppLaunchBlackScreen</key>
+		<string>Corregir pantalla negra al abrir app</string>
+		<key>FixAppExitStutter</key>
+		<string>Corregir tirones al salir de app (0ms Switcher)</string>
+		<key>TouchResponseBoost</key>
+		<string>Aceleración táctil (Overdrive)</string>
+		<key>QuantumRenderShieldOfficial</key>
+		<string>Quantum Render Shield</string>
+		<key>NeuralBufferOptimizerOfficial</key>
+		<string>Optimizador de búfer neural</string>
+		<key>ApexBackgroundPacingDaemon</key>
+		<string>Daemon de ritmo en segundo plano</string>
+		<key>HyperMemoryGuardian</key>
+		<string>Hyper Memory Guardian</string>
+		<key>UltraResponsivenessProEngineOfficial</key>
+		<string>Ultra Responsiveness Pro</string>
+		<key>HyperThreadIOAcceleratorOfficial</key>
+		<string>Acelerador de E/S HyperThread</string>
+		<key>QuantumCoreSyncStabilizerOfficial</key>
+		<string>Estabilizador de núcleo Quantum</string>
+		<key>ZeroLagNeuralBoosterOfficial</key>
+		<string>Optimizador neural Zero-Lag</string>
+		<key>VsyncAdaptiveBufferOfficial</key>
+		<string>Búfer adaptable V-Sync</string>
+		<key>DynamicThermalEngineOfficial</key>
+		<string>Motor térmico dinámico</string>
+		<key>Ios27AutoScheduler</key>
+		<string>Planificador automático de iOS Scheduler</string>
+		<key>RealtimePriorityBoost</key>
+		<string>Prioridad en tiempo real (SCHED_RR)</string>
+		<key>BoostCpuGpu</key>
+		<string>Optimización de frecuencia CPU/GPU</string>
+		<key>SmartRamClean</key>
+		<string>Limpieza inteligente de RAM periódica</string>
+		<key>AggressiveRamClean</key>
+		<string>Liberación profunda de Mach VM</string>
+		<key>KillBgApps</key>
+		<string>Cerrar apps en segundo plano</string>
+		<key>TurboAppLaunch</key>
+		<string>Inicio turbo de aplicaciones</string>
+		<key>GameFpsStabilizer</key>
+		<string>Estabilizador de FPS en juegos</string>
+		<key>OptimizeSystemProcess</key>
+		<string>Optimización de procesos del sistema</string>
+		<key>AutoSpoofNewDevice</key>
+		<string>Simular dispositivo moderno</string>
+		<key>AntiThermalThrottling</key>
+		<string>Evitar estrangulamiento térmico</string>
+		<key>SmartThermalManager</key>
+		<string>Gestor térmico inteligente</string>
+		<key>HeavyLoadCooling</key>
+		<string>Refrigeración bajo carga pesada</string>
+		<key>ChargeCoolingProtection</key>
+		<string>Protección contra calentamiento al cargar</string>
+		<key>PowerSaveMode</key>
+		<string>Modo ultra ahorro de batería (30Hz)</string>
+		<key>BypassVarSandbox</key>
+		<string>Omitir sandbox de directorio Var</string>
+		<key>BlockAnalytics</key>
+		<string>Bloquear telemetría y análisis</string>
+		<key>Author</key>
+		<string>Autor</string>
+		<key>Version</key>
+		<string>Versión</string>
+		<key>SupportLink</key>
+		<string>Unirse al grupo de soporte Zalo</string>
+
+		<!-- Popups & Dynamic Labels -->
+		<key>POPUP_LANG_TITLE</key>
+		<string>SELECCIONAR IDIOMA</string>
+		<key>LANGUAGE_BTN_FORMAT</key>
+		<string>Idioma: %@</string>
+		<key>TITLE_HZ</key>
+		<string>FRECUENCIA DE PANTALLA Y PIP (HZ)</string>
+		<key>TITLE_FPS</key>
+		<string>FPS EN APLICACIONES</string>
+		<key>DYNAMIC_HZ_TITLE</key>
+		<string>Frecuencia: Dinámica (Máx %ld Hz)</string>
+		<key>LOCK_HZ_TITLE</key>
+		<string>Frecuencia: Bloqueada a %ld Hz</string>
+		<key>DYNAMIC_FPS_TITLE</key>
+		<string>FPS Apps: Dinámico (Máx %ld FPS)</string>
+		<key>LOCK_FPS_TITLE</key>
+		<string>FPS Apps: Bloqueado a %ld FPS</string>
+		<key>DYNAMIC</key>
+		<string>🌟 Modo dinámico inteligente (30Hz - 144Hz)</string>
+		<key>BATTERY_SAVER</key>
+		<string>🟢 1. AHORRO DE BATERÍA (15Hz - 40Hz)</string>
+		<key>BALANCED</key>
+		<string>🟡 2. EQUILIBRADO (45Hz - 80Hz)</string>
+		<key>MAX_PERF</key>
+		<string>🔴 3. MÁXIMO RENDIMIENTO (85Hz - 144Hz)</string>
+		<key>LOCK_AT</key>
+		<string>Fijar en</string>
+		<key>BACK</key>
+		<string>Volver</string>
+		<key>CLOSE</key>
+		<string>Cerrar</string>
+		<key>TAG_SAVER</key>
+		<string> - Ahorro</string>
+		<key>TAG_BALANCED</key>
+		<string> - Equilibrado</string>
+		<key>TAG_ULTRA</key>
+		<string> - Ultra fluido</string>
+		<key>TAG_MAX</key>
+		<string> - Máximo</string>
+		<key>ACTION_TITLE</key>
+		<string>ACCIONES DEL SISTEMA</string>
+		<key>RESPRING</key>
+		<string>⚡️ Respring rápido</string>
+		<key>SREBOOT</key>
+		<string>🔥 Reinicio de Userspace (SReboot)</string>
+		<key>RESET</key>
+		<string>♻️ Restaurar ajustes por defecto</string>
+		<key>RESET_CONFIRM_TITLE</key>
+		<string>Confirmar restablecimiento</string>
+		<key>RESET_CONFIRM_MSG</key>
+		<string>Todos los ajustes se restablecerán a los valores predeterminados óptimos.</string>
+		<key>RESET_NOW</key>
+		<string>Restablecer ahora</string>
+	</dict>
+
+	<!-- ========================================== -->
+	<!-- 🇨🇳 4. TIẾNG TRUNG (CHINESE - zh)           -->
 	<!-- ========================================== -->
 	<key>zh</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>操作</string>
 		<key>GROUP_MASTER</key>
-		<string>V23.9.5.1 BETA 系统总开关</string>
+		<string>V26 BETA 系统总开关</string>
 		<key>FOOTER_MASTER</key>
 		<string>关闭总开关后，下方所有功能选项将自动隐藏并完全恢复系统原始状态。</string>
 		<key>GROUP_SPECIAL</key>
-		<string>V23.9.5.1 核心升级 (智能调度引擎)</string>
+		<string>V26 尊享升级 (6层 HEX BUFFERING 渲染)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>ProMotion 引擎根据硬件温度动态调度刷新率，触控极速响应，发热时自动降频降温。</string>
+		<string>ProMotion 引擎根据硬件温度动态调度刷新率，触控极速响应，并开启 Metal 6层深度缓冲。</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>刷新率与帧率调度 (三档调节)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -423,8 +615,10 @@
 		<string>安全防护与隐私保护</string>
 		<key>GROUP_DEV</key>
 		<string>开发信息与交流反馈</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>语言设置</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - 由 DUC LONG 优化重构。</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - 由 DUC LONG 优化重构。</string>
 
 		<key>Enabled</key>
 		<string>启用插件总开关</string>
@@ -432,8 +626,8 @@
 		<string>语言 (Language)</string>
 		<key>ProMotionEngineBeta7</key>
 		<string>ProMotion 自适应温控高刷</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>液态玻璃抗卡顿引擎</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6层缓冲)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>0ms 极速键盘与 AI 对话加速</string>
 		<key>EnableHzControl</key>
@@ -457,9 +651,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>修复应用冷启动黑屏</string>
 		<key>FixAppExitStutter</key>
-		<string>修复退出应用丢帧卡顿</string>
+		<string>修复退出应用丢帧卡顿 (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>触控采样率响应增强</string>
+		<string>触控采样率响应增强 (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum 渲染帧缓冲防护</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -494,8 +688,6 @@
 		<string>自动终止多余后台进程</string>
 		<key>TurboAppLaunch</key>
 		<string>应用极速启动 (Turbo)</string>
-		<key>MetalTripleBuffering</key>
-		<string>Metal 三重渲染缓冲</string>
 		<key>GameFpsStabilizer</key>
 		<string>游戏运行帧率锁频防抖</string>
 		<key>OptimizeSystemProcess</key>
@@ -529,7 +721,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>当前语言: %@</string>
 		<key>TITLE_HZ</key>
-		<string>选择屏幕刷新率 (Hz)</string>
+		<string>选择屏幕刷新率与 PIP (Hz)</string>
 		<key>TITLE_FPS</key>
 		<string>选择应用渲染帧率 (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -541,7 +733,7 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>应用帧率: 锁定 %ld FPS</string>
 		<key>DYNAMIC</key>
-		<string>🌟 智能动态调节 (Dynamic)</string>
+		<string>🌟 智能动态调节 (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
 		<string>🟢 1. 极致省电模式 (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
@@ -579,22 +771,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇷🇺 4. TIẾNG NGA (RUSSIAN - ru)             -->
+	<!-- 🇷🇺 5. TIẾNG NGA (RUSSIAN - ru)             -->
 	<!-- ========================================== -->
 	<key>ru</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>Действия</string>
 		<key>GROUP_MASTER</key>
-		<string>ГЛАВНЫЙ СИСТЕМНЫЙ ПЕРЕКЛЮЧАТЕЛЬ V23.9.5.1 BETA</string>
+		<string>ГЛАВНЫЙ СИСТЕМНЫЙ ПЕРЕКЛЮЧАТЕЛЬ V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>При отключении главного переключателя все опции скрываются, а хуки возвращаются к исходным.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>ЭКСКЛЮЗИВ V23.9.5.1 (УМНЫЙ ДВИЖОК)</string>
+		<string>ЭКСКЛЮЗИВ V26 (6-СЛОЙНЫЙ HEX BUFFERING)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>Движок ProMotion синхронизируется с термодатчиками, повышая герцовку при касании и снижая при нагреве.</string>
+		<string>Движок ProMotion синхронизируется с датчиками температуры, повышая плавность при касании и активируя 6-слойный Metal буфер.</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>ДИСПЕТЧЕР HZ И FPS (3 УРОВНЯ)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -606,7 +798,7 @@
 		<key>GROUP_UI</key>
 		<string>УСКОРЕНИЕ UI И ФИЗИКА АНИМАЦИИ</string>
 		<key>GROUP_GRAPHICS</key>
-		<string>ГЛУБОКИЙ ГРАФИЧЕСКИЙ ДВИЖОК</string>
+		<string>ГЛУБОКИЙ ГРАФИЧЕСКИЙ ДВИЖОК И ЯДРО HARDWARE</string>
 		<key>GROUP_RAM_CPU</key>
 		<string>ДИСПЕТЧЕР ОЗУ И ПОТОКОВ CPU</string>
 		<key>GROUP_THERMAL</key>
@@ -615,8 +807,10 @@
 		<string>БЕЗОПАСНОСТЬ И КОНФИДЕНЦИАЛЬНОСТЬ</string>
 		<key>GROUP_DEV</key>
 		<string>О РАЗРАБОТЧИКЕ И ПОДДЕРЖКА</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>НАСТРОЙКИ ЯЗЫКА</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - Разработано DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Разработано DUC LONG.</string>
 
 		<key>Enabled</key>
 		<string>Включить твик</string>
@@ -624,8 +818,8 @@
 		<string>Язык (Language)</string>
 		<key>ProMotionEngineBeta7</key>
 		<string>ProMotion Engine (Авто-термал)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Анти-лаг Liquid Glass</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 слоев буфера)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>Клавиатура без задержки (0мс)</string>
 		<key>EnableHzControl</key>
@@ -641,7 +835,7 @@
 		<key>AppLazyInjectionSync</key>
 		<string>Синхронизация отложенного старта</string>
 		<key>AppRenderShieldIsolation</key>
-		<string>Изоляция рендер-пайплайна</string>
+		<string>Изоляция нативного рендер-пайплайна</string>
 		<key>ColorOs17SmoothEngine</key>
 		<string>Плавная прокрутка ColorOS 17</string>
 		<key>ReduceMultiTaskLag</key>
@@ -649,9 +843,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>Устранение черного экрана запуска</string>
 		<key>FixAppExitStutter</key>
-		<string>Устранение фризов при выходе</string>
+		<string>Устранение фризов при выходе (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>Ускорение отклика сенсора</string>
+		<string>Ускорение отклика сенсора (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -679,19 +873,17 @@
 		<key>BoostCpuGpu</key>
 		<string>Оптимизация частот CPU/GPU</string>
 		<key>SmartRamClean</key>
-		<string>Автоматическая очистка ОЗУ</string>
+		<string>Автоматическая периодическая очистка ОЗУ</string>
 		<key>AggressiveRamClean</key>
 		<string>Глубокая очистка Mach VM</string>
 		<key>KillBgApps</key>
 		<string>Автозакрытие фоновых процессов</string>
 		<key>TurboAppLaunch</key>
 		<string>Турбо-запуск приложений</string>
-		<key>MetalTripleBuffering</key>
-		<string>Тройная буферизация Metal</string>
 		<key>GameFpsStabilizer</key>
 		<string>Стабилизация FPS в играх</string>
 		<key>OptimizeSystemProcess</key>
-		<string>Оптимизация системных демонов</string>
+		<string>Оптимизация системных процессов</string>
 		<key>AutoSpoofNewDevice</key>
 		<string>Эмуляция нового устройства</string>
 		<key>AntiThermalThrottling</key>
@@ -707,13 +899,13 @@
 		<key>BypassVarSandbox</key>
 		<string>Обход Sandbox директории Var</string>
 		<key>BlockAnalytics</key>
-		<string>Блокировка телеметрии и сбора</string>
+		<string>Блокировка фоновой телеметрии</string>
 		<key>Author</key>
 		<string>Автор</string>
 		<key>Version</key>
 		<string>Версия</string>
 		<key>SupportLink</key>
-		<string>Чат поддержки и сообщество</string>
+		<string>Группа поддержки Zalo</string>
 
 		<!-- Popups & Dynamic Labels -->
 		<key>POPUP_LANG_TITLE</key>
@@ -721,9 +913,9 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>Язык: %@</string>
 		<key>TITLE_HZ</key>
-		<string>ВЫБОР ЧАСТОТЫ ОБНОВЛЕНИЯ (HZ)</string>
+		<string>ЧАСТОТА ЭКРАНА И PIP (HZ)</string>
 		<key>TITLE_FPS</key>
-		<string>ВЫБОР ЧАСТОТЫ КАДРОВ (FPS)</string>
+		<string>ЧАСТОТА КАДРОВ В APPS (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
 		<string>Частота: Динамическая (До %ld Гц)</string>
 		<key>LOCK_HZ_TITLE</key>
@@ -733,7 +925,7 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>FPS приложений: Зафиксировано %ld</string>
 		<key>DYNAMIC</key>
-		<string>🌟 Динамический режим (Авто)</string>
+		<string>🌟 Авто-термоскан (Dynamic 30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
 		<string>🟢 1. Энергосбережение (15Гц - 40Гц)</string>
 		<key>BALANCED</key>
@@ -771,22 +963,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇮🇳 5. TIẾNG ẤN ĐỘ (HINDI - hi)             -->
+	<!-- 🇮🇳 6. TIẾNG ẤN ĐỘ (HINDI - hi)             -->
 	<!-- ========================================== -->
 	<key>hi</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>क्रियाएं</string>
 		<key>GROUP_MASTER</key>
-		<string>मास्टर सिस्टम स्विच V23.9.5.1 BETA</string>
+		<string>मास्टर सिस्टम स्विच V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>मास्टर स्विच बंद करने पर नीचे के सभी विकल्प छिप जाएंगे और सिस्टम सामान्य हो जाएगा।</string>
 		<key>GROUP_SPECIAL</key>
-		<string>V23.9.5.1 विशेष अपग्रेड (स्मार्ट इंजन)</string>
+		<string>V26 विशेष अपग्रेड (6-स्तरीय HEX BUFFERING)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>प्रोमोशन इंजन तापमान सेंसर के साथ मिलकर टच पर स्मूथनेस बढ़ाता है और गर्म होने पर फ्रेम दर घटाता है।</string>
+		<string>प्रोमोशन इंजन तापमान सेंसर के साथ मिलकर टच पर स्मूथनेस बढ़ाता है और 6-स्तरीय Metal बफरिंग सक्रिय करता है।</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>HZ और FPS नियंत्रण (3-स्तरीय प्रणाली)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -798,7 +990,7 @@
 		<key>GROUP_UI</key>
 		<string>यूआई गति और भौतिकी एनिमेशन</string>
 		<key>GROUP_GRAPHICS</key>
-		<string>हार्डवेयर और ग्राफिक्स इंजन</string>
+		<string>गहन हार्डवेयर और ग्राफिक्स इंजन</string>
 		<key>GROUP_RAM_CPU</key>
 		<string>रैम प्रबंधन और सीपीयू शेड्यूलिंग</string>
 		<key>GROUP_THERMAL</key>
@@ -807,17 +999,19 @@
 		<string>सुरक्षा और गोपनीयता</string>
 		<key>GROUP_DEV</key>
 		<string>डेवलपर जानकारी और सहायता</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>भाषा सेटिंग्स</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - DUC LONG द्वारा निर्मित।</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - DUC LONG द्वारा निर्मित।</string>
 
 		<key>Enabled</key>
 		<string>ट्वीक सक्षम करें</string>
 		<key>SelectedLanguage</key>
 		<string>भाषा (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>प्रोमोशन इंजन (तापमान ऑटो)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>लिक्विड ग्लास लैग फिक्स</string>
+		<string>प्रोमोशन इंजन (तापमान ऑटो स्कैन)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 लेयर बफर)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>0ms कीबोर्ड और एआई चैट</string>
 		<key>EnableHzControl</key>
@@ -841,9 +1035,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>ऐप ब्लैक स्क्रीन ठीक करें</string>
 		<key>FixAppExitStutter</key>
-		<string>ऐप क्लोजिंग लैग ठीक करें</string>
+		<string>ऐप क्लोजिंग लैग ठीक करें (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>टच रिस्पांस बूस्ट</string>
+		<string>टच रिस्पांस बूस्ट (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -871,15 +1065,13 @@
 		<key>BoostCpuGpu</key>
 		<string>CPU और GPU ऑप्टिमाइज़र</string>
 		<key>SmartRamClean</key>
-		<string>स्मार्ट रैम सफाई</string>
+		<string>स्मार्ट रैम समय-समय पर सफाई</string>
 		<key>AggressiveRamClean</key>
 		<string>गहन Mach VM मेमोरी सफाई</string>
 		<key>KillBgApps</key>
 		<string>बैकग्राउंड ऐप्स बंद करें</string>
 		<key>TurboAppLaunch</key>
 		<string>टर्बो ऐप लॉन्च</string>
-		<key>MetalTripleBuffering</key>
-		<string>Metal ट्रिपल बफरिंग</string>
 		<key>GameFpsStabilizer</key>
 		<string>गेम FPS स्टेबलाइजर</string>
 		<key>OptimizeSystemProcess</key>
@@ -913,7 +1105,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>भाषा: %@</string>
 		<key>TITLE_HZ</key>
-		<string>रिफ्रेश रेट चुनें (Hz)</string>
+		<string>रिफ्रेश रेट और PIP चुनें (Hz)</string>
 		<key>TITLE_FPS</key>
 		<string>फ्रेम रेट चुनें (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -925,7 +1117,7 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>ऐप फ्रेम रेट: लॉक %ld FPS</string>
 		<key>DYNAMIC</key>
-		<string>🌟 डायनामिक स्मार्ट इंजन (ऑटो)</string>
+		<string>🌟 डायनामिक स्मार्ट इंजन (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
 		<string>🟢 1. बैटरी सेवर (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
@@ -963,22 +1155,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇯🇵 6. TIẾNG NHẬT (JAPANESE - ja)           -->
+	<!-- 🇯🇵 7. TIẾNG NHẬT (JAPANESE - ja)           -->
 	<!-- ========================================== -->
 	<key>ja</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>アクション</string>
 		<key>GROUP_MASTER</key>
-		<string>マスターシステムスイッチ V23.9.5.1 BETA</string>
+		<string>マスターシステムスイッチ V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>マスタースイッチを無効にすると、すべてのオプションが非表示になり、元の状態に戻ります。</string>
 		<key>GROUP_SPECIAL</key>
-		<string>V23.9.5.1 特別アップグレード (スマートエンジン)</string>
+		<string>V26 特別アップグレード (6層 HEX BUFFERING)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>ProMotionエンジンは温度センサーと連動し、タッチ時に滑らかさを向上させ、発熱時に自動冷却します。</string>
+		<string>ProMotionエンジンは温度センサーと連動し、タッチ時に滑らかさを向上させ、6層Metalバッファリングを有効化します。</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>リフレッシュレートとFPS制御 (3段階)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -999,17 +1191,19 @@
 		<string>セキュリティとプライバシー保護</string>
 		<key>GROUP_DEV</key>
 		<string>開発者情報とサポート</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>言語設定</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - DUC LONGによって最適化。</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - DUC LONGによって最適化。</string>
 
 		<key>Enabled</key>
 		<string>Tweakを有効化</string>
 		<key>SelectedLanguage</key>
 		<string>言語 (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotionエンジン (動的温度制御)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Liquid Glassラグ防止</string>
+		<string>ProMotionエンジン (動的温度自動スキャン)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6層バッファ)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>0ms超高速キーボード＆AIチャット</string>
 		<key>EnableHzControl</key>
@@ -1033,9 +1227,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>アプリ起動時の黒画面を修正</string>
 		<key>FixAppExitStutter</key>
-		<string>アプリ終了時のカクつきを修正</string>
+		<string>アプリ終了時のカクつきを修正 (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>タッチレスポンスブースト</string>
+		<string>タッチレスポンスブースト (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantumレンダーシールド</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -1070,8 +1264,6 @@
 		<string>不要なバックグラウンドアプリを終了</string>
 		<key>TurboAppLaunch</key>
 		<string>アプリ超高速起動 (Turbo)</string>
-		<key>MetalTripleBuffering</key>
-		<string>Metalトリプルバッファリング</string>
 		<key>GameFpsStabilizer</key>
 		<string>ゲームFPSスタビライザー</string>
 		<key>OptimizeSystemProcess</key>
@@ -1105,7 +1297,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>現在の言語: %@</string>
 		<key>TITLE_HZ</key>
-		<string>画面リフレッシュレートを選択 (Hz)</string>
+		<string>画面リフレッシュレートとPIPを選択 (Hz)</string>
 		<key>TITLE_FPS</key>
 		<string>アプリフレームレートを選択 (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -1117,7 +1309,7 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>アプリFPS: %ld FPSに固定</string>
 		<key>DYNAMIC</key>
-		<string>🌟 動的スマートエンジン (自動)</string>
+		<string>🌟 動的スマートエンジン (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
 		<string>🟢 1. バッテリー節約 (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
@@ -1155,22 +1347,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇰🇷 7. TIẾNG HÀN (KOREAN - ko)              -->
+	<!-- 🇰🇷 8. TIẾNG HÀN (KOREAN - ko)              -->
 	<!-- ========================================== -->
 	<key>ko</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>동작</string>
 		<key>GROUP_MASTER</key>
-		<string>마스터 시스템 스위치 V23.9.5.1 BETA</string>
+		<string>마스터 시스템 스위치 V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>마스터 스위치를 끄면 아래의 모든 기능이 숨겨지고 기본 상태로 복원됩니다.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>V23.9.5.1 전용 업그레이드 (스마트 엔진)</string>
+		<string>V26 전용 업그레이드 (6계층 HEX BUFFERING)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>ProMotion 엔진은 하드웨어 온도와 동기화되어 터치 시 부드러움을 극대화하고 발열 시 냉각합니다.</string>
+		<string>ProMotion 엔진은 하드웨어 온도와 동기화되어 터치 시 부드러움을 극대화하고 Metal 6계층 버퍼링을 활성화합니다.</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>주사율 및 FPS 제어 (3단계 시스템)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -1191,17 +1383,19 @@
 		<string>보안 및 개인 정보 보호</string>
 		<key>GROUP_DEV</key>
 		<string>개발자 정보 및 지원</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>언어 설정</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - DUC LONG에 의해 최적화됨.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - DUC LONG에 의해 최적화됨.</string>
 
 		<key>Enabled</key>
 		<string>트윅 활성화</string>
 		<key>SelectedLanguage</key>
 		<string>언어 (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotion 엔진 (동적 온도 제어)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Liquid Glass 렉 방지</string>
+		<string>ProMotion 엔진 (동적 온도 자동 감지)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6계층 버퍼)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>0ms 딜레이 없는 키보드 및 AI 채팅</string>
 		<key>EnableHzControl</key>
@@ -1225,9 +1419,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>앱 실행 시 검은 화면 수정</string>
 		<key>FixAppExitStutter</key>
-		<string>앱 종료 시 끊김 현상 수정</string>
+		<string>앱 종료 시 끊김 현상 수정 (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>터치 반응 속도 부스트</string>
+		<string>터치 반응 속도 부스트 (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum 렌더 실드</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -1262,8 +1456,6 @@
 		<string>백그라운드 앱 자동 종료</string>
 		<key>TurboAppLaunch</key>
 		<string>초고속 앱 실행 (Turbo)</string>
-		<key>MetalTripleBuffering</key>
-		<string>Metal 트리플 버퍼링</string>
 		<key>GameFpsStabilizer</key>
 		<string>게임 FPS 안정화기</string>
 		<key>OptimizeSystemProcess</key>
@@ -1297,7 +1489,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>현재 언어: %@</string>
 		<key>TITLE_HZ</key>
-		<string>화면 주사율 선택 (Hz)</string>
+		<string>화면 주사율 및 PIP 선택 (Hz)</string>
 		<key>TITLE_FPS</key>
 		<string>앱 프레임 레이트 선택 (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -1309,7 +1501,7 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>앱 FPS: %ld FPS 고정</string>
 		<key>DYNAMIC</key>
-		<string>🌟 스마트 동적 제어 (자동)</string>
+		<string>🌟 스마트 동적 제어 (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
 		<string>🟢 1. 배터리 절약 모드 (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
@@ -1347,22 +1539,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇧🇷 8. TIẾNG BỒ ĐÀO NHA (PORTUGUESE - pt)    -->
+	<!-- 🇧🇷 9. TIẾNG BỒ ĐÀO NHA (PORTUGUESE - pt)    -->
 	<!-- ========================================== -->
 	<key>pt</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>Ações</string>
 		<key>GROUP_MASTER</key>
-		<string>INTERRUPTOR MESTRE V23.9.5.1 BETA</string>
+		<string>INTERRUPTOR MESTRE V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>Desativar o interruptor mestre ocultará todas as opções e restaurará os ganchos originais.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>EXCLUSIVO V23.9.5.1 (MOTOR INTELIGENTE)</string>
+		<string>EXCLUSIVO V26 (HEX BUFFERING DE 6 CAMADAS)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>O ProMotion Engine sincroniza com sensores térmicos, aumentando a fluidez ao toque e reduzindo ao aquecer.</string>
+		<string>O ProMotion Engine sincroniza com sensores térmicos, aumentando a fluidez ao toque e ativando Metal Hex Buffering (6 camadas).</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>DISPATCH DE HZ E FPS (3 NÍVEIS)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -1383,17 +1575,19 @@
 		<string>SEGURANÇA E PRIVACIDADE</string>
 		<key>GROUP_DEV</key>
 		<string>INFORMAÇÕES DO DESENVOLVEDOR E SUPORTE</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>CONFIGURAÇÕES DE IDIOMA</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - Otimizado por DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Otimizado por DUC LONG.</string>
 
 		<key>Enabled</key>
 		<string>Ativar Tweak</string>
 		<key>SelectedLanguage</key>
 		<string>Idioma (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotion Engine (Controle térmico)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Anti-Lag Liquid Glass</string>
+		<string>ProMotion Engine (Varredura térmica automática)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Camadas de Buffer)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>Teclado 0ms e Chat de IA ultra rápido</string>
 		<key>EnableHzControl</key>
@@ -1409,7 +1603,7 @@
 		<key>AppLazyInjectionSync</key>
 		<string>Sincronização de injeção tardia</string>
 		<key>AppRenderShieldIsolation</key>
-		<string>Isolamento do pipeline de renderização</string>
+		<string>Isolamento do pipeline de renderização nativo</string>
 		<key>ColorOs17SmoothEngine</key>
 		<string>Motor de rolagem suave ColorOS 17</string>
 		<key>ReduceMultiTaskLag</key>
@@ -1417,9 +1611,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>Corrigir tela preta ao abrir apps</string>
 		<key>FixAppExitStutter</key>
-		<string>Corrigir travamentos ao sair de apps</string>
+		<string>Corrigir travamentos ao sair de apps (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>Aceleração de resposta ao toque</string>
+		<string>Aceleração de resposta ao toque (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -1454,12 +1648,10 @@
 		<string>Fechar apps em segundo plano</string>
 		<key>TurboAppLaunch</key>
 		<string>Inicialização turbo de apps</string>
-		<key>MetalTripleBuffering</key>
-		<string>Buffer triplo Metal</string>
 		<key>GameFpsStabilizer</key>
 		<string>Estabilizador de FPS em jogos</string>
 		<key>OptimizeSystemProcess</key>
-		<string>Otimização de daemons do sistema</string>
+		<string>Otimização de processos do sistema</string>
 		<key>AutoSpoofNewDevice</key>
 		<string>Emular modelo de dispositivo recente</string>
 		<key>AntiThermalThrottling</key>
@@ -1481,7 +1673,7 @@
 		<key>Version</key>
 		<string>Versão</string>
 		<key>SupportLink</key>
-		<string>Entrar no grupo de suporte</string>
+		<string>Entrar no grupo de suporte Zalo</string>
 
 		<!-- Popups & Dynamic Labels -->
 		<key>POPUP_LANG_TITLE</key>
@@ -1489,7 +1681,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>Idioma: %@</string>
 		<key>TITLE_HZ</key>
-		<string>TAXA DE ATUALIZAÇÃO (HZ)</string>
+		<string>TAXA DE ATUALIZAÇÃO E PIP (HZ)</string>
 		<key>TITLE_FPS</key>
 		<string>FPS EM APLICATIVOS</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -1501,13 +1693,13 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>FPS Apps: Travado em %ld FPS</string>
 		<key>DYNAMIC</key>
-		<string>🌟 Modo dinâmico inteligente (Auto)</string>
+		<string>🌟 Modo dinâmico inteligente (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
-		<string>🟢 1. Economia de bateria (15Hz - 40Hz)</string>
+		<string>🟢 1. ECONOMIA DE BATERIA (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
-		<string>🟡 2. Equilibrado padrão (45Hz - 80Hz)</string>
+		<string>🟡 2. EQUILIBRADO PADRÃO (45Hz - 80Hz)</string>
 		<key>MAX_PERF</key>
-		<string>🔴 3. Desempenho máximo (85Hz - 144Hz)</string>
+		<string>🔴 3. DESEMPENHO MÁXIMO (85Hz - 144Hz)</string>
 		<key>LOCK_AT</key>
 		<string>Fixar em</string>
 		<key>BACK</key>
@@ -1539,22 +1731,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇫🇷 9. TIẾNG PHÁP (FRENCH - fr)             -->
+	<!-- 🇫🇷 10. TIẾNG PHÁP (FRENCH - fr)            -->
 	<!-- ========================================== -->
 	<key>fr</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>Actions</string>
 		<key>GROUP_MASTER</key>
-		<string>INTERRUPTEUR PRINCIPAL V23.9.5.1 BETA</string>
+		<string>INTERRUPTEUR PRINCIPAL V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>Désactiver l'interrupteur masquera toutes les options et restaurera les hooks système d'origine.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>EXCLUSIVITÉ V23.9.5.1 (MOTEUR INTELLIGENT)</string>
+		<string>EXCLUSIVITÉ V26 (HEX BUFFERING À 6 COUCHES)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>ProMotion Engine se synchronise avec les capteurs thermiques, boostant la fluidité au toucher et refroidissant en cas de chauffe.</string>
+		<string>ProMotion Engine se synchronise avec les capteurs thermiques, boostant la fluidité au toucher et activant le Hex Buffering (6 couches Metal).</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>CONTRÔLE DES HZ ET FPS (3 NIVEAUX)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -1575,17 +1767,19 @@
 		<string>SÉCURITÉ ET CONFIDENTIALITÉ</string>
 		<key>GROUP_DEV</key>
 		<string>INFOS DU DÉVELOPPEUR ET SUPPORT</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>RÉGLAGES DE LANGUE</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - Optimisé par DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Optimisé par DUC LONG.</string>
 
 		<key>Enabled</key>
 		<string>Activer le Tweak</string>
 		<key>SelectedLanguage</key>
 		<string>Langue (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotion Engine (Thermique dynamique)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Anti-Lag Liquid Glass</string>
+		<string>ProMotion Engine (Scan thermique automatique)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Couches de Tampon)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>Clavier 0ms et Chat IA instantané</string>
 		<key>EnableHzControl</key>
@@ -1601,7 +1795,7 @@
 		<key>AppLazyInjectionSync</key>
 		<string>Synchronisation d'injection différée</string>
 		<key>AppRenderShieldIsolation</key>
-		<string>Isolation du pipeline de rendu d'app</string>
+		<string>Isolation du pipeline de rendu natif</string>
 		<key>ColorOs17SmoothEngine</key>
 		<string>Moteur de défilement fluide ColorOS 17</string>
 		<key>ReduceMultiTaskLag</key>
@@ -1609,9 +1803,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>Corriger l'écran noir au démarrage d'app</string>
 		<key>FixAppExitStutter</key>
-		<string>Corriger les saccades en quittant les apps</string>
+		<string>Corriger les saccades en quittant les apps (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>Accélération de la réponse tactile</string>
+		<string>Accélération de la réponse tactile (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -1646,12 +1840,10 @@
 		<string>Fermer les applications en arrière-plan</string>
 		<key>TurboAppLaunch</key>
 		<string>Lancement turbo des applications</string>
-		<key>MetalTripleBuffering</key>
-		<string>Triple mise en mémoire tampon Metal</string>
 		<key>GameFpsStabilizer</key>
 		<string>Stabilisateur de FPS pour jeux</string>
 		<key>OptimizeSystemProcess</key>
-		<string>Optimisation des démons système</string>
+		<string>Optimisation des processus système</string>
 		<key>AutoSpoofNewDevice</key>
 		<string>Simuler un appareil récent</string>
 		<key>AntiThermalThrottling</key>
@@ -1673,7 +1865,7 @@
 		<key>Version</key>
 		<string>Version</string>
 		<key>SupportLink</key>
-		<string>Rejoindre la communauté d'aide</string>
+		<string>Rejoindre la communauté d'aide Zalo</string>
 
 		<!-- Popups & Dynamic Labels -->
 		<key>POPUP_LANG_TITLE</key>
@@ -1681,7 +1873,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>Langue: %@</string>
 		<key>TITLE_HZ</key>
-		<string>TAUX DE RAFRAÎCHISSEMENT (HZ)</string>
+		<string>TAUX DE RAFRAÎCHISSEMENT ET PIP (HZ)</string>
 		<key>TITLE_FPS</key>
 		<string>IMAGES PAR SECONDE (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -1693,13 +1885,13 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>FPS Apps: Verrouillé à %ld FPS</string>
 		<key>DYNAMIC</key>
-		<string>🌟 Moteur dynamique intelligent (Auto)</string>
+		<string>🌟 Moteur dynamique intelligent (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
-		<string>🟢 1. Économie d'énergie (15Hz - 40Hz)</string>
+		<string>🟢 1. ÉCONOMIE D'ÉNERGIE (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
-		<string>🟡 2. Équilibré standard (45Hz - 80Hz)</string>
+		<string>🟡 2. ÉQUILIBRÉ STANDARD (45Hz - 80Hz)</string>
 		<key>MAX_PERF</key>
-		<string>🔴 3. Performance maximale (85Hz - 144Hz)</string>
+		<string>🔴 3. PERFORMANCE MAXIMALE (85Hz - 144Hz)</string>
 		<key>LOCK_AT</key>
 		<string>Fixer à</string>
 		<key>BACK</key>
@@ -1731,22 +1923,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇩🇪 10. TIẾNG ĐỨC (GERMAN - de)             -->
+	<!-- 🇩🇪 11. TIẾNG ĐỨC (GERMAN - de)             -->
 	<!-- ========================================== -->
 	<key>de</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>Aktionen</string>
 		<key>GROUP_MASTER</key>
-		<string>HAUPTSCHALTER V23.9.5.1 BETA</string>
+		<string>HAUPTSCHALTER V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>Das Deaktivieren blendet alle Optionen aus und stellt die Standardeinstellungen wieder her.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>V23.9.5.1 EXKLUSIV (INTELLIGENTE ENGINE)</string>
+		<string>V26 EXKLUSIV (6-STUFIGES HEX BUFFERING)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>Die ProMotion Engine synchronisiert mit Temperatursensoren: maximale Glätte bei Berührung und Kühlung bei Hitze.</string>
+		<string>Die ProMotion Engine synchronisiert mit Temperatursensoren: maximale Glätte bei Berührung und Aktivierung von 6 Metal-Puffern.</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>HZ- &amp; FPS-STEUERUNG (3-STUFIG)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -1767,17 +1959,19 @@
 		<string>SICHERHEIT &amp; DATENSCHUTZ</string>
 		<key>GROUP_DEV</key>
 		<string>ENTWICKLER-INFO &amp; SUPPORT</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>SPRACHEINSTELLUNGEN</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - Optimiert von DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Optimiert von DUC LONG.</string>
 
 		<key>Enabled</key>
 		<string>Tweak aktivieren</string>
 		<key>SelectedLanguage</key>
 		<string>Sprache (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>ProMotion Engine (Dynamische Kühlung)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>Anti-Lag Liquid Glass</string>
+		<string>ProMotion Engine (Automatischer Thermoscan)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Pufferebenen)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>0ms Tastatur &amp; KI-Chat ohne Verzögerung</string>
 		<key>EnableHzControl</key>
@@ -1801,9 +1995,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>Schwarzbild beim App-Start beheben</string>
 		<key>FixAppExitStutter</key>
-		<string>Ruckeln beim Verlassen von Apps beheben</string>
+		<string>Ruckeln beim Verlassen von Apps beheben (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>Touch-Reaktionszeit optimieren</string>
+		<string>Touch-Reaktionszeit optimieren (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>Quantum Render Shield</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -1838,12 +2032,10 @@
 		<string>Hintergrund-Apps automatisch schließen</string>
 		<key>TurboAppLaunch</key>
 		<string>Turbo-Start für Apps</string>
-		<key>MetalTripleBuffering</key>
-		<string>Metal Triple Buffering</string>
 		<key>GameFpsStabilizer</key>
 		<string>FPS-Stabilisator für Spiele</string>
 		<key>OptimizeSystemProcess</key>
-		<string>System-Daemons optimieren</string>
+		<string>System-Prozesse optimieren</string>
 		<key>AutoSpoofNewDevice</key>
 		<string>Neues Gerätemodell emulieren</string>
 		<key>AntiThermalThrottling</key>
@@ -1865,7 +2057,7 @@
 		<key>Version</key>
 		<string>Version</string>
 		<key>SupportLink</key>
-		<string>Support-Community beitreten</string>
+		<string>Support-Community Zalo beitreten</string>
 
 		<!-- Popups & Dynamic Labels -->
 		<key>POPUP_LANG_TITLE</key>
@@ -1873,7 +2065,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>Sprache: %@</string>
 		<key>TITLE_HZ</key>
-		<string>BILDWIEDERHOLRATE (HZ)</string>
+		<string>BILDWIEDERHOLRATE &amp; PIP (HZ)</string>
 		<key>TITLE_FPS</key>
 		<string>APP-BILDRATE (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -1885,13 +2077,13 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>App-FPS: %ld FPS fest</string>
 		<key>DYNAMIC</key>
-		<string>🌟 Intelligente dynamische Engine (Auto)</string>
+		<string>🌟 Intelligente dynamische Engine (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
-		<string>🟢 1. Energiesparmodus (15Hz - 40Hz)</string>
+		<string>🟢 1. ENERGIESPARMODUS (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
-		<string>🟡 2. Ausgeglichener Standard (45Hz - 80Hz)</string>
+		<string>🟡 2. AUSGEGLICHEN (45Hz - 80Hz)</string>
 		<key>MAX_PERF</key>
-		<string>🔴 3. Maximale Leistung (85Hz - 144Hz)</string>
+		<string>🔴 3. MAXIMALE LEISTUNG (85Hz - 144Hz)</string>
 		<key>LOCK_AT</key>
 		<string>Festsetzen auf</string>
 		<key>BACK</key>
@@ -1923,22 +2115,22 @@
 	</dict>
 
 	<!-- ========================================== -->
-	<!-- 🇸🇦 11. TIẾNG Ả RẬP (ARABIC - ar)            -->
+	<!-- 🇸🇦 12. TIẾNG Ả RẬP (ARABIC - ar)            -->
 	<!-- ========================================== -->
 	<key>ar</key>
 	<dict>
 		<key>TITLE_MAIN</key>
-		<string>BoostiPhone6s V23.9.5.1 BETA</string>
+		<string>BoostiPhone6s V26 SUPREME</string>
 		<key>NAV_ACTIONS</key>
 		<string>إجراءات</string>
 		<key>GROUP_MASTER</key>
-		<string>المفتاح الرئيسي للنظام V23.9.5.1 BETA</string>
+		<string>المفتاح الرئيسي للنظام V26 BETA</string>
 		<key>FOOTER_MASTER</key>
 		<string>تعطيل المفتاح الرئيسي سيخفي جميع الخيارات أدناه ويعيد النظام لوضعه الأصلي.</string>
 		<key>GROUP_SPECIAL</key>
-		<string>ترقية V23.9.5.1 الحصرية (المحرك الذكي)</string>
+		<string>ترقية V26 الحصرية (تخزين مؤقت سداسي 6-طبقات)</string>
 		<key>FOOTER_SPECIAL</key>
-		<string>يتزامن محرك ProMotion مع مستشعرات الحرارة لزيادة السلاسة عند اللمس وتبريد الجهاز عند ارتفاع الحرارة.</string>
+		<string>يتزامن محرك ProMotion مع مستشعرات الحرارة لزيادة السلاسة عند اللمس وتفعيل Metal Hex Buffering (6 طبقات).</string>
 		<key>GROUP_HZ_FPS</key>
 		<string>التحكم في التردد والإطارات (3 مستويات)</string>
 		<key>FOOTER_HZ_FPS</key>
@@ -1959,17 +2151,19 @@
 		<string>الأمان والخصوصية</string>
 		<key>GROUP_DEV</key>
 		<string>معلومات المطور والدعم</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>إعدادات اللغة</string>
 		<key>FOOTER_DEV</key>
-		<string>© 2026 BoostiPhone6s V23.9.5.1 BETA - تم التطوير بواسطة DUC LONG.</string>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - تم التطوير بواسطة DUC LONG.</string>
 
 		<key>Enabled</key>
 		<string>تفعيل الأداة</string>
 		<key>SelectedLanguage</key>
 		<string>اللغة (Language)</string>
 		<key>ProMotionEngineBeta7</key>
-		<string>محرك ProMotion (تحكم حراري تلقائي)</string>
-		<key>HeavyEffectAntiLagV24</key>
-		<string>إزالة لاق الزجاج السائل</string>
+		<string>محرك ProMotion (مسح حراري تلقائي)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 طبقات مؤقتة)</string>
 		<key>KeyboardZeroLagV24</key>
 		<string>لوحة مفاتيح سريعة 0ms ودردشة ذكاء اصطناعي</string>
 		<key>EnableHzControl</key>
@@ -1993,9 +2187,9 @@
 		<key>FixAppLaunchBlackScreen</key>
 		<string>إصلاح الشاشة السوداء عند فتح التطبيقات</string>
 		<key>FixAppExitStutter</key>
-		<string>إصلاح التقطيع عند الخروج من التطبيقات</string>
+		<string>إصلاح التقطيع عند الخروج من التطبيقات (0ms Switcher)</string>
 		<key>TouchResponseBoost</key>
-		<string>تسريع استجابة اللمس</string>
+		<string>تسريع استجابة اللمس (Overdrive)</string>
 		<key>QuantumRenderShieldOfficial</key>
 		<string>درع معالجة Quantum</string>
 		<key>NeuralBufferOptimizerOfficial</key>
@@ -2030,8 +2224,6 @@
 		<string>إغلاق تطبيقات الخلفية تلقائياً</string>
 		<key>TurboAppLaunch</key>
 		<string>تشغيل فائق السرعة للتطبيقات</string>
-		<key>MetalTripleBuffering</key>
-		<string>تخزين مؤقت ثلاثي عبر Metal</string>
 		<key>GameFpsStabilizer</key>
 		<string>مثبت إطارات الألعاب</string>
 		<key>OptimizeSystemProcess</key>
@@ -2057,7 +2249,7 @@
 		<key>Version</key>
 		<string>الإصدار</string>
 		<key>SupportLink</key>
-		<string>الانضمام لمجتمع الدعم</string>
+		<string>الانضمام لمجتمع الدعم Zalo</string>
 
 		<!-- Popups & Dynamic Labels -->
 		<key>POPUP_LANG_TITLE</key>
@@ -2065,7 +2257,7 @@
 		<key>LANGUAGE_BTN_FORMAT</key>
 		<string>اللغة الحالية: %@</string>
 		<key>TITLE_HZ</key>
-		<string>اختر تردد الشاشة (HZ)</string>
+		<string>اختر تردد الشاشة و PIP (HZ)</string>
 		<key>TITLE_FPS</key>
 		<string>اختر إطارات التطبيقات (FPS)</string>
 		<key>DYNAMIC_HZ_TITLE</key>
@@ -2077,7 +2269,7 @@
 		<key>LOCK_FPS_TITLE</key>
 		<string>إطارات التطبيقات: قفل عند %ld</string>
 		<key>DYNAMIC</key>
-		<string>🌟 محرك ذكي ديناميكي (تلقائي)</string>
+		<string>🌟 محرك ذكي ديناميكي (30Hz - 144Hz)</string>
 		<key>BATTERY_SAVER</key>
 		<string>🟢 1. توفير فائق للبطارية (15Hz - 40Hz)</string>
 		<key>BALANCED</key>
@@ -2112,6 +2304,774 @@
 		<string>سيتم استعادة جميع الإعدادات إلى القيم الافتراضية المثلى.</string>
 		<key>RESET_NOW</key>
 		<string>إعادة التعيين الآن</string>
+	</dict>
+
+	<!-- ========================================== -->
+	<!-- 🇮🇹 13. TIẾNG Ý (ITALIAN - it)               -->
+	<!-- ========================================== -->
+	<key>it</key>
+	<dict>
+		<key>TITLE_MAIN</key>
+		<string>BoostiPhone6s V26 SUPREME</string>
+		<key>NAV_ACTIONS</key>
+		<string>Azioni</string>
+		<key>GROUP_MASTER</key>
+		<string>INTERRUTTORE PRINCIPALE V26 BETA</string>
+		<key>FOOTER_MASTER</key>
+		<string>Disattivando l'interruttore principale, tutte le opzioni sottostanti saranno nascoste e i hook verranno rilasciati.</string>
+		<key>GROUP_SPECIAL</key>
+		<string>PRIVILEGIO V26 (HEX BUFFERING A 6 LIVELLI)</string>
+		<key>FOOTER_SPECIAL</key>
+		<string>ProMotion Engine si sincronizza con i sensori termici per aumentare la fluidità al tocco e attivare Metal Hex Buffering.</string>
+		<key>GROUP_HZ_FPS</key>
+		<string>DISPATCH HZ &amp; FPS (3 LIVELLI)</string>
+		<key>FOOTER_HZ_FPS</key>
+		<string>Tocca per aprire: Risparmio batteria (15-40), Bilanciato (45-80), Massime prestazioni (85-144).</string>
+		<key>GROUP_LAZY</key>
+		<string>INIEZIONE RITARDATA APP (FIX SCHERMO NERO)</string>
+		<key>FOOTER_LAZY</key>
+		<string>Inietta i moduli al termine dell'avvio di UIApplication, garantendo zero schermate nere o blocchi grafici.</string>
+		<key>GROUP_UI</key>
+		<string>ACCELERAZIONE UI &amp; DINAMICA FISICA</string>
+		<key>GROUP_GRAPHICS</key>
+		<string>CORE GRAFICO PROFONDO &amp; HARDWARE</string>
+		<key>GROUP_RAM_CPU</key>
+		<string>DISPATCH RAM &amp; SCHEDULAZIONE CPU</string>
+		<key>GROUP_THERMAL</key>
+		<string>GESTIONE TERMICA &amp; ENERGETICA</string>
+		<key>GROUP_SECURITY</key>
+		<string>SICUREZZA &amp; PRIVACY</string>
+		<key>GROUP_DEV</key>
+		<string>INFO SVILUPPATORE &amp; SUPPORTO</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>IMPOSTAZIONI LINGUA</string>
+		<key>FOOTER_DEV</key>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Ottimizzato da DUC LONG.</string>
+
+		<key>Enabled</key>
+		<string>Attiva Tweak</string>
+		<key>SelectedLanguage</key>
+		<string>Lingua (Language)</string>
+		<key>ProMotionEngineBeta7</key>
+		<string>ProMotion Engine (Scansione termica auto)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Livelli di Buffer)</string>
+		<key>KeyboardZeroLagV24</key>
+		<string>Tastiera 0ms &amp; Chat IA senza ritardi</string>
+		<key>EnableHzControl</key>
+		<string>Controllo frequenza di aggiornamento (Hz)</string>
+		<key>TargetRefreshRate</key>
+		<string>Seleziona frequenza (Hz)</string>
+		<key>EnableFPSControl</key>
+		<string>Controllo FPS applicazioni</string>
+		<key>TargetFPSRate</key>
+		<string>Seleziona FPS app</string>
+		<key>ForceOverclock144Hz</key>
+		<string>Forza Overclock a 144Hz globale</string>
+		<key>AppLazyInjectionSync</key>
+		<string>Sincronizzazione iniezione ritardata</string>
+		<key>AppRenderShieldIsolation</key>
+		<string>Isolamento pipeline di rendering app</string>
+		<key>ColorOs17SmoothEngine</key>
+		<string>Motore di scorrimento ColorOS 17</string>
+		<key>ReduceMultiTaskLag</key>
+		<string>Riduci lag multitasking</string>
+		<key>FixAppLaunchBlackScreen</key>
+		<string>Correggi schermo nero all'avvio app</string>
+		<key>FixAppExitStutter</key>
+		<string>Correggi scatti all'uscita app (0ms Switcher)</string>
+		<key>TouchResponseBoost</key>
+		<string>Aumento risposta al tocco (Overdrive)</string>
+		<key>QuantumRenderShieldOfficial</key>
+		<string>Quantum Render Shield</string>
+		<key>NeuralBufferOptimizerOfficial</key>
+		<string>Ottimizzatore buffer neurale</string>
+		<key>ApexBackgroundPacingDaemon</key>
+		<string>Daemon ritmo in background</string>
+		<key>HyperMemoryGuardian</key>
+		<string>Hyper Memory Guardian</string>
+		<key>UltraResponsivenessProEngineOfficial</key>
+		<string>Ultra Responsiveness Pro</string>
+		<key>HyperThreadIOAcceleratorOfficial</key>
+		<string>Acceleratore I/O HyperThread</string>
+		<key>QuantumCoreSyncStabilizerOfficial</key>
+		<string>Stabilizzatore di sincronizzazione Quantum</string>
+		<key>ZeroLagNeuralBoosterOfficial</key>
+		<string>Zero-Lag Neural Booster</string>
+		<key>VsyncAdaptiveBufferOfficial</key>
+		<string>Buffer adattivo V-Sync</string>
+		<key>DynamicThermalEngineOfficial</key>
+		<string>Motore termico dinamico</string>
+		<key>Ios27AutoScheduler</key>
+		<string>Schedulatore automatico iOS</string>
+		<key>RealtimePriorityBoost</key>
+		<string>Priorità Realtime (SCHED_RR)</string>
+		<key>BoostCpuGpu</key>
+		<string>Ottimizzazione frequenza CPU/GPU</string>
+		<key>SmartRamClean</key>
+		<string>Pulizia periodica intelligente RAM</string>
+		<key>AggressiveRamClean</key>
+		<string>Pulizia profonda Mach VM</string>
+		<key>KillBgApps</key>
+		<string>Chiudi app in background</string>
+		<key>TurboAppLaunch</key>
+		<string>Avvio turbo delle applicazioni</string>
+		<key>GameFpsStabilizer</key>
+		<string>Stabilizzatore FPS giochi</string>
+		<key>OptimizeSystemProcess</key>
+		<string>Ottimizzazione processi di sistema</string>
+		<key>AutoSpoofNewDevice</key>
+		<string>Emula modello dispositivo recente</string>
+		<key>AntiThermalThrottling</key>
+		<string>Previeni throttling termico</string>
+		<key>SmartThermalManager</key>
+		<string>Gestore termico intelligente</string>
+		<key>HeavyLoadCooling</key>
+		<string>Raffreddamento sotto carico elevato</string>
+		<key>ChargeCoolingProtection</key>
+		<string>Protezione anti-surriscaldamento in carica</string>
+		<key>PowerSaveMode</key>
+		<string>Risparmio energetico ultra (30Hz)</string>
+		<key>BypassVarSandbox</key>
+		<string>Bypassa sandbox cartella Var</string>
+		<key>BlockAnalytics</key>
+		<string>Blocca telemetria e raccolta dati</string>
+		<key>Author</key>
+		<string>Autore</string>
+		<key>Version</key>
+		<string>Versione</string>
+		<key>SupportLink</key>
+		<string>Unisciti al gruppo di supporto Zalo</string>
+
+		<!-- Popups & Dynamic Labels -->
+		<key>POPUP_LANG_TITLE</key>
+		<string>SELEZIONA LINGUA</string>
+		<key>LANGUAGE_BTN_FORMAT</key>
+		<string>Lingua: %@</string>
+		<key>TITLE_HZ</key>
+		<string>FREQUENZA DI AGGIORNAMENTO E PIP (HZ)</string>
+		<key>TITLE_FPS</key>
+		<string>FRAME RATE APPLICAZIONI (FPS)</string>
+		<key>DYNAMIC_HZ_TITLE</key>
+		<string>Frequenza: Dinamica (Max %ld Hz)</string>
+		<key>LOCK_HZ_TITLE</key>
+		<string>Frequenza: Bloccata a %ld Hz</string>
+		<key>DYNAMIC_FPS_TITLE</key>
+		<string>FPS App: Dinamico (Max %ld FPS)</string>
+		<key>LOCK_FPS_TITLE</key>
+		<string>FPS App: Bloccato a %ld FPS</string>
+		<key>DYNAMIC</key>
+		<string>🌟 Motore dinamico intelligente (30Hz - 144Hz)</string>
+		<key>BATTERY_SAVER</key>
+		<string>🟢 1. RISPARMIO BATTERIA (15Hz - 40Hz)</string>
+		<key>BALANCED</key>
+		<string>🟡 2. BILANCIATO STANDARD (45Hz - 80Hz)</string>
+		<key>MAX_PERF</key>
+		<string>🔴 3. MASSIME PRESTAZIONI (85Hz - 144Hz)</string>
+		<key>LOCK_AT</key>
+		<string>Fissa a</string>
+		<key>BACK</key>
+		<string>Indietro</string>
+		<key>CLOSE</key>
+		<string>Chiudi</string>
+		<key>TAG_SAVER</key>
+		<string> - Risparmio</string>
+		<key>TAG_BALANCED</key>
+		<string> - Bilanciato</string>
+		<key>TAG_ULTRA</key>
+		<string> - Ultra fluido</string>
+		<key>TAG_MAX</key>
+		<string> - Massimo hardware</string>
+		<key>ACTION_TITLE</key>
+		<string>AZIONI DI SISTEMA</string>
+		<key>RESPRING</key>
+		<string>⚡️ Respring veloce</string>
+		<key>SREBOOT</key>
+		<string>🔥 Riavvio Userspace (SReboot)</string>
+		<key>RESET</key>
+		<string>♻️ Ripristina impostazioni predefinite</string>
+		<key>RESET_CONFIRM_TITLE</key>
+		<string>Conferma ripristino</string>
+		<key>RESET_CONFIRM_MSG</key>
+		<string>Tutte le impostazioni torneranno ai valori ottimali consigliati.</string>
+		<key>RESET_NOW</key>
+		<string>Ripristina ora</string>
+	</dict>
+
+	<!-- ========================================== -->
+	<!-- 🇹🇭 14. TIẾNG THÁI (THAI - th)              -->
+	<!-- ========================================== -->
+	<key>th</key>
+	<dict>
+		<key>TITLE_MAIN</key>
+		<string>BoostiPhone6s V26 SUPREME</string>
+		<key>NAV_ACTIONS</key>
+		<string>การทำงาน</string>
+		<key>GROUP_MASTER</key>
+		<string>สวิตช์หลักของระบบ V26 BETA</string>
+		<key>FOOTER_MASTER</key>
+		<string>เมื่อปิดสวิตช์หลัก ตัวเลือกทั้งหมดด้านล่างจะถูกซ่อนและคืนค่าฮุกเดิมของระบบ</string>
+		<key>GROUP_SPECIAL</key>
+		<string>เอกสิทธิ์เฉพาะ V26 (HEX BUFFERING 6 ชั้น)</string>
+		<key>FOOTER_SPECIAL</key>
+		<string>ProMotion Engine ซิงค์กับเซ็นเซอร์วัดอุณหภูมิ เพื่อเพิ่มความลื่นไหลเมื่อสัมผัสและเปิดใช้ Metal 6 ชั้น</string>
+		<key>GROUP_HZ_FPS</key>
+		<string>การจัดการ HZ และ FPS (3 ระดับ)</string>
+		<key>FOOTER_HZ_FPS</key>
+		<string>แตะเพื่อเลือก: ประหยัดแบตเตอรี่ (15-40), สมดุล (45-80), ประสิทธิภาพสูงสุด (85-144)</string>
+		<key>GROUP_LAZY</key>
+		<string>การหน่วงเวลาโหลดแอปภายนอก (แก้ปัญหาจอดำ)</string>
+		<key>FOOTER_LAZY</key>
+		<string>โหลดโมดูลหลังจาก UIApplication เริ่มต้นเสร็จสิ้น เพื่อป้องกันปัญหาจอดำและการค้างอย่างสมบูรณ์</string>
+		<key>GROUP_UI</key>
+		<string>เร่งความเร็ว UI และระบบฟิสิกส์</string>
+		<key>GROUP_GRAPHICS</key>
+		<string>แกนประมวลผลกราฟิกและฮาร์ดแวร์เชิงลึก</string>
+		<key>GROUP_RAM_CPU</key>
+		<string>การจัดการ RAM และกำหนดการทำงาน CPU</string>
+		<key>GROUP_THERMAL</key>
+		<string>การจัดการความร้อนและพลังงาน</string>
+		<key>GROUP_SECURITY</key>
+		<string>ความปลอดภัยและความเป็นส่วนตัว</string>
+		<key>GROUP_DEV</key>
+		<string>ข้อมูลผู้พัฒนาและการสนับสนุน</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>ตั้งค่าภาษา</string>
+		<key>FOOTER_DEV</key>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - ปรับแต่งโดย DUC LONG</string>
+
+		<key>Enabled</key>
+		<string>เปิดใช้งานทวิก</string>
+		<key>SelectedLanguage</key>
+		<string>ภาษา (Language)</string>
+		<key>ProMotionEngineBeta7</key>
+		<string>ProMotion Engine (สแกนอุณหภูมิอัตโนมัติ)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (บัฟเฟอร์ 6 ชั้น)</string>
+		<key>KeyboardZeroLagV24</key>
+		<string>แป้นพิมพ์ 0ms และแชท AI ไร้การหน่วง</string>
+		<key>EnableHzControl</key>
+		<string>ควบคุมอัตรารีเฟรชหน้าจอ (Hz)</string>
+		<key>TargetRefreshRate</key>
+		<string>เลือกอัตรารีเฟรช (Hz)</string>
+		<key>EnableFPSControl</key>
+		<string>ควบคุมเฟรมเรตของแอป (FPS)</string>
+		<key>TargetFPSRate</key>
+		<string>เลือกเฟรมเรตของแอป</string>
+		<key>ForceOverclock144Hz</key>
+		<string>บังคับโอเวอร์คล็อก 144Hz ทั่วทั้งระบบ</string>
+		<key>AppLazyInjectionSync</key>
+		<string>ซิงค์จังหวะการโหลดแอป</string>
+		<key>AppRenderShieldIsolation</key>
+		<string>แยกไปป์ไลน์การเรนเดอร์ของแอป</string>
+		<key>ColorOs17SmoothEngine</key>
+		<string>ระบบการเลื่อนหน้าจอ ColorOS 17</string>
+		<key>ReduceMultiTaskLag</key>
+		<string>ลดการกระตุกเมื่อสลับแอป</string>
+		<key>FixAppLaunchBlackScreen</key>
+		<string>แก้ไขอาการจอดำขณะเปิดแอป</string>
+		<key>FixAppExitStutter</key>
+		<string>แก้ไขอาการกระตุกขณะออกจากแอป (0ms Switcher)</string>
+		<key>TouchResponseBoost</key>
+		<string>เร่งการตอบสนองการสัมผัส (Overdrive)</string>
+		<key>QuantumRenderShieldOfficial</key>
+		<string>Quantum Render Shield</string>
+		<key>NeuralBufferOptimizerOfficial</key>
+		<string>ตัวปรับแต่งบัฟเฟอร์ประสาท</string>
+		<key>ApexBackgroundPacingDaemon</key>
+		<string>แดมอนควบคุมเฟรมพื้นหลัง</string>
+		<key>HyperMemoryGuardian</key>
+		<string>Hyper Memory Guardian</string>
+		<key>UltraResponsivenessProEngineOfficial</key>
+		<string>Ultra Responsiveness Pro</string>
+		<key>HyperThreadIOAcceleratorOfficial</key>
+		<string>ตัวเร่งความเร็ว I/O HyperThread</string>
+		<key>QuantumCoreSyncStabilizerOfficial</key>
+		<string>ตัวรักษาเสถียรภาพแกนควอนตัม</string>
+		<key>ZeroLagNeuralBoosterOfficial</key>
+		<string>Zero-Lag Neural Booster</string>
+		<key>VsyncAdaptiveBufferOfficial</key>
+		<string>บัฟเฟอร์ปรับเปลี่ยนตาม V-Sync</string>
+		<key>DynamicThermalEngineOfficial</key>
+		<string>เอนจินควบคุมความร้อนแบบไดนามิก</string>
+		<key>Ios27AutoScheduler</key>
+		<string>ระบบจัดตารางเวลาอัตโนมัติของ iOS</string>
+		<key>RealtimePriorityBoost</key>
+		<string>จัดลำดับความสำคัญตามเวลาจริง (SCHED_RR)</string>
+		<key>BoostCpuGpu</key>
+		<string>ปรับความถี่ CPU/GPU ให้เหมาะสม</string>
+		<key>SmartRamClean</key>
+		<string>ล้าง RAM อัจฉริยะเป็นระยะ</string>
+		<key>AggressiveRamClean</key>
+		<string>เคลียร์หน่วยความจำ Mach VM เชิงลึก</string>
+		<key>KillBgApps</key>
+		<string>ปิดแอปพื้นหลังที่ไม่จำเป็นโดยอัตโนมัติ</string>
+		<key>TurboAppLaunch</key>
+		<string>เปิดแอปด้วยความเร็วสูงพิเศษ (Turbo)</string>
+		<key>GameFpsStabilizer</key>
+		<string>ตัวควบคุมเฟรมเรตเกมให้นิ่ง</string>
+		<key>OptimizeSystemProcess</key>
+		<string>ปรับแต่งกระบวนการทำงานของระบบ</string>
+		<key>AutoSpoofNewDevice</key>
+		<string>จำลองรุ่นอุปกรณ์ใหม่ล่าสุด</string>
+		<key>AntiThermalThrottling</key>
+		<string>ป้องกันการลดประสิทธิภาพจากความร้อน</string>
+		<key>SmartThermalManager</key>
+		<string>ตัวจัดการความร้อนอัจฉริยะ</string>
+		<key>HeavyLoadCooling</key>
+		<string>ระบบระบายความร้อนเมื่อใช้งานหนัก</string>
+		<key>ChargeCoolingProtection</key>
+		<string>ป้องกันความร้อนขณะชาร์จแบตเตอรี่</string>
+		<key>PowerSaveMode</key>
+		<string>โหมดประหยัดพลังงานขั้นสุด (30Hz)</string>
+		<key>BypassVarSandbox</key>
+		<string>ข้ามแซนด์บ็อกซ์ไดเรกทอรี Var</string>
+		<key>BlockAnalytics</key>
+		<string>บล็อกการส่งข้อมูลวิเคราะห์และการติดตาม</string>
+		<key>Author</key>
+		<string>ผู้พัฒนา</string>
+		<key>Version</key>
+		<string>เวอร์ชัน</string>
+		<key>SupportLink</key>
+		<string>เข้าร่วมกลุ่มช่วยเหลือ Zalo</string>
+
+		<!-- Popups & Dynamic Labels -->
+		<key>POPUP_LANG_TITLE</key>
+		<string>เลือกภาษา (Select Language)</string>
+		<key>LANGUAGE_BTN_FORMAT</key>
+		<string>ภาษา: %@</string>
+		<key>TITLE_HZ</key>
+		<string>อัตรารีเฟรชหน้าจอและ PIP (HZ)</string>
+		<key>TITLE_FPS</key>
+		<string>เฟรมเรตของแอปพลิเคชัน (FPS)</string>
+		<key>DYNAMIC_HZ_TITLE</key>
+		<string>รีเฟรชเรต: อัตโนมัติ (สูงสุด %ld Hz)</string>
+		<key>LOCK_HZ_TITLE</key>
+		<string>รีเฟรชเรต: ล็อกไว้ที่ %ld Hz</string>
+		<key>DYNAMIC_FPS_TITLE</key>
+		<string>FPS แอป: อัตโนมัติ (สูงสุด %ld FPS)</string>
+		<key>LOCK_FPS_TITLE</key>
+		<string>FPS แอป: ล็อกไว้ที่ %ld FPS</string>
+		<key>DYNAMIC</key>
+		<string>🌟 เอนจินอัจฉริยะปรับเปลี่ยนอัตโนมัติ (30Hz - 144Hz)</string>
+		<key>BATTERY_SAVER</key>
+		<string>🟢 1. ประหยัดแบตเตอรี่ (15Hz - 40Hz)</string>
+		<key>BALANCED</key>
+		<string>🟡 2. สมดุลมาตรฐาน (45Hz - 80Hz)</string>
+		<key>MAX_PERF</key>
+		<string>🔴 3. ประสิทธิภาพสูงสุด (85Hz - 144Hz)</string>
+		<key>LOCK_AT</key>
+		<string>ล็อกไว้ที่</string>
+		<key>BACK</key>
+		<string>ย้อนกลับ</string>
+		<key>CLOSE</key>
+		<string>ปิด</string>
+		<key>TAG_SAVER</key>
+		<string> - ประหยัดพลังงาน</string>
+		<key>TAG_BALANCED</key>
+		<string> - มาตรฐาน</string>
+		<key>TAG_ULTRA</key>
+		<string> - ลื่นไหลพิเศษ</string>
+		<key>TAG_MAX</key>
+		<string> - ขีดจำกัดฮาร์ดแวร์</string>
+		<key>ACTION_TITLE</key>
+		<string>การทำงานของระบบ</string>
+		<key>RESPRING</key>
+		<string>⚡️ รีสปริงด่วน (Respring)</string>
+		<key>SREBOOT</key>
+		<string>🔥 รีบูต Userspace (SReboot)</string>
+		<key>RESET</key>
+		<string>♻️ คืนค่าการตั้งค่าเริ่มต้น</string>
+		<key>RESET_CONFIRM_TITLE</key>
+		<string>ยืนยันการคืนค่า</string>
+		<key>RESET_CONFIRM_MSG</key>
+		<string>การตั้งค่าทั้งหมดจะถูกคืนค่ากลับเป็นค่าแนะนำเริ่มต้น</string>
+		<key>RESET_NOW</key>
+		<string>คืนค่าทันที</string>
+	</dict>
+
+	<!-- ========================================== -->
+	<!-- 🇮🇩 15. TIẾNG INDONESIA (INDONESIAN - id)    -->
+	<!-- ========================================== -->
+	<key>id</key>
+	<dict>
+		<key>TITLE_MAIN</key>
+		<string>BoostiPhone6s V26 SUPREME</string>
+		<key>NAV_ACTIONS</key>
+		<string>Aksi</string>
+		<key>GROUP_MASTER</key>
+		<string>SAKELAR UTAMA SISTEM V26 BETA</string>
+		<key>FOOTER_MASTER</key>
+		<string>Mematikan sakelar utama akan menyembunyikan semua opsi di bawah dan memulihkan kait sistem asli.</string>
+		<key>GROUP_SPECIAL</key>
+		<string>HAK ISTIMEWA V26 (HEX BUFFERING 6 TINGKAT)</string>
+		<key>FOOTER_SPECIAL</key>
+		<string>ProMotion Engine sinkron dengan sensor suhu untuk meningkatkan respons sentuhan dan mengaktifkan 6 buffer Metal.</string>
+		<key>GROUP_HZ_FPS</key>
+		<string>PENGATURAN HZ &amp; FPS (3 TINGKAT)</string>
+		<key>FOOTER_HZ_FPS</key>
+		<string>Ketuk untuk memilih: Hemat Baterai (15-40), Seimbang (45-80), Kinerja Maksimal (85-144).</string>
+		<key>GROUP_LAZY</key>
+		<string>INJEKSI TERTUNDA APLIKASI (FIX LAYAR HITAM)</string>
+		<key>FOOTER_LAZY</key>
+		<string>Menyuntikkan modul setelah inisialisasi UIApplication selesai, memastikan zero black screen atau freeze grafis.</string>
+		<key>GROUP_UI</key>
+		<string>AKSELERASI UI &amp; DINAMIKA FISIKA</string>
+		<key>GROUP_GRAPHICS</key>
+		<string>CORE GRAFIS MENDALAM &amp; HARDWARE</string>
+		<key>GROUP_RAM_CPU</key>
+		<string>MANAJEMEN RAM &amp; PENJADWALAN CPU</string>
+		<key>GROUP_THERMAL</key>
+		<string>MANAJEMEN SUHU &amp; DAYA</string>
+		<key>GROUP_SECURITY</key>
+		<string>KEAMANAN &amp; PRIVASI</string>
+		<key>GROUP_DEV</key>
+		<string>INFORMASI PENGEMBANG &amp; DUKUNGAN</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>PENGATURAN BAHASA</string>
+		<key>FOOTER_DEV</key>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - Dioptimalkan oleh DUC LONG.</string>
+
+		<key>Enabled</key>
+		<string>Aktifkan Tweak</string>
+		<key>SelectedLanguage</key>
+		<string>Bahasa (Language)</string>
+		<key>ProMotionEngineBeta7</key>
+		<string>ProMotion Engine (Pindai Suhu Otomatis)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Lapisan Buffer)</string>
+		<key>KeyboardZeroLagV24</key>
+		<string>Keyboard 0ms &amp; Chat AI Tanpa Lag</string>
+		<key>EnableHzControl</key>
+		<string>Kontrol Refresh Rate Layar (Hz)</string>
+		<key>TargetRefreshRate</key>
+		<string>Pilih Refresh Rate (Hz)</string>
+		<key>EnableFPSControl</key>
+		<string>Kontrol FPS Aplikasi</string>
+		<key>TargetFPSRate</key>
+		<string>Pilih FPS Aplikasi</string>
+		<key>ForceOverclock144Hz</key>
+		<string>Paksa Overclock 144Hz Global</string>
+		<key>AppLazyInjectionSync</key>
+		<string>Sinkronisasi Injeksi Tertunda</string>
+		<key>AppRenderShieldIsolation</key>
+		<string>Isolasi Pipeline Render Aplikasi</string>
+		<key>ColorOs17SmoothEngine</key>
+		<string>Mesin Gulir Halus ColorOS 17</string>
+		<key>ReduceMultiTaskLag</key>
+		<string>Kurangi Lag Multitasking</string>
+		<key>FixAppLaunchBlackScreen</key>
+		<string>Perbaiki Layar Hitam Saat Buka Aplikasi</string>
+		<key>FixAppExitStutter</key>
+		<string>Perbaiki Patah-patah Saat Keluar Aplikasi (0ms Switcher)</string>
+		<key>TouchResponseBoost</key>
+		<string>Tingkatkan Respons Sentuh (Overdrive)</string>
+		<key>QuantumRenderShieldOfficial</key>
+		<string>Quantum Render Shield</string>
+		<key>NeuralBufferOptimizerOfficial</key>
+		<string>Pengoptimal Buffer Neural</string>
+		<key>ApexBackgroundPacingDaemon</key>
+		<string>Daemon Kecepatan Latar Belakang</string>
+		<key>HyperMemoryGuardian</key>
+		<string>Hyper Memory Guardian</string>
+		<key>UltraResponsivenessProEngineOfficial</key>
+		<string>Ultra Responsiveness Pro</string>
+		<key>HyperThreadIOAcceleratorOfficial</key>
+		<string>Akselerator I/O HyperThread</string>
+		<key>QuantumCoreSyncStabilizerOfficial</key>
+		<string>Penstabil Sinkronisasi Quantum Core</string>
+		<key>ZeroLagNeuralBoosterOfficial</key>
+		<string>Zero-Lag Neural Booster</string>
+		<key>VsyncAdaptiveBufferOfficial</key>
+		<string>Buffer Adaptif V-Sync</string>
+		<key>DynamicThermalEngineOfficial</key>
+		<string>Mesin Termal Dinamis</string>
+		<key>Ios27AutoScheduler</key>
+		<string>Penjadwal Otomatis Kernel iOS</string>
+		<key>RealtimePriorityBoost</key>
+		<string>Prioritas Realtime (SCHED_RR)</string>
+		<key>BoostCpuGpu</key>
+		<string>Optimasi Frekuensi CPU/GPU</string>
+		<key>SmartRamClean</key>
+		<string>Pembersihan RAM Cerdas Berkala</string>
+		<key>AggressiveRamClean</key>
+		<string>Pelepasan Memori Mendalam Mach VM</string>
+		<key>KillBgApps</key>
+		<string>Tutup Aplikasi Latar Belakang Otomatis</string>
+		<key>TurboAppLaunch</key>
+		<string>Peluncuran Turbo Aplikasi</string>
+		<key>GameFpsStabilizer</key>
+		<string>Penstabil FPS Game</string>
+		<key>OptimizeSystemProcess</key>
+		<string>Optimasi Proses Sistem</string>
+		<key>AutoSpoofNewDevice</key>
+		<string>Tiru Model Perangkat Terbaru</string>
+		<key>AntiThermalThrottling</key>
+		<string>Cegah Penurunan Kinerja Karena Panas</string>
+		<key>SmartThermalManager</key>
+		<string>Pengelola Suhu Cerdas</string>
+		<key>HeavyLoadCooling</key>
+		<string>Pendinginan Saat Beban Berat</string>
+		<key>ChargeCoolingProtection</key>
+		<string>Perlindungan Panas Saat Mengisi Daya</string>
+		<key>PowerSaveMode</key>
+		<string>Mode Hemat Baterai Ekstrem (30Hz)</string>
+		<key>BypassVarSandbox</key>
+		<string>Lewati Sandbox Direktori Var</string>
+		<key>BlockAnalytics</key>
+		<string>Blokir Telemetri dan Analisis Data</string>
+		<key>Author</key>
+		<string>Pengembang</string>
+		<key>Version</key>
+		<string>Versi</string>
+		<key>SupportLink</key>
+		<string>Gabung Grup Bantuan Zalo</string>
+
+		<!-- Popups & Dynamic Labels -->
+		<key>POPUP_LANG_TITLE</key>
+		<string>PILIH BAHASA</string>
+		<key>LANGUAGE_BTN_FORMAT</key>
+		<string>Bahasa: %@</string>
+		<key>TITLE_HZ</key>
+		<string>REFRESH RATE LAYAR &amp; PIP (HZ)</string>
+		<key>TITLE_FPS</key>
+		<string>FRAME RATE APLIKASI (FPS)</string>
+		<key>DYNAMIC_HZ_TITLE</key>
+		<string>Refresh Rate: Dinamis (Maks %ld Hz)</string>
+		<key>LOCK_HZ_TITLE</key>
+		<string>Refresh Rate: Terkunci di %ld Hz</string>
+		<key>DYNAMIC_FPS_TITLE</key>
+		<string>FPS Aplikasi: Dinamis (Maks %ld FPS)</string>
+		<key>LOCK_FPS_TITLE</key>
+		<string>FPS Aplikasi: Terkunci di %ld FPS</string>
+		<key>DYNAMIC</key>
+		<string>🌟 Mesin Cerdas Dinamis (30Hz - 144Hz)</string>
+		<key>BATTERY_SAVER</key>
+		<string>🟢 1. HEMAT BATERAI (15Hz - 40Hz)</string>
+		<key>BALANCED</key>
+		<string>🟡 2. SEIMBANG STANDAR (45Hz - 80Hz)</string>
+		<key>MAX_PERF</key>
+		<string>🔴 3. KINERJA MAKSIMAL (85Hz - 144Hz)</string>
+		<key>LOCK_AT</key>
+		<string>Kunci di</string>
+		<key>BACK</key>
+		<string>Kembali</string>
+		<key>CLOSE</key>
+		<string>Tutup</string>
+		<key>TAG_SAVER</key>
+		<string> - Hemat Daya</string>
+		<key>TAG_BALANCED</key>
+		<string> - Seimbang</string>
+		<key>TAG_ULTRA</key>
+		<string> - Sangat Halus</string>
+		<key>TAG_MAX</key>
+		<string> - Maksimal Hardware</string>
+		<key>ACTION_TITLE</key>
+		<string>AKSI SISTEM</string>
+		<key>RESPRING</key>
+		<string>⚡️ Respring Cepat</string>
+		<key>SREBOOT</key>
+		<string>🔥 Reboot Userspace (SReboot)</string>
+		<key>RESET</key>
+		<string>♻️ Pulihkan Pengaturan Default</string>
+		<key>RESET_CONFIRM_TITLE</key>
+		<string>Konfirmasi Pemulihan</string>
+		<key>RESET_CONFIRM_MSG</key>
+		<string>Semua pengaturan akan dikembalikan ke nilai default yang direkomendasikan.</string>
+		<key>RESET_NOW</key>
+		<string>Pulihkan Sekarang</string>
+	</dict>
+
+	<!-- ========================================== -->
+	<!-- 🇹🇷 16. TIẾNG THỔ NHĨ KỲ (TURKISH - tr)     -->
+	<!-- ========================================== -->
+	<key>tr</key>
+	<dict>
+		<key>TITLE_MAIN</key>
+		<string>BoostiPhone6s V26 SUPREME</string>
+		<key>NAV_ACTIONS</key>
+		<string>Eylemler</string>
+		<key>GROUP_MASTER</key>
+		<string>ANA SİSTEM ANAHTARI V26 BETA</string>
+		<key>FOOTER_MASTER</key>
+		<string>Ana anahtar kapatıldığında aşağıdaki tüm seçenekler gizlenir ve orijinal sistem kancaları geri yüklenir.</string>
+		<key>GROUP_SPECIAL</key>
+		<string>V26 ÖZEL AYRICALIĞI (6 KATMANLI HEX BUFFERING)</string>
+		<key>FOOTER_SPECIAL</key>
+		<string>ProMotion Engine, sıcaklık sensörleriyle senkronize olarak dokunma akıcılığını artırır ve 6 katmanlı Metal arabelleğini etkinleştirir.</string>
+		<key>GROUP_HZ_FPS</key>
+		<string>HZ VE FPS YÖNETİMİ (3 SEVİYELİ SİSTEM)</string>
+		<key>FOOTER_HZ_FPS</key>
+		<string>Seçmek için dokunun: Pil Tasarrufu (15-40), Dengeli (45-80), Maksimum Performans (85-144).</string>
+		<key>GROUP_LAZY</key>
+		<string>GECİKMELİ UYGULAMA ENJEKSİYONU (SİYAH EKRAN ÇÖZÜMÜ)</string>
+		<key>FOOTER_LAZY</key>
+		<string>Modülleri UIApplication başlatması tamamlandıktan sonra enjekte ederek siyah ekranı ve grafik kilitlenmelerini tamamen önler.</string>
+		<key>GROUP_UI</key>
+		<string>ARAYÜZ HIZLANDIRMA VE FİZİKSEL ANİMASYON</string>
+		<key>GROUP_GRAPHICS</key>
+		<string>DERİN GRAFİK VE DONANIM ÇEKİRDEĞİ</string>
+		<key>GROUP_RAM_CPU</key>
+		<string>RAM YÖNETİMİ VE CPU ZAMANLAMA</string>
+		<key>GROUP_THERMAL</key>
+		<string>SICAKLIK VE GÜÇ YÖNETİMİ</string>
+		<key>GROUP_SECURITY</key>
+		<string>GÜVENLİK VE GİZLİLİK</string>
+		<key>GROUP_DEV</key>
+		<string>GELİŞTİRİCİ BİLGİSİ VE DESTEK</string>
+		<key>GROUP_LANGUAGE</key>
+		<string>DİL AYARLARI</string>
+		<key>FOOTER_DEV</key>
+		<string>© 2026 BoostiPhone6s V26 SUPREME - DUC LONG tarafından optimize edilmiştir.</string>
+
+		<key>Enabled</key>
+		<string>Tweak'i Etkinleştir</string>
+		<key>SelectedLanguage</key>
+		<string>Dil (Language)</string>
+		<key>ProMotionEngineBeta7</key>
+		<string>ProMotion Engine (Otomatik Termal Tarama)</string>
+		<key>MetalHexBuffering</key>
+		<string>Metal Hex Buffering (6 Arabellek Katmanı)</string>
+		<key>KeyboardZeroLagV24</key>
+		<string>0ms Gecikmesiz Klavye ve AI Sohbet</string>
+		<key>EnableHzControl</key>
+		<string>Ekran Yenileme Hızı Kontrolü (Hz)</string>
+		<key>TargetRefreshRate</key>
+		<string>Yenileme Hızı Seçin (Hz)</string>
+		<key>EnableFPSControl</key>
+		<string>Uygulama Kare Hızı Kontrolü (FPS)</string>
+		<key>TargetFPSRate</key>
+		<string>Uygulama FPS Seçin</string>
+		<key>ForceOverclock144Hz</key>
+		<string>Genel 144Hz Hız Aşırtmayı Zorla</string>
+		<key>AppLazyInjectionSync</key>
+		<string>Gecikmeli Enjeksiyon Senkronizasyonu</string>
+		<key>AppRenderShieldIsolation</key>
+		<string>Uygulama Render Hattı İzolasyonu</string>
+		<key>ColorOs17SmoothEngine</key>
+		<string>ColorOS 17 Akıcı Kaydırma Motoru</string>
+		<key>ReduceMultiTaskLag</key>
+		<string>Çoklu Görev Gecikmesini Azalt</string>
+		<key>FixAppLaunchBlackScreen</key>
+		<string>Uygulama Başlangıcındaki Siyah Ekranı Düzelt</string>
+		<key>FixAppExitStutter</key>
+		<string>Uygulamadan Çıkış Takılmalarını Düzelt (0ms Switcher)</string>
+		<key>TouchResponseBoost</key>
+		<string>Dokunma Tepkisini Artır (Overdrive)</string>
+		<key>QuantumRenderShieldOfficial</key>
+		<string>Quantum Render Shield</string>
+		<key>NeuralBufferOptimizerOfficial</key>
+		<string>Nöral Arabellek Optimize Edici</string>
+		<key>ApexBackgroundPacingDaemon</key>
+		<string>Arka Plan Hız Ayarı Arka Plan Programı</string>
+		<key>HyperMemoryGuardian</key>
+		<string>Hyper Memory Guardian</string>
+		<key>UltraResponsivenessProEngineOfficial</key>
+		<string>Ultra Responsiveness Pro</string>
+		<key>HyperThreadIOAcceleratorOfficial</key>
+		<string>HyperThread G/Ç Hızlandırıcı</string>
+		<key>QuantumCoreSyncStabilizerOfficial</key>
+		<string>Quantum Core Senkronizasyon Sabitleyici</string>
+		<key>ZeroLagNeuralBoosterOfficial</key>
+		<string>Zero-Lag Nöral Güçlendirici</string>
+		<key>VsyncAdaptiveBufferOfficial</key>
+		<string>V-Sync Uyarlanabilir Arabellek</string>
+		<key>DynamicThermalEngineOfficial</key>
+		<string>Dinamik Termal Motor</string>
+		<key>Ios27AutoScheduler</key>
+		<string>iOS Otomatik Çekirdek Zamanlayıcı</string>
+		<key>RealtimePriorityBoost</key>
+		<string>Gerçek Zamanlı Öncelik (SCHED_RR)</string>
+		<key>BoostCpuGpu</key>
+		<string>CPU/GPU Frekans Optimizasyonu</string>
+		<key>SmartRamClean</key>
+		<string>Periyodik Akıllı RAM Temizliği</string>
+		<key>AggressiveRamClean</key>
+		<string>Derin Mach VM Bellek Boşaltma</string>
+		<key>KillBgApps</key>
+		<string>Gereksiz Arka Plan Uygulamalarını Kapat</string>
+		<key>TurboAppLaunch</key>
+		<string>Turbo Uygulama Başlatma</string>
+		<key>GameFpsStabilizer</key>
+		<string>Oyun FPS Sabitleyici</string>
+		<key>OptimizeSystemProcess</key>
+		<string>Sistem İşlemlerini Optimize Et</string>
+		<key>AutoSpoofNewDevice</key>
+		<string>Yeni Cihaz Modelini Taklit Et</string>
+		<key>AntiThermalThrottling</key>
+		<string>Isınmadan Kaynaklanan Hız Düşüşünü Önle</string>
+		<key>SmartThermalManager</key>
+		<string>Akıllı Sıcaklık Yöneticisi</string>
+		<key>HeavyLoadCooling</key>
+		<string>Ağır Yük Altında Soğutma Koruması</string>
+		<key>ChargeCoolingProtection</key>
+		<string>Şarj Sırasında Isınma Koruması</string>
+		<key>PowerSaveMode</key>
+		<string>Ultra Güç Tasarrufu Modu (30Hz)</string>
+		<key>BypassVarSandbox</key>
+		<string>Var Dizini Korumalı Alanını Atla</string>
+		<key>BlockAnalytics</key>
+		<string>Arka Plan Telemetrisini ve Takibini Engelle</string>
+		<key>Author</key>
+		<string>Geliştirici</string>
+		<key>Version</key>
+		<string>Sürüm</string>
+		<key>SupportLink</key>
+		<string>Zalo Destek Topluluğuna Katıl</string>
+
+		<!-- Popups & Dynamic Labels -->
+		<key>POPUP_LANG_TITLE</key>
+		<string>DİL SEÇİN</string>
+		<key>LANGUAGE_BTN_FORMAT</key>
+		<string>Mevcut Dil: %@</string>
+		<key>TITLE_HZ</key>
+		<string>EKRAN YENİLEME HIZI VE PIP (HZ)</string>
+		<key>TITLE_FPS</key>
+		<string>UYGULAMA KARE HIZI (FPS)</string>
+		<key>DYNAMIC_HZ_TITLE</key>
+		<string>Yenileme Hızı: Dinamik (Maks %ld Hz)</string>
+		<key>LOCK_HZ_TITLE</key>
+		<string>Yenileme Hızı: %ld Hz Sabit</string>
+		<key>DYNAMIC_FPS_TITLE</key>
+		<string>Uygulama FPS: Dinamik (Maks %ld FPS)</string>
+		<key>LOCK_FPS_TITLE</key>
+		<string>Uygulama FPS: %ld FPS Sabit</string>
+		<key>DYNAMIC</key>
+		<string>🌟 Akıllı Dinamik Motor (30Hz - 144Hz)</string>
+		<key>BATTERY_SAVER</key>
+		<string>🟢 1. PİL TASARRUFU (15Hz - 40Hz)</string>
+		<key>BALANCED</key>
+		<string>🟡 2. DENGELİ STANDART (45Hz - 80Hz)</string>
+		<key>MAX_PERF</key>
+		<string>🔴 3. MAKSİMUM PERFORMANS (85Hz - 144Hz)</string>
+		<key>LOCK_AT</key>
+		<string>Sabitle:</string>
+		<key>BACK</key>
+		<string>Geri</string>
+		<key>CLOSE</key>
+		<string>Kapat</string>
+		<key>TAG_SAVER</key>
+		<string> - Tasarruf</string>
+		<key>TAG_BALANCED</key>
+		<string> - Dengeli</string>
+		<key>TAG_ULTRA</key>
+		<string> - Ultra Akıcı</string>
+		<key>TAG_MAX</key>
+		<string> - Maksimum Donanım</string>
+		<key>ACTION_TITLE</key>
+		<string>SİSTEM EYLEMLERİ</string>
+		<key>RESPRING</key>
+		<string>⚡️ Hızlı Respring</string>
+		<key>SREBOOT</key>
+		<string>🔥 Userspace Yeniden Başlat (SReboot)</string>
+		<key>RESET</key>
+		<string>♻️ Varsayılan Ayarları Geri Yükle</string>
+		<key>RESET_CONFIRM_TITLE</key>
+		<string>Sıfırlamayı Onayla</string>
+		<key>RESET_CONFIRM_MSG</key>
+		<string>Tüm ayarlar önerilen optimum varsayılan değerlere sıfırlanacaktır.</string>
+		<key>RESET_NOW</key>
+		<string>Şimdi Sıfırla</string>
 	</dict>
 </dict>
 </plist>
