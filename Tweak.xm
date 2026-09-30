@@ -445,6 +445,406 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (BOOL)execute:(out id *)outContext error:(out id *)outError;
 @end
 
+#ifndef VM_PURGABLE_PURGE_ALL
+#define VM_PURGABLE_PURGE_ALL 0
+#endif
+
+#ifndef VM_FLAGS_PURGABLE
+#define VM_FLAGS_PURGABLE 1
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
+    const char *getprogname(void);
+    extern char **environ;
+#ifdef __cplusplus
+}
+#endif
+
+#ifndef UIWindowSceneActivationState_DEFINED
+#define UIWindowSceneActivationState_DEFINED
+typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
+    UIWindowSceneActivationStateUnspecified = -1,
+    UIWindowSceneActivationStateForegroundActive = 0,
+    UIWindowSceneActivationStateForegroundInactive = 1,
+    UIWindowSceneActivationStateBackground = 2
+};
+#endif
+
+#define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
+#define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
+#define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
+#define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
+#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
+
+#import "Modules/CrashGuard.h"
+#import "Modules/CacheCleaner.h"
+#import "Modules/SmartThermal.h"
+#import "Modules/KernelBypass.h"
+#import "Modules/SystemBlocker.h"
+#import "Modules/DeepExploit.h"
+#import <UIKit/UIEvent+Private.h>
+#import <mach/mach_time.h>
+
+// ========================================================
+// HỖ TRỢ ĐƯỜNG DẪN TƯƠNG THÍCH ROOTLESS & ROOTHIDE
+// ========================================================
+static inline NSString *Titanium_GetRootHidePrefixPath(void) {
+    static NSString *cachedJbRoot = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        Dl_info info;
+        if (dladdr((const void *)Titanium_GetRootHidePrefixPath, &info) && info.dli_fname) {
+            NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
+            NSRange range = [dylibPath rangeOfString:@"/var/jb"];
+            if (range.location != NSNotFound) {
+                NSRange sub = [dylibPath rangeOfString:@"/" options:0 range:NSMakeRange(range.location + 7, dylibPath.length - (range.location + 7))];
+                if (sub.location != NSNotFound) {
+                    cachedJbRoot = [dylibPath substringToIndex:sub.location];
+                } else {
+                    cachedJbRoot = @"/var/jb";
+                }
+            } else {
+                cachedJbRoot = @"/var/jb";
+            }
+        } else {
+            cachedJbRoot = @"/var/jb";
+        }
+    });
+    return cachedJbRoot;
+}
+
+static inline NSString *Titanium_GetPrefPath(NSString *path) {
+    if (!path) return @"";
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    if ([root isEqualToString:@"/var/jb"] && ![[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
+        return path;
+    }
+    return [root stringByAppendingPathComponent:path];
+}
+
+static inline NSString *Titanium_ResolvePrefPath(void) {
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist", root];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
+    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
+    return p1;
+}
+
+static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    if (!root || [root length] == 0) return NO;
+    if ([root containsString:@"/var/jb"]) return YES;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) return YES;
+    return NO;
+}
+
+@interface BoostConfigV261 : NSObject
+@property (nonatomic, assign) BOOL enabled;
+@property (nonatomic, strong) NSString *selectedLanguage;
+@property (nonatomic, assign) BOOL enableHzControl;
+@property (nonatomic, assign) NSInteger targetHz;
+@property (nonatomic, assign) BOOL enableFPSControl;
+@property (nonatomic, assign) NSInteger targetFPS;
+@property (nonatomic, assign) BOOL forceOverclock144Hz;
+@property (nonatomic, assign) BOOL proMotionEngineBeta7;
+@property (nonatomic, assign) BOOL touchResponseBoost;
+@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
+@property (nonatomic, assign) BOOL keyboardZeroLagV24;
+@property (nonatomic, assign) BOOL keyboardZeroLagV3;
+@property (nonatomic, assign) BOOL reduceMultitaskLag;
+@property (nonatomic, assign) BOOL reduceMultiTaskLag;
+@property (nonatomic, assign) BOOL metalHexBuffering;
+@property (nonatomic, assign) BOOL neuralBufferOpt;
+@property (nonatomic, assign) BOOL fixAppExitStutter;
+@property (nonatomic, assign) BOOL vsyncAdaptiveBuffer;
+@property (nonatomic, assign) BOOL quantumRenderShield;
+@property (nonatomic, assign) BOOL autoCloseBackgroundApp;
+@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
+@property (nonatomic, assign) BOOL syncModuleDelay;
+@property (nonatomic, assign) BOOL isolateRenderPipeline;
+@property (nonatomic, assign) BOOL antiBlackScreenLaunch;
+@property (nonatomic, assign) BOOL turboAppLaunch;
+@property (nonatomic, assign) BOOL turboLaunch;
+@property (nonatomic, assign) BOOL ultraResponsiveness;
+@property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
+@property (nonatomic, assign) BOOL aggressiveRamClean;
+@property (nonatomic, assign) BOOL periodicRamClean;
+@property (nonatomic, assign) BOOL machVMPurgeRam;
+@property (nonatomic, assign) BOOL antiThermalThrottling;
+@property (nonatomic, assign) BOOL antiThermalThrottle;
+@property (nonatomic, assign) BOOL powerSaveMode;
+
++ (instancetype)sharedInstance;
+- (void)loadSettings;
+- (BOOL)isCustomHzEnabled;
+- (NSInteger)resolvedTargetHz;
+- (NSInteger)resolvedTargetFPS;
+@end
+
+@interface SBApplication : NSObject
+- (NSString *)bundleIdentifier;
+- (id)processState;
+@end
+
+@interface SBApplicationController : NSObject
++ (instancetype)sharedInstance;
+- (NSArray *)allApplications;
+- (SBApplication *)applicationWithBundleIdentifier:(NSString *)bundleIdentifier;
+@end
+
+@interface FBProcessState : NSObject
+- (int)pid;
+- (BOOL)isRunning;
+- (BOOL)isForeground;
+@end
+
+@interface FBApplicationProcess : NSObject
+- (void)bootstrapWithContext:(id)context completion:(id)completion;
+- (void)launchIfNecessary;
+- (void)_finishInit;
+@end
+
+@interface SBWindowScene : NSObject
+- (void)_readySceneForDisplay;
+@end
+
+@interface UIWindow (ApexV261Revolution)
+- (void)_setSecure:(BOOL)arg1;
+- (BOOL)_isSecure;
+- (UIWindowScene *)windowScene;
+- (UIScreen *)screen;
+- (UIViewController *)rootViewController;
+@end
+
+@interface CALayer (ApexV261Revolution)
+- (id)context;
+- (void)setContext:(id)context;
+- (void)setAllowsEdgeAntialiasing:(BOOL)flag;
+- (void)setContentsDrawsAsynchronously:(BOOL)flag;
+- (void)setNeedsDisplayOnBoundsChange:(BOOL)flag;
+@end
+
+@class CADisplay;
+
+@interface UIScreen (ApexV261Revolution)
+- (void)_setTargetRefreshRate:(CGFloat)rate;
+- (NSInteger)_maximumFramesPerSecond;
+- (CGFloat)_refreshRate;
+- (CADisplay *)_display;
+@end
+
+@interface CADisplay : NSObject
++ (CADisplay *)mainDisplay;
+@property (nonatomic, readonly) NSArray *availableModes;
+@property (nonatomic, retain) id currentMode;
+@property (nonatomic, copy) NSString *colorMode;
+@property (nonatomic) NSInteger preferredFPS;
+@property (nonatomic) NSInteger preferredModeIndex;
+- (void)overrideDisplayTimings:(id)timings;
+- (void)overrideDisplayCadence:(id)cadence;
+@end
+
+@interface CAContext : NSObject
++ (NSArray *)allContexts;
++ (id)remoteContextWithOptions:(id)options;
+- (uint32_t)contextId;
+- (void)setCommitPriority:(uint32_t)priority;
+- (void)setDesiredDynamicRange:(float)range;
+- (void)orderAbove:(uint32_t)contextId;
+@end
+
+@interface PGPictureInPictureRemoteObject : NSObject
+- (void)_updatePreferredContentSize;
+- (void)startPictureInPicture;
+- (void)stopPictureInPictureAnimated:(BOOL)animated;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart;
+@end
+
+@interface SBPIPController : NSObject
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)margin;
+- (void)_updatePictureInPictureWindowMargin;
+- (UIEdgeInsets)pictureInPictureWindowMargin;
+@end
+
+@interface AVPictureInPictureController : NSObject
+- (void)startPictureInPicture;
+- (void)stopPictureInPicture;
+- (BOOL)isPictureInPicturePossible;
+- (BOOL)isPictureInPictureActive;
+- (BOOL)isPictureInPictureSuspended;
+@end
+
+@interface UIScrollView (ApexV261Revolution)
+- (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
+- (BOOL)_isScrolling;
+- (void)_setContentOffsetPinned:(CGPoint)point;
+- (void)_setInterruptionImpulse:(CGPoint)impulse;
+- (void)_forcePanGestureToEndImmediately;
+- (CGPoint)_touchPositionForTouches:(id)touches;
+@end
+
+@interface CAMetalLayer (ApexV261Revolution)
+- (void)setLowLatencyMode:(BOOL)flag;
+- (void)setMaximumDrawableCount:(NSUInteger)count;
+- (void)setDisplaySyncEnabled:(BOOL)enabled;
+- (void)setAllowsNextDrawableTimeout:(BOOL)allow;
+- (void)setPresentsWithTransaction:(BOOL)flag;
+- (void)setServerPresentsWithTransaction:(BOOL)flag;
+@end
+
+@interface UIKeyboardImpl : UIView
++ (instancetype)activeInstance;
+- (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
+- (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
+- (void)clearAnimations;
+- (void)setReturnKeyEnabled:(BOOL)enabled;
+- (void)updateReturnKey:(BOOL)enabled;
+- (void)hardwareKeyboardAvailabilityChanged;
+- (void)setAutomaticMinimizationEnabled:(BOOL)flag;
+@end
+
+@interface UITextInputController : NSObject
+- (void)_insertText:(id)text;
+- (void)deleteBackward;
+@end
+
+@interface SBIconController : NSObject
++ (instancetype)sharedInstance;
+- (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate;
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+- (id)model;
+@end
+
+@interface SBFloatingDockController : NSObject
+- (void)layoutFloatingDock;
+- (void)dismissFloatingDockIfPresentedAnimated:(BOOL)animated completionHandler:(id)completion;
+@end
+
+@interface SBBacklightController : NSObject
++ (instancetype)sharedInstance;
+- (void)setBacklightFactor:(float)factor;
+- (float)backlightFactor;
+@end
+
+@interface SBVolumeControl : NSObject
++ (instancetype)sharedInstance;
+- (void)increaseVolume;
+- (void)decreaseVolume;
+@end
+
+@interface SBMediaController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isPlaying;
+- (BOOL)isPaused;
+@end
+
+@interface SBMainDisplaySceneLayoutViewController : UIViewController
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+@end
+
+@interface SBHomeHardwareButtonActions : NSObject
+- (void)performSinglePressAction;
+- (void)performDoublePressAction;
+- (void)performTriplePressAction;
+- (void)performLongPressCancelled;
+@end
+
+@interface SBLockScreenManager : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isUILocked;
+- (void)unlockUIFromSource:(int)source withOptions:(id)options;
+- (void)lockUIFromSource:(int)source withOptions:(id)options;
+@end
+
+@interface SBControlCenterController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isVisible;
+- (void)presentAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated;
+@end
+
+@interface SBNotificationCenterController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isVisible;
+- (void)presentAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated;
+@end
+
+@interface SBWallpaperController : NSObject
++ (instancetype)sharedInstance;
+- (void)beginRequiringWithReason:(id)reason;
+- (void)endRequiringWithReason:(id)reason;
+@end
+
+@interface SBFView : UIView
+- (void)setCustomFullHomedStyle:(BOOL)flag;
+@end
+
+@interface SBFolderView : UIView
+- (void)layoutSubviews;
+- (void)scrollViewDidScroll:(id)scrollView;
+- (void)willAnimate;
+@end
+
+@interface SBIconListView : UIView
+- (void)layoutIconsNow;
+- (void)layoutSubviews;
+- (void)setAlphaForAllIcons:(double)alpha;
+@end
+
+@interface SBIconView : UIView
+- (void)setIconImageInfo:(id)info;
+- (void)setHighlighted:(BOOL)highlighted;
+- (void)setTouchDownInIcon:(BOOL)touchDown;
+- (void)setAllowsCloseBox:(BOOL)allows;
+- (BOOL)isInFolder;
+@end
+
+@interface SBFluidSwitcherViewController : UIViewController
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+- (id)layoutState;
+@end
+
+@interface SBAppSwitcherSettings : NSObject
+- (void)setDeckSwitcherPageScale:(double)scaleValue;
+- (double)deckSwitcherPageScale;
+@end
+
+@interface BSSimpleAssertion : NSObject
+- (void)invalidate;
+@end
+
+@interface FBScene : NSObject
+- (id)identifier;
+- (id)settings;
+@end
+
+@interface FBProcess : NSObject
+- (int)pid;
+- (id)workspace;
+- (id)bundleIdentifier;
+@end
+
+@interface RBSProcessIdentity : NSObject
+- (id)embeddedApplicationIdentifier;
+@end
+
+@interface RBSProcessHandle : NSObject
++ (instancetype)currentProcess;
+- (RBSProcessIdentity *)identity;
+@end
+
+@interface RBSLaunchRequest : NSObject
+- (BOOL)execute:(out id *)outContext error:(out id *)outError;
+@end
+
 @interface SBMainWorkspace : NSObject
 + (instancetype)sharedInstance;
 - (void)_handleApplicationProcessExited:(id)processDescription;
@@ -518,11 +918,9 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 // KIỂM TRA PHÂN TÁCH PHẦN CỨNG 6S-8PLUS (FAKE CỬ CHỈ X) VÀ X-15PRM (CỬ CHỈ GỐC)
 // =========================================================================
 static inline BOOL Titanium_IsGestureDevice(void) {
-    // Nếu là thiết bị có Face ID (X đến 15 Pro Max) -> Cử chỉ gốc
     if (!Titanium_IsClassicHomeButtonDevice()) {
         return YES;
     }
-    // Nếu là 6s/7/8/Plus/SE nhưng người dùng cài Tweak fake cử chỉ iPhone X
     if (NSClassFromString(@"SBFluidSwitcherViewController") != nil) {
         return YES;
     }
@@ -651,6 +1049,7 @@ static volatile uint64_t g_lastSyncTicksV261 = 0;
 static BOOL g_isDeviceChargingV261 = NO;
 static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
+static volatile BOOL g_isScrollInertiaActiveV261 = NO;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
 // NHẬN DIỆN THIẾT BỊ 16:9 NÚT HOME (6s / 7 / 8 / Plus / SE)
@@ -693,7 +1092,7 @@ static BOOL Titanium_IsSettingsApp(void) {
 }
 
 static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
-    return YES; // Bật cờ ProMotion Render Ảo mọi thiết bị
+    return YES;
 }
 
 // CỐT LÕI 1: KHÓA XUNG NHỊP THỜI GIAN THỰC CAO CẤP CHỐNG DROP FPS
@@ -713,7 +1112,7 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
     uint32_t framePeriodNs = 1000000000 / hz;
     thread_time_constraint_policy_data_t timeConstraint;
     timeConstraint.period = framePeriodNs;
-    timeConstraint.computation = framePeriodNs * 85 / 100; // Overclock 85% dải CPU khi vuốt để bù FPS bị hụt
+    timeConstraint.computation = framePeriodNs * 85 / 100;
     timeConstraint.constraint = framePeriodNs;
     timeConstraint.preemptible = 1;
     thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY, (task_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
@@ -1054,7 +1453,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     }
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
-    // CỐT LÕI 2: HÃM NHIỆT (ADAPTIVE THERMAL BRAKING)
     if (g_liveThermalStateV261 >= NSProcessInfoThermalStateSerious && self.antiThermalThrottling) {
         return 60; 
     }
@@ -1231,7 +1629,6 @@ static BoostConfigV261 *CFG261 = nil;
     return %orig;
 }
 %end
-
 %end
 
 // =========================================================================
@@ -1254,7 +1651,8 @@ static BoostConfigV261 *CFG261 = nil;
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
-    if (!g_isUserTouchingV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
+    BOOL isActivelyRendering = g_isUserTouchingV261 || g_isScrollInertiaActiveV261;
+    if (!isActivelyRendering && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
@@ -1272,7 +1670,7 @@ static BoostConfigV261 *CFG261 = nil;
     float rate = (float)targetHz;
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
     range = CAFrameRateRangeMake(minRate, rate, rate);
-    %orig; // <-- DÙNG %orig; KHÔNG DÙNG %orig(...)
+    %orig;
 }
 - (BOOL)isPaused { return %orig; }
 - (void)setPaused:(BOOL)paused { %orig(paused); }
@@ -1287,7 +1685,7 @@ static BoostConfigV261 *CFG261 = nil;
         float target = (float)[CFG261 resolvedTargetHz];
         float minHz = (target < 60.0f) ? 30.0f : 60.0f;
         range = CAFrameRateRangeMake(minHz, target, target);
-        %orig; // <-- SỬA DÒNG 1282 Ở ĐÂY: DÙNG %orig; KHÔNG DÙNG %orig(customRange);
+        %orig;
     } else {
         %orig;
     }
@@ -1401,10 +1799,11 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook SBFolderView
 - (void)layoutSubviews {
+    %orig;
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        self.layer.allowsGroupOpacity = NO;
     }
-    %orig;
 }
 - (void)scrollViewDidScroll:(id)scrollView {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
@@ -1457,14 +1856,12 @@ static BoostConfigV261 *CFG261 = nil;
 %hook SBIconView
 - (void)setIconImageInfo:(id)info { %orig(info); }
 
-// CHÌA KHÓA HIỆU ỨNG: ICON LÚN NHƯ COLOROS KHI CHẠM
 - (void)setHighlighted:(BOOL)highlighted {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        if (CFG261.colorOs17SmoothEngine) {
-            // Không bị gián đoạn, luôn phản hồi lập tức với cờ AllowUserInteraction
-            [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState animations:^{
-                self.transform = highlighted ? CGAffineTransformMakeScale(0.92, 0.92) : CGAffineTransformIdentity;
+        if (CFG261.colorOs17SmoothEngine && !self.isInFolder) {
+            [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState animations:^{
+                self.transform = highlighted ? CGAffineTransformMakeScale(0.94, 0.94) : CGAffineTransformIdentity;
             } completion:nil];
         }
     }
@@ -1617,22 +2014,6 @@ static BoostConfigV261 *CFG261 = nil;
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     return %orig(passcode, finish);
-}
-%end
-
-%hook SBControlCenterController
-- (BOOL)isVisible { return %orig; }
-- (void)presentAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(animated);
-}
-- (void)dismissAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(animated);
 }
 %end
 
