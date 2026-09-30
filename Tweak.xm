@@ -2642,7 +2642,6 @@ Shower thank youGroup_ZeroLatencyTouch_PhysicsV261
         %init(Group_UniversalDisplayControlV261);
 
         // 2. NẠP CORE ENGINE TĂNG TỐC TOÀN HỆ THỐNG
-        %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
         %init(Group_FastLaunch_SuperEngineV261);
         %init(Group_ScrollPerformance_SuperEngineV261);
