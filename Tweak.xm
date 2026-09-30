@@ -577,7 +577,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface SBIdleTimerGlobalCoordinator : NSObject
 + (instancetype)sharedInstance;
-- (void)resetIdleTimer;
+- (resetIdleTimer)resetIdleTimer;
 @end
 
 @interface SBAppLayout : NSObject
@@ -660,10 +660,33 @@ static BOOL Titanium_IsSettingsApp(void) {
     return isPrefs;
 }
 
+// Nhận diện phần cứng ProMotion gốc thông minh từ iPhone 13 Pro -> iPhone 15 Pro Max
+static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
+    static BOOL sHasProMotion = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        uname(&sysInfo);
+        NSString *devCode = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        if ([devCode containsString:@"iPhone14,2"] || [devCode containsString:@"iPhone14,3"] ||
+            [devCode containsString:@"iPhone15,2"] || [devCode containsString:@"iPhone15,3"] ||
+            [devCode containsString:@"iPhone16,1"] || [devCode containsString:@"iPhone16,2"]) {
+            sHasProMotion = YES;
+        } else {
+            if (@available(iOS 15.0, *)) {
+                if ([UIScreen mainScreen].maximumFramesPerSecond > 60) {
+                    sHasProMotion = YES;
+                }
+            }
+        }
+    });
+    return sHasProMotion;
+}
+
 static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uint32_t targetHz) {
     if (!thread) return;
     
-    // NGUYÊN TẮC: Không ép Realtime Mach thread lên SpringBoard để tránh khựng giật App Switcher và tụt StatusBar
+    // SpringBoard không ép Realtime Mach thread để tránh Watchdog kill
     if (Titanium_IsSpringBoard()) {
         struct task_qos_policy qos;
         qos.task_latency_qos_tier = 0;
@@ -835,21 +858,35 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     return isBank;
 }
 
-@implementation BoostConfigV261 {
-    dispatch_queue_t _syncQueue;
-}
+@implementation BoostConfigV261
 
 + (instancetype)sharedInstance {
     static BoostConfigV261 *inst = nil;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ inst = [[self alloc] init]; });
+    dispatch_once(&onceToken, ^{
+        inst = [[self alloc] init];
+    });
     return inst;
 }
 
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _syncQueue = dispatch_queue_create("com.titanium.v261.sync", DISPATCH_QUEUE_SERIAL);
+        // Khởi tạo các giá trị an toàn mặc định
+        self.enabled = YES;
+        self.targetHz = 60;
+        self.targetFPS = 60;
+        self.enableHzControl = YES;
+        self.enableFPSControl = YES;
+        self.proMotionEngineBeta7 = YES;
+        self.touchResponseBoost = YES;
+        self.colorOs17SmoothEngine = YES;
+        self.keyboardZeroLagV24 = YES;
+        self.metalHexBuffering = YES;
+        self.fixAppExitStutter = YES;
+        self.fixAppLaunchBlackScreen = YES;
+        self.antiThermalThrottling = YES;
+        
         [self loadSettings];
     }
     return self;
@@ -860,7 +897,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (void)loadSettings {
-    // 1. Chống lồng hàm (Re-entrancy lock) và loại bỏ hoàn toàn Deadlock của dispatch_sync
+    // Cơ chế Re-entrancy Lock tĩnh chống lồng hàm và Deadlock tuyệt đối
     static BOOL s_isLoading = NO;
     if (s_isLoading) return;
     s_isLoading = YES;
@@ -973,7 +1010,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.thermalShield = self.antiThermalThrottling ? 1 : 0;
             p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
             
-            // Tính toán tầng đệm thông minh theo dải tần số quét
+            // Tính toán tầng đệm GPU tuyến tính: 15-40Hz -> 3; 45-75Hz -> 4; 80-115Hz -> 5; 120-144Hz -> 6
             int32_t bufferLevel = 3;
             if (self.targetHz >= 120 || self.forceOverclock144Hz) {
                 bufferLevel = 6;
@@ -999,7 +1036,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetHz {
-    // 2. Không đọc trực tiếp từ Disk I/O trong render loop để tránh giật lag và Safe Mode
+    // Cache trực tiếp trong RAM - Không đọc file plist từ ổ đĩa trong render loop
     if (!self.enabled || !self.enableHzControl) return 60;
     if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
@@ -1018,29 +1055,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
-
-// Nhận diện màn hình ProMotion nguyên bản (iPhone 13 Pro -> 15 Pro Max)
-static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
-    static BOOL sHasProMotion = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        struct utsname sysInfo;
-        uname(&sysInfo);
-        NSString *devCode = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-        if ([devCode containsString:@"iPhone14,2"] || [devCode containsString:@"iPhone14,3"] ||
-            [devCode containsString:@"iPhone15,2"] || [devCode containsString:@"iPhone15,3"] ||
-            [devCode containsString:@"iPhone16,1"] || [devCode containsString:@"iPhone16,2"]) {
-            sHasProMotion = YES;
-        } else {
-            if (@available(iOS 15.0, *)) {
-                if ([UIScreen mainScreen].maximumFramesPerSecond > 60) {
-                    sHasProMotion = YES;
-                }
-            }
-        }
-    });
-    return sHasProMotion;
-}
 
 // Cờ kích hoạt tiêm trễ chống đen app
 static BOOL g_ApexRenderPipelineReady = NO;
@@ -1224,13 +1238,14 @@ static BOOL g_ApexRenderPipelineReady = NO;
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
     
-    // Tự động phân giải an toàn chống Safe Mode trên màn 60Hz gốc
+    // Tự động phân giải an toàn chống Safe Mode trên màn 60Hz gốc (A9 - A12)
     if (!Titanium_IsDeviceProMotionHardware()) {
         float safeTarget = (rate > 60.0f) ? 60.0f : rate;
         float minRate = (safeTarget <= 30.0f) ? 15.0f : 30.0f;
         return CAFrameRateRangeMake(minRate, safeTarget, safeTarget);
     }
     
+    // Thiết bị ProMotion 120Hz/144Hz
     float minRate = (rate <= 60.0f) ? 15.0f : 60.0f;
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
@@ -1356,15 +1371,9 @@ static BOOL g_ApexRenderPipelineReady = NO;
     return %orig;
 }
 
+// SỬA LỖI TỬ HUYỆT: Không can thiệp ép range trực tiếp lên link nội bộ của SpringBoard
 - (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
-    CADisplayLink *link = %orig(target, sel);
-    if (IS_ACTIVE && CFG261.enableHzControl) {
-        float r = (float)[CFG261 resolvedTargetHz];
-        float safeR = (!Titanium_IsDeviceProMotionHardware() && r > 60.0f) ? 60.0f : r;
-        float minR = (safeR <= 30.0f) ? 15.0f : 30.0f;
-        [link setPreferredFrameRateRange:CAFrameRateRangeMake(minR, safeR, safeR)];
-    }
-    return link;
+    return %orig(target, sel);
 }
 %end
 
@@ -1393,7 +1402,7 @@ static BOOL g_ApexRenderPipelineReady = NO;
 }
 
 - (void)overrideDisplayTimings:(id)timings {
-    // Luôn giữ liên lạc Driver IOKit tránh Safe Mode sập SpringBoard
+    // SỬA LỖI TỬ HUYỆT: Luôn chuyển tiếp qua %orig để tránh mất đồng bộ Driver IOKit
     %orig(timings);
 }
 
@@ -1507,6 +1516,7 @@ static BOOL g_ApexRenderPipelineReady = NO;
 %end
 
 %hook SBIconListView
+
 - (void)layoutIconsNow {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
