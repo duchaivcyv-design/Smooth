@@ -45,6 +45,7 @@
 // ============================================================================
 // KHAI BÁO CÁC HÀM / MACRO PRIVATE CỦA XNU KERNEL & DARWIN TRÁNH LỖI BIÊN DỊCH
 // ============================================================================#ifndef VM_PURGABLE_PURGE_ALL
+#ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
 
@@ -676,10 +677,10 @@ static BOOL Titanium_IsSettingsApp(void) {
 }
 
 static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
-    return YES; // Ép bật luồng ProMotion Render ảo
+    return YES; // Bật cờ ProMotion Render Ảo mọi thiết bị
 }
 
-// CỐT LÕI VƯỢT TRỘI 1: KHÓA XUNG NHỊP THỜI GIAN THỰC KHI CÓ CẢM ỨNG (REALTIME THREAD CONSTRAINT)
+// CỐT LÕI 1: KHÓA XUNG NHỊP THỜI GIAN THỰC CAO CẤP CHỐNG DROP FPS
 static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uint32_t targetHz) {
     if (!thread) return;
     if (Titanium_IsSpringBoard()) {
@@ -696,7 +697,7 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
     uint32_t framePeriodNs = 1000000000 / hz;
     thread_time_constraint_policy_data_t timeConstraint;
     timeConstraint.period = framePeriodNs;
-    timeConstraint.computation = framePeriodNs * 85 / 100; // Tăng biên độ tính toán lên 85% để triệt tiêu xé khung hình
+    timeConstraint.computation = framePeriodNs * 85 / 100; // Overclock 85% dải CPU khi vuốt để bù FPS bị hụt
     timeConstraint.constraint = framePeriodNs;
     timeConstraint.preemptible = 1;
     thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY, (task_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
@@ -1037,7 +1038,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     }
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
-    // SMART THERMAL BRAKING: Máy mát chạy 120/144, máy nóng tự ghì 60/90 để tản nhiệt, chống quá nhiệt giật lag.
+    // CỐT LÕI 2: HÃM NHIỆT (ADAPTIVE THERMAL BRAKING)
     if (g_liveThermalStateV261 >= NSProcessInfoThermalStateSerious && self.antiThermalThrottling) {
         return 60; 
     }
@@ -1066,9 +1067,12 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
-static BOOL g_ApexRenderPipelineReady = YES;
 
+// =========================================================================
+// NHÓM 1: KHỞI TỐC ỨNG DỤNG NHANH
+// =========================================================================
 %group Group_FastLaunch_SuperEngineV261
+
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
@@ -1115,6 +1119,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 2: CỬA SỔ NỔI & PICTURE-IN-PICTURE
+// =========================================================================
 %group Group_V261_FloatingWindow_PiP
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
@@ -1212,7 +1219,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 // =========================================================================
 // NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
-// CỐT LÕI VƯỢT TRỘI 2: ĐỘ ĐÀN HỒI LỎNG VÀ VƯỢT GIỚI HẠN KHUNG HÌNH MÀ KHÔNG NÓNG
+// CỐT LÕI 3: VƯỢT GIỚI HẠN KHUNG HÌNH (NO-DROP FPS)
 // =========================================================================
 %group Group_Display_SpringBoardV261
 
@@ -1230,7 +1237,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
-    // SMART THERMAL BRAKING: Phanh khung hình chống nóng. Buông tay 1.5s là hạ Hz. Chạm là đẩy 120/144Hz. Đối thủ không có cái này.
+    // PHANH NHIỆT KHUNG HÌNH TĨNH: Buông tay 1.5s về 60Hz. Chạm lại lập tức 120/144Hz.
     if (!g_isUserTouchingV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
     }
@@ -1248,23 +1255,15 @@ static BOOL g_ApexRenderPipelineReady = YES;
     NSInteger targetHz = [CFG261 resolvedTargetHz];
     float rate = (float)targetHz;
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
-    %orig(CAFrameRateRangeMake(minRate, rate, rate));
+    // BẢN FIX LỖI LOGOS: KHAI BÁO BIẾN STRUCT RỜI TRÁNH DẤU PHẨY TRONG %orig
+    CAFrameRateRange customRange = CAFrameRateRangeMake(minRate, rate, rate);
+    %orig(customRange);
 }
-- (BOOL)isPaused {
-    return %orig;
-}
-- (void)setPaused:(BOOL)paused {
-    %orig(paused);
-}
-- (CFTimeInterval)duration {
-    return %orig;
-}
-- (CFTimeInterval)targetTimestamp {
-    return %orig;
-}
-- (CFTimeInterval)timestamp {
-    return %orig;
-}
+- (BOOL)isPaused { return %orig; }
+- (void)setPaused:(BOOL)paused { %orig(paused); }
+- (CFTimeInterval)duration { return %orig; }
+- (CFTimeInterval)targetTimestamp { return %orig; }
+- (CFTimeInterval)timestamp { return %orig; }
 %end
 
 %hook CAAnimation
@@ -1272,7 +1271,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
         float target = (float)[CFG261 resolvedTargetHz];
         float minHz = (target < 60.0f) ? 30.0f : 60.0f;
-        %orig(CAFrameRateRangeMake(minHz, target, target));
+        CAFrameRateRange customRange = CAFrameRateRangeMake(minHz, target, target);
+        %orig(customRange);
     } else {
         %orig(range);
     }
@@ -1288,7 +1288,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(damping);
 }
-
 - (void)setStiffness:(CGFloat)stiffness {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         %orig(410.0); // Bật ra cực nhanh theo đầu ngón tay
@@ -1296,7 +1295,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(stiffness);
 }
-
 - (void)setMass:(CGFloat)mass {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         %orig(1.0);
@@ -1328,21 +1326,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig((CGFloat)[CFG261 resolvedTargetHz]);
 }
-- (CGRect)bounds {
-    return %orig;
-}
-- (CGFloat)scale {
-    return %orig;
-}
-- (CGFloat)nativeScale {
-    return %orig;
-}
-- (CGRect)nativeBounds {
-    return %orig;
-}
-- (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
-    return %orig(target, sel);
-}
+- (CGRect)bounds { return %orig; }
+- (CGFloat)scale { return %orig; }
+- (CGFloat)nativeScale { return %orig; }
+- (CGRect)nativeBounds { return %orig; }
+- (id)displayLinkWithTarget:(id)target selector:(SEL)sel { return %orig(target, sel); }
 %end
 
 %hook CADisplay
@@ -1359,16 +1347,10 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig([CFG261 resolvedTargetHz]);
 }
-- (void)overrideDisplayTimings:(id)timings {
-    %orig(timings);
-}
-- (void)overrideDisplayCadence:(id)cadence {
-    %orig(cadence);
-}
+- (void)overrideDisplayTimings:(id)timings { %orig(timings); }
+- (void)overrideDisplayCadence:(id)cadence { %orig(cadence); }
 - (BOOL)supportsDynamicRefresh {
-    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) {
-        return YES;
-    }
+    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) return YES;
     return %orig;
 }
 %end
@@ -1473,9 +1455,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-- (void)setAlphaForAllIcons:(double)alpha {
-    %orig(alpha);
-}
+- (void)setAlphaForAllIcons:(double)alpha { %orig(alpha); }
 - (void)fadeInIcon:(id)icon {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1485,16 +1465,14 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBIconView
-- (void)setIconImageInfo:(id)info {
-    %orig(info);
-}
+- (void)setIconImageInfo:(id)info { %orig(info); }
 
-// Chìa khóa tạo hiệu ứng "lún" Icon mềm mại khi chạm tay (Squishy Touch Deformation)
+// CHÌA KHÓA HIỆU ỨNG: ICON LÚN NHƯ COLOROS KHI CHẠM
 - (void)setHighlighted:(BOOL)highlighted {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         if (CFG261.colorOs17SmoothEngine) {
-            // Hiệu ứng vật lý song song cho phép hủy chuyển động giữa chừng mà không giật
+            // Không bị gián đoạn, luôn phản hồi lập tức với cờ AllowUserInteraction
             [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState animations:^{
                 self.transform = highlighted ? CGAffineTransformMakeScale(0.92, 0.92) : CGAffineTransformIdentity;
             } completion:nil];
@@ -1511,12 +1489,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(touchDown);
 }
-- (void)setAllowsCloseBox:(BOOL)allows {
-    %orig(allows);
-}
-- (void)prepareForReuse {
-    %orig;
-}
+- (void)setAllowsCloseBox:(BOOL)allows { %orig(allows); }
+- (void)prepareForReuse { %orig; }
 %end
 
 %hook SBFluidSwitcherViewController
@@ -1556,27 +1530,15 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBWallpaperController
-- (void)beginRequiringWithReason:(id)reason {
-    %orig(reason);
-}
-- (void)endRequiringWithReason:(id)reason {
-    %orig(reason);
-}
-- (void)suspendWallpaperAnimationForReason:(id)reason {
-    %orig(reason);
-}
-- (void)resumeWallpaperAnimationForReason:(id)reason {
-    %orig(reason);
-}
+- (void)beginRequiringWithReason:(id)reason { %orig(reason); }
+- (void)endRequiringWithReason:(id)reason { %orig(reason); }
+- (void)suspendWallpaperAnimationForReason:(id)reason { %orig(reason); }
+- (void)resumeWallpaperAnimationForReason:(id)reason { %orig(reason); }
 %end
 
 %hook SBBacklightController
-- (void)setBacklightFactor:(float)factor {
-    %orig(factor);
-}
-- (float)backlightFactor {
-    return %orig;
-}
+- (void)setBacklightFactor:(float)factor { %orig(factor); }
+- (float)backlightFactor { return %orig; }
 - (void)animateBacklightToFactor:(float)factor duration:(double)duration source:(long long)source completion:(id)completion {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1598,18 +1560,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-- (void)cancelVolumeEvent {
-    %orig;
-}
+- (void)cancelVolumeEvent { %orig; }
 %end
 
 %hook SBMediaController
-- (BOOL)isPlaying {
-    return %orig;
-}
-- (BOOL)isPaused {
-    return %orig;
-}
+- (BOOL)isPlaying { return %orig; }
+- (BOOL)isPaused { return %orig; }
 - (BOOL)playForEventSource:(long long)source {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1649,15 +1605,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-- (void)performLongPressCancelled {
-    %orig;
-}
+- (void)performLongPressCancelled { %orig; }
 %end
 
 %hook SBLockScreenManager
-- (BOOL)isUILocked {
-    return %orig;
-}
+- (BOOL)isUILocked { return %orig; }
 - (void)unlockUIFromSource:(int)source withOptions:(id)options {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1679,9 +1631,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBControlCenterController
-- (BOOL)isVisible {
-    return %orig;
-}
+- (BOOL)isVisible { return %orig; }
 - (void)presentAnimated:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1697,9 +1647,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBNotificationCenterController
-- (BOOL)isVisible {
-    return %orig;
-}
+- (BOOL)isVisible { return %orig; }
 - (void)presentAnimated:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1715,9 +1663,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBFView
-- (void)setCustomFullHomedStyle:(BOOL)flag {
-    %orig(flag);
-}
+- (void)setCustomFullHomedStyle:(BOOL)flag { %orig(flag); }
 %end
 
 %hook UIStatusBar
@@ -1728,18 +1674,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(style, animated);
 }
-- (void)forceUpdateData:(BOOL)animated {
-    %orig(animated);
-}
+- (void)forceUpdateData:(BOOL)animated { %orig(animated); }
 %end
 
 %hook SBReachabilityManager
-- (BOOL)reachabilityModeActive {
-    return %orig;
-}
-- (void)deactivateReachabilityMode {
-    %orig;
-}
+- (BOOL)reachabilityModeActive { return %orig; }
+- (void)deactivateReachabilityMode { %orig; }
 - (void)triggerReachability {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1749,12 +1689,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBWindow
-- (BOOL)_isSecure {
-    return %orig;
-}
-- (void)setHidden:(BOOL)hidden {
-    %orig(hidden);
-}
+- (BOOL)_isSecure { return %orig; }
+- (void)setHidden:(BOOL)hidden { %orig(hidden); }
 %end
 
 %hook SBRootFolderView
@@ -1764,9 +1700,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-- (void)setNeedsLayout {
-    %orig;
-}
+- (void)setNeedsLayout { %orig; }
 %end
 
 %hook SBSwitcherAppSuggestionViewController
@@ -1791,12 +1725,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(animated);
 }
-- (void)viewWillDisappear:(BOOL)animated {
-    %orig(animated);
-}
-- (void)viewDidDisappear:(BOOL)animated {
-    %orig(animated);
-}
+- (void)viewWillDisappear:(BOOL)animated { %orig(animated); }
+- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
 %end
 
 %hook SBHomeScreenViewController
@@ -1821,27 +1751,17 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(animated);
 }
-- (void)viewDidDisappear:(BOOL)animated {
-    %orig(animated);
-}
+- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
 %end
 
 %hook SBDisplayPowerLogReporter
-- (void)reportPowerLogEvent {
-    %orig;
-}
+- (void)reportPowerLogEvent { %orig; }
 %end
 
 %hook SBAttentionAwarenessClient
-- (void)setAttentionAwarenessConfiguration:(id)config {
-    %orig(config);
-}
-- (void)resume {
-    %orig;
-}
-- (void)suspend {
-    %orig;
-}
+- (void)setAttentionAwarenessConfiguration:(id)config { %orig(config); }
+- (void)resume { %orig; }
+- (void)suspend { %orig; }
 %end
 
 %hook SBIdleTimerGlobalCoordinator
@@ -1854,9 +1774,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SBUIController
-- (BOOL)isAppSwitcherShowing {
-    return %orig;
-}
+- (BOOL)isAppSwitcherShowing { return %orig; }
 - (void)clickedMenuButton {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1878,24 +1796,16 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook SpringBoard
-- (id)_accessibilityFrontMostApplication {
-    return %orig;
-}
-- (BOOL)isLocked {
-    return %orig;
-}
-- (void)_reboot:(BOOL)arg1 {
-    %orig(arg1);
-}
-- (void)_relaunchSpringBoardNow {
-    %orig;
-}
+- (id)_accessibilityFrontMostApplication { return %orig; }
+- (BOOL)isLocked { return %orig; }
+- (void)_reboot:(BOOL)arg1 { %orig(arg1); }
+- (void)_relaunchSpringBoardNow { %orig; }
 %end
 %end // End Group_Display_SpringBoardV261
 
 // =========================================================================
 // NHÓM 4: CẢM ỨNG 0S & VẬT LÝ COLOROS (PREDICTIVE TOUCH 120HZ)
-// CỐT LÕI VƯỢT TRỘI 3: DỰ ĐOÁN QUỸ ĐẠO NGÓN TAY TẠO RA ĐỘ TRỄ ÂM
+// CỐT LÕI 4: LOẠI BỎ ĐỘ KHỰNG (ZERO DELAY) THÔNG QUA DỰ ĐOÁN QUỸ ĐẠO
 // =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
 
@@ -1928,14 +1838,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
                 mach_port_deallocate(mach_task_self(), currentMachThread);
             }
             
-            // SUPERIOR TWEAK FEATURE: Dự đoán quỹ đạo tay bằng UIEvent (Kỹ thuật loại bỏ độ khựng 100%)
-            // Trích xuất các vị trí chạm tương lai để render trước 1 khung hình
+            // TOP 1 TWEAK FEATURE: Dự đoán quỹ đạo tay bằng UIEvent (Pre-rendering)
             for (UITouch *touch in allTouches) {
                 if ([event respondsToSelector:@selector(predictedTouchesForTouch:)]) {
                     NSArray *predicted = [event predictedTouchesForTouch:touch];
                     if (predicted && predicted.count > 0) {
-                        // Pre-warm the runloop by fetching the future location implicitly
-                        [predicted.lastObject locationInView:self];
+                        [predicted.lastObject locationInView:self]; // Đẩy bộ đệm khung hình render trước
                     }
                 }
             }
@@ -1955,12 +1863,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
         }
     }
 }
-- (BOOL)_isSecure {
-    return %orig;
-}
-- (void)_setSecure:(BOOL)flag {
-    %orig(flag);
-}
+- (BOOL)_isSecure { return %orig; }
+- (void)_setSecure:(BOOL)flag { %orig(flag); }
 - (void)setRootViewController:(UIViewController *)rootViewController {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1979,15 +1883,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-- (void)resignKeyWindow {
-    %orig;
-}
+- (void)resignKeyWindow { %orig; }
 %end
 
 %hook UITouch
-- (NSTimeInterval)timestamp {
-    return %orig;
-}
+- (NSTimeInterval)timestamp { return %orig; }
 - (CGPoint)preciseLocationInView:(UIView *)view {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -2014,30 +1914,14 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return currentTouchPhase;
 }
-- (UIWindow *)window {
-    return %orig;
-}
-- (UIView *)view {
-    return %orig;
-}
-- (NSUInteger)tapCount {
-    return %orig;
-}
-- (CGFloat)majorRadius {
-    return %orig;
-}
-- (CGFloat)majorRadiusTolerance {
-    return %orig;
-}
-- (NSArray *)gestureRecognizers {
-    return %orig;
-}
-- (CGFloat)force {
-    return %orig;
-}
-- (CGFloat)maximumPossibleForce {
-    return %orig;
-}
+- (UIWindow *)window { return %orig; }
+- (UIView *)view { return %orig; }
+- (NSUInteger)tapCount { return %orig; }
+- (CGFloat)majorRadius { return %orig; }
+- (CGFloat)majorRadiusTolerance { return %orig; }
+- (NSArray *)gestureRecognizers { return %orig; }
+- (CGFloat)force { return %orig; }
+- (CGFloat)maximumPossibleForce { return %orig; }
 - (CGPoint)locationInView:(UIView *)view {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -2052,12 +1936,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(view);
 }
-- (long long)type {
-    return %orig;
-}
-- (float)_pathMajorRadius {
-    return %orig;
-}
+- (long long)type { return %orig; }
+- (float)_pathMajorRadius { return %orig; }
 %end
 
 %hook UIGestureRecognizer
@@ -2099,12 +1979,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(state);
 }
-- (BOOL)isEnabled {
-    return %orig;
-}
-- (void)setEnabled:(BOOL)enabled {
-    %orig(enabled);
-}
+- (BOOL)isEnabled { return %orig; }
+- (void)setEnabled:(BOOL)enabled { %orig(enabled); }
 - (BOOL)cancelsTouchesInView {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         return NO;
@@ -2113,7 +1989,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 - (BOOL)delaysTouchesBegan {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        return NO; // Nhận ngón tay ngay lập tức không cần chờ phân tích hệ thống
+        return NO; // Hủy độ trễ hệ thống, chạm là ăn ngay
     }
     return %orig;
 }
@@ -2123,21 +1999,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig;
 }
-- (void)ignoreTouch:(UITouch *)touch forEvent:(UIEvent *)event {
-    %orig(touch, event);
-}
-- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer {
-    return %orig(preventedGestureRecognizer);
-}
-- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer {
-    return %orig(preventingGestureRecognizer);
-}
-- (BOOL)shouldRequireFailureOfGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    return %orig(otherGestureRecognizer);
-}
-- (BOOL)shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    return %orig(otherGestureRecognizer);
-}
+- (void)ignoreTouch:(UITouch *)touch forEvent:(UIEvent *)event { %orig(touch, event); }
+- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer { return %orig(preventedGestureRecognizer); }
+- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer { return %orig(preventingGestureRecognizer); }
+- (BOOL)shouldRequireFailureOfGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer { return %orig(otherGestureRecognizer); }
+- (BOOL)shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer { return %orig(otherGestureRecognizer); }
 %end
 
 %hook UIPanGestureRecognizer
@@ -2170,24 +2036,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return computedVelocity;
 }
-- (CGPoint)translationInView:(UIView *)view {
-    return %orig(view);
-}
-- (void)setTranslation:(CGPoint)translation inView:(UIView *)view {
-    %orig(translation, view);
-}
-- (NSUInteger)minimumNumberOfTouches {
-    return %orig;
-}
-- (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches {
-    %orig(minimumNumberOfTouches);
-}
-- (NSUInteger)maximumNumberOfTouches {
-    return %orig;
-}
-- (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches {
-    %orig(maximumNumberOfTouches);
-}
+- (CGPoint)translationInView:(UIView *)view { return %orig(view); }
+- (void)setTranslation:(CGPoint)translation inView:(UIView *)view { %orig(translation, view); }
+- (NSUInteger)minimumNumberOfTouches { return %orig; }
+- (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches { %orig(minimumNumberOfTouches); }
+- (NSUInteger)maximumNumberOfTouches { return %orig; }
+- (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches { %orig(maximumNumberOfTouches); }
 %end
 
 %hook UIScreenEdgePanGestureRecognizer
@@ -2205,12 +2059,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(delays);
 }
-- (UIRectEdge)edges {
-    return %orig;
-}
-- (void)setEdges:(UIRectEdge)edges {
-    %orig(edges);
-}
+- (UIRectEdge)edges { return %orig; }
+- (void)setEdges:(UIRectEdge)edges { %orig(edges); }
 %end
 
 %hook UIScrollView
@@ -2220,14 +2070,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(velocity, targetContentOffset);
 }
-
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(contentOffset, animated);
 }
-
 - (CGPoint)_touchPositionForTouches:(id)touches {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
@@ -2235,7 +2083,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(touches);
 }
-
 - (void)_setContentOffsetPinned:(CGPoint)point {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2243,10 +2090,10 @@ static BOOL g_ApexRenderPipelineReady = YES;
     %orig(point);
 }
 
-// KHẮC PHỤC KHUNG HÌNH CHẬM: Giảm DecelerationRate chuẩn mức Logarit phi tuyến tính ColorOS (0.992)
+// KHẮC PHỤC KHUNG HÌNH CHẬM: Giảm DecelerationRate chuẩn mức Logarit phi tuyến tính ColorOS
 - (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(0.992); // Cuộn mượt trôi êm kịch kim như ColorOS 17, xé bỏ cái khô cứng của UIScrollView Apple
+        %orig(0.992); // Cuộn mượt trôi êm kịch kim như ColorOS 17, xé bỏ cái khô cứng của Apple
         return;
     }
     %orig(rate);
@@ -2254,41 +2101,21 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        return YES; // Bẻ gãy giới hạn, có thể hủy vuốt bất cứ lúc nào
+        return YES; // Bẻ gãy giới hạn, có thể hủy vuốt bất cứ lúc nào (Interruptible)
     }
     return %orig(view);
 }
 
-- (BOOL)isPagingEnabled {
-    return %orig;
-}
-- (void)setPagingEnabled:(BOOL)pagingEnabled {
-    %orig(pagingEnabled);
-}
-- (BOOL)isScrollEnabled {
-    return %orig;
-}
-- (void)setScrollEnabled:(BOOL)scrollEnabled {
-    %orig(scrollEnabled);
-}
-- (BOOL)bounces {
-    return %orig;
-}
-- (void)setBounces:(BOOL)bounces {
-    %orig(bounces);
-}
-- (BOOL)alwaysBounceVertical {
-    return %orig;
-}
-- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical {
-    %orig(alwaysBounceVertical);
-}
-- (BOOL)alwaysBounceHorizontal {
-    return %orig;
-}
-- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal {
-    %orig(alwaysBounceHorizontal);
-}
+- (BOOL)isPagingEnabled { return %orig; }
+- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig(pagingEnabled); }
+- (BOOL)isScrollEnabled { return %orig; }
+- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig(scrollEnabled); }
+- (BOOL)bounces { return %orig; }
+- (void)setBounces:(BOOL)bounces { %orig(bounces); }
+- (BOOL)alwaysBounceVertical { return %orig; }
+- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig(alwaysBounceVertical); }
+- (BOOL)alwaysBounceHorizontal { return %orig; }
+- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig(alwaysBounceHorizontal); }
 
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
@@ -2296,7 +2123,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(impulse);
 }
-
 - (void)_forcePanGestureToEndImmediately {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         g_isUserTouchingV261 = NO;
@@ -2384,12 +2210,15 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-- (void)performBatchUpdates:(void (^)(void))updates completion:(void (^)(BOOL finished))completion {
+
+// BẢN FIX LỖI LOGOS: Sử dụng 'id' thay cho block để tránh lỗi 'invalid argument structure'
+- (void)performBatchUpdates:(id)updates completion:(id)completion {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(updates, completion);
 }
+
 - (void)scrollToItemAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UICollectionViewScrollPosition)scrollPosition animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2424,26 +2253,18 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig;
 }
-- (void)setAppSwitcherStyle:(long long)style {
-    %orig(style);
-}
-- (long long)appSwitcherStyle {
-    return %orig;
-}
+- (void)setAppSwitcherStyle:(long long)style { %orig(style); }
+- (long long)appSwitcherStyle { return %orig; }
 %end
 
 %hook SBFluidSwitcherItemContainer
-- (void)setContentAlpha:(double)alpha {
-    %orig(1.0);
-}
-- (void)prepareForReuse {
-    %orig;
-}
+- (void)setContentAlpha:(double)alpha { %orig(1.0); }
+- (void)prepareForReuse { %orig; }
 - (void)setCornerRadius:(CGFloat)radius {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(24.0); // Bo góc tròn sâu kiểu ColorOS Squircle
+        %orig(26.0); // Bo góc tròn sâu kiểu ColorOS Squircle tuyệt đối mượt
         if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
-            [self.layer setValue:@"continuous" forKey:@"cornerCurve"]; // Ép mượt góc Apple
+            [self.layer setValue:@"continuous" forKey:@"cornerCurve"]; // Mượt góc Apple
         }
         return;
     }
@@ -2456,6 +2277,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 // NHÓM 5: BÀN PHÍM TỐI ƯU
 // =========================================================================
 %group Group_Keyboard_And_TextV261
+
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
@@ -2503,9 +2325,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     %orig(enabled);
 }
 - (BOOL)returnKeyEnabled {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
-        return YES;
-    }
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) return YES;
     return %orig;
 }
 - (void)setInputMode:(id)inputMode {
@@ -2657,74 +2477,37 @@ static BOOL g_ApexRenderPipelineReady = YES;
         %orig(3);
     }
 }
-
 - (void)didMoveToSuperlayer {
     %orig;
     if ([self respondsToSelector:@selector(setAllowsGroupOpacity:)]) {
         [self setAllowsGroupOpacity:NO]; 
     }
 }
-
-- (NSUInteger)maximumDrawableCount {
-    return %orig;
-}
-
-- (void)setLowLatencyMode:(BOOL)flag {
-    %orig(flag);
-}
-
-- (BOOL)lowLatencyMode {
-    return %orig;
-}
+- (NSUInteger)maximumDrawableCount { return %orig; }
+- (void)setLowLatencyMode:(BOOL)flag { %orig(flag); }
+- (BOOL)lowLatencyMode { return %orig; }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    %orig(YES); // Khóa cứng VSYNC cho Metal tránh xé hình nhòe ảnh khi vuốt
+    %orig(YES); // Khóa cứng VSYNC cho Metal tránh xé hình nhòe ảnh khi vuốt nhanh
 }
-
-- (BOOL)displaySyncEnabled {
-    return YES;
-}
+- (BOOL)displaySyncEnabled { return YES; }
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     %orig(allow); // Khôi phục chống lỗi timeout đen app trên iOS 16/17
 }
-
-- (BOOL)allowsNextDrawableTimeout {
-    return %orig;
-}
+- (BOOL)allowsNextDrawableTimeout { return %orig; }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
     %orig(YES); // Đồng bộ Draw Call vào Transaction loại bỏ Frame Drops triệt để
 }
+- (BOOL)presentsWithTransaction { return YES; }
 
-- (BOOL)presentsWithTransaction {
-    return YES;
-}
-
-- (void)setServerPresentsWithTransaction:(BOOL)flag {
-    %orig(flag);
-}
-
-- (BOOL)serverPresentsWithTransaction {
-    return %orig;
-}
-
-- (void)setFramebufferOnly:(BOOL)framebufferOnly {
-    %orig(framebufferOnly);
-}
-
-- (BOOL)framebufferOnly {
-    return %orig;
-}
-
-- (void)setDrawableSize:(CGSize)drawableSize {
-    %orig(drawableSize);
-}
-
-- (CGSize)drawableSize {
-    return %orig;
-}
-
+- (void)setServerPresentsWithTransaction:(BOOL)flag { %orig(flag); }
+- (BOOL)serverPresentsWithTransaction { return %orig; }
+- (void)setFramebufferOnly:(BOOL)framebufferOnly { %orig(framebufferOnly); }
+- (BOOL)framebufferOnly { return %orig; }
+- (void)setDrawableSize:(CGSize)drawableSize { %orig(drawableSize); }
+- (CGSize)drawableSize { return %orig; }
 - (id)nextDrawable {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2745,22 +2528,17 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
     if (IS_ACTIVE) {
-        %orig(YES); // Draw tầng dưới song song
+        %orig(YES); // Draw tầng dưới song song siêu tốc
         return;
     }
     %orig(flag);
 }
-
 - (BOOL)contentsDrawsAsynchronously {
-    if (IS_ACTIVE) {
-        return YES;
-    }
+    if (IS_ACTIVE) return YES;
     return %orig;
 }
-
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag {
     if (IS_ACTIVE && CFG261.powerSaveMode) {
         %orig(NO);
@@ -2773,17 +2551,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(flag);
 }
-
 - (BOOL)allowsEdgeAntialiasing {
-    if (IS_ACTIVE && CFG261.powerSaveMode) {
-        return NO;
-    }
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && Titanium_IsSpringBoard()) {
-        return NO;
-    }
+    if (IS_ACTIVE && CFG261.powerSaveMode) return NO;
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && Titanium_IsSpringBoard()) return NO;
     return %orig;
 }
-
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         %orig(NO);
@@ -2791,17 +2563,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(flag);
 }
-
 - (BOOL)needsDisplayOnBoundsChange {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
-        return NO;
-    }
+    if (IS_ACTIVE && CFG261.fixAppExitStutter) return NO;
     return %orig;
 }
-
 - (void)setRasterizationScale:(CGFloat)rasterizationScale { %orig(rasterizationScale); }
 - (CGFloat)rasterizationScale { return %orig; }
-
 - (void)setShouldRasterize:(BOOL)shouldRasterize {
     if (IS_ACTIVE && CFG261 && CFG261.aggressiveRamClean) {
         %orig(NO);
@@ -2809,9 +2576,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(shouldRasterize);
 }
-
 - (BOOL)shouldRasterize { return %orig; }
-
 - (void)setDrawsAsynchronously:(BOOL)drawsAsynchronously {
     if (IS_ACTIVE) {
         %orig(YES);
@@ -2819,21 +2584,16 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(drawsAsynchronously);
 }
-
 - (BOOL)drawsAsynchronously {
-    if (IS_ACTIVE) {
-        return YES;
-    }
+    if (IS_ACTIVE) return YES;
     return %orig;
 }
-
 - (void)display {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
-
 - (void)setNeedsLayout { %orig; }
 - (void)layoutIfNeeded { %orig; }
 %end
@@ -2845,22 +2605,16 @@ static BOOL g_ApexRenderPipelineReady = YES;
         return;
     }
     if (IS_ACTIVE) {
-        %orig(1000); // Đẩy quyền Commit giao diện lên tối thượng
+        %orig(1000); // Ép ưu tiên khung hình UIKit lên mức tối thượng
         return;
     }
     %orig(priority);
 }
-
 - (uint32_t)commitPriority {
-    if (Titanium_IsSpringBoard()) {
-        return %orig;
-    }
-    if (IS_ACTIVE) {
-        return 1000;
-    }
+    if (Titanium_IsSpringBoard()) return %orig;
+    if (IS_ACTIVE) return 1000;
     return %orig;
 }
-
 - (void)setDesiredDynamicRange:(float)range {
     if (IS_ACTIVE && CFG261.powerSaveMode) {
         %orig(1.0f);
@@ -2868,14 +2622,10 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(range);
 }
-
 - (float)desiredDynamicRange {
-    if (IS_ACTIVE && CFG261.powerSaveMode) {
-        return 1.0f;
-    }
+    if (IS_ACTIVE && CFG261.powerSaveMode) return 1.0f;
     return %orig;
 }
-
 - (void)orderAbove:(uint32_t)contextId { %orig(contextId); }
 - (void)orderBelow:(uint32_t)contextId { %orig(contextId); }
 %end
@@ -2885,7 +2635,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 // NHÓM 7: UIKIT APP BÊN THỨ 3
 // =========================================================================
 %group Group_UIKit_ThirdParty_IsolatedV261
-
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
@@ -2896,18 +2645,13 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(animated);
 }
-
 - (void)viewDidAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
 }
-
-- (void)viewWillDisappear:(BOOL)animated {
-    %orig(animated);
-}
-
+- (void)viewWillDisappear:(BOOL)animated { %orig(animated); }
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
@@ -2916,7 +2660,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
         });
     }
 }
-
 - (void)viewDidLoad {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
@@ -2924,21 +2667,18 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-
 - (void)viewWillLayoutSubviews {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
-
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
-
 - (void)didReceiveMemoryWarning {
     %orig;
     if (IS_ACTIVE) {
@@ -2958,7 +2698,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
         });
     }
 }
-
 - (void)_applicationWillEnterForeground {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
@@ -2966,7 +2705,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-
 - (void)_applicationDidBecomeActive {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
@@ -2974,11 +2712,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-
-- (void)_applicationWillResignActive {
-    %orig;
-}
-
+- (void)_applicationWillResignActive { %orig; }
 - (void)_applicationWillTerminate {
     if (IS_ACTIVE) {
         Titanium_PurgeProcessMemoryAggressively();
@@ -2988,17 +2722,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 %hook UIWindowScene
-- (void)_readySceneForDisplay {
-    %orig;
-}
-
-- (UIWindowSceneActivationState)activationState {
-    return %orig;
-}
-
-- (UIScreen *)screen {
-    return %orig;
-}
+- (void)_readySceneForDisplay { %orig; }
+- (UIWindowSceneActivationState)activationState { return %orig; }
+- (UIScreen *)screen { return %orig; }
 %end
 %end // End Group_UIKit_ThirdParty_IsolatedV261
 
@@ -3006,7 +2732,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 // NHÓM 8: QUẢN LÝ TIẾN TRÌNH SPRINGBOARD
 // =========================================================================
 %group Group_SpringBoard_ProcessManagerV261
-
 %hook SBApplication
 - (void)setProcessState:(id)state {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
@@ -3014,13 +2739,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(state);
 }
-
 - (id)processState { return %orig; }
 - (NSString *)bundleIdentifier { return %orig; }
 - (NSString *)displayName { return %orig; }
 - (BOOL)isRunning { return %orig; }
 - (BOOL)isClassic { return %orig; }
-
 - (void)didExitWithContext:(id)context {
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
@@ -3040,14 +2763,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(processDescription);
 }
-
 - (void)handleApplicationLaunch:(id)application {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(application);
 }
-
 - (void)handleApplicationSuspended:(id)application {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
@@ -3067,14 +2788,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
         });
     }
 }
-
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
 }
-
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
@@ -3090,7 +2809,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 // NHÓM 9: HIỆU NĂNG CUỘN (SCROLL PERFORMANCE OVERCLOCK)
 // =========================================================================
 %group Group_ScrollPerformance_SuperEngineV261
-
 %hook UIScrollView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
@@ -3110,7 +2828,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
         }
     }
 }
-
 - (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
