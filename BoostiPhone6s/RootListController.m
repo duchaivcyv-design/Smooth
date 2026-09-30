@@ -18,6 +18,8 @@
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v261.prefschanged"
 
+#define APEX_SYNC_MAGIC_V261 0x56323631
+
 extern char **environ;
 
 @interface BoostConfigV261 : NSObject
@@ -62,7 +64,6 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
 
-// Tìm binary thực thi bất kể Rootless hay RootHide
 static inline const char *Titanium_FindExecutable(const char *name) {
     static char resolvedPath[PATH_MAX];
     NSString *root = Titanium_GetRootHidePrefixPath();
@@ -86,6 +87,7 @@ static inline const char *Titanium_FindExecutable(const char *name) {
     return name;
 }
 
+// KHỚP CHUẨN XÁC 100% VỚI STRUCT TRONG TWEAK.XM
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -95,21 +97,17 @@ typedef struct __attribute__((packed)) {
     uint32_t pipSyncEnabled;
     uint32_t thermalShield;
     uint32_t antiStutterExit;
-    uint32_t hexBuffering;
+    uint32_t smartBufferingLevel;
     uint32_t zeroLatencyTouch;
     uint32_t shaderOptimization;
     uint32_t dynamicInterpolation;
     uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
+    uint32_t keyboardZeroLagV3;
+    uint32_t aggressiveRamCleaner;
+    uint32_t lockFixedFpsWhenThermal;
     uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char reserved[32];
-} ApexV26CorePayload;
-
-#define APEX_V26_SYNC_MAGIC 0x56323630
+    uint64_t reservedTicks;
+} ApexV261Payload;
 
 enum PSCellType {
     PSGroupCell = 0,
@@ -225,9 +223,9 @@ static inline NSString *PM_TextV26(NSString *key) {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         NSDictionary *prefs = [self getMergedPreferences];
         
-        ApexV26CorePayload payload;
-        memset(&payload, 0, sizeof(ApexV26CorePayload));
-        payload.magic = APEX_V26_SYNC_MAGIC;
+        ApexV261Payload payload;
+        memset(&payload, 0, sizeof(ApexV261Payload));
+        payload.magic = APEX_SYNC_MAGIC_V261;
         payload.masterEnabled = enabled ? 1 : 0;
 
         if (!enabled) {
@@ -237,15 +235,14 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.pipSyncEnabled = 0;
             payload.thermalShield = 0;
             payload.antiStutterExit = 0;
-            payload.hexBuffering = 4;
+            payload.smartBufferingLevel = 4;
             payload.zeroLatencyTouch = 0;
-            payload.fastAppLaunch = 0;
-            payload.dynamicInterpolation = 0;
             payload.shaderOptimization = 0;
-            payload.lowLatencyAudio = 0;
-            payload.memoryPressureRelief = 0;
-            payload.metalPacingEnabled = 0;
-            payload.runloopHangGuard = 0;
+            payload.dynamicInterpolation = 0;
+            payload.fastAppLaunch = 0;
+            payload.keyboardZeroLagV3 = 0;
+            payload.aggressiveRamCleaner = 0;
+            payload.lockFixedFpsWhenThermal = 0;
         } else {
             int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
             int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
@@ -258,14 +255,13 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.pipSyncEnabled = 1;
             payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
             payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
-            payload.hexBuffering = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
+            payload.smartBufferingLevel = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
             payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
-            payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
             payload.shaderOptimization = 1;
-            payload.lowLatencyAudio = 1;
-            payload.memoryPressureRelief = 1;
-            payload.metalPacingEnabled = 1;
-            payload.runloopHangGuard = 1;
+            payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+            payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
+            payload.aggressiveRamCleaner = prefs[@"AggressiveRamClean"] ? ([prefs[@"AggressiveRamClean"] boolValue] ? 1 : 0) : 0;
+            payload.lockFixedFpsWhenThermal = payload.thermalShield;
         }
 
         payload.updateSeq = (uint64_t)mach_absolute_time();
@@ -479,10 +475,18 @@ static inline NSString *PM_TextV26(NSString *key) {
 }
 
 - (NSDictionary *)getMergedPreferences {
-    CFPreferencesAppSynchronize(PREF_DOMAIN);
     NSString *prefPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
-        return [NSDictionary dictionaryWithContentsOfFile:prefPath];
+        NSDictionary *fileDict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+        if (fileDict && fileDict.count > 0) return fileDict;
+    }
+    
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFArrayRef keyList = CFPreferencesCopyKeyList(PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (keyList) {
+        NSDictionary *dict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(keyList, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        CFRelease(keyList);
+        if (dict) return dict;
     }
     return [NSDictionary dictionary];
 }
@@ -531,10 +535,12 @@ static inline NSString *PM_TextV26(NSString *key) {
             @"MachVMPurgeRam": @YES,
             @"AutoCloseBackgroundApp": @NO,
             @"TurboLaunch": @YES,
+            @"TurboAppLaunch": @YES,
             @"GameFPSStabilizer": @YES,
             @"SystemProcessOpt": @YES,
             @"DeviceSpoofer": @YES,
             @"AntiThermalThrottle": @YES,
+            @"AntiThermalThrottling": @YES,
             @"SmartThermalDispatch": @YES,
             @"HeavyLoadCooling": @YES,
             @"ChargeThermalProtection": @YES,
@@ -544,7 +550,7 @@ static inline NSString *PM_TextV26(NSString *key) {
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
-        chmod([prefPath UTF8String], 0666); // Cấp quyền đọc ghi toàn diện
+        chmod([prefPath UTF8String], 0666);
 
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
@@ -559,15 +565,18 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return [specifier propertyForKey:@"default"];
 
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+        if (prefs && prefs[key] != nil) {
+            return prefs[key];
+        }
+    }
+
     CFPreferencesAppSynchronize(PREF_DOMAIN);
     CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
     if (val) {
         return (__bridge_transfer id)val;
-    }
-
-    NSDictionary *prefs = [self getMergedPreferences];
-    if (prefs && prefs[key] != nil) {
-        return prefs[key];
     }
 
     return [specifier propertyForKey:@"default"];
@@ -576,9 +585,6 @@ static inline NSString *PM_TextV26(NSString *key) {
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return;
-
-    CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
-    CFPreferencesAppSynchronize(PREF_DOMAIN);
 
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -591,6 +597,9 @@ static inline NSString *PM_TextV26(NSString *key) {
     [prefs setObject:value forKey:key];
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
+
+    CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
 
     BOOL currentEnabled = [key isEqualToString:@"Enabled"] ? [value boolValue] : ([self getMergedPreferences][@"Enabled"] ? [[self getMergedPreferences][@"Enabled"] boolValue] : YES);
     [self syncSharedMemoryFile:currentEnabled];
@@ -655,14 +664,15 @@ static inline NSString *PM_TextV26(NSString *key) {
     for (NSDictionary *item in langs) {
         [alert addAction:[UIAlertAction actionWithTitle:item[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             NSString *code = item[@"code"];
-            CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
-            CFPreferencesAppSynchronize(PREF_DOMAIN);
-
+            
             NSString *prefPath = Titanium_ResolvePrefPath();
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
             prefs[@"SelectedLanguage"] = code;
             [prefs writeToFile:prefPath atomically:YES];
             chmod([prefPath UTF8String], 0666);
+
+            CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
 
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_TITANIUM_CHANGED);
@@ -829,9 +839,6 @@ static inline NSString *PM_TextV26(NSString *key) {
     self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
-// ============================================================================
-// HỆ THỐNG THỰC THI LỆNH HỆ THỐNG ĐA TẦNG (CẢI TIẾN TOÀN DIỆN CHO A9 - A17)
-// ============================================================================
 - (void)presentActions {
     NSString *title = PM_TextV26(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -841,13 +848,11 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSString *resetText = PM_TextV26(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định";
     NSString *closeText = PM_TextV26(@"CLOSE") ?: @"Đóng";
 
-    // 1. RESPRING CHUẨN XÁC: Ưu tiên sbreload -> Fallback killall đa tiến trình
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
             pid_t pid;
             
-            // Ưu tiên sbreload của Dopamine / RootHide
             const char *sbreloadBin = Titanium_FindExecutable("sbreload");
             if (access(sbreloadBin, X_OK) == 0) {
                 char *argv[] = {(char *)sbreloadBin, NULL};
@@ -856,7 +861,6 @@ static inline NSString *PM_TextV26(NSString *key) {
                 return;
             }
 
-            // Fallback: Kill cả SpringBoard và backboardd để làm mới toàn diện
             const char *killallBin = Titanium_FindExecutable("killall");
             char *argv[] = {(char *)killallBin, (char *)"-9", (char *)"SpringBoard", (char *)"backboardd", NULL};
             posix_spawn(&pid, killallBin, NULL, NULL, argv, environ);
@@ -864,7 +868,6 @@ static inline NSString *PM_TextV26(NSString *key) {
         });
     }]];
 
-    // 2. SREBOOT: Tìm đường dẫn launchctl động thay vì hardcode
     [sheet addAction:[UIAlertAction actionWithTitle:srebootText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
