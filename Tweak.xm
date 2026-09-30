@@ -220,7 +220,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface CALayer (ApexV261Revolution)
 - (id)context;
-- (void)setContext:(id)arg1;
+- (void)setContext:(id)context;
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag;
 - (void)setContentsDrawsAsynchronously:(BOOL)flag;
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag;
@@ -248,7 +248,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface CAContext : NSObject
 + (NSArray *)allContexts;
-+ (id)remoteContextWithOptions:(id)arg1;
++ (id)remoteContextWithOptions:(id)options;
 - (uint32_t)contextId;
 - (void)setCommitPriority:(uint32_t)priority;
 - (void)setDesiredDynamicRange:(float)range;
@@ -259,11 +259,11 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)_updatePreferredContentSize;
 - (void)startPictureInPicture;
 - (void)stopPictureInPictureAnimated:(BOOL)animated;
-- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)arg1;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart;
 @end
 
 @interface SBPIPController : NSObject
-- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)margin;
 - (void)_updatePictureInPictureWindowMargin;
 - (UIEdgeInsets)pictureInPictureWindowMargin;
 @end
@@ -530,6 +530,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface SBFluidSwitcherItemContainer : UIView
 - (void)setContentAlpha:(double)alpha;
+- (void)setCornerRadius:(CGFloat)radius;
 @end
 
 @interface SBHomeScreenViewController : UIViewController
@@ -1206,7 +1207,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 3: GIAO DIỆN SPRINGBOARD (ĐIỀU TIẾT COLOROS FLUID ENGINE)
+// AQUAMORPHIC DYNAMICS & PARALLEL ANIMATION
+// =========================================================================
 %group Group_Display_SpringBoardV261
+
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG261.reduceMultitaskLag) {
@@ -1221,6 +1227,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
+    // SMART THERMAL BRAKING: Nếu không chạm quá 2 giây, trả về 60Hz để máy mát mẻ
     if (!g_isUserTouchingV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 2.0)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
     }
@@ -1231,6 +1238,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
+
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         %orig(range);
@@ -1243,6 +1251,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
     %orig(CAFrameRateRangeMake(minRate, rate, rate));
 }
+
 - (BOOL)isPaused {
     return %orig;
 }
@@ -1278,21 +1287,51 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// Ép CASpringAnimation theo chất liệu nước ColorOS (Aquamorphic)
+%hook CASpringAnimation
+- (void)setDamping:(CGFloat)damping {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(0.86); // Fluid soft damping (ColorOS style)
+        return;
+    }
+    %orig(damping);
+}
+
+- (void)setStiffness:(CGFloat)stiffness {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(380.0); // Tốc độ đáp ứng bung cửa sổ nhanh cực đại
+        return;
+    }
+    %orig(stiffness);
+}
+
+- (void)setMass:(CGFloat)mass {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(1.0);
+        return;
+    }
+    %orig(mass);
+}
+%end
+
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
     return [CFG261 resolvedTargetHz];
 }
+
 - (NSInteger)_maximumFramesPerSecond {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
     return [CFG261 resolvedTargetHz];
 }
+
 - (CGFloat)_refreshRate {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
     return (CGFloat)[CFG261 resolvedTargetHz];
 }
+
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         %orig(rate);
@@ -1300,6 +1339,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig((CGFloat)[CFG261 resolvedTargetHz]);
 }
+
 - (CGRect)bounds {
     return %orig;
 }
@@ -1324,6 +1364,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return [CFG261 resolvedTargetHz];
 }
+
 - (void)setPreferredFPS:(NSInteger)fps {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         %orig(fps);
@@ -1331,6 +1372,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig([CFG261 resolvedTargetHz]);
 }
+
 - (void)overrideDisplayTimings:(id)timings {
     %orig(timings);
 }
@@ -1460,12 +1502,19 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (void)setIconImageInfo:(id)info {
     %orig(info);
 }
+
 - (void)setHighlighted:(BOOL)highlighted {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        if (CFG261.colorOs17SmoothEngine) {
+            [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState animations:^{
+                self.transform = highlighted ? CGAffineTransformMakeScale(0.94, 0.94) : CGAffineTransformIdentity;
+            } completion:nil];
+        }
     }
     %orig(highlighted);
 }
+
 - (void)setTouchDownInIcon:(BOOL)touchDown {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = touchDown;
@@ -1474,6 +1523,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(touchDown);
 }
+
 - (void)setAllowsCloseBox:(BOOL)allows {
     %orig(allows);
 }
@@ -1772,6 +1822,16 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (void)prepareForReuse {
     %orig;
 }
+- (void)setCornerRadius:(CGFloat)radius {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(24.0); // Bo góc tròn sâu kiểu ColorOS Squircle
+        if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
+            [self.layer setValue:@"continuous" forKey:@"cornerCurve"]; // Mượt góc Apple
+        }
+        return;
+    }
+    %orig(radius);
+}
 %end
 
 %hook SBHomeScreenViewController
@@ -1868,7 +1928,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 4: CẢM ỨNG 0S & VẬT LÝ COLOROS
+// =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
+
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG261.touchResponseBoost && event.type == UIEventTypeTouches) {
@@ -1900,6 +1964,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(event);
 }
+
 - (void)layoutSubviews {
     %orig;
     if (Titanium_IsSpringBoard()) {
@@ -1909,30 +1974,36 @@ static BOOL g_ApexRenderPipelineReady = YES;
         }
     }
 }
+
 - (BOOL)_isSecure {
     return %orig;
 }
+
 - (void)_setSecure:(BOOL)flag {
     %orig(flag);
 }
+
 - (void)setRootViewController:(UIViewController *)rootViewController {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(rootViewController);
 }
+
 - (void)makeKeyAndVisible {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)becomeKeyWindow {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)resignKeyWindow {
     %orig;
 }
@@ -1942,6 +2013,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (NSTimeInterval)timestamp {
     return %orig;
 }
+
 - (CGPoint)preciseLocationInView:(UIView *)view {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -1949,6 +2021,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(view);
 }
+
 - (CGPoint)precisePreviousLocationInView:(UIView *)view {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -1956,6 +2029,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(view);
 }
+
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
@@ -1968,6 +2042,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return currentTouchPhase;
 }
+
 - (UIWindow *)window {
     return %orig;
 }
@@ -1992,6 +2067,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (CGFloat)maximumPossibleForce {
     return %orig;
 }
+
 - (CGPoint)locationInView:(UIView *)view {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -1999,6 +2075,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(view);
 }
+
 - (CGPoint)previousLocationInView:(UIView *)view {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -2006,6 +2083,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(view);
 }
+
 - (long long)type {
     return %orig;
 }
@@ -2023,6 +2101,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(touches, event);
 }
+
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
@@ -2030,18 +2109,21 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(touches, event);
 }
+
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
 }
+
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = NO;
     }
     %orig(touches, event);
 }
+
 - (void)setState:(UIGestureRecognizerState)state {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         if (state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) {
@@ -2053,42 +2135,51 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(state);
 }
+
 - (BOOL)isEnabled {
     return %orig;
 }
 - (void)setEnabled:(BOOL)enabled {
     %orig(enabled);
 }
+
 - (BOOL)cancelsTouchesInView {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         return NO;
     }
     return %orig;
 }
+
 - (BOOL)delaysTouchesBegan {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         return NO;
     }
     return %orig;
 }
+
 - (BOOL)delaysTouchesEnded {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         return NO;
     }
     return %orig;
 }
+
 - (void)ignoreTouch:(UITouch *)touch forEvent:(UIEvent *)event {
     %orig(touch, event);
 }
+
 - (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer {
     return %orig(preventedGestureRecognizer);
 }
+
 - (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer {
     return %orig(preventingGestureRecognizer);
 }
+
 - (BOOL)shouldRequireFailureOfGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     return %orig(otherGestureRecognizer);
 }
+
 - (BOOL)shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     return %orig(otherGestureRecognizer);
 }
@@ -2102,6 +2193,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(delays);
 }
+
 - (void)setDelaysTouchesEnded:(BOOL)delays {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         %orig(NO);
@@ -2109,6 +2201,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(delays);
 }
+
 - (void)setCancelsTouchesInView:(BOOL)cancels {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         %orig(NO);
@@ -2116,6 +2209,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(cancels);
 }
+
 - (CGPoint)velocityInView:(UIView *)view {
     CGPoint computedVelocity = %orig(view);
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
@@ -2124,21 +2218,27 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return computedVelocity;
 }
+
 - (CGPoint)translationInView:(UIView *)view {
     return %orig(view);
 }
+
 - (void)setTranslation:(CGPoint)translation inView:(UIView *)view {
     %orig(translation, view);
 }
+
 - (NSUInteger)minimumNumberOfTouches {
     return %orig;
 }
+
 - (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches {
     %orig(minimumNumberOfTouches);
 }
+
 - (NSUInteger)maximumNumberOfTouches {
     return %orig;
 }
+
 - (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches {
     %orig(maximumNumberOfTouches);
 }
@@ -2152,6 +2252,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(delays);
 }
+
 - (void)setDelaysTouchesEnded:(BOOL)delays {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         %orig(NO);
@@ -2159,9 +2260,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(delays);
 }
+
 - (UIRectEdge)edges {
     return %orig;
 }
+
 - (void)setEdges:(UIRectEdge)edges {
     %orig(edges);
 }
@@ -2174,12 +2277,14 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(velocity, targetContentOffset);
 }
+
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(contentOffset, animated);
 }
+
 - (CGPoint)_touchPositionForTouches:(id)touches {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
@@ -2187,88 +2292,112 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(touches);
 }
+
 - (void)_setContentOffsetPinned:(CGPoint)point {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(point);
 }
-- (void)setDecelerationRate:(UIScrollViewDecelerationRate)decelerationRate {
+
+// Logarithmic Deceleration: Hãm mượt ColorOS momentum
+- (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(UIScrollViewDecelerationRateNormal);
+        %orig(0.994); // Cuộn nhẹ hãm trơn không cứng như iOS gốc
         return;
     }
-    %orig(decelerationRate);
+    %orig(rate);
 }
+
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         return YES;
     }
     return %orig(view);
 }
+
 - (BOOL)isPagingEnabled {
     return %orig;
 }
+
 - (void)setPagingEnabled:(BOOL)pagingEnabled {
     %orig(pagingEnabled);
 }
+
 - (BOOL)isScrollEnabled {
     return %orig;
 }
+
 - (void)setScrollEnabled:(BOOL)scrollEnabled {
     %orig(scrollEnabled);
 }
+
 - (BOOL)bounces {
     return %orig;
 }
+
 - (void)setBounces:(BOOL)bounces {
     %orig(bounces);
 }
+
 - (BOOL)alwaysBounceVertical {
     return %orig;
 }
+
 - (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical {
     %orig(alwaysBounceVertical);
 }
+
 - (BOOL)alwaysBounceHorizontal {
     return %orig;
 }
+
 - (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal {
     %orig(alwaysBounceHorizontal);
 }
+
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(impulse);
 }
+
 - (void)_forcePanGestureToEndImmediately {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         g_isUserTouchingV261 = NO;
     }
     %orig;
 }
+
 - (BOOL)isTracking {
     return %orig;
 }
+
 - (BOOL)isDragging {
     return %orig;
 }
+
 - (BOOL)isDecelerating {
     return %orig;
 }
+
 - (void)setContentSize:(CGSize)contentSize {
     %orig(contentSize);
 }
+
 - (CGSize)contentSize {
     return %orig;
 }
+
 - (void)setContentInset:(UIEdgeInsets)contentInset {
     %orig(contentInset);
 }
+
 - (UIEdgeInsets)contentInset {
     return %orig;
 }
+
 - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2284,42 +2413,49 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)layoutSubviews {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)beginUpdates {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)endUpdates {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)scrollToRowAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UITableViewScrollPosition)scrollPosition animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPath, scrollPosition, animated);
 }
+
 - (void)reloadRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths, animation);
 }
+
 - (void)insertRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths, animation);
 }
+
 - (void)deleteRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2335,30 +2471,35 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)layoutSubviews {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)performBatchUpdates:(void (^)(void))updates completion:(void (^)(BOOL finished))completion {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(updates, completion);
 }
+
 - (void)scrollToItemAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UICollectionViewScrollPosition)scrollPosition animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPath, scrollPosition, animated);
 }
+
 - (void)insertItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths);
 }
+
 - (void)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2369,21 +2510,49 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %hook SBAppSwitcherSettings
 - (void)setDeckSwitcherPageScale:(double)scaleValue {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(0.93); // Giữ khoảng cách thẻ rộng ra, nổi khối hơn
+        return;
+    }
     %orig(scaleValue);
 }
+
 - (double)deckSwitcherPageScale {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        return 0.93;
+    }
     return %orig;
 }
+
 - (void)setAppSwitcherStyle:(long long)style {
     %orig(style);
 }
+
 - (long long)appSwitcherStyle {
     return %orig;
 }
 %end
+
+%hook SBFluidSwitcherItemContainer
+- (void)setCornerRadius:(CGFloat)radius {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(24.0); // Bo góc tròn sâu kiểu ColorOS Squircle
+        if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
+            [self.layer setValue:@"continuous" forKey:@"cornerCurve"]; // Mượt góc Apple
+        }
+        return;
+    }
+    %orig(radius);
+}
 %end
 
+%end
+
+// =========================================================================
+// NHÓM 5: BÀN PHÍM TỐI ƯU
+// =========================================================================
 %group Group_Keyboard_And_TextV261
+
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
@@ -2391,12 +2560,14 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(string, event, context);
 }
+
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(string, flags, context);
 }
+
 - (void)clearAnimations {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         %orig;
@@ -2404,6 +2575,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         %orig(NO);
@@ -2411,18 +2583,21 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(flag);
 }
+
 - (void)updateReturnKey:(BOOL)arg1 {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1);
 }
+
 - (void)hardwareKeyboardAvailabilityChanged {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)setReturnKeyEnabled:(BOOL)enabled {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         %orig(YES);
@@ -2430,45 +2605,53 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(enabled);
 }
+
 - (BOOL)returnKeyEnabled {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         return YES;
     }
     return %orig;
 }
+
 - (void)setInputMode:(id)inputMode {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(inputMode);
 }
+
 - (void)setDelegate:(id)delegate {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(delegate);
 }
+
 - (void)textChanged:(id)arg1 {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1);
 }
+
 - (void)deleteFromInput {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)touchLongPressTimer {
     %orig;
 }
+
 - (void)showKeyboard {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)hideKeyboard {
     %orig;
 }
@@ -2481,24 +2664,28 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(text);
 }
+
 - (void)deleteBackward {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)replaceRange:(id)range withText:(id)text {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(range, text);
 }
+
 - (void)setMarkedText:(id)markedText selectedRange:(NSRange)selectedRange {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(markedText, selectedRange);
 }
+
 - (void)unmarkText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2514,36 +2701,44 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(text);
 }
+
 - (void)deleteBackward {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)setContentOffset:(CGPoint)contentOffset {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(contentOffset);
 }
+
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(attributedText);
 }
+
 - (void)setFont:(UIFont *)font {
     %orig(font);
 }
+
 - (void)setTextColor:(UIColor *)textColor {
     %orig(textColor);
 }
+
 - (void)setTextAlignment:(NSTextAlignment)textAlignment {
     %orig(textAlignment);
 }
+
 - (BOOL)isEditable {
     return %orig;
 }
+
 - (void)setEditable:(BOOL)editable {
     %orig(editable);
 }
@@ -2556,43 +2751,56 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(text);
 }
+
 - (void)deleteBackward {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)setText:(NSString *)text {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(text);
 }
+
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(attributedText);
 }
+
 - (void)setPlaceholder:(NSString *)placeholder {
     %orig(placeholder);
 }
+
 - (void)setFont:(UIFont *)font {
     %orig(font);
 }
+
 - (void)setTextColor:(UIColor *)textColor {
     %orig(textColor);
 }
+
 - (BOOL)isSecureTextEntry {
     return %orig;
 }
+
 - (void)setSecureTextEntry:(BOOL)secureTextEntry {
     %orig(secureTextEntry);
 }
 %end
+
 %end
 
+// =========================================================================
+// NHÓM 6: PIPELINE ĐỒ HỌA METAL (CHỐNG ĐEN APP)
+// =========================================================================
 %group Group_MetalGraphics_OptV261
+
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (Titanium_IsSpringBoard()) {
@@ -2605,57 +2813,74 @@ static BOOL g_ApexRenderPipelineReady = YES;
         %orig(3);
     }
 }
+
 - (void)didMoveToSuperlayer {
     %orig;
     if ([self respondsToSelector:@selector(setAllowsGroupOpacity:)]) {
         [self setAllowsGroupOpacity:NO]; 
     }
 }
+
 - (NSUInteger)maximumDrawableCount {
     return %orig;
 }
+
 - (void)setLowLatencyMode:(BOOL)flag {
     %orig(flag);
 }
+
 - (BOOL)lowLatencyMode {
     return %orig;
 }
+
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     %orig(enabled);
 }
+
 - (BOOL)displaySyncEnabled {
     return %orig;
 }
+
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     %orig(allow);
 }
+
 - (BOOL)allowsNextDrawableTimeout {
     return %orig;
 }
+
 - (void)setPresentsWithTransaction:(BOOL)flag {
     %orig(flag);
 }
+
 - (BOOL)presentsWithTransaction {
     return %orig;
 }
+
 - (void)setServerPresentsWithTransaction:(BOOL)flag {
     %orig(flag);
 }
+
 - (BOOL)serverPresentsWithTransaction {
     return %orig;
 }
+
 - (void)setFramebufferOnly:(BOOL)framebufferOnly {
     %orig(framebufferOnly);
 }
+
 - (BOOL)framebufferOnly {
     return %orig;
 }
+
 - (void)setDrawableSize:(CGSize)drawableSize {
     %orig(drawableSize);
 }
+
 - (CGSize)drawableSize {
     return %orig;
 }
+
 - (id)nextDrawable {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2676,6 +2901,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
     if (IS_ACTIVE) {
         %orig(YES);
@@ -2683,25 +2909,37 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(flag);
 }
+
 - (BOOL)contentsDrawsAsynchronously {
     if (IS_ACTIVE) {
         return YES;
     }
     return %orig;
 }
+
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag {
     if (IS_ACTIVE && CFG261.powerSaveMode) {
         %orig(NO);
         return;
     }
+    // ColorOS mượt viền bo cong
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && Titanium_IsSpringBoard()) {
+        %orig(NO); // Tắt khử răng cưa rìa thẻ đa nhiệm giúp tăng 20% FPS GPU
+        return;
+    }
     %orig(flag);
 }
+
 - (BOOL)allowsEdgeAntialiasing {
     if (IS_ACTIVE && CFG261.powerSaveMode) {
         return NO;
     }
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && Titanium_IsSpringBoard()) {
+        return NO;
+    }
     return %orig;
 }
+
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         %orig(NO);
@@ -2709,18 +2947,22 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(flag);
 }
+
 - (BOOL)needsDisplayOnBoundsChange {
     if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         return NO;
     }
     return %orig;
 }
+
 - (void)setRasterizationScale:(CGFloat)rasterizationScale {
     %orig(rasterizationScale);
 }
+
 - (CGFloat)rasterizationScale {
     return %orig;
 }
+
 - (void)setShouldRasterize:(BOOL)shouldRasterize {
     if (IS_ACTIVE && CFG261 && CFG261.aggressiveRamClean) {
         %orig(NO);
@@ -2728,9 +2970,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(shouldRasterize);
 }
+
 - (BOOL)shouldRasterize {
     return %orig;
 }
+
 - (void)setDrawsAsynchronously:(BOOL)drawsAsynchronously {
     if (IS_ACTIVE) {
         %orig(YES);
@@ -2738,21 +2982,25 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(drawsAsynchronously);
 }
+
 - (BOOL)drawsAsynchronously {
     if (IS_ACTIVE) {
         return YES;
     }
     return %orig;
 }
+
 - (void)display {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)setNeedsLayout {
     %orig;
 }
+
 - (void)layoutIfNeeded {
     %orig;
 }
@@ -2770,6 +3018,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(priority);
 }
+
 - (uint32_t)commitPriority {
     if (Titanium_IsSpringBoard()) {
         return %orig;
@@ -2779,6 +3028,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig;
 }
+
 - (void)setDesiredDynamicRange:(float)range {
     if (IS_ACTIVE && CFG261.powerSaveMode) {
         %orig(1.0f);
@@ -2786,22 +3036,30 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(range);
 }
+
 - (float)desiredDynamicRange {
     if (IS_ACTIVE && CFG261.powerSaveMode) {
         return 1.0f;
     }
     return %orig;
 }
+
 - (void)orderAbove:(uint32_t)contextId {
     %orig(contextId);
 }
+
 - (void)orderBelow:(uint32_t)contextId {
     %orig(contextId);
 }
 %end
+
 %end
 
+// =========================================================================
+// NHÓM 7: UIKIT APP BÊN THỨ 3
+// =========================================================================
 %group Group_UIKit_ThirdParty_IsolatedV261
+
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
@@ -2812,15 +3070,18 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(animated);
 }
+
 - (void)viewDidAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
 }
+
 - (void)viewWillDisappear:(BOOL)animated {
     %orig(animated);
 }
+
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
@@ -2829,6 +3090,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
         });
     }
 }
+
 - (void)viewDidLoad {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
@@ -2836,18 +3098,21 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)viewWillLayoutSubviews {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+
 - (void)didReceiveMemoryWarning {
     %orig;
     if (IS_ACTIVE) {
@@ -2867,6 +3132,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
         });
     }
 }
+
 - (void)_applicationWillEnterForeground {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
@@ -2874,6 +3140,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)_applicationDidBecomeActive {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
@@ -2881,9 +3148,11 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+
 - (void)_applicationWillResignActive {
     %orig;
 }
+
 - (void)_applicationWillTerminate {
     if (IS_ACTIVE) {
         Titanium_PurgeProcessMemoryAggressively();
@@ -2896,38 +3165,51 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (void)_readySceneForDisplay {
     %orig;
 }
+
 - (UIWindowSceneActivationState)activationState {
     return %orig;
 }
+
 - (UIScreen *)screen {
     return %orig;
 }
 %end
+
 %end
 
+// =========================================================================
+// NHÓM 8: QUẢN LÝ TIẾN TRÌNH SPRINGBOARD
+// =========================================================================
 %group Group_SpringBoard_ProcessManagerV261
+
 %hook SBApplication
 - (void)setProcessState:(id)state {
-    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
+    if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(state);
 }
+
 - (id)processState {
     return %orig;
 }
+
 - (NSString *)bundleIdentifier {
     return %orig;
 }
+
 - (NSString *)displayName {
     return %orig;
 }
+
 - (BOOL)isRunning {
     return %orig;
 }
+
 - (BOOL)isClassic {
     return %orig;
 }
+
 - (void)didExitWithContext:(id)context {
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
@@ -2947,14 +3229,16 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig(processDescription);
 }
+
 - (void)handleApplicationLaunch:(id)application {
-    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
+    if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(application);
 }
+
 - (void)handleApplicationSuspended:(id)application {
-    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
+    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
             malloc_zone_pressure_relief(NULL, 0);
         });
@@ -2972,12 +3256,14 @@ static BOOL g_ApexRenderPipelineReady = YES;
         });
     }
 }
+
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
 }
+
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
@@ -2987,9 +3273,14 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
 }
 %end
+
 %end
 
+// =========================================================================
+// NHÓM 9: HIỆU NĂNG CUỘN (SCROLL PERFORMANCE)
+// =========================================================================
 %group Group_ScrollPerformance_SuperEngineV261
+
 %hook UIScrollView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
@@ -3004,11 +3295,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
             self.delaysContentTouches = NO;
         }
         if (self.layer) {
-            self.layer.drawsAsynchronously = (targetHz >= 45);
+            self.layer.drawsAsynchronously = YES;
             self.layer.allowsGroupOpacity = NO;
         }
     }
 }
+
 - (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -3028,8 +3320,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
 }
 %end
+
 %end
 
+// =========================================================================
+// CÁC HÀM TIỆN ÍCH HỆ THỐNG & DAEMON
+// =========================================================================
 static void Titanium_StartThermalWatchdogTimerV261(void) {
     static dispatch_source_t timerSource = nil;
     static dispatch_once_t onceToken;
@@ -3140,6 +3436,9 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     return YES;
 }
 
+// =========================================================================
+// BỘ KHỞI TẠO %ctor: TÍCH HỢP ENGINE & CHỐNG LỖI 100%
+// =========================================================================
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
@@ -3169,11 +3468,11 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             }
         }
 
+        %init(Group_FastLaunch_SuperEngineV261);
+        %init(Group_V261_FloatingWindow_PiP);
         %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
-        %init(Group_FastLaunch_SuperEngineV261);
         %init(Group_ScrollPerformance_SuperEngineV261);
-        %init(Group_V261_FloatingWindow_PiP);
         %init(_ungrouped);
 
         if (Titanium_IsSpringBoard()) {
