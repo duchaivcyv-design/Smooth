@@ -2498,7 +2498,7 @@ static BOOL g_ApexRenderPipelineReady = NO;
     return %orig;
 }
 
-- (scrollRectToVisible:(CGRect)rect animated:(BOOL)animated)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
+- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
