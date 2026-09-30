@@ -723,13 +723,14 @@ static inline void Titanium_PurgeProcessMemoryAggressively(void) {
     #endif
 }
 
-static void Titanium_WriteSyncPayloadV261(ApexV261Payload *payload) {
+static void Titanium_WriteSyncPayloadV261(const ApexV261Payload *payload) {
     if (!payload) return;
-    payload->magic = APEX_SYNC_MAGIC_V261;
-    payload->updateSeq = (uint64_t)mach_absolute_time();
+    ApexV261Payload temp = *payload;
+    temp.magic = APEX_SYNC_MAGIC_V261;
+    temp.updateSeq = (uint64_t)mach_absolute_time();
     int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd >= 0) {
-        write(fd, payload, sizeof(ApexV261Payload));
+        write(fd, &temp, sizeof(ApexV261Payload));
         close(fd);
         chmod([SHARED_SYNC_FILE UTF8String], 0666);
     }
