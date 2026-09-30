@@ -2015,32 +2015,42 @@ static BOOL g_ApexRenderPipelineReady = NO;
 %group Group_ZeroLatencyTouch_PhysicsV261
 
 %hook UIWindow
+
 - (void)sendEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        if (event.type == UIEventTypeTouches) {
+    if (IS_ACTIVE && CFG261.touchResponseBoost && event.type == UIEventTypeTouches) {
+        NSSet *allTouches = [event allTouches];
+        BOOL hasActiveTouch = NO;
+        BOOL isInitialTouch = NO;
+
+        for (UITouch *touch in allTouches) {
+            UITouchPhase phase = touch.phase;
+            if (phase == UITouchPhaseBegan) {
+                isInitialTouch = YES;
+                hasActiveTouch = YES;
+                break;
+            } else if (phase == UITouchPhaseMoved || phase == UITouchPhaseStationary) {
+                hasActiveTouch = YES;
+            }
+        }
+
+        if (hasActiveTouch) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            
-            if (!Titanium_IsSpringBoard()) {
+
+            // CHỈ gán Mach Realtime Constraint đúng 1 lần khi ngón tay vừa chạm mặt kính (Phase Began)
+            // Tránh bão hòa Kernel IPC khi đang vuốt liên tục
+            if (isInitialTouch && !Titanium_IsSpringBoard()) {
                 thread_t currentMachThread = mach_thread_self();
                 Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)[CFG261 resolvedTargetFPS]);
                 mach_port_deallocate(mach_task_self(), currentMachThread);
             }
+        } else {
+            g_isUserTouchingV261 = NO;
         }
     }
+
     %orig(event);
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        if (event.type == UIEventTypeTouches) {
-            NSSet *activeTouches = [event allTouches];
-            for (UITouch *touchObject in activeTouches) {
-                if (touchObject.phase == UITouchPhaseEnded || touchObject.phase == UITouchPhaseCancelled) {
-                    g_isUserTouchingV261 = NO;
-                    break;
-                }
-            }
-        }
-    }
 }
 
 - (void)layoutSubviews {
@@ -2085,6 +2095,7 @@ static BOOL g_ApexRenderPipelineReady = NO;
 - (void)resignKeyWindow {
     %orig;
 }
+
 %end
 
 %hook UITouch
