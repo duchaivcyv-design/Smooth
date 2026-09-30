@@ -940,7 +940,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
                 self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
                 self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
                 self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
-                self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel == 6) ? YES : NO;
+                self.metalHexBuffering = (g_syncPayloadV261.smartBufferingLevel >= 4) ? YES : NO;
                 self.neuralBufferOpt = self.metalHexBuffering;
                 self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
                 self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
@@ -966,7 +966,18 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.pipSyncEnabled = 1;
             p.thermalShield = self.antiThermalThrottling ? 1 : 0;
             p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = self.metalHexBuffering ? 6 : 4;
+            
+            // Tính toán tầng đệm thông minh theo dải tần số quét
+            int32_t bufferLevel = 3;
+            if (self.targetHz >= 120 || self.forceOverclock144Hz) {
+                bufferLevel = 6;
+            } else if (self.targetHz >= 80) {
+                bufferLevel = 5;
+            } else if (self.targetHz >= 45) {
+                bufferLevel = 4;
+            }
+            p.smartBufferingLevel = bufferLevel;
+            
             p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
             p.shaderOptimization = 1;
             p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
@@ -1032,6 +1043,32 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
+
+// Nhận diện màn hình ProMotion nguyên bản (iPhone 13 Pro -> 15 Pro Max)
+static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
+    static BOOL sHasProMotion = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        uname(&sysInfo);
+        NSString *devCode = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        if ([devCode containsString:@"iPhone14,2"] || [devCode containsString:@"iPhone14,3"] ||
+            [devCode containsString:@"iPhone15,2"] || [devCode containsString:@"iPhone15,3"] ||
+            [devCode containsString:@"iPhone16,1"] || [devCode containsString:@"iPhone16,2"]) {
+            sHasProMotion = YES;
+        } else {
+            if (@available(iOS 15.0, *)) {
+                if ([UIScreen mainScreen].maximumFramesPerSecond > 60) {
+                    sHasProMotion = YES;
+                }
+            }
+        }
+    });
+    return sHasProMotion;
+}
+
+// Cờ kích hoạt tiêm trễ chống đen app
+static BOOL g_ApexRenderPipelineReady = NO;
 
 %group Group_FastLaunch_SuperEngineV261
 
@@ -1209,7 +1246,18 @@ static BoostConfigV261 *CFG261 = nil;
         return %orig;
     }
     float rate = (float)[CFG261 resolvedTargetHz];
-    return CAFrameRateRangeMake(rate, rate, rate);
+    if (rate < 15.0f) rate = 15.0f;
+    if (rate > 144.0f) rate = 144.0f;
+    
+    // Tự động phân giải an toàn chống Safe Mode trên màn 60Hz gốc
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        float safeTarget = (rate > 60.0f) ? 60.0f : rate;
+        float minRate = (safeTarget <= 30.0f) ? 15.0f : 30.0f;
+        return CAFrameRateRangeMake(minRate, safeTarget, safeTarget);
+    }
+    
+    float minRate = (rate <= 60.0f) ? 15.0f : 60.0f;
+    return CAFrameRateRangeMake(minRate, rate, rate);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
@@ -1218,7 +1266,17 @@ static BoostConfigV261 *CFG261 = nil;
         return;
     }
     float rate = (float)[CFG261 resolvedTargetHz];
-    %orig(CAFrameRateRangeMake(rate, rate, rate));
+    if (rate < 15.0f) rate = 15.0f;
+    if (rate > 144.0f) rate = 144.0f;
+    
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        float safeTarget = (rate > 60.0f) ? 60.0f : rate;
+        float minRate = (safeTarget <= 30.0f) ? 15.0f : 30.0f;
+        %orig(CAFrameRateRangeMake(minRate, safeTarget, safeTarget));
+    } else {
+        float minRate = (rate <= 60.0f) ? 15.0f : 60.0f;
+        %orig(CAFrameRateRangeMake(minRate, rate, rate));
+    }
 }
 
 - (BOOL)isPaused {
@@ -1248,8 +1306,16 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
         float target = (float)[CFG261 resolvedTargetHz];
-        float minHz = (float)(CFG261.powerSaveMode ? 15 : 60);
-        %orig(CAFrameRateRangeMake(minHz, target, target));
+        if (target < 15.0f) target = 15.0f;
+        if (target > 144.0f) target = 144.0f;
+        
+        float minHz = (float)(CFG261.powerSaveMode ? 15.0f : ((target < 60.0f) ? 15.0f : 30.0f));
+        if (!Titanium_IsDeviceProMotionHardware()) {
+            float safeTarget = (target > 60.0f) ? 60.0f : target;
+            %orig(CAFrameRateRangeMake(minHz, safeTarget, safeTarget));
+        } else {
+            %orig(CAFrameRateRangeMake(minHz, target, target));
+        }
     } else {
         %orig(range);
     }
@@ -1260,19 +1326,31 @@ static BoostConfigV261 *CFG261 = nil;
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
-    return [CFG261 resolvedTargetHz];
+    NSInteger rate = [CFG261 resolvedTargetHz];
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        return (rate > 60) ? 60 : rate;
+    }
+    return rate;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
-    return [CFG261 resolvedTargetHz];
+    NSInteger rate = [CFG261 resolvedTargetHz];
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        return (rate > 60) ? 60 : rate;
+    }
+    return rate;
 }
 
 - (CGFloat)_refreshRate {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
-    return (CGFloat)[CFG261 resolvedTargetHz];
+    CGFloat rate = (CGFloat)[CFG261 resolvedTargetHz];
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        return (rate > 60.0) ? 60.0 : rate;
+    }
+    return rate;
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
@@ -1281,6 +1359,9 @@ static BoostConfigV261 *CFG261 = nil;
         return;
     }
     CGFloat targetRate = (CGFloat)[CFG261 resolvedTargetHz];
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        if (targetRate > 60.0) targetRate = 60.0;
+    }
     %orig(targetRate);
 }
 
@@ -1304,7 +1385,9 @@ static BoostConfigV261 *CFG261 = nil;
     CADisplayLink *link = %orig(target, sel);
     if (IS_ACTIVE && CFG261.enableHzControl) {
         float r = (float)[CFG261 resolvedTargetHz];
-        [link setPreferredFrameRateRange:CAFrameRateRangeMake(r, r, r)];
+        float safeR = (!Titanium_IsDeviceProMotionHardware() && r > 60.0f) ? 60.0f : r;
+        float minR = (safeR <= 30.0f) ? 15.0f : 30.0f;
+        [link setPreferredFrameRateRange:CAFrameRateRangeMake(minR, safeR, safeR)];
     }
     return link;
 }
@@ -1315,7 +1398,11 @@ static BoostConfigV261 *CFG261 = nil;
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
-    return [CFG261 resolvedTargetHz];
+    NSInteger target = [CFG261 resolvedTargetHz];
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        return (target > 60) ? 60 : target;
+    }
+    return target;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
@@ -1324,20 +1411,18 @@ static BoostConfigV261 *CFG261 = nil;
         return;
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
+    if (!Titanium_IsDeviceProMotionHardware()) {
+        if (targetHz > 60) targetHz = 60;
+    }
     %orig(targetHz);
 }
 
 - (void)overrideDisplayTimings:(id)timings {
-    if (IS_ACTIVE && CFG261.antiThermalThrottling) {
-        return;
-    }
+    // Luôn giữ liên lạc Driver IOKit tránh Safe Mode sập SpringBoard
     %orig(timings);
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
-    if (IS_ACTIVE && CFG261.antiThermalThrottling) {
-        return;
-    }
     %orig(cadence);
 }
 
@@ -2790,9 +2875,22 @@ static BoostConfigV261 *CFG261 = nil;
         %orig(3);
         return;
     }
-    if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
-        %orig(6);
-        return;
+    if (IS_ACTIVE) {
+        NSInteger targetHz = [CFG261 resolvedTargetHz];
+        // Tự động phân chia tầng đệm GPU bù trừ tuyến tính theo Hz
+        if (targetHz >= 120 || CFG261.forceOverclock144Hz) {
+            %orig(6);
+            return;
+        } else if (targetHz >= 80) {
+            %orig(5);
+            return;
+        } else if (targetHz >= 45) {
+            %orig(4);
+            return;
+        } else {
+            %orig(3);
+            return;
+        }
     }
     %orig(count);
 }
@@ -2808,8 +2906,12 @@ static BoostConfigV261 *CFG261 = nil;
     if (Titanium_IsSpringBoard()) {
         return 3;
     }
-    if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
-        return 6;
+    if (IS_ACTIVE) {
+        NSInteger targetHz = [CFG261 resolvedTargetHz];
+        if (targetHz >= 120 || CFG261.forceOverclock144Hz) return 6;
+        if (targetHz >= 80) return 5;
+        if (targetHz >= 45) return 4;
+        return 3;
     }
     return %orig;
 }
@@ -2929,6 +3031,9 @@ static BoostConfigV261 *CFG261 = nil;
     if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
         if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [CFG261 isCustomHzEnabled]) {
             NSInteger targetVal = [CFG261 resolvedTargetFPS];
+            if (!Titanium_IsDeviceProMotionHardware() && targetVal > 60) {
+                targetVal = 60;
+            }
             self.preferredFramesPerSecond = targetVal;
         }
     }
@@ -3313,10 +3418,22 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
-        self.delaysContentTouches = NO;
-        self.canCancelContentTouches = YES;
-        self.decelerationRate = UIScrollViewDecelerationRateNormal;
-        self.layer.drawsAsynchronously = YES;
+        NSInteger targetHz = [CFG261 resolvedTargetHz];
+        
+        // Bù quán tính cuộn: Càng cao càng lướt bay, dính tay
+        if (targetHz >= 80) {
+            self.decelerationRate = UIScrollViewDecelerationRateNormal;
+            self.delaysContentTouches = NO;
+            self.canCancelContentTouches = YES;
+        } else if (targetHz >= 45) {
+            self.decelerationRate = UIScrollViewDecelerationRateNormal;
+            self.delaysContentTouches = NO;
+        }
+        
+        if (self.layer) {
+            self.layer.drawsAsynchronously = (targetHz >= 45);
+            self.layer.allowsGroupOpacity = NO;
+        }
     }
 }
 
@@ -3381,9 +3498,11 @@ static void Titanium_StartPassiveRamDaemonV261(void) {
 }
 
 static void Titanium_ReloadPreferencesV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
-        [CFG261 loadSettings];
-    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
+            [CFG261 loadSettings];
+        }
+    });
 }
 
 static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
@@ -3423,11 +3542,13 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
-// 1. KHAI BÁO HÀM CALLBACK ĐỒNG BỘ CÀI ĐẶT (CHỐNG LỖI UNDECLARED IDENTIFIER)
+// 1. KHAI BÁO HÀM CALLBACK ĐỒNG BỘ CÀI ĐẶT (CHỐNG LỖI UNDECLARED IDENTIFIER & CHỐNG TREO LUỒNG)
 static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
-        [CFG261 loadSettings];
-    }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
+            [CFG261 loadSettings];
+        }
+    });
 }
 
 static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName) {
@@ -3534,13 +3655,22 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // 7. GIA TỐC RUNTIME CHO GIAI ĐOẠN APP HOÀN TẤT KHỞI ĐỘNG
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification * _Nonnull note) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        }];
+        // 7. GIA TỐC VÀ TRỄ KHỞI TẠO ĐỒ HỌA TRÁNH ĐEN MÀN HÌNH (ANTI-BLACK SCREEN ROOTHIDE)
+        if (Titanium_IsSpringBoard()) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                g_ApexRenderPipelineReady = YES;
+            });
+        } else {
+            [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                              object:nil
+                                                               queue:[NSOperationQueue mainQueue]
+                                                          usingBlock:^(NSNotification * _Nonnull note) {
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    g_ApexRenderPipelineReady = YES;
+                });
+            }];
+        }
 
         // 8. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
