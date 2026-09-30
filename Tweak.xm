@@ -2662,6 +2662,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
         if (configClass) {
             CFG261 = [configClass sharedInstance];
         }
+        %end
+
+        %end
 
         // 1. NẠP NHÓM ĐIỀU KHIỂN HZ/FPS TOÀN CỤC CHO CẢ SPRINGBOARD LẪN MỌI APP
         %init(Group_UniversalDisplayControlV261);
