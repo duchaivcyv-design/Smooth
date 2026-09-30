@@ -7,14 +7,15 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-BUNDLE_NAME = BoostiPhone6sPrefs
+BUNDLE_NAME = BoostiPhone6s
 
-BoostiPhone6sPrefs_FILES = RootListController.m
-BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
+BoostiPhone6s_FILES = RootListController.m
+BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics Foundation
+# KHÔNG đưa Preferences vào PRIVATE_FRAMEWORKS để tránh lỗi thiếu SDK stub trên CI
+BoostiPhone6s_PRIVATE_FRAMEWORKS =
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
-BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
+BoostiPhone6s_CFLAGS = -fobjc-arc \
                             -O3 \
                             -Wall \
                             -Wno-error \
@@ -32,8 +33,8 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I../ \
                             -I.
 
-# CẤU HÌNH LDFLAGS TƯƠNG THÍCH HOÀN TOÀN ROOTHIDE & ROOTLESS
-BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
+# CẤU HÌNH LDFLAGS BỎ QUA KIỂM TRA SYMBOL CỦA PREFERENCES TRÊN RUNNER
+BoostiPhone6s_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -Wl,-install_name,@rpath/BoostiPhone6sPrefs \
                             -Wl,-rpath,/System/Library/PrivateFrameworks \
