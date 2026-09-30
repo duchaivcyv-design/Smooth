@@ -307,7 +307,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface UITextInputController : NSObject
 - (void)_insertText:(id)text;
-- (deleteBackward)deleteBackward;
+- (void)deleteBackward;
 @end
 
 @interface SBIconController : NSObject
