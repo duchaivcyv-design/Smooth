@@ -2603,6 +2603,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+%end
+
 // FIX LỖI 6: TỐI ƯU HÓA BÀN PHÍM KHI GÕ NHIỀU CHỮ / CODE TRONG APP NẶNG
 %group Group_Keyboard_And_TextV261
 
