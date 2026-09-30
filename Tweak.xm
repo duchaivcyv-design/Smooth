@@ -577,7 +577,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface SBIdleTimerGlobalCoordinator : NSObject
 + (instancetype)sharedInstance;
-- (resetIdleTimer)resetIdleTimer;
+- (void)resetIdleTimer;
 @end
 
 @interface SBAppLayout : NSObject
