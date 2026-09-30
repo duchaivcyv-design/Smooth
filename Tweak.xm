@@ -3399,6 +3399,13 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
+// 1. KHAI BÁO HÀM CALLBACK ĐỒNG BỘ CÀI ĐẶT (CHỐNG LỖI UNDECLARED IDENTIFIER)
+static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
+        [CFG261 loadSettings];
+    }
+}
+
 static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName) {
     if (!progName) return NO;
     if (strstr(progName, "ReportCrash") || strstr(progName, "crashreporterd") || 
@@ -3420,7 +3427,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     @autoreleasepool {
         const char *progName = getprogname();
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        NSString *processName = [[NSProcessInfo processInfo] processName];
 
         // 1. KIỂM TRA BẢO VỆ CHỐNG BOOTLOOP & SÀNG LỌC TIẾN TRÌNH NGUY HIỂM
         if (!Titanium_CheckAndPreventBootloopUniversal()) {
@@ -3436,18 +3442,20 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             return;
         }
 
-        // 2. ÉP BUỘC CHÍNH SÁCH ĐIỀU PHỐI THỜI GIAN THỰC LÊN NHÂN MACH KERNEL
+        // 2. ĐIỀU PHỐI ĐỘ ƯU TIÊN AN TOÀN (KHÔNG ÉP THREAD TIME CONSTRAINT LÊN SPRINGBOARD ĐỂ TRÁNH LAG/KHỰNG)
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        mach_port_t currentThread = mach_thread_self();
-        thread_time_constraint_policy_data_t timeConstraint;
-        timeConstraint.period = 1000000;         // 1ms danh nghĩa
-        timeConstraint.computation = 60000;      // 60us xử lý đồ họa
-        timeConstraint.constraint = 250000;      // 250us giới hạn tối đa
-        timeConstraint.preemptible = 1;
-        thread_policy_set(currentThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-        mach_port_deallocate(mach_task_self(), currentThread);
+        if (!Titanium_IsSpringBoard()) {
+            mach_port_t currentThread = mach_thread_self();
+            thread_time_constraint_policy_data_t timeConstraint;
+            timeConstraint.period = 1000000;         // 1ms danh nghĩa
+            timeConstraint.computation = 60000;      // 60us xử lý đồ họa
+            timeConstraint.constraint = 250000;      // 250us giới hạn tối đa
+            timeConstraint.preemptible = 1;
+            thread_policy_set(currentThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+            mach_port_deallocate(mach_task_self(), currentThread);
+        }
 
-        // 3. NẠP CẤU HÌNH TỨC THÌ (DÒ TÌM TRỰC TIẾP TỪ RUNTIME ĐA NỀN TẢNG)
+        // 3. NẠP CẤU HÌNH TỨC THÌ
         Class configClass = NSClassFromString(@"BoostConfigV261");
         if (!configClass) {
             int classCount = objc_getClassList(NULL, 0);
@@ -3487,7 +3495,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             %init(Group_Display_SpringBoardV261);
             %init(Group_SpringBoard_ProcessManagerV261);
         } else {
-            // Ép nạp duy nhất một lần tại đây cho ứng dụng bên thứ 3
             %init(Group_UIKit_ThirdParty_IsolatedV261);
         }
 
@@ -3503,7 +3510,7 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // 7. GIA TỐC RUNTIME CHO GIAI ĐOẠN APP HOÀN TẤT KHỞI ĐỘNG (KHÔNG RE-%INIT)
+        // 7. GIA TỐC RUNTIME CHO GIAI ĐOẠN APP HOÀN TẤT KHỞI ĐỘNG
         [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                           object:nil
                                                            queue:[NSOperationQueue mainQueue]
@@ -3511,28 +3518,25 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }];
 
-        // 8. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION (CHỐNG TREO WATCHDOG TIMEOUT)
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 8. KHỞI TẠO BẤT ĐỒNG BỘ DAEMON VÀ KÊNH NOTIFICATION
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-                // Kích hoạt giám sát nhiệt độ
                 Titanium_StartThermalWatchdogTimerV261();
 
-                // Lắng nghe thông báo thay đổi cài đặt từ Darwin Notify Center
                 CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
                 if (darwinCenter) {
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, reloadPrefsNotificationV261,
+                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
                         CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, reloadPrefsNotificationV261,
+                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
                         CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)Titanium_ReloadPreferencesV261,
+                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
                         CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
                 }
 
-                // Dọn dẹp RAM nền định kỳ 90s cho SpringBoard sau 15 giây ổn định hệ thống
                 if (Titanium_IsSpringBoard()) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         Titanium_StartPassiveRamDaemonV261();
                     });
                 }
