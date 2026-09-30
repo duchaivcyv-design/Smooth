@@ -57,7 +57,6 @@
 extern "C" {
 #endif
     kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
-    void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
     const char *getprogname(void);
     extern char **environ;
 #ifdef __cplusplus
