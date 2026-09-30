@@ -1849,7 +1849,8 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook SBFluidSwitcherItemContainer
 - (void)setContentAlpha:(double)alpha {
-    %orig(alpha);
+    // Đảm bảo thẻ đa nhiệm luôn rõ nét, không bị đè mờ
+    %orig(1.0);
 }
 
 - (void)prepareForReuse {
@@ -1971,9 +1972,12 @@ static BoostConfigV261 *CFG261 = nil;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             
-            thread_t currentMachThread = mach_thread_self();
-            Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
-            mach_port_deallocate(mach_task_self(), currentMachThread);
+            // Chỉ nâng Realtime cho App thường, KHÔNG ép trên SpringBoard để tránh thụt đen StatusBar
+            if (!Titanium_IsSpringBoard()) {
+                thread_t currentMachThread = mach_thread_self();
+                Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)[CFG261 resolvedTargetFPS]);
+                mach_port_deallocate(mach_task_self(), currentMachThread);
+            }
         }
     }
     %orig(event);
@@ -1986,6 +1990,17 @@ static BoostConfigV261 *CFG261 = nil;
                     break;
                 }
             }
+        }
+    }
+}
+
+- (void)layoutSubviews {
+    %orig;
+    // Chống lỗi thụt đen/lệch viền đỉnh màn hình của StatusBar
+    if (Titanium_IsSpringBoard()) {
+        NSString *clsName = NSStringFromClass([self class]);
+        if ([clsName containsString:@"StatusBar"] || [clsName containsString:@"SecureWindow"]) {
+            return;
         }
     }
 }
@@ -2006,7 +2021,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (void)makeKeyAndVisible {
-if (IS_ACTIVE && CFG261.turboAppLaunch) {
+    if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -2124,9 +2139,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t currentMachThread = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
-        mach_port_deallocate(mach_task_self(), currentMachThread);
     }
     %orig(touches, event);
 }
@@ -2304,9 +2316,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t currentMachThread = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
-        mach_port_deallocate(mach_task_self(), currentMachThread);
     }
     %orig(velocity, targetContentOffset);
 }
@@ -2540,20 +2549,14 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 %end
 
+// FIX TRIỆT ĐỂ: TRẢ LẠI TỶ LỆ GỐC CỦA CARD SWITCHER, KHÔNG ÉP CỨNG GÂY KẸT/ĐÈ HÌNH
 %hook SBAppSwitcherSettings
 
 - (void)setDeckSwitcherPageScale:(double)scaleValue {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
-        %orig(1.0);
-        return;
-    }
     %orig(scaleValue);
 }
 
 - (double)deckSwitcherPageScale {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
-        return 1.0;
-    }
     return %orig;
 }
 
@@ -2574,9 +2577,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t currentMachThread = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
-        mach_port_deallocate(mach_task_self(), currentMachThread);
     }
     %orig(string, event, context);
 }
@@ -2584,9 +2584,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t currentMachThread = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
-        mach_port_deallocate(mach_task_self(), currentMachThread);
     }
     %orig(string, flags, context);
 }
@@ -2825,6 +2822,11 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 %hook CAMetalLayer
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
+    // Trên SpringBoard chỉ dùng tối đa 3 buffer để không nghẽn card Switcher
+    if (Titanium_IsSpringBoard()) {
+        %orig(3);
+        return;
+    }
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         %orig(6);
         return;
@@ -2840,6 +2842,9 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 }
 
 - (NSUInteger)maximumDrawableCount {
+    if (Titanium_IsSpringBoard()) {
+        return 3;
+    }
     if (IS_ACTIVE && (CFG261.metalHexBuffering || CFG261.neuralBufferOpt)) {
         return 6;
     }
@@ -2947,7 +2952,7 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 %end
 
 
-// --- 2. HOOK CADisplayLink ---
+// --- 2. HOOK CADisplayLink: ĐỒNG BỘ ĐÚNG THEO TARGET FPS / HZ ĐÃ CHỌN ---
 %hook CADisplayLink
 
 - (void)setPaused:(BOOL)paused {
@@ -2961,9 +2966,9 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 
 - (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
     if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
-        // Ép kiểu (id) để vượt qua bộ kiểm tra interface của Clang compiler
-        if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && ((BOOL (*)(id, SEL))objc_msgSend)(CFG261, @selector(isCustomHzEnabled))) {
-            self.preferredFramesPerSecond = 60; 
+        if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [CFG261 isCustomHzEnabled]) {
+            NSInteger targetVal = [CFG261 resolvedTargetFPS];
+            self.preferredFramesPerSecond = targetVal;
         }
     }
     %orig;
@@ -3041,7 +3046,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     return %orig;
 }
 
-// Gom lại duy nhất 1 phương thức setShouldRasterize để triệt tiêu lỗi Redefinition
 - (void)setShouldRasterize:(BOOL)shouldRasterize {
     if (IS_ACTIVE && CFG261 && CFG261.aggressiveRamClean) {
         %orig(NO);
@@ -3301,9 +3305,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)handleApplicationLaunch:(id)application {
     if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t currentMachThread = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(currentMachThread, 120);
-        mach_port_deallocate(mach_task_self(), currentMachThread);
     }
     %orig(application);
 }
@@ -3353,7 +3354,6 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
-        // Hủy bỏ độ trễ nhận diện vuốt/chạm
         self.delaysContentTouches = NO;
         self.canCancelContentTouches = YES;
         self.decelerationRate = UIScrollViewDecelerationRateNormal;
@@ -3374,27 +3374,10 @@ if (IS_ACTIVE && CFG261.turboAppLaunch) {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
         self.layer.drawsAsynchronously = YES;
-        // Bật dựng bố cục không liền kề để lướt file code dài không bị sụt FPS
         if ([self respondsToSelector:@selector(setLayoutManager:)]) {
             self.layoutManager.allowsNonContiguousLayout = YES;
         }
     }
-}
-%end
-
-%hook UIGestureRecognizer
-- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(touches, event);
-}
-
-- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(touches, event);
 }
 %end
 
