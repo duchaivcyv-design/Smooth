@@ -1651,12 +1651,23 @@ static BoostConfigV261 *CFG261 = nil;
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
+    
+    NSInteger targetHz = [CFG261 resolvedTargetHz];
+    float rate = (float)targetHz;
+    if (rate < 15.0f) rate = 15.0f;
+    if (rate > 144.0f) rate = 144.0f;
+
+    // SỬA CHUẨN: Nếu người dùng cố tình hạ Hz (ví dụ 15Hz, 30Hz), khóa chết ở mức đó kể cả khi vuốt
+    if (rate <= 30.0f) {
+        return CAFrameRateRangeMake(rate, rate, rate);
+    }
+
+    // Nếu người dùng chọn mức cao (60Hz - 144Hz):
     BOOL isActivelyRendering = g_isUserTouchingV261 || g_isScrollInertiaActiveV261;
     if (!isActivelyRendering && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
     }
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
+
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
     return CAFrameRateRangeMake(minRate, rate, rate);
 }
@@ -1668,7 +1679,10 @@ static BoostConfigV261 *CFG261 = nil;
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
     float rate = (float)targetHz;
-    float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
+    if (rate < 15.0f) rate = 15.0f;
+    if (rate > 144.0f) rate = 144.0f;
+
+    float minRate = (rate <= 30.0f) ? rate : ((rate <= 60.0f) ? 30.0f : 60.0f);
     range = CAFrameRateRangeMake(minRate, rate, rate);
     %orig;
 }
@@ -1683,7 +1697,9 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
         float target = (float)[CFG261 resolvedTargetHz];
-        float minHz = (target < 60.0f) ? 30.0f : 60.0f;
+        if (target < 15.0f) target = 15.0f;
+        if (target > 144.0f) target = 144.0f;
+        float minHz = (target <= 30.0f) ? target : ((target < 60.0f) ? 30.0f : 60.0f);
         range = CAFrameRateRangeMake(minHz, target, target);
         %orig;
     } else {
@@ -1823,7 +1839,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
-- (void)cleanupAfterClose {
+- (cleanupAfterClose)cleanupAfterClose {
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
         Titanium_PurgeProcessMemoryAggressively();
     }
@@ -2039,7 +2055,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UIStatusBar
 - (void)requestStyle:(long long)style animated:(BOOL)animated {
-    if (Titanium_IsClassicHomeButtonDevice()) {
+    if (Titanium_IsClassicHomeButtonDevice() && !Titanium_IsGestureDevice()) {
         %orig(0, animated);
         return;
     }
@@ -2175,8 +2191,7 @@ static BoostConfigV261 *CFG261 = nil;
 %end // End Group_Display_SpringBoardV261
 
 // =========================================================================
-// NHÓM 4: CẢM ỨNG 0S & VẬT LÝ COLOROS (PREDICTIVE TOUCH 120HZ)
-// CỐT LÕI 4: LOẠI BỎ ĐỘ KHỰNG (ZERO DELAY) THÔNG QUA DỰ ĐOÁN QUỸ ĐẠO
+// NHÓM 4: CẢM ỨNG & VẬT LÝ COLOROS (KHÓA CHUẨN FPS THEO NGƯỜI DÙNG CHỌN)
 // =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
 
@@ -2201,20 +2216,24 @@ static BoostConfigV261 *CFG261 = nil;
         if (hasActiveTouch) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             
-            if (isInitialTouch && !Titanium_IsSpringBoard()) {
-                thread_t currentMachThread = mach_thread_self();
-                Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)[CFG261 resolvedTargetFPS]);
-                mach_port_deallocate(mach_task_self(), currentMachThread);
+            // SỬA CHUẨN: Chỉ boost realtime thread nếu targetFPS >= 60.
+            // Nếu người dùng chọn 15Hz/30Hz thì KHÔNG ép CPU chạy đua nhịp cao!
+            NSInteger curFPS = [CFG261 resolvedTargetFPS];
+            if (curFPS >= 60) {
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+                if (isInitialTouch && !Titanium_IsSpringBoard()) {
+                    thread_t currentMachThread = mach_thread_self();
+                    Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)curFPS);
+                    mach_port_deallocate(mach_task_self(), currentMachThread);
+                }
             }
             
-            // TOP 1 TWEAK FEATURE: Dự đoán quỹ đạo tay bằng UIEvent (Pre-rendering)
             for (UITouch *touch in allTouches) {
                 if ([event respondsToSelector:@selector(predictedTouchesForTouch:)]) {
                     NSArray *predicted = [event predictedTouchesForTouch:touch];
                     if (predicted && predicted.count > 0) {
-                        [predicted.lastObject locationInView:self]; // Đẩy bộ đệm khung hình render trước
+                        [predicted.lastObject locationInView:self];
                     }
                 }
             }
@@ -2316,7 +2335,9 @@ static BoostConfigV261 *CFG261 = nil;
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        if ([CFG261 resolvedTargetFPS] >= 60) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        }
     }
     %orig(touches, event);
 }
@@ -2360,7 +2381,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 - (BOOL)delaysTouchesBegan {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        return NO; // Hủy độ trễ hệ thống, chạm là ăn ngay
+        return NO;
     }
     return %orig;
 }
@@ -2434,19 +2455,26 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)setEdges:(UIRectEdge)edges { %orig(edges); }
 %end
 
+// =========================================================================
+// HOOK UISCROLLVIEW - CHUẨN XÁC 100% CẢ STRUCT LẪN HZ/FPS ĐÃ CHỌN
+// =========================================================================
 %hook UIScrollView
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    g_isScrollInertiaActiveV261 = YES;
+    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(velocity, targetContentOffset);
+    %orig;
 }
+
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(contentOffset, animated);
+    %orig;
 }
+
 - (CGPoint)_touchPositionForTouches:(id)touches {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
@@ -2454,17 +2482,17 @@ static BoostConfigV261 *CFG261 = nil;
     }
     return %orig(touches);
 }
+
 - (void)_setContentOffsetPinned:(CGPoint)point {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(point);
+    %orig;
 }
 
-// KHẮC PHỤC KHUNG HÌNH CHẬM: Giảm DecelerationRate chuẩn mức Logarit phi tuyến tính ColorOS
 - (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(0.992); // Cuộn mượt trôi êm kịch kim như ColorOS 17, xé bỏ cái khô cứng của Apple
+        %orig(0.992);
         return;
     }
     %orig(rate);
@@ -2472,7 +2500,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        return YES; // Bẻ gãy giới hạn, có thể hủy vuốt bất cứ lúc nào (Interruptible)
+        return YES;
     }
     return %orig(view);
 }
@@ -2489,14 +2517,16 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig(alwaysBounceHorizontal); }
 
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(impulse);
+    %orig;
 }
+
 - (void)_forcePanGestureToEndImmediately {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         g_isUserTouchingV261 = NO;
+        g_isScrollInertiaActiveV261 = NO;
     }
     %orig;
 }
@@ -2510,58 +2540,58 @@ static BoostConfigV261 *CFG261 = nil;
 - (UIEdgeInsets)contentInset { return %orig; }
 
 - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(rect, animated);
+    %orig;
 }
 %end
 
 %hook UITableView
 - (void)reloadData {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 - (void)layoutSubviews {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 - (void)beginUpdates {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 - (void)endUpdates {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 - (void)scrollToRowAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UITableViewScrollPosition)scrollPosition animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPath, scrollPosition, animated);
 }
 - (void)reloadRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths, animation);
 }
 - (void)insertRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths, animation);
 }
 - (void)deleteRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths, animation);
@@ -2570,40 +2600,37 @@ static BoostConfigV261 *CFG261 = nil;
 
 %hook UICollectionView
 - (void)reloadData {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
 - (void)layoutSubviews {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
-
-// BẢN FIX LỖI LOGOS: Sử dụng 'id' thay cho block để tránh lỗi 'invalid argument structure'
 - (void)performBatchUpdates:(id)updates completion:(id)completion {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(updates, completion);
 }
-
 - (void)scrollToItemAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UICollectionViewScrollPosition)scrollPosition animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPath, scrollPosition, animated);
 }
 - (void)insertItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths);
 }
 - (void)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(indexPaths);
@@ -2613,15 +2640,14 @@ static BoostConfigV261 *CFG261 = nil;
 %hook SBAppSwitcherSettings
 - (void)setDeckSwitcherPageScale:(double)scaleValue {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(0.93); // Giữ khoảng cách thẻ rộng ra, nổi khối hơn
-        return;
+        if (Titanium_IsGestureDevice()) {
+            %orig(scaleValue);
+            return;
+        }
     }
     %orig(scaleValue);
 }
 - (double)deckSwitcherPageScale {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        return 0.93;
-    }
     return %orig;
 }
 - (void)setAppSwitcherStyle:(long long)style { %orig(style); }
@@ -2633,9 +2659,9 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)prepareForReuse { %orig; }
 - (void)setCornerRadius:(CGFloat)radius {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(26.0); // Bo góc tròn sâu kiểu ColorOS Squircle tuyệt đối mượt
+        %orig(26.0);
         if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
-            [self.layer setValue:@"continuous" forKey:@"cornerCurve"]; // Mượt góc Apple
+            [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
         }
         return;
     }
@@ -2783,7 +2809,7 @@ static BoostConfigV261 *CFG261 = nil;
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(contentOffset);
+    %orig;
 }
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
@@ -2839,7 +2865,7 @@ static BoostConfigV261 *CFG261 = nil;
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (Titanium_IsSpringBoard()) {
-        %orig(3); // Ép cứng Triple Buffering cho UI siêu mượt
+        %orig(3);
         return;
     }
     if (count > 0 && count <= 3) {
@@ -2859,17 +2885,17 @@ static BoostConfigV261 *CFG261 = nil;
 - (BOOL)lowLatencyMode { return %orig; }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    %orig(YES); // Khóa cứng VSYNC cho Metal tránh xé hình nhòe ảnh khi vuốt nhanh
+    %orig(YES);
 }
 - (BOOL)displaySyncEnabled { return YES; }
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    %orig(allow); // Khôi phục chống lỗi timeout đen app trên iOS 16/17
+    %orig(allow);
 }
 - (BOOL)allowsNextDrawableTimeout { return %orig; }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
-    %orig(YES); // Đồng bộ Draw Call vào Transaction loại bỏ Frame Drops triệt để
+    %orig(YES);
 }
 - (BOOL)presentsWithTransaction { return YES; }
 
@@ -2901,7 +2927,7 @@ static BoostConfigV261 *CFG261 = nil;
 }
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
     if (IS_ACTIVE) {
-        %orig(YES); // Draw tầng dưới song song siêu tốc
+        %orig(YES);
         return;
     }
     %orig(flag);
@@ -2915,7 +2941,6 @@ static BoostConfigV261 *CFG261 = nil;
         %orig(NO);
         return;
     }
-    // ColorOS mượt viền bo cong: Tắt tính toán răng cưa thừa để tăng 25% hiệu suất GPU khi vuốt đa nhiệm
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && Titanium_IsSpringBoard()) {
         %orig(NO);
         return;
@@ -2976,7 +3001,7 @@ static BoostConfigV261 *CFG261 = nil;
         return;
     }
     if (IS_ACTIVE) {
-        %orig(1000); // Ép ưu tiên khung hình UIKit lên mức tối thượng
+        %orig(1000);
         return;
     }
     %orig(priority);
@@ -3200,10 +3225,17 @@ static BoostConfigV261 *CFG261 = nil;
     }
 }
 - (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
+    g_isScrollInertiaActiveV261 = NO;
+    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1, arg2);
+}
+- (void)_scrollViewDidEndDecelerating {
+    g_isScrollInertiaActiveV261 = NO;
+    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
+    %orig;
 }
 %end
 
