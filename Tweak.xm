@@ -614,8 +614,39 @@ static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
+static BOOL Titanium_IsSpringBoard(void) {
+    static BOOL isSB = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *proc = [[NSProcessInfo processInfo] processName];
+        if (proc) isSB = [proc isEqualToString:@"SpringBoard"];
+    });
+    return isSB;
+}
+
+static BOOL Titanium_IsSettingsApp(void) {
+    static BOOL isPrefs = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *name = [[NSProcessInfo processInfo] processName];
+        if (name) {
+            isPrefs = [name isEqualToString:@"Preferences"] || [name isEqualToString:@"Settings"] || [name isEqualToString:@"TweakSettings"];
+        }
+    });
+    return isPrefs;
+}
+
 static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uint32_t targetHz) {
     if (!thread) return;
+    
+    // NGUYÊN TẮC: Không ép Realtime Mach thread lên SpringBoard để tránh khựng giật App Switcher và tụt StatusBar
+    if (Titanium_IsSpringBoard()) {
+        struct task_qos_policy qos;
+        qos.task_latency_qos_tier = 0;
+        qos.task_throughput_qos_tier = 0;
+        task_policy_set(mach_task_self(), TASK_BASE_QOS_POLICY, (task_policy_t)&qos, TASK_QOS_POLICY_COUNT);
+        return;
+    }
     
     thread_extended_policy_data_t extendedPolicy;
     extendedPolicy.timeshare = 0;
@@ -739,28 +770,6 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
         }
     }
     pthread_mutex_unlock(&g_syncLockV261);
-}
-
-static BOOL Titanium_IsSpringBoard(void) {
-    static BOOL isSB = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSString *proc = [[NSProcessInfo processInfo] processName];
-        if (proc) isSB = [proc isEqualToString:@"SpringBoard"];
-    });
-    return isSB;
-}
-
-static BOOL Titanium_IsSettingsApp(void) {
-    static BOOL isPrefs = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSString *name = [[NSProcessInfo processInfo] processName];
-        if (name) {
-            isPrefs = [name isEqualToString:@"Preferences"] || [name isEqualToString:@"Settings"] || [name isEqualToString:@"TweakSettings"];
-        }
-    });
-    return isPrefs;
 }
 
 static BOOL Titanium_IsCriticalSystemDaemon(void) {
@@ -947,7 +956,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetHz {
-    // 🌟 Ép đọc thẳng file plist hệ thống chuẩn xác 100% cho mọi tiến trình (SpringBoard, LockScreen, App)
     NSString *resolvedPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
         NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
@@ -973,7 +981,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetFPS {
-    // 🌟 Ép đọc thẳng file plist hệ thống chuẩn xác 100% cho FPS của App và hiệu ứng
     NSString *resolvedPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
         NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
@@ -1008,9 +1015,6 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t curr = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(curr, 120);
-        mach_port_deallocate(mach_task_self(), curr);
     }
     %orig(context, completion);
 }
@@ -1044,9 +1048,6 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        thread_t curr = mach_thread_self();
-        Titanium_SetThreadRealtimeConstraintV261(curr, 120);
-        mach_port_deallocate(mach_task_self(), curr);
     }
     %orig(scene, context, completion);
 }
@@ -1170,12 +1171,59 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 
 %group Group_Display_SpringBoardV261
+
+// --- FIX TRIỆT ĐỂ LỖI KẸT THẺ ĐA NHIỆM & GIẬT KHỰNG CARD ---
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     %orig;
+    // BỎ HOÀN TOÀN CÂU LỆNH ÉP TRANSFORM IDENTITY GÂY KẸT THẺ Ở ĐÂY
+}
+%end
+
+%hook SBAppSwitcherSettings
+- (void)setDeckSwitcherPageScale:(double)scaleValue {
+    // Không ghi đè tỉ lệ tuỳ tiện làm vỡ toạ độ hiển thị thẻ
+    %orig(scaleValue);
+}
+%end
+
+%hook SBFluidSwitcherViewController
+- (void)viewWillLayoutSubviews {
+    %orig;
+}
+- (BOOL)_shouldAnimatePropertyWithKey:(NSString *)key {
+    return %orig;
+}
+%end
+
+%hook SBFluidSwitcherItemContainer
+- (void)setContentAlpha:(double)alpha {
+    // Đảm bảo card luôn hiển thị rõ nét, chống lỗi tàng hình hoặc đè chồng mờ card
+    %orig(1.0);
+}
+%end
+
+// --- FIX TRIỆT ĐỂ LỖI THỤT ĐEN ĐỈNH MÀN HÌNH / STATUSBAR ---
+%hook UIWindow
+- (void)layoutSubviews {
+    %orig;
+    if (Titanium_IsSpringBoard()) {
+        NSString *clsName = NSStringFromClass([self class]);
+        if ([clsName containsString:@"StatusBar"] || [clsName containsString:@"SecureWindow"]) {
+            return;
+        }
+    }
+}
+%end
+
+%hook SBMainDisplaySceneLayoutViewController
+- (void)viewWillLayoutSubviews {
+    %orig;
     if ([self respondsToSelector:@selector(view)]) {
-        UIView *switcherView = [self view];
-        switcherView.transform = CGAffineTransformIdentity;
+        UIView *v = [self view];
+        if (v && !CGRectEqualToRect(v.frame, [UIScreen mainScreen].bounds)) {
+            v.frame = [UIScreen mainScreen].bounds;
+        }
     }
 }
 %end
