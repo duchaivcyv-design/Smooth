@@ -1,4 +1,4 @@
-Oh thanks pan mommy#import <mach/mach.h>
+#import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
 #import <mach/mach_types.h>
@@ -44,7 +44,8 @@ Oh thanks pan mommy#import <mach/mach.h>
 
 // ============================================================================
 // KHAI BÁO CÁC HÀM / MACRO PRIVATE CỦA XNU KERNEL & DARWIN TRÁNH LỖI BIÊN DỊCH
-// ============================================================================#ifndef VM_PURGABLE_PURGE_ALL
+// ============================================================================
+#ifndef VM_PURGABLE_PURGE_ALL
 #ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
