@@ -860,7 +860,12 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (void)loadSettings {
-    dispatch_sync(_syncQueue, ^{
+    // 1. Chống lồng hàm (Re-entrancy lock) và loại bỏ hoàn toàn Deadlock của dispatch_sync
+    static BOOL s_isLoading = NO;
+    if (s_isLoading) return;
+    s_isLoading = YES;
+
+    @autoreleasepool {
         CFPreferencesAppSynchronize(PREF_DOMAIN);
         id (^ReadLiveValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
             CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
@@ -870,9 +875,10 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         
         NSDictionary *diskDict = nil;
         NSString *resolvedPath = Titanium_ResolvePrefPath();
-        if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
+        if (resolvedPath && [[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
             diskDict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
         }
+        
         BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
             id val = ReadLiveValue((__bridge CFStringRef)k, nil);
             if (val != nil) return [val boolValue];
@@ -987,27 +993,13 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
             Titanium_WriteSyncPayloadV261(&p);
         }
-    });
+    }
+
+    s_isLoading = NO;
 }
 
 - (NSInteger)resolvedTargetHz {
-    NSString *resolvedPath = Titanium_ResolvePrefPath();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
-        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
-        if (dict) {
-            BOOL masterOn = dict[@"Enabled"] ? [dict[@"Enabled"] boolValue] : YES;
-            if (!masterOn) return 60;
-            
-            BOOL hzCtrl = dict[@"EnableHzControl"] ? [dict[@"EnableHzControl"] boolValue] : YES;
-            if (hzCtrl && dict[@"TargetRefreshRate"]) {
-                NSInteger val = [dict[@"TargetRefreshRate"] integerValue];
-                if (val >= 15 && val <= 144) return val;
-            }
-            if (dict[@"ForceOverclock144Hz"] && [dict[@"ForceOverclock144Hz"] boolValue]) return 144;
-            if (dict[@"PowerSaveMode"] && [dict[@"PowerSaveMode"] boolValue]) return 15;
-        }
-    }
-    
+    // 2. Không đọc trực tiếp từ Disk I/O trong render loop để tránh giật lag và Safe Mode
     if (!self.enabled || !self.enableHzControl) return 60;
     if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
@@ -1016,23 +1008,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetFPS {
-    NSString *resolvedPath = Titanium_ResolvePrefPath();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
-        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
-        if (dict) {
-            BOOL masterOn = dict[@"Enabled"] ? [dict[@"Enabled"] boolValue] : YES;
-            if (!masterOn) return 60;
-            
-            BOOL fpsCtrl = dict[@"EnableFPSControl"] ? [dict[@"EnableFPSControl"] boolValue] : YES;
-            if (fpsCtrl && dict[@"TargetFPSRate"]) {
-                NSInteger val = [dict[@"TargetFPSRate"] integerValue];
-                if (val >= 15 && val <= 144) return val;
-            }
-            if (dict[@"ForceOverclock144Hz"] && [dict[@"ForceOverclock144Hz"] boolValue]) return 144;
-            if (dict[@"PowerSaveMode"] && [dict[@"PowerSaveMode"] boolValue]) return 15;
-        }
-    }
-    
     if (!self.enabled || !self.enableFPSControl) return 60;
     if (self.powerSaveMode) return 15;
     if (self.forceOverclock144Hz) return 144;
