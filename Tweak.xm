@@ -893,8 +893,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
         self.antiThermalThrottle = self.antiThermalThrottling;
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
-    });
-}
 
         if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
             Titanium_ReloadSharedSyncStateV261();
