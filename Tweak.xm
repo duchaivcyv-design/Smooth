@@ -307,7 +307,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface UITextInputController : NSObject
 - (void)_insertText:(id)text;
-- (void)deleteBackward;
+- (deleteBackward)deleteBackward;
 @end
 
 @interface SBIconController : NSObject
@@ -634,7 +634,7 @@ static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
-// HÀM CHUẨN HÓA DẢI CAFrameRateRange: TRIỆT TIÊU SAFEMODE CHO TOÀN BỘ MỨC HZ LẺ
+// HÀM CHUẨN HÓA DẢI CAFrameRateRange: KHỬ SAFEMODE VÀ TƯƠNG THÍCH MỌI MỨC HZ LẺ
 static inline CAFrameRateRange Titanium_NormalizeFrameRateRange(float target) {
     if (target < 15.0f) target = 15.0f;
     if (target > 144.0f) target = 144.0f;
@@ -650,9 +650,7 @@ static inline CAFrameRateRange Titanium_NormalizeFrameRateRange(float target) {
         minRate = 10.0f;
     }
     
-    if (minRate > target) {
-        minRate = target;
-    }
+    if (minRate > target) minRate = target;
     return CAFrameRateRangeMake(minRate, target, target);
 }
 
@@ -915,7 +913,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
     @autoreleasepool {
         if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-            // APP BÊN THỨ 3: Đọc trực tiếp qua POSIX SHM (Cực nhanh, 0ms, không chạm tới đĩa)
             Titanium_ReloadSharedSyncStateV261();
             if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
                 self.enabled = g_syncPayloadV261.masterEnabled;
@@ -929,7 +926,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
                 self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
             }
         } else {
-            // TRONG SPRINGBOARD & CÀI ĐẶT
             NSDictionary *diskDict = nil;
             NSString *resolvedPath = Titanium_ResolvePrefPath();
             if (resolvedPath && [[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
@@ -992,8 +988,14 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 - (NSInteger)resolvedTargetHz {
     if (!self.enabled || !self.enableHzControl) return 120;
     
-    // Nếu trong App bên thứ 3 mà cache bị lệch nhịp, đọc ngay tức thì từ biến RAM g_syncPayloadV261
+    // NẾU TRONG APP BÊN THỨ 3: ĐỒNG BỘ TRỰC TIẾP TỪ SHM ĐỂ APP NHẬN HZ CHÍNH XÁC 100%
     if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        static uint64_t lastAppSync = 0;
+        uint64_t now = mach_absolute_time();
+        if (now - lastAppSync > 500000000ULL || g_syncPayloadV261.magic != APEX_SYNC_MAGIC_V261) { // 0.5s check 1 lần
+            lastAppSync = now;
+            Titanium_ReloadSharedSyncStateV261();
+        }
         if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.targetHz >= 15) {
             return g_syncPayloadV261.targetHz;
         }
@@ -1784,12 +1786,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// FIX LỖI 2: KHÔNG ÉP STYLE 0 ĐỂ TRÁNH LỆCH ĐỒNG HỒ VÀ PIN SANG 2 BÊN
 %hook UIStatusBar
 - (void)requestStyle:(long long)style animated:(BOOL)animated {
-    if (Titanium_IsClassicHomeButtonDevice()) {
-        %orig(0, animated);
-        return;
-    }
     %orig(style, animated);
 }
 
@@ -2604,8 +2603,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-%end
-
+// FIX LỖI 6: TỐI ƯU HÓA BÀN PHÍM KHI GÕ NHIỀU CHỮ / CODE TRONG APP NẶNG
 %group Group_Keyboard_And_TextV261
 
 %hook UIKeyboardImpl
@@ -2849,11 +2847,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-%end
-
-// =========================================================================
-// PIPELINE METAL GRAPHICS CHUẨN XÁC: FIX LỖI ĐEN MÀN HÌNH VÀ VIDEO GIẬT
-// =========================================================================
+// FIX LỖI 1: KHÔNG CAN THIỆP GƯỢNG ÉP LÊN LOWLATENCY / NEXTDRAWABLETIMEOUT ĐỂ TRÁNH ĐEN APP
 %group Group_MetalGraphics_OptV261
 
 %hook CAMetalLayer
@@ -2882,19 +2876,19 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 
 - (void)setLowLatencyMode:(BOOL)flag {
-    %orig(YES);
+    %orig(flag);
 }
 
 - (BOOL)lowLatencyMode {
-    return YES;
+    return %orig;
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    %orig(YES);
+    %orig(enabled);
 }
 
 - (BOOL)displaySyncEnabled {
-    return YES;
+    return %orig;
 }
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
