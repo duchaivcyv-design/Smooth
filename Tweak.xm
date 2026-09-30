@@ -765,48 +765,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     return isBank;
 }
 
-@interface BoostConfigV261 : NSObject
-@property (nonatomic, assign) BOOL enabled;
-@property (nonatomic, strong) NSString *selectedLanguage;
-@property (nonatomic, assign) BOOL enableHzControl;
-@property (nonatomic, assign) NSInteger targetHz;
-@property (nonatomic, assign) BOOL enableFPSControl;
-@property (nonatomic, assign) NSInteger targetFPS;
-@property (nonatomic, assign) BOOL forceOverclock144Hz;
-@property (nonatomic, assign) BOOL proMotionEngineBeta7;
-@property (nonatomic, assign) BOOL touchResponseBoost;
-@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
-@property (nonatomic, assign) BOOL keyboardZeroLagV24;
-@property (nonatomic, assign) BOOL keyboardZeroLagV3;
-@property (nonatomic, assign) BOOL reduceMultitaskLag;
-@property (nonatomic, assign) BOOL reduceMultiTaskLag;
-@property (nonatomic, assign) BOOL metalHexBuffering;
-@property (nonatomic, assign) BOOL neuralBufferOpt;
-@property (nonatomic, assign) BOOL fixAppExitStutter;
-@property (nonatomic, assign) BOOL vsyncAdaptiveBuffer;
-@property (nonatomic, assign) BOOL quantumRenderShield;
-@property (nonatomic, assign) BOOL autoCloseBackgroundApp;
-@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
-@property (nonatomic, assign) BOOL syncModuleDelay;
-@property (nonatomic, assign) BOOL isolateRenderPipeline;
-@property (nonatomic, assign) BOOL antiBlackScreenLaunch;
-@property (nonatomic, assign) BOOL turboAppLaunch;
-@property (nonatomic, assign) BOOL turboLaunch;
-@property (nonatomic, assign) BOOL ultraResponsiveness;
-@property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
-@property (nonatomic, assign) BOOL aggressiveRamClean;
-@property (nonatomic, assign) BOOL periodicRamClean;
-@property (nonatomic, assign) BOOL machVMPurgeRam;
-@property (nonatomic, assign) BOOL antiThermalThrottling;
-@property (nonatomic, assign) BOOL antiThermalThrottle;
-@property (nonatomic, assign) BOOL powerSaveMode;
-
-+ (instancetype)sharedInstance;
-- (void)loadSettings;
-- (NSInteger)resolvedTargetHz;
-- (NSInteger)resolvedTargetFPS;
-@end
-
 @implementation BoostConfigV261 {
     dispatch_queue_t _syncQueue;
 }
@@ -825,6 +783,10 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         [self loadSettings];
     }
     return self;
+}
+
+- (BOOL)isCustomHzEnabled {
+    return self.enabled && (self.enableHzControl || self.forceOverclock144Hz);
 }
 
 - (void)loadSettings {
