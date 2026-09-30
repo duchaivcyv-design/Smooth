@@ -1,10 +1,10 @@
 Package: com.taojb.boostiphone6s
-Name: SmoothIOS
-Version: 4.8.0-BETA
+Name: SmoothIOS Pro
+Version: 5.0.0
 Architecture: iphoneos-arm64
 Description: Next update NƯỚC ĐÁI
-Maintainer: TaoJB, NMH
-Author: TaoJB, NMH
+Maintainer: TaoJB
+Author: TaoJB
 Section: Tweaks
 Depends: mobilesubstrate, firmware (>= 14.0), firmware (<= 26.0.1), preferenceloader
 Priority: optional
