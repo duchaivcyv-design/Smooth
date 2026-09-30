@@ -2588,10 +2588,6 @@ Shower thank youGroup_ZeroLatencyTouch_PhysicsV261
 
 %hook SBAppSwitcherSettings
 
-- (void)setDeckSwitcherPageScale:(double)scaleValue {
-    %orig(scaleValue);
-}
-
 - (double)deckSwitcherPageScale {
     return %orig;
 }
@@ -2605,7 +2601,7 @@ Shower thank youGroup_ZeroLatencyTouch_PhysicsV261
 }
 %end // Đóng %hook SBAppSwitcherSettings
 
-%end // <-- THÊM DÒNG NÀY ĐỂ ĐÓNG %group Group_ZeroLatencyTouch_PhysicsV261
+%end // Đóng %group Group_ZeroLatencyTouch_PhysicsV261 (hoặc group chứa UIScrollView/AppSwitcher)
 
 // =========================================================================
 // BỘ KHỞI TẠO %ctor: PHÂN TÁCH ĐỘ TRỄ CHỈ CHO ROOTHIDE, ROOTLESS KHÔNG DÙNG
@@ -2639,9 +2635,7 @@ Shower thank youGroup_ZeroLatencyTouch_PhysicsV261
         if (configClass) {
             CFG261 = [configClass sharedInstance];
         }
-        %end
-
-        %end
+        // <--- ĐÃ XÓA 2 DÒNG %end BỊ ĐẶT NHẦM Ở ĐÂY --->
 
         // 1. NẠP NHÓM ĐIỀU KHIỂN HZ/FPS TOÀN CỤC CHO CẢ SPRINGBOARD LẪN MỌI APP
         %init(Group_UniversalDisplayControlV261);
