@@ -220,7 +220,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface CALayer (ApexV261Revolution)
 - (id)context;
-- (void)setContext:(id)arg1;
+- (void)setContext:(id)context;
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag;
 - (void)setContentsDrawsAsynchronously:(BOOL)flag;
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag;
@@ -248,7 +248,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface CAContext : NSObject
 + (NSArray *)allContexts;
-+ (id)remoteContextWithOptions:(id)arg1;
++ (id)remoteContextWithOptions:(id)options;
 - (uint32_t)contextId;
 - (void)setCommitPriority:(uint32_t)priority;
 - (void)setDesiredDynamicRange:(float)range;
@@ -259,11 +259,11 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)_updatePreferredContentSize;
 - (void)startPictureInPicture;
 - (void)stopPictureInPictureAnimated:(BOOL)animated;
-- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)arg1;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart;
 @end
 
 @interface SBPIPController : NSObject
-- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)margin;
 - (void)_updatePictureInPictureWindowMargin;
 - (UIEdgeInsets)pictureInPictureWindowMargin;
 @end
@@ -624,7 +624,7 @@ typedef struct __attribute__((packed)) {
 } ApexV261Payload;
 
 static ApexV261Payload g_syncPayloadV261 = {
-    APEX_SYNC_MAGIC_V261, 1, 60, 60, 0, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
+    APEX_SYNC_MAGIC_V261, 1, 120, 120, 0, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
 };
 
 static pthread_mutex_t g_syncLockV261 = PTHREAD_MUTEX_INITIALIZER;
@@ -734,11 +734,27 @@ static inline void Titanium_PurgeProcessMemoryAggressively(void) {
     malloc_zone_pressure_relief(malloc_default_zone(), 0);
 }
 
+#define SHM_HZ_KEY "/apex_hz_shm_v261"
+
 static void Titanium_WriteSyncPayloadV261(const ApexV261Payload *payload) {
     if (!payload) return;
     ApexV261Payload temp = *payload;
     temp.magic = APEX_SYNC_MAGIC_V261;
     temp.updateSeq = (uint64_t)mach_absolute_time();
+
+    // 1. Ghi POSIX SHM
+    int shm_fd = shm_open(SHM_HZ_KEY, O_CREAT | O_RDWR, 0666);
+    if (shm_fd >= 0) {
+        ftruncate(shm_fd, sizeof(ApexV261Payload));
+        void *addr = mmap(NULL, sizeof(ApexV261Payload), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+        if (addr != MAP_FAILED) {
+            memcpy(addr, &temp, sizeof(ApexV261Payload));
+            munmap(addr, sizeof(ApexV261Payload));
+        }
+        close(shm_fd);
+    }
+
+    // 2. Ghi File /tmp
     int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd >= 0) {
         write(fd, &temp, sizeof(ApexV261Payload));
@@ -747,87 +763,59 @@ static void Titanium_WriteSyncPayloadV261(const ApexV261Payload *payload) {
     }
 }
 
+// HÀM ĐỒNG BỘ TOÀN DIỆN CHO CẢ SPRINGBOARD VÀ APP BÊN NGOÀI
 static inline void Titanium_ReloadSharedSyncStateV261(void) {
-    pthread_mutex_lock(&g_syncLockV261);
-    int fd = open([SHARED_SYNC_FILE UTF8String], O_RDONLY);
-    if (fd >= 0) {
-        ApexV261Payload temp;
-        ssize_t bytes = read(fd, &temp, sizeof(temp));
-        if (bytes == sizeof(temp) && temp.magic == APEX_SYNC_MAGIC_V261) {
-            if (temp.updateSeq != g_syncPayloadV261.updateSeq) {
+    if (pthread_mutex_trylock(&g_syncLockV261) != 0) {
+        return; // Đang có luồng khác đọc, không block luồng render
+    }
+
+    BOOL syncSuccess = NO;
+
+    // 1. Ưu tiên đọc SHM
+    int shm_fd = shm_open(SHM_HZ_KEY, O_RDONLY, 0666);
+    if (shm_fd >= 0) {
+        void *addr = mmap(NULL, sizeof(ApexV261Payload), PROT_READ, MAP_SHARED, shm_fd, 0);
+        if (addr != MAP_FAILED) {
+            ApexV261Payload *p = (ApexV261Payload *)addr;
+            if (p->magic == APEX_SYNC_MAGIC_V261) {
+                g_syncPayloadV261 = *p;
+                g_lastSyncTicksV261 = mach_absolute_time();
+                syncSuccess = YES;
+            }
+            munmap(addr, sizeof(ApexV261Payload));
+        }
+        close(shm_fd);
+    }
+
+    // 2. Fallback đọc file /tmp
+    if (!syncSuccess) {
+        int fd = open([SHARED_SYNC_FILE UTF8String], O_RDONLY);
+        if (fd >= 0) {
+            ApexV261Payload temp;
+            ssize_t bytes = read(fd, &temp, sizeof(temp));
+            if (bytes == sizeof(temp) && temp.magic == APEX_SYNC_MAGIC_V261) {
                 g_syncPayloadV261 = temp;
                 g_lastSyncTicksV261 = mach_absolute_time();
+                syncSuccess = YES;
             }
-        }
-        close(fd);
-    } else {
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        CFPropertyListRef enVal = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
-        if (enVal) {
-            g_syncPayloadV261.masterEnabled = CFBooleanGetValue((CFBooleanRef)enVal) ? 1 : 0;
-            CFRelease(enVal);
-        }
-        CFPropertyListRef hzVal = CFPreferencesCopyAppValue(CFSTR("TargetRefreshRate"), PREF_DOMAIN);
-        if (hzVal) {
-            int val = 120;
-            CFNumberGetValue((CFNumberRef)hzVal, kCFNumberIntType, &val);
-            g_syncPayloadV261.targetHz = (val > 0) ? val : 120;
-            CFRelease(hzVal);
-        }
-        CFPropertyListRef fpsVal = CFPreferencesCopyAppValue(CFSTR("TargetFPSRate"), PREF_DOMAIN);
-        if (fpsVal) {
-            int val = 120;
-            CFNumberGetValue((CFNumberRef)fpsVal, kCFNumberIntType, &val);
-            g_syncPayloadV261.targetFPS = (val > 0) ? val : 120;
-            CFRelease(fpsVal);
-        }
-        CFPropertyListRef overVal = CFPreferencesCopyAppValue(CFSTR("ForceOverclock144Hz"), PREF_DOMAIN);
-        if (overVal) {
-            g_syncPayloadV261.forceOverclock = CFBooleanGetValue((CFBooleanRef)overVal) ? 1 : 0;
-            CFRelease(overVal);
-        }
-        CFPropertyListRef dynVal = CFPreferencesCopyAppValue(CFSTR("ProMotionEngineBeta7"), PREF_DOMAIN);
-        if (dynVal) {
-            g_syncPayloadV261.dynamicInterpolation = CFBooleanGetValue((CFBooleanRef)dynVal) ? 1 : 0;
-            CFRelease(dynVal);
-        }
-        CFPropertyListRef touchVal = CFPreferencesCopyAppValue(CFSTR("TouchResponseBoost"), PREF_DOMAIN);
-        if (touchVal) {
-            g_syncPayloadV261.zeroLatencyTouch = CFBooleanGetValue((CFBooleanRef)touchVal) ? 1 : 0;
-            CFRelease(touchVal);
-        }
-        CFPropertyListRef keyVal = CFPreferencesCopyAppValue(CFSTR("KeyboardZeroLagV24"), PREF_DOMAIN);
-        if (keyVal) {
-            g_syncPayloadV261.keyboardZeroLagV3 = CFBooleanGetValue((CFBooleanRef)keyVal) ? 1 : 0;
-            CFRelease(keyVal);
-        }
-        CFPropertyListRef metalVal = CFPreferencesCopyAppValue(CFSTR("MetalHexBuffering"), PREF_DOMAIN);
-        if (metalVal) {
-            g_syncPayloadV261.smartBufferingLevel = 3;
-            CFRelease(metalVal);
-        }
-        CFPropertyListRef exitVal = CFPreferencesCopyAppValue(CFSTR("FixAppExitStutter"), PREF_DOMAIN);
-        if (exitVal) {
-            g_syncPayloadV261.antiStutterExit = CFBooleanGetValue((CFBooleanRef)exitVal) ? 1 : 0;
-            CFRelease(exitVal);
-        }
-        CFPropertyListRef launchVal = CFPreferencesCopyAppValue(CFSTR("TurboAppLaunch"), PREF_DOMAIN);
-        if (launchVal) {
-            g_syncPayloadV261.fastAppLaunch = CFBooleanGetValue((CFBooleanRef)launchVal) ? 1 : 0;
-            CFRelease(launchVal);
-        }
-        CFPropertyListRef ramVal = CFPreferencesCopyAppValue(CFSTR("AggressiveRamClean"), PREF_DOMAIN);
-        if (ramVal) {
-            g_syncPayloadV261.aggressiveRamCleaner = CFBooleanGetValue((CFBooleanRef)ramVal) ? 1 : 0;
-            CFRelease(ramVal);
-        }
-        CFPropertyListRef thermVal = CFPreferencesCopyAppValue(CFSTR("AntiThermalThrottling"), PREF_DOMAIN);
-        if (thermVal) {
-            g_syncPayloadV261.thermalShield = CFBooleanGetValue((CFBooleanRef)thermVal) ? 1 : 0;
-            g_syncPayloadV261.lockFixedFpsWhenThermal = g_syncPayloadV261.thermalShield;
-            CFRelease(thermVal);
+            close(fd);
         }
     }
+
+    // 3. Fallback đọc plist trực tiếp (chỉ khi không phải sandbox app)
+    if (!syncSuccess && (Titanium_IsSpringBoard() || Titanium_IsSettingsApp())) {
+        NSString *prefPath = Titanium_ResolvePrefPath();
+        if (prefPath && [[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+            NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+            if (dict) {
+                if (dict[@"Enabled"]) g_syncPayloadV261.masterEnabled = [dict[@"Enabled"] boolValue] ? 1 : 0;
+                if (dict[@"TargetRefreshRate"]) g_syncPayloadV261.targetHz = [dict[@"TargetRefreshRate"] intValue];
+                if (dict[@"TargetFPSRate"]) g_syncPayloadV261.targetFPS = [dict[@"TargetFPSRate"] intValue];
+                if (dict[@"ForceOverclock144Hz"]) g_syncPayloadV261.forceOverclock = [dict[@"ForceOverclock144Hz"] boolValue] ? 1 : 0;
+            }
+        }
+    }
+
     pthread_mutex_unlock(&g_syncLockV261);
 }
 
@@ -850,7 +838,8 @@ static BOOL Titanium_IsCriticalSystemDaemon(void) {
                 [proc isEqualToString:@"identityservicesd"] || [proc isEqualToString:@"PosterBoard"] || 
                 [proc isEqualToString:@"tursd"] || [proc isEqualToString:@"roothided"] || 
                 [proc isEqualToString:@"PosterBoardPosterExtension"] ||
-                [proc isEqualToString:@"thermalmonitord"]) {
+                [proc isEqualToString:@"thermalmonitord"] || [proc isEqualToString:@"powerd"] ||
+                [proc isEqualToString:@"fseventsd"] || [proc isEqualToString:@"analyticsd"]) {
                 isDaemon = YES;
                 return;
             }
@@ -911,7 +900,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.fixAppExitStutter = YES;
         self.fixAppLaunchBlackScreen = YES;
         self.antiThermalThrottling = YES;
-        [self loadSettings];
     }
     return self;
 }
@@ -926,74 +914,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     s_isLoading = YES;
 
     @autoreleasepool {
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
-        id (^ReadLiveValue)(CFStringRef, id) = ^id(CFStringRef key, id defaultVal) {
-            CFPropertyListRef val = CFPreferencesCopyAppValue(key, PREF_DOMAIN);
-            if (val) return (__bridge_transfer id)val;
-            return defaultVal;
-        };
-        
-        NSDictionary *diskDict = nil;
-        NSString *resolvedPath = Titanium_ResolvePrefPath();
-        if (resolvedPath && [[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
-            diskDict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
-        }
-        
-        BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
-            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
-            if (val != nil) return [val boolValue];
-            if (diskDict && diskDict[k] != nil) return [diskDict[k] boolValue];
-            return d;
-        };
-        NSInteger (^GetLiveInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
-            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
-            if (val != nil) return [val integerValue];
-            if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
-            return d;
-        };
-        NSString * (^GetLiveString)(NSString *, NSString *) = ^NSString *(NSString *k, NSString *d) {
-            id val = ReadLiveValue((__bridge CFStringRef)k, nil);
-            if (val != nil && [val isKindOfClass:[NSString class]]) return (NSString *)val;
-            if (diskDict && diskDict[k] != nil && [diskDict[k] isKindOfClass:[NSString class]]) return (NSString *)diskDict[k];
-            return d;
-        };
-
-        self.enabled = GetLiveBool(@"Enabled", YES);
-        self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
-        self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
-        self.targetHz = GetLiveInt(@"TargetRefreshRate", 120);
-        self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
-        self.targetFPS = GetLiveInt(@"TargetFPSRate", 120);
-        self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
-        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES);
-        self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
-        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
-        self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.keyboardZeroLagV3 = GetLiveBool(@"KeyboardZeroLagV24", YES);
-        self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
-        self.neuralBufferOpt = self.metalHexBuffering;
-        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
-        self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
-        self.quantumRenderShield = self.fixAppExitStutter;
-        self.autoCloseBackgroundApp = self.fixAppExitStutter;
-        self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
-        self.syncModuleDelay = self.fixAppLaunchBlackScreen;
-        self.isolateRenderPipeline = self.fixAppLaunchBlackScreen;
-        self.antiBlackScreenLaunch = self.fixAppLaunchBlackScreen;
-        self.reduceMultitaskLag = GetLiveBool(@"ReduceMultiTaskLag", YES);
-        self.reduceMultiTaskLag = self.reduceMultitaskLag;
-        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
-        self.turboLaunch = self.turboAppLaunch;
-        self.ultraResponsiveness = self.touchResponseBoost;
-        self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
-        self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
-        self.periodicRamClean = self.aggressiveRamClean;
-        self.machVMPurgeRam = self.aggressiveRamClean;
-        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
-        self.antiThermalThrottle = self.antiThermalThrottling;
-        self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
-
         if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+            // APP BÊN THỨ 3: Đọc trực tiếp qua POSIX SHM (Cực nhanh, 0ms, không chạm tới đĩa)
             Titanium_ReloadSharedSyncStateV261();
             if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261) {
                 self.enabled = g_syncPayloadV261.masterEnabled;
@@ -1002,48 +924,66 @@ static BOOL Titanium_IsSecureBankingApp(void) {
                 self.forceOverclock144Hz = g_syncPayloadV261.forceOverclock;
                 self.proMotionEngineBeta7 = g_syncPayloadV261.dynamicInterpolation ? YES : NO;
                 self.touchResponseBoost = g_syncPayloadV261.zeroLatencyTouch ? YES : NO;
-                self.ultraResponsiveness = self.touchResponseBoost;
-                self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
                 self.keyboardZeroLagV24 = g_syncPayloadV261.keyboardZeroLagV3 ? YES : NO;
-                self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
-                self.metalHexBuffering = YES;
-                self.neuralBufferOpt = YES;
                 self.fixAppExitStutter = g_syncPayloadV261.antiStutterExit ? YES : NO;
-                self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
-                self.quantumRenderShield = self.fixAppExitStutter;
-                self.autoCloseBackgroundApp = self.fixAppExitStutter;
-                self.reduceMultitaskLag = self.fixAppExitStutter;
-                self.reduceMultiTaskLag = self.reduceMultitaskLag;
                 self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
-                self.turboLaunch = self.turboAppLaunch;
-                self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
-                self.periodicRamClean = self.aggressiveRamClean;
-                self.machVMPurgeRam = self.aggressiveRamClean;
-                self.antiThermalThrottling = g_syncPayloadV261.thermalShield ? YES : NO;
-                self.antiThermalThrottle = self.antiThermalThrottling;
             }
-        } else if (Titanium_IsSpringBoard()) {
-            ApexV261Payload p;
-            memset(&p, 0, sizeof(ApexV261Payload));
-            p.masterEnabled = self.enabled ? 1 : 0;
-            p.targetHz = (int32_t)self.targetHz;
-            p.targetFPS = (int32_t)self.targetFPS;
-            p.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
-            p.pipSyncEnabled = 1;
-            p.thermalShield = self.antiThermalThrottling ? 1 : 0;
-            p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = 3;
-            p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
-            p.shaderOptimization = 1;
-            p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
-            p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
-            p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
-            p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
-            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
+        } else {
+            // TRONG SPRINGBOARD & CÀI ĐẶT
+            NSDictionary *diskDict = nil;
+            NSString *resolvedPath = Titanium_ResolvePrefPath();
+            if (resolvedPath && [[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
+                diskDict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
+            }
             
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                Titanium_WriteSyncPayloadV261(&p);
-            });
+            BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
+                if (diskDict && diskDict[k] != nil) return [diskDict[k] boolValue];
+                return d;
+            };
+            NSInteger (^GetLiveInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
+                if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
+                return d;
+            };
+
+            self.enabled = GetLiveBool(@"Enabled", YES);
+            self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
+            self.targetHz = GetLiveInt(@"TargetRefreshRate", 120);
+            self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
+            self.targetFPS = GetLiveInt(@"TargetFPSRate", 120);
+            self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
+            self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES);
+            self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
+            self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
+            self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
+            self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
+            self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
+            self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
+            self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
+            self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
+            self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
+            self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
+
+            if (Titanium_IsSpringBoard()) {
+                ApexV261Payload p;
+                memset(&p, 0, sizeof(ApexV261Payload));
+                p.masterEnabled = self.enabled ? 1 : 0;
+                p.targetHz = (int32_t)self.targetHz;
+                p.targetFPS = (int32_t)self.targetFPS;
+                p.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
+                p.pipSyncEnabled = 1;
+                p.thermalShield = self.antiThermalThrottling ? 1 : 0;
+                p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
+                p.smartBufferingLevel = 3;
+                p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
+                p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
+                p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
+                p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
+                p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
+
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                    Titanium_WriteSyncPayloadV261(&p);
+                });
+            }
         }
     }
     s_isLoading = NO;
@@ -1051,6 +991,13 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 - (NSInteger)resolvedTargetHz {
     if (!self.enabled || !self.enableHzControl) return 120;
+    
+    // Nếu trong App bên thứ 3 mà cache bị lệch nhịp, đọc ngay tức thì từ biến RAM g_syncPayloadV261
+    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.targetHz >= 15) {
+            return g_syncPayloadV261.targetHz;
+        }
+    }
     
     UIDevice *dev = [UIDevice currentDevice];
     if (dev.batteryMonitoringEnabled) {
@@ -1073,6 +1020,12 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 - (NSInteger)resolvedTargetFPS {
     if (!self.enabled || !self.enableFPSControl) return 120;
+    
+    if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        if (g_syncPayloadV261.magic == APEX_SYNC_MAGIC_V261 && g_syncPayloadV261.targetFPS >= 15) {
+            return g_syncPayloadV261.targetFPS;
+        }
+    }
     
     UIDevice *dev = [UIDevice currentDevice];
     if (dev.batteryMonitoringEnabled) {
@@ -1098,6 +1051,182 @@ static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 
 static BOOL g_ApexRenderPipelineReady = YES;
+
+// =========================================================================
+// NHÓM ĐIỀU KHIỂN HZ/FPS CHO TẤT CẢ TIẾN TRÌNH (SPRINGBOARD + MỌI APP)
+// =========================================================================
+%group Group_UniversalDisplayControlV261
+
+%hook CADisplayLink
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return %orig;
+    }
+    NSInteger targetHz = [CFG261 resolvedTargetHz];
+    return Titanium_NormalizeFrameRateRange((float)targetHz);
+}
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        %orig(range);
+        return;
+    }
+    NSInteger targetHz = [CFG261 resolvedTargetHz];
+    %orig(Titanium_NormalizeFrameRateRange((float)targetHz));
+}
+
+- (NSInteger)preferredFramesPerSecond {
+    if (!IS_ACTIVE || (!CFG261.enableFPSControl && !CFG261.enableHzControl)) {
+        return %orig;
+    }
+    return [CFG261 resolvedTargetFPS];
+}
+
+- (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    if (!IS_ACTIVE || (!CFG261.enableFPSControl && !CFG261.enableHzControl)) {
+        %orig(fps);
+        return;
+    }
+    %orig([CFG261 resolvedTargetFPS]);
+}
+
+- (BOOL)isPaused {
+    return %orig;
+}
+
+- (void)setPaused:(BOOL)paused {
+    %orig(paused);
+}
+
+- (CFTimeInterval)duration {
+    return %orig;
+}
+
+- (CFTimeInterval)targetTimestamp {
+    return %orig;
+}
+
+- (CFTimeInterval)timestamp {
+    return %orig;
+}
+
+- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
+    if (IS_ACTIVE && [CFG261 isCustomHzEnabled]) {
+        self.preferredFramesPerSecond = [CFG261 resolvedTargetFPS];
+        if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+            [self setPreferredFrameRateRange:Titanium_NormalizeFrameRateRange((float)[CFG261 resolvedTargetHz])];
+        }
+    }
+    %orig;
+}
+
+%end
+
+%hook CAAnimation
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
+        float target = (float)[CFG261 resolvedTargetHz];
+        if (range.maximum > 0 && range.maximum != 60) {
+            %orig(range);
+            return;
+        }
+        %orig(Titanium_NormalizeFrameRateRange(target));
+    } else {
+        %orig(range);
+    }
+}
+
+%end
+
+%hook UIScreen
+- (NSInteger)maximumFramesPerSecond {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
+    return [CFG261 resolvedTargetHz];
+}
+
+- (NSInteger)_maximumFramesPerSecond {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
+    return [CFG261 resolvedTargetHz];
+}
+
+- (CGFloat)_refreshRate {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return %orig;
+    }
+    return (CGFloat)[CFG261 resolvedTargetHz];
+}
+
+- (void)_setTargetRefreshRate:(CGFloat)rate {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        %orig(rate);
+        return;
+    }
+    %orig((CGFloat)[CFG261 resolvedTargetHz]);
+}
+
+- (CGRect)bounds {
+    return %orig;
+}
+
+- (CGFloat)scale {
+    return %orig;
+}
+
+- (CGFloat)nativeScale {
+    return %orig;
+}
+
+- (CGRect)nativeBounds {
+    return %orig;
+}
+
+- (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
+    id link = %orig(target, sel);
+    if (IS_ACTIVE && link && [link isKindOfClass:NSClassFromString(@"CADisplayLink")]) {
+        CADisplayLink *dl = (CADisplayLink *)link;
+        if ([dl respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+            [dl setPreferredFrameRateRange:Titanium_NormalizeFrameRateRange((float)[CFG261 resolvedTargetHz])];
+        }
+    }
+    return link;
+}
+%end
+
+%hook CADisplay
+- (NSInteger)preferredFPS {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return %orig;
+    }
+    return [CFG261 resolvedTargetHz];
+}
+
+- (void)setPreferredFPS:(NSInteger)fps {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        %orig(fps);
+        return;
+    }
+    %orig([CFG261 resolvedTargetHz]);
+}
+
+- (void)overrideDisplayTimings:(id)timings {
+    %orig(timings);
+}
+
+- (void)overrideDisplayCadence:(id)cadence {
+    %orig(cadence);
+}
+
+- (BOOL)supportsDynamicRefresh {
+    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) {
+        return YES;
+    }
+    return %orig;
+}
+%end
+
+%end
 
 // FIX LỖI 7: TỐC ĐỘ LOADING APP NHANH TỨC THÌ
 %group Group_FastLaunch_SuperEngineV261
@@ -1270,147 +1399,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
-}
-%end
-
-%hook CADisplayLink
-
-- (CAFrameRateRange)preferredFrameRateRange {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        return %orig;
-    }
-    
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    return Titanium_NormalizeFrameRateRange((float)targetHz);
-}
-
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        %orig(range);
-        return;
-    }
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    %orig(Titanium_NormalizeFrameRateRange((float)targetHz));
-}
-
-- (BOOL)isPaused {
-    return %orig;
-}
-
-- (void)setPaused:(BOOL)paused {
-    %orig(paused);
-}
-
-- (CFTimeInterval)duration {
-    return %orig;
-}
-
-- (CFTimeInterval)targetTimestamp {
-    return %orig;
-}
-
-- (CFTimeInterval)timestamp {
-    return %orig;
-}
-
-%end
-
-// FIX LỖI CHUYỂN CẢNH & KHÔNG ĐÈ ANIMATION
-%hook CAAnimation
-
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
-        float target = (float)[CFG261 resolvedTargetHz];
-        
-        if (range.maximum > 0 && range.maximum != 60) {
-            %orig(range);
-            return;
-        }
-        
-        %orig(Titanium_NormalizeFrameRateRange(target));
-    } else {
-        %orig(range);
-    }
-}
-
-%end
-
-%hook UIScreen
-- (NSInteger)maximumFramesPerSecond {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
-    return [CFG261 resolvedTargetHz];
-}
-
-- (NSInteger)_maximumFramesPerSecond {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) return %orig;
-    return [CFG261 resolvedTargetHz];
-}
-
-- (CGFloat)_refreshRate {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        return %orig;
-    }
-    return (CGFloat)[CFG261 resolvedTargetHz];
-}
-
-- (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        %orig(rate);
-        return;
-    }
-    %orig((CGFloat)[CFG261 resolvedTargetHz]);
-}
-
-- (CGRect)bounds {
-    return %orig;
-}
-
-- (CGFloat)scale {
-    return %orig;
-}
-
-- (CGFloat)nativeScale {
-    return %orig;
-}
-
-- (CGRect)nativeBounds {
-    return %orig;
-}
-
-- (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
-    return %orig(target, sel);
-}
-%end
-
-%hook CADisplay
-- (NSInteger)preferredFPS {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        return %orig;
-    }
-    return [CFG261 resolvedTargetHz];
-}
-
-- (void)setPreferredFPS:(NSInteger)fps {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        %orig(fps);
-        return;
-    }
-    %orig([CFG261 resolvedTargetHz]);
-}
-
-- (void)overrideDisplayTimings:(id)timings {
-    %orig(timings);
-}
-
-- (void)overrideDisplayCadence:(id)cadence {
-    %orig(cadence);
-}
-
-- (BOOL)supportsDynamicRefresh {
-    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) {
-        return YES;
-    }
-    return %orig;
 }
 %end
 
@@ -2002,6 +1990,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// =========================================================================
+// NHÓM CẢM ỨNG ĐỘ TRỄ 0S (ZERO LATENCY TOUCH)
+// =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
 
 %hook UIWindow
@@ -2613,8 +2604,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-%end
-
 // FIX LỖI 6: TỐI ƯU HÓA BÀN PHÍM KHI GÕ NHIỀU CHỮ / CODE TRONG APP NẶNG
 %group Group_Keyboard_And_TextV261
 
@@ -2956,28 +2945,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
-%hook CADisplayLink
-
-- (void)setPaused:(BOOL)paused {
-    %orig(paused);
-}
-
-- (void)setFrameInterval:(NSInteger)interval {
-    if (interval < 1) interval = 1;
-    %orig(interval);
-}
-
-- (void)addToRunLoop:(NSRunLoop *)runloop forMode:(NSString *)mode {
-    if ([mode isEqualToString:UITrackingRunLoopMode] || [mode isEqualToString:NSRunLoopCommonModes]) {
-        if (IS_ACTIVE && [CFG261 respondsToSelector:@selector(isCustomHzEnabled)] && [CFG261 isCustomHzEnabled]) {
-            self.preferredFramesPerSecond = [CFG261 resolvedTargetFPS];
-        }
-    }
-    %orig;
-}
-
-%end
-
 %hook CALayer
 
 - (void)setContentsScale:(CGFloat)scale {
@@ -3139,21 +3106,23 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// =========================================================================
+// NHÓM UIKIT DÀNH CHO APP BÊN THỨ 3 (TỰ ĐỘNG ĐỒNG BỘ HZ/FPS KHI MỞ / VÀO APP)
+// =========================================================================
 %group Group_UIKit_ThirdParty_IsolatedV261
 
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         Titanium_ReloadSharedSyncStateV261();
-        if (CFG261.syncModuleDelay || CFG261.isolateRenderPipeline) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        }
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     if (IS_ACTIVE) {
+        Titanium_ReloadSharedSyncStateV261();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
@@ -3258,6 +3227,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// =========================================================================
+// NHÓM QUẢN LÝ TIẾN TRÌNH SPRINGBOARD
+// =========================================================================
 %group Group_SpringBoard_ProcessManagerV261
 
 %hook SBApplication
@@ -3318,7 +3290,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (void)handleApplicationSuspended:(id)application {
     if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            Titanium_PurgeProcessMemoryAggressively();
+            malloc_zone_pressure_relief(NULL, 0);
         });
     }
     %orig(application);
@@ -3354,6 +3326,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// =========================================================================
+// NHÓM HIỆU NĂNG CUỘN (SCROLL PERFORMANCE)
+// =========================================================================
 %group Group_ScrollPerformance_SuperEngineV261
 
 %hook UIScrollView
@@ -3526,7 +3501,7 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     return YES;
 }
 
-// BỘ KHỞI TẠO BẤT ĐỒNG BỘ: FIX LỖI TREO RESPRING VÀ TREO USERSPACE REBOOT TRÊN ROOTHIDE
+// BỘ KHỞI TẠO BẤT ĐỒNG BỘ: SỬA TRIỆT ĐỂ TREO RESPRING / SREBOOT VÀ NẠP CẢ 2 PHÍA
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
@@ -3555,11 +3530,12 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
         Class configClass = NSClassFromString(@"BoostConfigV261");
         if (configClass) {
             CFG261 = [configClass sharedInstance];
-            if ([CFG261 respondsToSelector:@selector(loadSettings)]) {
-                [CFG261 loadSettings];
-            }
         }
 
+        // 1. QUAN TRỌNG NHẤT: BẮT BUỘC PHẢI INIT NHÓM ĐIỀU KHIỂN HZ/FPS CHO TẤT CẢ TIẾN TRÌNH (CẢ SPRINGBOARD LẪN MỌI APP)
+        %init(Group_UniversalDisplayControlV261);
+
+        // 2. NẠP CORE ENGINE TĂNG TỐC TOÀN HỆ THỐNG
         %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
         %init(Group_FastLaunch_SuperEngineV261);
@@ -3585,8 +3561,12 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // Chạy bất đồng bộ để chống treo màn hình đen khi respring hoặc reboot userspace
+        // 3. TÁCH RỜI TOÀN BỘ I/O ĐỌC ĐĨA RA KHỎI MAIN THREAD -> CHỐNG TREO RESPRING VÀ SREBOOT 100%
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
+                [CFG261 loadSettings];
+            }
+
             Titanium_StartThermalWatchdogTimerV261();
 
             CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
@@ -3609,4 +3589,3 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
         });
     }
 }
-
