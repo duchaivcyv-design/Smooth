@@ -2849,6 +2849,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+%end
+
 // FIX LỖI 1: KHÔNG CAN THIỆP GƯỢNG ÉP LÊN LOWLATENCY / NEXTDRAWABLETIMEOUT ĐỂ TRÁNH ĐEN APP
 %group Group_MetalGraphics_OptV261
 
