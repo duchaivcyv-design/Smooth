@@ -1028,7 +1028,11 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
             p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
             p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
-            Titanium_WriteSyncPayloadV261(&p);
+            
+            // Đẩy thao tác ghi đĩa ra luồng nền để SpringBoard không bị nghẽn Watchdog
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                Titanium_WriteSyncPayloadV261(&p);
+            });
         }
     }
 
@@ -1379,6 +1383,9 @@ static BOOL g_ApexRenderPipelineReady = NO;
 
 %hook CADisplay
 - (NSInteger)preferredFPS {
+    if (Titanium_IsSpringBoard()) {
+        return %orig;
+    }
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
@@ -1390,6 +1397,10 @@ static BOOL g_ApexRenderPipelineReady = NO;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
+    if (Titanium_IsSpringBoard()) {
+        %orig(fps);
+        return;
+    }
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         %orig(fps);
         return;
@@ -2475,7 +2486,7 @@ static BOOL g_ApexRenderPipelineReady = NO;
     return %orig;
 }
 
-- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
+- (scrollRectToVisible:(CGRect)rect animated:(BOOL)animated)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -3141,6 +3152,10 @@ static BOOL g_ApexRenderPipelineReady = NO;
 
 %hook CAContext
 - (void)setCommitPriority:(uint32_t)priority {
+    if (Titanium_IsSpringBoard()) {
+        %orig(priority);
+        return;
+    }
     if (IS_ACTIVE) {
         %orig(100);
         return;
@@ -3149,6 +3164,9 @@ static BOOL g_ApexRenderPipelineReady = NO;
 }
 
 - (uint32_t)commitPriority {
+    if (Titanium_IsSpringBoard()) {
+        return %orig;
+    }
     if (IS_ACTIVE) {
         return 100;
     }
@@ -3527,13 +3545,30 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
-// 1. KHAI BÁO HÀM CALLBACK ĐỒNG BỘ CÀI ĐẶT (CHỐNG LỖI UNDECLARED IDENTIFIER & CHỐNG TREO LUỒNG)
+// 1. KHAI BÁO HÀM CALLBACK ĐỒNG BỘ CÀI ĐẶT CÓ CƠ CHẾ DEBOUNCE (CHỐNG SPAM NOTIFY & KHỬ SAFE MODE 100%)
 static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+    static dispatch_source_t s_debounceTimer = nil;
+    static dispatch_queue_t s_prefQueue = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_prefQueue = dispatch_queue_create("com.titanium.v261.prefsync", DISPATCH_QUEUE_SERIAL);
+    });
+
+    if (s_debounceTimer) {
+        dispatch_source_cancel(s_debounceTimer);
+        s_debounceTimer = nil;
+    }
+
+    // Trì hoãn 120ms sau khi người dùng buông tay khỏi Slider hoặc công tắc rồi mới đọc
+    s_debounceTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, s_prefQueue);
+    dispatch_source_set_timer(s_debounceTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+    dispatch_source_set_event_handler(s_debounceTimer, ^{
         if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
             [CFG261 loadSettings];
         }
+        s_debounceTimer = nil;
     });
+    dispatch_resume(s_debounceTimer);
 }
 
 static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName) {
