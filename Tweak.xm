@@ -3418,47 +3418,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
 
 %ctor {
     @autoreleasepool {
-        if (!Titanium_CheckAndPreventBootloopUniversal()) {
-            return;
-        }
-        
-        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        const char *progName = getprogname();
-        if (!Titanium_IsProcessEligible(bundleID, progName)) {
-            return;
-        }
-        
-        CFG261 = [BoostConfigV261 sharedInstance];
-        
-        // Đăng ký nhận thông báo thay đổi tức thì từ Settings (không cần respring)
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            NULL,
-            Titanium_ReloadPreferencesV261,
-            CFSTR("com.taojb.boostiphone6s/ReloadPrefs"),
-            NULL,
-            CFNotificationSuspensionBehaviorDeliverImmediately
-        );
-        
-        %init(Group_FastLaunch_SuperEngineV261);
-        %init(Group_V261_FloatingWindow_PiP);
-        %init(Group_Display_SpringBoardV261);
-        %init(Group_ZeroLatencyTouch_PhysicsV261);
-        %init(Group_Keyboard_And_TextV261);
-        %init(Group_MetalGraphics_OptV261);
-        %init(Group_UIKit_ThirdParty_IsolatedV261);
-        %init(Group_SpringBoard_ProcessManagerV261);
-        %init(Group_ScrollPerformance_SuperEngineV261);
-        
-        if (Titanium_IsSpringBoard()) {
-            Titanium_StartThermalWatchdogTimerV261();
-            Titanium_StartPassiveRamDaemonV261();
-        }
-    }
-}
-
-%ctor {
-    @autoreleasepool {
         const char *progName = getprogname();
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
         NSString *processName = [[NSProcessInfo processInfo] processName];
