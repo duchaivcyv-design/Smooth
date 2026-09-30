@@ -1994,30 +1994,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-%hook SpringBoard
-- (id)_accessibilityFrontMostApplication {
-    return %orig;
-}
-
-- (BOOL)isLocked {
-    return %orig;
-}
-
-- (void)_reboot:(BOOL)arg1 {
-    %orig(arg1);
-}
-
-- (void)_relaunchSpringBoardNow {
-    %orig;
-}
-%end
-
-%end
-
-// =========================================================================
-// NHÓM CẢM ỨNG ĐỘ TRỄ 0S (ZERO LATENCY TOUCH)
-// =========================================================================
-%group Group_ZeroLatencyTouch_PhysicsV261
+Shower thank youGroup_ZeroLatencyTouch_PhysicsV261
 
 %hook UIWindow
 
@@ -2626,12 +2603,15 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (long long)appSwitcherStyle {
     return %orig;
 }
-%end
+%end // Đóng %hook SBAppSwitcherSettings
+
+%end // <-- THÊM DÒNG NÀY ĐỂ ĐÓNG %group Group_ZeroLatencyTouch_PhysicsV261
 
 // =========================================================================
 // BỘ KHỞI TẠO %ctor: PHÂN TÁCH ĐỘ TRỄ CHỈ CHO ROOTHIDE, ROOTLESS KHÔNG DÙNG
 // =========================================================================
 %ctor {
+Hello
     @autoreleasepool {
         const char *progName = getprogname();
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
