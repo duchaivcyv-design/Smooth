@@ -50,7 +50,6 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
 
 BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
-# CẤU HÌNH LDFLAGS ĐẶC TRỊ PHÂN VÙNG ROOTHIDE & ROOTLESS
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -Wl,-install_name,@rpath/BoostiPhone6sCore.dylib \
@@ -122,7 +121,7 @@ before-package::
 	else \
 		echo "  [FAIL] Filter Plist MISSING!"; \
 	fi; \
-	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6s.bundle" ] || [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ]; then \
+	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle" ] || [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6s.bundle" ]; then \
 		echo "  [OK] Settings Bundle verified!"; \
 	else \
 		echo "  [FAIL] Settings Bundle MISSING!"; \
