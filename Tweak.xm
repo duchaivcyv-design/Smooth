@@ -2628,8 +2628,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-%end
-
 // =========================================================================
 // BỘ KHỞI TẠO %ctor: PHÂN TÁCH ĐỘ TRỄ CHỈ CHO ROOTHIDE, ROOTLESS KHÔNG DÙNG
 // =========================================================================
