@@ -279,8 +279,8 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 - (void)clearAnimations;
-- (void)setReturnKeyEnabled:(BOOL)1;
-- (void)updateReturnKey:(BOOL)1;
+- (void)setReturnKeyEnabled:(BOOL)enabled;
+- (void)updateReturnKey:(BOOL)enabled;
 - (void)hardwareKeyboardAvailabilityChanged;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 @end
@@ -541,7 +541,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
-- (void)_reboot:(BOOL)1;
+- (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
 @end
 
@@ -826,17 +826,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     return self.enabled && (self.enableHzControl || self.forceOverclock144Hz);
 }
 
-- (NSInteger)resolvedTargetHz {
-    if (!self.enabled || !self.enableHzControl) return 60;
-    if (self.forceOverclock144Hz) return 144;
-    return (self.targetHz > 0) ? self.targetHz : 60;
-}
-
-- (NSInteger)resolvedTargetFPS {
-    if (!self.enabled || !self.enableFPSControl) return 60;
-    return (self.targetFPS > 0) ? self.targetFPS : 60;
-}
-
 - (void)loadSettings {
     dispatch_sync(_syncQueue, ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -904,6 +893,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
         self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
         self.antiThermalThrottle = self.antiThermalThrottling;
         self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
+    });
+}
 
         if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
             Titanium_ReloadSharedSyncStateV261();
