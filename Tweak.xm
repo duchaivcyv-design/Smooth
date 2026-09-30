@@ -45,6 +45,7 @@
 // ============================================================================
 // KHAI BÁO CÁC HÀM / MACRO PRIVATE CỦA XNU KERNEL & DARWIN TRÁNH LỖI BIÊN DỊCH
 // ============================================================================#ifndef VM_PURGABLE_PURGE_ALL
+#ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
 
@@ -77,8 +78,6 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
-
-extern char **environ;
 
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
@@ -625,7 +624,7 @@ typedef struct __attribute__((packed)) {
 } ApexV261Payload;
 
 static ApexV261Payload g_syncPayloadV261 = {
-    APEX_SYNC_MAGIC_V261, 1, 60, 60, 0, 1, 1, 1, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
+    APEX_SYNC_MAGIC_V261, 1, 60, 60, 0, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, {0}
 };
 
 static pthread_mutex_t g_syncLockV261 = PTHREAD_MUTEX_INITIALIZER;
@@ -635,7 +634,7 @@ static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
-// NHẬN DIỆN THIẾT BỊ 16:9 NÚT HOME (6s / 7 / 8 / Plus / SE) ĐỂ FIX LỖI RADAR & PIN ĐỒNG HỒ
+// NHẬN DIỆN THIẾT BỊ 16:9 NÚT HOME (6s / 7 / 8 / Plus / SE)
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
     static BOOL sIsClassic = NO;
     static dispatch_once_t onceToken;
@@ -674,7 +673,6 @@ static BOOL Titanium_IsSettingsApp(void) {
     return isPrefs;
 }
 
-// BỘ ÉP XUNG MÀN HÌNH MƯỢT ĐỈNH CAO: Mở khóa ép xung mượt mà, chống Safe Mode tuyệt đối
 static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
     return YES;
 }
@@ -711,7 +709,6 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
 
 // CƠ CHẾ XẢ SÂU RAM MÀ KHÔNG GÂY TẢI LẠI (RELOAD) APP
 static inline void Titanium_PurgeProcessMemoryAggressively(void) {
-    // Chỉ giải phóng cache nhàn rỗi và layer bộ đệm GPU thay vì xóa sạch VM map khiến app bị kill
     malloc_zone_pressure_relief(malloc_default_zone(), 0);
 }
 
@@ -784,7 +781,7 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
         }
         CFPropertyListRef metalVal = CFPreferencesCopyAppValue(CFSTR("MetalHexBuffering"), PREF_DOMAIN);
         if (metalVal) {
-            g_syncPayloadV261.smartBufferingLevel = CFBooleanGetValue((CFBooleanRef)metalVal) ? 7 : 7;
+            g_syncPayloadV261.smartBufferingLevel = 3;
             CFRelease(metalVal);
         }
         CFPropertyListRef exitVal = CFPreferencesCopyAppValue(CFSTR("FixAppExitStutter"), PREF_DOMAIN);
@@ -1012,7 +1009,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.pipSyncEnabled = 1;
             p.thermalShield = self.antiThermalThrottling ? 1 : 0;
             p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = 7;
+            p.smartBufferingLevel = 3; // Chuẩn 3-layer drawable để tuyệt đối không làm đen ứng dụng trên X-15PM
             p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
             p.shaderOptimization = 1;
             p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
@@ -1032,7 +1029,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 - (NSInteger)resolvedTargetHz {
     if (!self.enabled || !self.enableHzControl) return 120;
     
-    // ĐIỀU PHỐI PIN YẾU (1-20%): Chặn việc bóp xung giật cục của kernel, giữ 60Hz mượt mà và mát máy
     UIDevice *dev = [UIDevice currentDevice];
     if (dev.batteryMonitoringEnabled) {
         float batLevel = dev.batteryLevel;
@@ -1044,7 +1040,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
     
-    // Tự động điều tiết hạ nhiệt thông minh khi máy bị nóng quá mức
     if (g_liveThermalStateV261 >= NSProcessInfoThermalStateSerious && self.antiThermalThrottling) {
         return 60;
     }
@@ -1244,7 +1239,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %group Group_Display_SpringBoardV261
 
-// FIX LỖI 1: KHỬ DROP FPS / LAG KHỰNG ĐA NHIỆM KHI CHUYỂN QUA APP KHÁC
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG261.reduceMultitaskLag) {
@@ -1261,7 +1255,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
         return %orig;
     }
     
-    // Tự động hạ xung khi màn hình tĩnh để triệt tiêu nóng máy ở Màn Hình Khóa & Màn Chính
     if (!g_isUserTouchingV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 2.0)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
     }
@@ -1311,7 +1304,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
-// FIX LỖI 13: KHÔNG ĐÈ HOẶC PHÁ HỦY ANIMATION CỦA TWEAK BÊN THỨ 3
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
@@ -1320,7 +1312,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
         if (target < 15.0f) target = 15.0f;
         if (target > 144.0f) target = 144.0f;
         
-        // Nếu animation đã được cấu hình riêng từ tweak khác, chuyển tiếp mượt mà
         if (range.maximum > 0 && range.maximum != 60) {
             %orig(range);
             return;
@@ -1768,7 +1759,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-// FIX LỖI 11: TỐI ƯU HÓA RENDER THÔNG BÁO DÀY ĐẶC KHÔNG NÓNG / LAG
 %hook SBNotificationCenterController
 - (BOOL)isVisible {
     return %orig;
@@ -1795,11 +1785,10 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-// FIX LỖI 5: FIX TRIỆT ĐỂ RADAR ĐỎ VÀ LỆCH GIỜ PIN TRÊN 6s/7/8/Plus
 %hook UIStatusBar
 - (void)requestStyle:(long long)style animated:(BOOL)animated {
     if (Titanium_IsClassicHomeButtonDevice()) {
-        %orig(0, animated); // Ép phong cách status bar cổ điển, chống lệch layout sang 2 bên
+        %orig(0, animated);
         return;
     }
     %orig(style, animated);
@@ -2614,7 +2603,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
-// FIX LỖI 12: ĐỘ TRỄ BÀN PHÍM BẰNG 0, KHÔNG BỊ KHỰNG KHI GÕ NHANH
 %group Group_Keyboard_And_TextV261
 
 %hook UIKeyboardImpl
@@ -2860,17 +2848,24 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// =========================================================================
+// FIX TRIỆT ĐỂ LỖI ĐEN MÀN HÌNH TRÊN X-15PRM: ĐIỀU TIẾT METAL CHUẨN XÁC
+// =========================================================================
 %group Group_MetalGraphics_OptV261
 
 %hook CAMetalLayer
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
+    // Giữ nguyên thiết lập gốc của App nếu app tự cấu hình, không ép 7 gây deadlock buffer
     if (Titanium_IsSpringBoard()) {
         %orig(3);
         return;
     }
-    // Ép Metal cấp độ 7 cực đại cho tất cả ứng dụng & game
-    %orig(7);
+    if (count > 0 && count <= 3) {
+        %orig(count);
+    } else {
+        %orig(3);
+    }
 }
 
 - (void)didMoveToSuperlayer {
@@ -2881,10 +2876,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 
 - (NSUInteger)maximumDrawableCount {
-    if (Titanium_IsSpringBoard()) {
-        return 3;
-    }
-    return 7;
+    return %orig;
 }
 
 - (void)setLowLatencyMode:(BOOL)flag {
@@ -2903,29 +2895,29 @@ static BOOL g_ApexRenderPipelineReady = YES;
     return YES;
 }
 
+// KHÔNG ÉP CƯỠNG BỨC setAllowsNextDrawableTimeout để tránh nil drawable gây đen màn hình trên iOS 16/17
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    // FIX LỖI 3: Cho phép timeout để tránh xé hình khi thoát ứng dụng
-    %orig(YES);
+    %orig(allow);
 }
 
 - (BOOL)allowsNextDrawableTimeout {
-    return YES;
+    return %orig;
 }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
-    %orig(NO);
+    %orig(flag);
 }
 
 - (BOOL)presentsWithTransaction {
-    return NO;
+    return %orig;
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)flag {
-    %orig(NO);
+    %orig(flag);
 }
 
 - (BOOL)serverPresentsWithTransaction {
-    return NO;
+    return %orig;
 }
 
 - (void)setFramebufferOnly:(BOOL)framebufferOnly {
@@ -2984,7 +2976,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
 
     if (IS_ACTIVE && CFG261.metalHexBuffering) {
-        %orig(scale > 0 ? scale : 2.0);
+        %orig(scale > 0 ? scale : [UIScreen mainScreen].scale);
         return;
     }
     %orig;
@@ -3136,7 +3128,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
-// FIX LỖI 2: ÉP TOÀN BỘ CÔNG TẮC HZ/FPS HOẠT ĐỘNG 100% TRONG APP BÊN THỨ 3
 %group Group_UIKit_ThirdParty_IsolatedV261
 
 %hook UIViewController
@@ -3163,7 +3154,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    // Dọn dẹp an toàn khi chuyển View, không làm văng bộ nhớ app
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             Titanium_PurgeProcessMemoryAggressively();
@@ -3241,11 +3231,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// FIX TRIỆT ĐỂ: Tuyệt đối không can thiệp chặn _readySceneForDisplay để app không bị treo đen
 %hook UIWindowScene
 - (void)_readySceneForDisplay {
-    if (IS_ACTIVE && (CFG261.fixAppLaunchBlackScreen || CFG261.antiBlackScreenLaunch)) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
     %orig;
 }
 
@@ -3402,7 +3390,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
-// BỘ ĐIỀU NHIỆT VÀ THEO DÕI NĂNG LƯỢNG THÔNG MINH
 static void Titanium_StartThermalWatchdogTimerV261(void) {
     static dispatch_source_t timerSource = nil;
     static dispatch_once_t onceToken;
@@ -3415,7 +3402,6 @@ static void Titanium_StartThermalWatchdogTimerV261(void) {
             NSProcessInfoThermalState currentThermalState = [[NSProcessInfo processInfo] thermalState];
             g_liveThermalStateV261 = currentThermalState;
             
-            // Giám sát trạng thái sạc pin
             UIDevice *device = [UIDevice currentDevice];
             if (device.batteryMonitoringEnabled) {
                 g_isDeviceChargingV261 = (device.batteryState == UIDeviceBatteryStateCharging || device.batteryState == UIDeviceBatteryStateFull);
@@ -3429,7 +3415,6 @@ static void Titanium_StartThermalWatchdogTimerV261(void) {
     });
 }
 
-// XẢ RAM ĐỊNH KỲ AN TOÀN TRÊN SPRINGBOARD (KHÔNG BỊ TẢI LẠI APP)
 static void Titanium_StartPassiveRamDaemonV261(void) {
     if (!Titanium_IsSpringBoard()) return;
     
@@ -3486,7 +3471,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     return YES;
 }
 
-// KHAI BÁO BỘ ĐỒNG BỘ CÀI ĐẶT CÓ CƠ CHẾ DEBOUNCE (CHỐNG SPAM NOTIFY & KHỬ SAFE MODE 100%)
 static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     static dispatch_source_t s_debounceTimer = nil;
     static dispatch_queue_t s_prefQueue = nil;
@@ -3531,7 +3515,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     return YES;
 }
 
-// BỘ KHỞI TẠO BẤT ĐỒNG BỘ: CHỐNG TREO MÀN ĐEN VÀ TREO DOPAMINE ROOTHIDE KHI RESPRING / SREBOOT
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
@@ -3553,12 +3536,10 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             return;
         }
 
-        // Bật giám sát pin trong SpringBoard
         if (Titanium_IsSpringBoard()) {
             [UIDevice currentDevice].batteryMonitoringEnabled = YES;
         }
 
-        // Nạp cấu hình tức thì
         Class configClass = NSClassFromString(@"BoostConfigV261");
         if (configClass) {
             CFG261 = [configClass sharedInstance];
@@ -3567,7 +3548,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             }
         }
 
-        // Đăng ký toàn bộ các nhóm Hook đã fix lỗi
         %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
         %init(Group_FastLaunch_SuperEngineV261);
@@ -3593,7 +3573,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // Khởi động các tiến trình nền chống treo đen
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
                 Titanium_StartThermalWatchdogTimerV261();
@@ -3619,5 +3598,3 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
         });
     }
 }
-
-
