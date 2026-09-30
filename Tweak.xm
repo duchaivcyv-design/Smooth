@@ -5,6 +5,7 @@
 #import <mach/vm_map.h>
 #import <mach/vm_region.h>
 #import <mach/vm_statistics.h>
+#import <mach/vm_types.h>
 #import <mach/thread_act.h>
 #import <mach/thread_policy.h>
 #import <mach/task.h>
@@ -14,6 +15,8 @@
 #import <pthread/qos.h>
 #import <sched.h>
 #import <unistd.h>
+#import <stdlib.h>
+#import <string.h>
 #import <spawn.h>
 #import <sys/sysctl.h>
 #import <sys/resource.h>
@@ -38,6 +41,28 @@
 #import <Metal/Metal.h>
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
+
+// ============================================================================
+// KHAI BÁO CÁC HÀM / MACRO PRIVATE CỦA XNU KERNEL & DARWIN TRÁNH LỖI BIÊN DỊCH
+// ============================================================================
+#ifndef VM_PURGABLE_PURGE_ALL
+#define VM_PURGABLE_PURGE_ALL 0
+#endif
+
+#ifndef VM_FLAGS_PURGABLE
+#define VM_FLAGS_PURGABLE 1
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+    kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
+    void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
+    const char *getprogname(void);
+    extern char **environ;
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef UIWindowSceneActivationState_DEFINED
 #define UIWindowSceneActivationState_DEFINED
