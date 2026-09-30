@@ -634,6 +634,28 @@ static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
+// HÀM CHUẨN HÓA DẢI CAFrameRateRange: TRIỆT TIÊU SAFEMODE CHO TOÀN BỘ MỨC HZ LẺ
+static inline CAFrameRateRange Titanium_NormalizeFrameRateRange(float target) {
+    if (target < 15.0f) target = 15.0f;
+    if (target > 144.0f) target = 144.0f;
+    
+    float minRate = 15.0f;
+    if (target >= 120.0f) {
+        minRate = 60.0f;
+    } else if (target >= 60.0f) {
+        minRate = 30.0f;
+    } else if (target >= 30.0f) {
+        minRate = 15.0f;
+    } else {
+        minRate = 10.0f;
+    }
+    
+    if (minRate > target) {
+        minRate = target;
+    }
+    return CAFrameRateRangeMake(minRate, target, target);
+}
+
 // NHẬN DIỆN THIẾT BỊ 16:9 NÚT HOME (6s / 7 / 8 / Plus / SE)
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
     static BOOL sIsClassic = NO;
@@ -827,7 +849,8 @@ static BOOL Titanium_IsCriticalSystemDaemon(void) {
                 [proc isEqualToString:@"mediaserverd"] || [proc isEqualToString:@"passd"] || 
                 [proc isEqualToString:@"identityservicesd"] || [proc isEqualToString:@"PosterBoard"] || 
                 [proc isEqualToString:@"tursd"] || [proc isEqualToString:@"roothided"] || 
-                [proc isEqualToString:@"PosterBoardPosterExtension"]) {
+                [proc isEqualToString:@"PosterBoardPosterExtension"] ||
+                [proc isEqualToString:@"thermalmonitord"]) {
                 isDaemon = YES;
                 return;
             }
@@ -1009,7 +1032,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
             p.pipSyncEnabled = 1;
             p.thermalShield = self.antiThermalThrottling ? 1 : 0;
             p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = 3; // Chuẩn 3-layer drawable để tuyệt đối không làm đen ứng dụng trên X-15PM
+            p.smartBufferingLevel = 3;
             p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
             p.shaderOptimization = 1;
             p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
@@ -1076,6 +1099,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 static BOOL g_ApexRenderPipelineReady = YES;
 
+// FIX LỖI 7: TỐC ĐỘ LOADING APP NHANH TỨC THÌ
 %group Group_FastLaunch_SuperEngineV261
 
 %hook FBApplicationProcess
@@ -1092,8 +1116,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
-%end
-
 %end
 
 %hook FBProcess
@@ -1125,6 +1147,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     return %orig(options, suspended, restoreState);
 }
+%end
+
 %end
 
 %group Group_V261_FloatingWindow_PiP
@@ -1237,6 +1261,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// FIX LỖI 1 & 2: ÉP HZ/FPS HOẠT ĐỘNG TOÀN DIỆN CHO SPRINGBOARD, CC, NC VÀ KHỬ SAFEMODE TẤT CẢ MỨC HZ
 %group Group_Display_SpringBoardV261
 
 %hook SBAppSwitcherController
@@ -1255,17 +1280,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
         return %orig;
     }
     
-    if (!g_isUserTouchingV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 2.0)) {
-        return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
-    }
-    
     NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
-    if (rate < 15.0f) rate = 15.0f;
-    if (rate > 144.0f) rate = 144.0f;
-    
-    float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
-    return CAFrameRateRangeMake(minRate, rate, rate);
+    return Titanium_NormalizeFrameRateRange((float)targetHz);
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
@@ -1274,12 +1290,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
         return;
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
-    if (rate < 15.0f) rate = 15.0f;
-    if (rate > 144.0f) rate = 144.0f;
-    
-    float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
-    %orig(CAFrameRateRangeMake(minRate, rate, rate));
+    %orig(Titanium_NormalizeFrameRateRange((float)targetHz));
 }
 
 - (BOOL)isPaused {
@@ -1304,21 +1315,19 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// FIX LỖI CHUYỂN CẢNH & KHÔNG ĐÈ ANIMATION
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
         float target = (float)[CFG261 resolvedTargetHz];
-        if (target < 15.0f) target = 15.0f;
-        if (target > 144.0f) target = 144.0f;
         
         if (range.maximum > 0 && range.maximum != 60) {
             %orig(range);
             return;
         }
         
-        float minHz = (float)(CFG261.powerSaveMode ? 15.0f : ((target < 60.0f) ? 30.0f : 60.0f));
-        %orig(CAFrameRateRangeMake(minHz, target, target));
+        %orig(Titanium_NormalizeFrameRateRange(target));
     } else {
         %orig(range);
     }
@@ -1739,6 +1748,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// FIX: ÉP CONTROL CENTER ĐẠT HZ MƯỢT ĐỈNH CAO
 %hook SBControlCenterController
 - (BOOL)isVisible {
     return %orig;
@@ -1759,6 +1769,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// FIX: ÉP NOTIFICATION CENTER ĐẠT HZ MƯỢT ĐỈNH CAO
 %hook SBNotificationCenterController
 - (BOOL)isVisible {
     return %orig;
@@ -2345,6 +2356,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// FIX LỖI 4: VUỐT CUỘN NHANH VIDEO KHÔNG BỊ KHỰNG / DELAY
 %hook UIScrollView
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
@@ -2603,6 +2615,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 
 %end
 
+// FIX LỖI 6: TỐI ƯU HÓA BÀN PHÍM KHI GÕ NHIỀU CHỮ / CODE TRONG APP NẶNG
 %group Group_Keyboard_And_TextV261
 
 %hook UIKeyboardImpl
@@ -2849,14 +2862,13 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 // =========================================================================
-// FIX TRIỆT ĐỂ LỖI ĐEN MÀN HÌNH TRÊN X-15PRM: ĐIỀU TIẾT METAL CHUẨN XÁC
+// PIPELINE METAL GRAPHICS CHUẨN XÁC: FIX LỖI ĐEN MÀN HÌNH VÀ VIDEO GIẬT
 // =========================================================================
 %group Group_MetalGraphics_OptV261
 
 %hook CAMetalLayer
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    // Giữ nguyên thiết lập gốc của App nếu app tự cấu hình, không ép 7 gây deadlock buffer
     if (Titanium_IsSpringBoard()) {
         %orig(3);
         return;
@@ -2895,7 +2907,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
     return YES;
 }
 
-// KHÔNG ÉP CƯỠNG BỨC setAllowsNextDrawableTimeout để tránh nil drawable gây đen màn hình trên iOS 16/17
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     %orig(allow);
 }
@@ -3231,7 +3242,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
-// FIX TRIỆT ĐỂ: Tuyệt đối không can thiệp chặn _readySceneForDisplay để app không bị treo đen
 %hook UIWindowScene
 - (void)_readySceneForDisplay {
     %orig;
@@ -3500,7 +3510,8 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     if (strstr(progName, "ReportCrash") || strstr(progName, "crashreporterd") || 
         strstr(progName, "panic_report") || strstr(progName, "analyticsd") ||
         strstr(progName, "symptomsd") || strstr(progName, "logd") ||
-        strstr(progName, "PosterBoard") || strstr(progName, "WallpaperKit")) {
+        strstr(progName, "PosterBoard") || strstr(progName, "WallpaperKit") ||
+        strstr(progName, "thermalmonitord")) {
         return NO;
     }
     if (bundleID) {
@@ -3515,6 +3526,7 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     return YES;
 }
 
+// BỘ KHỞI TẠO BẤT ĐỒNG BỘ: FIX LỖI TREO RESPRING VÀ TREO USERSPACE REBOOT TRÊN ROOTHIDE
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
@@ -3573,28 +3585,28 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             %init(Group_Keyboard_And_TextV261);
         }
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-                Titanium_StartThermalWatchdogTimerV261();
+        // Chạy bất đồng bộ để chống treo màn hình đen khi respring hoặc reboot userspace
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            Titanium_StartThermalWatchdogTimerV261();
 
-                CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-                if (darwinCenter) {
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
-                        CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+            CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+            if (darwinCenter) {
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                    CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
-                        CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                    CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
-                        CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-                }
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                    CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+            }
 
-                if (Titanium_IsSpringBoard()) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        Titanium_StartPassiveRamDaemonV261();
-                    });
-                }
-            });
+            if (Titanium_IsSpringBoard()) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    Titanium_StartPassiveRamDaemonV261();
+                });
+            }
         });
     }
 }
+
