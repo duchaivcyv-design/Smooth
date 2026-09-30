@@ -148,7 +148,7 @@
 			<string>Ép Xung Cực Đại 144Hz Toàn Máy</string>
 		</dict>
 
-		<!-- NHÓM 4: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 -->
+		<!-- NHÓM 4: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP) -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -165,7 +165,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>AppLazyInjectionSync</string>
+			<string>SyncModuleDelay</string>
 			<key>label</key>
 			<string>Đồng Bộ Độ Trễ Tiêm Mô-Đun</string>
 		</dict>
@@ -177,7 +177,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>AppRenderShieldIsolation</string>
+			<string>IsolateRenderPipeline</string>
 			<key>label</key>
 			<string>Cách Ly Render Pipeline App Gốc</string>
 		</dict>
@@ -265,7 +265,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>QuantumRenderShieldOfficial</string>
+			<string>QuantumRenderShield</string>
 			<key>label</key>
 			<string>Quantum Render Shield</string>
 		</dict>
@@ -277,7 +277,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>NeuralBufferOptimizerOfficial</string>
+			<string>NeuralBufferOpt</string>
 			<key>label</key>
 			<string>Neural Buffer Optimizer</string>
 		</dict>
@@ -289,7 +289,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>ApexBackgroundPacingDaemon</string>
+			<string>BackgroundPacingDaemon</string>
 			<key>label</key>
 			<string>Background Pacing Daemon</string>
 		</dict>
@@ -313,7 +313,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>UltraResponsivenessProEngineOfficial</string>
+			<string>UltraResponsiveness</string>
 			<key>label</key>
 			<string>Ultra Responsiveness Pro</string>
 		</dict>
@@ -325,7 +325,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>HyperThreadIOAcceleratorOfficial</string>
+			<string>HyperThreadIO</string>
 			<key>label</key>
 			<string>HyperThread I/O Accelerator</string>
 		</dict>
@@ -337,7 +337,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>QuantumCoreSyncStabilizerOfficial</string>
+			<string>QuantumCoreSync</string>
 			<key>label</key>
 			<string>Quantum Core Sync Stabilizer</string>
 		</dict>
@@ -349,7 +349,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>ZeroLagNeuralBoosterOfficial</string>
+			<string>ZeroLagNeuralBooster</string>
 			<key>label</key>
 			<string>Zero-Lag Neural Booster</string>
 		</dict>
@@ -361,7 +361,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>VsyncAdaptiveBufferOfficial</string>
+			<string>VsyncAdaptiveBuffer</string>
 			<key>label</key>
 			<string>V-Sync Adaptive Buffer</string>
 		</dict>
@@ -373,7 +373,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>DynamicThermalEngineOfficial</string>
+			<string>DynamicThermalEngine</string>
 			<key>label</key>
 			<string>Dynamic Thermal Engine</string>
 		</dict>
@@ -393,7 +393,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>Ios27AutoScheduler</string>
+			<string>IOSchedulerEngine</string>
 			<key>label</key>
 			<string>Bộ Điều Phối iOS Scheduler</string>
 		</dict>
@@ -405,7 +405,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>RealtimePriorityBoost</string>
+			<string>RealtimeThreadSched</string>
 			<key>label</key>
 			<string>Ưu Tiên Luồng Realtime (SCHED_RR)</string>
 		</dict>
@@ -417,7 +417,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>BoostCpuGpu</string>
+			<string>CPUGPUFreqOptimizer</string>
 			<key>label</key>
 			<string>Tối Ưu Xung Nhịp CPU/GPU</string>
 		</dict>
@@ -429,7 +429,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>SmartRamClean</string>
+			<string>PeriodicRamClean</string>
 			<key>label</key>
 			<string>Dọn RAM Tự Động Định Kỳ</string>
 		</dict>
@@ -441,7 +441,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>AggressiveRamClean</string>
+			<string>MachVMPurgeRam</string>
 			<key>label</key>
 			<string>Dọn RAM Chuyên Sâu Cấp Mach VM</string>
 		</dict>
@@ -453,7 +453,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>KillBgApps</string>
+			<string>AutoCloseBackgroundApp</string>
 			<key>label</key>
 			<string>Đóng Ứng Dụng Nền Tự Động</string>
 		</dict>
@@ -477,7 +477,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>GameFpsStabilizer</string>
+			<string>GameFPSStabilizer</string>
 			<key>label</key>
 			<string>Ổn Định Khung Hình Chơi Game</string>
 		</dict>
@@ -489,7 +489,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>OptimizeSystemProcess</string>
+			<string>SystemProcessOpt</string>
 			<key>label</key>
 			<string>Tối Ưu Tiến Trình Hệ Thống</string>
 		</dict>
@@ -501,7 +501,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>AutoSpoofNewDevice</string>
+			<string>DeviceSpoofer</string>
 			<key>label</key>
 			<string>Giả Lập Thiết Bị Đời Mới</string>
 		</dict>
@@ -533,7 +533,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>SmartThermalManager</string>
+			<string>SmartThermalDispatch</string>
 			<key>label</key>
 			<string>Điều Phối Nhiệt Độ Thông Minh</string>
 		</dict>
@@ -557,7 +557,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>ChargeCoolingProtection</string>
+			<string>ChargeThermalProtection</string>
 			<key>label</key>
 			<string>Bảo Vệ Hạ Nhiệt Khi Cắm Sạc</string>
 		</dict>
@@ -601,7 +601,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>BlockAnalytics</string>
+			<string>BlockBackgroundTelemetry</string>
 			<key>label</key>
 			<string>Chặn Thu Thập Dữ Liệu Ngầm</string>
 		</dict>
@@ -613,7 +613,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V26 BETA - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V26 DEBUG - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
