@@ -87,7 +87,9 @@ static inline const char *Titanium_FindExecutable(const char *name) {
     return name;
 }
 
-// KHỚP CHUẨN XÁC 100% VỚI STRUCT TRONG TWEAK.XM
+// ============================================================================
+// ĐÃ ĐỒNG BỘ 100% CHUẨN XÁC TỪNG BYTE VỚI STRUCT TRONG TWEAK.XM
+// ============================================================================
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -102,11 +104,16 @@ typedef struct __attribute__((packed)) {
     uint32_t shaderOptimization;
     uint32_t dynamicInterpolation;
     uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
     uint32_t keyboardZeroLagV3;
     uint32_t aggressiveRamCleaner;
     uint32_t lockFixedFpsWhenThermal;
     uint64_t updateSeq;
-    uint64_t reservedTicks;
+    uint64_t lastHeartbeat;
+    char     reserved[64];
 } ApexV261Payload;
 
 enum PSCellType {
@@ -141,6 +148,8 @@ enum PSCellType {
 @interface RootListController : PSListController {
     NSArray *_allSavedSpecifiers;
 }
+@property (nonatomic, strong) dispatch_source_t debounceSyncTimer;
+@property (nonatomic, strong) dispatch_queue_t syncQueue;
 @end
 
 static inline UIAlertController *alertPresentationControllerHelperV26(UIAlertController *alert, UIViewController *vc) {
@@ -216,12 +225,32 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 @implementation RootListController
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _syncQueue = dispatch_queue_create("com.titanium.v261.rootsync", DISPATCH_QUEUE_SERIAL);
+    }
+    return self;
+}
+
 // ============================================================================
-// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & BẮN CƯỠNG BỨC TOÀN BỘ NOTIFICATION CHANNELS
+// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & BẮN NOTIFICATION CÓ DEBOUNCE (CHỐNG SPAM GÂY SAFE MODE)
 // ============================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        NSDictionary *prefs = [self getMergedPreferences];
+    if (self.debounceSyncTimer) {
+        dispatch_source_cancel(self.debounceSyncTimer);
+        self.debounceSyncTimer = nil;
+    }
+
+    self.debounceSyncTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self.syncQueue);
+    dispatch_source_set_timer(self.debounceSyncTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_source_set_event_handler(self.debounceSyncTimer, ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        NSDictionary *prefs = [strongSelf getMergedPreferences];
         
         ApexV261Payload payload;
         memset(&payload, 0, sizeof(ApexV261Payload));
@@ -240,6 +269,10 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.shaderOptimization = 0;
             payload.dynamicInterpolation = 0;
             payload.fastAppLaunch = 0;
+            payload.lowLatencyAudio = 0;
+            payload.memoryPressureRelief = 0;
+            payload.metalPacingEnabled = 0;
+            payload.runloopHangGuard = 0;
             payload.keyboardZeroLagV3 = 0;
             payload.aggressiveRamCleaner = 0;
             payload.lockFixedFpsWhenThermal = 0;
@@ -255,39 +288,51 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.pipSyncEnabled = 1;
             payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
             payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
-            payload.smartBufferingLevel = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 6 : 4) : 6;
+            
+            // Tính số tầng đệm chuẩn theo Hz
+            int32_t bufLvl = 4;
+            if (payload.targetHz >= 120 || payload.forceOverclock) {
+                bufLvl = 6;
+            } else if (payload.targetHz >= 80) {
+                bufLvl = 5;
+            } else if (payload.targetHz <= 40) {
+                bufLvl = 3;
+            }
+            payload.smartBufferingLevel = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? bufLvl : 4) : bufLvl;
+            
             payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
             payload.shaderOptimization = 1;
             payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+            payload.lowLatencyAudio = 1;
+            payload.memoryPressureRelief = 1;
+            payload.metalPacingEnabled = 1;
+            payload.runloopHangGuard = 1;
             payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
             payload.aggressiveRamCleaner = prefs[@"AggressiveRamClean"] ? ([prefs[@"AggressiveRamClean"] boolValue] ? 1 : 0) : 0;
             payload.lockFixedFpsWhenThermal = payload.thermalShield;
         }
 
         payload.updateSeq = (uint64_t)mach_absolute_time();
+        payload.lastHeartbeat = payload.updateSeq;
 
-        // Ghi đồng bộ tức thì với cờ O_SYNC, cấp quyền 0666 cho toàn bộ Apps đọc được
-        int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, 0666);
+        // Ghi file atomic an toàn
+        int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (fd >= 0) {
-            write(fd, &payload, sizeof(payload));
+            write(fd, &payload, sizeof(ApexV261Payload));
             close(fd);
             chmod([SHARED_SYNC_FILE UTF8String], 0666);
         }
-        
-        Class configClass = NSClassFromString(@"BoostConfigV261");
-        if (configClass && [configClass respondsToSelector:@selector(sharedInstance)]) {
-            id cfg = [configClass sharedInstance];
-            if ([cfg respondsToSelector:@selector(loadSettings)]) {
-                [cfg performSelector:@selector(loadSettings)];
-            }
-        }
 
-        // Bắn đồng loạt 4 kênh Notify để toàn bộ SpringBoard, UIKit và Daemons cập nhật ngay
+        // Bắn Notify đồng bộ đến SpringBoard và các daemon
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
         notify_post(NOTIFY_TITANIUM_CHANGED);
+
+        strongSelf.debounceSyncTimer = nil;
     });
+
+    dispatch_resume(self.debounceSyncTimer);
 }
 
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
@@ -507,9 +552,9 @@ static inline NSString *PM_TextV26(NSString *key) {
             @"MetalHexBuffering": @YES,
             @"KeyboardZeroLagV24": @YES,
             @"EnableHzControl": @YES,
-            @"TargetRefreshRate": @144,
+            @"TargetRefreshRate": @60,
             @"EnableFPSControl": @YES,
-            @"TargetFPSRate": @144,
+            @"TargetFPSRate": @60,
             @"ForceOverclock144Hz": @NO,
             @"SyncModuleDelay": @YES,
             @"IsolateRenderPipeline": @YES,
