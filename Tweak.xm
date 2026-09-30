@@ -274,7 +274,7 @@ static inline BOOL Titanium_IsRootHideEnvironment(void) {
 - (void)_updatePreferredContentSize;
 - (void)startPictureInPicture;
 - (void)stopPictureInPictureAnimated:(BOOL)animated;
-- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)start;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart;
 @end
 
 @interface SBPIPController : NSObject
@@ -2631,7 +2631,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 
 // =========================================================================
-// BỘ KHỞI TẠO %ctor: PHÂN TÁCH ĐỘ TRỄ CHỈ CHO ROOTHIDE, ROOTLESS (LESS) KHÔNG DÙNG
+// BỘ KHỞI TẠO %ctor: PHÂN TÁCH ĐỘ TRỄ CHỈ CHO ROOTHIDE, ROOTLESS KHÔNG DÙNG
 // =========================================================================
 %ctor {
     @autoreleasepool {
@@ -2666,7 +2666,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
         // 1. NẠP NHÓM ĐIỀU KHIỂN HZ/FPS TOÀN CỤC CHO CẢ SPRINGBOARD LẪN MỌI APP
         %init(Group_UniversalDisplayControlV261);
 
-        // 2. NẠP CÁC CORE ENGINE TĂNG TỐC TOÀN HỆ THỐNG
+        // 2. NẠP CORE ENGINE TĂNG TỐC TOÀN HỆ THỐNG
         %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
         %init(Group_FastLaunch_SuperEngineV261);
@@ -2692,9 +2692,8 @@ static BOOL g_ApexRenderPipelineReady = YES;
             %init(Group_Keyboard_And_TextV261);
         }
 
-        // 3. PHÂN TÁCH MÔI TRƯỜNG ROOTHIDE VÀ ROOTLESS ("LESS")
+        // 3. PHÂN TÁCH ROOTHIDE VÀ ROOTLESS: ROOTHIDE DÙNG ĐỘ TRỄ NỀN, ROOTLESS (LESS) NẠP TỨC THÌ
         if (Titanium_IsRootHideEnvironment()) {
-            // Roothide có độ trễ nền an toàn để chống treo respring / sreboot
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
                     [CFG261 loadSettings];
@@ -2721,7 +2720,6 @@ static BOOL g_ApexRenderPipelineReady = YES;
                 }
             });
         } else {
-            // Rootless ("Less"): Nạp ngay lập tức trên luồng chính, tốc độ tối đa 0 độ trễ
             if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
                 [CFG261 loadSettings];
             }
