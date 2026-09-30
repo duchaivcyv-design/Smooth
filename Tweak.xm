@@ -1254,7 +1254,6 @@ static BoostConfigV261 *CFG261 = nil;
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
         return %orig;
     }
-    // PHANH NHIỆT KHUNG HÌNH TĨNH: Buông tay 1.5s về 60Hz. Chạm lại lập tức 120/144Hz.
     if (!g_isUserTouchingV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
     }
@@ -1272,11 +1271,8 @@ static BoostConfigV261 *CFG261 = nil;
     NSInteger targetHz = [CFG261 resolvedTargetHz];
     float rate = (float)targetHz;
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
-    
-    // Gán trực tiếp vào biến tham số range và gọi %orig không đối số
-    // Cách này giúp Logos không bị lỗi cú pháp 'invalid argument structure'
     range = CAFrameRateRangeMake(minRate, rate, rate);
-    %orig;
+    %orig; // <-- DÙNG %orig; KHÔNG DÙNG %orig(...)
 }
 - (BOOL)isPaused { return %orig; }
 - (void)setPaused:(BOOL)paused { %orig(paused); }
@@ -1291,7 +1287,7 @@ static BoostConfigV261 *CFG261 = nil;
         float target = (float)[CFG261 resolvedTargetHz];
         float minHz = (target < 60.0f) ? 30.0f : 60.0f;
         range = CAFrameRateRangeMake(minHz, target, target);
-        %orig;
+        %orig; // <-- SỬA DÒNG 1282 Ở ĐÂY: DÙNG %orig; KHÔNG DÙNG %orig(customRange);
     } else {
         %orig;
     }
