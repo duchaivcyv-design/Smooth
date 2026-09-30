@@ -1,4 +1,4 @@
-#import <mach/mach.h>
+Oh thanks pan mommy#import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
 #import <mach/mach_types.h>
@@ -2611,7 +2611,6 @@ Shower thank youGroup_ZeroLatencyTouch_PhysicsV261
 // BỘ KHỞI TẠO %ctor: PHÂN TÁCH ĐỘ TRỄ CHỈ CHO ROOTHIDE, ROOTLESS KHÔNG DÙNG
 // =========================================================================
 %ctor {
-Hello
     @autoreleasepool {
         const char *progName = getprogname();
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
