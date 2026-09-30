@@ -1172,14 +1172,13 @@ static BoostConfigV261 *CFG261 = nil;
 
 %group Group_Display_SpringBoardV261
 
-// Giữ lại khung hook cơ sở và kết thúc nhóm, để phần hiện thực chi tiết cho đoạn dưới
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     %orig;
 }
 %end
 
-%end
+%hook CADisplayLink
 
 - (CAFrameRateRange)preferredFrameRateRange {
     Titanium_ReloadSharedSyncStateV261();
@@ -1199,6 +1198,8 @@ static BoostConfigV261 *CFG261 = nil;
     float rate = (float)[CFG261 resolvedTargetHz];
     %orig(CAFrameRateRangeMake(rate, rate, rate));
 }
+
+%end
 
 - (BOOL)isPaused {
     return %orig;
