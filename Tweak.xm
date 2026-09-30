@@ -403,6 +403,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)setHighlighted:(BOOL)highlighted;
 - (void)setTouchDownInIcon:(BOOL)touchDown;
 - (void)setAllowsCloseBox:(BOOL)allows;
+- (BOOL)isInFolder; // Đã thêm để tránh lỗi biên dịch khi kiểm tra icon trong thư mục
 @end
 
 @interface SBFluidSwitcherViewController : UIViewController
@@ -512,6 +513,21 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)viewWillDisappear:(BOOL)animated;
 - (void)viewDidDisappear:(BOOL)animated;
 @end
+
+// =========================================================================
+// KIỂM TRA PHÂN TÁCH PHẦN CỨNG 6S-8PLUS (FAKE CỬ CHỈ X) VÀ X-15PRM (CỬ CHỈ GỐC)
+// =========================================================================
+static inline BOOL Titanium_IsGestureDevice(void) {
+    // Nếu là thiết bị có Face ID (X đến 15 Pro Max) -> Cử chỉ gốc
+    if (!Titanium_IsClassicHomeButtonDevice()) {
+        return YES;
+    }
+    // Nếu là 6s/7/8/Plus/SE nhưng người dùng cài Tweak fake cử chỉ iPhone X
+    if (NSClassFromString(@"SBFluidSwitcherViewController") != nil) {
+        return YES;
+    }
+    return NO;
+}
 
 @interface SBMainDisplayLayoutStateManager : NSObject
 - (id)layoutState;
@@ -1250,15 +1266,17 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        %orig(range);
+        %orig;
         return;
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
     float rate = (float)targetHz;
     float minRate = (rate <= 60.0f) ? 30.0f : 60.0f;
-    // BẢN FIX LỖI LOGOS: KHAI BÁO BIẾN STRUCT RỜI TRÁNH DẤU PHẨY TRONG %orig
-    CAFrameRateRange customRange = CAFrameRateRangeMake(minRate, rate, rate);
-    %orig(customRange);
+    
+    // Gán trực tiếp vào biến tham số range và gọi %orig không đối số
+    // Cách này giúp Logos không bị lỗi cú pháp 'invalid argument structure'
+    range = CAFrameRateRangeMake(minRate, rate, rate);
+    %orig;
 }
 - (BOOL)isPaused { return %orig; }
 - (void)setPaused:(BOOL)paused { %orig(paused); }
@@ -1272,36 +1290,11 @@ static BoostConfigV261 *CFG261 = nil;
     if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
         float target = (float)[CFG261 resolvedTargetHz];
         float minHz = (target < 60.0f) ? 30.0f : 60.0f;
-        CAFrameRateRange customRange = CAFrameRateRangeMake(minHz, target, target);
-        %orig(customRange);
+        range = CAFrameRateRangeMake(minHz, target, target);
+        %orig;
     } else {
-        %orig(range);
+        %orig;
     }
-}
-%end
-
-// Ép hệ thống mô phỏng Vật lý chất lỏng (Aquamorphic)
-%hook CASpringAnimation
-- (void)setDamping:(CGFloat)damping {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(0.82); // Nảy êm, không bị cứng như iOS
-        return;
-    }
-    %orig(damping);
-}
-- (void)setStiffness:(CGFloat)stiffness {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(410.0); // Bật ra cực nhanh theo đầu ngón tay
-        return;
-    }
-    %orig(stiffness);
-}
-- (void)setMass:(CGFloat)mass {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(1.0);
-        return;
-    }
-    %orig(mass);
 }
 %end
 
