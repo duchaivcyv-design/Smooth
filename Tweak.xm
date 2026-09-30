@@ -1172,72 +1172,14 @@ static BoostConfigV261 *CFG261 = nil;
 
 %group Group_Display_SpringBoardV261
 
-// --- FIX TRIỆT ĐỂ LỖI KẸT THẺ ĐA NHIỆM & GIẬT KHỰNG CARD ---
+// Giữ lại khung hook cơ sở và kết thúc nhóm, để phần hiện thực chi tiết cho đoạn dưới
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     %orig;
-    // BỎ HOÀN TOÀN CÂU LỆNH ÉP TRANSFORM IDENTITY GÂY KẸT THẺ Ở ĐÂY
 }
 %end
 
-%hook SBAppSwitcherSettings
-- (void)setDeckSwitcherPageScale:(double)scaleValue {
-    // Không ghi đè tỉ lệ tuỳ tiện làm vỡ toạ độ hiển thị thẻ
-    %orig(scaleValue);
-}
 %end
-
-%hook SBFluidSwitcherViewController
-- (void)viewWillLayoutSubviews {
-    %orig;
-}
-- (BOOL)_shouldAnimatePropertyWithKey:(NSString *)key {
-    return %orig;
-}
-%end
-
-%hook SBFluidSwitcherItemContainer
-- (void)setContentAlpha:(double)alpha {
-    // Đảm bảo card luôn hiển thị rõ nét, chống lỗi tàng hình hoặc đè chồng mờ card
-    %orig(1.0);
-}
-%end
-
-// --- FIX TRIỆT ĐỂ LỖI THỤT ĐEN ĐỈNH MÀN HÌNH / STATUSBAR ---
-%hook UIWindow
-- (void)layoutSubviews {
-    %orig;
-    if (Titanium_IsSpringBoard()) {
-        NSString *clsName = NSStringFromClass([self class]);
-        if ([clsName containsString:@"StatusBar"] || [clsName containsString:@"SecureWindow"]) {
-            return;
-        }
-    }
-}
-%end
-
-%hook SBMainDisplaySceneLayoutViewController
-- (void)viewWillLayoutSubviews {
-    %orig;
-    if ([self respondsToSelector:@selector(view)]) {
-        UIView *v = [self view];
-        if (v && !CGRectEqualToRect(v.frame, [UIScreen mainScreen].bounds)) {
-            v.frame = [UIScreen mainScreen].bounds;
-        }
-    }
-}
-%end
-
-%hook FrameRateRange
-
-- (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    Titanium_ReloadSharedSyncStateV261();
-    if (!IS_ACTIVE || !CFG261.enableFPSControl) {
-        %orig(fps);
-        return;
-    }
-    %orig([CFG261 resolvedTargetFPS]);
-}
 
 - (CAFrameRateRange)preferredFrameRateRange {
     Titanium_ReloadSharedSyncStateV261();
