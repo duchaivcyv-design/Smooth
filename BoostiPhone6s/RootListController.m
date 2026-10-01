@@ -264,7 +264,7 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.pipSyncEnabled = 0;
             payload.thermalShield = 0;
             payload.antiStutterExit = 0;
-            payload.smartBufferingLevel = 4;
+            payload.smartBufferingLevel = 3;
             payload.zeroLatencyTouch = 0;
             payload.shaderOptimization = 0;
             payload.dynamicInterpolation = 0;
@@ -289,9 +289,7 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
             payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
             
-            int32_t bufLvl = 6; // Đẩy mức đệm Metal lên tối đa giúp đồ họa mượt gấp 20 lần
-            payload.smartBufferingLevel = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? bufLvl : 4) : bufLvl;
-            
+            payload.smartBufferingLevel = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 3 : 1) : 3;
             payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
             payload.shaderOptimization = 1;
             payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
@@ -342,10 +340,10 @@ static inline NSString *PM_TextV26(NSString *key) {
 
     NSDictionary *footerMap = @{
         @"Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định.": @"FOOTER_MASTER",
-        @"ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và kích hoạt Hex Buffering (6 tầng Metal) thông minh.": @"FOOTER_SPECIAL",
+        @"ProMotion Engine tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối mức mượt mà khi vuốt chạm và kích hoạt Hex Buffering thông minh.": @"FOOTER_SPECIAL",
         @"Bấm vào nút chọn để mở Menu 3 mục: Tiết Kiệm Pin (15-40), Bình Thường (45-80), và Cao Nhất (85-144). Chế độ Tự Động dựa trên nhiệt độ phần cứng để co giãn nhịp khung hình.": @"FOOTER_HZ_FPS",
         @"Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ họa.": @"FOOTER_LAZY",
-        @"© 2026 BoostiPhone6s V26 SUPREME - Tối ưu hoàn chỉnh bởi ĐỨC LONG.": @"FOOTER_DEV"
+        @"© 2026 BoostiPhone6s - Tối ưu hoàn chỉnh bởi ĐỨC LONG.": @"FOOTER_DEV"
     };
 
     for (PSSpecifier *spec in specs) {
@@ -386,7 +384,6 @@ static inline NSString *PM_TextV26(NSString *key) {
     }
 }
 
-// GIỮ NGUYÊN HOÀN TOÀN CÁC MỤC GIAO DIỆN (KHÔNG BỊ MẤT CÔNG CẮT HZ/FPS CHO MÀN HÌNH CHÍNH VÀ APP THỨ 3)
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
         NSString *root = Titanium_GetRootHidePrefixPath();
@@ -505,33 +502,14 @@ static inline NSString *PM_TextV26(NSString *key) {
             @"TouchResponseBoost": @YES,
             @"QuantumRenderShield": @YES,
             @"NeuralBufferOpt": @YES,
-            @"BackgroundPacingDaemon": @YES,
-            @"HyperMemoryGuardian": @YES,
-            @"UltraResponsiveness": @YES,
-            @"HyperThreadIO": @YES,
-            @"QuantumCoreSync": @YES,
-            @"ZeroLagNeuralBooster": @YES,
-            @"VsyncAdaptiveBuffer": @YES,
-            @"DynamicThermalEngine": @YES,
-            @"IOSchedulerEngine": @YES,
-            @"RealtimeThreadSched": @YES,
-            @"CPUGPUFreqOptimizer": @YES,
             @"PeriodicRamClean": @YES,
             @"MachVMPurgeRam": @YES,
             @"AutoCloseBackgroundApp": @NO,
             @"TurboLaunch": @YES,
             @"TurboAppLaunch": @YES,
-            @"GameFPSStabilizer": @YES,
-            @"SystemProcessOpt": @YES,
-            @"DeviceSpoofer": @YES,
             @"AntiThermalThrottle": @YES,
             @"AntiThermalThrottling": @YES,
-            @"SmartThermalDispatch": @YES,
-            @"HeavyLoadCooling": @YES,
-            @"ChargeThermalProtection": @YES,
-            @"PowerSaveMode": @NO,
-            @"BypassVarSandbox": @YES,
-            @"BlockBackgroundTelemetry": @YES
+            @"PowerSaveMode": @NO
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
@@ -788,7 +766,7 @@ static inline NSString *PM_TextV26(NSString *key) {
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V26 SUPREME PRO";
+    return @"V28 SUPREME PRO";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
