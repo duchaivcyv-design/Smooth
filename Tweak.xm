@@ -1427,14 +1427,14 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (void)setContentAlpha:(double)alpha { %orig(1.0); }
 - (void)prepareForReuse { %orig; }
 - (void)setCornerRadius:(CGFloat)radius {
+    CGFloat targetRadius = radius;
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
-        %orig(38.0);
+        targetRadius = (CGFloat)38.0;
         if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
             [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
         }
-        return;
     }
-    %orig(radius);
+    %orig(targetRadius);
 }
 %end
 
@@ -1499,8 +1499,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
-- (void)performLongPressCancelled {
-    %orig;
+- (void)performLongPressCancelled:(id)arg1 {
+    %orig(arg1);
 }
 %end
 %end
