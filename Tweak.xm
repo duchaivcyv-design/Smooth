@@ -2947,7 +2947,6 @@ static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *ob
                 [CFG261 loadSettings];
             }
 
-            %init(Group_Animation_Smooth_Engine);
             %init(Group_ZeroLatencyTouch_PhysicsV261);
             %init(Group_Graphics_Optimization);
             %init(Group_FastLaunch_SuperEngineV261);
