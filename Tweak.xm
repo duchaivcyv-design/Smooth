@@ -1361,12 +1361,15 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %hook SBFluidSwitcherItemContainer
 
-- (void)setContentAlpha:(double)alpha { %orig(1.0); }
+- (void)setContentAlpha:(double)alpha {
+    double forcedAlpha = 1.0;
+    %orig(forcedAlpha);
+}
 
 - (void)setCornerRadius:(CGFloat)radius {
     CGFloat targetRadius = radius;
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
-        targetRadius = (CGFloat)38.0;
+        targetRadius = 38.0f;
         if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
             [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
         }
