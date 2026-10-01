@@ -647,7 +647,6 @@ static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
 static volatile BOOL g_isScrollInertiaActiveV261 = NO;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
-// NHẬN DIỆN THIẾT BỊ NÚT HOME (6s / 7 / 8 / Plus / SE) VÀ MÁY CỬ CHỈ (X-15 PRO MAX)
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
     static BOOL sIsClassic = NO;
     static dispatch_once_t onceToken;
@@ -696,23 +695,12 @@ static BOOL Titanium_IsSettingsApp(void) {
     return isPrefs;
 }
 
-// =========================================================================
-// THUẬT TOÁN ĐIỀU PHỐI ĐỘ MƯỢT (THAY THẾ ÉP XUNG)
-// KHÔNG DÙNG thread_policy_set NỮA ĐỂ TRÁNH NÓNG MÁY / THROTTLE
-// =========================================================================
-static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uint32_t targetHz) {
-    // Để trống. Không ép xung CPU thô bạo. Sự mượt mà sẽ được quản lý bằng GCD
-}
-
 static inline void Titanium_BoostCurrentThreadBriefly(void) {
-    // Đẩy luồng bằng GCD (Grand Central Dispatch). Xử lý xong lập tức nghỉ -> Siêu mát.
     dispatch_async(dispatch_get_main_queue(), ^{});
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{});
 }
 
-// CẢI TIẾN 12 & 14: XẢ RAM AN TOÀN, KHÔNG RESET APP, KHÔNG VM_PURGABLE VÔ TỘI VẠ, THÂN THIỆN PIN
 static inline void Titanium_PurgeProcessMemoryAggressively(void) {
-    // Chỉ giải phóng vùng nhớ rác an toàn, tuyệt đối không đụng vào memory-mapped (tránh crash khi thoát app)
     if (g_liveThermalStateV261 >= NSProcessInfoThermalStateFair) {
         malloc_zone_pressure_relief(malloc_default_zone(), 0); 
     }
@@ -815,7 +803,6 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
     pthread_mutex_unlock(&g_syncLockV261);
 }
 
-// CẢI TIẾN 2: LOẠI BỎ CÁC TIẾN TRÌNH XUNG ĐỘT TWEAK/HỆ THỐNG GÂY TREO RESPRING/SREBOOT
 static BOOL Titanium_IsCriticalSystemDaemon(void) {
     static BOOL isDaemon = NO;
     static dispatch_once_t onceToken;
@@ -1035,9 +1022,8 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     s_isLoading = NO;
 }
 
-// CẢI TIẾN 3 & 11: ĐẢM BẢO HOÀN TOÀN APP THỨ 3 VÀ MÀN HÌNH CHÍNH NHẬN 100% CÁC MỨC HZ/FPS LẺ TỪ 15 - 144HZ
 - (NSInteger)resolvedTargetHz {
-    if (!self.enabled || !self.enableHzControl) return 120; // Default
+    if (!self.enabled || !self.enableHzControl) return 120;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
     if (self.targetHz >= 15 && self.targetHz <= 144) return self.targetHz;
@@ -1045,7 +1031,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 }
 
 - (NSInteger)resolvedTargetFPS {
-    if (!self.enabled || !self.enableFPSControl) return 120; // Default
+    if (!self.enabled || !self.enableFPSControl) return 120;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
     if (self.targetFPS >= 15 && self.targetFPS <= 144) return self.targetFPS;
@@ -1058,7 +1044,7 @@ static BoostConfigV261 *CFG261 = nil;
 static BOOL g_ApexRenderPipelineReady = YES;
 
 // =========================================================================
-// HOOK THUẦN C HOÀN TOÀN CHO CADISPLAYLINK LỖI LOGOS
+// HOOK C-RUNTIME BẮT BUỘC CADISPLAYLINK & CAANIMATION
 // =========================================================================
 static CAFrameRateRange (*orig_CADisplayLink_preferredFrameRateRange)(id self, SEL _cmd);
 static void (*orig_CADisplayLink_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
@@ -1072,8 +1058,6 @@ static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SE
     float rate = (float)targetHz;
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
-
-    // KHÔNG HẠ HZ/FPS ĐỂ ĐẢM BẢO MƯỢT TUYỆT ĐỐI GẤP 20 LẦN
     return CAFrameRateRangeMake(rate, rate, rate);
 }
 
@@ -1086,7 +1070,6 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
     float rate = (float)targetHz;
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
-
     orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(rate, rate, rate));
 }
 
@@ -1102,11 +1085,53 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 
 // =========================================================================
-// NHÓM 1: KHỞI TỐC ỨNG DỤNG LẬP TỨC (LOADING NGAY LẬP TỨC KHI VỪA BẤM & TẮT HOẠT ẢNH MỞ APP)
+// GROUP: ANIMATION COLOROS 17 ĐỘ NẢY MƯỢT MÀ (KHẮC PHỤC LỖI THIẾU GROUP)
+// =========================================================================
+%group Group_Animation_Smooth_Engine
+
+%hook UIView
++ (void)animateWithDuration:(NSTimeInterval)duration delay:(NSTimeInterval)delay usingSpringWithDamping:(CGFloat)dampingRatio initialSpringVelocity:(CGFloat)velocity options:(UIViewAnimationOptions)options animations:(void (^)(void))animations completion:(void (^)(BOOL finished))completion {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        CGFloat smoothDamping = dampingRatio;
+        if (dampingRatio > 0.8) {
+            smoothDamping = 0.8;
+        } else if (dampingRatio < 0.6) {
+            smoothDamping = 0.72;
+        }
+        Titanium_BoostCurrentThreadBriefly();
+        %orig(duration, delay, smoothDamping, velocity, options | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState, animations, completion);
+    } else {
+        %orig;
+    }
+}
+
++ (void)animateWithDuration:(NSTimeInterval)duration delay:(NSTimeInterval)delay options:(UIViewAnimationOptions)options animations:(void (^)(void))animations completion:(void (^)(BOOL finished))completion {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        Titanium_BoostCurrentThreadBriefly();
+        %orig(duration, delay, options | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState, animations, completion);
+    } else {
+        %orig;
+    }
+}
+%end
+
+%hook UIScrollView
+- (void)setDecelerationRate:(UIScrollViewDecelerationRate)decelerationRate {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(UIScrollViewDecelerationRateNormal);
+        return;
+    }
+    %orig(decelerationRate);
+}
+%end
+
+%end // Group_Animation_Smooth_Engine
+
+// =========================================================================
+// GROUP: KHỞI TỐC ỨNG DỤNG LẬP TỨC
 // =========================================================================
 %group Group_FastLaunch_SuperEngineV261
 
-// CẢI TIẾN 4 & 13: KHỞI ĐỘNG VÀ VÀO APP NGAY LẬP TỨC VỚI LATENCY 0ms
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
@@ -1134,7 +1159,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
-// Ép tắt hoạt ảnh mở app mặc định của iOS để mượt ngay lập tức
 %hook UIApplication
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
@@ -1150,12 +1174,13 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
-%end // End Group_FastLaunch_SuperEngineV261
+%end // Group_FastLaunch_SuperEngineV261
 
 // =========================================================================
-// NHÓM 2: PIP & CỬA SỔ NỔI
+// GROUP: PIP & CỬA SỔ NỔI
 // =========================================================================
 %group Group_V261_FloatingWindow_PiP
+
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
     %orig;
@@ -1248,14 +1273,14 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig;
 }
 %end
-%end
+
+%end // Group_V261_FloatingWindow_PiP
 
 // =========================================================================
-// NHÓM 3: HỆ THỐNG SPRINGBOARD & ĐIỀU KHIỂN HZ/FPS CHO MÀN HÌNH CHÍNH, APP THỨ 3, CONTROL CENTER
+// GROUP: HIỆU NĂNG GIAO DIỆN HỆ THỐNG & SPRINGBOARD
 // =========================================================================
 %group Group_Display_SpringBoardV261
 
-// CẢI TIẾN ĐỘ MƯỢT TRUNG TÂM ĐIỀU KHIỂN & ĐA NHIỆM CHỐNG LAG
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG261.reduceMultitaskLag) {
@@ -1267,34 +1292,25 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %hook SBControlCenterController
 - (void)presentAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_BoostCurrentThreadBriefly(); // Ép CC siêu mượt
-    }
+    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
 - (void)dismissAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_BoostCurrentThreadBriefly();
-    }
+    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
 %end
 
 %hook SBNotificationCenterController
 - (void)presentAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_BoostCurrentThreadBriefly(); // Ép NC siêu mượt
-    }
+    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
 - (void)dismissAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_BoostCurrentThreadBriefly();
-    }
+    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
 %end
-
 
 %hook CADisplayLink
 - (BOOL)isPaused {
@@ -1492,7 +1508,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
-// FIX LỖI ĐA NHIỆM BO TRÒN TRÊN X-15 PRO MAX VÀ MÁY NÚT HOME (6S-8P)
 %hook SBIconView
 - (void)setIconImageInfo:(id)info {
     %orig(info);
@@ -1734,7 +1749,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBSwitcherAppSuggestionViewController
-- (void)viewWillAppear:(BOOL)animated {
+- (viewWillAppear:(BOOL)animated) {
     if (IS_ACTIVE) {
         Titanium_BoostCurrentThreadBriefly();
     }
@@ -1773,10 +1788,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (void)prepareForReuse {
     %orig;
 }
-// CẢI TIẾN 8 & 9: ÉP BO TRÒN GÓC TAB ĐA NHIỆM CHUẨN X-15 PRO MAX KỂ CẢ KHI DÙNG CỬ CHỈ GIAO DIỆN KHÁC
 - (void)setCornerRadius:(CGFloat)radius {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(38.0); // Tăng bo góc lên chuẩn iOS 17 mới nhất
+        %orig(38.0);
         if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
             [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
         }
@@ -1878,26 +1892,24 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig;
 }
 %end
-%end
+
+%end // Group_Display_SpringBoardV261
 
 // =========================================================================
-// NHÓM 4: CẢM ỨNG & VẬT LÝ COLOROS 17 (0.0s TRỄ, KHÔNG KHỰNG KHI THOÁT APP)
+// GROUP: CẢM ỨNG 0MS DELAY & VẬT LÝ COLOROS 17
 // =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
+
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG261.touchResponseBoost && event.type == UIEventTypeTouches) {
         NSSet *allTouches = [event allTouches];
         BOOL hasActiveTouch = NO;
-        BOOL isInitialTouch = NO;
         for (UITouch *touch in allTouches) {
             UITouchPhase phase = touch.phase;
-            if (phase == UITouchPhaseBegan) {
-                isInitialTouch = YES;
+            if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
                 hasActiveTouch = YES;
                 break;
-            } else if (phase == UITouchPhaseMoved || phase == UITouchPhaseStationary) {
-                hasActiveTouch = YES;
             }
         }
         if (hasActiveTouch) {
@@ -2290,10 +2302,11 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig;
 }
 %end
-%end
+
+%end // Group_ZeroLatencyTouch_PhysicsV261
 
 // =========================================================================
-// NHÓM 5: BÀN PHÍM TỐI ƯU CỰC ĐẠI (0ms DELAY, CHỐNG KHỰNG LAG GÕ PHÍM)
+// GROUP: BÀN PHÍM TỐI ƯU CỰC ĐẠI
 // =========================================================================
 %group Group_Keyboard_And_TextV261
 
@@ -2433,6 +2446,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
+- (void)setContentOffset:(CGPoint)contentOffset {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
+    %orig;
+}
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         Titanium_BoostCurrentThreadBriefly();
@@ -2497,12 +2516,14 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(secureTextEntry);
 }
 %end
-%end
+
+%end // Group_Keyboard_And_TextV261
 
 // =========================================================================
-// NHÓM 6: KHÔNG RASTERIZE MÙ QUÁNG -> TƯƠNG THÍCH TWEAK TRONG SUỐT, TRÁNH NÓNG MÁY
+// GROUP: PIPELINE METAL & GRAPHICS
 // =========================================================================
-%group Group_Graphics_Optimization
+%group Group_MetalGraphics_OptV261
+
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (Titanium_IsSpringBoard()) {
@@ -2569,9 +2590,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook CALayer
-- (void)setShouldRasterize:(BOOL)shouldRasterize {
-    %orig(shouldRasterize); // CHỐNG NÓNG MÁY CHO LIQUID GLASS
-}
 - (void)setContentsScale:(CGFloat)scale {
     if (Titanium_IsSpringBoard()) {
         %orig;
@@ -2628,6 +2646,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (CGFloat)rasterizationScale {
     return %orig;
 }
+- (void)setShouldRasterize:(BOOL)shouldRasterize {
+    %orig(shouldRasterize);
+}
 - (BOOL)shouldRasterize {
     return NO;
 }
@@ -2645,6 +2666,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         Titanium_BoostCurrentThreadBriefly();
     }
+    %orig;
+}
+- (void)setNeedsLayout {
+    %orig;
+}
+- (void)layoutIfNeeded {
     %orig;
 }
 %end
@@ -2690,12 +2717,14 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(contextId);
 }
 %end
-%end
+
+%end // Group_MetalGraphics_OptV261
 
 // =========================================================================
-// NHÓM 7: BẢO VỆ TIẾN TRÌNH & DỌN RÁC ÂM THẦM KHI NÓNG
+// GROUP: TIẾN TRÌNH UIKIT BÊN THỨ 3
 // =========================================================================
 %group Group_UIKit_ThirdParty_IsolatedV261
+
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
@@ -2731,11 +2760,15 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig;
 }
 - (void)viewWillLayoutSubviews {
-    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
     %orig;
 }
 - (void)viewDidLayoutSubviews {
-    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
     %orig;
 }
 - (void)didReceiveMemoryWarning {
@@ -2793,60 +2826,161 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig;
 }
 %end
+
 %end // Group_UIKit_ThirdParty_IsolatedV261
 
 // =========================================================================
-// BẢO VỆ CHỐNG TREO BOOTLOOP RESPRING/SREBOOT & DAEMON BACKGROUND
+// GROUP: QUẢN LÝ TIẾN TRÌNH SPRINGBOARD
 // =========================================================================
-static void Titanium_StartPassiveRamDaemon_Tier1(void) {
+%group Group_SpringBoard_ProcessManagerV261
+
+%hook SBApplication
+- (void)setProcessState:(id)state {
+    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
+    %orig(state);
+}
+- (id)processState {
+    return %orig;
+}
+- (NSString *)bundleIdentifier {
+    return %orig;
+}
+- (NSString *)displayName {
+    return %orig;
+}
+- (BOOL)isRunning {
+    return %orig;
+}
+- (BOOL)isClassic {
+    return %orig;
+}
+- (void)didExitWithContext:(id)context {
+    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+        return;
+    }
+    %orig(context);
+}
+%end
+
+%hook SBMainWorkspace
+- (void)_handleApplicationProcessExited:(id)processDescription {
+    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+        return;
+    }
+    %orig(processDescription);
+}
+- (void)handleApplicationLaunch:(id)application {
+    if (IS_ACTIVE && (CFG261.turboAppLaunch || CFG261.turboLaunch)) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
+    %orig(application);
+}
+- (void)handleApplicationSuspended:(id)application {
+    if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
+        return;
+    }
+    %orig(application);
+}
+%end
+
+%hook SBAppSwitcherController
+- (void)switcherContentController:(id)contentController deletedItem:(id)deletedItem {
+    %orig(contentController, deletedItem);
+    if (IS_ACTIVE && CFG261.aggressiveRamClean) {
+        Titanium_PurgeProcessMemoryAggressively();
+    }
+}
+- (void)viewWillAppear:(BOOL)animated {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
+    %orig(animated);
+}
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+}
+%end
+
+%end // Group_SpringBoard_ProcessManagerV261
+
+// =========================================================================
+// GROUP: HIỆU NĂNG CUỘN
+// =========================================================================
+%group Group_ScrollPerformance_SuperEngineV261
+
+%hook UIScrollView
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    %orig(newWindow);
+    if (newWindow && IS_ACTIVE) {
+        NSInteger targetHz = [CFG261 resolvedTargetHz];
+        self.decelerationRate = UIScrollViewDecelerationRateNormal;
+        self.delaysContentTouches = NO;
+        if (self.layer) {
+            self.layer.drawsAsynchronously = YES;
+            self.layer.allowsGroupOpacity = NO;
+        }
+    }
+}
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+    }
+    %orig(arg1, arg2);
+}
+%end
+
+%hook UITextView
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    %orig(newWindow);
+    if (newWindow && IS_ACTIVE) {
+        self.layer.drawsAsynchronously = YES;
+        if ([self respondsToSelector:@selector(setLayoutManager:)]) {
+            self.layoutManager.allowsNonContiguousLayout = YES;
+        }
+    }
+}
+%end
+
+%end // Group_ScrollPerformance_SuperEngineV261
+
+static void Titanium_StartThermalWatchdogTimerV261(void) {
+    static dispatch_source_t timerSource = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dispatch_queue_t watchdogQueue = dispatch_queue_create("com.titanium.v261.thermal", DISPATCH_QUEUE_SERIAL);
+        timerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, watchdogQueue);
+        dispatch_source_set_timer(timerSource, DISPATCH_TIME_NOW, 5.0 * NSEC_PER_SEC, 1.0 * NSEC_PER_SEC);
+        dispatch_source_set_event_handler(timerSource, ^{
+            if (!IS_ACTIVE) return;
+            NSProcessInfoThermalState currentThermalState = [[NSProcessInfo processInfo] thermalState];
+            g_liveThermalStateV261 = currentThermalState;
+            UIDevice *device = [UIDevice currentDevice];
+            if (device.batteryMonitoringEnabled) {
+                g_isDeviceChargingV261 = (device.batteryState == UIDeviceBatteryStateCharging || device.batteryState == UIDeviceBatteryStateFull);
+            }
+            if (currentThermalState >= NSProcessInfoThermalStateSerious || g_isDeviceChargingV261) {
+                Titanium_PurgeProcessMemoryAggressively();
+            }
+        });
+        dispatch_resume(timerSource);
+    });
+}
+
+static void Titanium_StartPassiveRamDaemonV261(void) {
     if (!Titanium_IsSpringBoard()) return;
-    dispatch_queue_t daemonQueue = dispatch_queue_create("com.titanium.v268.ram1", DISPATCH_QUEUE_SERIAL);
-    dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
-    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 30.0 * NSEC_PER_SEC), 30.0 * NSEC_PER_SEC, 5.0 * NSEC_PER_SEC);
+    static dispatch_source_t ramTimerSource = nil;
+    if (ramTimerSource) return;
+    dispatch_queue_t daemonQueue = dispatch_queue_create("com.titanium.v261.ramdaemon", DISPATCH_QUEUE_SERIAL);
+    ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
+    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 120.0 * NSEC_PER_SEC), 120.0 * NSEC_PER_SEC, 30.0 * NSEC_PER_SEC);
     dispatch_source_set_event_handler(ramTimerSource, ^{
-        if (IS_ACTIVE && CFG261.aggressiveRamClean && g_liveThermalStateV261 >= NSProcessInfoThermalStateFair) {
+        if (IS_ACTIVE && CFG261.aggressiveRamClean) {
             Titanium_PurgeProcessMemoryAggressively();
         }
     });
     dispatch_resume(ramTimerSource);
-}
-
-static void Titanium_StartPassiveRamDaemon_Tier2(void) {
-    if (!Titanium_IsSpringBoard()) return;
-    dispatch_queue_t daemonQueue = dispatch_queue_create("com.titanium.v268.ram2", DISPATCH_QUEUE_SERIAL);
-    dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
-    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 120.0 * NSEC_PER_SEC), 120.0 * NSEC_PER_SEC, 10.0 * NSEC_PER_SEC);
-    dispatch_source_set_event_handler(ramTimerSource, ^{
-        if (IS_ACTIVE && CFG261.aggressiveRamClean) {
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        }
-    });
-    dispatch_resume(ramTimerSource);
-}
-
-static void Titanium_StartPassiveRamDaemon_Tier3(void) {
-    if (!Titanium_IsSpringBoard()) return;
-    dispatch_queue_t daemonQueue = dispatch_queue_create("com.titanium.v268.ram3", DISPATCH_QUEUE_SERIAL);
-    dispatch_source_t ramTimerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, daemonQueue);
-    dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, 300.0 * NSEC_PER_SEC), 300.0 * NSEC_PER_SEC, 30.0 * NSEC_PER_SEC);
-    dispatch_source_set_event_handler(ramTimerSource, ^{
-        if (IS_ACTIVE && CFG261.aggressiveRamClean) {
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        }
-    });
-    dispatch_resume(ramTimerSource);
-}
-
-// Giám sát nhiệt độ liên tục
-static void Titanium_StartThermalWatchdogTimer(void) {
-    dispatch_queue_t watchdogQueue = dispatch_queue_create("com.titanium.v268.thermal", DISPATCH_QUEUE_SERIAL);
-    dispatch_source_t timerSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, watchdogQueue);
-    dispatch_source_set_timer(timerSource, DISPATCH_TIME_NOW, 5.0 * NSEC_PER_SEC, 1.0 * NSEC_PER_SEC);
-    dispatch_source_set_event_handler(timerSource, ^{
-        if (!IS_ACTIVE) return;
-        g_liveThermalStateV261 = [[NSProcessInfo processInfo] thermalState];
-    });
-    dispatch_resume(timerSource);
 }
 
 static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
@@ -2880,38 +3014,79 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 }
 
 static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    if (CFG261) {
-        [CFG261 loadSettings];
+    static dispatch_source_t s_debounceTimer = nil;
+    static dispatch_queue_t s_prefQueue = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_prefQueue = dispatch_queue_create("com.titanium.v261.prefsync", DISPATCH_QUEUE_SERIAL);
+    });
+    if (s_debounceTimer) {
+        dispatch_source_cancel(s_debounceTimer);
+        s_debounceTimer = nil;
     }
+    s_debounceTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, s_prefQueue);
+    dispatch_source_set_timer(s_debounceTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+    dispatch_source_set_event_handler(s_debounceTimer, ^{
+        if (CFG261 && [CFG261 respondsToSelector:@selector(loadSettings)]) {
+            [CFG261 loadSettings];
+        }
+        s_debounceTimer = nil;
+    });
+    dispatch_resume(s_debounceTimer);
+}
+
+static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName) {
+    if (!progName) return NO;
+    if (strstr(progName, "ReportCrash") || strstr(progName, "crashreporterd") || 
+        strstr(progName, "panic_report") || strstr(progName, "analyticsd") ||
+        strstr(progName, "symptomsd") || strstr(progName, "logd") ||
+        strstr(progName, "PosterBoard") || strstr(progName, "WallpaperKit")) {
+        return NO;
+    }
+    if (bundleID) {
+        if ([bundleID hasPrefix:@"com.apple.crashreport"] || 
+            [bundleID hasPrefix:@"com.apple.ReportCrash"] ||
+            [bundleID isEqualToString:@"com.apple.CoreAuthUI"] ||
+            [bundleID containsString:@"PosterBoard"] ||
+            [bundleID containsString:@"WallpaperKit"]) {
+            return NO;
+        }
+    }
+    return YES;
 }
 
 // =========================================================================
-// KHỞI TẠO %ctor: ĐỒNG BỘ 100% HOOK VÀ PHÂN TÁCH LUỒNG AN TOÀN
+// KHỞI TẠO %ctor: ĐẦY ĐỦ NHẤT - KHÔNG THIẾU BẤT KỲ NHÓM GROUP INIT NÀO
 // =========================================================================
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        // Tránh hook vào các tiến trình nhạy cảm dễ gây đơ Cài đặt / Bootloop
-        if (progName && (strstr(progName, "ReportCrash") || strstr(progName, "crashreporterd") || strstr(progName, "PosterBoard") || strstr(progName, "Preferences"))) {
-            // TỪ CHỐI HOOK VÀO "Preferences" (Ứng dụng Cài đặt) để sữa lỗi đơ hoàn toàn.
-            if (strstr(progName, "Preferences")) {
-                Class configClass = NSClassFromString(@"BoostConfigV261");
-                if (configClass) {
-                    CFG261 = [configClass sharedInstance];
-                    [CFG261 loadSettings];
-                }
-                return;
+        if (Titanium_IsCriticalSystemDaemon()) {
+            return;
+        }
+        if (!Titanium_CheckAndPreventBootloopUniversal()) {
+            return;
+        }
+        if (!Titanium_IsProcessEligible(bundleID, progName)) {
+            return;
+        }
+        if (Titanium_IsSecureBankingApp()) {
+            return;
+        }
+
+        // Bỏ qua hook UI cho ứng dụng Cài Đặt để chống đơ Cài đặt 100%
+        if (progName && strstr(progName, "Preferences")) {
+            Class configClass = NSClassFromString(@"BoostConfigV261");
+            if (configClass) {
+                CFG261 = [configClass sharedInstance];
+                [CFG261 loadSettings];
             }
             return;
         }
 
-        if (!Titanium_CheckAndPreventBootloopUniversal()) {
-            return;
-        }
-
-        // Tự động hook C-runtime vào CADisplayLink & CAAnimation (Tương thích 100%)
+        // Tự động hook C-runtime vào CADisplayLink & CAAnimation
         Class clsCADisplayLink = NSClassFromString(@"CADisplayLink");
         if (clsCADisplayLink) {
             MSHookMessageEx(clsCADisplayLink, @selector(preferredFrameRateRange), 
@@ -2928,45 +3103,64 @@ static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *ob
                             (IMP *)&orig_CAAnimation_setPreferredFrameRateRange);
         }
 
-        // ĐỘ TRỄ 3 GIÂY AN TOÀN CHO DÒNG CŨ ĐỂ KHÔNG BỊ TREO LÚC KHỞI ĐỘNG
-        NSTimeInterval delay = Titanium_IsClassicHomeButtonDevice() ? 3.0 : 0.5;
+        // ĐỘ TRỄ AN TOÀN 3 GIÂY CHO 6s-7p ĐỂ KHÔNG BỊ TREO RESPRING / SREBOOT
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            @autoreleasepool {
+                if (Titanium_IsSpringBoard()) {
+                    [UIDevice currentDevice].batteryMonitoringEnabled = YES;
+                }
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            Class configClass = NSClassFromString(@"BoostConfigV261");
-            if (configClass) {
-                CFG261 = [configClass sharedInstance];
-                [CFG261 loadSettings];
-            }
+                Class configClass = NSClassFromString(@"BoostConfigV261");
+                if (configClass) {
+                    CFG261 = [configClass sharedInstance];
+                    if ([CFG261 respondsToSelector:@selector(loadSettings)]) {
+                        [CFG261 loadSettings];
+                    }
+                }
 
-            %init(Group_Animation_Smooth_Engine);
-            %init(Group_ZeroLatencyTouch_PhysicsV261);
-            %init(Group_Graphics_Optimization);
-            %init(Group_FastLaunch_SuperEngineV261);
-            %init(Group_V261_FloatingWindow_PiP);
-            
-            if (Titanium_IsSpringBoard()) {
-                %init(Group_SpringBoard_Core);
-                [UIDevice currentDevice].batteryMonitoringEnabled = YES;
-                Titanium_StartThermalWatchdogTimer();
-                
-                // Kích hoạt 3 daemon chạy ngầm hỗ trợ dọn rác cực nhẹ
-                Titanium_StartPassiveRamDaemon_Tier1();
-                Titanium_StartPassiveRamDaemon_Tier2();
-                Titanium_StartPassiveRamDaemon_Tier3();
-            }
+                %init(Group_Animation_Smooth_Engine);
+                %init(Group_MetalGraphics_OptV261);
+                %init(Group_ZeroLatencyTouch_PhysicsV261);
+                %init(Group_FastLaunch_SuperEngineV261);
+                %init(Group_ScrollPerformance_SuperEngineV261);
+                %init(Group_V261_FloatingWindow_PiP);
+                %init(_ungrouped);
 
-            BOOL isKeyboardExtension = NO;
-            if (bundleID) {
-                isKeyboardExtension = [bundleID containsString:@"TextInputUI"] || [bundleID containsString:@"InputUI"] || [bundleID containsString:@"keyboard"];
-            }
-            if (Titanium_IsSpringBoard() || isKeyboardExtension || (progName && strstr(progName, "Keyboard"))) {
-                %init(Group_Keyboard_Speed);
-            }
+                if (Titanium_IsSpringBoard()) {
+                    %init(Group_Display_SpringBoardV261);
+                    %init(Group_SpringBoard_ProcessManagerV261);
+                } else {
+                    %init(Group_UIKit_ThirdParty_IsolatedV261);
+                }
 
-            CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-            if (darwinCenter) {
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261, CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261, CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+                BOOL isKeyboardExtension = NO;
+                if (bundleID) {
+                    isKeyboardExtension = [bundleID containsString:@"TextInputUI"] || 
+                                          [bundleID containsString:@"InputUI"] || 
+                                          [bundleID containsString:@"keyboard"];
+                }
+                if (Titanium_IsSpringBoard() || isKeyboardExtension || 
+                    (progName && (strstr(progName, "inputhost") || strstr(progName, "Keyboard")))) {
+                    %init(Group_Keyboard_And_TextV261);
+                }
+
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                    Titanium_StartThermalWatchdogTimerV261();
+                    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+                    if (darwinCenter) {
+                        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                            CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                            CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                            CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+                    }
+                    if (Titanium_IsSpringBoard()) {
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            Titanium_StartPassiveRamDaemonV261();
+                        });
+                    }
+                });
             }
         });
     }
