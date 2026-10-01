@@ -53,7 +53,7 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 3: DỌN DẸP VÀ BIÊN DỊCH GÓI DEB ---
+      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ TỰ ĐỘNG BÓC TÁCH LỖI MÃ NGUỒN ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -68,15 +68,64 @@ jobs:
           if [ -d "postinst" ]; then chmod 755 postinst; fi
           if [ -d "prerm" ]; then chmod 755 prerm; fi
           
-          # Chạy build. Nếu lỗi, in chính xác khu vực dòng 1350 - 1380 của Tweak.xm ra log
-          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless || {
-            echo "================================================================="
-            echo "❌ PHÁT HIỆN LỖI PREPROCESSING! NỘI DUNG TWEAK.XM TẠI DÒNG 1350-1380:"
-            echo "================================================================="
-            nl -ba Tweak.xm | sed -n '1350,1380p' || cat -n Tweak.xm | head -n 1400 | tail -n 50
-            echo "================================================================="
+          # Lưu toàn bộ log đầu ra của make vào tệp tạm thời
+          BUILD_LOG_FILE="/tmp/theos_build.log"
+          
+          set +e
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE"
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "======================================================================"
+            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG QUÉT CÁC DÒNG LỖI CỤ THỂ..."
+            echo "======================================================================"
+            
+            # Tìm kiếm các mẫu lỗi chuẩn của Clang, GCC và Logos: "filename:line: error" hoặc "filename:line:col: error"
+            ERROR_ENTRIES=$(grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" | head -n 5)
+            
+            if [ -n "$ERROR_ENTRIES" ]; then
+              while IFS= read -r line; do
+                ERR_FILE=$(echo "$line" | cut -d':' -f1)
+                ERR_LINE=$(echo "$line" | cut -d':' -f2)
+                ERR_MSG=$(echo "$line" | cut -d':' -f3-)
+                
+                echo ""
+                echo "----------------------------------------------------------------------"
+                echo "📍 TỆP TIN: $ERR_FILE"
+                echo "⚠️  DÒNG SỐ: $ERR_LINE"
+                echo "❌ THÔNG BÁO: $ERR_MSG"
+                echo "----------------------------------------------------------------------"
+                
+                # Tìm đường dẫn thực tế của tệp nếu đường dẫn trong log là tương đối hoặc nằm trong thư mục con
+                ACTUAL_PATH=""
+                if [ -f "$ERR_FILE" ]; then
+                  ACTUAL_PATH="$ERR_FILE"
+                else
+                  FOUND_PATH=$(find . -name "$(basename "$ERR_FILE")" -not -path "*/.theos/*" -not -path "*/.git/*" | head -n 1)
+                  if [ -n "$FOUND_PATH" ]; then
+                    ACTUAL_PATH="$FOUND_PATH"
+                  fi
+                fi
+
+                if [ -n "$ACTUAL_PATH" ] && [ -f "$ACTUAL_PATH" ]; then
+                  START_LINE=$((ERR_LINE > 15 ? ERR_LINE - 15 : 1))
+                  END_LINE=$((ERR_LINE + 15))
+                  echo "🔍 ĐOẠN CODE XUNG QUANH DÒNG $ERR_LINE ($ACTUAL_PATH):"
+                  nl -ba "$ACTUAL_PATH" | sed -n "${START_LINE},${END_LINE}p"
+                else
+                  echo "⚠️️ Không tìm thấy tệp nguồn thực tế tương ứng với: $ERR_FILE"
+                fi
+              done <<< "$ERROR_ENTRIES"
+            else
+              echo "⚠️ Không bắt được định dạng tệp:dòng thông thường. 30 dòng log cuối cùng:"
+              tail -n 30 "$BUILD_LOG_FILE"
+            fi
+            
+            echo "======================================================================"
             exit 1
-          }
+          fi
           
           ls -lh packages/*.deb || { 
             echo "❌ Build hoàn tất nhưng không tìm thấy file .deb!"; 
