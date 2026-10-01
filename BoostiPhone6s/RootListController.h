@@ -32,6 +32,10 @@ NS_ASSUME_NONNULL_BEGIN
     NSArray *_allSavedSpecifiers;
 }
 
+// ==================== BỘ ĐIỀU PHỐI ĐỒNG BỘ NỀN & DEBOUNCE ====================
+@property (nonatomic, strong, nullable) dispatch_source_t debounceSyncTimer;
+@property (nonatomic, strong) dispatch_queue_t syncQueue;
+
 // ==================== BỘ ĐỌC / GHI CẤU HÌNH ĐỒNG BỘ KÉP ====================
 - (nullable id)readPreferenceValue:(PSSpecifier *)specifier;
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier;
@@ -47,7 +51,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)showLanguagePickerPopup:(PSSpecifier *)specifier;
 - (void)updateDynamicTitles;
 
-// ==================== THÔNG TIN PHÁT TRIỂN & LIÊN KẾT ZALO ====================
+// ==================== THÔNG TIN PHÁT TRIỂN & LIÊN KẾT HỖ TRỢ ====================
 - (id)getAuthorName:(PSSpecifier *)specifier;
 - (id)getVersionString:(PSSpecifier *)specifier;
 - (void)openSupportLink:(PSSpecifier *)specifier;
