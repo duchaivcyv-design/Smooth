@@ -1468,11 +1468,25 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBAppSwitcherSettings
-- (void)setDeckSwitcherPageScale:(double)scaleValue { %orig(scaleValue); }
-- (double)deckSwitcherPageScale { return %orig; }
-- (void)setAppSwitcherStyle:(long long)style { %orig(style); }
-- (long long)appSwitcherStyle { return %orig; }
+
+- (void)setDeckSwitcherPageScale:(double)scaleValue {
+    %orig(scaleValue);
+}
+
+- (double)deckSwitcherPageScale {
+    return %orig;
+}
+
+- (void)setAppSwitcherStyle:(long long)style {
+    %orig(style);
+}
+
+- (long long)appSwitcherStyle {
+    return %orig;
+}
+
 %end
+
 %end
 
 // ====================================================================================================
