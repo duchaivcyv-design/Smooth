@@ -42,9 +42,7 @@
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
 
-// ============================================================================
-// KHAI BÁO CÁC HÀM / MACRO PRIVATE CỦA XNU KERNEL & DARWIN TRÁNH LỖI BIÊN DỊCH
-// ============================================================================#ifndef VM_PURGABLE_PURGE_ALL#ifndef VM_PURGABLE_PURGE_ALL
+#ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
 
