@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>BoostiPhone6s V26 SUPREME</string>
+    <string>BoostiPhone6s V26.2 SUPREME</string>
     <key>CFBundleExecutable</key>
     <string>BoostiPhone6sPrefs</string>
     <key>CFBundleIdentifier</key>
@@ -17,11 +17,11 @@
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>4.7.0</string>
+    <string>5.1.0</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
-    <string>4.7.0</string>
+    <string>5.1.0</string>
     <key>PrincipalClass</key>
     <string>RootListController</string>
     <key>CFBundleIconFile</key>
