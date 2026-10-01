@@ -1137,57 +1137,64 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %group Group_Display_SpringBoardV285
 
+// ====================================================================================================
+// 1. CADisplayLink
+// ====================================================================================================
 %hook CADisplayLink
-- (BOOL)isPaused {
-    return %orig;
-}
-- (void)setPaused:(BOOL)paused {
-    %orig(paused);
-}
-- (CFTimeInterval)duration {
-    return %orig;
-}
-- (CFTimeInterval)targetTimestamp {
-    return %orig;
-}
-- (CFTimeInterval)timestamp {
-    return %orig;
-}
+
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableFPSControl) {
         %orig(fps);
         return;
     }
-    %orig([CFG285 resolvedTargetFPS]);
+    NSInteger target = [CFG285 resolvedTargetFPS];
+    %orig(target > 0 ? target : fps);
 }
+
 - (NSInteger)preferredFramesPerSecond {
-    if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableFPSControl) return %orig;
-    return [CFG285 resolvedTargetFPS];
+    if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableFPSControl) {
+        return %orig;
+    }
+    NSInteger target = [CFG285 resolvedTargetFPS];
+    return target > 0 ? target : %orig;
 }
+
 - (void)setFrameInterval:(NSInteger)interval {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableFPSControl) {
         %orig(interval);
         return;
     }
     NSInteger target = [CFG285 resolvedTargetFPS];
-    NSInteger calcInterval = (NSInteger)roundf(60.0f / (float)target);
-    %orig(calcInterval > 0 ? calcInterval : 1);
+    if (target > 0) {
+        NSInteger calcInterval = (NSInteger)roundf(60.0f / (float)target);
+        %orig(calcInterval > 0 ? calcInterval : 1);
+    } else {
+        %orig(interval);
+    }
 }
+
 %end
 
+// ====================================================================================================
+// 2. UIScreen & CADisplay
+// ====================================================================================================
 %hook UIScreen
+
 - (NSInteger)maximumFramesPerSecond {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableHzControl) return %orig;
     return [CFG285 resolvedTargetHz];
 }
+
 - (NSInteger)_maximumFramesPerSecond {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableHzControl) return %orig;
     return [CFG285 resolvedTargetHz];
 }
+
 - (CGFloat)_refreshRate {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableHzControl) return %orig;
     return (CGFloat)[CFG285 resolvedTargetHz];
 }
+
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableHzControl) {
         %orig(rate);
@@ -1195,20 +1202,16 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig((CGFloat)[CFG285 resolvedTargetHz]);
 }
-- (CGRect)bounds { return %orig; }
-- (CGFloat)scale { return %orig; }
-- (CGFloat)nativeScale { return %orig; }
-- (CGRect)nativeBounds { return %orig; }
-- (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
-    return %orig(target, sel);
-}
+
 %end
 
 %hook CADisplay
+
 - (NSInteger)preferredFPS {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableHzControl) return %orig;
     return [CFG285 resolvedTargetHz];
 }
+
 - (void)setPreferredFPS:(NSInteger)fps {
     if (!g_SystemMasterReady || !IS_ACTIVE || !CFG285.enableHzControl) {
         %orig(fps);
@@ -1216,101 +1219,80 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig([CFG285 resolvedTargetHz]);
 }
-- (void)overrideDisplayTimings:(id)timings {
-    %orig(timings);
-}
-- (void)overrideDisplayCadence:(id)cadence {
-    %orig(cadence);
-}
+
 - (BOOL)supportsDynamicRefresh {
     if (IS_ACTIVE && CFG285.proMotionEngineBeta7) return YES;
     return %orig;
 }
+
 %end
 
+// ====================================================================================================
+// 3. SpringBoard UI & Controllers
+// ====================================================================================================
 %hook SBIconController
+
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(index, animate);
 }
-- (void)viewWillLayoutSubviews {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)viewDidLayoutSubviews {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
+
 - (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(folder, animated, completion);
 }
+
 - (void)closeFolderAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(animated, completion);
 }
+
 %end
 
 %hook SBFloatingDockController
-- (void)layoutFloatingDock {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
+
 - (void)dismissFloatingDockIfPresentedAnimated:(BOOL)animated completionHandler:(id)completion {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(animated, completion);
 }
+
 - (void)presentFloatingDockIfPossible:(BOOL)animated completionHandler:(id)completion {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(animated, completion);
 }
+
 %end
 
 %hook SBFolderView
-- (void)layoutSubviews {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)scrollViewDidScroll:(id)scrollView {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig(scrollView);
-}
-- (void)willAnimate {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
+
 - (void)prepareToOpen {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
+
 - (void)cleanupAfterClose {
     if (IS_ACTIVE && CFG285.aggressiveRamClean) Titanium_PurgeProcessMemoryAggressively();
     %orig;
 }
+
 %end
 
 %hook SBIconListView
-- (void)layoutIconsNow {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)layoutSubviews {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)setAlphaForAllIcons:(double)alpha { %orig(alpha); }
+
 - (void)fadeInIcon:(id)icon {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(icon);
 }
+
 %end
 
 %hook SBIconView
-- (void)setIconImageInfo:(id)info { %orig(info); }
+
 - (void)setHighlighted:(BOOL)highlighted {
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig(highlighted);
 }
+
 - (void)setTouchDownInIcon:(BOOL)touchDown {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
         g_isUserTouchingV285 = touchDown;
@@ -1319,113 +1301,83 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(touchDown);
 }
-- (void)setAllowsCloseBox:(BOOL)allows { %orig(allows); }
-- (void)prepareForReuse { %orig; }
+
 %end
 
 %hook SBBacklightController
-- (void)setBacklightFactor:(float)factor { %orig(factor); }
-- (float)backlightFactor { return %orig; }
+
 - (void)animateBacklightToFactor:(float)factor duration:(double)duration source:(long long)source completion:(id)completion {
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
     %orig(factor, duration, source, completion);
 }
-%end
 
-%hook SBVolumeControl
-- (void)increaseVolume {
-    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)decreaseVolume {
-    if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)cancelVolumeEvent { %orig; }
 %end
 
 %hook SBMediaController
-- (BOOL)isPlaying { return %orig; }
-- (BOOL)isPaused { return %orig; }
+
 - (BOOL)playForEventSource:(long long)source {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     return %orig(source);
 }
+
 - (BOOL)pauseForEventSource:(long long)source {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     return %orig(source);
 }
+
 - (BOOL)togglePlayPauseForEventSource:(long long)source {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     return %orig(source);
 }
+
 %end
 
 %hook SBLockScreenManager
-- (BOOL)isUILocked { return %orig; }
+
 - (void)unlockUIFromSource:(int)source withOptions:(id)options {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(source, options);
 }
+
 - (void)lockUIFromSource:(int)source withOptions:(id)options {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(source, options);
 }
+
 - (BOOL)attemptUnlockWithPasscode:(id)passcode finishUIUnlock:(BOOL)finish {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     return %orig(passcode, finish);
 }
-%end
 
-%hook SBFView
-- (void)setCustomFullHomedStyle:(BOOL)flag { %orig(flag); }
-%end
-
-%hook UIStatusBar
-- (void)requestStyle:(long long)style animated:(BOOL)animated {
-    %orig(style, animated);
-}
-- (void)forceUpdateData:(BOOL)animated { %orig(animated); }
 %end
 
 %hook SBReachabilityManager
-- (BOOL)reachabilityModeActive { return %orig; }
-- (void)deactivateReachabilityMode { %orig; }
+
 - (void)triggerReachability {
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
-%end
 
-%hook SBWindow
-- (BOOL)_isSecure { return %orig; }
-- (void)setHidden:(BOOL)hidden { %orig(hidden); }
-%end
-
-%hook SBRootFolderView
-- (void)layoutSubviews {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) Titanium_BoostCurrentThreadBriefly();
-    %orig;
-}
-- (void)setNeedsLayout { %orig; }
 %end
 
 %hook SBDeckSwitcherViewController
+
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
+
 - (void)viewDidAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
-- (void)viewWillDisappear:(BOOL)animated { %orig(animated); }
-- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
+
 %end
 
 %hook SBFluidSwitcherItemContainer
+
 - (void)setContentAlpha:(double)alpha { %orig(1.0); }
-- (void)prepareForReuse { %orig; }
+
 - (void)setCornerRadius:(CGFloat)radius {
     CGFloat targetRadius = radius;
     if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
@@ -1436,50 +1388,53 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(targetRadius);
 }
+
 %end
 
 %hook SBHomeScreenViewController
+
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
+
 - (void)viewDidAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
+
 %end
 
 %hook CSCoverSheetViewController
+
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_BoostCurrentThreadBriefly();
     %orig(animated);
 }
-- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
+
 %end
 
 %hook SBUIController
-- (BOOL)isAppSwitcherShowing { return %orig; }
+
 - (void)clickedMenuButton {
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
+
 - (void)handleHomeButtonDoublePressDown {
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
+
 - (void)lockFromSource:(int)source {
     if (IS_ACTIVE) Titanium_PurgeProcessMemoryAggressively();
     %orig(source);
 }
+
 %end
 
-%hook SpringBoard
-- (id)_accessibilityFrontMostApplication { return %orig; }
-- (BOOL)isLocked { return %orig; }
-- (void)_reboot:(BOOL)arg1 { %orig(arg1); }
-- (void)_relaunchSpringBoardNow { %orig; }
-%end
-%end
+%end // Kết thúc Group_Display_SpringBoardV285
+
 
 // ====================================================================================================
 // NHÓM 4: PHÂN BIỆT PHẦN CỨNG - NÚT HOME VẬT LÝ (6s - 7P - 8P - SE)
