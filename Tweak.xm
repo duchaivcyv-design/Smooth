@@ -1527,12 +1527,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(event);
 }
-- (BOOL)_isSecure { return %orig; }
-- (void)_setSecure:(BOOL)flag { %orig(flag); }
+
 - (void)setRootViewController:(UIViewController *)rootViewController {
     if (IS_ACTIVE && CFG285.turboAppLaunch) Titanium_BoostCurrentThreadBriefly();
     %orig(rootViewController);
 }
+
 - (void)makeKeyAndVisible {
     if (IS_ACTIVE && CFG285.turboAppLaunch) {
         [CATransaction begin];
@@ -1544,18 +1544,24 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
+
 - (void)becomeKeyWindow {
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
-- (void)resignKeyWindow { %orig; }
+
+- (void)resignKeyWindow {
+    %orig;
+}
 %end
 
 %hook UITouch
+
 - (NSTimeInterval)timestamp {
     if (IS_ACTIVE) return CACurrentMediaTime();
     return %orig;
 }
+
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
@@ -1569,9 +1575,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     return currentTouchPhase;
 }
-- (UIWindow *)window { return %orig; }
-- (UIView *)view { return %orig; }
-- (NSUInteger)tapCount { return %orig; }
+
 - (CGFloat)majorRadius {
     CGFloat r = %orig;
     if (IS_ACTIVE && CFG285.antiGhostTouch) {
@@ -1580,18 +1584,16 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     return r;
 }
+
 - (CGFloat)majorRadiusTolerance {
     if (IS_ACTIVE && CFG285.antiGhostTouch) return 5.0f;
     return %orig;
 }
-- (NSArray *)gestureRecognizers { return %orig; }
-- (CGFloat)force { return %orig; }
-- (CGFloat)maximumPossibleForce { return %orig; }
-- (long long)type { return %orig; }
-- (float)_pathMajorRadius { return %orig; }
+
 %end
 
 %hook UIGestureRecognizer
+
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
         g_isUserTouchingV285 = YES;
@@ -1600,6 +1602,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(touches, event);
 }
+
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
         g_isUserTouchingV285 = YES;
@@ -1607,14 +1610,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(touches, event);
 }
+
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) g_isUserTouchingV285 = NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        g_isUserTouchingV285 = NO;
+    }
     %orig(touches, event);
 }
+
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) g_isUserTouchingV285 = NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        g_isUserTouchingV285 = NO;
+    }
     %orig(touches, event);
 }
+
 - (void)setState:(UIGestureRecognizerState)state {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
         if (state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) {
@@ -1626,52 +1636,76 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(state);
 }
-- (BOOL)isEnabled { return %orig; }
-- (void)setEnabled:(BOOL)enabled { %orig(enabled); }
+
 - (BOOL)cancelsTouchesInView {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) return NO;
+    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
+        return NO;
+    }
     return %orig;
 }
+
 - (BOOL)delaysTouchesBegan {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        return NO;
+    }
     return %orig;
 }
+
 - (BOOL)delaysTouchesEnded {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        return NO;
+    }
     return %orig;
 }
+
 %end
 
 %hook UIPanGestureRecognizer
+
 - (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
     %orig(delays);
 }
+
 - (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
     %orig(delays);
 }
+
 - (void)setCancelsTouchesInView:(BOOL)cancels {
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) { %orig(NO); return; }
+    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
+        %orig(NO);
+        return;
+    }
     %orig(cancels);
 }
-- (NSUInteger)minimumNumberOfTouches { return %orig; }
-- (void)setMinimumNumberOfTouches:(NSUInteger)min { %orig(min); }
-- (NSUInteger)maximumNumberOfTouches { return %orig; }
-- (void)setMaximumNumberOfTouches:(NSUInteger)max { %orig(max); }
+
 %end
 
 %hook UIScreenEdgePanGestureRecognizer
+
 - (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
     %orig(delays);
 }
+
 - (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
     %orig(delays);
 }
-- (UIRectEdge)edges { return %orig; }
-- (void)setEdges:(UIRectEdge)edges { %orig(edges); }
+
 %end
 %end
 
