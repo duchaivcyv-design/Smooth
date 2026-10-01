@@ -79,6 +79,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 
+#import <QuartzCore/QuartzCore.h>
 #import "Modules/CrashGuard.h"
 #import "Modules/CacheCleaner.h"
 #import "Modules/SmartThermal.h"
@@ -276,6 +277,8 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
 - (void)_updatePictureInPictureWindowMargin;
 - (UIEdgeInsets)pictureInPictureWindowMargin;
+- (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion;
+- (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId;
 @end
 
 @interface AVPictureInPictureController : NSObject
@@ -1072,12 +1075,13 @@ static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 
 // =========================================================================
-// HOOK THUẦN C CHO CADISPLAYLINK & CAANIMATION 
-// (MIỄN NHIỄM VỚI LỖI STRUCT CỦA LOGOS VÀ ÉP CHUẨN MỌI MỨC FPS)
+// HOOK THUẦN C CHO CÁC CLASS TRẢ VỀ C-STRUCT (Xóa sổ 100% lỗi Logos)
 // =========================================================================
 static CAFrameRateRange (*orig_CADisplayLink_preferredFrameRateRange)(id self, SEL _cmd);
 static void (*orig_CADisplayLink_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
 static void (*orig_CAAnimation_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
+static void (*orig_SBPIPController_setPictureInPictureWindowMargin)(id self, SEL _cmd, UIEdgeInsets arg1);
+static UIEdgeInsets (*orig_SBPIPController_pictureInPictureWindowMargin)(id self, SEL _cmd);
 
 static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SEL _cmd) {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
@@ -1088,8 +1092,7 @@ static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SE
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
     
-    // Nếu màn hình đang chạm, duy trì mức Hz thiết lập.
-    // Nếu màn hình không chạm hơn 1.5s, TỰ ĐỘNG HẠ tần số xuống 30Hz để tiết kiệm pin tối đa
+    // Tự động hạ xuống 30Hz khi không có tương tác sau 1.5s (Tiết kiệm pin)
     if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, rate > 60.0f ? 60.0f : rate, rate > 60.0f ? 60.0f : rate);
     }
@@ -1131,6 +1134,17 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     } else {
         orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, range);
     }
+}
+
+static void custom_SBPIPController_setPictureInPictureWindowMargin(id self, SEL _cmd, UIEdgeInsets arg1) {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    orig_SBPIPController_setPictureInPictureWindowMargin(self, _cmd, arg1);
+}
+
+static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self, SEL _cmd) {
+    return orig_SBPIPController_pictureInPictureWindowMargin(self, _cmd);
 }
 
 // =========================================================================
@@ -1223,6 +1237,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBPIPController
+- (void)_updatePictureInPictureWindowMargin {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2959,6 +2979,16 @@ static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *ob
             MSHookMessageEx(clsCAAnimation, @selector(setPreferredFrameRateRange:), 
                             (IMP)custom_CAAnimation_setPreferredFrameRateRange, 
                             (IMP *)&orig_CAAnimation_setPreferredFrameRateRange);
+        }
+
+        Class clsSBPIPController = NSClassFromString(@"SBPIPController");
+        if (clsSBPIPController) {
+            MSHookMessageEx(clsSBPIPController, @selector(setPictureInPictureWindowMargin:), 
+                            (IMP)custom_SBPIPController_setPictureInPictureWindowMargin, 
+                            (IMP *)&orig_SBPIPController_setPictureInPictureWindowMargin);
+            MSHookMessageEx(clsSBPIPController, @selector(pictureInPictureWindowMargin), 
+                            (IMP)custom_SBPIPController_pictureInPictureWindowMargin, 
+                            (IMP *)&orig_SBPIPController_pictureInPictureWindowMargin);
         }
 
         // Tích hợp Engine Tweak
