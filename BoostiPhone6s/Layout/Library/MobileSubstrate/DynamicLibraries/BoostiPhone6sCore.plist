@@ -9,7 +9,6 @@
 			<string>com.apple.UIKit</string>
 			<string>com.apple.springboard</string>
 			<string>com.apple.Preferences</string>
-			<string>com.apple.Accessibility</string>
 			<string>com.apple.TextInputUI</string>
 			<string>com.apple.InputUI</string>
 		</array>
@@ -17,7 +16,6 @@
 		<array>
 			<string>SpringBoard</string>
 			<string>Preferences</string>
-			<string>assistivetouchd</string>
 		</array>
 	</dict>
 </dict>
