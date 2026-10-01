@@ -48,9 +48,9 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit BackBoardServices
+# Đã bỏ BackBoardServices để tránh lỗi thiếu SDK trên GitHub Actions
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
-# Liên kết động chuẩn xác Substrate/Ellekit runtime
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -Wl,-install_name,@rpath/BoostiPhone6sCore.dylib \
@@ -63,7 +63,6 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# Thư mục con chứa bundle cài đặt Preferences
 SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
