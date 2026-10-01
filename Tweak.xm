@@ -1531,15 +1531,11 @@ static BoostConfigV261 *CFG261 = nil;
     return %orig(options, suspended, restoreState);
 }
 %end
+
 %end
 
-// =========================================================================
-// NHÓM 2: CỬA SỔ NỔI & PICTURE-IN-PICTURE
-// =========================================================================
-// =========================================================================
-// NHÓM 2: CỬA SỔ NỔI & PICTURE-IN-PICTURE
-// =========================================================================
 %group Group_V261_FloatingWindow_PiP
+
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
     %orig;
@@ -2454,7 +2450,7 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 
 // =========================================================================
-// HOOK UISCROLLVIEW - ĐÃ SỬA CÚ PHÁP LOGOS & KHÓA CHUẨN FPS
+// HOOK UISCROLLVIEW - CHUẨN HÓA %orig KHÔNG THAM SỐ STRUCT
 // =========================================================================
 %hook UIScrollView
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
@@ -2494,17 +2490,6 @@ static BoostConfigV261 *CFG261 = nil;
     return %orig(view);
 }
 
-- (BOOL)isPagingEnabled { return %orig; }
-- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig; }
-- (BOOL)isScrollEnabled { return %orig; }
-- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig; }
-- (BOOL)bounces { return %orig; }
-- (void)setBounces:(BOOL)bounces { %orig; }
-- (BOOL)alwaysBounceVertical { return %orig; }
-- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig; }
-- (BOOL)alwaysBounceHorizontal { return %orig; }
-- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig; }
-
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2519,14 +2504,6 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
-
-- (BOOL)isTracking { return %orig; }
-- (BOOL)isDragging { return %orig; }
-- (BOOL)isDecelerating { return %orig; }
-- (void)setContentSize:(CGSize)contentSize { %orig; }
-- (CGSize)contentSize { return %orig; }
-- (void)setContentInset:(UIEdgeInsets)contentInset { %orig; }
-- (UIEdgeInsets)contentInset { return %orig; }
 
 - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
@@ -2657,7 +2634,7 @@ static BoostConfigV261 *CFG261 = nil;
     %orig(radius);
 }
 %end
-%end // End Group_ZeroLatencyTouch_PhysicsV261
+%end // Kết thúc Group_ZeroLatencyTouch_PhysicsV261
 
 // =========================================================================
 // NHÓM 5: BÀN PHÍM TỐI ƯU
@@ -2844,7 +2821,7 @@ static BoostConfigV261 *CFG261 = nil;
 - (BOOL)isSecureTextEntry { return %orig; }
 - (void)setSecureTextEntry:(BOOL)secureTextEntry { %orig(secureTextEntry); }
 %end
-%end // End Group_Keyboard_And_TextV261
+%end // Kết thúc Group_Keyboard_And_TextV261
 
 // =========================================================================
 // NHÓM 6: PIPELINE ĐỒ HỌA METAL (CHỐNG ĐEN MÀN HÌNH - XÉ HÌNH VSYNC TRIPLE BUFFER)
@@ -3014,7 +2991,7 @@ static BoostConfigV261 *CFG261 = nil;
 - (void)orderAbove:(uint32_t)contextId { %orig(contextId); }
 - (void)orderBelow:(uint32_t)contextId { %orig(contextId); }
 %end
-%end // End Group_MetalGraphics_OptV261
+%end // Kết thúc Group_MetalGraphics_OptV261
 
 // =========================================================================
 // NHÓM 7: UIKIT APP BÊN THỨ 3
@@ -3111,7 +3088,7 @@ static BoostConfigV261 *CFG261 = nil;
 - (UIWindowSceneActivationState)activationState { return %orig; }
 - (UIScreen *)screen { return %orig; }
 %end
-%end // End Group_UIKit_ThirdParty_IsolatedV261
+%end // Kết thúc Group_UIKit_ThirdParty_IsolatedV261
 
 // =========================================================================
 // NHÓM 8: QUẢN LÝ TIẾN TRÌNH SPRINGBOARD
@@ -3188,7 +3165,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
 }
 %end
-%end // End Group_SpringBoard_ProcessManagerV261
+%end // Kết thúc Group_SpringBoard_ProcessManagerV261
 
 // =========================================================================
 // NHÓM 9: HIỆU NĂNG CUỘN (SCROLL PERFORMANCE OVERCLOCK)
@@ -3239,7 +3216,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
 }
 %end
-%end // End Group_ScrollPerformance_SuperEngineV261
+%end // Kết thúc Group_ScrollPerformance_SuperEngineV261
 
 // =========================================================================
 // CÁC HÀM TIỆN ÍCH HỆ THỐNG & DAEMON THÔNG MINH
