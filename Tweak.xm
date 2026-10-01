@@ -1657,12 +1657,12 @@ static BoostConfigV261 *CFG261 = nil;
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
 
-    // SỬA CHUẨN: Nếu người dùng cố tình hạ Hz (ví dụ 15Hz, 30Hz), khóa chết ở mức đó kể cả khi vuốt
+    // Nếu người dùng cố tình hạ Hz (15Hz, 30Hz), khóa chết mức đó kể cả khi vuốt
     if (rate <= 30.0f) {
         return CAFrameRateRangeMake(rate, rate, rate);
     }
 
-    // Nếu người dùng chọn mức cao (60Hz - 144Hz):
+    // Nếu chọn mức cao (60Hz - 144Hz):
     BOOL isActivelyRendering = g_isUserTouchingV261 || g_isScrollInertiaActiveV261;
     if (!isActivelyRendering && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
@@ -1839,7 +1839,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
-- (cleanupAfterClose)cleanupAfterClose {
+- (void)cleanupAfterClose {
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
         Titanium_PurgeProcessMemoryAggressively();
     }
