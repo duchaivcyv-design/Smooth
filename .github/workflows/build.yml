@@ -10,77 +10,75 @@ permissions:
 
 jobs:
   build-deb:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- BƯỚC 1: THIẾT LẬP MÔI TRƯỜNG ROOTLESS & CÀI TOOL CẦN THIẾT ---
-      - name: Setup Environment Variables
+      # --- BƯỚC 1: CÀI ĐẶT CÔNG CỤ HỖ TRỢ ĐÓNG GÓI ---
+      - name: Setup Tools & Environment
         run: |
           THEOS_PATH="$HOME/theos"
-          
           echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          # Chỉ cài những công cụ Theos thực sự thiếu trên macOS runner để không bị spam cảnh báo vàng
-          brew install make ldid dpkg coreutils
-          
-          echo "/opt/homebrew/opt/make/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" >> $GITHUB_PATH
+          # Cài dpkg và ldid để Theos đóng gói và ký mã deb
+          brew install dpkg ldid coreutils
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI SDK IPHONEOS 16.5 ---
-      - name: Clone Theos & Install SDK via Git Sparse
+      # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
+      - name: Clone Theos & Install SDK
         run: |
           TARGET_DIR="${{ env.THEOS }}"
-          
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
           
+          # Tải nhanh SDK 16.5 bằng sparse-checkout
           mkdir -p /tmp/sdk_repo
           cd /tmp/sdk_repo
-          
           git init
           git remote add origin https://github.com/theos/sdks.git
           git config core.sparseCheckout true
           echo "iPhoneOS16.5.sdk/" > .git/info/sparse-checkout
-          
           git fetch --depth=1 origin master
           git checkout FETCH_HEAD
           
           mkdir -p "$TARGET_DIR/sdks"
           mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
-          
           cd ~
           rm -rf /tmp/sdk_repo
           
           if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
-             echo "❌ Error: Failed to move SDK."
+             echo "❌ Error: Không tìm thấy SDK iPhoneOS16.5!"
              exit 1
           fi
 
-      # --- BƯỚC 3: DỌN DẸP VÀ BUILD ĐÓNG GÓI .DEB ---
+      # --- BƯỚC 3: DỌN DẸP VÀ BIÊN DỊCH GÓI DEB ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
           
           if [ ! -f Makefile ]; then
-            echo "❌ Error: No Makefile found!"
+            echo "❌ Error: Không tìm thấy Makefile tại thư mục gốc!"
             exit 1
           fi
           
           rm -rf packages/ obj/ .theos/
           
-          # Đóng gói Rootless dứt điểm
+          # Đảm bảo phân quyền các file thực thi trong layout (nếu có)
+          if [ -d "postinst" ]; then chmod 755 postinst; fi
+          if [ -d "prerm" ]; then chmod 755 prerm; fi
+          
+          # Tiến hành build gói deb Rootless
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
           
           # Kiểm tra file thành phẩm
           ls -lh packages/*.deb || { 
-            echo "❌ Build finished but no deb found in packages/"; 
+            echo "❌ Build hoàn tất nhưng không tìm thấy file .deb!"; 
             exit 1; 
           }
 
-      # --- BƯỚC 4: XUẤT FILE .DEB THÀNH PHẨM LÊN ARTIFACTS ---
+      # --- BƯỚC 4: TẢI FILE DEB LÊN ARTIFACTS ---
       - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
         with:
