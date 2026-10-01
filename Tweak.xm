@@ -1657,12 +1657,10 @@ static BoostConfigV261 *CFG261 = nil;
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
 
-    // Nếu người dùng cố tình hạ Hz (15Hz, 30Hz), khóa chết mức đó kể cả khi vuốt
     if (rate <= 30.0f) {
         return CAFrameRateRangeMake(rate, rate, rate);
     }
 
-    // Nếu chọn mức cao (60Hz - 144Hz):
     BOOL isActivelyRendering = g_isUserTouchingV261 || g_isScrollInertiaActiveV261;
     if (!isActivelyRendering && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, 60.0f, 60.0f);
@@ -2217,8 +2215,6 @@ static BoostConfigV261 *CFG261 = nil;
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
             
-            // SỬA CHUẨN: Chỉ boost realtime thread nếu targetFPS >= 60.
-            // Nếu người dùng chọn 15Hz/30Hz thì KHÔNG ép CPU chạy đua nhịp cao!
             NSInteger curFPS = [CFG261 resolvedTargetFPS];
             if (curFPS >= 60) {
                 pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2456,7 +2452,7 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 
 // =========================================================================
-// HOOK UISCROLLVIEW - CHUẨN XÁC 100% CẢ STRUCT LẪN HZ/FPS ĐÃ CHỌN
+// HOOK UISCROLLVIEW - ĐÃ SỬA TRIỆT ĐỂ DÒNG 1690 BẰNG %orig(touches)
 // =========================================================================
 %hook UIScrollView
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
@@ -2475,6 +2471,7 @@ static BoostConfigV261 *CFG261 = nil;
     %orig;
 }
 
+// SỬA DÒNG 1690: Hàm có giá trị trả về struct CGPoint -> Dùng %orig(touches)
 - (CGPoint)_touchPositionForTouches:(id)touches {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         g_isUserTouchingV261 = YES;
@@ -2492,10 +2489,9 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(0.992);
-        return;
+        rate = 0.992;
     }
-    %orig(rate);
+    %orig;
 }
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
@@ -2506,15 +2502,15 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)isPagingEnabled { return %orig; }
-- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig(pagingEnabled); }
+- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig; }
 - (BOOL)isScrollEnabled { return %orig; }
-- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig(scrollEnabled); }
+- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig; }
 - (BOOL)bounces { return %orig; }
-- (void)setBounces:(BOOL)bounces { %orig(bounces); }
+- (void)setBounces:(BOOL)bounces { %orig; }
 - (BOOL)alwaysBounceVertical { return %orig; }
-- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig(alwaysBounceVertical); }
+- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig; }
 - (BOOL)alwaysBounceHorizontal { return %orig; }
-- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig(alwaysBounceHorizontal); }
+- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig; }
 
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
@@ -2534,9 +2530,9 @@ static BoostConfigV261 *CFG261 = nil;
 - (BOOL)isTracking { return %orig; }
 - (BOOL)isDragging { return %orig; }
 - (BOOL)isDecelerating { return %orig; }
-- (void)setContentSize:(CGSize)contentSize { %orig(contentSize); }
+- (void)setContentSize:(CGSize)contentSize { %orig; }
 - (CGSize)contentSize { return %orig; }
-- (void)setContentInset:(UIEdgeInsets)contentInset { %orig(contentInset); }
+- (void)setContentInset:(UIEdgeInsets)contentInset { %orig; }
 - (UIEdgeInsets)contentInset { return %orig; }
 
 - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
