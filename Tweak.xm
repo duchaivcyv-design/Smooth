@@ -85,9 +85,6 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 #import "Modules/KernelBypass.h"
 #import "Modules/SystemBlocker.h"
 #import "Modules/DeepExploit.h"
-#import <UIKit/UIEvent+Private.h>
-#import <mach/mach_time.h>
-#import <substrate.h> // Bắt buộc để dùng MSHookMessageEx
 
 // ========================================================
 // HỖ TRỢ ĐƯỜNG DẪN TƯƠNG THÍCH ROOTLESS & ROOTHIDE
