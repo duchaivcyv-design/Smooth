@@ -1,3 +1,4 @@
+// ==================== MACH KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
@@ -11,6 +12,8 @@
 #import <mach/task.h>
 #import <mach/task_info.h>
 #import <mach/clock.h>
+
+// ==================== POSIX & SYSTEM ====================
 #import <pthread.h>
 #import <pthread/qos.h>
 #import <sched.h>
@@ -18,6 +21,12 @@
 #import <stdlib.h>
 #import <string.h>
 #import <spawn.h>
+#import <fcntl.h>
+#import <dlfcn.h>
+#import <malloc/malloc.h>
+#import <notify.h>
+
+// ==================== SYS HEADERS ====================
 #import <sys/sysctl.h>
 #import <sys/resource.h>
 #import <sys/utsname.h>
@@ -25,17 +34,19 @@
 #import <sys/mman.h>
 #import <sys/stat.h>
 #import <sys/types.h>
-#import <fcntl.h>
-#import <dlfcn.h>
-#import <malloc/malloc.h>
-#import <CommonCrypto/CommonDigest.h>
-#import <notify.h>
+
+// ==================== OBJC & SECURITY ====================
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import <CommonCrypto/CommonDigest.h>
+#import <substrate.h>
+
+// ==================== APPLE FRAMEWORKS ====================
 #import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <QuartzCore/CAMetalLayer.h>
 #import <QuartzCore/CAFrameRateRange.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Metal/Metal.h>
@@ -1148,7 +1159,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         return;
     }
     NSInteger target = [CFG285 resolvedTargetFPS];
-    %orig(target > 0 ? target : fps);
+    NSInteger safeFPS = (target > 0) ? target : fps;
+    %orig(safeFPS);
 }
 
 - (NSInteger)preferredFramesPerSecond {
@@ -1156,7 +1168,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         return %orig;
     }
     NSInteger target = [CFG285 resolvedTargetFPS];
-    return target > 0 ? target : %orig;
+    return (target > 0) ? target : %orig;
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
@@ -1167,7 +1179,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     NSInteger target = [CFG285 resolvedTargetFPS];
     if (target > 0) {
         NSInteger calcInterval = (NSInteger)roundf(60.0f / (float)target);
-        %orig(calcInterval > 0 ? calcInterval : 1);
+        NSInteger safeInterval = (calcInterval > 0) ? calcInterval : 1;
+        %orig(safeInterval);
     } else {
         %orig(interval);
     }
@@ -1435,7 +1448,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %end // Kết thúc Group_Display_SpringBoardV285
 
-
 // ====================================================================================================
 // NHÓM 4: PHÂN BIỆT PHẦN CỨNG - NÚT HOME VẬT LÝ (6s - 7P - 8P - SE)
 // ====================================================================================================
@@ -1454,8 +1466,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
     %orig;
 }
-- (void)performLongPressCancelled:(id)arg1 {
-    %orig(arg1);
+- (void)performLongPressCancelled {
+    %orig;
 }
 %end
 %end
@@ -1900,7 +1912,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
-- (void)didReceiveMemoryWarning {
+- (didReceiveMemoryWarning)didReceiveMemoryWarning {
     %orig;
     if (IS_ACTIVE) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
@@ -1952,9 +1964,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %group Group_SpringBoard_ProcessManagerV285
 %hook SBApplication
-- (void)didExitWithContext:(id)context {
-    if (IS_ACTIVE && CFG285.aggressiveRamClean) return;
-    %orig; // Thay vì %orig(context);
+- (void)setProcessState:(id)state {
+    if (IS_ACTIVE && CFG285.turboAppLaunch) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    %orig(state);
 }
 - (id)processState { return %orig; }
 - (NSString *)bundleIdentifier { return %orig; }
