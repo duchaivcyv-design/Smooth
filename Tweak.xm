@@ -42,13 +42,6 @@
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
 
-// ====================================================================================================
-// TITANIUM & APEX V28.5 PRO MASTER ENTERPRISE ENGINE (UNIVERSAL SUITE)
-// Architecture: 10-Tier Zero-Latency, Adaptive 15-144 Hz/FPS, Anti-Throttling, Anti-Ghost Touch
-// Hardware Profiles: Segregated Classic Home (iPhone 6s - 7P - 8P - SE) vs Fluid Gestures (X - 15PM)
-// Compatibility: iOS 14.0 - 26.0.1 | Environments: Rootless (Dopamine/ElleKit) & RootHide
-// ====================================================================================================
-
 #ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
@@ -1841,7 +1834,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (void)setContentsScale:(CGFloat)scale {
     if (Titanium_IsSpringBoard()) { %orig; return; }
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        %orig(scale > 0 ? scale : [UIScreen mainScreen].scale);
+        CGFloat safeScale = (scale > 0) ? scale : [UIScreen mainScreen].scale;
+        %orig(safeScale);
         return;
     }
     %orig;
@@ -1865,8 +1859,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (void)setShouldRasterize:(BOOL)val { %orig(NO); }
 - (BOOL)shouldRasterize { return NO; }
 - (void)setShadowRadius:(CGFloat)radius {
-    // Giới hạn bán kính đổ bóng loại bỏ thuật toán Gaussian Blur nặng
-    %orig(MIN(radius, 2.0f));
+    // Tách biến safeRadius để tránh dấu phẩy làm Logos phân tách sai số lượng tham số
+    CGFloat safeRadius = (radius > 2.0f) ? 2.0f : radius;
+    %orig(safeRadius);
 }
 - (void)setAllowsGroupOpacity:(BOOL)allows { %orig(NO); }
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag {
@@ -2002,9 +1997,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %group Group_SpringBoard_ProcessManagerV285
 %hook SBApplication
-- (void)setProcessState:(id)state {
-    if (IS_ACTIVE && CFG285.turboAppLaunch) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    %orig(state);
+- (void)didExitWithContext:(id)context {
+    if (IS_ACTIVE && CFG285.aggressiveRamClean) return;
+    %orig; // Thay vì %orig(context);
 }
 - (id)processState { return %orig; }
 - (NSString *)bundleIdentifier { return %orig; }
