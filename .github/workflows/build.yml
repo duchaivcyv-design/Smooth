@@ -65,14 +65,19 @@ jobs:
           
           rm -rf packages/ obj/ .theos/
           
-          # Đảm bảo phân quyền các file thực thi trong layout (nếu có)
           if [ -d "postinst" ]; then chmod 755 postinst; fi
           if [ -d "prerm" ]; then chmod 755 prerm; fi
           
-          # Tiến hành build gói deb Rootless
-          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          # Chạy build. Nếu lỗi, in chính xác khu vực dòng 1350 - 1380 của Tweak.xm ra log
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless || {
+            echo "================================================================="
+            echo "❌ PHÁT HIỆN LỖI PREPROCESSING! NỘI DUNG TWEAK.XM TẠI DÒNG 1350-1380:"
+            echo "================================================================="
+            nl -ba Tweak.xm | sed -n '1350,1380p' || cat -n Tweak.xm | head -n 1400 | tail -n 50
+            echo "================================================================="
+            exit 1
+          }
           
-          # Kiểm tra file thành phẩm
           ls -lh packages/*.deb || { 
             echo "❌ Build hoàn tất nhưng không tìm thấy file .deb!"; 
             exit 1; 
