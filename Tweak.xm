@@ -1781,7 +1781,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         return; 
     }
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        CGFloat safeScale = (scale > 0.0f) ? scale : [UIScreen mainScreen].scale;
+        CGFloat screenScale = [UIScreen mainScreen].scale;
+        CGFloat safeScale = (scale > 0.0f) ? scale : screenScale;
         %orig(safeScale);
         return;
     }
@@ -1836,7 +1837,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig;
     if (IS_ACTIVE) {
         if (self.subviews.count > 0) {
-            self.subviews.firstObject.hidden = YES;
+            UIView *firstV = (UIView *)self.subviews.firstObject;
+            firstV.hidden = YES;
         }
         self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.75f];
     }
