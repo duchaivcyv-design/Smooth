@@ -287,7 +287,12 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @end
 
 @interface UIScrollView (ApexV261Revolution)
+- (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset;
 - (BOOL)_isScrolling;
+- (void)_setContentOffsetPinned:(CGPoint)point;
+- (void)_setInterruptionImpulse:(CGPoint)impulse;
+- (void)_forcePanGestureToEndImmediately;
+- (CGPoint)_touchPositionForTouches:(id)touches;
 @end
 
 @interface CAMetalLayer (ApexV261Revolution)
@@ -301,6 +306,8 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 
 @interface UIKeyboardImpl : UIView
 + (instancetype)activeInstance;
+- (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
+- (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 - (void)clearAnimations;
 - (void)setReturnKeyEnabled:(BOOL)enabled;
 - (void)updateReturnKey:(BOOL)enabled;
@@ -309,6 +316,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @end
 
 @interface UITextInputController : NSObject
+- (void)_insertText:(id)text;
 - (void)deleteBackward;
 @end
 
@@ -358,16 +366,22 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @interface SBLockScreenManager : NSObject
 + (instancetype)sharedInstance;
 - (BOOL)isUILocked;
+- (void)unlockUIFromSource:(int)source withOptions:(id)options;
+- (void)lockUIFromSource:(int)source withOptions:(id)options;
 @end
 
 @interface SBControlCenterController : NSObject
 + (instancetype)sharedInstance;
 - (BOOL)isVisible;
+- (void)presentAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated;
 @end
 
 @interface SBNotificationCenterController : NSObject
 + (instancetype)sharedInstance;
 - (BOOL)isVisible;
+- (void)presentAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated;
 @end
 
 @interface SBWallpaperController : NSObject
@@ -434,8 +448,15 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 - (RBSProcessIdentity *)identity;
 @end
 
+@interface RBSLaunchRequest : NSObject
+- (BOOL)execute:(out id *)outContext error:(out id *)outError;
+@end
+
 @interface SBMainWorkspace : NSObject
 + (instancetype)sharedInstance;
+- (void)_handleApplicationProcessExited:(id)processDescription;
+- (void)handleApplicationLaunch:(id)application;
+- (void)handleApplicationSuspended:(id)application;
 @end
 
 @interface SBAppSwitcherController : UIViewController
@@ -443,6 +464,7 @@ static inline BOOL Titanium_IsRootlessOrRootHideEnvironment(void) {
 @end
 
 @interface UIStatusBar : UIView
+- (void)requestStyle:(long long)style animated:(BOOL)animated;
 - (void)forceUpdateData:(BOOL)animated;
 @end
 
@@ -620,10 +642,9 @@ static volatile uint64_t g_lastSyncTicksV261 = 0;
 static BOOL g_isDeviceChargingV261 = NO;
 static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
-static volatile BOOL g_isScrollInertiaActiveV261 = NO;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
-// NHẬN DIỆN THIẾT BỊ 16:9 NÚT HOME (6s / 7 / 8 / Plus / SE)
+// NHẬN DIỆN THIẾT BỊ NÚT HOME (6s / 7 / 8 / Plus / SE) VÀ MÁY CỬ CHỈ (X-15 PRO MAX)
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
     static BOOL sIsClassic = NO;
     static dispatch_once_t onceToken;
@@ -676,7 +697,6 @@ static inline BOOL Titanium_IsDeviceProMotionHardware(void) {
     return YES;
 }
 
-// THỰC THI MACH THREAD CONSTRAINT CAO CẤP - ÉP TẠO ĐỒ HỌA TRƯỚC 40 KHUNG HÌNH / GIÂY
 static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uint32_t targetHz) {
     if (!thread) return;
     if (Titanium_IsSpringBoard()) {
@@ -693,7 +713,7 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
     uint32_t framePeriodNs = 1000000000 / hz;
     thread_time_constraint_policy_data_t timeConstraint;
     timeConstraint.period = framePeriodNs;
-    timeConstraint.computation = framePeriodNs * 40 / 100; // Tối ưu trước 40 frame/s pre-fetch
+    timeConstraint.computation = framePeriodNs * 40 / 100; // Pre-fetch 40 frame/s siêu tốc
     timeConstraint.constraint = framePeriodNs;
     timeConstraint.preemptible = 1;
     thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY, (task_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
@@ -702,7 +722,6 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
     thread_policy_set(thread, THREAD_AFFINITY_POLICY, (task_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 }
 
-// CƠ CHẾ XẢ SÂU RAM MÀ KHÔNG GÂY TẢI LẠI (RELOAD) APP
 static inline void Titanium_PurgeProcessMemoryAggressively(void) {
     malloc_zone_pressure_relief(malloc_default_zone(), 0);
 }
@@ -804,7 +823,6 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
     pthread_mutex_unlock(&g_syncLockV261);
 }
 
-// BỎ QUA TIẾN TRÌNH HỆ THỐNG NGUY HIỂM & TRÁNH TREO RESPRING / SAFEMODE CHO ROOTHIDE
 static BOOL Titanium_IsCriticalSystemDaemon(void) {
     static BOOL isDaemon = NO;
     static dispatch_once_t onceToken;
@@ -1023,22 +1041,20 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     s_isLoading = NO;
 }
 
-// CHO PHÉP CHỌN BẤT KỲ MỨC HZ / FPS NÀO (TỪ 15 ĐẾN 144) KHÔNG BỊ SAFEMODE
+// CHO PHÉP NHẬN TẤT CẢ MỨC LẺ HZ/FPS (15 ĐẾN 144) KHÔNG BỊ SAFEMODE
 - (NSInteger)resolvedTargetHz {
     if (!self.enabled || !self.enableHzControl) return 120;
     UIDevice *dev = [UIDevice currentDevice];
     if (dev.batteryMonitoringEnabled) {
         float batLevel = dev.batteryLevel;
-        // Chỉ giới hạn khi pin yếu dưới 20% và không cắm sạc để bảo vệ thiết bị
         if (batLevel > 0.0f && batLevel <= 0.20f && !g_isDeviceChargingV261) {
             return 60;
         }
     }
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
-    // Tự động hạ nền nhiệt khi máy quá nóng (Serious Thermal)
     if (g_liveThermalStateV261 >= NSProcessInfoThermalStateSerious && self.antiThermalThrottling) {
-        return 45; 
+        return 60;
     }
     if (self.targetHz >= 15 && self.targetHz <= 144) return self.targetHz;
     return 120;
@@ -1056,7 +1072,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
     if (g_liveThermalStateV261 >= NSProcessInfoThermalStateSerious && self.antiThermalThrottling) {
-        return 45;
+        return 60;
     }
     if (self.targetFPS >= 15 && self.targetFPS <= 144) return self.targetFPS;
     return 120;
@@ -1065,63 +1081,9 @@ static BOOL Titanium_IsSecureBankingApp(void) {
 
 static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
+static BOOL g_ApexRenderPipelineReady = YES;
 
-// =========================================================================
-// HOOK THUẦN C HOÀN TOÀN CHO CADISPLAYLINK & CAANIMATION (TRIỆT TIÊU 100% LOGOS STRUCT ERROR)
-// =========================================================================
-static CAFrameRateRange (*orig_CADisplayLink_preferredFrameRateRange)(id self, SEL _cmd);
-static void (*orig_CADisplayLink_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
-static void (*orig_CAAnimation_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
-
-static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SEL _cmd) {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        return orig_CADisplayLink_preferredFrameRateRange(self, _cmd);
-    }
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
-    if (rate < 15.0f) rate = 15.0f;
-    if (rate > 144.0f) rate = 144.0f;
-
-    // ĐÃ FIX LỖI VUỐT MẠNH KHÔNG BỊ PHANH GẤP: Duy trì quán tính trôi mượt tự nhiên
-    if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 2.0)) {
-        return CAFrameRateRangeMake(30.0f, rate, rate);
-    }
-
-    float minRate = (rate <= 60.0f) ? rate : 60.0f;
-    return CAFrameRateRangeMake(minRate, rate, rate);
-}
-
-static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, range);
-        return;
-    }
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
-    if (rate < 15.0f) rate = 15.0f;
-    if (rate > 144.0f) rate = 144.0f;
-
-    float minRate = (rate <= 60.0f) ? rate : 60.0f;
-    orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(minRate, rate, rate));
-}
-
-static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
-    if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
-        float target = (float)[CFG261 resolvedTargetHz];
-        if (target < 15.0f) target = 15.0f;
-        if (target > 144.0f) target = 144.0f;
-        float minHz = (target <= 30.0f) ? target : ((target < 60.0f) ? 30.0f : 60.0f);
-        orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(minHz, target, target));
-    } else {
-        orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, range);
-    }
-}
-
-// =========================================================================
-// NHÓM 1: KHỞI TỐC ỨNG DỤNG NHANH
-// =========================================================================
 %group Group_FastLaunch_SuperEngineV261
-
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
@@ -1135,6 +1097,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
+%end
 %end
 
 %hook FBProcess
@@ -1166,13 +1129,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig(options, suspended, restoreState);
 }
 %end
-%end // End Group_FastLaunch_SuperEngineV261
 
-// =========================================================================
-// NHÓM 2: CỬA SỔ NỔI & PICTURE-IN-PICTURE
-// =========================================================================
 %group Group_V261_FloatingWindow_PiP
-
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
     %orig;
@@ -1190,7 +1148,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig(animated);
 }
 - (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart {
     %orig(shouldStart);
@@ -1202,28 +1160,37 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig(suspended);
 }
 %end
 
 %hook SBPIPController
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
 - (void)_updatePictureInPictureWindowMargin {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
+- (UIEdgeInsets)pictureInPictureWindowMargin {
+    return %orig;
+}
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig(pid, sceneId, animated, completion);
 }
 - (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig(pid, sceneId);
 }
 %end
 
@@ -1256,13 +1223,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig;
 }
 %end
-%end // End Group_V261_FloatingWindow_PiP
+%end
 
-// =========================================================================
-// NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
-// =========================================================================
 %group Group_Display_SpringBoardV261
-
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG261.reduceMultitaskLag) {
@@ -1273,11 +1236,39 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook CADisplayLink
-- (BOOL)isPaused { return %orig; }
-- (void)setPaused:(BOOL)paused { %orig(paused); }
-- (CFTimeInterval)duration { return %orig; }
-- (CFTimeInterval)targetTimestamp { return %orig; }
-- (CFTimeInterval)timestamp { return %orig; }
+- (BOOL)isPaused {
+    return %orig;
+}
+- (void)setPaused:(BOOL)paused {
+    %orig(paused);
+}
+- (CFTimeInterval)duration {
+    return %orig;
+}
+- (CFTimeInterval)targetTimestamp {
+    return %orig;
+}
+- (CFTimeInterval)timestamp {
+    return %orig;
+}
+%end
+
+%hook CAAnimation
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
+        float target = (float)[CFG261 resolvedTargetHz];
+        if (target < 15.0f) target = 15.0f;
+        if (target > 144.0f) target = 144.0f;
+        if (range.maximum > 0 && range.maximum != 60) {
+            %orig;
+            return;
+        }
+        float minHz = (float)(CFG261.powerSaveMode ? 15.0f : ((target < 60.0f) ? 30.0f : 60.0f));
+        %orig;
+    } else {
+        %orig;
+    }
+}
 %end
 
 %hook UIScreen
@@ -1302,11 +1293,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig((CGFloat)[CFG261 resolvedTargetHz]);
 }
-- (CGRect)bounds { return %orig; }
-- (CGFloat)scale { return %orig; }
-- (CGFloat)nativeScale { return %orig; }
-- (CGRect)nativeBounds { return %orig; }
-- (id)displayLinkWithTarget:(id)target selector:(SEL)sel { return %orig(target, sel); }
+- (CGRect)bounds {
+    return %orig;
+}
+- (CGFloat)scale {
+    return %orig;
+}
+- (CGFloat)nativeScale {
+    return %orig;
+}
+- (CGRect)nativeBounds {
+    return %orig;
+}
+- (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
+    return %orig(target, sel);
+}
 %end
 
 %hook CADisplay
@@ -1323,10 +1324,16 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig([CFG261 resolvedTargetHz]);
 }
-- (void)overrideDisplayTimings:(id)timings { %orig(timings); }
-- (void)overrideDisplayCadence:(id)cadence { %orig(cadence); }
+- (void)overrideDisplayTimings:(id)timings {
+    %orig(timings);
+}
+- (void)overrideDisplayCadence:(id)cadence {
+    %orig(cadence);
+}
 - (BOOL)supportsDynamicRefresh {
-    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) return YES;
+    if (IS_ACTIVE && CFG261.proMotionEngineBeta7) {
+        return YES;
+    }
     return %orig;
 }
 %end
@@ -1387,11 +1394,10 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %hook SBFolderView
 - (void)layoutSubviews {
-    %orig;
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        self.layer.allowsGroupOpacity = NO;
     }
+    %orig;
 }
 - (void)scrollViewDidScroll:(id)scrollView {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
@@ -1432,7 +1438,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)setAlphaForAllIcons:(double)alpha { %orig(alpha); }
+- (void)setAlphaForAllIcons:(double)alpha {
+    %orig(alpha);
+}
 - (void)fadeInIcon:(id)icon {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1442,7 +1450,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBIconView
-- (void)setIconImageInfo:(id)info { %orig(info); }
+- (void)setIconImageInfo:(id)info {
+    %orig(info);
+}
 - (void)setHighlighted:(BOOL)highlighted {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1457,8 +1467,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(touchDown);
 }
-- (void)setAllowsCloseBox:(BOOL)allows { %orig(allows); }
-- (void)prepareForReuse { %orig; }
+- (void)setAllowsCloseBox:(BOOL)allows {
+    %orig(allows);
+}
+- (void)prepareForReuse {
+    %orig;
+}
 %end
 
 %hook SBFluidSwitcherViewController
@@ -1498,15 +1512,27 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBWallpaperController
-- (void)beginRequiringWithReason:(id)reason { %orig(reason); }
-- (void)endRequiringWithReason:(id)reason { %orig(reason); }
-- (void)suspendWallpaperAnimationForReason:(id)reason { %orig(reason); }
-- (void)resumeWallpaperAnimationForReason:(id)reason { %orig(reason); }
+- (void)beginRequiringWithReason:(id)reason {
+    %orig(reason);
+}
+- (void)endRequiringWithReason:(id)reason {
+    %orig(reason);
+}
+- (void)suspendWallpaperAnimationForReason:(id)reason {
+    %orig(reason);
+}
+- (void)resumeWallpaperAnimationForReason:(id)reason {
+    %orig(reason);
+}
 %end
 
 %hook SBBacklightController
-- (void)setBacklightFactor:(float)factor { %orig(factor); }
-- (float)backlightFactor { return %orig; }
+- (void)setBacklightFactor:(float)factor {
+    %orig(factor);
+}
+- (float)backlightFactor {
+    return %orig;
+}
 - (void)animateBacklightToFactor:(float)factor duration:(double)duration source:(long long)source completion:(id)completion {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1528,12 +1554,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)cancelVolumeEvent { %orig; }
+- (void)cancelVolumeEvent {
+    %orig;
+}
 %end
 
 %hook SBMediaController
-- (BOOL)isPlaying { return %orig; }
-- (BOOL)isPaused { return %orig; }
+- (BOOL)isPlaying {
+    return %orig;
+}
+- (BOOL)isPaused {
+    return %orig;
+}
 - (BOOL)playForEventSource:(long long)source {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1573,11 +1605,15 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)performLongPressCancelled { %orig; }
+- (void)performLongPressCancelled {
+    %orig;
+}
 %end
 
 %hook SBLockScreenManager
-- (BOOL)isUILocked { return %orig; }
+- (BOOL)isUILocked {
+    return %orig;
+}
 - (void)unlockUIFromSource:(int)source withOptions:(id)options {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1598,8 +1634,28 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
+%hook SBControlCenterController
+- (BOOL)isVisible {
+    return %orig;
+}
+- (void)presentAnimated:(BOOL)animated {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated);
+}
+- (void)dismissAnimated:(BOOL)animated {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated);
+}
+%end
+
 %hook SBNotificationCenterController
-- (BOOL)isVisible { return %orig; }
+- (BOOL)isVisible {
+    return %orig;
+}
 - (void)presentAnimated:(BOOL)animated {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1615,7 +1671,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBFView
-- (void)setCustomFullHomedStyle:(BOOL)flag { %orig(flag); }
+- (void)setCustomFullHomedStyle:(BOOL)flag {
+    %orig(flag);
+}
 %end
 
 %hook UIStatusBar
@@ -1626,12 +1684,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(style, animated);
 }
-- (void)forceUpdateData:(BOOL)animated { %orig(animated); }
+- (void)forceUpdateData:(BOOL)animated {
+    %orig(animated);
+}
 %end
 
 %hook SBReachabilityManager
-- (BOOL)reachabilityModeActive { return %orig; }
-- (void)deactivateReachabilityMode { %orig; }
+- (BOOL)reachabilityModeActive {
+    return %orig;
+}
+- (void)deactivateReachabilityMode {
+    %orig;
+}
 - (void)triggerReachability {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1641,8 +1705,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBWindow
-- (BOOL)_isSecure { return %orig; }
-- (void)setHidden:(BOOL)hidden { %orig(hidden); }
+- (BOOL)_isSecure {
+    return %orig;
+}
+- (void)setHidden:(BOOL)hidden {
+    %orig(hidden);
+}
 %end
 
 %hook SBRootFolderView
@@ -1652,7 +1720,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)setNeedsLayout { %orig; }
+- (void)setNeedsLayout {
+    %orig;
+}
 %end
 
 %hook SBSwitcherAppSuggestionViewController
@@ -1660,6 +1730,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
+    %orig(animated);
+}
+- (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
 }
 %end
@@ -1677,8 +1750,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(animated);
 }
-- (void)viewWillDisappear:(BOOL)animated { %orig(animated); }
-- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
+- (void)viewWillDisappear:(BOOL)animated {
+    %orig(animated);
+}
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+}
+%end
+
+%hook SBFluidSwitcherItemContainer
+- (void)setContentAlpha:(double)alpha {
+    %orig(1.0);
+}
+- (void)prepareForReuse {
+    %orig;
+}
 %end
 
 %hook SBHomeScreenViewController
@@ -1703,17 +1789,27 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(animated);
 }
-- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+}
 %end
 
 %hook SBDisplayPowerLogReporter
-- (void)reportPowerLogEvent { %orig; }
+- (void)reportPowerLogEvent {
+    %orig;
+}
 %end
 
 %hook SBAttentionAwarenessClient
-- (void)setAttentionAwarenessConfiguration:(id)config { %orig(config); }
-- (void)resume { %orig; }
-- (void)suspend { %orig; }
+- (void)setAttentionAwarenessConfiguration:(id)config {
+    %orig(config);
+}
+- (void)resume {
+    %orig;
+}
+- (void)suspend {
+    %orig;
+}
 %end
 
 %hook SBIdleTimerGlobalCoordinator
@@ -1726,7 +1822,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBUIController
-- (BOOL)isAppSwitcherShowing { return %orig; }
+- (BOOL)isAppSwitcherShowing {
+    return %orig;
+}
 - (void)clickedMenuButton {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1748,25 +1846,28 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SpringBoard
-- (id)_accessibilityFrontMostApplication { return %orig; }
-- (BOOL)isLocked { return %orig; }
-- (void)_reboot:(BOOL)arg1 { %orig(arg1); }
-- (void)_relaunchSpringBoardNow { %orig; }
+- (id)_accessibilityFrontMostApplication {
+    return %orig;
+}
+- (BOOL)isLocked {
+    return %orig;
+}
+- (void)_reboot:(BOOL)arg1 {
+    %orig(arg1);
+}
+- (void)_relaunchSpringBoardNow {
+    %orig;
+}
 %end
-%end // End Group_Display_SpringBoardV261
+%end
 
-// =========================================================================
-// NHÓM 4: CẢM ỨNG & VẬT LÝ COLOROS (ÉP XÓA BỎ LỖI STRUCT CỦA LOGOS TUYỆT ĐỐI)
-// =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
-
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG261.touchResponseBoost && event.type == UIEventTypeTouches) {
         NSSet *allTouches = [event allTouches];
         BOOL hasActiveTouch = NO;
         BOOL isInitialTouch = NO;
-        
         for (UITouch *touch in allTouches) {
             UITouchPhase phase = touch.phase;
             if (phase == UITouchPhaseBegan) {
@@ -1777,19 +1878,14 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
                 hasActiveTouch = YES;
             }
         }
-        
         if (hasActiveTouch) {
             g_isUserTouchingV261 = YES;
             g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-            
-            NSInteger curFPS = [CFG261 resolvedTargetFPS];
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            
             if (isInitialTouch && !Titanium_IsSpringBoard()) {
                 thread_t currentMachThread = mach_thread_self();
-                Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)curFPS);
+                Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)[CFG261 resolvedTargetFPS]);
                 mach_port_deallocate(mach_task_self(), currentMachThread);
-                self.layer.drawsAsynchronously = YES;
             }
         } else {
             g_isUserTouchingV261 = NO;
@@ -1797,7 +1893,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(event);
 }
-
 - (void)layoutSubviews {
     %orig;
     if (Titanium_IsSpringBoard()) {
@@ -1807,8 +1902,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         }
     }
 }
-- (BOOL)_isSecure { return %orig; }
-- (void)_setSecure:(BOOL)flag { %orig(flag); }
+- (BOOL)_isSecure {
+    return %orig;
+}
+- (void)_setSecure:(BOOL)flag {
+    %orig(flag);
+}
 - (void)setRootViewController:(UIViewController *)rootViewController {
     if (IS_ACTIVE && CFG261.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1827,11 +1926,15 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)resignKeyWindow { %orig; }
+- (void)resignKeyWindow {
+    %orig;
+}
 %end
 
 %hook UITouch
-- (NSTimeInterval)timestamp { return %orig; }
+- (NSTimeInterval)timestamp {
+    return %orig;
+}
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
@@ -1844,13 +1947,36 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     return currentTouchPhase;
 }
-- (UIWindow *)window { return %orig; }
-- (UIView *)view { return %orig; }
-- (NSUInteger)tapCount { return %orig; }
-- (CGFloat)force { return %orig; }
-- (CGFloat)maximumPossibleForce { return %orig; }
-- (long long)type { return %orig; }
-- (float)_pathMajorRadius { return %orig; }
+- (UIWindow *)window {
+    return %orig;
+}
+- (UIView *)view {
+    return %orig;
+}
+- (NSUInteger)tapCount {
+    return %orig;
+}
+- (CGFloat)majorRadius {
+    return %orig;
+}
+- (CGFloat)majorRadiusTolerance {
+    return %orig;
+}
+- (NSArray *)gestureRecognizers {
+    return %orig;
+}
+- (CGFloat)force {
+    return %orig;
+}
+- (CGFloat)maximumPossibleForce {
+    return %orig;
+}
+- (long long)type {
+    return %orig;
+}
+- (float)_pathMajorRadius {
+    return %orig;
+}
 %end
 
 %hook UIGestureRecognizer
@@ -1892,8 +2018,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(state);
 }
-- (BOOL)isEnabled { return %orig; }
-- (void)setEnabled:(BOOL)enabled { %orig(enabled); }
+- (BOOL)isEnabled {
+    return %orig;
+}
+- (void)setEnabled:(BOOL)enabled {
+    %orig(enabled);
+}
 - (BOOL)cancelsTouchesInView {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         return NO;
@@ -1912,11 +2042,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     return %orig;
 }
-- (void)ignoreTouch:(UITouch *)touch forEvent:(UIEvent *)event { %orig(touch, event); }
-- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer { return %orig(preventedGestureRecognizer); }
-- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer { return %orig(preventingGestureRecognizer); }
-- (BOOL)shouldRequireFailureOfGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer { return %orig(otherGestureRecognizer); }
-- (BOOL)shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer { return %orig(otherGestureRecognizer); }
+- (void)ignoreTouch:(UITouch *)touch forEvent:(UIEvent *)event {
+    %orig(touch, event);
+}
+- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer *)preventedGestureRecognizer {
+    return %orig(preventedGestureRecognizer);
+}
+- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer *)preventingGestureRecognizer {
+    return %orig(preventingGestureRecognizer);
+}
+- (BOOL)shouldRequireFailureOfGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return %orig(otherGestureRecognizer);
+}
+- (BOOL)shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return %orig(otherGestureRecognizer);
+}
 %end
 
 %hook UIPanGestureRecognizer
@@ -1941,10 +2081,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(cancels);
 }
-- (NSUInteger)minimumNumberOfTouches { return %orig; }
-- (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches { %orig(minimumNumberOfTouches); }
-- (NSUInteger)maximumNumberOfTouches { return %orig; }
-- (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches { %orig(maximumNumberOfTouches); }
+- (NSUInteger)minimumNumberOfTouches {
+    return %orig;
+}
+- (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches {
+    %orig(minimumNumberOfTouches);
+}
+- (NSUInteger)maximumNumberOfTouches {
+    return %orig;
+}
+- (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches {
+    %orig(maximumNumberOfTouches);
+}
 %end
 
 %hook UIScreenEdgePanGestureRecognizer
@@ -1962,32 +2110,78 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(delays);
 }
-- (UIRectEdge)edges { return %orig; }
-- (void)setEdges:(UIRectEdge)edges { %orig(edges); }
+- (UIRectEdge)edges {
+    return %orig;
+}
+- (void)setEdges:(UIRectEdge)edges {
+    %orig(edges);
+}
 %end
 
 %hook UIScrollView
-- (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
+- (void)setDecelerationRate:(UIScrollViewDecelerationRate)decelerationRate {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(UIScrollViewDecelerationRateNormal); // Giữ nguyên quán tính trôi mượt tuyệt đối, KHÔNG PHANH GẤP
+        %orig(UIScrollViewDecelerationRateNormal); // Chuyển sang trôi mượt tự nhiên, KHÔNG CÒN PHANH GẤP
         return;
     }
-    %orig(rate);
+    %orig(decelerationRate);
 }
-
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         return YES;
     }
     return %orig(view);
 }
-
+- (BOOL)isPagingEnabled {
+    return %orig;
+}
+- (void)setPagingEnabled:(BOOL)pagingEnabled {
+    %orig(pagingEnabled);
+}
+- (BOOL)isScrollEnabled {
+    return %orig;
+}
+- (void)setScrollEnabled:(BOOL)scrollEnabled {
+    %orig(scrollEnabled);
+}
+- (BOOL)bounces {
+    return %orig;
+}
+- (void)setBounces:(BOOL)bounces {
+    %orig(bounces);
+}
+- (BOOL)alwaysBounceVertical {
+    return %orig;
+}
+- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical {
+    %orig(alwaysBounceVertical);
+}
+- (BOOL)alwaysBounceHorizontal {
+    return %orig;
+}
+- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal {
+    %orig(alwaysBounceHorizontal);
+}
 - (void)_forcePanGestureToEndImmediately {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         g_isUserTouchingV261 = NO;
-        g_isScrollInertiaActiveV261 = NO;
     }
     %orig;
+}
+- (BOOL)isTracking {
+    return %orig;
+}
+- (BOOL)isDragging {
+    return %orig;
+}
+- (BOOL)isDecelerating {
+    return %orig;
+}
+- (CGSize)contentSize {
+    return %orig;
+}
+- (UIEdgeInsets)contentInset {
+    return %orig;
 }
 %end
 
@@ -2085,32 +2279,19 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (void)setDeckSwitcherPageScale:(double)scaleValue {
     %orig(scaleValue);
 }
-- (double)deckSwitcherPageScale { return %orig; }
-- (void)setAppSwitcherStyle:(long long)style { %orig(style); }
-- (long long)appSwitcherStyle { return %orig; }
-%end
-
-%hook SBFluidSwitcherItemContainer
-- (void)setContentAlpha:(double)alpha { %orig(1.0); }
-- (void)prepareForReuse { %orig; }
-- (void)setCornerRadius:(CGFloat)radius {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(26.0);
-        if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
-            [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
-        }
-        return;
-    }
-    %orig(radius);
+- (double)deckSwitcherPageScale {
+    return %orig;
+}
+- (void)setAppSwitcherStyle:(long long)style {
+    %orig(style);
+}
+- (long long)appSwitcherStyle {
+    return %orig;
 }
 %end
-%end // Kết thúc Group_ZeroLatencyTouch_PhysicsV261
+%end
 
-// =========================================================================
-// NHÓM 5: BÀN PHÍM TỐI ƯU (XÓA BỎ DELAY BÀN PHÍM HOÀN TOÀN)
-// =========================================================================
 %group Group_Keyboard_And_TextV261
-
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
@@ -2158,7 +2339,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(enabled);
 }
 - (BOOL)returnKeyEnabled {
-    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) return YES;
+    if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
+        return YES;
+    }
     return %orig;
 }
 - (void)setInputMode:(id)inputMode {
@@ -2185,14 +2368,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)touchLongPressTimer { %orig; }
+- (void)touchLongPressTimer {
+    %orig;
+}
 - (void)showKeyboard {
     if (IS_ACTIVE && CFG261.keyboardZeroLagV24) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
-- (void)hideKeyboard { %orig; }
+- (void)hideKeyboard {
+    %orig;
+}
 %end
 
 %hook UITextInputController
@@ -2247,11 +2434,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(attributedText);
 }
-- (void)setFont:(UIFont *)font { %orig(font); }
-- (void)setTextColor:(UIColor *)textColor { %orig(textColor); }
-- (void)setTextAlignment:(NSTextAlignment)textAlignment { %orig(textAlignment); }
-- (BOOL)isEditable { return %orig; }
-- (void)setEditable:(BOOL)editable { %orig(editable); }
+- (void)setFont:(UIFont *)font {
+    %orig(font);
+}
+- (void)setTextColor:(UIColor *)textColor {
+    %orig(textColor);
+}
+- (void)setTextAlignment:(NSTextAlignment)textAlignment {
+    %orig(textAlignment);
+}
+- (BOOL)isEditable {
+    return %orig;
+}
+- (void)setEditable:(BOOL)editable {
+    %orig(editable);
+}
 %end
 
 %hook UITextField
@@ -2279,19 +2476,25 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(attributedText);
 }
-- (void)setPlaceholder:(NSString *)placeholder { %orig(placeholder); }
-- (void)setFont:(UIFont *)font { %orig(font); }
-- (void)setTextColor:(UIColor *)textColor { %orig(textColor); }
-- (BOOL)isSecureTextEntry { return %orig; }
-- (void)setSecureTextEntry:(BOOL)secureTextEntry { %orig(secureTextEntry); }
+- (void)setPlaceholder:(NSString *)placeholder {
+    %orig(placeholder);
+}
+- (void)setFont:(UIFont *)font {
+    %orig(font);
+}
+- (void)setTextColor:(UIColor *)textColor {
+    %orig(textColor);
+}
+- (BOOL)isSecureTextEntry {
+    return %orig;
+}
+- (void)setSecureTextEntry:(BOOL)secureTextEntry {
+    %orig(secureTextEntry);
+}
 %end
-%end // Kết thúc Group_Keyboard_And_TextV261
+%end
 
-// =========================================================================
-// NHÓM 6: PIPELINE ĐỒ HỌA METAL & CHỐNG NÓNG KHI CẮM SẠC
-// =========================================================================
 %group Group_MetalGraphics_OptV261
-
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (Titanium_IsSpringBoard()) {
@@ -2310,20 +2513,45 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         [self setAllowsGroupOpacity:NO]; 
     }
 }
-- (NSUInteger)maximumDrawableCount { return %orig; }
-- (void)setLowLatencyMode:(BOOL)flag { %orig(flag); }
-- (BOOL)lowLatencyMode { return %orig; }
-- (void)setDisplaySyncEnabled:(BOOL)enabled { %orig(YES); }
-- (BOOL)displaySyncEnabled { return YES; }
-- (void)setAllowsNextDrawableTimeout:(BOOL)allow { %orig(allow); }
-- (BOOL)allowsNextDrawableTimeout { return %orig; }
-- (void)setPresentsWithTransaction:(BOOL)flag { %orig(YES); }
-- (BOOL)presentsWithTransaction { return YES; }
-- (void)setServerPresentsWithTransaction:(BOOL)flag { %orig(flag); }
-- (BOOL)serverPresentsWithTransaction { return %orig; }
-- (void)setFramebufferOnly:(BOOL)framebufferOnly { %orig(framebufferOnly); }
-- (BOOL)framebufferOnly { return %orig; }
-- (CGSize)drawableSize { return %orig; }
+- (NSUInteger)maximumDrawableCount {
+    return %orig;
+}
+- (void)setLowLatencyMode:(BOOL)flag {
+    %orig(flag);
+}
+- (BOOL)lowLatencyMode {
+    return %orig;
+}
+- (void)setDisplaySyncEnabled:(BOOL)enabled {
+    %orig(enabled);
+}
+- (BOOL)displaySyncEnabled {
+    return %orig;
+}
+- (void)setAllowsNextDrawableTimeout:(BOOL)allow {
+    %orig(allow);
+}
+- (BOOL)allowsNextDrawableTimeout {
+    return %orig;
+}
+- (void)setPresentsWithTransaction:(BOOL)flag {
+    %orig(flag);
+}
+- (BOOL)presentsWithTransaction {
+    return %orig;
+}
+- (void)setServerPresentsWithTransaction:(BOOL)flag {
+    %orig(flag);
+}
+- (BOOL)serverPresentsWithTransaction {
+    return %orig;
+}
+- (void)setFramebufferOnly:(BOOL)framebufferOnly {
+    %orig(framebufferOnly);
+}
+- (BOOL)framebufferOnly {
+    return %orig;
+}
 - (id)nextDrawable {
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2352,11 +2580,12 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(flag);
 }
 - (BOOL)contentsDrawsAsynchronously {
-    if (IS_ACTIVE) return YES;
+    if (IS_ACTIVE) {
+        return YES;
+    }
     return %orig;
 }
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag {
-    // Ép tắt khử răng cưa khi cắm sạc hoặc tiết kiệm pin để máy KHÔNG BỊ NÓNG VÀ TRÁNH LAG NẶNG
     if (IS_ACTIVE && (CFG261.powerSaveMode || g_isDeviceChargingV261)) {
         %orig(NO);
         return;
@@ -2364,7 +2593,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(flag);
 }
 - (BOOL)allowsEdgeAntialiasing {
-    if (IS_ACTIVE && (CFG261.powerSaveMode || g_isDeviceChargingV261)) return NO;
+    if (IS_ACTIVE && (CFG261.powerSaveMode || g_isDeviceChargingV261)) {
+        return NO;
+    }
     return %orig;
 }
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag {
@@ -2375,20 +2606,27 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(flag);
 }
 - (BOOL)needsDisplayOnBoundsChange {
-    if (IS_ACTIVE && CFG261.fixAppExitStutter) return NO;
+    if (IS_ACTIVE && CFG261.fixAppExitStutter) {
+        return NO;
+    }
     return %orig;
 }
-- (void)setRasterizationScale:(CGFloat)rasterizationScale { %orig(rasterizationScale); }
-- (CGFloat)rasterizationScale { return %orig; }
+- (void)setRasterizationScale:(CGFloat)rasterizationScale {
+    %orig(rasterizationScale);
+}
+- (CGFloat)rasterizationScale {
+    return %orig;
+}
 - (void)setShouldRasterize:(BOOL)shouldRasterize {
-    // VÔ HIỆU HÓA RASTERIZE KHI BỊ TRONG SUỐT (GIỐNG IOS 26) ĐỂ TRIỆT TIÊU HOÀN TOÀN NÓNG VÀ DROP FPS
     if (IS_ACTIVE) {
         %orig(NO);
         return;
     }
     %orig(shouldRasterize);
 }
-- (BOOL)shouldRasterize { return NO; }
+- (BOOL)shouldRasterize {
+    return NO;
+}
 - (void)setDrawsAsynchronously:(BOOL)drawsAsynchronously {
     if (IS_ACTIVE) {
         %orig(YES);
@@ -2396,15 +2634,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(drawsAsynchronously);
 }
-- (BOOL)drawsAsynchronously { return YES; }
+- (BOOL)drawsAsynchronously {
+    return YES;
+}
 - (void)display {
     if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
 }
-- (void)setNeedsLayout { %orig; }
-- (void)layoutIfNeeded { %orig; }
+- (void)setNeedsLayout {
+    %orig;
+}
+- (void)layoutIfNeeded {
+    %orig;
+}
 %end
 
 %hook CAContext
@@ -2414,14 +2658,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         return;
     }
     if (IS_ACTIVE) {
-        %orig(1000);
+        %orig(100);
         return;
     }
     %orig(priority);
 }
 - (uint32_t)commitPriority {
-    if (Titanium_IsSpringBoard()) return %orig;
-    if (IS_ACTIVE) return 1000;
+    if (Titanium_IsSpringBoard()) {
+        return %orig;
+    }
+    if (IS_ACTIVE) {
+        return 100;
+    }
     return %orig;
 }
 - (void)setDesiredDynamicRange:(float)range {
@@ -2432,17 +2680,20 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(range);
 }
 - (float)desiredDynamicRange {
-    if (IS_ACTIVE && CFG261.powerSaveMode) return 1.0f;
+    if (IS_ACTIVE && CFG261.powerSaveMode) {
+        return 1.0f;
+    }
     return %orig;
 }
-- (void)orderAbove:(uint32_t)contextId { %orig(contextId); }
-- (void)orderBelow:(uint32_t)contextId { %orig(contextId); }
+- (void)orderAbove:(uint32_t)contextId {
+    %orig(contextId);
+}
+- (void)orderBelow:(uint32_t)contextId {
+    %orig(contextId);
+}
 %end
-%end // Kết thúc Group_MetalGraphics_OptV261
+%end
 
-// =========================================================================
-// NHÓM 7: UIKIT APP BÊN THỨ 3 & CÁCH LY CHỐNG GIẬT LAG BACKGROUND
-// =========================================================================
 %group Group_UIKit_ThirdParty_IsolatedV261
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
@@ -2460,7 +2711,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(animated);
 }
-- (void)viewWillDisappear:(BOOL)animated { %orig(animated); }
+- (void)viewWillDisappear:(BOOL)animated {
+    %orig(animated);
+}
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
@@ -2521,7 +2774,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig;
 }
-- (void)_applicationWillResignActive { %orig; }
+- (void)_applicationWillResignActive {
+    %orig;
+}
 - (void)_applicationWillTerminate {
     if (IS_ACTIVE) {
         Titanium_PurgeProcessMemoryAggressively();
@@ -2531,15 +2786,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook UIWindowScene
-- (void)_readySceneForDisplay { %orig; }
-- (UIWindowSceneActivationState)activationState { return %orig; }
-- (UIScreen *)screen { return %orig; }
+- (void)_readySceneForDisplay {
+    %orig;
+}
+- (UIWindowSceneActivationState)activationState {
+    return %orig;
+}
+- (UIScreen *)screen {
+    return %orig;
+}
 %end
-%end // Kết thúc Group_UIKit_ThirdParty_IsolatedV261
+%end
 
-// =========================================================================
-// NHÓM 8: QUẢN LÝ TIẾN TRÌNH SPRINGBOARD & CHỐNG RELOAD APP KHI VUỐT RA
-// =========================================================================
 %group Group_SpringBoard_ProcessManagerV261
 %hook SBApplication
 - (void)setProcessState:(id)state {
@@ -2548,15 +2806,24 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(state);
 }
-- (id)processState { return %orig; }
-- (NSString *)bundleIdentifier { return %orig; }
-- (NSString *)displayName { return %orig; }
-- (BOOL)isRunning { return %orig; }
-- (BOOL)isClassic { return %orig; }
+- (id)processState {
+    return %orig;
+}
+- (NSString *)bundleIdentifier {
+    return %orig;
+}
+- (NSString *)displayName {
+    return %orig;
+}
+- (BOOL)isRunning {
+    return %orig;
+}
+- (BOOL)isClassic {
+    return %orig;
+}
 - (void)didExitWithContext:(id)context {
-    // Đảm bảo không kill ngầm các app nặng khi vuốt ra để tránh load lại từ đầu
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
-        return; 
+        return; // Chống kill ngầm app khi vuốt ra ngoài
     }
     %orig(context);
 }
@@ -2565,7 +2832,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %hook SBMainWorkspace
 - (void)_handleApplicationProcessExited:(id)processDescription {
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
-        return; 
+        return;
     }
     %orig(processDescription);
 }
@@ -2577,7 +2844,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 - (void)handleApplicationSuspended:(id)application {
     if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
-        return; // Giữ app trong RAM tuyệt đối, chống reset app đột ngột
+        return; // Giữ app trong RAM tuyệt đối, chống reset ngầm
     }
     %orig(application);
 }
@@ -2600,11 +2867,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(animated);
 }
 %end
-%end // Kết thúc Group_SpringBoard_ProcessManagerV261
+%end
 
-// =========================================================================
-// NHÓM 9: HIỆU NĂNG CUỘN (SCROLL PERFORMANCE OVERCLOCK)
-// =========================================================================
 %group Group_ScrollPerformance_SuperEngineV261
 %hook UIScrollView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
@@ -2620,17 +2884,10 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
 }
 - (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
-    g_isScrollInertiaActiveV261 = NO;
-    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(arg1, arg2);
-}
-- (void)_scrollViewDidEndDecelerating {
-    g_isScrollInertiaActiveV261 = NO;
-    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    %orig;
 }
 %end
 
@@ -2645,11 +2902,8 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
 }
 %end
-%end // Kết thúc Group_ScrollPerformance_SuperEngineV261
+%end
 
-// =========================================================================
-// CÁC HÀM TIỆN ÍCH HỆ THỐNG & WATCHDOG NHIỆT ĐỘ THÔNG MINH
-// =========================================================================
 static void Titanium_StartThermalWatchdogTimerV261(void) {
     static dispatch_source_t timerSource = nil;
     static dispatch_once_t onceToken;
@@ -2665,7 +2919,6 @@ static void Titanium_StartThermalWatchdogTimerV261(void) {
             if (device.batteryMonitoringEnabled) {
                 g_isDeviceChargingV261 = (device.batteryState == UIDeviceBatteryStateCharging || device.batteryState == UIDeviceBatteryStateFull);
             }
-            // KHI CẮM SẠC HOẶC NÓNG MÁY: TỰ ĐỘNG HẠ TẢI ĐỒ HỌA ĐỂ TRÁNH NÓNG VÀ GIẬT KHUNG HÌNH
             if (currentThermalState >= NSProcessInfoThermalStateSerious || g_isDeviceChargingV261) {
                 Titanium_PurgeProcessMemoryAggressively();
             }
@@ -2689,7 +2942,6 @@ static void Titanium_StartPassiveRamDaemonV261(void) {
     dispatch_resume(ramTimerSource);
 }
 
-// BẢO VỆ CHỐNG TREO MÁY RESPRING / SAFE MODE CHO ROOTHIDE VÀ ROOTLESS
 static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     NSString *bootCounterFilePath = @"/tmp/.boost_boot_counter";
     NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -2709,7 +2961,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     }
     NSDictionary *updatedCounterDict = @{@"count": @(restartCount), @"time": @(currentUnixTime)};
     [updatedCounterDict writeToFile:bootCounterFilePath atomically:YES];
-    if (restartCount >= 4) { // Nếu boot liên tục 4 lần trong 15s -> Tự ngắt Tweak để tránh SafeMode vòng lặp
+    if (restartCount >= 4) {
         return NO;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -2762,9 +3014,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
     return YES;
 }
 
-// =========================================================================
-// BỘ KHỞI TẠO %ctor: ĐĂNG KÝ HOOK THUẦN C VÀ KÍCH HOẠT TOÀN BỘ ENGINE V26.1
-// =========================================================================
 %ctor {
     @autoreleasepool {
         const char *progName = getprogname();
@@ -2774,7 +3023,7 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             return;
         }
         if (!Titanium_CheckAndPreventBootloopUniversal()) {
-            return; // Ngăn chặn treo Respring RootHide tuyệt đối
+            return;
         }
         if (!Titanium_IsProcessEligible(bundleID, progName)) {
             return;
@@ -2794,25 +3043,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             }
         }
 
-        // ĐĂNG KÝ MSHOOKMESSAGEEX C-STRUCT HOOK CHO CADISPLAYLINK VÀ CAANIMATION (XÓA SỔ LỖI LOGOS)
-        Class clsCADisplayLink = NSClassFromString(@"CADisplayLink");
-        if (clsCADisplayLink) {
-            MSHookMessageEx(clsCADisplayLink, @selector(preferredFrameRateRange), 
-                            (IMP)custom_CADisplayLink_preferredFrameRateRange, 
-                            (IMP *)&orig_CADisplayLink_preferredFrameRateRange);
-            MSHookMessageEx(clsCADisplayLink, @selector(setPreferredFrameRateRange:), 
-                            (IMP)custom_CADisplayLink_setPreferredFrameRateRange, 
-                            (IMP *)&orig_CADisplayLink_setPreferredFrameRateRange);
-        }
-        
-        Class clsCAAnimation = NSClassFromString(@"CAAnimation");
-        if (clsCAAnimation) {
-            MSHookMessageEx(clsCAAnimation, @selector(setPreferredFrameRateRange:), 
-                            (IMP)custom_CAAnimation_setPreferredFrameRateRange, 
-                            (IMP *)&orig_CAAnimation_setPreferredFrameRateRange);
-        }
-
-        // KÍCH HOẠT CÁC NHÓM GROUP TÍNH NĂNG
         %init(Group_MetalGraphics_OptV261);
         %init(Group_ZeroLatencyTouch_PhysicsV261);
         %init(Group_FastLaunch_SuperEngineV261);
