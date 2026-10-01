@@ -1750,11 +1750,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %group Group_MetalGraphics_OptV285
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    %orig(3);
+    NSUInteger tripleBuffer = 3;
+    %orig(tripleBuffer);
 }
-- (NSUInteger)maximumDrawableCount { return 3; }
-- (void)setFramebufferOnly:(BOOL)fb { %orig(YES); }
-- (BOOL)framebufferOnly { return YES; }
+- (NSUInteger)maximumDrawableCount { 
+    return 3; 
+}
+- (void)setFramebufferOnly:(BOOL)fb { 
+    %orig(YES); 
+}
+- (BOOL)framebufferOnly { 
+    return YES; 
+}
 - (void)didMoveToSuperlayer {
     %orig;
     if ([self respondsToSelector:@selector(setAllowsGroupOpacity:)]) {
@@ -1774,37 +1781,44 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         return; 
     }
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        CGFloat safeScale = (scale > 0) ? scale : [UIScreen mainScreen].scale;
+        CGFloat safeScale = (scale > 0.0f) ? scale : [UIScreen mainScreen].scale;
         %orig(safeScale);
         return;
     }
     %orig(scale);
 }
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
-    if (IS_ACTIVE) { %orig(YES); return; }
-    %orig(flag);
+    %orig(YES);
 }
 - (BOOL)contentsDrawsAsynchronously {
     if (IS_ACTIVE) return YES;
     return %orig;
 }
 - (void)setDrawsAsynchronously:(BOOL)draws {
-    if (IS_ACTIVE) { %orig(YES); return; }
-    %orig(draws);
+    %orig(YES);
 }
 - (BOOL)drawsAsynchronously {
     if (IS_ACTIVE) return YES;
     return %orig;
 }
-- (void)setShouldRasterize:(BOOL)val { %orig(NO); }
-- (BOOL)shouldRasterize { return NO; }
+- (void)setShouldRasterize:(BOOL)val { 
+    %orig(NO); 
+}
+- (BOOL)shouldRasterize { 
+    return NO; 
+}
 - (void)setShadowRadius:(CGFloat)radius {
     CGFloat safeRadius = (radius > 2.0f) ? 2.0f : radius;
     %orig(safeRadius);
 }
-- (void)setAllowsGroupOpacity:(BOOL)allows { %orig(NO); }
+- (void)setAllowsGroupOpacity:(BOOL)allows { 
+    %orig(NO); 
+}
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag {
-    if (IS_ACTIVE && CFG285.fixAppExitStutter) { %orig(NO); return; }
+    if (IS_ACTIVE && CFG285.fixAppExitStutter) { 
+        %orig(NO); 
+        return; 
+    }
     %orig(flag);
 }
 - (BOOL)needsDisplayOnBoundsChange {
@@ -1831,8 +1845,15 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %hook CAContext
 - (void)setCommitPriority:(uint32_t)priority {
-    if (Titanium_IsSpringBoard()) { %orig(priority); return; }
-    if (IS_ACTIVE) { %orig(100); return; }
+    if (Titanium_IsSpringBoard()) { 
+        %orig(priority); 
+        return; 
+    }
+    if (IS_ACTIVE) { 
+        uint32_t vipPrio = 100;
+        %orig(vipPrio); 
+        return; 
+    }
     %orig(priority);
 }
 - (uint32_t)commitPriority {
@@ -1933,11 +1954,21 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE && CFG285.turboAppLaunch) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(state);
 }
-- (id)processState { return %orig; }
-- (NSString *)bundleIdentifier { return %orig; }
-- (NSString *)displayName { return %orig; }
-- (BOOL)isRunning { return %orig; }
-- (BOOL)isClassic { return %orig; }
+- (id)processState { 
+    return %orig; 
+}
+- (NSString *)bundleIdentifier { 
+    return %orig; 
+}
+- (NSString *)displayName { 
+    return %orig; 
+}
+- (BOOL)isRunning { 
+    return %orig; 
+}
+- (BOOL)isClassic { 
+    return %orig; 
+}
 - (void)didExitWithContext:(id)context {
     if (IS_ACTIVE && CFG285.aggressiveRamClean) return;
     %orig(context);
@@ -1968,7 +1999,9 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(animated);
 }
-- (void)viewDidDisappear:(BOOL)animated { %orig(animated); }
+- (void)viewDidDisappear:(BOOL)animated { 
+    %orig(animated); 
+}
 - (void)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG285.reduceMultitaskLag) Titanium_BoostCurrentThreadBriefly();
     %orig;
