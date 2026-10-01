@@ -2955,7 +2955,7 @@ static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *ob
             if (Titanium_IsSpringBoard()) {
                 %init(Group_SpringBoard_Core);
                 [UIDevice currentDevice].batteryMonitoringEnabled = YES;
-                Titanium_StartThermalWatchdogTimer();
+                Titanium_StartThermalWatchdogTimerV261();
                 
                 // Kích hoạt 3 daemon chạy ngầm hỗ trợ dọn rác cực nhẹ
                 Titanium_StartPassiveRamDaemon_Tier1();
