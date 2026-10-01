@@ -1715,82 +1715,134 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %group Group_Keyboard_And_TextV285
 %hook UIKeyboardImpl
+
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(string, event, context);
 }
+
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(string, flags, context);
 }
+
 - (void)clearAnimations {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) { %orig; return; }
     %orig;
 }
+
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) { %orig(NO); return; }
-    %orig(flag);
+    BOOL safeFlag = (IS_ACTIVE && CFG285.keyboardZeroLagV24) ? NO : flag;
+    %orig(safeFlag);
 }
+
 - (void)updateReturnKey:(BOOL)arg1 {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(arg1);
 }
+
 - (void)hardwareKeyboardAvailabilityChanged {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
+
 - (void)setReturnKeyEnabled:(BOOL)enabled {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) { %orig(YES); return; }
-    %orig(enabled);
+    BOOL safeEnabled = (IS_ACTIVE && CFG285.keyboardZeroLagV24) ? YES : enabled;
+    %orig(safeEnabled);
 }
+
 - (BOOL)returnKeyEnabled {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) return YES;
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        return YES;
+    }
     return %orig;
 }
+
 - (void)setInputMode:(id)inputMode {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(inputMode);
 }
+
 - (void)setDelegate:(id)delegate {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(delegate);
 }
+
 - (void)textChanged:(id)arg1 {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(arg1);
 }
+
 - (void)deleteFromInput {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
+
 - (void)showKeyboard {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
-- (void)hideKeyboard { %orig; }
+
+- (void)hideKeyboard {
+    %orig;
+}
+
 %end
 
 %hook UITextInputController
+
 - (void)_insertText:(id)text {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(text);
 }
+
 - (void)deleteBackward {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
+
 - (void)replaceRange:(id)range withText:(id)text {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(range, text);
 }
+
 - (void)setMarkedText:(id)markedText selectedRange:(NSRange)selectedRange {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(markedText, selectedRange);
 }
+
 - (void)unmarkText {
-    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
+
 %end
 %end
 
