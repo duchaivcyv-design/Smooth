@@ -732,6 +732,7 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
     thread_policy_set(thread, THREAD_AFFINITY_POLICY, (task_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 }
 
+// CƠ CHẾ XẢ SÂU RAM MÀ KHÔNG GÂY TẢI LẠI (RELOAD) APP
 static inline void Titanium_PurgeProcessMemoryAggressively(void) {
     malloc_zone_pressure_relief(malloc_default_zone(), 0);
 }
@@ -2031,7 +2032,9 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
     return computedVelocity;
 }
 - (CGPoint)translationInView:(UIView *)view { return %orig(view); }
-- (void)setTranslation:(CGPoint)translation inView:(UIView *)view { %orig(translation, view); }
+- (void)setTranslation:(CGPoint)translation inView:(UIView *)view {
+    %orig; // Đã xử lý struct arg an toàn
+}
 - (NSUInteger)minimumNumberOfTouches { return %orig; }
 - (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches { %orig(minimumNumberOfTouches); }
 - (NSUInteger)maximumNumberOfTouches { return %orig; }
@@ -2064,21 +2067,21 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig; // Xóa struct parameter, chống crash Logos
 }
 
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig; // Xóa struct parameter, chống crash Logos
 }
 
 - (void)_setContentOffsetPinned:(CGPoint)point {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig; // Xóa struct parameter, chống crash Logos
 }
 
 // SỬA LỖI PHANH GẤP KHI VUỐT MẠNH: LOẠI BỎ KHỰNG KHUNG HÌNH (INERTIA SCROLL)
@@ -2101,7 +2104,7 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig; // Xóa struct parameter, chống crash Logos
 }
 
 - (void)_forcePanGestureToEndImmediately {
@@ -2116,7 +2119,7 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig;
+    %orig; // Xóa struct parameter, chống crash Logos
 }
 %end
 
@@ -2374,7 +2377,7 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(contentOffset);
+    %orig; // Đã xử lý C-struct an toàn
 }
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
@@ -2468,7 +2471,7 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
 - (BOOL)serverPresentsWithTransaction { return %orig; }
 - (void)setFramebufferOnly:(BOOL)framebufferOnly { %orig(framebufferOnly); }
 - (BOOL)framebufferOnly { return %orig; }
-- (void)setDrawableSize:(CGSize)drawableSize { %orig(drawableSize); }
+- (void)setDrawableSize:(CGSize)drawableSize { %orig; } // C-Struct size fixed
 - (CGSize)drawableSize { return %orig; }
 - (id)nextDrawable {
     if (IS_ACTIVE) {
