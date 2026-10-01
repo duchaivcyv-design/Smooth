@@ -1250,7 +1250,6 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
     orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(minRate, rate, rate));
 }
 %end
-%end
 
 // =========================================================================
 // NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
