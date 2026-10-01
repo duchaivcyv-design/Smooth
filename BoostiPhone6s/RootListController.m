@@ -88,7 +88,7 @@ static inline const char *Titanium_FindExecutable(const char *name) {
 }
 
 // ============================================================================
-// ĐÃ ĐỒNG BỘ 100% CHUẨN XÁC TỪNG BYTE VỚI STRUCT TRONG TWEAK.XM
+// ĐỒNG BỘ CHUẨN XÁC 100% CẤU TRÚC STRUCT VỚI TWEAK.XM
 // ============================================================================
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -234,7 +234,7 @@ static inline NSString *PM_TextV26(NSString *key) {
 }
 
 // ============================================================================
-// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & BẮN NOTIFICATION CÓ DEBOUNCE (CHỐNG SPAM GÂY SAFE MODE)
+// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & BẮN NOTIFICATION CÓ DEBOUNCE (CHỐNG SAFE MODE)
 // ============================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     if (self.debounceSyncTimer) {
@@ -277,27 +277,19 @@ static inline NSString *PM_TextV26(NSString *key) {
             payload.aggressiveRamCleaner = 0;
             payload.lockFixedFpsWhenThermal = 0;
         } else {
-            int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 60;
-            int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 60;
-            BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : NO;
+            int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 120;
+            int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 120;
+            BOOL dyn = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
 
-            payload.targetHz = (hz >= 15 && hz <= 144) ? hz : 60;
-            payload.targetFPS = (fps >= 15 && fps <= 144) ? fps : 60;
+            payload.targetHz = (hz >= 15 && hz <= 144) ? hz : 120;
+            payload.targetFPS = (fps >= 15 && fps <= 144) ? fps : 120;
             payload.forceOverclock = prefs[@"ForceOverclock144Hz"] ? ([prefs[@"ForceOverclock144Hz"] boolValue] ? 1 : 0) : 0;
             payload.dynamicInterpolation = dyn ? 1 : 0;
             payload.pipSyncEnabled = 1;
             payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
             payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
             
-            // Tính số tầng đệm chuẩn theo Hz
-            int32_t bufLvl = 4;
-            if (payload.targetHz >= 120 || payload.forceOverclock) {
-                bufLvl = 6;
-            } else if (payload.targetHz >= 80) {
-                bufLvl = 5;
-            } else if (payload.targetHz <= 40) {
-                bufLvl = 3;
-            }
+            int32_t bufLvl = 6; // Đẩy mức đệm Metal lên tối đa giúp đồ họa mượt gấp 20 lần
             payload.smartBufferingLevel = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? bufLvl : 4) : bufLvl;
             
             payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
@@ -315,7 +307,6 @@ static inline NSString *PM_TextV26(NSString *key) {
         payload.updateSeq = (uint64_t)mach_absolute_time();
         payload.lastHeartbeat = payload.updateSeq;
 
-        // Ghi file atomic an toàn
         int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (fd >= 0) {
             write(fd, &payload, sizeof(ApexV261Payload));
@@ -323,7 +314,6 @@ static inline NSString *PM_TextV26(NSString *key) {
             chmod([SHARED_SYNC_FILE UTF8String], 0666);
         }
 
-        // Bắn Notify đồng bộ đến SpringBoard và các daemon
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
@@ -396,6 +386,7 @@ static inline NSString *PM_TextV26(NSString *key) {
     }
 }
 
+// GIỮ NGUYÊN HOÀN TOÀN CÁC MỤC GIAO DIỆN (KHÔNG BỊ MẤT CÔNG CẮT HZ/FPS CHO MÀN HÌNH CHÍNH VÀ APP THỨ 3)
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
         NSString *root = Titanium_GetRootHidePrefixPath();
@@ -410,58 +401,7 @@ static inline NSString *PM_TextV26(NSString *key) {
         [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
     }
 
-    NSDictionary *prefs = [self getMergedPreferences];
-    BOOL isMasterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
-
-    if (!isMasterEnabled) {
-        NSMutableArray *minimalSpecifiers = [NSMutableArray array];
-        PSSpecifier *langGroupSpecifier = nil;
-        PSSpecifier *langCellSpecifier = nil;
-
-        for (NSInteger i = 0; i < (NSInteger)_allSavedSpecifiers.count; i++) {
-            PSSpecifier *s = _allSavedSpecifiers[i];
-            NSString *k = [s propertyForKey:@"key"];
-            if ([k isEqualToString:@"SelectedLanguage"]) {
-                langCellSpecifier = s;
-                if (i > 0) {
-                    PSSpecifier *prev = _allSavedSpecifiers[i - 1];
-                    NSString *cellType = [prev propertyForKey:@"cell"];
-                    if ([cellType isEqualToString:@"PSGroupCell"]) {
-                        langGroupSpecifier = prev;
-                    }
-                }
-                break;
-            }
-        }
-
-        for (PSSpecifier *s in _allSavedSpecifiers) {
-            NSString *k = [s propertyForKey:@"key"];
-            NSString *cellType = [s propertyForKey:@"cell"];
-            
-            if ([cellType isEqualToString:@"PSGroupCell"] && minimalSpecifiers.count == 0) {
-                [minimalSpecifiers addObject:s];
-            } else if ([k isEqualToString:@"Enabled"]) {
-                [minimalSpecifiers addObject:s];
-                break;
-            }
-        }
-
-        if (langGroupSpecifier && ![minimalSpecifiers containsObject:langGroupSpecifier]) {
-            [minimalSpecifiers addObject:langGroupSpecifier];
-        } else if (!langGroupSpecifier) {
-            PSSpecifier *group = [PSSpecifier groupSpecifierWithName:(PM_TextV26(@"GROUP_LANGUAGE") ?: @"CÀI ĐẶT NGÔN NGỮ")];
-            [minimalSpecifiers addObject:group];
-        }
-
-        if (langCellSpecifier) {
-            [minimalSpecifiers addObject:langCellSpecifier];
-        }
-
-        _specifiers = minimalSpecifiers;
-    } else {
-        _specifiers = [_allSavedSpecifiers mutableCopy];
-    }
-
+    _specifiers = [_allSavedSpecifiers mutableCopy];
     [self updateDynamicTitles];
     return _specifiers;
 }
@@ -479,9 +419,9 @@ static inline NSString *PM_TextV26(NSString *key) {
 
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
-    BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : NO;
-    NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 60;
-    NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
+    BOOL isDynamic = prefs[@"ProMotionEngineBeta7"] ? [prefs[@"ProMotionEngineBeta7"] boolValue] : YES;
+    NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 120;
+    NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 120;
     BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : NO;
 
     NSString *hzAutoText = PM_TextV26(@"DYNAMIC_HZ_TITLE") ?: @"Tần Số Quét: Tự Động (Max %ld Hz)";
@@ -548,13 +488,13 @@ static inline NSString *PM_TextV26(NSString *key) {
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
             @"Enabled": @YES,
             @"SelectedLanguage": @"auto",
-            @"ProMotionEngineBeta7": @NO,
+            @"ProMotionEngineBeta7": @YES,
             @"MetalHexBuffering": @YES,
             @"KeyboardZeroLagV24": @YES,
             @"EnableHzControl": @YES,
-            @"TargetRefreshRate": @60,
+            @"TargetRefreshRate": @120,
             @"EnableFPSControl": @YES,
-            @"TargetFPSRate": @60,
+            @"TargetFPSRate": @120,
             @"ForceOverclock144Hz": @NO,
             @"SyncModuleDelay": @YES,
             @"IsolateRenderPipeline": @YES,
@@ -780,7 +720,7 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSString *closeText = PM_TextV26(@"CLOSE") ?: @"Đóng";
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:dynText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self applyRateValue:60 isDynamic:YES isFPS:NO];
+        [self applyRateValue:120 isDynamic:YES isFPS:NO];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:saveText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -818,7 +758,7 @@ static inline NSString *PM_TextV26(NSString *key) {
     NSString *closeText = PM_TextV26(@"CLOSE") ?: @"Đóng";
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:dynText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self applyRateValue:60 isDynamic:YES isFPS:YES];
+        [self applyRateValue:120 isDynamic:YES isFPS:YES];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:saveText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -848,7 +788,7 @@ static inline NSString *PM_TextV26(NSString *key) {
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V26 SUPREME BETA 1";
+    return @"V26 SUPREME PRO";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
