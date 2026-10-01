@@ -642,6 +642,7 @@ static volatile uint64_t g_lastSyncTicksV261 = 0;
 static BOOL g_isDeviceChargingV261 = NO;
 static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
+static volatile BOOL g_isScrollInertiaActiveV261 = NO;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
 // =========================================================================
@@ -1071,6 +1072,68 @@ static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 
 // =========================================================================
+// HOOK THUẦN C CHO CADISPLAYLINK & CAANIMATION 
+// (MIỄN NHIỄM VỚI LỖI STRUCT CỦA LOGOS VÀ ÉP CHUẨN MỌI MỨC FPS)
+// =========================================================================
+static CAFrameRateRange (*orig_CADisplayLink_preferredFrameRateRange)(id self, SEL _cmd);
+static void (*orig_CADisplayLink_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
+static void (*orig_CAAnimation_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
+
+static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SEL _cmd) {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        return orig_CADisplayLink_preferredFrameRateRange(self, _cmd);
+    }
+    NSInteger targetHz = [CFG261 resolvedTargetHz];
+    float rate = (float)targetHz;
+    if (rate < 15.0f) rate = 15.0f;
+    if (rate > 144.0f) rate = 144.0f;
+    
+    // Nếu màn hình đang chạm, duy trì mức Hz thiết lập.
+    // Nếu màn hình không chạm hơn 1.5s, TỰ ĐỘNG HẠ tần số xuống 30Hz để tiết kiệm pin tối đa
+    if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
+        return CAFrameRateRangeMake(30.0f, rate > 60.0f ? 60.0f : rate, rate > 60.0f ? 60.0f : rate);
+    }
+
+    float minRate = (rate <= 60.0f) ? rate : 60.0f;
+    return CAFrameRateRangeMake(minRate, rate, rate);
+}
+
+static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
+    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
+        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, range);
+        return;
+    }
+    NSInteger targetHz = [CFG261 resolvedTargetHz];
+    float rate = (float)targetHz;
+    if (rate < 15.0f) rate = 15.0f;
+    if (rate > 144.0f) rate = 144.0f;
+
+    if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
+        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(30.0f, rate > 60.0f ? 60.0f : rate, rate > 60.0f ? 60.0f : rate));
+        return;
+    }
+
+    float minRate = (rate <= 60.0f) ? rate : 60.0f;
+    orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(minRate, rate, rate));
+}
+
+static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
+    if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
+        float target = (float)[CFG261 resolvedTargetHz];
+        if (target < 15.0f) target = 15.0f;
+        if (target > 144.0f) target = 144.0f;
+        if (range.maximum > 0 && range.maximum != 60) {
+            orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, range);
+            return;
+        }
+        float minHz = (float)(CFG261.powerSaveMode ? 15.0f : ((target < 60.0f) ? 30.0f : 60.0f));
+        orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(minHz, target, target));
+    } else {
+        orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, range);
+    }
+}
+
+// =========================================================================
 // NHÓM 1: KHỞI TỐC ỨNG DỤNG NHANH
 // =========================================================================
 %group Group_FastLaunch_SuperEngineV261
@@ -1205,50 +1268,6 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 %end // End Group_V261_FloatingWindow_PiP
 
-// =========================================================================
-// HOOK THUẦN C CHO CADISPLAYLINK - MIỄN NHIỄM VỚI LỖI STRUCT CỦA LOGOS VÀ ÉP CHUẨN MỌI MỨC FPS
-// =========================================================================
-static CAFrameRateRange (*orig_CADisplayLink_preferredFrameRateRange)(id self, SEL _cmd);
-static void (*orig_CADisplayLink_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
-
-static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SEL _cmd) {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        return orig_CADisplayLink_preferredFrameRateRange(self, _cmd);
-    }
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
-    // Cấp phép tuyệt đối mọi dải FPS từ 15 đến 144
-    if (rate < 15.0f) rate = 15.0f;
-    if (rate > 144.0f) rate = 144.0f;
-    
-    // Nếu màn hình đang chạm, duy trì mức Hz thiết lập.
-    // Nếu màn hình không chạm hơn 1.5s, TỰ ĐỘNG HẠ tần số xuống 30Hz để tiết kiệm pin tối đa
-    if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
-        return CAFrameRateRangeMake(30.0f, rate > 60.0f ? 60.0f : rate, rate > 60.0f ? 60.0f : rate);
-    }
-
-    float minRate = (rate <= 60.0f) ? rate : 60.0f;
-    return CAFrameRateRangeMake(minRate, rate, rate);
-}
-
-static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
-    if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, range);
-        return;
-    }
-    NSInteger targetHz = [CFG261 resolvedTargetHz];
-    float rate = (float)targetHz;
-    if (rate < 15.0f) rate = 15.0f;
-    if (rate > 144.0f) rate = 144.0f;
-
-    if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
-        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(30.0f, rate > 60.0f ? 60.0f : rate, rate > 60.0f ? 60.0f : rate));
-        return;
-    }
-
-    float minRate = (rate <= 60.0f) ? rate : 60.0f;
-    orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(minRate, rate, rate));
-}
 
 // =========================================================================
 // NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
@@ -1270,21 +1289,6 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
 - (CFTimeInterval)duration { return %orig; }
 - (CFTimeInterval)targetTimestamp { return %orig; }
 - (CFTimeInterval)timestamp { return %orig; }
-%end
-
-%hook CAAnimation
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ACTIVE && CFG261.isCustomHzEnabled) {
-        float target = (float)[CFG261 resolvedTargetHz];
-        if (target < 15.0f) target = 15.0f;
-        if (target > 144.0f) target = 144.0f;
-        float minHz = (target <= 30.0f) ? target : ((target < 60.0f) ? 30.0f : 60.0f);
-        range = CAFrameRateRangeMake(minHz, target, target);
-        %orig(range);
-    } else {
-        %orig(range);
-    }
-}
 %end
 
 %hook UIScreen
@@ -1454,6 +1458,11 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
 - (void)setHighlighted:(BOOL)highlighted {
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        if (CFG261.colorOs17SmoothEngine && !self.isInFolder) {
+            [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState animations:^{
+                self.transform = highlighted ? CGAffineTransformMakeScale(0.94, 0.94) : CGAffineTransformIdentity;
+            } completion:nil];
+        }
     }
     %orig(highlighted);
 }
@@ -2035,21 +2044,21 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(velocity, targetContentOffset);
+    %orig;
 }
 
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(contentOffset, animated);
+    %orig;
 }
 
 - (void)_setContentOffsetPinned:(CGPoint)point {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(point);
+    %orig;
 }
 
 // SỬA LỖI PHANH GẤP KHI VUỐT MẠNH: LOẠI BỎ KHỰNG KHUNG HÌNH (INERTIA SCROLL)
@@ -2072,7 +2081,7 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(impulse);
+    %orig;
 }
 
 - (void)_forcePanGestureToEndImmediately {
@@ -2087,7 +2096,7 @@ static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, C
     if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(rect, animated);
+    %orig;
 }
 %end
 
@@ -2943,6 +2952,13 @@ static void reloadPrefsNotificationV261(CFNotificationCenterRef center, void *ob
             MSHookMessageEx(clsCADisplayLink, @selector(setPreferredFrameRateRange:), 
                             (IMP)custom_CADisplayLink_setPreferredFrameRateRange, 
                             (IMP *)&orig_CADisplayLink_setPreferredFrameRateRange);
+        }
+        
+        Class clsCAAnimation = NSClassFromString(@"CAAnimation");
+        if (clsCAAnimation) {
+            MSHookMessageEx(clsCAAnimation, @selector(setPreferredFrameRateRange:), 
+                            (IMP)custom_CAAnimation_setPreferredFrameRateRange, 
+                            (IMP *)&orig_CAAnimation_setPreferredFrameRateRange);
         }
 
         // Tích hợp Engine Tweak
