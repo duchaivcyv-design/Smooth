@@ -1769,13 +1769,16 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %hook CALayer
 - (void)setContentsScale:(CGFloat)scale {
-    if (Titanium_IsSpringBoard()) { %orig; return; }
+    if (Titanium_IsSpringBoard()) { 
+        %orig(scale); 
+        return; 
+    }
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
         CGFloat safeScale = (scale > 0) ? scale : [UIScreen mainScreen].scale;
         %orig(safeScale);
         return;
     }
-    %orig;
+    %orig(scale);
 }
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
     if (IS_ACTIVE) { %orig(YES); return; }
@@ -1917,12 +1920,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) Titanium_PurgeProcessMemoryAggressively();
     %orig;
 }
-%end
-
-%hook UIWindowScene
-- (void)_readySceneForDisplay { %orig; }
-- (UIWindowSceneActivationState)activationState { return %orig; }
-- (UIScreen *)screen { return %orig; }
 %end
 %end
 
