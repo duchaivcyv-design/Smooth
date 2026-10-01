@@ -1536,6 +1536,9 @@ static BoostConfigV261 *CFG261 = nil;
 // =========================================================================
 // NHÓM 2: CỬA SỔ NỔI & PICTURE-IN-PICTURE
 // =========================================================================
+// =========================================================================
+// NHÓM 2: CỬA SỔ NỔI & PICTURE-IN-PICTURE
+// =========================================================================
 %group Group_V261_FloatingWindow_PiP
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
@@ -1629,121 +1632,10 @@ static BoostConfigV261 *CFG261 = nil;
     return %orig;
 }
 %end
-%end
+%end // End Group_V261_FloatingWindow_PiP
 
 // =========================================================================
 // NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
-// CỐT LÕI 3: VƯỢT GIỚI HẠN KHUNG HÌNH (NO-DROP FPS)
-// =========================================================================
-%group Group_Display_SpringBoardV261
-
-%hook SBAppSwitcherController
-- (void)viewDidLayoutSubviews {
-    if (IS_ACTIVE && CFG261.reduceMultitaskLag) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-%end
-
-%group Group_V261_FloatingWindow_PiP
-%hook PGPictureInPictureRemoteObject
-- (void)_updatePreferredContentSize {
-    %orig;
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-}
-- (void)startPictureInPicture {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)stopPictureInPictureAnimated:(BOOL)animated {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(animated);
-}
-- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart {
-    %orig(shouldStart);
-}
-- (BOOL)isStartingStoppingOrCancellingPictureInPicture {
-    return %orig;
-}
-- (void)setSuspended:(BOOL)suspended {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(suspended);
-}
-%end
-
-%hook SBPIPController
-- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(arg1);
-}
-- (void)_updatePictureInPictureWindowMargin {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (UIEdgeInsets)pictureInPictureWindowMargin {
-    return %orig;
-}
-- (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(pid, sceneId, animated, completion);
-}
-- (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(pid, sceneId);
-}
-%end
-
-%hook AVPictureInPictureController
-- (void)startPictureInPicture {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)stopPictureInPicture {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (BOOL)isPictureInPicturePossible {
-    return %orig;
-}
-- (BOOL)isPictureInPictureActive {
-    return %orig;
-}
-- (BOOL)isPictureInPictureSuspended {
-    return %orig;
-}
-- (void)setRequiresLinearPlayback:(BOOL)requiresLinearPlayback {
-    %orig(requiresLinearPlayback);
-}
-- (BOOL)canStopPictureInPicture {
-    return %orig;
-}
-%end
-%end
-
-// =========================================================================
-// NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
-// CỐT LÕI 3: VƯỢT GIỚI HẠN KHUNG HÌNH (NO-DROP FPS)
 // =========================================================================
 %group Group_Display_SpringBoardV261
 
@@ -2562,7 +2454,7 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 
 // =========================================================================
-// HOOK UISCROLLVIEW - ĐÃ SỬA SẠCH LỖI DÒNG 1688 / 1690
+// HOOK UISCROLLVIEW - ĐÃ SỬA CÚ PHÁP LOGOS & KHÓA CHUẨN FPS
 // =========================================================================
 %hook UIScrollView
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
@@ -2603,15 +2495,15 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)isPagingEnabled { return %orig; }
-- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig(pagingEnabled); }
+- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig; }
 - (BOOL)isScrollEnabled { return %orig; }
-- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig(scrollEnabled); }
+- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig; }
 - (BOOL)bounces { return %orig; }
-- (void)setBounces:(BOOL)bounces { %orig(bounces); }
+- (void)setBounces:(BOOL)bounces { %orig; }
 - (BOOL)alwaysBounceVertical { return %orig; }
-- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig(alwaysBounceVertical); }
+- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig; }
 - (BOOL)alwaysBounceHorizontal { return %orig; }
-- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig(alwaysBounceHorizontal); }
+- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig; }
 
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
@@ -2631,9 +2523,9 @@ static BoostConfigV261 *CFG261 = nil;
 - (BOOL)isTracking { return %orig; }
 - (BOOL)isDragging { return %orig; }
 - (BOOL)isDecelerating { return %orig; }
-- (void)setContentSize:(CGSize)contentSize { %orig(contentSize); }
+- (void)setContentSize:(CGSize)contentSize { %orig; }
 - (CGSize)contentSize { return %orig; }
-- (void)setContentInset:(UIEdgeInsets)contentInset { %orig(contentInset); }
+- (void)setContentInset:(UIEdgeInsets)contentInset { %orig; }
 - (UIEdgeInsets)contentInset { return %orig; }
 
 - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
@@ -2726,7 +2618,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig(indexPaths);
 }
-- (deleteItemsAtIndexPaths)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
+- (void)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -3172,7 +3064,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
-- (didReceiveMemoryWarning)didReceiveMemoryWarning {
+- (void)didReceiveMemoryWarning {
     %orig;
     if (IS_ACTIVE) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
