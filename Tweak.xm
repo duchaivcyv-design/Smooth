@@ -44,8 +44,7 @@
 
 // ============================================================================
 // KHAI BÁO CÁC HÀM / MACRO PRIVATE CỦA XNU KERNEL & DARWIN TRÁNH LỖI BIÊN DỊCH
-// ============================================================================#ifndef VM_PURGABLE_PURGE_ALL
-#ifndef VM_PURGABLE_PURGE_ALL
+// ============================================================================#ifndef VM_PURGABLE_PURGE_ALL#ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
 
@@ -647,6 +646,7 @@ static volatile uint64_t g_lastSyncTicksV261 = 0;
 static BOOL g_isDeviceChargingV261 = NO;
 static volatile BOOL g_isUserTouchingV261 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV261 = 0.0;
+static volatile BOOL g_isScrollInertiaActiveV261 = NO;
 static volatile NSProcessInfoThermalState g_liveThermalStateV261 = NSProcessInfoThermalStateNominal;
 
 // NHẬN DIỆN THIẾT BỊ NÚT HOME (6s / 7 / 8 / Plus / SE) VÀ MÁY CỬ CHỈ (X-15 PRO MAX)
@@ -1529,7 +1529,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
-// CẢI TIẾN 8 & 9: CHỈNH ĐÚNG BO TRÒN TRÊN X-15 PRO MAX VÀ MÁY CỬ CHỈ, NGAY CẢ KHI CÀI FLUID ENABLER
+// FIX LỖI ĐA NHIỆM BO TRÒN TRÊN X-15 PRO MAX VÀ MÁY NÚT HOME (6S-8P)
 %hook SBIconView
 - (void)setIconImageInfo:(id)info {
     %orig(info);
