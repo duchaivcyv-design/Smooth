@@ -1830,7 +1830,6 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
                 thread_t currentMachThread = mach_thread_self();
                 Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)curFPS);
                 mach_port_deallocate(mach_task_self(), currentMachThread);
-                // Kích hoạt layer render ép 30 khung
                 self.layer.drawsAsynchronously = YES;
             }
             
@@ -1883,20 +1882,6 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
 
 %hook UITouch
 - (NSTimeInterval)timestamp { return %orig; }
-- (CGPoint)preciseLocationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        g_isUserTouchingV261 = YES;
-        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    }
-    return %orig(view);
-}
-- (CGPoint)precisePreviousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        g_isUserTouchingV261 = YES;
-        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    }
-    return %orig(view);
-}
 - (UITouchPhase)phase {
     UITouchPhase currentTouchPhase = %orig;
     if (IS_ACTIVE && CFG261.touchResponseBoost) {
@@ -1912,25 +1897,8 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
 - (UIWindow *)window { return %orig; }
 - (UIView *)view { return %orig; }
 - (NSUInteger)tapCount { return %orig; }
-- (CGFloat)majorRadius { return %orig; }
-- (CGFloat)majorRadiusTolerance { return %orig; }
-- (NSArray *)gestureRecognizers { return %orig; }
 - (CGFloat)force { return %orig; }
 - (CGFloat)maximumPossibleForce { return %orig; }
-- (CGPoint)locationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        g_isUserTouchingV261 = YES;
-        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    }
-    return %orig(view);
-}
-- (CGPoint)previousLocationInView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        g_isUserTouchingV261 = YES;
-        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    }
-    return %orig(view);
-}
 - (long long)type { return %orig; }
 - (float)_pathMajorRadius { return %orig; }
 %end
@@ -2000,6 +1968,126 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
 - (BOOL)shouldRequireFailureOfGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer { return %orig(otherGestureRecognizer); }
 - (BOOL)shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer { return %orig(otherGestureRecognizer); }
 %end
+
+%hook UIPanGestureRecognizer
+- (void)setDelaysTouchesBegan:(BOOL)delays {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
+    %orig(delays);
+}
+- (void)setDelaysTouchesEnded:(BOOL)delays {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
+    %orig(delays);
+}
+- (void)setCancelsTouchesInView:(BOOL)cancels {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(NO);
+        return;
+    }
+    %orig(cancels);
+}
+- (CGPoint)velocityInView:(UIView *)view {
+    CGPoint computedVelocity = %orig(view);
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        g_isUserTouchingV261 = YES;
+        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
+    }
+    return computedVelocity;
+}
+- (CGPoint)translationInView:(UIView *)view { return %orig(view); }
+- (void)setTranslation:(CGPoint)translation inView:(UIView *)view { %orig; }
+- (NSUInteger)minimumNumberOfTouches { return %orig; }
+- (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches { %orig(minimumNumberOfTouches); }
+- (NSUInteger)maximumNumberOfTouches { return %orig; }
+- (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches { %orig(maximumNumberOfTouches); }
+%end
+
+%hook UIScreenEdgePanGestureRecognizer
+- (void)setDelaysTouchesBegan:(BOOL)delays {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
+    %orig(delays);
+}
+- (void)setDelaysTouchesEnded:(BOOL)delays {
+    if (IS_ACTIVE && CFG261.touchResponseBoost) {
+        %orig(NO);
+        return;
+    }
+    %orig(delays);
+}
+- (UIRectEdge)edges { return %orig; }
+- (void)setEdges:(UIRectEdge)edges { %orig(edges); }
+%end
+
+%hook UIScrollView
+- (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
+    g_isScrollInertiaActiveV261 = YES;
+    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
+    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)_setContentOffsetPinned:(CGPoint)point {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(UIScrollViewDecelerationRateNormal);
+        return;
+    }
+    %orig(rate);
+}
+
+- (BOOL)touchesShouldCancelInContentView:(UIView *)view {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        return YES;
+    }
+    return %orig(view);
+}
+
+- (void)_setInterruptionImpulse:(CGPoint)impulse {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+
+- (void)_forcePanGestureToEndImmediately {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        g_isUserTouchingV261 = NO;
+        g_isScrollInertiaActiveV261 = NO;
+    }
+    %orig;
+}
+
+- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
+    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+%end
+%end // Kết thúc Group_ZeroLatencyTouch_PhysicsV261
 
 %hook UIPanGestureRecognizer
 - (void)setDelaysTouchesBegan:(BOOL)delays {
