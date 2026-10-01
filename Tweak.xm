@@ -1177,7 +1177,7 @@ static BoostConfigV261 *CFG261 = nil;
     if (IS_ACTIVE) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
-    %orig(arg1);
+    %orig;
 }
 - (void)_updatePictureInPictureWindowMargin {
     if (IS_ACTIVE) {
@@ -1186,7 +1186,7 @@ static BoostConfigV261 *CFG261 = nil;
     %orig;
 }
 - (UIEdgeInsets)pictureInPictureWindowMargin {
-    return %orig;
+    return %orig();
 }
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
     if (IS_ACTIVE) {
@@ -1273,7 +1273,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        %orig(range);
+        %orig;
         return;
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
@@ -1283,7 +1283,7 @@ static BoostConfigV261 *CFG261 = nil;
 
     float minRate = (rate <= 30.0f) ? rate : ((rate <= 60.0f) ? 30.0f : 60.0f);
     range = CAFrameRateRangeMake(minRate, rate, rate);
-    %orig(range);
+    %orig;
 }
 - (BOOL)isPaused { return %orig; }
 - (void)setPaused:(BOOL)paused { %orig(paused); }
