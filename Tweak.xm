@@ -1646,6 +1646,116 @@ static BoostConfigV261 *CFG261 = nil;
 }
 %end
 
+%group Group_V261_FloatingWindow_PiP
+%hook PGPictureInPictureRemoteObject
+- (void)_updatePreferredContentSize {
+    %orig;
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+}
+- (void)startPictureInPicture {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+- (void)stopPictureInPictureAnimated:(BOOL)animated {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated);
+}
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart {
+    %orig(shouldStart);
+}
+- (BOOL)isStartingStoppingOrCancellingPictureInPicture {
+    return %orig;
+}
+- (void)setSuspended:(BOOL)suspended {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(suspended);
+}
+%end
+
+%hook SBPIPController
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(arg1);
+}
+- (void)_updatePictureInPictureWindowMargin {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+- (UIEdgeInsets)pictureInPictureWindowMargin {
+    return %orig;
+}
+- (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(pid, sceneId, animated, completion);
+}
+- (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(pid, sceneId);
+}
+%end
+
+%hook AVPictureInPictureController
+- (void)startPictureInPicture {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+- (void)stopPictureInPicture {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+- (BOOL)isPictureInPicturePossible {
+    return %orig;
+}
+- (BOOL)isPictureInPictureActive {
+    return %orig;
+}
+- (BOOL)isPictureInPictureSuspended {
+    return %orig;
+}
+- (void)setRequiresLinearPlayback:(BOOL)requiresLinearPlayback {
+    %orig(requiresLinearPlayback);
+}
+- (BOOL)canStopPictureInPicture {
+    return %orig;
+}
+%end
+%end
+
+// =========================================================================
+// NHÓM 3: GIAO DIỆN SPRINGBOARD - COLOROS AQUAMORPHIC ENGINE
+// CỐT LÕI 3: VƯỢT GIỚI HẠN KHUNG HÌNH (NO-DROP FPS)
+// =========================================================================
+%group Group_Display_SpringBoardV261
+
+%hook SBAppSwitcherController
+- (void)viewDidLayoutSubviews {
+    if (IS_ACTIVE && CFG261.reduceMultitaskLag) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig;
+}
+%end
+
 %hook CADisplayLink
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
@@ -2452,7 +2562,7 @@ static BoostConfigV261 *CFG261 = nil;
 %end
 
 // =========================================================================
-// HOOK UISCROLLVIEW - ĐÃ SỬA TRIỆT ĐỂ DÒNG 1690 BẰNG %orig(touches)
+// HOOK UISCROLLVIEW - ĐÃ SỬA SẠCH LỖI DÒNG 1688 / 1690
 // =========================================================================
 %hook UIScrollView
 - (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
@@ -2471,15 +2581,6 @@ static BoostConfigV261 *CFG261 = nil;
     %orig;
 }
 
-// SỬA DÒNG 1690: Hàm có giá trị trả về struct CGPoint -> Dùng %orig(touches)
-- (CGPoint)_touchPositionForTouches:(id)touches {
-    if (IS_ACTIVE && (CFG261.touchResponseBoost || CFG261.ultraResponsiveness)) {
-        g_isUserTouchingV261 = YES;
-        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    }
-    return %orig(touches);
-}
-
 - (void)_setContentOffsetPinned:(CGPoint)point {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2491,7 +2592,7 @@ static BoostConfigV261 *CFG261 = nil;
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         rate = 0.992;
     }
-    %orig;
+    %orig(rate);
 }
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
@@ -2502,15 +2603,15 @@ static BoostConfigV261 *CFG261 = nil;
 }
 
 - (BOOL)isPagingEnabled { return %orig; }
-- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig; }
+- (void)setPagingEnabled:(BOOL)pagingEnabled { %orig(pagingEnabled); }
 - (BOOL)isScrollEnabled { return %orig; }
-- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig; }
+- (void)setScrollEnabled:(BOOL)scrollEnabled { %orig(scrollEnabled); }
 - (BOOL)bounces { return %orig; }
-- (void)setBounces:(BOOL)bounces { %orig; }
+- (void)setBounces:(BOOL)bounces { %orig(bounces); }
 - (BOOL)alwaysBounceVertical { return %orig; }
-- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig; }
+- (void)setAlwaysBounceVertical:(BOOL)alwaysBounceVertical { %orig(alwaysBounceVertical); }
 - (BOOL)alwaysBounceHorizontal { return %orig; }
-- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig; }
+- (void)setAlwaysBounceHorizontal:(BOOL)alwaysBounceHorizontal { %orig(alwaysBounceHorizontal); }
 
 - (void)_setInterruptionImpulse:(CGPoint)impulse {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
@@ -2530,9 +2631,9 @@ static BoostConfigV261 *CFG261 = nil;
 - (BOOL)isTracking { return %orig; }
 - (BOOL)isDragging { return %orig; }
 - (BOOL)isDecelerating { return %orig; }
-- (void)setContentSize:(CGSize)contentSize { %orig; }
+- (void)setContentSize:(CGSize)contentSize { %orig(contentSize); }
 - (CGSize)contentSize { return %orig; }
-- (void)setContentInset:(UIEdgeInsets)contentInset { %orig; }
+- (void)setContentInset:(UIEdgeInsets)contentInset { %orig(contentInset); }
 - (UIEdgeInsets)contentInset { return %orig; }
 
 - (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
@@ -2625,7 +2726,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig(indexPaths);
 }
-- (void)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
+- (deleteItemsAtIndexPaths)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine && [CFG261 resolvedTargetFPS] >= 60) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -3071,7 +3172,7 @@ static BoostConfigV261 *CFG261 = nil;
     }
     %orig;
 }
-- (void)didReceiveMemoryWarning {
+- (didReceiveMemoryWarning)didReceiveMemoryWarning {
     %orig;
     if (IS_ACTIVE) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
