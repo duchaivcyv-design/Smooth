@@ -1250,7 +1250,7 @@ static BoostConfigV261 *CFG261 = nil;
 %hook CADisplayLink
 - (CAFrameRateRange)preferredFrameRateRange {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        return %orig;
+        return %orig();
     }
     
     NSInteger targetHz = [CFG261 resolvedTargetHz];
@@ -1273,7 +1273,7 @@ static BoostConfigV261 *CFG261 = nil;
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (!IS_ACTIVE || (!CFG261.enableHzControl && !CFG261.proMotionEngineBeta7)) {
-        %orig;
+        %orig(range);
         return;
     }
     NSInteger targetHz = [CFG261 resolvedTargetHz];
@@ -1283,7 +1283,7 @@ static BoostConfigV261 *CFG261 = nil;
 
     float minRate = (rate <= 30.0f) ? rate : ((rate <= 60.0f) ? 30.0f : 60.0f);
     range = CAFrameRateRangeMake(minRate, rate, rate);
-    %orig;
+    %orig(range);
 }
 - (BOOL)isPaused { return %orig; }
 - (void)setPaused:(BOOL)paused { %orig(paused); }
@@ -1300,9 +1300,9 @@ static BoostConfigV261 *CFG261 = nil;
         if (target > 144.0f) target = 144.0f;
         float minHz = (target <= 30.0f) ? target : ((target < 60.0f) ? 30.0f : 60.0f);
         range = CAFrameRateRangeMake(minHz, target, target);
-        %orig;
+        %orig(range);
     } else {
-        %orig;
+        %orig(range);
     }
 }
 %end
