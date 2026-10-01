@@ -11,7 +11,7 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS =
+BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
@@ -19,12 +19,10 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -Wall \
                             -Wno-error \
                             -Wno-deprecated-declarations \
-                            -Wno-unknown-warning-option \
                             -Wno-unused-variable \
                             -Wno-unused-function \
                             -Wno-implicit-function-declaration \
                             -Wno-deprecated-non-prototype \
-                            -fno-autolink \
                             -I$(THEOS)/include \
                             -I$(THEOS)/vendor/include \
                             -I../Headers \
