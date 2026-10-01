@@ -1749,7 +1749,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %end
 
 %hook SBSwitcherAppSuggestionViewController
-- (viewWillAppear:(BOOL)animated) {
+- (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         Titanium_BoostCurrentThreadBriefly();
     }
