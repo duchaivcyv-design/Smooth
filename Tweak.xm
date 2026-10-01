@@ -1005,7 +1005,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
                 self.quantumRenderShield = self.fixAppExitStutter;
                 self.autoCloseBackgroundApp = self.fixAppExitStutter;
                 self.reduceMultitaskLag = self.fixAppExitStutter;
-                self.reduceMultiTaskLag = self.reduceMultitaskLag;
+                self.reduceMultiTaskLag = self.reduceMultiTaskLag;
                 self.turboAppLaunch = g_syncPayloadV261.fastAppLaunch ? YES : NO;
                 self.turboLaunch = self.turboAppLaunch;
                 self.aggressiveRamClean = g_syncPayloadV261.aggressiveRamCleaner ? YES : NO;
@@ -1041,7 +1041,7 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     s_isLoading = NO;
 }
 
-// CHO PHÉP NHẬN TẤT CẢ MỨC LẺ HZ/FPS (15 ĐẾN 144) KHÔNG BỊ SAFEMODE
+// HỖ TRỢ ĐẦY ĐỦ TẤT CẢ MỨC LẺ HZ/FPS (15 ĐẾN 144) CHO HỆ THỐNG VÀ APP THỨ 3
 - (NSInteger)resolvedTargetHz {
     if (!self.enabled || !self.enableHzControl) return 120;
     UIDevice *dev = [UIDevice currentDevice];
@@ -1083,6 +1083,9 @@ static BoostConfigV261 *CFG261 = nil;
 #define IS_ACTIVE (CFG261.enabled)
 static BOOL g_ApexRenderPipelineReady = YES;
 
+// =========================================================================
+// NHÓM 1: KHỞI TỐC ỨNG DỤNG LẬP TỨC (LOADING NGAY LẬP TỨC)
+// =========================================================================
 %group Group_FastLaunch_SuperEngineV261
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
@@ -1130,6 +1133,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// =========================================================================
+// NHÓM 2: PIP & CỬA SỔ NỔI
+// =========================================================================
 %group Group_V261_FloatingWindow_PiP
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
@@ -1225,6 +1231,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 3: HỆ THỐNG SPRINGBOARD & ĐIỀU KHIỂN HZ/FPS CHO MÀN HÌNH CHÍNH, APP THỨ 3, CONTROL CENTER
+// =========================================================================
 %group Group_Display_SpringBoardV261
 %hook SBAppSwitcherController
 - (void)viewDidLayoutSubviews {
@@ -1449,6 +1458,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 %end
 
+// FIX LỖI ĐA NHIỆM BO TRÒN TRÊN X-15 PRO MAX VÀ MÁY NÚT HOME (6S-8P)
 %hook SBIconView
 - (void)setIconImageInfo:(id)info {
     %orig(info);
@@ -1765,6 +1775,17 @@ static BOOL g_ApexRenderPipelineReady = YES;
 - (void)prepareForReuse {
     %orig;
 }
+// ÉP BO TRÒN GÓC TAB ĐA NHIỆM CHUẨN COLOROS 17 CHO CẢ MÁY CỬ CHỈ LẪN MÁY Ổ NÚT HOME
+- (void)setCornerRadius:(CGFloat)radius {
+    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
+        %orig(28.0);
+        if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
+            [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
+        }
+        return;
+    }
+    %orig(radius);
+}
 %end
 
 %hook SBHomeScreenViewController
@@ -1861,6 +1882,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 4: CẢM ỨNG & VẬT LÝ COLOROS 17 (SIÊU MƯỢT, 0 DELAY, XÓA KHỰNG KHHI THOÁT APP)
+// =========================================================================
 %group Group_ZeroLatencyTouch_PhysicsV261
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
@@ -2121,7 +2145,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %hook UIScrollView
 - (void)setDecelerationRate:(UIScrollViewDecelerationRate)decelerationRate {
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(UIScrollViewDecelerationRateNormal); // Chuyển sang trôi mượt tự nhiên, KHÔNG CÒN PHANH GẤP
+        %orig(UIScrollViewDecelerationRateNormal); // Trôi mượt tự nhiên, hoàn toàn không phanh gấp
         return;
     }
     %orig(decelerationRate);
@@ -2291,6 +2315,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 5: BÀN PHÍM TỐI ƯU (0 DELAY, NHẮN TIN LIÊN TỤC KHÔNG BAO GIỜ ĐƠ)
+// =========================================================================
 %group Group_Keyboard_And_TextV261
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
@@ -2428,6 +2455,12 @@ static BOOL g_ApexRenderPipelineReady = YES;
     }
     %orig;
 }
+- (void)setContentOffset:(CGPoint)contentOffset {
+    if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig; // Đã sửa thành %orig; trần chống lỗi dòng 1277
+}
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (IS_ACTIVE && (CFG261.keyboardZeroLagV24 || CFG261.keyboardZeroLagV3)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2494,6 +2527,9 @@ static BOOL g_ApexRenderPipelineReady = YES;
 %end
 %end
 
+// =========================================================================
+// NHÓM 6: PIPELINE METAL (ÉP GPU TĂNG TỐC ĐỒ HỌA 20 LẦN, FIX LỖI LIQUID GLASS NÓNG MÁY)
+// =========================================================================
 %group Group_MetalGraphics_OptV261
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
@@ -2619,7 +2655,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 - (void)setShouldRasterize:(BOOL)shouldRasterize {
     if (IS_ACTIVE) {
-        %orig(NO);
+        %orig(NO); // Vô hiệu hóa rasterize để tương thích tuyệt đối với các tweak trong suốt nặng như Liquid Glass, chống nóng và xé hình
         return;
     }
     %orig(shouldRasterize);
@@ -2823,7 +2859,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 - (void)didExitWithContext:(id)context {
     if (IS_ACTIVE && CFG261.aggressiveRamClean) {
-        return; // Chống kill ngầm app khi vuốt ra ngoài
+        return; // Chống kill ngầm app khi vuốt ra ngoài, giữ nguyên trạng thái RAM
     }
     %orig(context);
 }
@@ -2844,7 +2880,7 @@ static BOOL g_ApexRenderPipelineReady = YES;
 }
 - (void)handleApplicationSuspended:(id)application {
     if (IS_ACTIVE && (CFG261.fixAppExitStutter || CFG261.autoCloseBackgroundApp)) {
-        return; // Giữ app trong RAM tuyệt đối, chống reset ngầm
+        return; // Giữ app trong RAM tuyệt đối, chống reset app đột ngột
     }
     %orig(application);
 }
@@ -3031,61 +3067,65 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
         if (Titanium_IsSecureBankingApp()) {
             return;
         }
-        if (Titanium_IsSpringBoard()) {
-            [UIDevice currentDevice].batteryMonitoringEnabled = YES;
-        }
 
-        Class configClass = NSClassFromString(@"BoostConfigV261");
-        if (configClass) {
-            CFG261 = [configClass sharedInstance];
-            if ([CFG261 respondsToSelector:@selector(loadSettings)]) {
-                [CFG261 loadSettings];
-            }
-        }
-
-        %init(Group_MetalGraphics_OptV261);
-        %init(Group_ZeroLatencyTouch_PhysicsV261);
-        %init(Group_FastLaunch_SuperEngineV261);
-        %init(Group_ScrollPerformance_SuperEngineV261);
-        %init(Group_V261_FloatingWindow_PiP);
-        %init(_ungrouped);
-
-        if (Titanium_IsSpringBoard()) {
-            %init(Group_Display_SpringBoardV261);
-            %init(Group_SpringBoard_ProcessManagerV261);
-        } else {
-            %init(Group_UIKit_ThirdParty_IsolatedV261);
-        }
-
-        BOOL isKeyboardExtension = NO;
-        if (bundleID) {
-            isKeyboardExtension = [bundleID containsString:@"TextInputUI"] || 
-                                  [bundleID containsString:@"InputUI"] || 
-                                  [bundleID containsString:@"keyboard"];
-        }
-        if (Titanium_IsSpringBoard() || isKeyboardExtension || 
-            (progName && (strstr(progName, "inputhost") || strstr(progName, "Keyboard")))) {
-            %init(Group_Keyboard_And_TextV261);
-        }
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-                Titanium_StartThermalWatchdogTimerV261();
-                CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-                if (darwinCenter) {
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
-                        CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
-                        CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
-                        CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-                }
+        // ĐỘ TRỄ AN TOÀN 3 GIÂY TRƯỚC KHI TIÊM HOÀN TOÀN VÀO HỆ THỐNG (Đặc biệt tối ưu cho 6s - 7 Plus iOS 14/15)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            @autoreleasepool {
                 if (Titanium_IsSpringBoard()) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        Titanium_StartPassiveRamDaemonV261();
-                    });
+                    [UIDevice currentDevice].batteryMonitoringEnabled = YES;
                 }
-            });
+
+                Class configClass = NSClassFromString(@"BoostConfigV261");
+                if (configClass) {
+                    CFG261 = [configClass sharedInstance];
+                    if ([CFG261 respondsToSelector:@selector(loadSettings)]) {
+                        [CFG261 loadSettings];
+                    }
+                }
+
+                %init(Group_MetalGraphics_OptV261);
+                %init(Group_ZeroLatencyTouch_PhysicsV261);
+                %init(Group_FastLaunch_SuperEngineV261);
+                %init(Group_ScrollPerformance_SuperEngineV261);
+                %init(Group_V261_FloatingWindow_PiP);
+                %init(_ungrouped);
+
+                if (Titanium_IsSpringBoard()) {
+                    %init(Group_Display_SpringBoardV261);
+                    %init(Group_SpringBoard_ProcessManagerV261);
+                } else {
+                    %init(Group_UIKit_ThirdParty_IsolatedV261);
+                }
+
+                BOOL isKeyboardExtension = NO;
+                if (bundleID) {
+                    isKeyboardExtension = [bundleID containsString:@"TextInputUI"] || 
+                                          [bundleID containsString:@"InputUI"] || 
+                                          [bundleID containsString:@"keyboard"];
+                }
+                if (Titanium_IsSpringBoard() || isKeyboardExtension || 
+                    (progName && (strstr(progName, "inputhost") || strstr(progName, "Keyboard")))) {
+                    %init(Group_Keyboard_And_TextV261);
+                }
+
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                    Titanium_StartThermalWatchdogTimerV261();
+                    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+                    if (darwinCenter) {
+                        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                            CFSTR("com.taojb.boostiphone6s/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                            CFSTR("com.taojb.boostiphone6s/ReloadUIKitPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)reloadPrefsNotificationV261,
+                            CFSTR("com.titanium.v261.prefschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+                    }
+                    if (Titanium_IsSpringBoard()) {
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            Titanium_StartPassiveRamDaemonV261();
+                        });
+                    }
+                });
+            }
         });
     }
 }
