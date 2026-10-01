@@ -112,25 +112,6 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 #define NOTIFY_FPS_CHANGED "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 
-#import <mach/mach_time.h>
-#import <mach/mach.h>
-#import <mach/thread_policy.h>
-#import <substrate.h>
-#import <sys/utsname.h>
-#import <objc/runtime.h>
-#import <UIKit/UIKit.h>
-#import <QuartzCore/QuartzCore.h>
-#import <QuartzCore/CAMetalLayer.h>
-#import <QuartzCore/CAFrameRateRange.h>
-#import <notify.h>
-#import <dlfcn.h>
-#import <sys/stat.h>
-#import <fcntl.h>
-#import <unistd.h>
-#import <malloc/malloc.h>
-#import <pthread.h>
-#import <CoreFoundation/CoreFoundation.h>
-
 // ====================================================================================================
 // KHAI BÁO CÁC PRIVATE INTERFACES CỦA HỆ ĐIỀU HÀNH
 // ====================================================================================================
@@ -1096,7 +1077,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %hook SBPIPController
 - (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
     if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    %orig;
+    %orig(arg1);
 }
 - (void)_updatePictureInPictureWindowMargin {
     if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1148,9 +1129,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %group Group_Display_SpringBoardV285
 
-// ====================================================================================================
-// 1. CADisplayLink
-// ====================================================================================================
 %hook CADisplayLink
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
@@ -1188,9 +1166,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %end
 
-// ====================================================================================================
-// 2. UIScreen & CADisplay
-// ====================================================================================================
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
@@ -1240,9 +1215,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %end
 
-// ====================================================================================================
-// 3. SpringBoard UI & Controllers
-// ====================================================================================================
 %hook SBIconController
 
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
@@ -1446,7 +1418,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %end
 
-%end // Kết thúc Group_Display_SpringBoardV285
+%end
 
 // ====================================================================================================
 // NHÓM 4: PHÂN BIỆT PHẦN CỨNG - NÚT HOME VẬT LÝ (6s - 7P - 8P - SE)
@@ -1522,12 +1494,11 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
                 g_isUserTouchingV285 = YES;
                 g_lastTouchMediaTimeV285 = CACurrentMediaTime();
                 
-                // Lọc rung vi mô màn lô (Spatial Hysteresis Suppression)
                 if (CFG285.antiGhostTouch) {
                     CGFloat deltaX = fabs(currentPoint.x - g_lastStableTouchLocation.x);
                     CGFloat deltaY = fabs(currentPoint.y - g_lastStableTouchLocation.y);
                     if (deltaX < kAntiJitterThresholdDistance && deltaY < kAntiJitterThresholdDistance) {
-                        return; // Nuốt sự kiện rung rác của chip cảm ứng lô
+                        return;
                     }
                 }
                 g_lastStableTouchLocation = currentPoint;
@@ -1587,7 +1558,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (CGFloat)majorRadius {
     CGFloat r = %orig;
     if (IS_ACTIVE && CFG285.antiGhostTouch) {
-        if (r <= 0.5f) return 11.0f; // Sửa lỗi IC lô báo bán kính 0 gây đơ cảm ứng
+        if (r <= 0.5f) return 11.0f;
         if (r > 45.0f) return 20.0f;
     }
     return r;
@@ -1779,7 +1750,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %group Group_MetalGraphics_OptV285
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    // Tỷ lệ vàng: Khóa cố định 3 Buffer để triệt tiêu micro-stutter và không trôi tay
     %orig(3);
 }
 - (NSUInteger)maximumDrawableCount { return 3; }
@@ -1826,7 +1796,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 - (void)setShouldRasterize:(BOOL)val { %orig(NO); }
 - (BOOL)shouldRasterize { return NO; }
 - (void)setShadowRadius:(CGFloat)radius {
-    // Tách biến safeRadius để tránh dấu phẩy làm Logos phân tách sai số lượng tham số
     CGFloat safeRadius = (radius > 2.0f) ? 2.0f : radius;
     %orig(safeRadius);
 }
@@ -1845,7 +1814,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
-// Dập tắt Dynamic Gaussian Blur trên toàn hệ thống để giảm 60% tải GPU
 %hook UIVisualEffectView
 - (void)layoutSubviews {
     %orig;
@@ -1912,7 +1880,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
-- (didReceiveMemoryWarning)didReceiveMemoryWarning {
+- (void)didReceiveMemoryWarning {
     %orig;
     if (IS_ACTIVE) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
@@ -2153,7 +2121,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
     NSDictionary *updatedCounterDict = @{@"count": @(restartCount), @"time": @(currentUnixTime)};
     [updatedCounterDict writeToFile:bootCounterFilePath atomically:YES];
     if (restartCount >= 4) {
-        return NO; // Ngăn chặn nạp tweak nếu máy respring liên tục 4 lần
+        return NO;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if ([fileManager fileExistsAtPath:bootCounterFilePath]) {
@@ -2206,7 +2174,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             [bundleID containsString:@"WallpaperKit"]) {
             return NO;
         }
-        // Tự động bỏ qua các app ngân hàng / ví điện tử bảo vệ môi trường jailbreak
         NSArray *bankKeys = @[@"bank", @"momo", @"zalopay", @"vnpay", @"smartotp", @"viettelmoney", @"tpb", @"vcb", @"bidv", @"acb", @"techcombank", @"mb"];
         for (NSString *key in bankKeys) {
             if ([bundleID.lowercaseString containsString:key]) return NO;
@@ -2227,7 +2194,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
         if (!Titanium_CheckAndPreventBootloopUniversal()) return;
         if (!Titanium_IsProcessEligible(bundleID, progName)) return;
 
-        // Bỏ qua nạp hook UI nếu là Preferences pane
         if (progName && strstr(progName, "Preferences")) {
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
@@ -2237,13 +2203,11 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
             return;
         }
 
-        // Kích hoạt cờ nội bộ QuartzCore & Metal
         setenv("CA_DISABLE_FRAME_PACING", "1", 1);
         setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
         setenv("MTL_FORCE_SERIAL_DISPATCH", "0", 1);
         setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
 
-        // Đăng ký hook CADisplayLink & CAAnimation
         Class clsCADisplayLink = NSClassFromString(@"CADisplayLink");
         if (clsCADisplayLink) {
             MSHookMessageEx(clsCADisplayLink, @selector(preferredFrameRateRange), 
@@ -2260,7 +2224,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
                             (IMP *)&orig_CAAnimation_setPreferredFrameRateRange);
         }
 
-        // Độ trễ phân tầng: 3.5s cho iPhone 6s/7P (chip A9/A10 ổn định bộ nhớ); 0.8s cho iPhone X-15PM
         NSTimeInterval initializationDelay = Titanium_IsClassicHomeButtonDevice() ? 3.5 : 0.8;
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(initializationDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -2321,10 +2284,7 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
                     CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
                 }
 
-                // Khơi thông I/O và ghim luồng Mach Realtime cho tiến trình hiện tại
                 Titanium_EnforceThreadRealtimeAndDiskVIP();
-
-                // Mở khóa cờ điều khiển FPS/Hz
                 g_SystemMasterReady = YES;
             }
         });
