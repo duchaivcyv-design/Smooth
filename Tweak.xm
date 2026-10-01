@@ -671,7 +671,6 @@ static inline BOOL Titanium_IsGestureDevice(void) {
     if (!Titanium_IsClassicHomeButtonDevice()) {
         return YES;
     }
-    // Nếu có Cài Cử chỉ giả trên 6s-8P
     if (NSClassFromString(@"SBFluidSwitcherViewController") != nil) {
         return YES;
     }
@@ -732,7 +731,6 @@ static inline void Titanium_SetThreadRealtimeConstraintV261(thread_t thread, uin
     thread_policy_set(thread, THREAD_AFFINITY_POLICY, (task_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 }
 
-// CƠ CHẾ XẢ SÂU RAM MÀ KHÔNG GÂY TẢI LẠI (RELOAD) APP
 static inline void Titanium_PurgeProcessMemoryAggressively(void) {
     malloc_zone_pressure_relief(malloc_default_zone(), 0);
 }
@@ -834,7 +832,6 @@ static inline void Titanium_ReloadSharedSyncStateV261(void) {
     pthread_mutex_unlock(&g_syncLockV261);
 }
 
-// BỎ QUA TIẾN TRÌNH HỆ THỐNG NGUY HIỂM & POSTERBOARD ĐỂ TRÁNH TREO RESPRING / SAFE MODE
 static BOOL Titanium_IsCriticalSystemDaemon(void) {
     static BOOL isDaemon = NO;
     static dispatch_once_t onceToken;
@@ -1057,7 +1054,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (!self.enabled || !self.enableHzControl) return 120;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
-    // Bỏ khóa 60Hz cứng, tôn trọng cài đặt FPS tùy chỉnh của người dùng để tránh crash
     if (self.targetHz >= 15 && self.targetHz <= 144) return self.targetHz;
     return 120;
 }
@@ -1066,7 +1062,6 @@ static BOOL Titanium_IsSecureBankingApp(void) {
     if (!self.enabled || !self.enableFPSControl) return 120;
     if (self.powerSaveMode) return 30;
     if (self.forceOverclock144Hz) return 144;
-    // Bỏ khóa 60Hz cứng, tôn trọng cài đặt FPS tùy chỉnh của người dùng để tránh crash
     if (self.targetFPS >= 15 && self.targetFPS <= 144) return self.targetFPS;
     return 120;
 }
@@ -1093,7 +1088,6 @@ static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SE
     if (rate < 15.0f) rate = 15.0f;
     if (rate > 144.0f) rate = 144.0f;
     
-    // Tự động hạ xuống 30Hz khi không có tương tác sau 1.5s (Tiết kiệm pin)
     if (!g_isUserTouchingV261 && !g_isScrollInertiaActiveV261 && (CACurrentMediaTime() - g_lastTouchMediaTimeV261 > 1.5)) {
         return CAFrameRateRangeMake(30.0f, rate > 60.0f ? 60.0f : rate, rate > 60.0f ? 60.0f : rate);
     }
@@ -1659,7 +1653,6 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
 
 %hook UIStatusBar
 - (void)requestStyle:(long long)style animated:(BOOL)animated {
-    // SỬA LỖI ĐẨY LỆCH HAI BÊN MÀN HÌNH: ĐẢM BẢO KHÔNG BỊ XUNG ĐỘT TRÊN MÁY HOME NÚT VẬT LÝ FAKE GESTURE X
     if (Titanium_IsClassicHomeButtonDevice() && Titanium_IsGestureDevice()) {
         %orig(style, animated);
         return;
@@ -1825,7 +1818,6 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
             NSInteger curFPS = [CFG261 resolvedTargetFPS];
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             
-            // ÉP TẠO ĐỒ HỌA CỰC KỲ NHANH, RENDER PRE-FETCH 30 FRAME TRƯỚC KHI VUỐT
             if (isInitialTouch && !Titanium_IsSpringBoard()) {
                 thread_t currentMachThread = mach_thread_self();
                 Titanium_SetThreadRealtimeConstraintV261(currentMachThread, (uint32_t)curFPS);
@@ -1992,14 +1984,13 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
     %orig(cancels);
 }
 - (CGPoint)velocityInView:(UIView *)view {
-    CGPoint computedVelocity = %orig(view);
     if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
         g_isUserTouchingV261 = YES;
         g_lastTouchMediaTimeV261 = CACurrentMediaTime();
     }
-    return computedVelocity;
+    return %orig();
 }
-- (CGPoint)translationInView:(UIView *)view { return %orig(view); }
+- (CGPoint)translationInView:(UIView *)view { return %orig(); }
 - (void)setTranslation:(CGPoint)translation inView:(UIView *)view { %orig; }
 - (NSUInteger)minimumNumberOfTouches { return %orig; }
 - (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches { %orig(minimumNumberOfTouches); }
@@ -2085,243 +2076,6 @@ static UIEdgeInsets custom_SBPIPController_pictureInPictureWindowMargin(id self,
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
-}
-%end
-%end // Kết thúc Group_ZeroLatencyTouch_PhysicsV261
-
-%hook UIPanGestureRecognizer
-- (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        %orig(NO);
-        return;
-    }
-    %orig(delays);
-}
-- (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        %orig(NO);
-        return;
-    }
-    %orig(delays);
-}
-- (void)setCancelsTouchesInView:(BOOL)cancels {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(NO);
-        return;
-    }
-    %orig(cancels);
-}
-- (CGPoint)velocityInView:(UIView *)view {
-    CGPoint computedVelocity = %orig(view);
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        g_isUserTouchingV261 = YES;
-        g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    }
-    return computedVelocity;
-}
-- (CGPoint)translationInView:(UIView *)view { return %orig(view); }
-- (void)setTranslation:(CGPoint)translation inView:(UIView *)view {
-    %orig; // Đã xử lý struct arg an toàn
-}
-- (NSUInteger)minimumNumberOfTouches { return %orig; }
-- (void)setMinimumNumberOfTouches:(NSUInteger)minimumNumberOfTouches { %orig(minimumNumberOfTouches); }
-- (NSUInteger)maximumNumberOfTouches { return %orig; }
-- (void)setMaximumNumberOfTouches:(NSUInteger)maximumNumberOfTouches { %orig(maximumNumberOfTouches); }
-%end
-
-%hook UIScreenEdgePanGestureRecognizer
-- (void)setDelaysTouchesBegan:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        %orig(NO);
-        return;
-    }
-    %orig(delays);
-}
-- (void)setDelaysTouchesEnded:(BOOL)delays {
-    if (IS_ACTIVE && CFG261.touchResponseBoost) {
-        %orig(NO);
-        return;
-    }
-    %orig(delays);
-}
-- (UIRectEdge)edges { return %orig; }
-- (void)setEdges:(UIRectEdge)edges { %orig(edges); }
-%end
-
-%hook UIScrollView
-- (void)_smoothScrollWithVelocity:(CGPoint)velocity targetContentOffset:(CGPoint)targetContentOffset {
-    g_isScrollInertiaActiveV261 = YES;
-    g_lastTouchMediaTimeV261 = CACurrentMediaTime();
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig; // Xóa struct parameter, chống crash Logos
-}
-
-- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig; // Xóa struct parameter, chống crash Logos
-}
-
-- (void)_setContentOffsetPinned:(CGPoint)point {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig; // Xóa struct parameter, chống crash Logos
-}
-
-// SỬA LỖI PHANH GẤP KHI VUỐT MẠNH: LOẠI BỎ KHỰNG KHUNG HÌNH (INERTIA SCROLL)
-- (void)setDecelerationRate:(UIScrollViewDecelerationRate)rate {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(UIScrollViewDecelerationRateNormal); // Chuyển sang trôi mượt tự nhiên, không phanh gấp
-        return;
-    }
-    %orig(rate);
-}
-
-- (BOOL)touchesShouldCancelInContentView:(UIView *)view {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        return YES; // Chạm để ngắt cuộn mượt ngay lập tức
-    }
-    return %orig(view);
-}
-
-- (void)_setInterruptionImpulse:(CGPoint)impulse {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig; // Xóa struct parameter, chống crash Logos
-}
-
-- (void)_forcePanGestureToEndImmediately {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        g_isUserTouchingV261 = NO;
-        g_isScrollInertiaActiveV261 = NO;
-    }
-    %orig;
-}
-
-- (void)scrollRectToVisible:(CGRect)rect animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig; // Xóa struct parameter, chống crash Logos
-}
-%end
-
-%hook UITableView
-- (void)reloadData {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)layoutSubviews {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)beginUpdates {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)endUpdates {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)scrollToRowAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UITableViewScrollPosition)scrollPosition animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPath, scrollPosition, animated);
-}
-- (void)reloadRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPaths, animation);
-}
-- (void)insertRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPaths, animation);
-}
-- (void)deleteRowsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths withRowAnimation:(UITableViewRowAnimation)animation {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPaths, animation);
-}
-%end
-
-%hook UICollectionView
-- (void)reloadData {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)layoutSubviews {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-- (void)performBatchUpdates:(void (^)(void))updates completion:(void (^)(BOOL finished))completion {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(updates, completion);
-}
-- (void)scrollToItemAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UICollectionViewScrollPosition)scrollPosition animated:(BOOL)animated {
-    if (IS_ACTIVE && animated && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPath, scrollPosition, animated);
-}
-- (void)insertItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPaths);
-}
-- (void)deleteItemsAtIndexPaths:(NSArray<NSIndexPath *> *)indexPaths {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(indexPaths);
-}
-%end
-
-%hook SBAppSwitcherSettings
-- (void)setDeckSwitcherPageScale:(double)scaleValue {
-    %orig(scaleValue);
-}
-- (double)deckSwitcherPageScale { return %orig; }
-- (void)setAppSwitcherStyle:(long long)style { %orig(style); }
-- (long long)appSwitcherStyle { return %orig; }
-%end
-
-%hook SBFluidSwitcherItemContainer
-- (void)setContentAlpha:(double)alpha { %orig(1.0); }
-- (void)prepareForReuse { %orig; }
-- (void)setCornerRadius:(CGFloat)radius {
-    if (IS_ACTIVE && CFG261.colorOs17SmoothEngine) {
-        %orig(26.0);
-        if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
-            [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
-        }
-        return;
-    }
-    %orig(radius);
 }
 %end
 %end // Kết thúc Group_ZeroLatencyTouch_PhysicsV261
