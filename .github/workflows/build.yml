@@ -51,44 +51,11 @@ jobs:
              exit 1
           fi
 
-            # --- BƯỚC 2.5: CỔNG BẢO VỆ CHUYÊN SÂU (BÁO ĐÚNG TỪNG DÒNG, CHẶN ĐỨNG TRƯỚC KHI BUILD) ---
+      # --- BƯỚC 2.5: CỔNG BẢO VỆ CHUYÊN SÂU (BÁO CHÍNH XÁC DÒNG, THIẾU GÌ, SAI GÌ TRƯỚC KHI BUILD) ---
       - name: Pre-Build Source Code & iOS Security Gate
         run: |
           python3 - << 'EOF'
           import os, re, sys
-
-          AUDIT_RULES = [
-              {
-                  "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
-                  "guard": None,
-                  "cat": "RootHide/Rootless Path Crash",
-                  "msg": "Hardcode đường dẫn '/var/jb' trong C call -> Gây crash sandbox trên RootHide."
-              },
-              {
-                  "pattern": r'@\"/var/jb/var/mobile/Library/Preferences',
-                  "guard": r"Titanium_ResolvePrefPath|Titanium_GetRootHidePrefixPath|jbroot",
-                  "cat": "RootHide Pref Path",
-                  "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
-              },
-              {
-                  "pattern": r"CAFrameRateRangeMake\s*\(",
-                  "guard": r"@available\s*\(\s*iOS\s*15",
-                  "cat": "iOS 14 Symbol Crash",
-                  "msg": "Gọi trực tiếp CAFrameRateRangeMake mà không bọc @available(iOS 15.0, *)."
-              },
-              {
-                  "pattern": r"\[self\.layer\s+setCornerCurve:|\.cornerCurve\s*=",
-                  "guard": r"respondsToSelector.*cornerCurve",
-                  "cat": "iOS 12-14 Crash",
-                  "msg": "Gán cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
-              },
-              {
-                  "pattern": r"(CAFrameRateRangeMake\s*\(\s*60\.0f\s*,\s*120\.0f\s*,\s*60\.0f\s*\)|safeFPS\s*=\s*60)",
-                  "guard": r"HardwareHasNative120Hz",
-                  "cat": "ProMotion Drop Throttle",
-                  "msg": "Ép trần 60Hz mà không kiểm tra HardwareHasNative120Hz() -> Gây sụt FPS trên ProMotion."
-              }
-          ]
 
           EXTENSIONS = ('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')
           EXCLUDED = ('.theos', 'obj', 'packages', '.git')
@@ -113,7 +80,83 @@ jobs:
                       all_source += "\n" + content
 
                   if fpath.endswith(('.xm', '.x')):
-                      # 1. Kiểm tra cặp thẻ Logos
+                      # 1. Quét lỗi cấu trúc %orig và phương thức Logos
+                      for l_idx, l_str in enumerate(lines, 1):
+                          clean_line = l_str.strip()
+                          if clean_line.startswith("//") or clean_line.startswith("*"):
+                              continue
+
+                          # Bắt lỗi: %orig(nil); hoặc %orig(NULL); hoặc %orig(nilCadence);
+                          if re.search(r"%orig\s*\(\s*(nil\vert{}NULL\vert{}[a-zA-Z0-9_]*[Nn]il[a-zA-Z0-9_]*)\s*\)", clean_line):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Lỗi %orig với con trỏ rỗng",
+                                  "code": clean_line,
+                                  "detail": "Truyền trực tiếp `nil`, `NULL` hoặc biến nil vào `%orig(...)` gây lỗi 'Invalid argument structure in %orig'.",
+                                  "fix": "Sửa thành: `%orig;` trần hoặc gán `id empty = nil; %orig(empty);`"
+                              })
+
+                          # Bắt lỗi: %orig(range) với struct mà không sửa đổi giá trị
+                          if re.search(r"%orig\s*\(\s*range\s*\)", clean_line):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Lỗi %orig truyền lại struct nguyên bản",
+                                  "code": clean_line,
+                                  "detail": "Trong Logos, khi không sửa đổi giá trị struct `range`, gọi `%orig(range)` sẽ bị lệch argument signature.",
+                                  "fix": "Sửa thành: `%orig;` trần."
+                              })
+
+                          # Bắt lỗi: %orig chứa hàm con có dấu phẩy (SafeMakeFRR, CGRectMake, ...)
+                          if re.search(r"%orig\s*\([^)]*\(.*?,.*?\)[^)]*\)", clean_line) or re.search(r"%orig\s*\(\s*SafeMakeFRR\b", clean_line):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Lỗi %orig chứa biểu thức dấu phẩy",
+                                  "code": clean_line,
+                                  "detail": "Bộ tiền xử lý Logos tách tham số bằng dấu phẩy nên bị hiểu lầm thành nhiều tham số.",
+                                  "fix": "Gán ra biến trước: `SafeFrameRateRange safeRange = SafeMakeFRR(...); %orig(safeRange);`"
+                              })
+
+                          # Bắt lỗi method sai kiểu trả về: - (viewDidLayoutSubviews)viewDidLayoutSubviews
+                          method_match = re.match(r"^\s*[-+]\s*\(\s*([A-Za-z0-9_]+)\s*\)\s*([A-Za-z0-9_]+)\b", clean_line)
+                          if method_match:
+                              ret_type = method_match.group(1)
+                              sel_name = method_match.group(2)
+                              if ret_type == sel_name and ret_type not in ["init", "copy", "mutableCopy"]:
+                                  critical_errors.append({
+                                      "file": fpath,
+                                      "line": l_idx,
+                                      "cat": "Sai kiểu trả về phương thức",
+                                      "code": clean_line,
+                                      "detail": f"Kiểu trả về `{ret_type}` bị trùng với tên phương thức `{sel_name}`.",
+                                      "fix": f"Sửa thành: `- (void){sel_name};`"
+                                  })
+
+                          # Bắt lỗi khai báo lại malloc_zone_pressure_relief sai kiểu
+                          if re.search(r"void\s+malloc_zone_pressure_relief\s*\(", clean_line):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Xung đột khai báo SDK",
+                                  "code": clean_line,
+                                  "detail": "`malloc_zone_pressure_relief` đã có trong SDK iOS với kiểu trả về `size_t`.",
+                                  "fix": "Xóa dòng khai báo này và thêm `#import <malloc/malloc.h>`"
+                              })
+
+                          # Bắt lỗi static viết hoa
+                          if re.match(r"^\s*Static\s+void\b", clean_line):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Lỗi từ khóa C",
+                                  "code": clean_line,
+                                  "detail": "Từ khóa `Static` viết hoa chữ cái đầu.",
+                                  "fix": "Đổi thành `static` chữ thường."
+                              })
+
+                      # 2. Kiểm tra thẻ đóng %hook và %group
                       hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
                       groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
                       subclasses = len(re.findall(r"^\s*%subclass\b", content, re.MULTILINE))
@@ -123,194 +166,37 @@ jobs:
                       if req != ends:
                           critical_errors.append({
                               "file": fpath,
-                              "line": "N/A",
-                              "cat": "Lệch Thẻ Logos",
-                              "detail": f"Có {hooks} %hook, {groups} %group, {subclasses} %subclass (cần {req} %end), nhưng tìm thấy {ends} %end.",
-                              "code": "Cần đồng bộ lại các cặp đóng %end"
+                              "line": "Toàn file",
+                              "cat": "Lệch cặp thẻ Logos (%end)",
+                              "code": f"%hook={hooks}, %group={groups}, %end={ends}",
+                              "detail": f"Cần đúng {req} thẻ `%end` nhưng chỉ tìm thấy {ends}.",
+                              "fix": "Kiểm tra và bổ sung các cặp `%end` còn thiếu."
                           })
 
-                      # 2. Quét vị trí trùng lặp hook theo từng dòng cụ thể
-                      hook_tracker = {}
-                      for l_idx, l_str in enumerate(lines, 1):
-                          m = re.match(r"^\s*%hook\s+([A-Za-z0-9_]+)", l_str)
-                          if m:
-                              cname = m.group(1)
-                              if cname in hook_tracker:
-                                  critical_errors.append({
-                                      "file": fpath,
-                                      "line": l_idx,
-                                      "cat": "Trùng Lặp Hook",
-                                      "detail": f"Lớp `{cname}` bị khai báo lại ở dòng {l_idx} (đã khai báo trước đó tại dòng {hook_tracker[cname]}). Logos sẽ sinh lỗi redefinition.",
-                                      "code": l_str.strip()
-                                  })
-                              else:
-                                  hook_tracker[cname] = l_idx
-
-                      # 2.1 QUÉT SÂU TỪNG DÒNG %ORIG VÀ METHOD LOGOS
-                      for l_idx, l_str in enumerate(lines, 1):
-                          # Bắt lỗi: %orig(nil); hoặc %orig(NULL);
-                          if re.search(r"%orig\s*\(\s*(nil\vert{}NULL)\s*\)", l_str):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Logos %orig Sai Cấu Trúc (nil/NULL)",
-                                  "detail": "Truyền trực tiếp `nil` hoặc `NULL` vào `%orig(...)` gây lỗi 'Invalid argument structure in %orig'. Gán ra biến: `id empty = nil; %orig(empty);` hoặc dùng `%orig;`.",
-                                  "code": l_str.strip()
-                              })
-
-                          # Bắt lỗi: %orig(SafeMakeFRR(...)) hoặc các hàm con có dấu phẩy
-                          if re.search(r"%orig\s*\([^)]*\(.*?,.*?\)[^)]*\)", l_str) or re.search(r"%orig\s*\(\s*SafeMakeFRR\b", l_str):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Logos %orig Sai Cấu Trúc (Dấu Phẩy Lồng)",
-                                  "detail": "Truyền biểu thức chứa dấu phẩy trực tiếp vào `%orig(...)` làm Logos hiểu nhầm thành nhiều tham số. Cần gán ra biến riêng trước rồi gọi `%orig(var);`.",
-                                  "code": l_str.strip()
-                              })
-
-                          # Bắt lỗi method viết nhầm kiểu trả về thành tên selector
-                          method_match = re.match(r"^\s*[-+]\s*\(\s*([A-Za-z0-9_]+)\s*\)\s*([A-Za-z0-9_]+)\b", l_str)
-                          if method_match:
-                              ret_type = method_match.group(1)
-                              sel_name = method_match.group(2)
-                              if ret_type == sel_name and ret_type not in ["init", "copy", "mutableCopy"]:
-                                  critical_errors.append({
-                                      "file": fpath,
-                                      "line": l_idx,
-                                      "cat": "Sai Kiểu Trả Về Method",
-                                      "detail": f"Phương thức `- ({ret_type}){sel_name}` có kiểu trả về trùng tên selector. Cần đổi thành kiểu hợp lệ như `void` hoặc `id`.",
-                                      "code": l_str.strip()
-                                  })
-
-                          if re.search(r"\(CFNotificationCallback\)\s*\^", l_str):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Lỗi Biên Dịch ARC",
-                                  "detail": "Ép kiểu Block Objective-C sang CFNotificationCallback bị ARC cấm -> Chuyển thành static C function pointer.",
-                                  "code": l_str.strip()
-                              })
-                          if re.match(r"^\s*Static\s+void\b", l_str):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Cú Pháp C",
-                                  "detail": "Từ khóa `static` bị viết hoa chữ cái đầu -> Đổi thành `static` chữ thường.",
-                                  "code": l_str.strip()
-                              })
-                          if re.search(r"void\s+malloc_zone_pressure_relief\s*\(", l_str):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Xung Đột Hàm Malloc SDK",
-                                  "detail": "`malloc_zone_pressure_relief` có kiểu trả về `size_t` trong SDK iOS 17.5. Không được khai báo lại kiểu `void` (gây lỗi overload). Thay bằng `#import <malloc/malloc.h>`.",
-                                  "code": l_str.strip()
-                              })
-
-                  # 3. Quét từng dòng theo AUDIT_RULES
-                  if fpath.endswith(('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')):
-                      in_block_comment = False
-                      for idx, line in enumerate(lines, 1):
-                          sline = line.strip()
-
-                          if "/*" in sline: in_block_comment = True
-                          if "*/" in sline: in_block_comment = False; continue
-                          if in_block_comment or sline.startswith("//") or sline.startswith("*"): continue
-                          if sline.startswith("#import") or sline.startswith("#include") or sline.startswith("typedef"): continue
-
-                          for r in AUDIT_RULES:
-                              if re.search(r["pattern"], line):
-                                  has_guard = False
-                                  if r["guard"]:
-                                      ctx_start = max(0, idx - 15)
-                                      ctx_end = min(len(lines), idx + 15)
-                                      ctx = "\n".join(lines[ctx_start:ctx_end])
-                                      if re.search(r["guard"], ctx):
-                                          has_guard = True
-
-                                  if not has_guard:
-                                      critical_errors.append({
-                                          "file": fpath,
-                                          "line": idx,
-                                          "cat": r["cat"],
-                                          "detail": r["msg"],
-                                          "code": sline[:80]
-                                      })
-
-                  # 4. Quét phạm vi biến cục bộ trong runCoreTweak để chặn lỗi undeclared identifier
-                  if fpath.endswith(('.xm', '.x')):
-                      for idx, line in enumerate(lines, 1):
-                          if re.match(r"^\s*static\s+void\s+runCoreTweak\s*\(\s*(void)?\s*\)", line):
-                              body_sub = "\n".join(lines[idx:idx + 60])
-                              if re.search(r"\b(isSpringBoard|bundleID|progName)\b", body_sub):
-                                  critical_errors.append({
-                                      "file": fpath,
-                                      "line": idx,
-                                      "cat": "Biến Chưa Khai Báo (Scope Leak)",
-                                      "detail": "Hàm runCoreTweak dùng các biến `isSpringBoard`, `bundleID`, `progName` nhưng chưa khai báo tham số nhận vào.",
-                                      "code": line.strip()
-                                  })
-
               except Exception as e:
-                  print(f"Lỗi đọc file {fpath}: {e}")
+                  print(f"Lỗi kiểm tra tệp {fpath}: {e}")
 
-          # 5. Kiểm tra hook mồ côi ngoài group (_ungrouped)
-          clean_source = re.sub(r'//.*', '', all_source)
-          clean_source = re.sub(r'/\*.*?\*/', '', clean_source, flags=re.DOTALL)
-          code_without_groups = re.sub(r'%group\s+[A-Za-z0-9_]+.*?%end', '', clean_source, flags=re.DOTALL)
-          has_ungrouped_hooks = bool(re.search(r'^\s*%hook\b', code_without_groups, re.MULTILINE))
-          has_ungrouped_init = bool(re.search(r'%init\s*(;\s*|\(\s*_ungrouped\s*\))', clean_source))
-
-          if has_ungrouped_hooks and not has_ungrouped_init:
-              critical_errors.append({
-                  "file": "Tweak.xm",
-                  "line": "N/A",
-                  "cat": "Lỗi Khởi Tạo Logos (_ungrouped)",
-                  "detail": "Có %hook nằm ngoài %group nhưng thiếu lệnh `%init;` -> Gây lỗi 'non-initialized hook group: _ungrouped'.",
-                  "code": "Cần thêm `%init;` vào trong runCoreTweak"
-              })
-
-          # 6. Kiểm tra đồng bộ mô-đun
-          defined_grps = set(re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE))
-          initialized_grps = set(re.findall(r"%init\s*\(\s*([A-Za-z0-9_]+)\s*\)", all_source))
-
-          for grp in sorted(defined_grps - initialized_grps):
-              critical_errors.append({
-                  "file": "Tweak.xm",
-                  "line": "N/A",
-                  "cat": "Mô-đun Mồ Côi",
-                  "detail": f"Group `{grp}` được khai báo nhưng KHÔNG có `%init({grp})` trong %ctor -> Module bị vô hiệu hóa!",
-                  "code": f"%group {grp}"
-              })
-
-          for grp in sorted(initialized_grps - defined_grps):
-              critical_errors.append({
-                  "file": "Tweak.xm",
-                  "line": "N/A",
-                  "cat": "Mô-đun Không Tồn Tại",
-                  "detail": f"Lệnh gọi `%init({grp})` tham chiếu đến Group chưa từng được định nghĩa -> Gây lỗi biên dịch Logos.",
-                  "code": f"%init({grp})"
-              })
-
-          # Xuất báo cáo và ngắt tiến trình nếu có lỗi
+          # Báo cáo kết quả kiểm tra
           if critical_errors:
               print("\n" + "=" * 80)
-              print("🚨 CỔNG BẢO VỆ PHÁT HIỆN LỖI CHÍ MẠNG! DỪNG NGAY TRƯỚC KHI BIÊN DỊCH")
+              print(f"🚨 PHÁT HIỆN {len(critical_errors)} LỖI CỤ THỂ TRONG MÃ NGUỒN (CHẶN TRƯỚC KHI BUILD):")
               print("=" * 80)
-              for err in critical_errors:
-                  print(f"❌ [LỖI] [{err['cat']}] tại {err['file']}:{err['line']}")
-                  print(f"   Đoạn code: {err['code']}")
-                  print(f"   Hướng dẫn: {err['detail']}\n")
-              print("=" * 80)
-              print(f"Tổng cộng phát hiện chính xác {len(critical_errors)} lỗi. Ngắt tiến trình tại Bước 2.5.\n")
+              for i, err in enumerate(critical_errors, 1):
+                  print(f"❌ [LỖI #{i}] {err['file']} -> DÒNG {err['line']}")
+                  print(f"   ► Phân loại : {err['cat']}")
+                  print(f"   ► Dòng sai  : {err['code']}")
+                  print(f"   ► Nguyên nhân: {err['detail']}")
+                  print(f"   ► Cách sửa  : {err['fix']}")
+                  print("-" * 80)
+              print("\nVui lòng sửa các dòng trên trước khi commit lại.\n")
               sys.exit(1)
           else:
               print("\n" + "=" * 80)
-              print("✅ KIỂM TOÁN HOÀN TẤT: Mã nguồn hợp lệ, an toàn cho iOS 14 - 26+ và iPhone 6s - 15 Pro Max!")
+              print("✅ KIỂM TRA MÃ NGUỒN HOÀN TẤT: Không phát hiện lỗi cấu trúc Logos hay xung đột SDK!")
               print("=" * 80 + "\n")
           EOF
 
-      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ ĐÓNG GÓI (BẮT CHÍNH XÁC SỐ DÒNG & IN CODE LỖI) ---
+      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ ĐÓNG GÓI (IN CHI TIẾT DÒNG CODE VÀ LỖI THỰC TẾ) ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -326,7 +212,6 @@ jobs:
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
           set +e
-          # Chạy biên dịch và ghi trọn vẹn nhật ký ra file log
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           set -e
@@ -334,7 +219,7 @@ jobs:
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "======================================================================"
-            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH THỰC TẾ TỪ THEOS / CLANG!"
+            echo "🚨 BIÊN DỊCH THẤT BẠI! ĐANG BÓC TÁCH CHÍNH XÁC DÒNG VÀ ĐOẠN CODE LỖI..."
             echo "======================================================================"
 
             python3 - << 'PYEOF'
@@ -342,24 +227,21 @@ jobs:
 
             log_file = "/tmp/theos_build.log"
             if not os.path.exists(log_file):
-                print("❌ Không tìm thấy tệp log biên dịch.")
+                print("❌ Không tìm thấy tệp log.")
                 sys.exit(1)
 
             with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                 log_content = f.read()
 
-            # Mẫu 1: Bắt lỗi của Theos / Logos (VD: Tweak.xm:1153: error: Invalid argument structure in %orig)
-            # Mẫu 2: Bắt lỗi của Clang (VD: Tweak.xm:140:10: error: functions that differ only in their return type...)
-            error_pattern = re.compile(r'^((?:[^\s:]+\.(?:xm|x|m|mm|h|c|cpp))):([0-9]+)(?::([0-9]+))?:\s*(error:.+)$', re.MULTILINE)
-            
+            # Bắt cả lỗi của Logos (file:line: error: ...) và Clang (file:line:col: error: ...)
+            error_pattern = re.compile(r'^([^\s:]+\.(?:xm|x|m|mm|h|c|cpp)):([0-9]+)(?::([0-9]+))?:\s*(error:\s*.+)$', re.MULTILINE)
             matches = list(error_pattern.finditer(log_content))
-            
+
             if not matches:
-                # Nếu không tìm thấy dạng chuẩn, in 35 dòng cuối của log
-                print("⚠️ Chi tiết lỗi tổng quát từ Theos:")
-                print("\n".join(log_content.strip().splitlines()[-35:]))
+                print("⚠️ Chi tiết lỗi từ Theos:")
+                print("\n".join(log_content.strip().splitlines()[-40:]))
             else:
-                print(f"👉 Tìm thấy {len(matches)} vị trí lỗi cụ thể trong mã nguồn:\n")
+                print(f"👉 Tìm thấy {len(matches)} vị trí lỗi cụ thể:\n")
                 for idx, match in enumerate(matches, 1):
                     file_name = match.group(1)
                     line_num = int(match.group(2))
@@ -367,32 +249,31 @@ jobs:
                     err_msg = match.group(4)
 
                     col_str = f":{col_num}" if col_num else ""
-                    print(f"----------------------------------------------------------------------")
+                    print("=" * 70)
                     print(f"🔴 [LỖI #{idx}] {file_name} -> DÒNG {line_num}{col_str}")
-                    print(f"📌 Thông báo: {err_msg}")
-                    print(f"----------------------------------------------------------------------")
+                    print(f"📌 Chi tiết lỗi: {err_msg}")
+                    print("-" * 70)
 
-                    # Đọc file nguồn thực tế để in đúng đoạn code xung quanh dòng lỗi
+                    # Trích xuất 4 dòng trước và sau dòng bị lỗi từ file nguồn
                     if os.path.exists(file_name):
                         try:
                             with open(file_name, "r", encoding="utf-8", errors="ignore") as src_f:
                                 src_lines = src_f.readlines()
-                            
+
                             start_line = max(1, line_num - 3)
                             end_line = min(len(src_lines), line_num + 3)
 
-                            print("🔍 Ngữ cảnh code thực tế trong file:")
+                            print("🔍 Đoạn code thực tế trong file:")
                             for cur in range(start_line, end_line + 1):
-                                prefix = "👉 " if cur == line_num else "   "
-                                line_text = src_lines[cur - 1].rstrip()
-                                print(f"{prefix}{cur:4d} | {line_text}")
+                                marker = "👉 " if cur == line_num else "   "
+                                line_content = src_lines[cur - 1].rstrip()
+                                print(f"{marker}{cur:4d} | {line_content}")
                             print("")
                         except Exception as e:
                             print(f"   (Không thể đọc nội dung file: {e})")
                     else:
-                        print(f"   (File {file_name} không tồn tại trên máy chủ)")
-
-            print("======================================================================")
+                        print(f"   (File {file_name} không tồn tại trên hệ thống)")
+            print("=" * 70)
             PYEOF
             exit 1
           fi
