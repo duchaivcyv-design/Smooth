@@ -1553,6 +1553,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 %group Group_Switcher30Apps_Virtualization
 
+// 1. Cho phép render layout app bất đồng bộ: Mở app tức thì, xóa sạch màn hình đen
 %hook SBFluidSwitcherModifier
 - (BOOL)shouldasyncRenderAppLayouts {
     if (IS_ACTIVE) return YES;
@@ -1560,9 +1561,10 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
+// 2. Giữ snapshot trong bộ nhớ đệm: Vuốt đa nhiệm không bị nạp lại từ ổ cứng, hết giật khi dừng tay
 %hook SBAppSwitcherSettings
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    if (IS_ACTIVE) return NO;
+    if (IS_ACTIVE) return YES; // Giữ lại ảnh chụp tạm thời để chuyển app mượt mà 60 FPS
     return %orig;
 }
 
@@ -1570,8 +1572,15 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     if (IS_ACTIVE) return UIScrollViewDecelerationRateNormal;
     return %orig;
 }
+
+// Giảm tải tính toán bóng mờ đa nhiệm để dồn toàn bộ GPU cho hiệu ứng chuyển cảnh
+- (BOOL)shouldSimplifyForOptions:(long long)options {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
 %end
 
+// 3. Tăng tốc hàng đợi vẽ đa nhiệm
 %hook SBAppSwitcherController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
@@ -1579,6 +1588,16 @@ static void Titanium_TriggerInstantTouchBurst(void) {
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig(animated);
+}
+%end
+
+%hook SBFluidSwitcherItemContainer
+- (void)prepareForReuse {
+    %orig;
+    if (IS_ACTIVE) {
+        UIView *v = (UIView *)self;
+        v.layer.drawsAsynchronously = YES; // Vẽ khung thẻ app bất đồng bộ, chống khựng khung hình
+    }
 }
 %end
 
