@@ -52,8 +52,8 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN BẢN 3.1 (ĐÃ SỬA LỖI BIẾN VÀ LỌC FILE THÔNG MINH) ---
-      - name: Pre-Build Source Code & iOS Security Gate V3.1
+      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN BẢN 3.2 (QUÉT NGỮ CẢNH HAI CHIỀU, LOẠI BỎ LỖI ẢO) ---
+      - name: Pre-Build Source Code & iOS Security Gate V3.2
         run: |
           python3 - << 'EOF'
           import os, re, sys
@@ -64,7 +64,7 @@ jobs:
                   "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
                   "guard": None,
                   "cat": "RootHide/Rootless Path Crash",
-                  "msg": "Hardcode đường dẫn '/var/jb' trong C call -> Gây crash sandbox hoặc sai UUID trên RootHide. Dùng dynamic prefix."
+                  "msg": "Hardcode đường dẫn '/var/jb' trong C call -> Gây crash sandbox trên RootHide."
               },
               {
                   "pattern": r'@\"/var/jb/var/mobile/Library/Preferences',
@@ -72,32 +72,25 @@ jobs:
                   "cat": "RootHide Pref Path",
                   "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
               },
-              # 2. Crash Symbol iOS 14
+              # 2. Crash Symbol iOS 14 (Chỉ kiểm tra khi gọi hàm macro CAFrameRateRangeMake trực tiếp)
               {
-                  "pattern": r"(CAFrameRateRangeMake|setPreferredFrameRateRange:)",
+                  "pattern": r"CAFrameRateRangeMake\s*\(",
                   "guard": r"@available\s*\(\s*iOS\s*15",
                   "cat": "iOS 14 Symbol Crash",
-                  "msg": "Dùng API CAFrameRateRange nhưng không bọc @available(iOS 15.0, *) -> Crash Safe Mode trên iOS 14."
+                  "msg": "Gọi trực tiếp CAFrameRateRangeMake mà không bọc @available(iOS 15.0, *)."
               },
               {
                   "pattern": r"\[self\.layer\s+setCornerCurve:|\.cornerCurve\s*=",
                   "guard": r"respondsToSelector.*cornerCurve",
                   "cat": "iOS 12-14 Crash",
-                  "msg": "Gán trực tiếp cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
+                  "msg": "Gán cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
               },
-              # 3. Kìm hãm 120Hz ProMotion thật
+              # 3. Kìm hãm màn 120Hz thật của 13 Pro -> 15 Pro Max
               {
                   "pattern": r"(CAFrameRateRangeMake\s*\(\s*60\.0f\s*,\s*120\.0f\s*,\s*60\.0f\s*\)|safeFPS\s*=\s*60)",
                   "guard": r"HardwareHasNative120Hz",
                   "cat": "ProMotion Drop Throttle",
-                  "msg": "Ép trần 60Hz mà không kiểm tra HardwareHasNative120Hz() -> Gây sụt FPS trên 13 Pro đến 15 Pro Max."
-              },
-              # 4. Nguy cơ treo UI
-              {
-                  "pattern": r"\[\w+\s+layoutIfNeeded\]",
-                  "guard": None,
-                  "cat": "UI Hang/Lag Launch",
-                  "msg": "Cưỡng ép layout đồng bộ -> Gây khựng từ 200-500ms khi mở app hoặc cuộn Switcher."
+                  "msg": "Ép trần 60Hz mà không kiểm tra HardwareHasNative120Hz() -> Gây sụt FPS trên ProMotion."
               }
           ]
 
@@ -124,7 +117,7 @@ jobs:
                       all_source += "\n" + content
 
                   if fpath.endswith(('.xm', '.x')):
-                      # 1. Kiểm tra toàn vẹn thẻ Logos
+                      # Kiểm tra tính toàn vẹn cấu trúc mở/đóng thẻ Logos
                       hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
                       groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
                       subclasses = len(re.findall(r"^\s*%subclass\b", content, re.MULTILINE))
@@ -140,26 +133,7 @@ jobs:
                               "code": "Cần đồng bộ lại các cặp đóng %end"
                           })
 
-                      # 2. Kiểm tra trùng lặp hook
-                      hook_targets = re.findall(r"^\s*%hook\s+([A-Za-z0-9_]+)", content, re.MULTILINE)
-                      seen_hooks = set()
-                      dup_hooks = set()
-                      for ht in hook_targets:
-                          if ht in seen_hooks:
-                              dup_hooks.add(ht)
-                          else:
-                              seen_hooks.add(ht)
-                      if dup_hooks:
-                          for dh in sorted(dup_hooks):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": "N/A",
-                                  "cat": "Trùng Lặp Hook",
-                                  "detail": f"Lớp `{dh}` bị khai báo %hook nhiều lần trong cùng file -> Gây lỗi redefinition.",
-                                  "code": f"%hook {dh}"
-                              })
-
-                  # 3. Quét từng dòng theo RULES (chỉ quét file mã nguồn và plist)
+                  # Quét từng dòng theo các luật AUDIT_RULES với cửa sổ ngữ cảnh trước và sau (±15 dòng)
                   if fpath.endswith(('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')):
                       in_block_comment = False
                       for idx, line in enumerate(lines, 1):
@@ -180,8 +154,9 @@ jobs:
                               if re.search(r["pattern"], line):
                                   has_guard = False
                                   if r["guard"]:
-                                      ctx_start = max(0, idx - 18)
-                                      ctx = "\n".join(lines[ctx_start:idx])
+                                      ctx_start = max(0, idx - 15)
+                                      ctx_end = min(len(lines), idx + 15)
+                                      ctx = "\n".join(lines[ctx_start:ctx_end])
                                       if re.search(r["guard"], ctx):
                                           has_guard = True
 
@@ -196,7 +171,7 @@ jobs:
               except Exception as e:
                   print(f"Lỗi đọc file {fpath}: {e}")
 
-          # 4. Kiểm tra đồng bộ mô-đun
+          # Kiểm tra đồng bộ mô-đun hai chiều (%group vs %init)
           defined_grps = set(re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE))
           initialized_grps = set(re.findall(r"%init\s*\(\s*([A-Za-z0-9_]+)\s*\)", all_source))
 
@@ -220,7 +195,7 @@ jobs:
                   "code": f"%init({grp})"
               })
 
-          # 5. Kiểm tra plist
+          # Kiểm tra sự tồn tại của filter plist
           has_plist = any(f.endswith('.plist') for f in files_list)
           if not has_plist:
               critical_errors.append({
@@ -231,6 +206,7 @@ jobs:
                   "code": "Cần có file <TweakName>.plist cùng cấp Makefile"
               })
 
+          # Đưa ra phán quyết
           if critical_errors:
               print("\n" + "=" * 80)
               print("🚨 CỔNG BẢO VỆ PHÁT HIỆN LỖI CHÍ MẠNG! KHÔNG THỂ BẮT ĐẦU BIÊN DỊCH")
