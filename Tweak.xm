@@ -1479,18 +1479,20 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
 // ====================================================================================================
 
-// Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang và thông báo
+// ====================================================================================================
+// QUẢN LÝ BIẾN ĐA LUỒNG & BƠM XUNG THÔNG BÁO
+// ====================================================================================================
+
 static volatile int32_t g_activeAnimationCount = 0;
-static volatile BOOL g_isScrollingActive = NO; // Cờ giữ trần 120Hz/60Hz khi đang cuộn hoặc trôi quán tính
+static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
 
-// Kích xung nhịp CPU/GPU cực đại tức thì 0ms khi có thông báo xuất hiện
+// Kích xung nhịp tức thì 0ms khi có thông báo xuất hiện
 static void Titanium_TriggerNotificationBurst(void) {
     g_isNotificationBannerActive = YES;
-    Titanium_LockMainThreadFast();
     Titanium_EnableZeroLatencyPipeline();
 
     static dispatch_once_t bToken;
@@ -1503,7 +1505,6 @@ static void Titanium_TriggerNotificationBurst(void) {
         g_bannerBurstTimer = nil;
     }
 
-    // Giữ trần FPS trong 850ms để bao trọn thời lượng banner rơi xuống và neo mượt mà
     g_bannerBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_bannerBurstQueue);
     dispatch_source_set_timer(g_bannerBurstTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(850 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
     dispatch_source_set_event_handler(g_bannerBurstTimer, ^{
@@ -1514,191 +1515,122 @@ static void Titanium_TriggerNotificationBurst(void) {
 }
 
 // ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ/FPS TÙY CHỌN - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
-// (CHỈ ÁP DỤNG IPHONE 6S - 12 PRO MAX)
+// NHÓM 3: KHÓA CỨNG HZ & FPS TUYỆT ĐỐI THEO CẤU HÌNH (CHỈNH BAO NHIÊU ÉP CHẾT BẤY NHIÊU)
 // ====================================================================================================
-
-// 1. Kiểm tra trạng thái chuyển cảnh, chạm tay hoặc có thông báo
-static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isUserTouchingScreen) return YES;         // Chạm tay vuốt màn hình
-    if (g_isScrollingActive) return YES;            // Đang cuộn feed hoặc trôi quán tính (TikTok, FB, Safari)
-    if (g_isNotificationBannerActive) return YES;   // Thông báo đang/chuẩn bị trượt xuống
-    if (g_activeAnimationCount > 0) return YES;     // Có hiệu ứng chuyển cảnh, đóng mở app, lò xo
-    return NO; // Màn hình tĩnh 100% -> Cho phép hạ tần số quét làm mát máy
-}
-
-// 2. Kiểm tra xem có đang ở chế độ xem video thụ động (không tương tác tay) hay không
-static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
-    // Chỉ nhả về gốc khi đang xem video mà KHÔNG chạm tay và KHÔNG cuộn trang
-    return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive);
-}
 
 %group Group_FluidTransitions_Pacing
 
-// 1. ĐIỀU PHỐI VÒNG LẶP DỰNG HÌNH CADISPLAYLINK
+// 1. ĐIỀU PHỐI VÒNG LẶP DỰNG HÌNH CADISPLAYLINK (KHÓA CỨNG FPS TOÀN BỘ APP & HỆ THỐNG)
 %hook CADisplayLink
 
 - (NSInteger)preferredFramesPerSecond {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (Titanium_IsPassiveVideoPlayback()) return %orig; // Giữ nguyên FPS gốc của video khi chỉ ngồi xem
-
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        NSInteger target = [CFG285 resolvedTargetFPS];
-        if (Titanium_ShouldLockTargetRate()) {
-            return target; // KHÓA CỨNG ĐÚNG MỨC ĐÃ CHỌN (KỂ CẢ KHI LƯỚT TIKTOK)
-        }
-        return 10; // Tĩnh hoàn toàn: Hạ về 10 FPS làm mát GPU, không bị đơ thức dậy
+        return [CFG285 resolvedTargetFPS]; // Khóa chết đúng con số đã chọn (60/90/120/144)
     }
     return %orig;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (HardwareHasNative120Hz()) {
-        %orig;
-        return;
-    }
-    if (Titanium_IsPassiveVideoPlayback()) {
-        %orig;
-        return;
-    }
-
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        NSInteger target = [CFG285 resolvedTargetFPS];
-        if (Titanium_ShouldLockTargetRate()) {
-            %orig(target);
-            return;
-        }
-        %orig(10);
+        %orig([CFG285 resolvedTargetFPS]); // Ép thẳng số target, không cho app tự hạ
         return;
     }
-    %orig;
+    %orig(fps);
 }
 
-// ĐÃ SỬA LẠI TÊN HÀM CHUẨN XÁC: setPreferredFrameRateRange
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    if (HardwareHasNative120Hz()) { 
-        %orig; 
-        return; 
-    }
-    if (Titanium_IsPassiveVideoPlayback()) { 
-        %orig; 
-        return; 
-    }
-
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
-            if (Titanium_ShouldLockTargetRate()) {
-                // KHÓA CỨNG: Cả 3 mốc min - max - pref đều bằng target (Apple không thể tự bóp xung)
-                range = SafeMakeFRR(target, target, target);
-                Titanium_EnableZeroLatencyPipeline();
-            } else {
-                // TĨNH: Sàn 10Hz làm mát máy, nhưng TRẦN VẪN GIỮ TARGET để vọt lên trong 0ms khi chạm
-                range = SafeMakeFRR(10.0f, target, 10.0f);
-            }
+            // ÉP CỨNG: Min = Max = Preferred = Target (Tuyệt đối không tụt 1 Hz nào)
+            range = SafeMakeFRR(target, target, target);
+            Titanium_EnableZeroLatencyPipeline();
         }
     }
     %orig(range);
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE && CFG285.enableHzControl) {
-        interval = 1;
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        interval = 1; // 1 nhịp chuẩn, không cho phép nhảy cóc frame
     }
     %orig(interval);
 }
 
 %end
 
-// 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY
+// 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY (ÁP DỤNG TRÊN TẤT CẢ DÒNG MÁY)
 %hook CADisplay
 
 - (NSInteger)preferredFPS {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (Titanium_IsPassiveVideoPlayback()) return %orig;
-    if (!IS_ACTIVE) return %orig;
-    
-    NSInteger target = [CFG285 resolvedTargetFPS];
-    return Titanium_ShouldLockTargetRate() ? target : 10;
+    if (IS_ACTIVE && CFG285.enableFPSControl) {
+        return [CFG285 resolvedTargetFPS];
+    }
+    return %orig;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    if (HardwareHasNative120Hz()) { 
-        %orig; 
-        return; 
-    }
-    if (Titanium_IsPassiveVideoPlayback()) { 
-        %orig; 
-        return; 
-    }
-    
-    if (IS_ACTIVE) {
-        NSInteger target = [CFG285 resolvedTargetFPS];
-        fps = Titanium_ShouldLockTargetRate() ? target : 10;
+    if (IS_ACTIVE && CFG285.enableFPSControl) {
+        fps = [CFG285 resolvedTargetFPS];
     }
     %orig(fps);
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
-    if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE && CFG285.enableHzControl) {
-        cadence = nil;
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        cadence = nil; // Hủy hoàn toàn giới hạn xung nhịp mặc định của iOS
     }
     %orig(cadence);
 }
 
 - (BOOL)supportsDynamicRefresh {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (!IS_ACTIVE) return %orig;
-    return YES;
+    if (IS_ACTIVE && CFG285.enableHzControl) return YES;
+    return %orig;
 }
 
 - (BOOL)hasDynamicDisplayMode {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (!IS_ACTIVE) return YES;
+    if (IS_ACTIVE && CFG285.enableHzControl) return YES;
     return %orig;
 }
 
 %end
 
-// 3. BÁO CÁO THÔNG SỐ KHÓA CỨNG CHO UIKIT
+// 3. BÁO CÁO THÔNG SỐ KHÓA CỨNG CHO UIKIT & TOÀN BỘ APP BÊN THỨ BA
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (IS_ACTIVE) return [CFG285 resolvedTargetFPS];
+    if (IS_ACTIVE && CFG285.enableFPSControl) {
+        return [CFG285 resolvedTargetFPS];
+    }
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (IS_ACTIVE) return [CFG285 resolvedTargetFPS];
+    if (IS_ACTIVE && CFG285.enableFPSControl) {
+        return [CFG285 resolvedTargetFPS];
+    }
     return %orig;
 }
 
 - (CGFloat)_refreshRate {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (IS_ACTIVE) return (CGFloat)[CFG285 resolvedTargetHz];
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        return (CGFloat)[CFG285 resolvedTargetHz]; // Báo thẳng tần số quét đã chọn
+    }
     return %orig;
 }
 
 - (BOOL)supportsDynamicRefreshRate {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (IS_ACTIVE) return YES;
+    if (IS_ACTIVE && CFG285.enableHzControl) return YES;
     return %orig;
 }
 
 - (BOOL)_supportsDynamicRefreshRate {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (IS_ACTIVE) return YES;
+    if (IS_ACTIVE && CFG285.enableHzControl) return YES;
     return %orig;
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (HardwareHasNative120Hz()) { 
-        %orig; 
-        return; 
-    }
-    if (IS_ACTIVE) {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
         rate = (CGFloat)[CFG285 resolvedTargetHz];
         Titanium_EnableZeroLatencyPipeline();
     }
@@ -1707,14 +1639,14 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 4. KHÓA CỨNG TẤT CẢ HIỆU ỨNG HOẠT ẢNH & LÒ XO (26ANIM)
+// 4. KHÓA CỨNG TẤT CẢ HOẠT ẢNH & LÒ XO (CAANIMATION / CASPRINGANIMATION)
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
+        if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
-            range = SafeMakeFRR(target, target, target); // Khóa cứng hoạt ảnh
+            range = SafeMakeFRR(target, target, target); // Khóa cứng toàn bộ animation
         }
     }
     %orig(range);
@@ -1733,9 +1665,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
+        if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
-            range = SafeMakeFRR(target, target, target); // Khóa cứng lò xo
+            range = SafeMakeFRR(target, target, target); // Khóa cứng hoạt ảnh lò xo
         }
     }
     %orig(range);
@@ -1770,7 +1702,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 6. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN: KÍCH XUNG LÊN TRẦN HZ/FPS ĐÃ KHÓA TRƯỚC 0MS
+// 6. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN
 %hook NCNotificationDispatcher
 
 - (void)postNotificationWithRequest:(id)request {
@@ -1804,7 +1736,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 7. TẢI LẠI CẤU HÌNH KHI APP ACTIVE
+// 7. TỰ ĐỘNG ĐỒNG BỘ CẤU HÌNH KHI MỞ / QUAY LẠI APP
 %hook UIApplication
 
 - (void)_applicationDidBecomeActive:(id)arg1 {
