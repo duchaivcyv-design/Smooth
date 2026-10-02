@@ -1,100 +1,90 @@
-      # --- BƯỚC 2.5: KIỂM TOÁN MÃ NGUỒN TOÀN DIỆN, QUYỀN TRUY CẬP ROOTLESS/ROOTHIDE VÀ CODE THIẾU ---
-      - name: Full Project Audit & iOS Compatibility Scan
+name: Build BoostiPhone6s Rootless Deb
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: 
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # --- BƯỚC 1: CÀI ĐẶT CÔNG CỤ HỖ TRỢ ĐÓNG GÓI ---
+      - name: Setup Tools & Environment
+        run: |
+          THEOS_PATH="$HOME/theos"
+          echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
+          echo "$THEOS_PATH/bin" >> $GITHUB_PATH
+          echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
+          
+          # Cài dpkg, ldid và coreutils để Theos đóng gói và ký mã deb
+          brew install dpkg ldid coreutils python3
+
+      # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
+      - name: Clone Theos & Install SDK
+        run: |
+          TARGET_DIR="${{ env.THEOS }}"
+          if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
+          git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
+          
+          # Tải nhanh SDK 16.5 bằng sparse-checkout
+          mkdir -p /tmp/sdk_repo
+          cd /tmp/sdk_repo
+          git init
+          git remote add origin https://github.com/theos/sdks.git
+          git config core.sparseCheckout true
+          echo "iPhoneOS16.5.sdk/" > .git/info/sparse-checkout
+          git fetch --depth=1 origin master
+          git checkout FETCH_HEAD
+          
+          mkdir -p "$TARGET_DIR/sdks"
+          mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
+          cd ~
+          rm -rf /tmp/sdk_repo
+          
+          if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
+             echo "❌ Error: Không tìm thấy SDK iPhoneOS16.5!"
+             exit 1
+          fi
+
+      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN (NẾU CÓ LỖI SẼ BÁO DẤU X ĐỎ VÀ DỪNG NGAY) ---
+      - name: Pre-Build Source Code & iOS Security Gate
         run: |
           python3 - << 'EOF'
           import os, re, sys
 
-          AUDIT_RULES = [
-              # --- 1. LỖI PHÂN QUYỀN VÀ TRUY XUẤT ĐƯỜNG DẪN ROOTLESS / ROOTHIDE ---
+          RULES = [
+              # 1. Lỗi phân quyền và sai đường dẫn Rootless / RootHide
               {
                   "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
                   "guard": None,
-                  "category": "RootHide/Rootless Path Crash",
-                  "severity": "CRITICAL",
-                  "msg": "Hardcode đường dẫn '/var/jb' trong hàm C system call -> Gây crash do phân quyền Sandbox hoặc sai UUID jb-root trên RootHide."
+                  "cat": "RootHide/Rootless Path Crash",
+                  "msg": "Hardcode đường dẫn '/var/jb' trong C system call -> Gây crash sandbox hoặc sai UUID trên RootHide."
               },
               {
                   "pattern": r'@\"/var/jb/var/mobile/Library/Preferences',
                   "guard": r"Titanium_ResolvePrefPath|Titanium_GetRootHidePrefixPath|jbroot",
-                  "category": "RootHide Pref Path",
-                  "severity": "CRITICAL",
-                  "msg": "Hardcode đường dẫn file Preferences tuyệt đối -> Sẽ không đọc/ghi được cấu hình trên RootHide."
+                  "cat": "RootHide Pref Path",
+                  "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
               },
-              {
-                  "pattern": r'com\.apple\.UIKit',
-                  "guard": None,
-                  "category": "Filter Plist Over-Inject",
-                  "severity": "WARNING",
-                  "msg": "Filter chứa 'com.apple.UIKit': Dylib sẽ bị nạp vào toàn bộ app App Store bị kẹp Sandbox chặt chẽ."
-              },
-
-              # --- 2. LỖI CRASH KHÔNG TƯƠNG THÍCH PHIÊN BẢN IOS ---
+              # 2. Lỗi crash thiếu Symbol trên iOS 14
               {
                   "pattern": r"(CAFrameRateRange|setPreferredFrameRateRange:)",
                   "guard": r"@available\s*\(\s*iOS\s*15",
-                  "category": "iOS 14 Crash",
-                  "severity": "CRITICAL",
-                  "msg": "Dùng API CAFrameRateRange nhưng không bọc trong @available(iOS 15.0, *) -> Crash Safe Mode 'Symbol not found' trên iOS 14."
+                  "cat": "iOS 14 Symbol Crash",
+                  "msg": "Dùng API CAFrameRateRange nhưng không bọc @available(iOS 15.0, *) -> Crash Safe Mode 'Symbol not found' trên iOS 14."
               },
               {
                   "pattern": r"\[self\.layer\s+setCornerCurve:|\.cornerCurve\s*=",
                   "guard": r"respondsToSelector.*cornerCurve",
-                  "category": "iOS 12-14 Crash",
-                  "severity": "CRITICAL",
+                  "cat": "iOS 12-14 Crash",
                   "msg": "Gán trực tiếp cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
-              },
-
-              # --- 3. LỖI HIỆU NĂNG & XUNG ĐỘT GIAO DIỆN ---
-              {
-                  "pattern": r"\[\w+\s+layoutIfNeeded\]",
-                  "guard": None,
-                  "category": "Lag Launch/Switcher",
-                  "severity": "WARNING",
-                  "msg": "Cưỡng ép layout đồng bộ: Làm chậm khởi động app từ 200-500ms và gây giật khung hình khi lướt App Switcher."
-              },
-              {
-                  "pattern": r"(malloc_zone_pressure_relief|_flushSharedImageCache)",
-                  "guard": None,
-                  "category": "Lag Switcher",
-                  "severity": "WARNING",
-                  "msg": "Xả RAM đồ họa quá đà: Làm mất bộ đệm snapshot của App Switcher."
-              },
-              {
-                  "pattern": r"MSHookMessageEx",
-                  "guard": None,
-                  "category": "Xung đột Hooks",
-                  "severity": "WARNING",
-                  "msg": "Dùng MSHookMessageEx song song với Logos dễ làm hỏng chuỗi con trỏ %orig."
-              },
-
-              # --- 4. CÁC TÍNH NĂNG VÀ NHẬN DIỆN PHẦN CỨNG ---
-              {
-                  "pattern": r"supportsDynamicRefresh",
-                  "guard": None,
-                  "category": "iOS 15.0+ Only",
-                  "severity": "INFO",
-                  "msg": "API ProMotion chỉ có trên iOS 15+."
-              },
-              {
-                  "pattern": r"HardwareHasNative120Hz",
-                  "guard": None,
-                  "category": "Phần cứng 120Hz Native",
-                  "severity": "INFO",
-                  "msg": "Nhận diện màn hình 120Hz vật lý (iPhone 13 Pro -> 15 Pro Max)."
-              },
-              {
-                  "pattern": r"Titanium_IsClassicHomeButtonDevice",
-                  "guard": None,
-                  "category": "Phần cứng Nút Home (A9-A11)",
-                  "severity": "INFO",
-                  "msg": "Phân nhánh xử lý cho iPhone 6s, 7, 7P, 8, 8P, SE."
-              },
-              {
-                  "pattern": r"UIApplicationDidFinishLaunchingNotification",
-                  "guard": None,
-                  "category": "Cứu hộ Treo Reboot",
-                  "severity": "INFO",
-                  "msg": "Cơ chế hoãn nạp bảo vệ SpringBoard an toàn khi vừa reboot jailbreak."
               }
           ]
 
@@ -108,15 +98,10 @@
                   if f.endswith(EXTENSIONS) or f in ['Makefile', 'control']:
                       files_list.append(os.path.join(root, f))
 
-          critical_errors = 0
-          warnings = 0
-          dist_map = {}
-          issues = []
+          critical_errors = []
+          all_source = ""
 
-          print("🔍 [BƯỚC 1/2] Đang quét toàn bộ file kiểm tra cú pháp và quyền Rootless/RootHide...")
-
-          all_source_code = ""
-
+          # Quét cấu trúc từng file
           for fpath in files_list:
               try:
                   with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
@@ -124,143 +109,164 @@
                       lines = content.splitlines()
 
                   if fpath.endswith(('.xm', '.x', '.m', '.mm')):
-                      all_source_code += "\n" + content
+                      all_source += "\n" + content
 
-                  # Kiểm tra cấu trúc đóng/mở Logos
+                  # Bắt lệch thẻ Logos %hook / %group vs %end
                   if fpath.endswith(('.xm', '.x')):
                       hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
                       groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
                       subclasses = len(re.findall(r"^\s*%subclass\b", content, re.MULTILINE))
                       ends = len(re.findall(r"^\s*%end\b", content, re.MULTILINE))
-                      required_ends = hooks + groups + subclasses
+                      req = hooks + groups + subclasses
 
-                      if required_ends != ends:
-                          critical_errors += 1
-                          issues.append({
+                      if req != ends:
+                          critical_errors.append({
                               "file": fpath,
-                              "line": 0,
-                              "sev": "CRITICAL",
-                              "cat": "Lỗi Cú Pháp Logos",
-                              "msg": f"Lệch cấu trúc khối: Tìm thấy {hooks} %hook, {groups} %group, {subclasses} %subclass (cần {required_ends} %end), nhưng chỉ có {ends} %end.",
-                              "snippet": "Kiểm tra lại toàn bộ các cặp đóng %end."
+                              "line": "N/A",
+                              "cat": "Lệch Thẻ Logos",
+                              "detail": f"Có {hooks} %hook, {groups} %group, {subclasses} %subclass (cần {req} %end), nhưng chỉ tìm thấy {ends} %end.",
+                              "code": "Cần đồng bộ lại các cặp đóng %end"
                           })
 
-                  # Quét chi tiết từng dòng
+                  # Quét từng dòng theo luật
                   for idx, line in enumerate(lines, 1):
-                      stripped = line.strip()
-                      if stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+                      sline = line.strip()
+                      if sline.startswith("//") or sline.startswith("/*") or sline.startswith("*"):
                           continue
 
-                      for rule in AUDIT_RULES:
-                          if re.search(rule["pattern"], line):
-                              cat = rule["category"]
-                              if cat not in dist_map:
-                                  dist_map[cat] = []
-                              dist_map[cat].append(f"{os.path.basename(fpath)}:{idx}")
-
+                      for r in RULES:
+                          if re.search(r["pattern"], line):
                               has_guard = False
-                              if rule["guard"]:
-                                  start_ctx = max(0, idx - 12)
-                                  context_lines = "\n".join(lines[start_ctx:idx])
-                                  if re.search(rule["guard"], context_lines):
+                              if r["guard"]:
+                                  ctx_start = max(0, idx - 12)
+                                  ctx = "\n".join(lines[ctx_start:idx])
+                                  if re.search(r["guard"], ctx):
                                       has_guard = True
 
-                              if rule["guard"] and not has_guard:
-                                  critical_errors += 1
-                                  issues.append({
+                              if not has_guard:
+                                  critical_errors.append({
                                       "file": fpath,
                                       "line": idx,
-                                      "sev": "CRITICAL",
-                                      "cat": rule["category"],
-                                      "msg": rule["msg"],
-                                      "snippet": stripped[:80]
+                                      "cat": r["cat"],
+                                      "detail": r["msg"],
+                                      "code": sline[:80]
                                   })
-                              elif not rule["guard"]:
-                                  if rule["severity"] == "CRITICAL":
-                                      critical_errors += 1
-                                  elif rule["severity"] == "WARNING":
-                                      warnings += 1
-
-                                  if rule["severity"] in ["CRITICAL", "WARNING"]:
-                                      issues.append({
-                                          "file": fpath,
-                                          "line": idx,
-                                          "sev": rule["severity"],
-                                          "cat": rule["category"],
-                                          "msg": rule["msg"],
-                                          "snippet": stripped[:80]
-                                      })
               except Exception as e:
-                  print(f"Không thể đọc file {fpath}: {e}")
+                  print(f"Lỗi đọc file {fpath}: {e}")
 
-          # --- 2. BẮT LỖI THIẾU CODE / CODE KHÔNG HOẠT ĐỘNG TRONG PROJECT ---
-          print("🔍 [BƯỚC 2/2] Đang kiểm tra tính toàn vẹn và các thành phần cốt lõi...")
-
-          # Kiểm tra xem có khai báo Group nhưng quên %init(Group_Name) không
-          defined_groups = re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source_code, re.MULTILINE)
-          for grp in set(defined_groups):
-              if not re.search(rf"%init\s*\(\s*{grp}\s*\)", all_source_code):
-                  warnings += 1
-                  issues.append({
+          # Kiểm tra code thiếu: Group định nghĩa nhưng không %init
+          defined_grps = re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE)
+          for grp in set(defined_grps):
+              if not re.search(rf"%init\s*\(\s*{grp}\s*\)", all_source):
+                  critical_errors.append({
                       "file": "Tweak.xm",
-                      "line": 0,
-                      "sev": "WARNING",
+                      "line": "N/A",
                       "cat": "Thiếu Code Kích Hoạt",
-                      "msg": f"Group `{grp}` đã được viết mã nhưng KHÔNG được gọi `%init({grp})` trong %ctor -> Code này sẽ hoàn toàn không hoạt động!",
-                      "snippet": f"%group {grp}"
+                      "detail": f"Group `{grp}` được khai báo nhưng KHÔNG có `%init({grp})` trong %ctor -> Tính năng này sẽ bị vô hiệu hóa!",
+                      "code": f"%group {grp}"
                   })
 
-          # Kiểm tra xem hook CADisplayLink có đầy đủ API để ép tần số quét không
-          if "CADisplayLink" in all_source_code:
-              if "preferredFramesPerSecond:" not in all_source_code and "setPreferredFramesPerSecond:" not in all_source_code:
-                  warnings += 1
-                  issues.append({
-                      "file": "Tweak.xm",
-                      "line": 0,
-                      "sev": "WARNING",
-                      "cat": "Thiếu Code FPS",
-                      "msg": "Có hook CADisplayLink nhưng thiếu method `setPreferredFramesPerSecond:` -> Không thể giới hạn 60fps an toàn.",
-                      "snippet": "%hook CADisplayLink"
-                  })
-
-          # Kiểm tra file cấu hình .plist
-          plist_found = any(f.endswith('.plist') for f in files_list)
-          if not plist_found:
-              critical_errors += 1
-              issues.append({
-                  "file": "Project Root",
-                  "line": 0,
-                  "sev": "CRITICAL",
-                  "cat": "Thiếu Tệp Filter",
-                  "msg": "Không tìm thấy file .plist bộ lọc bundle (vd: BoostiPhone6sCore.plist) -> Dylib sẽ không biết nạp vào đâu!",
-                  "snippet": "Tạo file <TweakName>.plist cùng cấp Makefile"
-              })
-
-          # In bảng báo cáo
-          print("\n" + "=" * 80)
-          print("📊 BÁO CÁO PHÂN PHỐI TÍNH NĂNG & DẢI HỖ TRỢ THEO TỪNG PHIÊN BẢN IOS")
-          print("=" * 80)
-          for category, occs in sorted(dist_map.items()):
-              loc_preview = ", ".join(occs[:6]) + ("..." if len(occs) > 6 else "")
-              print(f"👉 \033[1;36m{category:<32}\033[0m : {loc_preview}")
-
-          if issues:
+          # Xuất báo cáo nếu phát hiện lỗi
+          if critical_errors:
               print("\n" + "=" * 80)
-              print("🚨 DANH SÁCH LỖI PHÂN QUYỀN, THIẾU CODE & ĐIỂM NGHẼN CẦN XỬ LÝ")
+              print("🚨 CỔNG BẢO VỆ PHÁT HIỆN LỖI CHÍ MẠNG! KHÔNG THỂ BẮT ĐẦU BIÊN DỊCH")
               print("=" * 80)
-              for item in issues:
-                  color = "\033[1;31m" if item["sev"] == "CRITICAL" else "\033[1;33m"
-                  loc = f"{item['file']}:{item['line']}" if item['line'] > 0 else item['file']
-                  print(f"{color}[{item['sev']}] [{item['cat']}] tại {loc}\033[0m")
-                  print(f"   Trích đoạn : {item['snippet']}")
-                  print(f"   Hướng xử lý: {item['msg']}\n")
-
-          print("=" * 80)
-          print(f"TỔNG KẾT: {critical_errors} Lỗi Chí Mạng (Sẽ dừng build) | {warnings} Cảnh Báo Hiệu Năng/Thiếu Code\n")
-
-          if critical_errors > 0:
-              print("❌ PHÁT HIỆN LỖI PHÂN QUYỀN HOẶC CÚ PHÁP CÓ THỂ GÂY TREO/CRASH! DỪNG BUILD.")
+              for err in critical_errors:
+                  print(f"❌ [LỖI] [{err['cat']}] tại {err['file']}:{err['line']}")
+                  print(f"   Đoạn code: {err['code']}")
+                  print(f"   Hướng dẫn: {err['detail']}\n")
+              print("=" * 80)
+              print(f"Tổng cộng phát hiện {len(critical_errors)} lỗi. Dừng workflow ngay tại bước kiểm tra.\n")
               sys.exit(1)
           else:
-              print("✅ Mã nguồn vượt qua kiểm toán an toàn! Đủ điều kiện build cho iOS 14 -> 16+.")
+              print("\n" + "=" * 80)
+              print("✅ KIỂM TOÁN HOÀN TẤT: Mã nguồn hợp lệ, an toàn cho cả iOS 14 - 16+ và RootHide!")
+              print("=" * 80 + "\n")
           EOF
+
+      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ TỰ ĐỘNG BÓC TÁCH LỖI MÃ NGUỒN ---
+      - name: Build Package
+        run: |
+          cd $GITHUB_WORKSPACE
+          
+          if [ ! -f Makefile ]; then
+            echo "❌ Error: Không tìm thấy Makefile tại thư mục gốc!"
+            exit 1
+          fi
+          
+          rm -rf packages/ obj/ .theos/
+          
+          if [ -d "postinst" ]; then chmod 755 postinst; fi
+          if [ -d "prerm" ]; then chmod 755 prerm; fi
+          
+          # Lưu toàn bộ log đầu ra của make vào tệp tạm thời
+          BUILD_LOG_FILE="/tmp/theos_build.log"
+          
+          set +e
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE"
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "======================================================================"
+            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG QUÉT CÁC DÒNG LỖI CỤ THỂ..."
+            echo "======================================================================"
+            
+            # Tìm kiếm các mẫu lỗi chuẩn của Clang, GCC và Logos: "filename:line: error" hoặc "filename:line:col: error"
+            ERROR_ENTRIES=$(grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" | head -n 5)
+            
+            if [ -n "$ERROR_ENTRIES" ]; then
+              while IFS= read -r line; do
+                ERR_FILE=$(echo "$line" | cut -d':' -f1)
+                ERR_LINE=$(echo "$line" | cut -d':' -f2)
+                ERR_MSG=$(echo "$line" | cut -d':' -f3-)
+                
+                echo ""
+                echo "----------------------------------------------------------------------"
+                echo "📍 TỆP TIN: $ERR_FILE"
+                echo "⚠️  DÒNG SỐ: $ERR_LINE"
+                echo "❌ THÔNG BÁO: $ERR_MSG"
+                echo "----------------------------------------------------------------------"
+                
+                # Tìm đường dẫn thực tế của tệp nếu đường dẫn trong log là tương đối hoặc nằm trong thư mục con
+                ACTUAL_PATH=""
+                if [ -f "$ERR_FILE" ]; then
+                  ACTUAL_PATH="$ERR_FILE"
+                else
+                  FOUND_PATH=$(find . -name "$(basename "$ERR_FILE")" -not -path "*/.theos/*" -not -path "*/.git/*" | head -n 1)
+                  if [ -n "$FOUND_PATH" ]; then
+                    ACTUAL_PATH="$FOUND_PATH"
+                  fi
+                fi
+
+                if [ -n "$ACTUAL_PATH" ] && [ -f "$ACTUAL_PATH" ]; then
+                  START_LINE=$((ERR_LINE > 15 ? ERR_LINE - 15 : 1))
+                  END_LINE=$((ERR_LINE + 15))
+                  echo "🔍 ĐOẠN CODE XUNG QUANH DÒNG $ERR_LINE ($ACTUAL_PATH):"
+                  nl -ba "$ACTUAL_PATH" | sed -n "${START_LINE},${END_LINE}p"
+                else
+                  echo "⚠ Không tìm thấy tệp nguồn thực tế tương ứng với: $ERR_FILE"
+                fi
+              done <<< "$ERROR_ENTRIES"
+            else
+              echo "⚠️ Không bắt được định dạng tệp:dòng thông thường. 30 dòng log cuối cùng:"
+              tail -n 30 "$BUILD_LOG_FILE"
+            fi
+            
+            echo "======================================================================"
+            exit 1
+          fi
+          
+          ls -lh packages/*.deb || { 
+            echo "❌ Build hoàn tất nhưng không tìm thấy file .deb!"; 
+            exit 1; 
+          }
+
+      # --- BƯỚC 4: TẢI FILE DEB LÊN ARTIFACTS ---
+      - name: Upload Deb Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoostiPhone6s-Rootless-Deb
+          path: packages/*.deb
+          retention-days: 7
