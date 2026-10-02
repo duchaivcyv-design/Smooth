@@ -1160,7 +1160,7 @@ static BoostConfigV285Pro *CFG285 = nil;
     return 120;
 }
 
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (!IS_ACTIVE) {
             %orig(range);
@@ -1186,7 +1186,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook CAAnimation
 
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (g_SystemMasterReady && IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
