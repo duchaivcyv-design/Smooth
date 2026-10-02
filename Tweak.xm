@@ -233,7 +233,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)arg1;
+- (void)textChanged:(id)1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -330,6 +330,7 @@ extern "C" {
 - (NSArray *)displays;
 @end
 
+// ĐÃ GỘP CHUẨN: SBApplication chỉ khai báo 1 lần duy nhất chứa đủ method willActivate
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
 - (NSString *)displayName;
@@ -337,6 +338,7 @@ extern "C" {
 - (BOOL)isRunning;
 - (BOOL)isClassic;
 - (void)didExitWithContext:(id)context;
+- (void)willActivate;
 @end
 
 @interface SBApplicationController : NSObject
@@ -615,10 +617,6 @@ extern "C" {
 @interface SBAppSwitcherSnapshotImageCache : NSObject
 - (void)reloadImagesForAllItems;
 - (void)_purgeAllSnapshots;
-@end
-
-@interface SBApplication : NSObject
-- (void)willActivate;
 @end
 
 @interface SBAppLaunchSettings : NSObject
@@ -1305,11 +1303,12 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 
 // ====================================================================================================
-// NHÓM 1: CẢM ỨNG 0MS & CHỐNG RUNG CHỮ, LỆCH PIXEL ICON KHI ẤN VÀO APP
+// NHÓM 1: CẢM ỨNG 0MS & CHỐNG RUNG CHỮ KHI MỞ APP (ĐÃ TỐI ƯU TOÀN DIỆN)
 // ====================================================================================================
 
 %group Group_ZeroLatency_Touch_Opt
 
+// 1. TRIỆT TIÊU ĐỘ TRỄ NHẬN DIỆN CỬ CHỈ GESTURE
 %hook UIGestureRecognizer
 - (BOOL)delaysTouchesBegan {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
@@ -1332,6 +1331,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
+// 2. PHẢN HỒI NÚT BẤM VÀ ĐIỀU HƯỚNG TỨC THÌ
 %hook UIControl
 - (NSTimeInterval)_touchDelayThreshold {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return 0.0;
@@ -1340,16 +1340,12 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
-        Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig(touches, event);
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) {
-        Titanium_TriggerInstantTouchBurst();
-    }
     %orig(touches, event);
 }
 
@@ -1362,40 +1358,29 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
-// Khóa chống rung chữ trên mọi UILabel và Layer text khi mở app
+// 3. KHÓA TỌA ĐỘ NGUYÊN PIXEL CHỐNG RUNG CHỮ (CHỈ LÀM TRÒN KHI BỊ LỆCH SUB-PIXEL)
 %hook UILabel
 - (void)setFrame:(CGRect)frame {
     if (IS_ACTIVE) {
-        frame = CGRectIntegral(frame); // Khóa tọa độ nguyên pixel, dứt điểm rung chữ
+        // Chỉ làm tròn nếu toạ độ bị lẻ thập phân, tránh tính toán thừa trong feed dài
+        if (frame.origin.x != floorf(frame.origin.x) || frame.origin.y != floorf(frame.origin.y)) {
+            frame = CGRectIntegral(frame);
+        }
     }
     %orig(frame);
 }
+
 - (void)setBounds:(CGRect)bounds {
     if (IS_ACTIVE) {
-        bounds = CGRectIntegral(bounds);
+        if (bounds.origin.x != floorf(bounds.origin.x) || bounds.origin.y != floorf(bounds.origin.y)) {
+            bounds = CGRectIntegral(bounds);
+        }
     }
     %orig(bounds);
 }
 %end
 
-%hook SBIconView
-- (void)setHighlighted:(BOOL)highlighted {
-    if (highlighted && IS_ACTIVE && CFG285.touchResponseBoost) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(highlighted);
-}
-
-- (void)setTouchDownInIcon:(BOOL)touchDown {
-    if (touchDown && IS_ACTIVE && CFG285.touchResponseBoost) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(touchDown);
-}
-%end
-
+// 4. ĐÓN ĐẦU CHẠM TOÀN MÀN HÌNH TẠI CỬA SỔ GỐC (0MS BURST)
 %hook UIWindow
 - (BOOL)_shouldDelayTouchForCancelEvents {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
@@ -1403,6 +1388,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 
 - (void)sendEvent:(UIEvent *)event {
+    // 0 = UIEventTypeTouches: Đón đầu ngay khi ngón tay vừa chạm vào kính cảm ứng
     if (IS_ACTIVE && CFG285.touchResponseBoost && event.type == 0) {
         Titanium_TriggerInstantTouchBurst();
     }
@@ -1995,63 +1981,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 // ====================================================================================================
-// 2. BẬT SNAPSHOT BẤT ĐỒNG BỘ & GIỮ ẢNH ĐỆM TRONG BỘ NHỚ (XÓA BỎ MÀN HÌNH ĐEN & KHỰNG SWITCHER)
-// ====================================================================================================
-
-// Cho phép render layout app bất đồng bộ: Mở app tức thì, xóa sạch màn hình đen
-%hook SBFluidSwitcherModifier
-- (BOOL)shouldasyncRenderAppLayouts {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-%end
-
-// Giữ snapshot trong bộ nhớ đệm: Vuốt đa nhiệm không bị nạp lại từ ổ cứng, hết giật khi dừng tay
-%hook SBAppSwitcherSettings
-- (BOOL)shouldKeepAppSnapshotsInMemory {
-    if (IS_ACTIVE) return YES; // Giữ lại ảnh chụp tạm thời để chuyển app mượt mà 60 FPS
-    return %orig;
-}
-
-- (CGFloat)decelerationRate {
-    if (IS_ACTIVE) return UIScrollViewDecelerationRateNormal;
-    return %orig;
-}
-
-// Giảm tải tính toán bóng mờ đa nhiệm để dồn toàn bộ GPU cho hiệu ứng chuyển cảnh
-- (BOOL)shouldSimplifyForOptions:(long long)options {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-%end
-
-// ====================================================================================================
-// 3. TĂNG TỐC HÀNG ĐỢI VẼ ĐA NHIỆM & ITEM CONTAINER
-// ====================================================================================================
-
-%hook SBAppSwitcherController
-- (void)viewWillAppear:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(animated);
-}
-%end
-
-%hook SBFluidSwitcherItemContainer
-- (void)prepareForReuse {
-    %orig;
-    if (IS_ACTIVE) {
-        UIView *v = (UIView *)self;
-        v.layer.drawsAsynchronously = YES; // Vẽ khung thẻ app bất đồng bộ, chống khựng khung hình
-    }
-}
-%end
-
-%end
-
-// ====================================================================================================
 // NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (TURBO ENGINE)
 // ====================================================================================================
 
@@ -2288,7 +2217,10 @@ static volatile BOOL g_isContinuousSwiping = NO;
 
 %group Group_Display_SpringBoardV285
 
+// ====================================================================================================
 // 1. KHÓA CỨNG HÌNH NỀN TĨNH & ĐÓNG BĂNG MÔ HÌNH 3D (GIẢI PHÓNG 80% TẢI GPU)
+// ====================================================================================================
+
 %hook SBWallpaperController
 - (double)wallpaperScaleForVariant:(long long)variant {
     if (IS_ACTIVE) return 1.0;
@@ -2303,44 +2235,37 @@ static volatile BOOL g_isContinuousSwiping = NO;
 }
 %end
 
-// 2. KHỬ TRỄ BẤM ICON: Đặt 0.05s để ngón tay lướt ngang trang KHÔNG kích hoạt highlight giả
+// ====================================================================================================
+// 2. KHỬ TRỄ BẤM ICON: NẢY TỨC THÌ 0MS NHƯNG KHÔNG GIẬT KHI LƯỚT NGANG
+// ====================================================================================================
+
 %hook SBIconView
 - (double)highlightDelay {
-    if (IS_ACTIVE) return 0.05; // 50ms: Vừa đủ để bấm mở app nảy ngay, vừa không bị giật khi lướt ngang
-    return %orig;
-}
-%end
-
-// 3. TỐI ƯU CỬ CHỈ LIÊN HOÀN & TRIỆT TIÊU ĐỘ TRỄ VUỐT ĐÁY (LITTLE12 & 26ANIM)
-%hook SBFluidSwitcherGestureWorkspaceTransaction
-- (BOOL)_shouldSuppressGestures {
-    if (IS_ACTIVE) return NO;
+    if (IS_ACTIVE) return 0.05; // 50ms: Ngăn kích hoạt highlight giả khi lướt ngang trang
     return %orig;
 }
 
-- (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-%end
-
-%hook SBHomeGestureSettings
-- (double)homeGestureDelayDuration {
-    if (IS_ACTIVE) return 0.0;
-    return %orig;
-}
-%end
-
-// Đón đầu cử chỉ vuốt đáy ngay khoảnh khắc chạm: Kích xung nhịp trước 0ms
-%hook SBHomeGestureInteraction
-- (void)_handleGestureBegan:(id)gesture {
-    if (IS_ACTIVE) {
+// Bấm chạm icon là nảy hiệu ứng và kích 120Hz/60Hz ngay tại 0ms
+- (void)setHighlighted:(BOOL)highlighted {
+    if (highlighted && IS_ACTIVE && CFG285.touchResponseBoost) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
     }
-    %orig(gesture);
+    %orig(highlighted);
+}
+
+- (void)setTouchDownInIcon:(BOOL)touchDown {
+    if (touchDown && IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(touchDown);
 }
 %end
+
+// ====================================================================================================
+// 3. TỐI ƯU CỬ CHỈ ĐA NHIỆM SPRINGBOARD (ĐÃ XÓA CÁC HOOK TRÙNG VỚI GROUP SWITCHER VÀ GIỮ NGUYÊN 26ANIM)
+// ====================================================================================================
 
 %hook SBFluidSwitcherViewController
 - (void)handleFluidSwitcherGesture:(id)gesture {
@@ -2352,34 +2277,14 @@ static volatile BOOL g_isContinuousSwiping = NO;
 }
 %end
 
-// 4. THOÁT APP KHÔNG KHỰNG (KHÓA XUNG NGAY TỪ ĐẦU, DỜI DỌN RAM SAU 1.5S)
-%hook SBAppToHomeWorkspaceTransaction
-- (BOOL)shouldAnimateOrientationChangeOnCompletion {
-    return NO;
-}
+// ĐÃ GỠ BỎ: SBHomeGestureSettings (homeGestureDelayDuration) để 26Anim tính vector gia tốc văng chuẩn xác!
+// ĐÃ GỠ BỎ: SBFluidSwitcherGestureWorkspaceTransaction, SBHomeGestureInteraction, SBAppToHomeWorkspaceTransaction
+// (Các hook này đã nằm trọn vẹn và an toàn trong Group_Switcher30Apps_Virtualization, tránh xung đột kép)
 
-- (void)_willBegin {
-    if (IS_ACTIVE) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig;
-}
+// ====================================================================================================
+// 4. TRIỆT TIÊU LAG KHI CHỤP MÀN HÌNH
+// ====================================================================================================
 
-- (void)_didComplete {
-    %orig;
-    if (IS_ACTIVE) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            Titanium_EnableZeroLatencyPipeline();
-        });
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        });
-    }
-}
-%end
-
-// 5. TRIỆT TIÊU LAG KHI CHỤP MÀN HÌNH
 %hook SBScreenshotManager
 - (void)saveScreenshotsWithCompletion:(id)completion {
     if (IS_ACTIVE) Titanium_TriggerInstantTouchBurst();
@@ -2387,7 +2292,10 @@ static volatile BOOL g_isContinuousSwiping = NO;
 }
 %end
 
-// 6. KÉO CONTROL CENTER & TRUNG TÂM THÔNG BÁO TỨC THÌ (0MS DELAY)
+// ====================================================================================================
+// 5. KÉO CONTROL CENTER & TRUNG TÂM THÔNG BÁO TỨC THÌ (0MS DELAY)
+// ====================================================================================================
+
 %hook SBControlCenterController
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE) {
@@ -2408,7 +2316,10 @@ static volatile BOOL g_isContinuousSwiping = NO;
 }
 %end
 
-// 7. SỬA DỨT ĐIỂM GIẬT/GỢN KHI LƯỚT TRANG MÀN HÌNH CHÍNH (SMOOTH HOMESCREEN PAGING)
+// ====================================================================================================
+// 6. SỬA DỨT ĐIỂM GIẬT/GỢN KHI LƯỚT TRANG MÀN HÌNH CHÍNH (SMOOTH HOMESCREEN PAGING)
+// ====================================================================================================
+
 %hook SBIconScrollView
 // Cho phép vuốt là trang trượt đi ngay lập tức
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
@@ -2421,7 +2332,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
     return YES;
 }
 
-// Duy trì xung nhịp 120FPS/60FPS phẳng lỳ xuyên suốt quá trình kéo trang
+// Duy trì xung nhịp phẳng lỳ xuyên suốt quá trình kéo trang
 - (void)_notifyDidScroll {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
@@ -2460,7 +2371,10 @@ static volatile BOOL g_isContinuousSwiping = NO;
 }
 %end
 
-// 8. CÁC TIỆN ÍCH KHÁC CỦA SPRINGBOARD
+// ====================================================================================================
+// 7. CÁC TIỆN ÍCH KHÁC CỦA SPRINGBOARD
+// ====================================================================================================
+
 %hook SBFolderControllerAnimationSettings
 - (double)duration {
     return %orig;
@@ -2475,7 +2389,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 // ====================================================================================================
-// 9. ÉP TỐC ĐỘ LOAD APP SIÊU TỐC & TRIỆT TIÊU ĐỘ TRỄ MỞ ỨNG DỤNG (ULTRA-FAST LAUNCH)
+// 8. ÉP TỐC ĐỘ LOAD APP SIÊU TỐC & TRIỆT TIÊU ĐỘ TRỄ MỞ ỨNG DỤNG (ULTRA-FAST LAUNCH)
 // ====================================================================================================
 
 // Bơm xung CPU/GPU cực đại ngay khoảnh khắc chạm icon mở app
@@ -2645,30 +2559,34 @@ static volatile BOOL g_isContinuousSwiping = NO;
 
 %group Group_UIKit_ThirdParty_IsolatedV285
 
+// 1. KÍCH XUNG KHI CỬA SỔ CHÍNH ĐƯỢC KÍCH HOẠT
 %hook UIWindow
 - (void)makeKeyAndVisible {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
 }
 
-- (void)sendEvent:(UIEvent *)event {
-    if (IS_ACTIVE) {
-        Titanium_TriggerInstantTouchBurst();
-    }
-    %orig(event);
-}
+// ĐÃ GỠ BỎ sendEvent: để tránh kích xung kép (đã do Group_ZeroLatency_Touch_Opt đảm nhiệm)
 %end
 
+// 2. ƯU TIÊN LUỒNG CAO NHẤT KHI NẠP VIEW CONTROLLER CỦA APP BÊN THỨ BA
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
-    if (IS_ACTIVE) Titanium_LockMainThreadFast();
+    if (IS_ACTIVE) {
+        Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+    }
     %orig(animated);
 }
+
 - (void)viewDidLoad {
-    if (IS_ACTIVE) Titanium_LockMainThreadFast();
+    if (IS_ACTIVE) {
+        Titanium_LockMainThreadFast();
+    }
     %orig;
 }
 %end
