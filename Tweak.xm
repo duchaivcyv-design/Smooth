@@ -1494,7 +1494,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 // ====================================================================================================
 
 %group Group_ZeroLatencyTouch_PhysicsV285
-
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG285.touchResponseBoost && event.type == UIEventTypeTouches) {
@@ -1511,8 +1510,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     }
     %orig(event);
 }
-%end
-
 - (void)setRootViewController:(UIViewController *)rootViewController {
     if (IS_ACTIVE && CFG285.turboAppLaunch) Titanium_BoostCurrentThreadBriefly();
     %orig(rootViewController);
