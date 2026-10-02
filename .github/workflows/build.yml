@@ -310,7 +310,7 @@ jobs:
               print("=" * 80 + "\n")
           EOF
 
-      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ ĐÓNG GÓI ---
+      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ ĐÓNG GÓI (BẮT CHÍNH XÁC SỐ DÒNG & IN CODE LỖI) ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -326,6 +326,7 @@ jobs:
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
           set +e
+          # Chạy biên dịch và ghi trọn vẹn nhật ký ra file log
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           set -e
@@ -333,16 +334,66 @@ jobs:
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "======================================================================"
-            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG BÓC TÁCH LỖI VÀ SỐ DÒNG..."
+            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH THỰC TẾ TỪ THEOS / CLANG!"
             echo "======================================================================"
+
+            python3 - << 'PYEOF'
+            import re, os, sys
+
+            log_file = "/tmp/theos_build.log"
+            if not os.path.exists(log_file):
+                print("❌ Không tìm thấy tệp log biên dịch.")
+                sys.exit(1)
+
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                log_content = f.read()
+
+            # Mẫu 1: Bắt lỗi của Theos / Logos (VD: Tweak.xm:1153: error: Invalid argument structure in %orig)
+            # Mẫu 2: Bắt lỗi của Clang (VD: Tweak.xm:140:10: error: functions that differ only in their return type...)
+            error_pattern = re.compile(r'^((?:[^\s:]+\.(?:xm|x|m|mm|h|c|cpp))):([0-9]+)(?::([0-9]+))?:\s*(error:.+)$', re.MULTILINE)
             
-            # Trích xuất chính xác tên file, số dòng, số cột và mô tả lỗi từ Clang và Logos
-            grep -E '(\.xm|\.x|\.m|\.mm|\.h|\.c|\.cpp):[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" || \
-            grep -E '(\.xm|\.x):[0-9]+:[[:space:]]+error:' "$BUILD_LOG_FILE" || \
-            grep -E 'error:[[:space:]]+' "$BUILD_LOG_FILE" || \
-            tail -n 40 "$BUILD_LOG_FILE"
+            matches = list(error_pattern.finditer(log_content))
             
-            echo "======================================================================"
+            if not matches:
+                # Nếu không tìm thấy dạng chuẩn, in 35 dòng cuối của log
+                print("⚠️ Chi tiết lỗi tổng quát từ Theos:")
+                print("\n".join(log_content.strip().splitlines()[-35:]))
+            else:
+                print(f"👉 Tìm thấy {len(matches)} vị trí lỗi cụ thể trong mã nguồn:\n")
+                for idx, match in enumerate(matches, 1):
+                    file_name = match.group(1)
+                    line_num = int(match.group(2))
+                    col_num = match.group(3)
+                    err_msg = match.group(4)
+
+                    col_str = f":{col_num}" if col_num else ""
+                    print(f"----------------------------------------------------------------------")
+                    print(f"🔴 [LỖI #{idx}] {file_name} -> DÒNG {line_num}{col_str}")
+                    print(f"📌 Thông báo: {err_msg}")
+                    print(f"----------------------------------------------------------------------")
+
+                    # Đọc file nguồn thực tế để in đúng đoạn code xung quanh dòng lỗi
+                    if os.path.exists(file_name):
+                        try:
+                            with open(file_name, "r", encoding="utf-8", errors="ignore") as src_f:
+                                src_lines = src_f.readlines()
+                            
+                            start_line = max(1, line_num - 3)
+                            end_line = min(len(src_lines), line_num + 3)
+
+                            print("🔍 Ngữ cảnh code thực tế trong file:")
+                            for cur in range(start_line, end_line + 1):
+                                prefix = "👉 " if cur == line_num else "   "
+                                line_text = src_lines[cur - 1].rstrip()
+                                print(f"{prefix}{cur:4d} | {line_text}")
+                            print("")
+                        except Exception as e:
+                            print(f"   (Không thể đọc nội dung file: {e})")
+                    else:
+                        print(f"   (File {file_name} không tồn tại trên máy chủ)")
+
+            print("======================================================================")
+            PYEOF
             exit 1
           fi
           
