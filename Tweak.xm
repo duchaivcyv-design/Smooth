@@ -1053,6 +1053,10 @@ static BoostConfigV285Pro *CFG285 = nil;
 // NHÓM 2: PIP & CỬA SỔ NỔI ĐỒNG BỘ TỨC THỜI
 // ====================================================================================================
 
+// ====================================================================================================
+// NHÓM 2: PIP & CỬA SỔ NỔI ĐỒNG BỘ TỨC THỜI
+// ====================================================================================================
+
 %group Group_V285_FloatingWindow_PiP
 
 %hook PGPictureInPictureRemoteObject
@@ -1131,7 +1135,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 // ====================================================================================================
-// NHÓM 3: SPRINGBOARD DISPLAY & ĐIỀU TIẾT HZ/FPS CHO MÀN HÌNH CHÍNH
+// NHÓM 3: SPRINGBOARD DISPLAY & ĐIỀU TIẾT HZ/FPS CHO MÀN HÌNH CHÍNH (DUY NHẤT 1 NƠI)
 // ====================================================================================================
 
 %group Group_Display_SpringBoardV285
@@ -1480,7 +1484,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 // ====================================================================================================
-// NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & BÙ ĐẮP MÀN HÌNH LINH KIỆN (BỔ SUNG KHỚP %INIT)
+// NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & BÙ ĐẮP MÀN HÌNH LINH KIỆN
 // ====================================================================================================
 
 %group Group_ZeroLatencyTouch_PhysicsV285
@@ -1514,97 +1518,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 // ====================================================================================================
-// 2. GIẢ LẬP PROMOTION 120HZ MƯỢT MÀ (KHÔNG DESYNC, KHÔNG DROP FPS)
-// ====================================================================================================
-
-%hook CADisplayLink
-
-- (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    // Nếu là thiết bị có màn 120Hz gốc, tôn trọng thiết lập của app
-    if (HardwareHasNative120Hz()) {
-        %orig(fps);
-        return;
-    }
-    // Màn 60Hz vật lý: Giới hạn trần 60fps để tránh tràn pipeline GPU
-    NSInteger safeFPS = (fps > 60) ? 60 : fps;
-    %orig(safeFPS);
-}
-
-- (NSInteger)preferredFramesPerSecond {
-    return 120; // Báo 120fps cho logic hệ thống và app
-}
-
-// Bọc an toàn: Chỉ kích hoạt trên iOS 15+ để iOS 14 không bị crash "Symbol not found"
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (@available(iOS 15.0, *)) {
-        if (HardwareHasNative120Hz()) {
-            // Màn 120Hz xịn: Mở trọn dải ProMotion 10 - 120Hz
-            CAFrameRateRange fullProMotion = CAFrameRateRangeMake(10.0f, 120.0f, 120.0f);
-            %orig(fullProMotion);
-            return;
-        } else {
-            // Màn 60Hz giả lập: App yêu cầu 120Hz nhưng render giữ vững 60Hz V-Sync
-            CAFrameRateRange smoothRange = CAFrameRateRangeMake(60.0f, 120.0f, 60.0f);
-            %orig(smoothRange);
-            return;
-        }
-    }
-    %orig(range);
-}
-
-- (void)setFrameInterval:(NSInteger)interval {
-    %orig(1);
-}
-
-%end
-
-%hook UIScreen
-
-- (NSInteger)maximumFramesPerSecond {
-    return 120;
-}
-
-- (NSInteger)_maximumFramesPerSecond {
-    return 120;
-}
-
-- (CGFloat)_refreshRate {
-    return 120.0f;
-}
-
-- (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (HardwareHasNative120Hz()) {
-        %orig(rate);
-    } else {
-        %orig(60.0f);
-    }
-}
-
-%end
-
-%hook CADisplay
-
-- (NSInteger)preferredFPS {
-    return 120;
-}
-
-- (void)setPreferredFPS:(NSInteger)fps {
-    if (HardwareHasNative120Hz()) {
-        %orig(fps);
-    } else {
-        %orig(60);
-    }
-}
-
-- (BOOL)supportsDynamicRefresh {
-    return YES;
-}
-
-%end
-%end
-
-// ====================================================================================================
-// 2. TỐI ƯU CẢM ỨNG & CUỘN LƯỚT PROMOTION
+// CẢM ỨNG TOÀN CỤC & TĂNG TỐC CUỘN LƯỚT
 // ====================================================================================================
 
 %hook UIScrollView
@@ -1622,7 +1536,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook CALayer
 
 - (void)setDrawsAsynchronously:(BOOL)flag {
-    // Luôn vẽ bất đồng bộ nhưng không can thiệp sâu vào getter để tránh tràn RAM đồ họa
     %orig(YES);
 }
 
