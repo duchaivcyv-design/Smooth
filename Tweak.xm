@@ -1921,7 +1921,8 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 @interface SBFluidSwitcherGestureWorkspaceTransaction : NSObject
 @end
 
-@interface SBHomeScreenViewController : UIViewController
+// Khai báo interface cho container thẻ đa nhiệm (chống warning/lỗi biên dịch)
+@interface SBFluidSwitcherItemContainer : UIView
 @end
 
 %group Group_Display_SpringBoardV285
@@ -2024,9 +2025,23 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 %end
 
-// 5. CACHE SNAPSHOT & RENDER ĐA NHIỆM BẤT ĐỒNG BỘ
+// 5. CACHE SNAPSHOT & TĂNG TỐC CUỘN THẺ ĐA NHIỆM (HẾT CHẬM / LỪ ĐỪ KHI TÌM TAB)
 %hook SBAppSwitcherSettings
 - (BOOL)shouldKeepAppSnapshotsInMemory {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+
+// Cho phép lướt trớn bay bổng, không bị hãm phanh giật cục khi gạt tìm tab
+- (CGFloat)decelerationRate {
+    if (IS_ACTIVE) {
+        return UIScrollViewDecelerationRateNormal;
+    }
+    return %orig;
+}
+
+// Bỏ tính toán đổ bóng/làm mờ phức tạp khi đang trượt ngang danh sách tab
+- (BOOL)shouldSimplifyForOptions:(long long)options {
     if (IS_ACTIVE) return YES;
     return %orig;
 }
@@ -2034,8 +2049,21 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 
 %hook SBFluidSwitcherModifier
 - (BOOL)shouldasyncRenderAppLayouts {
-    if (IS_ACTIVE) return YES;
+    // Trả về NO để card ứng dụng render trực tiếp từ snapshot, không bị trễ khung hình
+    if (IS_ACTIVE) return NO;
     return %orig;
+}
+%end
+
+// Rasterize lớp đồ họa của từng thẻ giúp lướt qua lại 60fps mượt mà trên chip A9/A10
+%hook SBFluidSwitcherItemContainer
+- (void)prepareForReuse {
+    %orig;
+    if (IS_ACTIVE) {
+        self.layer.drawsAsynchronously = YES;
+        self.layer.shouldRasterize = YES;
+        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
+    }
 }
 %end
 
@@ -2332,6 +2360,153 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 %end
 
 // ====================================================================================================
+// NHÓM TĂNG TỐC BÀN PHÍM, NÚT 3 GẠCH & CHUYỂN TAB ỨNG DỤNG NẶNG
+// ====================================================================================================
+
+@interface UIKeyboardImpl : NSObject
++ (instancetype)activeInstance;
+@end
+
+@interface UIKBRenderConfig : NSObject
+@property (nonatomic, assign) BOOL lightKeyboard;
+@end
+
+@interface UIControl ()
+- (void)sendActionsForControlEvents:(UIControlEvents)controlEvents;
+@end
+
+%group Group_InstantActionAndMenuTransitions_Boost
+
+// 1. TĂNG TỐC BÀN PHÍM: BẬT NẢY TỨC THÌ KHI CHẠM Ô NHẬP LIỆU
+%hook UIKeyboardImpl
+- (void)callShowKeyboard {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig;
+}
+
++ (NSTimeInterval)suppressionIntervalForTouchesOnKeyboard {
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
+}
+%end
+
+%hook UIKBRenderConfig
+- (BOOL)lightKeyboard {
+    // Làm phẳng nền phím, giảm tải GPU khi mở phím trong app nặng
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+%end
+
+%hook UIPeripheralHost
+- (double)getLastTranslateTime {
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
+}
+%end
+
+// 2. TRIỆT TIÊU ĐỘ TRỄ NÚT BẤM (MENU 3 GẠCH, DRAWER, TAB CON, SIDEBAR)
+%hook UIButton
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(touches, event);
+}
+%end
+
+%hook UIControl
+- (void)sendAction:(SEL)action to:(id)target forEvent:(UIEvent *)event {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(action, target, event);
+}
+%end
+
+// 3. KHÔNG NGÂM CỬ CHỈ CHẠM KHI NÚT NẰM TRONG KHUNG CUỘN (SCROLLVIEW / NAVBAR)
+%hook UIScrollView
+- (BOOL)delaysContentTouches {
+    if (IS_ACTIVE) return NO;
+    return %orig;
+}
+%end
+
+// 4. TỐI ƯU VIEW CON KHI MENU / TAB NỘI DUNG DÀY ĐẶC BUNG RA
+%hook UIView
+- (void)addSubview:(UIView *)view {
+    %orig(view);
+    if (IS_ACTIVE && view) {
+        // Tối ưu hóa các lớp bo tròn góc để GPU A9/A10 không phải vẽ lại từng pixel
+        if (view.layer.masksToBounds && view.layer.cornerRadius > 0) {
+            view.layer.shouldRasterize = YES;
+            view.layer.rasterizationScale = [UIScreen mainScreen].scale;
+        }
+    }
+}
+%end
+
+// 5. GIẢM TẢI BLUR MỜ NỀN PHÍA SAU MENU TRƯỢT 3 GẠCH
+%hook UIVisualEffectView
+- (void)setBackgroundEffects:(id)effects {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        %orig(nil);
+        return;
+    }
+    %orig(effects);
+}
+%end
+
+// 6. TĂNG TỐC HOẠT ẢNH TRƯỢT TAB / CHUYỂN MÀN HÌNH CON
+%hook CATransition
+- (void)setDuration:(CFTimeInterval)duration {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        if (duration > 0.15) {
+            duration = duration * 0.75; // Rút ngắn thời gian chuyển cảnh để mở tức thì
+        }
+    }
+    %orig(duration);
+}
+%end
+
+%hook UIViewController
+- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(viewControllerToPresent, flag, completion);
+}
+%end
+
+%hook UINavigationController
+- (void)pushViewController:(UIViewController *)viewController animated:(BOOL)animated {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(viewController, animated);
+}
+%end
+
+%hook UITabBarController
+- (void)setSelectedViewController:(UIViewController *)selectedViewController {
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(selectedViewController);
+}
+%end
+
+%end
+
+// ====================================================================================================
 // RUNTIME TWEAK INITIALIZER & SPRINGBOARD ENTRY POINT
 // ====================================================================================================
 static void Titanium_StartThermalAndChargingWatchdog(void) {
@@ -2357,7 +2532,17 @@ static void Titanium_StartThermalAndChargingWatchdog(void) {
                 }
                 g_isDeviceChargingV285 = (device.batteryState == UIDeviceBatteryStateCharging || device.batteryState == UIDeviceBatteryStateFull);
                 
-                if (currentThermalState >= NSProcessInfoThermalStateSerious || g_isDeviceChargingV285) {
+                // Né thời điểm tay đang chạm/vuốt màn hình
+                CFStringRef currentMode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain());
+                BOOL isUserTouching = NO;
+                if (currentMode) {
+                    if (CFEqual(currentMode, (CFStringRef)UITrackingRunLoopMode)) {
+                        isUserTouching = YES;
+                    }
+                    CFRelease(currentMode);
+                }
+
+                if (!isUserTouching && (currentThermalState >= NSProcessInfoThermalStateSerious || g_isDeviceChargingV285)) {
                     Titanium_BackgroundPurgeMemory();
                 }
             });
@@ -2443,6 +2628,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_FluidTransitions_Pacing);
         %init(Group_FastLaunch_SuperEngineV285);
         %init(Group_Scroll_And_Keyboard_Opt);
+
+        // KÍCH HOẠT NHÓM BÀN PHÍM, MENU 3 GẠCH & CHUYỂN TAB TỨC THÌ
+        %init(Group_InstantActionAndMenuTransitions_Boost);
 
         if (Titanium_IsClassicHomeButtonDevice()) {
             %init(Group_HardwareSegregation_ClassicHomeV285);
@@ -2563,4 +2751,5 @@ static void AppDidFinishLaunchingSafeCallback(CFNotificationCenterRef center, vo
         }
     }
 }
+
 
