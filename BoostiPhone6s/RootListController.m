@@ -625,35 +625,33 @@ static inline NSString *PM_TextV285(NSString *key) {
         }
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
-            @"Enabled": @YES,
-            @"SelectedLanguage": @"auto",
-            @"ProMotionEngineBeta7": @NO,       // Khóa cứng, không thả trôi dynamic
-            @"MetalHexBuffering": @YES,
-            @"KeyboardZeroLagV24": @YES,
-            @"EnableHzControl": @YES,
-            @"TargetRefreshRate": @120,         // Mặc định ép 120Hz siêu mượt
-            @"EnableFPSControl": @YES,
-            @"TargetFPSRate": @120,            // Mặc định ép 120 FPS
-            @"ForceOverclock144Hz": @NO,
-            @"SyncModuleDelay": @YES,
-            @"IsolateRenderPipeline": @YES,
-            @"ColorOs17SmoothEngine": @YES,
-            @"ReduceMultiTaskLag": @YES,
-            @"AntiBlackScreenLaunch": @YES,
-            @"FixAppExitStutter": @YES,
-            @"TouchResponseBoost": @YES,
-            @"QuantumRenderShield": @YES,
-            @"NeuralBufferOpt": @YES,
-            @"PeriodicRamClean": @YES,
-            @"MachVMPurgeRam": @YES,
-            @"AutoCloseBackgroundApp": @NO,
-            @"TurboLaunch": @YES,
-            @"TurboAppLaunch": @YES,
-            @"AntiThermalThrottle": @YES,
-            @"AntiThermalThrottling": @YES,
-            @"PowerSaveMode": @NO,
-            @"AntiGhostTouch": @YES,
-            @"ChargerRippleRejection": @YES
+             @"Enabled": @YES,
+             @"SelectedLanguage": @"auto",
+             @"ProMotionEngineBeta7": @NO,
+             @"MetalHexBuffering": @YES,
+             @"KeyboardZeroLagV24": @YES,
+             @"EnableHzControl": @YES,
+             @"TargetRefreshRate": @120,
+             @"EnableFPSControl": @YES,
+             @"TargetFPSRate": @120,
+             @"ForceOverclock144Hz": @NO,
+             @"SyncModuleDelay": @YES,
+             @"IsolateRenderPipeline": @YES,
+             @"ColorOs17SmoothEngine": @YES,
+             @"ReduceMultiTaskLag": @YES,
+             @"FixAppLaunchBlackScreen": @YES,  // 👈 Dùng đúng key gốc này của Root.plist
+             @"FixAppExitStutter": @YES,
+             @"TouchResponseBoost": @YES,
+             @"QuantumRenderShield": @YES,
+             @"NeuralBufferOpt": @YES,
+             @"PeriodicRamClean": @YES,
+             @"MachVMPurgeRam": @YES,
+             @"AutoCloseBackgroundApp": @NO,
+             @"TurboAppLaunch": @YES,
+             @"AntiThermalThrottling": @YES,     // 👈 Khớp đúng key gốc của Root.plist
+             @"PowerSaveMode": @NO,
+             @"AntiGhostTouch": @YES,
+             @"ChargerRippleRejection": @YES
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
