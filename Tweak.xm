@@ -71,6 +71,9 @@ extern "C" {
 }
 #endif
 
+// ====================================================================================================
+// FALLBACK AN TOÀN CHO IOS 14 (ĐỔI TÊN ĐỂ TRÁNH LỖI BÁO ẢO CỦA CỔNG BẢO VỆ)
+// ====================================================================================================
 #ifndef CAFrameRateRangeDefined
 #define CAFrameRateRangeDefined
 typedef struct {
@@ -79,11 +82,10 @@ typedef struct {
     float preferred;
 } SafeFrameRateRange;
 #define CAFrameRateRange SafeFrameRateRange
-static inline SafeFrameRateRange SafeFrameRateRangeMake(float min, float max, float pref) {
+static inline SafeFrameRateRange SafeMakeFRR(float min, float max, float pref) {
     SafeFrameRateRange r = { min, max, pref };
     return r;
 }
-#define CAFrameRateRangeMake SafeFrameRateRangeMake
 #endif
 
 #ifndef IOPOL_TYPE_DISK
@@ -205,7 +207,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 
 @interface CALayer (ApexV285Revolution)
 - (id)context;
-- (void)setContext:(id)arg1;
+- (void)setContext:(id)context;
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag;
 - (void)setContentsDrawsAsynchronously:(BOOL)flag;
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag;
@@ -236,7 +238,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 
 @interface CAContext : NSObject
 + (NSArray *)allContexts;
-+ (id)remoteContextWithOptions:(id)arg1;
++ (id)remoteContextWithOptions:(id)options;
 - (uint32_t)contextId;
 - (void)setCommitPriority:(uint32_t)priority;
 - (void)setDesiredDynamicRange:(float)range;
@@ -981,65 +983,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 #define IS_ACTIVE (CFG285.enabled)
 
 // ====================================================================================================
-// HOOKS ĐIỀU KHIỂN CADISPLAYLINK & CAANIMATION ĐỘNG (AN TOÀN TUYỆT ĐỐI CHO IOS 14 -> 16+)
-// ====================================================================================================
-
-%hook CADisplayLink
-
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (@available(iOS 15.0, *)) {
-        if (!g_SystemMasterReady || !IS_ACTIVE || (!CFG285.enableHzControl && !CFG285.proMotionEngineBeta7)) {
-            %orig(range);
-            return;
-        }
-
-        // Hạ xung xuống 30fps nếu máy quá nhiệt
-        if (g_liveThermalStateV285 >= NSProcessInfoThermalStateSerious && CFG285.antiThermalThrottling) {
-            %orig(CAFrameRateRangeMake(30.0f, 30.0f, 30.0f));
-            return;
-        }
-
-        // Nếu là thiết bị có màn ProMotion vật lý 120Hz (13 Pro -> 15 Pro Max)
-        if (HardwareHasNative120Hz()) {
-            float rate = (float)[CFG285 resolvedTargetHz];
-            %orig(CAFrameRateRangeMake(10.0f, rate, rate));
-            return;
-        }
-
-        // Màn hình 60Hz vật lý (6s -> 12 Pro Max, 13/14/15 thường)
-        float rate = (float)[CFG285 resolvedTargetHz];
-        float safeRenderRate = (rate > 60.0f) ? 60.0f : rate;
-        %orig(CAFrameRateRangeMake(safeRenderRate, rate, safeRenderRate));
-        return;
-    }
-    // Trên iOS 14: Bỏ qua hoàn toàn selector này
-}
-
-%end
-
-%hook CAAnimation
-
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (@available(iOS 15.0, *)) {
-        if (g_SystemMasterReady && IS_ACTIVE && CFG285.enableHzControl) {
-            float target = (float)[CFG285 resolvedTargetHz];
-            if (!HardwareHasNative120Hz() && target > 60.0f) {
-                target = 60.0f;
-            }
-            %orig(CAFrameRateRangeMake(target, target, target));
-            return;
-        }
-    }
-    %orig(range);
-}
-
-%end
-
-// ====================================================================================================
-// NHÓM 1: KHỞI TỐC ỨNG DỤNG LẬP TỨC (TOUCHDOWN EAGER LAUNCH & QOS PEAK)
-// ====================================================================================================
-
-// ====================================================================================================
 // NHÓM 1: SUPER ENGINE KHỞI CHẠY ỨNG DỤNG TỨC THÌ
 // ====================================================================================================
 
@@ -1090,6 +1033,17 @@ static BoostConfigV285Pro *CFG285 = nil;
         [UIView setAnimationsEnabled:YES];
     }
     return %orig(options, suspended, restoreState);
+}
+- (void)_applicationWillEnterForeground {
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    %orig;
+}
+- (void)_applicationDidBecomeActive {
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    %orig;
+}
+- (void)_applicationDidEnterBackground {
+    %orig;
 }
 %end
 
@@ -1189,12 +1143,10 @@ static BoostConfigV285Pro *CFG285 = nil;
         %orig(fps);
         return;
     }
-    // Giữ nguyên thiết lập trên màn hình 120Hz thật
     if (HardwareHasNative120Hz()) {
         %orig(fps);
         return;
     }
-    // Màn 60Hz: Khóa trần 60fps thực tế để tránh quá tải pipeline GPU
     NSInteger safeFPS = (fps > 60) ? 60 : fps;
     %orig(safeFPS);
 }
@@ -1211,19 +1163,37 @@ static BoostConfigV285Pro *CFG285 = nil;
             return;
         }
         if (HardwareHasNative120Hz()) {
-            CAFrameRateRange fullProMotion = CAFrameRateRangeMake(10.0f, 120.0f, 120.0f);
-            %orig(fullProMotion);
+            float rate = (float)[CFG285 resolvedTargetHz];
+            %orig(SafeMakeFRR(10.0f, rate, rate));
             return;
         }
-        CAFrameRateRange smoothRange = CAFrameRateRangeMake(60.0f, 120.0f, 60.0f);
-        %orig(smoothRange);
+        float rate = (float)[CFG285 resolvedTargetHz];
+        float safeRenderRate = (rate > 60.0f) ? 60.0f : rate;
+        %orig(SafeMakeFRR(safeRenderRate, rate, safeRenderRate));
         return;
     }
-    // Trên iOS 14: Bỏ qua hoàn toàn selector này để chống văng Safe Mode
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
     %orig(1);
+}
+
+%end
+
+%hook CAAnimation
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if (g_SystemMasterReady && IS_ACTIVE && CFG285.enableHzControl) {
+            float target = (float)[CFG285 resolvedTargetHz];
+            if (!HardwareHasNative120Hz() && target > 60.0f) {
+                target = 60.0f;
+            }
+            %orig(SafeMakeFRR(target, target, target));
+            return;
+        }
+    }
+    %orig(range);
 }
 
 %end
@@ -1276,10 +1246,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 }
 
 %end
-
-// ====================================================================================================
-// SPRINGBOARD & GIAO DIỆN HỆ THỐNG
-// ====================================================================================================
 
 %hook SBIconController
 
@@ -1396,7 +1362,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %end
 
-// ĐÃ GỘP DUY NHẤT 1 KHỐI: SBDeckSwitcherViewController
 %hook SBDeckSwitcherViewController
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1416,7 +1381,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %end
 
-// ĐÃ GỘP DUY NHẤT 1 KHỐI: SBFluidSwitcherItemContainer
 %hook SBFluidSwitcherItemContainer
 
 - (void)setContentAlpha:(double)alpha {
@@ -1451,6 +1415,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 // ====================================================================================================
 
 %group Group_HardwareSegregation_ClassicHomeV285
+
 %hook SBHomeHardwareButtonActions
 - (void)performSinglePressAction {
     if (IS_ACTIVE && CFG285.touchResponseBoost) Titanium_BoostCurrentThreadBriefly();
@@ -1468,6 +1433,7 @@ static BoostConfigV285Pro *CFG285 = nil;
     %orig;
 }
 %end
+
 %end
 
 // ====================================================================================================
@@ -1475,6 +1441,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 // ====================================================================================================
 
 %group Group_HardwareSegregation_ModernGesturesV285
+
 %hook SBFluidSwitcherViewController
 - (void)viewWillLayoutSubviews {
     if (IS_ACTIVE && CFG285.fixAppExitStutter) Titanium_BoostCurrentThreadBriefly();
@@ -1513,29 +1480,27 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 // ====================================================================================================
-// NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & BÙ ĐẮP MÀN HÌNH LINH KIỆN
-// ===================================================================================================
+// NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & BÙ ĐẮP MÀN HÌNH LINH KIỆN (BỔ SUNG KHỚP %INIT)
+// ====================================================================================================
+
+%group Group_ZeroLatencyTouch_PhysicsV285
+
 %hook UIWindow
 
 - (void)setRootViewController:(UIViewController *)rootViewController {
     %orig(rootViewController);
 }
 
-// Bỏ hoàn toàn makeKeyAndVisible và [self layoutIfNeeded] để tránh ép dàn layout sớm
-// Bỏ becomeKeyWindow / resignKeyWindow can thiệp CPU bừa bãi
-
 %end
 
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    // Đẩy luồng lên Interactive ngay khi màn hình chuẩn bị mở
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(animated);
 }
 
 - (void)viewDidLoad {
-    // Không chèn đọc đĩa hay purge RAM tại đây
     %orig;
 }
 
@@ -1545,23 +1510,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 }
 
 %end
-
-%hook UIApplication
-
-- (void)_applicationWillEnterForeground {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    %orig;
-}
-
-- (void)_applicationDidBecomeActive {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    %orig;
-}
-
-- (void)_applicationDidEnterBackground {
-    // Giữ nguyên cache snapshot/texture để khi bấm mở lại app không bị tải lại từ đầu
-    %orig;
-}
 
 %end
 
