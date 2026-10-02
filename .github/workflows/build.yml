@@ -51,152 +51,7 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 2.5: CỔNG BẢO VỆ CHUYÊN SÂU (BÁO CHÍNH XÁC DÒNG, THIẾU GÌ, SAI GÌ TRƯỚC KHI BUILD) ---
-      - name: Pre-Build Source Code & iOS Security Gate
-        run: |
-          python3 - << 'EOF'
-          import os, re, sys
-
-          EXTENSIONS = ('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')
-          EXCLUDED = ('.theos', 'obj', 'packages', '.git')
-
-          files_list = []
-          for root, dirs, files in os.walk("."):
-              dirs[:] = [d for d in dirs if d not in EXCLUDED]
-              for f in files:
-                  if f.endswith(EXTENSIONS) or f in ['Makefile', 'control']:
-                      files_list.append(os.path.join(root, f))
-
-          critical_errors = []
-          all_source = ""
-
-          for fpath in files_list:
-              try:
-                  with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                      content = f.read()
-                      lines = content.splitlines()
-
-                  if fpath.endswith(('.xm', '.x', '.m', '.mm')):
-                      all_source += "\n" + content
-
-                  if fpath.endswith(('.xm', '.x')):
-                      # 1. Quét lỗi cấu trúc %orig và phương thức Logos
-                      for l_idx, l_str in enumerate(lines, 1):
-                          clean_line = l_str.strip()
-                          if clean_line.startswith("//") or clean_line.startswith("*"):
-                              continue
-
-                          # Bắt lỗi: %orig(nil); hoặc %orig(NULL); hoặc %orig(nilCadence);
-                          if re.search(r"%orig\s*\(\s*(nil\vert{}NULL\vert{}[a-zA-Z0-9_]*[Nn]il[a-zA-Z0-9_]*)\s*\)", clean_line):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Lỗi %orig với con trỏ rỗng",
-                                  "code": clean_line,
-                                  "detail": "Truyền trực tiếp `nil`, `NULL` hoặc biến nil vào `%orig(...)` gây lỗi 'Invalid argument structure in %orig'.",
-                                  "fix": "Sửa thành: `%orig;` trần hoặc gán `id empty = nil; %orig(empty);`"
-                              })
-
-                          # Bắt lỗi: %orig(range) với struct mà không sửa đổi giá trị
-                          if re.search(r"%orig\s*\(\s*range\s*\)", clean_line):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Lỗi %orig truyền lại struct nguyên bản",
-                                  "code": clean_line,
-                                  "detail": "Trong Logos, khi không sửa đổi giá trị struct `range`, gọi `%orig(range)` sẽ bị lệch argument signature.",
-                                  "fix": "Sửa thành: `%orig;` trần."
-                              })
-
-                          # Bắt lỗi: %orig chứa hàm con có dấu phẩy (SafeMakeFRR, CGRectMake, ...)
-                          if re.search(r"%orig\s*\([^)]*\(.*?,.*?\)[^)]*\)", clean_line) or re.search(r"%orig\s*\(\s*SafeMakeFRR\b", clean_line):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Lỗi %orig chứa biểu thức dấu phẩy",
-                                  "code": clean_line,
-                                  "detail": "Bộ tiền xử lý Logos tách tham số bằng dấu phẩy nên bị hiểu lầm thành nhiều tham số.",
-                                  "fix": "Gán ra biến trước: `SafeFrameRateRange safeRange = SafeMakeFRR(...); %orig(safeRange);`"
-                              })
-
-                          # Bắt lỗi method sai kiểu trả về: - (viewDidLayoutSubviews)viewDidLayoutSubviews
-                          method_match = re.match(r"^\s*[-+]\s*\(\s*([A-Za-z0-9_]+)\s*\)\s*([A-Za-z0-9_]+)\b", clean_line)
-                          if method_match:
-                              ret_type = method_match.group(1)
-                              sel_name = method_match.group(2)
-                              if ret_type == sel_name and ret_type not in ["init", "copy", "mutableCopy"]:
-                                  critical_errors.append({
-                                      "file": fpath,
-                                      "line": l_idx,
-                                      "cat": "Sai kiểu trả về phương thức",
-                                      "code": clean_line,
-                                      "detail": f"Kiểu trả về `{ret_type}` bị trùng với tên phương thức `{sel_name}`.",
-                                      "fix": f"Sửa thành: `- (void){sel_name};`"
-                                  })
-
-                          # Bắt lỗi khai báo lại malloc_zone_pressure_relief sai kiểu
-                          if re.search(r"void\s+malloc_zone_pressure_relief\s*\(", clean_line):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Xung đột khai báo SDK",
-                                  "code": clean_line,
-                                  "detail": "`malloc_zone_pressure_relief` đã có trong SDK iOS với kiểu trả về `size_t`.",
-                                  "fix": "Xóa dòng khai báo này và thêm `#import <malloc/malloc.h>`"
-                              })
-
-                          # Bắt lỗi static viết hoa
-                          if re.match(r"^\s*Static\s+void\b", clean_line):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Lỗi từ khóa C",
-                                  "code": clean_line,
-                                  "detail": "Từ khóa `Static` viết hoa chữ cái đầu.",
-                                  "fix": "Đổi thành `static` chữ thường."
-                              })
-
-                      # 2. Kiểm tra thẻ đóng %hook và %group
-                      hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
-                      groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
-                      subclasses = len(re.findall(r"^\s*%subclass\b", content, re.MULTILINE))
-                      ends = len(re.findall(r"^\s*%end\b", content, re.MULTILINE))
-                      req = hooks + groups + subclasses
-
-                      if req != ends:
-                          critical_errors.append({
-                              "file": fpath,
-                              "line": "Toàn file",
-                              "cat": "Lệch cặp thẻ Logos (%end)",
-                              "code": f"%hook={hooks}, %group={groups}, %end={ends}",
-                              "detail": f"Cần đúng {req} thẻ `%end` nhưng chỉ tìm thấy {ends}.",
-                              "fix": "Kiểm tra và bổ sung các cặp `%end` còn thiếu."
-                          })
-
-              except Exception as e:
-                  print(f"Lỗi kiểm tra tệp {fpath}: {e}")
-
-          # Báo cáo kết quả kiểm tra
-          if critical_errors:
-              print("\n" + "=" * 80)
-              print(f"🚨 PHÁT HIỆN {len(critical_errors)} LỖI CỤ THỂ TRONG MÃ NGUỒN (CHẶN TRƯỚC KHI BUILD):")
-              print("=" * 80)
-              for i, err in enumerate(critical_errors, 1):
-                  print(f"❌ [LỖI #{i}] {err['file']} -> DÒNG {err['line']}")
-                  print(f"   ► Phân loại : {err['cat']}")
-                  print(f"   ► Dòng sai  : {err['code']}")
-                  print(f"   ► Nguyên nhân: {err['detail']}")
-                  print(f"   ► Cách sửa  : {err['fix']}")
-                  print("-" * 80)
-              print("\nVui lòng sửa các dòng trên trước khi commit lại.\n")
-              sys.exit(1)
-          else:
-              print("\n" + "=" * 80)
-              print("✅ KIỂM TRA MÃ NGUỒN HOÀN TẤT: Không phát hiện lỗi cấu trúc Logos hay xung đột SDK!")
-              print("=" * 80 + "\n")
-          EOF
-
-      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ ĐÓNG GÓI (IN CHI TIẾT DÒNG CODE VÀ LỖI THỰC TẾ) ---
+      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ BÓC TÁCH LỖI CHÍNH XÁC ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -219,62 +74,40 @@ jobs:
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "======================================================================"
-            echo "🚨 BIÊN DỊCH THẤT BẠI! ĐANG BÓC TÁCH CHÍNH XÁC DÒNG VÀ ĐOẠN CODE LỖI..."
+            echo "🚨 BIÊN DỊCH THẤT BẠI! ĐANG BÓC TÁCH CHÍNH XÁC SỐ DÒNG VÀ ĐOẠN CODE LỖI:"
             echo "======================================================================"
 
-            python3 - << 'PYEOF'
-            import re, os, sys
+            ERR_LINES=$(grep -E '^[^\s:]+\.(xm|x|m|mm|h|c|cpp):[0-9]+(:[0-9]+)?:\s*error:' "$BUILD_LOG_FILE" || true)
 
-            log_file = "/tmp/theos_build.log"
-            if not os.path.exists(log_file):
-                print("❌ Không tìm thấy tệp log.")
-                sys.exit(1)
+            if [ -z "$ERR_LINES" ]; then
+              echo "⚠️ Toàn bộ nhật ký lỗi cuối cùng từ Theos:"
+              tail -n 40 "$BUILD_LOG_FILE"
+            else
+              echo "$ERR_LINES" | while IFS= read -r line; do
+                echo "----------------------------------------------------------------------"
+                echo "🔴 $line"
+                
+                # Tách file và dòng
+                FILE_NAME=$(echo "$line" | cut -d: -f1)
+                LINE_NUM=$(echo "$line" | cut -d: -f2)
 
-            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
-                log_content = f.read()
-
-            # Bắt cả lỗi của Logos (file:line: error: ...) và Clang (file:line:col: error: ...)
-            error_pattern = re.compile(r'^([^\s:]+\.(?:xm|x|m|mm|h|c|cpp)):([0-9]+)(?::([0-9]+))?:\s*(error:\s*.+)$', re.MULTILINE)
-            matches = list(error_pattern.finditer(log_content))
-
-            if not matches:
-                print("⚠️ Chi tiết lỗi từ Theos:")
-                print("\n".join(log_content.strip().splitlines()[-40:]))
-            else:
-                print(f"👉 Tìm thấy {len(matches)} vị trí lỗi cụ thể:\n")
-                for idx, match in enumerate(matches, 1):
-                    file_name = match.group(1)
-                    line_num = int(match.group(2))
-                    col_num = match.group(3)
-                    err_msg = match.group(4)
-
-                    col_str = f":{col_num}" if col_num else ""
-                    print("=" * 70)
-                    print(f"🔴 [LỖI #{idx}] {file_name} -> DÒNG {line_num}{col_str}")
-                    print(f"📌 Chi tiết lỗi: {err_msg}")
-                    print("-" * 70)
-
-                    # Trích xuất 4 dòng trước và sau dòng bị lỗi từ file nguồn
-                    if os.path.exists(file_name):
-                        try:
-                            with open(file_name, "r", encoding="utf-8", errors="ignore") as src_f:
-                                src_lines = src_f.readlines()
-
-                            start_line = max(1, line_num - 3)
-                            end_line = min(len(src_lines), line_num + 3)
-
-                            print("🔍 Đoạn code thực tế trong file:")
-                            for cur in range(start_line, end_line + 1):
-                                marker = "👉 " if cur == line_num else "   "
-                                line_content = src_lines[cur - 1].rstrip()
-                                print(f"{marker}{cur:4d} | {line_content}")
-                            print("")
-                        except Exception as e:
-                            print(f"   (Không thể đọc nội dung file: {e})")
-                    else:
-                        print(f"   (File {file_name} không tồn tại trên hệ thống)")
-            print("=" * 70)
-            PYEOF
+                if [ -f "$FILE_NAME" ] && [ -n "$LINE_NUM" ]; then
+                  echo "🔍 Đoạn code thực tế quanh dòng $LINE_NUM trong file $FILE_NAME:"
+                  START_LINE=$((LINE_NUM > 3 ? LINE_NUM - 3 : 1))
+                  END_LINE=$((LINE_NUM + 3))
+                  sed -n "${START_LINE},${END_LINE}p" "$FILE_NAME" | nl -ba -v "$START_LINE" | while IFS= read -r code_line; do
+                    NUM=$(echo "$code_line" | awk '{print $1}')
+                    if [ "$NUM" -eq "$LINE_NUM" ]; then
+                      echo "👉 $code_line"
+                    else
+                      echo "   $code_line"
+                    fi
+                  done
+                fi
+                echo "----------------------------------------------------------------------"
+              done
+            fi
+            echo "======================================================================"
             exit 1
           fi
           
