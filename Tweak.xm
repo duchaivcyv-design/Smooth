@@ -1500,33 +1500,18 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     if (IS_ACTIVE && CFG285.touchResponseBoost && event.type == UIEventTypeTouches) {
         UITouch *touch = [[event allTouches] anyObject];
         if (touch) {
-            CGPoint currentPoint = [touch locationInView:self];
             if (touch.phase == UITouchPhaseBegan) {
                 g_isUserTouchingV285 = YES;
                 g_lastTouchMediaTimeV285 = CACurrentMediaTime();
-                g_lastStableTouchLocation = currentPoint;
-                Titanium_EnforceThreadRealtimeAndDiskVIP();
                 pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            } else if (touch.phase == UITouchPhaseMoved) {
-                g_isUserTouchingV285 = YES;
-                g_lastTouchMediaTimeV285 = CACurrentMediaTime();
-                
-                if (CFG285.antiGhostTouch) {
-                    CGFloat deltaX = fabs(currentPoint.x - g_lastStableTouchLocation.x);
-                    CGFloat deltaY = fabs(currentPoint.y - g_lastStableTouchLocation.y);
-                    if (deltaX < kAntiJitterThresholdDistance && deltaY < kAntiJitterThresholdDistance) {
-                        return;
-                    }
-                }
-                g_lastStableTouchLocation = currentPoint;
             } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
                 g_isUserTouchingV285 = NO;
-                pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
             }
         }
     }
     %orig(event);
 }
+%end
 
 - (void)setRootViewController:(UIViewController *)rootViewController {
     if (IS_ACTIVE && CFG285.turboAppLaunch) Titanium_BoostCurrentThreadBriefly();
@@ -1935,19 +1920,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 %end
 
-%hook UIVisualEffectView
-- (void)layoutSubviews {
-    %orig;
-    if (IS_ACTIVE) {
-        if (self.subviews.count > 0) {
-            UIView *firstV = (UIView *)self.subviews.firstObject;
-            firstV.hidden = YES;
-        }
-        self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.75f];
-    }
-}
-%end
-
 %hook CAContext
 - (void)setCommitPriority:(uint32_t)priority {
     if (Titanium_IsSpringBoard()) { 
@@ -1977,7 +1949,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
-        Titanium_ReloadSharedSyncStateV285();
+        Titanium_ReloadSharedSyncStateV285(); // <--- CHÍNH LÀ DÒNG NÀY, XÓA HOẶC COMMENT NÓ LẠI!
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(animated);
