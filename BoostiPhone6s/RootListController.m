@@ -166,6 +166,7 @@ enum PSCellType {
 
 @interface PSSpecifier : NSObject
 @property (nonatomic, strong) NSString *name;
+- (NSInteger)cellType;
 + (instancetype)preferenceSpecifierNamed:(NSString *)name target:(id)target set:(SEL)set get:(SEL)get detail:(Class)detail cell:(NSInteger)cell edit:(Class)edit;
 + (instancetype)groupSpecifierWithName:(NSString *)name;
 - (id)propertyForKey:(NSString *)key;
@@ -178,6 +179,31 @@ enum PSCellType {
 @property (nonatomic, strong) dispatch_source_t debounceSyncTimer;
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
 @end
+
+// Phân biệt chính xác giữa Group Header và Control Cell
+static inline BOOL Titanium_IsGroupCell(PSSpecifier *spec) {
+    id cellVal = [spec propertyForKey:@"cell"];
+    if ([cellVal isKindOfClass:[NSString class]]) {
+        return [cellVal isEqualToString:@"PSGroupCell"];
+    }
+    if ([spec respondsToSelector:@selector(cellType)]) {
+        return [spec cellType] == PSGroupCell;
+    }
+    if ([cellVal isKindOfClass:[NSNumber class]]) {
+        return [cellVal integerValue] == PSGroupCell;
+    }
+    return NO;
+}
+
+static inline NSString *Titanium_GetGroupID(PSSpecifier *spec) {
+    NSString *gid = [spec propertyForKey:@"groupID"];
+    if (gid) return gid;
+    NSString *lbl = [spec propertyForKey:@"label"] ?: spec.name ?: @"";
+    if ([lbl containsString:@"CÔNG TẮC TỔNG"] || [lbl containsString:@"MASTER"]) return @"GROUP_MASTER";
+    if ([lbl containsString:@"NGÔN NGỮ"] || [lbl containsString:@"LANGUAGE"]) return @"GROUP_LANGUAGE";
+    if ([lbl containsString:@"THÔNG TIN"] || [lbl containsString:@"DEV"] || [lbl containsString:@"HỖ TRỢ"]) return @"GROUP_DEV";
+    return @"GROUP_OTHER";
+}
 
 // Trình hỗ trợ căn chỉnh Popover chống văng ứng dụng Cài đặt trên iPad/màn hình ngang
 static inline UIAlertController *alertPresentationControllerHelperV285(UIAlertController *alert, UIViewController *vc) {
@@ -390,6 +416,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSDictionary *headerMap = @{
         @"CÔNG TẮC TỔNG HỆ THỐNG V28.5 PRO": @"GROUP_MASTER",
         @"CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO": @"GROUP_MASTER",
+        @"CÀI ĐẶT NGÔN NGỮ": @"GROUP_LANGUAGE",
         @"ĐẶC QUYỀN NÂNG CẤP V28.5 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
         @"ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
         @"ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ)": @"GROUP_HZ_FPS",
@@ -401,8 +428,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         @"BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME": @"GROUP_RAM_CPU",
         @"QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN": @"GROUP_THERMAL",
         @"BẢO MẬT & QUYỀN RIÊNG TƯ": @"GROUP_SECURITY",
-        @"THÔNG TIN PHÁT TRIỂN & HỖ TRỢ": @"GROUP_DEV",
-        @"CÀI ĐẶT NGÔN NGỮ": @"GROUP_LANGUAGE"
+        @"THÔNG TIN PHÁT TRIỂN & HỖ TRỢ": @"GROUP_DEV"
     };
 
     NSDictionary *footerMap = @{
@@ -474,34 +500,28 @@ static inline NSString *PM_TextV285(NSString *key) {
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
     if (!masterEnabled) {
+        // Thu gọn: Giữ lại nhóm Công Tắc Tổng (kèm nút switch), Cài Đặt Ngôn Ngữ và Thông Tin Phát Triển
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
-        BOOL inMasterGroup = NO;
-        BOOL inAllowedGroup = NO;
+        NSString *currentGroupID = nil;
 
         for (PSSpecifier *spec in _allSavedSpecifiers) {
-            NSString *label = [spec propertyForKey:@"label"];
-            NSString *key = [spec propertyForKey:@"key"];
-
-            if ([spec propertyForKey:@"cell"] && [[spec propertyForKey:@"cell"] integerValue] == PSGroupCell) {
-                if ([label containsString:@"CÔNG TẮC TỔNG"] || [label containsString:@"MASTER"]) {
-                    inMasterGroup = YES;
-                    inAllowedGroup = YES;
-                } else if ([label containsString:@"NGÔN NGỮ"] || [label containsString:@"LANGUAGE"] ||
-                           [label containsString:@"THÔNG TIN"] || [label containsString:@"DEV"]) {
-                    inMasterGroup = NO;
-                    inAllowedGroup = YES;
-                } else {
-                    inMasterGroup = NO;
-                    inAllowedGroup = NO;
+            if (Titanium_IsGroupCell(spec)) {
+                currentGroupID = Titanium_GetGroupID(spec);
+                if ([currentGroupID isEqualToString:@"GROUP_MASTER"] ||
+                    [currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
+                    [currentGroupID isEqualToString:@"GROUP_DEV"]) {
+                    [collapsedSpecs addObject:spec];
                 }
-            }
-
-            if (inAllowedGroup) {
-                if (inMasterGroup) {
-                    if (!key || [key isEqualToString:@"Enabled"]) {
+            } else {
+                // Xử lý các ô con bên trong nhóm được phép hiển thị
+                if ([currentGroupID isEqualToString:@"GROUP_MASTER"]) {
+                    NSString *key = [spec propertyForKey:@"key"];
+                    // GIỮ LẠI CÔNG TẮC TỔNG ĐỂ BẬT LẠI ĐƯỢC
+                    if ([key isEqualToString:@"Enabled"]) {
                         [collapsedSpecs addObject:spec];
                     }
-                } else {
+                } else if ([currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
+                           [currentGroupID isEqualToString:@"GROUP_DEV"]) {
                     [collapsedSpecs addObject:spec];
                 }
             }
@@ -621,7 +641,7 @@ static inline NSString *PM_TextV285(NSString *key) {
             @"SyncModuleDelay": @YES,
             @"IsolateRenderPipeline": @YES,
             @"ColorOs17SmoothEngine": @YES,
-            @"ReduceMultitaskLag": @YES,
+            @"ReduceMultiTaskLag": @YES,
             @"AntiBlackScreenLaunch": @YES,
             @"FixAppExitStutter": @YES,
             @"TouchResponseBoost": @YES,
