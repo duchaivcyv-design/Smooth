@@ -52,25 +52,6 @@
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
 
-#ifndef VM_PURGABLE_PURGE_ALL
-#define VM_PURGABLE_PURGE_ALL 0
-#endif
-
-#ifndef VM_FLAGS_PURGABLE
-#define VM_FLAGS_PURGABLE 1
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-    kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
-    const char *getprogname(void);
-    extern char **environ;
-    int setiopolicy_np(int iotype, int scope, int policy);
-#ifdef __cplusplus
-}
-#endif
-
 // ====================================================================================================
 // FALLBACK AN TOÀN CHO IOS 14 (ĐỔI TÊN ĐỂ TRÁNH LỖI BÁO ẢO CỦA CỔNG BẢO VỆ)
 // ====================================================================================================
@@ -142,6 +123,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
+- (NSString *)displayName;
 - (id)processState;
 - (BOOL)isRunning;
 - (BOOL)isClassic;
@@ -210,9 +192,18 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 - (void)setContext:(id)context;
 - (void)setAllowsEdgeAntialiasing:(BOOL)flag;
 - (void)setContentsDrawsAsynchronously:(BOOL)flag;
+- (BOOL)contentsDrawsAsynchronously;
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag;
+- (BOOL)needsDisplayOnBoundsChange;
 - (void)setAllowsGroupOpacity:(BOOL)allows;
 - (void)setCornerCurve:(NSString *)curve;
+- (void)setDrawsAsynchronously:(BOOL)flag;
+- (BOOL)drawsAsynchronously;
+- (void)setShouldRasterize:(BOOL)val;
+- (BOOL)shouldRasterize;
+- (void)setShadowRadius:(CGFloat)radius;
+- (void)setContentsScale:(CGFloat)scale;
+- (void)display;
 @end
 
 @class CADisplay;
@@ -220,6 +211,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 @interface UIScreen (ApexV285Revolution)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
+- (NSInteger)maximumFramesPerSecond;
 - (CGFloat)_refreshRate;
 - (CADisplay *)_display;
 @end
@@ -241,6 +233,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 + (id)remoteContextWithOptions:(id)options;
 - (uint32_t)contextId;
 - (void)setCommitPriority:(uint32_t)priority;
+- (uint32_t)commitPriority;
 - (void)setDesiredDynamicRange:(float)range;
 - (void)orderAbove:(uint32_t)contextId;
 - (void)orderBelow:(uint32_t)contextId;
@@ -280,15 +273,21 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 - (void)_setInterruptionImpulse:(CGPoint)impulse;
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
+- (BOOL)touchesShouldCancelInContentView:(UIView *)view;
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
 @end
 
 @interface CAMetalLayer (ApexV285Revolution)
 - (void)setLowLatencyMode:(BOOL)flag;
 - (void)setMaximumDrawableCount:(NSUInteger)count;
+- (NSUInteger)maximumDrawableCount;
 - (void)setDisplaySyncEnabled:(BOOL)enabled;
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow;
 - (void)setPresentsWithTransaction:(BOOL)flag;
 - (void)setServerPresentsWithTransaction:(BOOL)flag;
+- (void)setFramebufferOnly:(BOOL)fb;
+- (BOOL)framebufferOnly;
+- (id)nextDrawable;
 @end
 
 @interface UIKeyboardImpl : UIView
@@ -297,6 +296,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 - (void)clearAnimations;
 - (void)setReturnKeyEnabled:(BOOL)enabled;
+- (BOOL)returnKeyEnabled;
 - (void)updateReturnKey:(BOOL)enabled;
 - (void)hardwareKeyboardAvailabilityChanged;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
@@ -304,7 +304,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 - (void)setDelegate:(id)delegate;
 - (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
-- (void)showKeyboard;
+- (showKeyboard)showKeyboard;
 - (void)hideKeyboard;
 @end
 
@@ -505,6 +505,10 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 - (void)_relaunchSpringBoardNow;
 @end
 
+@interface SBAppSwitcherSnapshotImageCache : NSObject
+- (void)reloadImagesForAllItems;
+@end
+
 // ====================================================================================================
 // ĐỊNH NGHĨA CẤU TRÚC PAYLOAD V28.5 PRO & ĐIỀU PHỐI IPC
 // ====================================================================================================
@@ -552,11 +556,6 @@ static volatile BOOL g_isUserTouchingV285 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV285 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfoThermalStateNominal;
 
-// Bộ đệm lọc rung tọa độ vi mô (Anti-Jitter Filter State)
-static CGPoint g_lastStableTouchLocation = {0.0f, 0.0f};
-static const CGFloat kAntiJitterThresholdDistance = 2.0f;
-
-// Cờ khóa toàn hệ thống ngăn ngừa Bootloop và Crash giai đoạn khởi động
 static BOOL g_SystemMasterReady = NO;
 
 // ====================================================================================================
@@ -599,7 +598,6 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     return p1;
 }
 
-// Phân biệt phần cứng: Nút Home cổ điển (6s, 6s+, 7, 7+, 8, 8+, SE2, SE3) vs Máy Cử chỉ (X -> 15 Pro Max)
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
     static BOOL sIsClassic = NO;
     static dispatch_once_t onceToken;
@@ -616,10 +614,6 @@ static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
         }
     });
     return sIsClassic;
-}
-
-static inline BOOL Titanium_IsGestureDevice(void) {
-    return !Titanium_IsClassicHomeButtonDevice();
 }
 
 static BOOL Titanium_IsSpringBoard(void) {
@@ -644,7 +638,6 @@ static BOOL Titanium_IsSettingsApp(void) {
     return isPrefs;
 }
 
-// Hàm kẹp FPS/Hz an toàn tuyệt đối chống chia cho 0 và triệt tiêu Watchdog Kill
 static inline float ClampSafeFPS(float target) {
     if (target < 15.0f) return 15.0f;
     if (target > 144.0f) return 144.0f;
@@ -652,26 +645,23 @@ static inline float ClampSafeFPS(float target) {
 }
 
 // ====================================================================================================
-// TIER 1, 8, 9: MACH HARD REALTIME, CPU AFFINITY VÀ KHƠI THÔNG I/O Ổ ĐĨA
+// REALTIME VIP & I/O BOOST
 // ====================================================================================================
 
 static inline void Titanium_EnforceThreadRealtimeAndDiskVIP(void) {
     if (!NSThread.isMainThread) return;
     
-    // 1. Ghim cứng luồng chính vào 1 P-Core (Affinity Tag 1)
     mach_port_t machThread = pthread_mach_thread_np(pthread_self());
     thread_affinity_policy_data_t affPolicy = { 1 };
     thread_policy_set(machThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affPolicy, THREAD_AFFINITY_POLICY_COUNT);
 
-    // 2. Cấp hạn ngạch Mach Hard Realtime 16.6ms (Cấm chiếm quyền preemption)
     thread_time_constraint_policy_data_t timePolicy;
-    timePolicy.period      = 16666667; // 16.67ms (60Hz baseline)
-    timePolicy.computation = 12000000; // 12ms xử lý độc quyền không bị ngắt quãng
+    timePolicy.period      = 16666667;
+    timePolicy.computation = 12000000;
     timePolicy.constraint  = 16666667;
     timePolicy.preemptible = 0;
     thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
-    // 3. Đặt quyền ưu tiên I/O đọc đĩa cao nhất (IOPOL_IMPORTANT) và tắt cập nhật atime
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
 }
@@ -720,7 +710,6 @@ static inline void Titanium_ReloadSharedSyncStateV285(void) {
     pthread_mutex_unlock(&g_syncLockV285);
 }
 
-// Kiểm tra phần cứng màn hình 120Hz vật lý (13 Pro - 15 Pro Max)
 static BOOL HardwareHasNative120Hz(void) {
     static BOOL isNative120 = NO;
     static dispatch_once_t onceToken;
@@ -983,7 +972,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 #define IS_ACTIVE (CFG285.enabled)
 
 // ====================================================================================================
-// NHÓM 1: SUPER ENGINE KHỞI CHẠY ỨNG DỤNG TỨC THÌ
+// NHÓM 1: SUPER ENGINE KHỞI CHẠY ỨNG DỤNG TỨC THÌ (GỘP DUY NHẤT UIAPPLICATION)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -1027,6 +1016,7 @@ static BoostConfigV285Pro *CFG285 = nil;
     }
     %orig(scene, context, completion);
 }
+
 - (BOOL)_handleDelegateCallbacksWithOptions:(id)options isSuspended:(BOOL)suspended restoreState:(BOOL)restoreState {
     if (IS_ACTIVE && CFG285.turboAppLaunch) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1034,24 +1024,31 @@ static BoostConfigV285Pro *CFG285 = nil;
     }
     return %orig(options, suspended, restoreState);
 }
+
 - (void)_applicationWillEnterForeground {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
+
 - (void)_applicationDidBecomeActive {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
+
 - (void)_applicationDidEnterBackground {
     %orig;
 }
+
+- (void)_applicationWillTerminate {
+    %orig;
+}
 %end
 
 %end
-
-// ====================================================================================================
-// NHÓM 2: PIP & CỬA SỔ NỔI ĐỒNG BỘ TỨC THỜI
-// ====================================================================================================
 
 // ====================================================================================================
 // NHÓM 2: PIP & CỬA SỔ NỔI ĐỒNG BỘ TỨC THỜI
@@ -1135,7 +1132,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 // ====================================================================================================
-// NHÓM 3: SPRINGBOARD DISPLAY & ĐIỀU TIẾT HZ/FPS CHO MÀN HÌNH CHÍNH (DUY NHẤT 1 NƠI)
+// NHÓM 3: SPRINGBOARD DISPLAY & ĐIỀU TIẾT HZ/FPS CHO MÀN HÌNH CHÍNH (DUY NHẤT)
 // ====================================================================================================
 
 %group Group_Display_SpringBoardV285
@@ -1484,7 +1481,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 // ====================================================================================================
-// NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & BÙ ĐẮP MÀN HÌNH LINH KIỆN
+// NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & GIAO DIỆN (GỘP DUY NHẤT UIVIEWCONTROLLER)
 // ====================================================================================================
 
 %group Group_ZeroLatencyTouch_PhysicsV285
@@ -1500,44 +1497,38 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated);
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+    %orig(animated);
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
 }
 
 - (void)viewDidLoad {
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 
 - (void)didReceiveMemoryWarning {
     %orig;
-    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-}
-
-%end
-
-%end
-
-// ====================================================================================================
-// CẢM ỨNG TOÀN CỤC & TĂNG TỐC CUỘN LƯỚT
-// ====================================================================================================
-
-%hook UIScrollView
-
-- (void)willMoveToWindow:(UIWindow *)newWindow {
-    %orig(newWindow);
-    if (newWindow) {
-        self.delaysContentTouches = NO;
-        self.decelerationRate = UIScrollViewDecelerationRateNormal;
+    if (IS_ACTIVE) {
+        malloc_zone_pressure_relief(malloc_default_zone(), 0);
     }
 }
 
 %end
-
-%hook CALayer
-
-- (void)setDrawsAsynchronously:(BOOL)flag {
-    %orig(YES);
-}
 
 %end
 
@@ -1546,6 +1537,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 // ====================================================================================================
 
 %group Group_Keyboard_And_TextV285
+
 %hook UIKeyboardImpl
 
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
@@ -1676,13 +1668,15 @@ static BoostConfigV285Pro *CFG285 = nil;
 }
 
 %end
+
 %end
 
 // ====================================================================================================
-// NHÓM 8: METAL GRAPHICS, TRIPLE BUFFERING (3) & TRIỆT TIÊU BLUR ĐỘNG
+// NHÓM 8: METAL GRAPHICS, TRIPLE BUFFERING (3) & TỐI ƯU LAYER (GỘP DUY NHẤT CALAYER)
 // ====================================================================================================
 
 %group Group_MetalGraphics_OptV285
+
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     NSUInteger tripleBuffer = 3;
@@ -1786,76 +1780,22 @@ static BoostConfigV285Pro *CFG285 = nil;
     return %orig;
 }
 %end
+
 %end
 
 // ====================================================================================================
-// NHÓM 9: CÁCH LY GIAO DIỆN ỨNG DỤNG BÊN THỨ 3 & BẢO VỆ TIẾN TRÌNH
+// NHÓM 9: CÁCH LY ỨNG DỤNG BÊN THỨ 3 & CLEAN MEMORY
 // ====================================================================================================
 
 %group Group_UIKit_ThirdParty_IsolatedV285
-%hook UIViewController
 
-- (void)viewWillAppear:(BOOL)animated {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(animated);
+// Nhóm này phục vụ routing và cấu trúc độc lập của UIKit
+%hook SBFView
+- (void)setCustomFullHomedStyle:(BOOL)flag {
+    %orig(flag);
 }
-
-- (void)viewDidAppear:(BOOL)animated {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig(animated);
-}
-
-- (void)viewDidDisappear:(BOOL)animated {
-    %orig(animated);
-}
-
-- (void)viewDidLoad {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-
-- (void)didReceiveMemoryWarning {
-    %orig;
-    if (IS_ACTIVE) {
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            Titanium_PurgeProcessMemoryAggressively();
-        });
-    }
-}
-
 %end
 
-%hook UIApplication
-
-- (void)_applicationDidEnterBackground {
-    %orig;
-}
-
-- (void)_applicationWillEnterForeground {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-
-- (void)_applicationDidBecomeActive {
-    if (IS_ACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
-    %orig;
-}
-
-- (void)_applicationWillTerminate {
-    %orig;
-}
-
-%end
 %end
 
 // ====================================================================================================
@@ -1863,6 +1803,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 // ====================================================================================================
 
 %group Group_SpringBoard_ProcessManagerV285
+
 %hook SBApplication
 - (void)setProcessState:(id)state {
     if (IS_ACTIVE && CFG285.turboAppLaunch) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1921,13 +1862,15 @@ static BoostConfigV285Pro *CFG285 = nil;
     %orig;
 }
 %end
+
 %end
 
 // ====================================================================================================
-// NHÓM 11: CUỘN MƯỢT TỐI ĐA (COLOROS 17 FLUID SCROLL ENGINE)
+// NHÓM 11: CUỘN MƯỢT TỐI ĐA (COLOROS 17 FLUID SCROLL - GỘP DUY NHẤT UISCROLLVIEW)
 // ====================================================================================================
 
 %group Group_ScrollPerformance_SuperEngineV285
+
 %hook UIScrollView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
@@ -1955,37 +1898,32 @@ static BoostConfigV285Pro *CFG285 = nil;
 %end
 
 %hook UITableView
-
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
         self.layer.drawsAsynchronously = YES;
     }
 }
-
 %end
 
 %hook UICollectionView
-
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
         self.layer.drawsAsynchronously = YES;
     }
 }
-
 %end
 
 %hook UITextView
-
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
         self.layer.drawsAsynchronously = YES;
     }
 }
-
 %end
+
 %end
 
 // ====================================================================================================
@@ -2084,36 +2022,8 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
     dispatch_resume(s_debounceTimer);
 }
 
-// Danh sách loại trừ các Daemon hệ thống nhạy cảm của Apple và ứng dụng Ngân hàng
-static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName) {
-    if (!progName) return NO;
-    if (strstr(progName, "ReportCrash") || strstr(progName, "crashreporterd") || 
-        strstr(progName, "panic_report") || strstr(progName, "analyticsd") ||
-        strstr(progName, "symptomsd") || strstr(progName, "logd") ||
-        strstr(progName, "PosterBoard") || strstr(progName, "WallpaperKit") ||
-        strstr(progName, "backboardd") || strstr(progName, "runningboardd") ||
-        strstr(progName, "jailbreakd") || strstr(progName, "roothided") ||
-        strstr(progName, "tursd") || strstr(progName, "containermanagerd")) {
-        return NO;
-    }
-    if (bundleID) {
-        if ([bundleID hasPrefix:@"com.apple.crashreport"] || 
-            [bundleID hasPrefix:@"com.apple.ReportCrash"] ||
-            [bundleID isEqualToString:@"com.apple.CoreAuthUI"] ||
-            [bundleID containsString:@"PosterBoard"] ||
-            [bundleID containsString:@"WallpaperKit"]) {
-            return NO;
-        }
-        NSArray *bankKeys = @[@"bank", @"momo", @"zalopay", @"vnpay", @"smartotp", @"viettelmoney", @"tpb", @"vcb", @"bidv", @"acb", @"techcombank", @"mb"];
-        for (NSString *key in bankKeys) {
-            if ([bundleID.lowercaseString containsString:key]) return NO;
-        }
-    }
-    return YES;
-}
-
 // ====================================================================================================
-// HÀM KHỞI CHẠY CORE TWEAK (ĐÃ TRUYỀN ĐẦY ĐỦ THAM SỐ)
+// HÀM KHỞI CHẠY CORE TWEAK (ĐÃ TRUYỀN ĐẦY ĐỦ THAM SỐ, TRÁNH LỖI UNDECLARED IDENTIFIER)
 // ====================================================================================================
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
@@ -2129,17 +2039,17 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             }
         }
 
-        // 1. Kích hoạt hook tự do nằm ngoài group
+        // 1. Kích hoạt hook tự do nếu có
         %init;
 
-        // 2. Kích hoạt các nhóm đồ họa và cảm ứng chung
+        // 2. Kích hoạt toàn bộ các nhóm module
         %init(Group_MetalGraphics_OptV285);
         %init(Group_ZeroLatencyTouch_PhysicsV285);
         %init(Group_FastLaunch_SuperEngineV285);
         %init(Group_ScrollPerformance_SuperEngineV285);
         %init(Group_V285_FloatingWindow_PiP);
 
-        // 3. Phân biệt phần cứng: Nút Home vật lý (6s -> 8 Plus) vs Cử chỉ vuốt
+        // 3. Phân biệt phần cứng Home vật lý vs Cử chỉ vuốt
         if (Titanium_IsClassicHomeButtonDevice()) {
             %init(Group_HardwareSegregation_ClassicHomeV285);
         } else {
