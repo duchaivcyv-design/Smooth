@@ -47,7 +47,6 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <QuartzCore/CAMetalLayer.h>
-#import <QuartzCore/CAFrameRateRange.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Metal/Metal.h>
 #import <WebKit/WebKit.h>
@@ -70,6 +69,21 @@ extern "C" {
     int setiopolicy_np(int iotype, int scope, int policy);
 #ifdef __cplusplus
 }
+#endif
+
+#ifndef CAFrameRateRangeDefined
+#define CAFrameRateRangeDefined
+typedef struct {
+    float minimum;
+    float maximum;
+    float preferred;
+} SafeFrameRateRange;
+#define CAFrameRateRange SafeFrameRateRange
+static inline SafeFrameRateRange SafeFrameRateRangeMake(float min, float max, float pref) {
+    SafeFrameRateRange r = { min, max, pref };
+    return r;
+}
+#define CAFrameRateRangeMake SafeFrameRateRangeMake
 #endif
 
 #ifndef IOPOL_TYPE_DISK
@@ -967,51 +981,70 @@ static BoostConfigV285Pro *CFG285 = nil;
 #define IS_ACTIVE (CFG285.enabled)
 
 // ====================================================================================================
-// HOOKS ĐIỀU KHIỂN CADISPLAYLINK & CAANIMATION ĐỘNG (15 HZ - 144 HZ/FPS)
+// HOOKS ĐIỀU KHIỂN CADISPLAYLINK & CAANIMATION ĐỘNG (AN TOÀN TUYỆT ĐỐI CHO IOS 14 -> 16+)
 // ====================================================================================================
 
-static CAFrameRateRange (*orig_CADisplayLink_preferredFrameRateRange)(id self, SEL _cmd);
-static void (*orig_CADisplayLink_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
-static void (*orig_CAAnimation_setPreferredFrameRateRange)(id self, SEL _cmd, CAFrameRateRange range);
+%hook CADisplayLink
 
-static CAFrameRateRange custom_CADisplayLink_preferredFrameRateRange(id self, SEL _cmd) {
-    if (!g_SystemMasterReady || !IS_ACTIVE || (!CFG285.enableHzControl && !CFG285.proMotionEngineBeta7)) {
-        return orig_CADisplayLink_preferredFrameRateRange(self, _cmd);
-    }
-    if (g_liveThermalStateV285 >= NSProcessInfoThermalStateSerious && CFG285.antiThermalThrottling) {
-        return CAFrameRateRangeMake(30.0f, 30.0f, 30.0f);
-    }
-    float rate = (float)[CFG285 resolvedTargetHz];
-    return CAFrameRateRangeMake(rate, rate, rate);
-}
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if (!g_SystemMasterReady || !IS_ACTIVE || (!CFG285.enableHzControl && !CFG285.proMotionEngineBeta7)) {
+            %orig(range);
+            return;
+        }
 
-static void custom_CADisplayLink_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
-    if (!g_SystemMasterReady || !IS_ACTIVE || (!CFG285.enableHzControl && !CFG285.proMotionEngineBeta7)) {
-        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, range);
+        // Hạ xung xuống 30fps nếu máy quá nhiệt
+        if (g_liveThermalStateV285 >= NSProcessInfoThermalStateSerious && CFG285.antiThermalThrottling) {
+            %orig(CAFrameRateRangeMake(30.0f, 30.0f, 30.0f));
+            return;
+        }
+
+        // Nếu là thiết bị có màn ProMotion vật lý 120Hz (13 Pro -> 15 Pro Max)
+        if (HardwareHasNative120Hz()) {
+            float rate = (float)[CFG285 resolvedTargetHz];
+            %orig(CAFrameRateRangeMake(10.0f, rate, rate));
+            return;
+        }
+
+        // Màn hình 60Hz vật lý (6s -> 12 Pro Max, 13/14/15 thường)
+        float rate = (float)[CFG285 resolvedTargetHz];
+        float safeRenderRate = (rate > 60.0f) ? 60.0f : rate;
+        %orig(CAFrameRateRangeMake(safeRenderRate, rate, safeRenderRate));
         return;
     }
-    if (g_liveThermalStateV285 >= NSProcessInfoThermalStateSerious && CFG285.antiThermalThrottling) {
-        orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(30.0f, 30.0f, 30.0f));
-        return;
-    }
-    float rate = (float)[CFG285 resolvedTargetHz];
-    orig_CADisplayLink_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(rate, rate, rate));
+    // Trên iOS 14: Bỏ qua hoàn toàn selector này
 }
 
-static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAFrameRateRange range) {
-    if (g_SystemMasterReady && IS_ACTIVE && CFG285.enableHzControl) {
-        float target = (float)[CFG285 resolvedTargetHz];
-        orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, CAFrameRateRangeMake(target, target, target));
-    } else {
-        orig_CAAnimation_setPreferredFrameRateRange(self, _cmd, range);
+%end
+
+%hook CAAnimation
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if (g_SystemMasterReady && IS_ACTIVE && CFG285.enableHzControl) {
+            float target = (float)[CFG285 resolvedTargetHz];
+            if (!HardwareHasNative120Hz() && target > 60.0f) {
+                target = 60.0f;
+            }
+            %orig(CAFrameRateRangeMake(target, target, target));
+            return;
+        }
     }
+    %orig(range);
 }
+
+%end
 
 // ====================================================================================================
 // NHÓM 1: KHỞI TỐC ỨNG DỤNG LẬP TỨC (TOUCHDOWN EAGER LAUNCH & QOS PEAK)
 // ====================================================================================================
 
+// ====================================================================================================
+// NHÓM 1: SUPER ENGINE KHỞI CHẠY ỨNG DỤNG TỨC THÌ
+// ====================================================================================================
+
 %group Group_FastLaunch_SuperEngineV285
+
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG285.turboAppLaunch) {
@@ -1059,6 +1092,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig(options, suspended, restoreState);
 }
 %end
+
 %end
 
 // ====================================================================================================
@@ -1066,6 +1100,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 // ====================================================================================================
 
 %group Group_V285_FloatingWindow_PiP
+
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
     %orig;
@@ -1138,6 +1173,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     return %orig;
 }
 %end
+
 %end
 
 // ====================================================================================================
@@ -1145,9 +1181,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 // ====================================================================================================
 
 %group Group_Display_SpringBoardV285
-// ====================================================================================================
-// 1. GIẢ MẠO TẦN SỐ QUÉT & ĐIỀU PHỐI KHUNG HÌNH (KHÔNG DROP FPS)
-// ====================================================================================================
 
 %hook CADisplayLink
 
@@ -1156,31 +1189,40 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
         %orig(fps);
         return;
     }
-    // Giới hạn xung nhịp render thực tế không vượt quá 60Hz phần cứng để tránh tắc hàng đợi GPU
+    // Giữ nguyên thiết lập trên màn hình 120Hz thật
+    if (HardwareHasNative120Hz()) {
+        %orig(fps);
+        return;
+    }
+    // Màn 60Hz: Khóa trần 60fps thực tế để tránh quá tải pipeline GPU
     NSInteger safeFPS = (fps > 60) ? 60 : fps;
     %orig(safeFPS);
 }
 
 - (NSInteger)preferredFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
-    // Báo cáo cho app thấy đang chạy ở 120fps
     return 120;
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (!IS_ACTIVE) {
-        %orig(range);
+    if (@available(iOS 15.0, *)) {
+        if (!IS_ACTIVE) {
+            %orig(range);
+            return;
+        }
+        if (HardwareHasNative120Hz()) {
+            CAFrameRateRange fullProMotion = CAFrameRateRangeMake(10.0f, 120.0f, 120.0f);
+            %orig(fullProMotion);
+            return;
+        }
+        CAFrameRateRange smoothRange = CAFrameRateRangeMake(60.0f, 120.0f, 60.0f);
+        %orig(smoothRange);
         return;
     }
-    // DÒNG QUAN TRỌNG NHẤT ĐỂ KHÔNG DROP:
-    // Min: 60Hz, Max: 120Hz, Preferred: 60Hz
-    // CoreAnimation nhận lệnh 120Hz mượt từ app nhưng chỉ render đúng chu kỳ 60Hz vật lý
-    CAFrameRateRange smoothRange = CAFrameRateRangeMake(60.0f, 120.0f, 60.0f);
-    %orig(smoothRange);
+    // Trên iOS 14: Bỏ qua hoàn toàn selector này để chống văng Safe Mode
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    // Luôn giữ interval = 1 để đồng bộ từng khung hình với V-Sync gốc
     %orig(1);
 }
 
@@ -1190,7 +1232,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 - (NSInteger)maximumFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
-    return 120; // Báo 120fps để Game và App mở khóa thiết lập đồ họa cao
+    return 120;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
@@ -1204,7 +1246,11 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    %orig(60.0f); // Thực tế phần cứng chỉ nhận tối đa 60.0f
+    if (HardwareHasNative120Hz()) {
+        %orig(rate);
+    } else {
+        %orig(60.0f);
+    }
 }
 
 %end
@@ -1217,19 +1263,22 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    %orig(60);
+    if (HardwareHasNative120Hz()) {
+        %orig(fps);
+    } else {
+        %orig(60);
+    }
 }
 
 - (BOOL)supportsDynamicRefresh {
     if (!IS_ACTIVE) return %orig;
-    // Bật cờ ProMotion ảo để iOS kích hoạt bộ nội suy animation mượt mà
     return YES;
 }
 
 %end
 
 // ====================================================================================================
-// 2. SPRINGBOARD & GIAO DIỆN HỆ THỐNG (ĐÃ BỎ HẾT BOOST RÁC VÀ PURGE BỘ NHỚ)
+// SPRINGBOARD & GIAO DIỆN HỆ THỐNG
 // ====================================================================================================
 
 %hook SBIconController
@@ -1267,7 +1316,6 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 }
 
 - (void)cleanupAfterClose {
-    // Tuyệt đối không purge RAM ở đây để lần sau mở folder không bị khựng đơ
     %orig;
 }
 
@@ -1348,10 +1396,13 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %end
 
+// ĐÃ GỘP DUY NHẤT 1 KHỐI: SBDeckSwitcherViewController
 %hook SBDeckSwitcherViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(animated);
 }
 
@@ -1359,8 +1410,13 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
     %orig(animated);
 }
 
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+}
+
 %end
 
+// ĐÃ GỘP DUY NHẤT 1 KHỐI: SBFluidSwitcherItemContainer
 %hook SBFluidSwitcherItemContainer
 
 - (void)setContentAlpha:(double)alpha {
@@ -1380,48 +1436,14 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 %end
 
-// ====================================================================================================
-// TỐI ƯU ĐA NHIỆM: MƯỢT MÀ, ĐỒNG BỘ V-SYNC, KHÔNG PHÌNH TO KHUNG HÌNH
-// ====================================================================================================
-
-%hook SBFluidSwitcherItemContainer
-
-// Giữ nguyên kích thước và tỉ lệ gốc của thẻ app, chống biến dạng/phình to
-- (void)setCornerRadius:(CGFloat)radius {
-    %orig(radius);
-}
-
-// Bỏ ép alpha để tránh ép GPU blend nhiều lớp không cần thiết
-- (void)setContentAlpha:(double)alpha {
-    %orig(alpha);
-}
-
-%end
-
-%hook SBDeckSwitcherViewController
-
-- (void)viewWillAppear:(BOOL)animated {
-    // Đẩy ưu tiên CPU mức cao nhất ngay khi bắt đầu vuốt mở đa nhiệm
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    %orig(animated);
-}
-
-- (void)viewDidDisappear:(BOOL)animated {
-    // Tuyệt đối KHÔNG xả RAM/purge bộ nhớ ở đây để giữ snapshot cho lần mở sau
-    %orig(animated);
-}
-
-%end
-
-// Tối ưu lớp hiển thị snapshot để cuộn đa nhiệm nhẹ như không
 %hook SBAppSwitcherSnapshotImageCache
 
 - (void)reloadImagesForAllItems {
-    // Cho phép hệ thống quản lý cache tự nhiên, không cưỡng ép tải lại liên tục
     %orig;
 }
 
 %end
+
 %end
 
 // ====================================================================================================
@@ -1492,16 +1514,7 @@ static void custom_CAAnimation_setPreferredFrameRateRange(id self, SEL _cmd, CAF
 
 // ====================================================================================================
 // NHÓM 6: CẢM ỨNG 0MS, ANTI-GHOST TOUCH & BÙ ĐẮP MÀN HÌNH LINH KIỆN
-// ====================================================================================================
-
-#import <UIKit/UIKit.h>
-#import <QuartzCore/QuartzCore.h>
-#import <pthread.h>
-
-// ====================================================================================================
-// 1. TỐI ƯU MỞ ỨNG DỤNG TỨC THÌ (LAUNCH PIPELINE KHÔNG NGHẼN)
-// ====================================================================================================
-
+// ===================================================================================================
 %hook UIWindow
 
 - (void)setRootViewController:(UIViewController *)rootViewController {
