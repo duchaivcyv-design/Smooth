@@ -1914,18 +1914,6 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // KHAI BÁO GIAO DIỆN HỆ THỐNG SPRINGBOARD & UIKIT (CHUẨN HÓA TOÀN DIỆN, CHỐNG LỖI THEOS)
 // ====================================================================================================
 
-#ifndef CAFrameRateRangeMake
-typedef struct {
-    float minimum;
-    float maximum;
-    float preferred;
-} CAFrameRateRange;
-static inline CAFrameRateRange CAFrameRateRangeMake(float minimum, float maximum, float preferred) {
-    CAFrameRateRange r = {minimum, maximum, preferred};
-    return r;
-}
-#endif
-
 @interface SBAppToHomeWorkspaceTransaction : NSObject
 @end
 
@@ -2618,7 +2606,7 @@ static void Titanium_EnforceGlobalUnthrottledPower(void) {
 }
 %end
 
-// 3. KHÓA CHẾT TẦN SỐ QUÉT 60.00 FPS PHẲNG LỲ
+// 3. KHÓA CHẾT TẦN SỐ QUÉT 60.00 FPS PHẲNG LỲ (DÙNG API TIÊU CHUẨN TRÁNH LỖI STRUCT SDK)
 %hook CADisplayLink
 - (NSInteger)preferredFramesPerSecond {
     if (IS_ACTIVE) return 60;
@@ -2630,25 +2618,6 @@ static void Titanium_EnforceGlobalUnthrottledPower(void) {
         return;
     }
     %orig(fps);
-}
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ACTIVE) {
-        CAFrameRateRange lockedRange = CAFrameRateRangeMake(60.0, 60.0, 60.0);
-        %orig(lockedRange);
-        return;
-    }
-    %orig(range);
-}
-%end
-
-%hook CAAnimation
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (IS_ACTIVE) {
-        CAFrameRateRange lockedRange = CAFrameRateRangeMake(60.0, 60.0, 60.0);
-        %orig(lockedRange);
-        return;
-    }
-    %orig(range);
 }
 %end
 
