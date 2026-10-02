@@ -9,6 +9,7 @@
 #import <spawn.h>
 #import <sys/wait.h>
 #import <sys/stat.h>
+#import <sys/utsname.h>
 #import <fcntl.h>
 #import <unistd.h>
 #import <notify.h>
@@ -36,7 +37,7 @@ extern char **environ;
 @end
 
 // ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG (ROOTHIDE & ROOTLESS UNIVERSAL RESOLVER)
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ
 // ====================================================================================================
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
@@ -72,10 +73,25 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
 
-static inline const char *Titanium_FindExecutable(const char *name) {
-    static char resolvedPath[PATH_MAX];
+// Kiểm tra phần cứng màn hình 120Hz ProMotion thực tế (đồng bộ với Tweak.xm)
+static inline BOOL HardwareHasNative120Hz(void) {
+    static BOOL isNative120 = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        uname(&sysInfo);
+        NSString *dev = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        if ([dev hasPrefix:@"iPhone14,2"] || [dev hasPrefix:@"iPhone14,3"] ||
+            [dev hasPrefix:@"iPhone15,2"] || [dev hasPrefix:@"iPhone15,3"] ||
+            [dev hasPrefix:@"iPhone16,"] || [dev hasPrefix:@"iPhone17,"]) {
+            isNative120 = YES;
+        }
+    });
+    return isNative120;
+}
+
+static inline NSString *Titanium_FindExecutablePath(NSString *name) {
     NSString *root = Titanium_GetRootHidePrefixPath();
-    
     NSArray *searchPrefixes = @[
         [root stringByAppendingPathComponent:@"usr/bin"],
         [root stringByAppendingPathComponent:@"bin"],
@@ -86,10 +102,9 @@ static inline const char *Titanium_FindExecutable(const char *name) {
     ];
 
     for (NSString *prefix in searchPrefixes) {
-        NSString *candidate = [prefix stringByAppendingPathComponent:[NSString stringWithUTF8String:name]];
+        NSString *candidate = [prefix stringByAppendingPathComponent:name];
         if (access([candidate UTF8String], X_OK) == 0) {
-            strlcpy(resolvedPath, [candidate UTF8String], sizeof(resolvedPath));
-            return resolvedPath;
+            return candidate;
         }
     }
     return name;
@@ -164,9 +179,16 @@ enum PSCellType {
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
 @end
 
+// Trình hỗ trợ căn chỉnh Popover chống văng ứng dụng Cài đặt trên iPad/màn hình ngang
 static inline UIAlertController *alertPresentationControllerHelperV285(UIAlertController *alert, UIViewController *vc) {
-    if (alert.popoverPresentationController && vc.navigationItem.rightBarButtonItem) {
-        alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItem;
+    if (alert.popoverPresentationController) {
+        if (vc.navigationItem.rightBarButtonItem) {
+            alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItem;
+        } else {
+            alert.popoverPresentationController.sourceView = vc.view;
+            alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(vc.view.bounds), CGRectGetMidY(vc.view.bounds), 1, 1);
+            alert.popoverPresentationController.permittedArrowDirections = 0;
+        }
     }
     return alert;
 }
@@ -309,6 +331,12 @@ static inline NSString *PM_TextV285(NSString *key) {
                 if (hz > 144) hz = 144;
                 if (fps < 15) fps = 15;
                 if (fps > 144) fps = 144;
+                
+                // Khóa an toàn 60Hz/FPS trên màn hình 60Hz vật lý (iPhone 6s-7+)
+                if (!HardwareHasNative120Hz()) {
+                    if (hz > 60) hz = 60;
+                    if (fps > 60) fps = 60;
+                }
             }
 
             payload.targetHz = hz;
@@ -446,7 +474,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
     if (!masterEnabled) {
-        // Thu gọn: Chỉ hiển thị nhóm Công Tắc Tổng, Cài Đặt Ngôn Ngữ và Thông Tin Phát Triển
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
         BOOL inMasterGroup = NO;
         BOOL inAllowedGroup = NO;
@@ -470,7 +497,6 @@ static inline NSString *PM_TextV285(NSString *key) {
             }
 
             if (inAllowedGroup) {
-                // Nếu đang ở nhóm công tắc tổng thì chỉ giữ lại switch Enabled
                 if (inMasterGroup) {
                     if (!key || [key isEqualToString:@"Enabled"]) {
                         [collapsedSpecs addObject:spec];
@@ -507,6 +533,12 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 60;
     BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : NO;
     BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
+
+    // Giới hạn hiển thị nếu phần cứng vật lý chỉ hỗ trợ 60Hz và không ép xung
+    if (!HardwareHasNative120Hz() && !isOverclock && !isPowerSave) {
+        if (hz > 60) hz = 60;
+        if (fps > 60) fps = 60;
+    }
 
     NSString *hzAutoText = PM_TextV285(@"DYNAMIC_HZ_TITLE") ?: @"Tần Số Quét: Tự Động (Max %ld Hz)";
     NSString *hzLockText = PM_TextV285(@"LOCK_HZ_TITLE") ?: @"Tần Số Quét: Khóa %ld Hz";
@@ -746,10 +778,9 @@ static inline NSString *PM_TextV285(NSString *key) {
 
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
     [alert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
-    if (alert.popoverPresentationController) {
-        alert.popoverPresentationController.sourceView = self.view;
-    }
-    [self presentViewController:alert animated:YES completion:nil];
+    
+    UIAlertController *safeAlert = alertPresentationControllerHelperV285(alert, self);
+    [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
 - (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS {
@@ -776,10 +807,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 
     [alert addAction:[UIAlertAction actionWithTitle:backText style:UIAlertActionStyleCancel handler:nil]];
-    if (alert.popoverPresentationController) {
-        alert.popoverPresentationController.sourceView = self.view;
-    }
-    [self presentViewController:alert animated:YES completion:nil];
+    
+    UIAlertController *safeAlert = alertPresentationControllerHelperV285(alert, self);
+    [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
@@ -814,10 +844,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
-    if (mainAlert.popoverPresentationController) {
-        mainAlert.popoverPresentationController.sourceView = self.view;
-    }
-    [self presentViewController:mainAlert animated:YES completion:nil];
+    
+    UIAlertController *safeAlert = alertPresentationControllerHelperV285(mainAlert, self);
+    [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
@@ -852,10 +881,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
-    if (mainAlert.popoverPresentationController) {
-        mainAlert.popoverPresentationController.sourceView = self.view;
-    }
-    [self presentViewController:mainAlert animated:YES completion:nil];
+    
+    UIAlertController *safeAlert = alertPresentationControllerHelperV285(mainAlert, self);
+    [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
 - (id)getAuthorName:(PSSpecifier *)specifier {
@@ -912,22 +940,27 @@ static inline NSString *PM_TextV285(NSString *key) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
             pid_t pid;
+            int status = 0;
             
-            const char *sbreloadBin = Titanium_FindExecutable("sbreload");
-            if (access(sbreloadBin, X_OK) == 0) {
-                char *argv[] = {(char *)sbreloadBin, NULL};
-                posix_spawn(&pid, sbreloadBin, NULL, NULL, argv, environ);
-                waitpid(pid, NULL, 0);
-                return;
+            NSString *sbreloadBin = Titanium_FindExecutablePath(@"sbreload");
+            if (access([sbreloadBin UTF8String], X_OK) == 0) {
+                char *argv[] = {(char *)[sbreloadBin UTF8String], NULL};
+                if (posix_spawn(&pid, [sbreloadBin UTF8String], NULL, NULL, argv, environ) == 0) {
+                    waitpid(pid, &status, 0);
+                    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+                        return;
+                    }
+                }
             }
 
-            const char *killallBin = Titanium_FindExecutable("killall");
-            char *argvSB[] = {(char *)killallBin, (char *)"-9", (char *)"SpringBoard", NULL};
-            posix_spawn(&pid, killallBin, NULL, NULL, argvSB, environ);
+            // Fallback an toàn nếu sbreload không phản hồi
+            NSString *killallBin = Titanium_FindExecutablePath(@"killall");
+            char *argvSB[] = {(char *)[killallBin UTF8String], (char *)"-9", (char *)"SpringBoard", NULL};
+            posix_spawn(&pid, [killallBin UTF8String], NULL, NULL, argvSB, environ);
             waitpid(pid, NULL, 0);
 
-            char *argvBB[] = {(char *)killallBin, (char *)"-9", (char *)"backboardd", NULL};
-            posix_spawn(&pid, killallBin, NULL, NULL, argvBB, environ);
+            char *argvBB[] = {(char *)[killallBin UTF8String], (char *)"-9", (char *)"backboardd", NULL};
+            posix_spawn(&pid, [killallBin UTF8String], NULL, NULL, argvBB, environ);
             waitpid(pid, NULL, 0);
         });
     }]];
@@ -936,9 +969,9 @@ static inline NSString *PM_TextV285(NSString *key) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
             pid_t pid;
-            const char *launchctlBin = Titanium_FindExecutable("launchctl");
-            char *argv[] = {(char *)launchctlBin, (char *)"reboot", (char *)"userspace", NULL};
-            posix_spawn(&pid, launchctlBin, NULL, NULL, argv, environ);
+            NSString *launchctlBin = Titanium_FindExecutablePath(@"launchctl");
+            char *argv[] = {(char *)[launchctlBin UTF8String], (char *)"reboot", (char *)"userspace", NULL};
+            posix_spawn(&pid, [launchctlBin UTF8String], NULL, NULL, argv, environ);
             waitpid(pid, NULL, 0);
         });
     }]];
