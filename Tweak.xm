@@ -2119,69 +2119,6 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
 #import <mach-o/dyld.h>
 #import <sys/sysctl.h>
 
-%ctor {
-    @autoreleasepool {
-        const char *progName = getprogname();
-        if (!progName) return;
-
-        // 1. CHẶN ĐỨNG TOÀN BỘ TIẾN TRÌNH DAEMON HỆ THỐNG / JAILBREAK (CHỐNG TREO REBOOT)
-        // Khi reboot JB, các tiến trình này chạy trước; nếu inject vào sẽ làm sập chuỗi nạp JB
-        if (strstr(progName, "jailbreakd") ||
-            strstr(progName, "launchd") ||
-            strstr(progName, "containermanagerd") ||
-            strstr(progName, "cfprefsd") ||
-            strstr(progName, "installd") ||
-            strstr(progName, "watchdogd") ||
-            strstr(progName, "mediaserverd") ||
-            strstr(progName, "runningboardd") ||
-            strstr(progName, "profiled")) {
-            return;
-        }
-
-        // 2. Kiểm tra bundle ID an toàn
-        NSBundle *mainBundle = [NSBundle mainBundle];
-        if (!mainBundle) return;
-        
-        NSString *bundleID = [mainBundle bundleIdentifier];
-        if (!bundleID || [bundleID length] == 0) return;
-
-        // 3. XÁC ĐỊNH MÔI TRƯỜNG: Chỉ chạy trên SpringBoard, App Apple hoặc App Jailbreak
-        BOOL isSpringBoard = [bundleID isEqualToString:@"com.apple.springboard"];
-        BOOL isAppleStock = [bundleID hasPrefix:@"com.apple."];
-        BOOL isJBApp = NO;
-
-        NSString *bundlePath = [mainBundle bundlePath];
-        if (bundlePath) {
-            if ([bundlePath containsString:@"/Applications"] || 
-                [bundlePath containsString:@"/procursus"] || 
-                [bundlePath containsString:@"/jb"] || 
-                [bundlePath containsString:@"/TrollStore"]) {
-                if (![bundlePath containsString:@"/var/containers/Bundle/Application/"]) {
-                    isJBApp = YES;
-                }
-            }
-        }
-
-        // Chặn hoàn toàn App Store / IPA ngoài
-        if (!isSpringBoard && !isAppleStock && !isJBApp) {
-            return;
-        }
-
-        // Xử lý riêng app Settings (Preferences)
-        if (strstr(progName, "Preferences")) {
-            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-            if (configClass) {
-                CFG285 = [configClass sharedInstance];
-                if ([CFG285 respondsToSelector:@selector(loadSettings)]) {
-                    [CFG285 loadSettings];
-                }
-            }
-            return;
-        }
-
-        // 4. KIỂM TRA CHỐNG BOOTLOOP AN TOÀN
-        if (!Titanium_CheckAndPreventBootloopUniversal()) return;
-
         // 5. BLOCK KHỞI CHẠY TWEAK
         void (^runCoreTweak)(void) = ^{
             @autoreleasepool {
@@ -2196,6 +2133,11 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
                         [CFG285 loadSettings];
                     }
                 }
+
+                // ====================================================================================
+                // KHỞI TẠO TẤT CẢ CÁC HOOK TỰ DO NẰM NGOÀI %group (CHỐNG LỖI: non-initialized _ungrouped)
+                // ====================================================================================
+                %init;
 
                 // Nạp nhóm đồ họa và cảm ứng chung
                 %init(Group_MetalGraphics_OptV285);
@@ -2243,27 +2185,3 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
                 g_SystemMasterReady = YES;
             }
         };
-
-        // 6. CƠ CHẾ AN TOÀN TUYỆT ĐỐI CHO SPRINGBOARD KHI REBOOT / RE-JAILBREAK:
-        // Đợi SpringBoard post thông báo đã sẵn sàng giao diện hoàn toàn rồi mới hook
-        if (isSpringBoard) {
-            CFNotificationCenterAddObserver(
-                CFNotificationCenterGetLocalCenter(),
-                NULL,
-                (CFNotificationCallback)^(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-                    static dispatch_once_t onceToken;
-                    dispatch_once(&onceToken, ^{
-                        runCoreTweak();
-                    });
-                },
-                (CFStringRef)UIApplicationDidFinishLaunchingNotification,
-                NULL,
-                CFNotificationSuspensionBehaviorDeliverImmediately
-            );
-        } else {
-            // Các app JB hoặc App Apple mở lên sau khi SpringBoard đã sống -> Chạy trực tiếp
-            runCoreTweak();
-        }
-    }
-}
-
