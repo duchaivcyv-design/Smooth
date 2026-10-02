@@ -1921,22 +1921,74 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 @interface SBFluidSwitcherGestureWorkspaceTransaction : NSObject
 @end
 
+@interface SBHomeScreenViewController : UIViewController
+@end
+
 %group Group_Display_SpringBoardV285
 
-%hook SBIconController
-- (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
-    %orig(index, animate);
+// 1. TỐI ƯU CỬ CHỈ LIÊN HOÀN (CHỐNG DELAY / KHỰNG KHI VUỐT NHANH HOẶC DÙNG ANIMATION26)
+%hook SBFluidSwitcherGestureWorkspaceTransaction
+- (BOOL)_shouldSuppressGestures {
+    // Không bao giờ khóa cử chỉ mới khi cử chỉ trước vừa hoàn tất
+    if (IS_ACTIVE) return NO;
+    return %orig;
 }
-- (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion {
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
-    %orig(folder, animated, completion);
+
+- (BOOL)canInterruptActiveGesture {
+    // Cho phép ngón tay chạm cướp quyền ngay cả khi animation lò xo chưa kịp hạ cánh
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
-- (void)closeFolderAnimated:(BOOL)animated completion:(id)completion {
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
-    %orig(animated, completion);
+%end
+
+// 2. KHỬ ĐỘ TRỄ CỬ CHỈ CẠNH DƯỚI & TĂNG TỐC ĐỘ ĐÁP VỀ ICON
+%hook SBHomeGestureSettings
+- (double)homeGestureDelayDuration {
+    // Ép độ trễ nhận diện vuốt đáy về 0ms tuyệt đối
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
 }
-- (void)viewDidLayoutSubviews {
+%end
+
+%hook SBFluidSwitcherAnimationSettings
+- (double)appToHomeScaleDampingRatio {
+    // Giảm chấn phẳng 1.0 triệt tiêu rung giật hoặc giật cục khung hình ở cuối hoạt ảnh
+    if (IS_ACTIVE) return 1.0;
+    return %orig;
+}
+%end
+
+%hook SBFluidSwitcherViewController
+- (void)handleFluidSwitcherGesture:(id)gesture {
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+    %orig(gesture);
+}
+
+- (double)animationDurationForTransitionRequest:(id)request {
+    double orig = %orig(request);
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        // Rút ngắn 25% thời gian neo giữ animation giúp màn hình chính sẵn sàng tương tác sớm hơn
+        return orig * 0.75;
+    }
+    return orig;
+}
+%end
+
+// 3. ĐIỀU PHỐI CHUYỂN CẢNH APP VỀ HOME (GIẢI PHÓNG HÀNG ĐỢI RENDER)
+%hook SBAppToHomeWorkspaceTransaction
+- (BOOL)shouldAnimateOrientationChangeOnCompletion {
+    return NO;
+}
+
+- (void)_willBegin {
+    %orig;
+    if (IS_ACTIVE) {
+        Titanium_BoostCurrentThreadBriefly();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+}
+
+- (void)_didComplete {
     %orig;
     if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
 }
@@ -1950,6 +2002,44 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 %end
 
+// 4. BẢO VỆ MÀN HÌNH CHÍNH (ĐÃ LOẠI BỎ layoutIconsNow VÀ viewDidLayoutSubviews ĐỂ KHÔNG ĐƠ ICON KHI VỀ HOME)
+%hook SBIconController
+- (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+    %orig(index, animate);
+}
+- (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion {
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+    %orig(folder, animated, completion);
+}
+- (void)closeFolderAnimated:(BOOL)animated completion:(id)completion {
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+    %orig(animated, completion);
+}
+%end
+
+%hook SBIconListView
+- (void)fadeInIcon:(id)icon {
+    %orig(icon);
+}
+%end
+
+// 5. CACHE SNAPSHOT & RENDER ĐA NHIỆM BẤT ĐỒNG BỘ
+%hook SBAppSwitcherSettings
+- (BOOL)shouldKeepAppSnapshotsInMemory {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+%end
+
+%hook SBFluidSwitcherModifier
+- (BOOL)shouldasyncRenderAppLayouts {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+%end
+
+// 6. CÁC HOOK CƠ BẢN CỦA SPRINGBOARD
 %hook SBFloatingDockController
 - (void)dismissFloatingDockIfPresentedAnimated:(BOOL)animated completionHandler:(id)completion {
     %orig(animated, completion);
@@ -1966,58 +2056,6 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 - (void)cleanupAfterClose {
     %orig;
-}
-%end
-
-%hook SBIconListView
-- (void)fadeInIcon:(id)icon {
-    %orig(icon);
-}
-// Chống giật lag khi SpringBoard tính toán lại vị trí icon lúc vừa đáp xuống Home
-- (void)layoutIconsNow {
-    %orig;
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
-}
-%end
-
-// Giữ snapshot app trong RAM để không phải render lại ảnh chụp khi vuốt ra
-%hook SBAppSwitcherSettings
-- (BOOL)shouldKeepAppSnapshotsInMemory {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-%end
-
-// Render bố cục đa nhiệm bất đồng bộ, dồn toàn bộ GPU ưu tiên hoạt ảnh thoát app
-%hook SBFluidSwitcherModifier
-- (BOOL)shouldasyncRenderAppLayouts {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-%end
-
-// Bù trễ ngay khi hoạt ảnh thu nhỏ cửa sổ vừa kết thúc
-%hook SBAppToHomeWorkspaceTransaction
-- (void)_didComplete {
-    %orig;
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
-}
-%end
-
-// TỐI ƯU CỬ CHỈ LIÊN HOÀN (CHỐNG KHỰNG KHI VUỐT NHANH / DÙNG ANIMATION26):
-// Không chặn cử chỉ mới khi cử chỉ vuốt trước vừa kết thúc
-%hook SBFluidSwitcherGestureWorkspaceTransaction
-- (BOOL)_shouldSuppressGestures {
-    if (IS_ACTIVE) return NO;
-    return %orig;
-}
-%end
-
-// Khử độ trễ cử chỉ vuốt thanh Home khi tương tác nhanh liên tiếp
-%hook SBFluidSwitcherViewController
-- (void)handleFluidSwitcherGesture:(id)gesture {
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
-    %orig(gesture);
 }
 %end
 
@@ -2339,7 +2377,23 @@ static void Titanium_StartPassiveRamDaemon(void) {
         dispatch_source_set_timer(ramTimerSource, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(90.0 * NSEC_PER_SEC)), 90.0 * NSEC_PER_SEC, 15.0 * NSEC_PER_SEC);
         dispatch_source_set_event_handler(ramTimerSource, ^{
             if (IS_ACTIVE && CFG285.aggressiveRamClean) {
-                Titanium_BackgroundPurgeMemory();
+                // Đẩy kiểm tra lên Main RunLoop để phát hiện thao tác chạm của người dùng
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    CFStringRef currentMode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain());
+                    BOOL isUserTouching = NO;
+                    if (currentMode) {
+                        // UITrackingRunLoopMode được kích hoạt khi ngón tay đang chạm hoặc cuộn/vuốt
+                        if (CFEqual(currentMode, (CFStringRef)UITrackingRunLoopMode)) {
+                            isUserTouching = YES;
+                        }
+                        CFRelease(currentMode);
+                    }
+                    
+                    // Tuyệt đối không dọn RAM nếu người dùng đang chạm/vuốt màn hình
+                    if (!isUserTouching) {
+                        Titanium_BackgroundPurgeMemory();
+                    }
+                });
             }
         });
         dispatch_resume(ramTimerSource);
