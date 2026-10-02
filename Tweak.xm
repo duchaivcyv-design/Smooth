@@ -2113,75 +2113,157 @@ static BOOL Titanium_IsProcessEligible(NSString *bundleID, const char *progName)
 }
 
 // ====================================================================================================
-// KHỞI TẠO %ctor TRUNG TÂM - ĐỒNG BỘ ĐẦY ĐỦ TẤT CẢ CÁC NHÓM HOOK
+// HÀM KHỞI CHẠY CORE TWEAK (ĐÃ TRUYỀN ĐẦY ĐỦ THAM SỐ)
 // ====================================================================================================
+static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
+    @autoreleasepool {
+        setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
+        setenv("MTL_FORCE_SERIAL_DISPATCH", "0", 1);
+        setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
 
-#import <mach-o/dyld.h>
-#import <sys/sysctl.h>
-
-        // 5. BLOCK KHỞI CHẠY TWEAK
-        void (^runCoreTweak)(void) = ^{
-            @autoreleasepool {
-                setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
-                setenv("MTL_FORCE_SERIAL_DISPATCH", "0", 1);
-                setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
-
-                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-                if (configClass) {
-                    CFG285 = [configClass sharedInstance];
-                    if ([CFG285 respondsToSelector:@selector(loadSettings)]) {
-                        [CFG285 loadSettings];
-                    }
-                }
-
-                // ====================================================================================
-                // KHỞI TẠO TẤT CẢ CÁC HOOK TỰ DO NẰM NGOÀI %group (CHỐNG LỖI: non-initialized _ungrouped)
-                // ====================================================================================
-                %init;
-
-                // Nạp nhóm đồ họa và cảm ứng chung
-                %init(Group_MetalGraphics_OptV285);
-                %init(Group_ZeroLatencyTouch_PhysicsV285);
-                %init(Group_FastLaunch_SuperEngineV285);
-                %init(Group_ScrollPerformance_SuperEngineV285);
-                %init(Group_V285_FloatingWindow_PiP);
-
-                // Nút Home vật lý (6s -> 8 Plus) vs Cử chỉ vuốt
-                if (Titanium_IsClassicHomeButtonDevice()) {
-                    %init(Group_HardwareSegregation_ClassicHomeV285);
-                } else {
-                    %init(Group_HardwareSegregation_ModernGesturesV285);
-                }
-
-                // Phân tách SpringBoard
-                if (isSpringBoard) {
-                    [UIDevice currentDevice].batteryMonitoringEnabled = YES;
-                    %init(Group_Display_SpringBoardV285);
-                    %init(Group_SpringBoard_ProcessManagerV285);
-                    Titanium_StartThermalAndChargingWatchdog();
-                    Titanium_StartPassiveRamDaemon();
-                } else {
-                    %init(Group_UIKit_ThirdParty_IsolatedV285);
-                }
-
-                // Bàn phím
-                BOOL isKeyboardProcess = [bundleID containsString:@"TextInputUI"] || 
-                                        [bundleID containsString:@"InputUI"] || 
-                                        [bundleID containsString:@"keyboard"];
-                if (isSpringBoard || isKeyboardProcess || (strstr(progName, "inputhost") || strstr(progName, "Keyboard"))) {
-                    %init(Group_Keyboard_And_TextV285);
-                }
-
-                // Darwin Notifications
-                CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-                if (darwinCenter) {
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
-                }
-
-                Titanium_EnforceThreadRealtimeAndDiskVIP();
-                g_SystemMasterReady = YES;
+        Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+        if (configClass) {
+            CFG285 = [configClass sharedInstance];
+            if ([CFG285 respondsToSelector:@selector(loadSettings)]) {
+                [CFG285 loadSettings];
             }
-        };
+        }
+
+        // 1. Kích hoạt hook tự do nằm ngoài group
+        %init;
+
+        // 2. Kích hoạt các nhóm đồ họa và cảm ứng chung
+        %init(Group_MetalGraphics_OptV285);
+        %init(Group_ZeroLatencyTouch_PhysicsV285);
+        %init(Group_FastLaunch_SuperEngineV285);
+        %init(Group_ScrollPerformance_SuperEngineV285);
+        %init(Group_V285_FloatingWindow_PiP);
+
+        // 3. Phân biệt phần cứng: Nút Home vật lý (6s -> 8 Plus) vs Cử chỉ vuốt
+        if (Titanium_IsClassicHomeButtonDevice()) {
+            %init(Group_HardwareSegregation_ClassicHomeV285);
+        } else {
+            %init(Group_HardwareSegregation_ModernGesturesV285);
+        }
+
+        // 4. Phân tách SpringBoard vs App độc lập
+        if (isSpringBoard) {
+            [UIDevice currentDevice].batteryMonitoringEnabled = YES;
+            %init(Group_Display_SpringBoardV285);
+            %init(Group_SpringBoard_ProcessManagerV285);
+            Titanium_StartThermalAndChargingWatchdog();
+            Titanium_StartPassiveRamDaemon();
+        } else {
+            %init(Group_UIKit_ThirdParty_IsolatedV285);
+        }
+
+        // 5. Bàn phím hệ thống
+        BOOL isKeyboardProcess = NO;
+        if (bundleID) {
+            isKeyboardProcess = [bundleID containsString:@"TextInputUI"] || 
+                                [bundleID containsString:@"InputUI"] || 
+                                [bundleID containsString:@"keyboard"];
+        }
+        if (isSpringBoard || isKeyboardProcess || (progName && (strstr(progName, "inputhost") || strstr(progName, "Keyboard")))) {
+            %init(Group_Keyboard_And_TextV285);
+        }
+
+        // 6. Darwin Notifications
+        CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+        if (darwinCenter) {
+            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+        }
+
+        Titanium_EnforceThreadRealtimeAndDiskVIP();
+        g_SystemMasterReady = YES;
+    }
+}
+
+// ====================================================================================================
+// %ctor CHÍNH
+// ====================================================================================================
+%ctor {
+    @autoreleasepool {
+        const char *progName = getprogname();
+        if (!progName) return;
+
+        // 1. Chặn daemon hệ thống / jailbreak
+        if (strstr(progName, "jailbreakd") ||
+            strstr(progName, "launchd") ||
+            strstr(progName, "containermanagerd") ||
+            strstr(progName, "cfprefsd") ||
+            strstr(progName, "installd") ||
+            strstr(progName, "watchdogd") ||
+            strstr(progName, "mediaserverd") ||
+            strstr(progName, "runningboardd") ||
+            strstr(progName, "profiled")) {
+            return;
+        }
+
+        // 2. Lấy bundle ID
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        if (!mainBundle) return;
+        
+        NSString *bundleID = [mainBundle bundleIdentifier];
+        if (!bundleID || [bundleID length] == 0) return;
+
+        // 3. Phân loại môi trường
+        BOOL isSpringBoard = [bundleID isEqualToString:@"com.apple.springboard"];
+        BOOL isAppleStock = [bundleID hasPrefix:@"com.apple."];
+        BOOL isJBApp = NO;
+
+        NSString *bundlePath = [mainBundle bundlePath];
+        if (bundlePath) {
+            if ([bundlePath containsString:@"/Applications"] || 
+                [bundlePath containsString:@"/procursus"] || 
+                [bundlePath containsString:@"/jb"] || 
+                [bundlePath containsString:@"/TrollStore"]) {
+                if (![bundlePath containsString:@"/var/containers/Bundle/Application/"]) {
+                    isJBApp = YES;
+                }
+            }
+        }
+
+        // Chặn App Store / IPA ngoài
+        if (!isSpringBoard && !isAppleStock && !isJBApp) {
+            return;
+        }
+
+        // Xử lý riêng app Settings (Preferences)
+        if (strstr(progName, "Preferences")) {
+            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+            if (configClass) {
+                CFG285 = [configClass sharedInstance];
+                if ([CFG285 respondsToSelector:@selector(loadSettings)]) {
+                    [CFG285 loadSettings];
+                }
+            }
+            return;
+        }
+
+        // 4. Kiểm tra chống bootloop
+        if (!Titanium_CheckAndPreventBootloopUniversal()) return;
+
+        // 5. Khởi chạy
+        if (isSpringBoard) {
+            CFNotificationCenterAddObserver(
+                CFNotificationCenterGetLocalCenter(),
+                NULL,
+                (CFNotificationCallback)^(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+                    static dispatch_once_t onceToken;
+                    dispatch_once(&onceToken, ^{
+                        runCoreTweak(YES, bundleID, progName);
+                    });
+                },
+                (CFStringRef)UIApplicationDidFinishLaunchingNotification,
+                NULL,
+                CFNotificationSuspensionBehaviorDeliverImmediately
+            );
+        } else {
+            runCoreTweak(NO, bundleID, progName);
+        }
+    }
+}
