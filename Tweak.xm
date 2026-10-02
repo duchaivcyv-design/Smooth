@@ -1495,12 +1495,29 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 %end
 
+// Hook hoạt ảnh đồ họa thông thường: Khóa chặt target FPS
 %hook CAAnimation
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
             range = SafeMakeFRR(target, target, target);
+        }
+    }
+    %orig(range);
+}
+%end
+
+// HOOK RIÊNG CHO LÒ XO QUÁN TÍNH: Cho phép dải tần số co giãn theo gia tốc vuốt
+// Khắc phục triệt để hiện tượng vấp/khựng khi vuốt nhanh liên tục hoặc dùng ANIMATION26
+%hook CASpringAnimation
+- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if (IS_ACTIVE && CFG285.enableHzControl) {
+            float target = (float)[CFG285 resolvedTargetHz];
+            // min = 30Hz, preferred = target, max = target
+            // Thuật toán lò xo có không gian tính toán gia tốc văng cửa sổ mượt mà, không bị frame snap
+            range = SafeMakeFRR(30.0f, target, target);
         }
     }
     %orig(range);
@@ -1897,8 +1914,11 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // NHÓM 7: SPRINGBOARD DISPLAY SHELL & ICON GRID OPTIMIZATIONS
 // ====================================================================================================
 
-// Khai báo giao diện hỗ trợ chuyển cảnh thoát app về Home
+// Khai báo giao diện hỗ trợ chuyển cảnh và cử chỉ vuốt
 @interface SBAppToHomeWorkspaceTransaction : NSObject
+@end
+
+@interface SBFluidSwitcherGestureWorkspaceTransaction : NSObject
 @end
 
 %group Group_Display_SpringBoardV285
@@ -1922,7 +1942,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 %end
 
-// Đảm bảo pipeline độ trễ thấp được bật ngay khi màn hình chính chuẩn bị xuất hiện
+// Kích hoạt pipeline render 0ms ngay khi màn hình chính chuẩn bị xuất hiện
 %hook SBHomeScreenViewController
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
@@ -1981,6 +2001,23 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (void)_didComplete {
     %orig;
     if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+}
+%end
+
+// TỐI ƯU CỬ CHỈ LIÊN HOÀN (CHỐNG KHỰNG KHI VUỐT NHANH / DÙNG ANIMATION26):
+// Không chặn cử chỉ mới khi cử chỉ vuốt trước vừa kết thúc
+%hook SBFluidSwitcherGestureWorkspaceTransaction
+- (BOOL)_shouldSuppressGestures {
+    if (IS_ACTIVE) return NO;
+    return %orig;
+}
+%end
+
+// Khử độ trễ cử chỉ vuốt thanh Home khi tương tác nhanh liên tiếp
+%hook SBFluidSwitcherViewController
+- (void)handleFluidSwitcherGesture:(id)gesture {
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+    %orig(gesture);
 }
 %end
 
