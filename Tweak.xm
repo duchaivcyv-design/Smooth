@@ -232,7 +232,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -1417,13 +1417,11 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (!IS_ACTIVE || !CFG285.enableHzControl) {
-        %orig(fps);
-        return;
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        fps = [CFG285 resolvedTargetFPS];
+        Titanium_EnableZeroLatencyPipeline();
     }
-    NSInteger target = [CFG285 resolvedTargetFPS];
-    Titanium_EnableZeroLatencyPipeline();
-    %orig(target);
+    %orig(fps);
 }
 
 - (NSInteger)preferredFramesPerSecond {
@@ -1433,26 +1431,18 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (!IS_ACTIVE || !CFG285.enableHzControl) {
-            %orig;
-            return;
+        if (IS_ACTIVE && CFG285.enableHzControl) {
+            float target = (float)[CFG285 resolvedTargetHz];
+            Titanium_EnableZeroLatencyPipeline();
+            range = SafeMakeFRR(target, target, target);
         }
-        float target = (float)[CFG285 resolvedTargetHz];
-        Titanium_EnableZeroLatencyPipeline();
-        
-        // Khóa đồng nhất dải quét: min = target, preferred = target, max = target
-        SafeFrameRateRange lockedRange = SafeMakeFRR(target, target, target);
-        %orig(lockedRange);
-        return;
     }
-    %orig;
+    %orig(range);
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
     if (IS_ACTIVE && CFG285.enableHzControl) {
-        NSInteger customInterval = [CFG285 resolvedFrameInterval];
-        %orig(customInterval);
-        return;
+        interval = [CFG285 resolvedFrameInterval];
     }
     %orig(interval);
 }
@@ -1465,19 +1455,15 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    if (!IS_ACTIVE || !CFG285.enableHzControl) {
-        %orig(fps);
-        return;
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        fps = [CFG285 resolvedTargetFPS];
     }
-    NSInteger target = [CFG285 resolvedTargetFPS];
-    %orig(target);
+    %orig(fps);
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
     if (IS_ACTIVE && CFG285.enableHzControl) {
-        id emptyCadence = nil;
-        %orig(emptyCadence);
-        return;
+        cadence = nil;
     }
     %orig(cadence);
 }
@@ -1505,13 +1491,11 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (!IS_ACTIVE || !CFG285.enableHzControl) {
-        %orig(rate);
-        return;
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        rate = (CGFloat)[CFG285 resolvedTargetHz];
+        Titanium_EnableZeroLatencyPipeline();
     }
-    CGFloat target = (CGFloat)[CFG285 resolvedTargetHz];
-    Titanium_EnableZeroLatencyPipeline();
-    %orig(target);
+    %orig(rate);
 }
 %end
 
@@ -1520,12 +1504,10 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
-            SafeFrameRateRange locked = SafeMakeFRR(target, target, target);
-            %orig(locked);
-            return;
+            range = SafeMakeFRR(target, target, target);
         }
     }
-    %orig;
+    %orig(range);
 }
 %end
 
@@ -1543,7 +1525,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (void)_applicationDidBecomeActive:(id)arg1 {
     %orig;
     if (IS_ACTIVE) {
-        [[BoostConfigV285Pro sharedInstance] reloadPreferences];
+        [[BoostConfigV285Pro sharedInstance] loadSettings];
         Titanium_EnableZeroLatencyPipeline();
     }
 }
@@ -1551,7 +1533,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (void)applicationDidBecomeActive:(id)arg1 {
     %orig;
     if (IS_ACTIVE) {
-        [[BoostConfigV285Pro sharedInstance] reloadPreferences];
+        [[BoostConfigV285Pro sharedInstance] loadSettings];
         Titanium_EnableZeroLatencyPipeline();
     }
 }
