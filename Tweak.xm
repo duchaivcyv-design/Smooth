@@ -1519,7 +1519,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
 }
-- (viewDidLayoutSubviews)viewDidLayoutSubviews {
+- (void)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG285.reduceMultitaskLag) {
         Titanium_BoostCurrentThreadBriefly();
     }
