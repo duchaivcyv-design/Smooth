@@ -1355,21 +1355,23 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (!IS_ACTIVE) {
-        %orig(fps);
+        %orig;
         return;
     }
     NSInteger target = [CFG285 resolvedTargetFPS];
     if (!HardwareHasNative120Hz() && target > 60) target = 60;
     %orig(target);
 }
+
 - (NSInteger)preferredFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
     return [CFG285 resolvedTargetFPS];
 }
+
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (!IS_ACTIVE) {
-            %orig(range);
+            %orig;
             return;
         }
         float target = (float)[CFG285 resolvedTargetHz];
@@ -1378,9 +1380,11 @@ static BoostConfigV285Pro *CFG285 = nil;
         %orig(safeRange);
         return;
     }
+    %orig;
 }
+
 - (void)setFrameInterval:(NSInteger)interval {
-    %orig(1);
+    %orig;
 }
 %end
 
@@ -1389,22 +1393,24 @@ static BoostConfigV285Pro *CFG285 = nil;
     if (!IS_ACTIVE) return %orig;
     return [CFG285 resolvedTargetFPS];
 }
+
 - (void)setPreferredFPS:(NSInteger)fps {
     if (!IS_ACTIVE) {
-        %orig(fps);
+        %orig;
         return;
     }
     NSInteger targetFPS = [CFG285 resolvedTargetFPS];
     %orig(targetFPS);
 }
+
 - (void)overrideDisplayCadence:(id)cadence {
     if (IS_ACTIVE) {
-        id nilCadence = nil;
-        %orig(nilCadence);
+        %orig(nil);
         return;
     }
-    %orig(cadence);
+    %orig;
 }
+
 - (BOOL)supportsDynamicRefresh {
     if (!IS_ACTIVE) return %orig;
     return YES;
@@ -1416,17 +1422,20 @@ static BoostConfigV285Pro *CFG285 = nil;
     if (!IS_ACTIVE) return %orig;
     return [CFG285 resolvedTargetHz];
 }
+
 - (NSInteger)_maximumFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
     return [CFG285 resolvedTargetHz];
 }
+
 - (CGFloat)_refreshRate {
     if (!IS_ACTIVE) return %orig;
     return (CGFloat)[CFG285 resolvedTargetHz];
 }
+
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (!IS_ACTIVE) {
-        %orig(rate);
+        %orig;
         return;
     }
     CGFloat targetHz = (CGFloat)[CFG285 resolvedTargetHz];
@@ -1447,7 +1456,7 @@ static BoostConfigV285Pro *CFG285 = nil;
             return;
         }
     }
-    %orig(range);
+    %orig;
 }
 %end
 
@@ -1456,6 +1465,7 @@ static BoostConfigV285Pro *CFG285 = nil;
     if (IS_ACTIVE && CFG285.antiThermalThrottling) return NO;
     return %orig;
 }
+
 - (NSProcessInfoThermalState)thermalState {
     if (IS_ACTIVE && CFG285.antiThermalThrottling) return NSProcessInfoThermalStateNominal;
     return %orig;
