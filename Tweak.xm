@@ -639,8 +639,7 @@ extern "C" {
 @interface SBAppToHomeWorkspaceTransaction : NSObject
 @end
 
-@interface UIViewPropertyAnimator : NSObject
-@property (nonatomic, getter=isManualHitTestingEnabled) BOOL manualHitTestingEnabled;
+@interface UIViewPropertyAnimator ()
 + (void)_setTrackDuration:(double)duration;
 @end
 
