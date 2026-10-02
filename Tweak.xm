@@ -304,7 +304,7 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 - (void)setDelegate:(id)delegate;
 - (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
-- (showKeyboard)showKeyboard;
+- (void)showKeyboard;
 - (void)hideKeyboard;
 @end
 
@@ -2025,6 +2025,9 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 // ====================================================================================================
 // HÀM KHỞI CHẠY CORE TWEAK (ĐÃ TRUYỀN ĐẦY ĐỦ THAM SỐ, TRÁNH LỖI UNDECLARED IDENTIFIER)
 // ====================================================================================================
+// ====================================================================================================
+// HÀM KHỞI CHẠY CORE TWEAK (ĐÃ TRUYỀN ĐẦY ĐỦ THAM SỐ, static CHỮ THƯỜNG)
+// ====================================================================================================
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
         setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
@@ -2090,6 +2093,22 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         Titanium_EnforceThreadRealtimeAndDiskVIP();
         g_SystemMasterReady = YES;
     }
+}
+
+// ====================================================================================================
+// CALLBACK C RIÊNG CHO SPRINGBOARD (KHẮC PHỤC TRIỆT ĐỂ LỖI CAST BLOCK CỦA ARC)
+// ====================================================================================================
+static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, 
+                                        void *observer, 
+                                        CFStringRef name, 
+                                        const void *object, 
+                                        CFDictionaryRef userInfo) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        const char *progName = getprogname();
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        runCoreTweak(YES, bundleID, progName);
+    });
 }
 
 // ====================================================================================================
@@ -2162,12 +2181,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetLocalCenter(),
                 NULL,
-                (CFNotificationCallback)^(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-                    static dispatch_once_t onceToken;
-                    dispatch_once(&onceToken, ^{
-                        runCoreTweak(YES, bundleID, progName);
-                    });
-                },
+                SpringBoardDidLaunchCallback,
                 (CFStringRef)UIApplicationDidFinishLaunchingNotification,
                 NULL,
                 CFNotificationSuspensionBehaviorDeliverImmediately
@@ -2177,3 +2191,4 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
     }
 }
+
