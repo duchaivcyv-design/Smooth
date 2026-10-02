@@ -815,10 +815,6 @@ static inline void Titanium_BoostCurrentThreadBriefly(void) {
 static inline void Titanium_BackgroundPurgeMemory(void) {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
         malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        Class imgClass = NSClassFromString(@"UIImage");
-        if (imgClass && [imgClass respondsToSelector:@selector(_flushSharedImageCache)]) {
-            [imgClass performSelector:@selector(_flushSharedImageCache)];
-        }
     });
 }
 
@@ -1525,7 +1521,10 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (void)_applicationDidBecomeActive:(id)arg1 {
     %orig;
     if (IS_ACTIVE) {
-        [[BoostConfigV285Pro sharedInstance] loadSettings];
+        // Chỉ app con mới reload khi active, SpringBoard tuyệt đối không đọc đĩa lúc về Home
+        if (!Titanium_IsSpringBoard()) {
+            [[BoostConfigV285Pro sharedInstance] loadSettings];
+        }
         Titanium_EnableZeroLatencyPipeline();
     }
 }
@@ -1533,7 +1532,9 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (void)applicationDidBecomeActive:(id)arg1 {
     %orig;
     if (IS_ACTIVE) {
-        [[BoostConfigV285Pro sharedInstance] loadSettings];
+        if (!Titanium_IsSpringBoard()) {
+            [[BoostConfigV285Pro sharedInstance] loadSettings];
+        }
         Titanium_EnableZeroLatencyPipeline();
     }
 }
@@ -1896,6 +1897,10 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // NHÓM 7: SPRINGBOARD DISPLAY SHELL & ICON GRID OPTIMIZATIONS
 // ====================================================================================================
 
+// Khai báo giao diện hỗ trợ chuyển cảnh thoát app về Home
+@interface SBAppToHomeWorkspaceTransaction : NSObject
+@end
+
 %group Group_Display_SpringBoardV285
 
 %hook SBIconController
@@ -1910,6 +1915,18 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (void)closeFolderAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     %orig(animated, completion);
+}
+- (void)viewDidLayoutSubviews {
+    %orig;
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+}
+%end
+
+// Đảm bảo pipeline độ trễ thấp được bật ngay khi màn hình chính chuẩn bị xuất hiện
+%hook SBHomeScreenViewController
+- (void)viewWillAppear:(BOOL)animated {
+    %orig(animated);
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
 }
 %end
 
@@ -1935,6 +1952,35 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 %hook SBIconListView
 - (void)fadeInIcon:(id)icon {
     %orig(icon);
+}
+// Chống giật lag khi SpringBoard tính toán lại vị trí icon lúc vừa đáp xuống Home
+- (void)layoutIconsNow {
+    %orig;
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+}
+%end
+
+// Giữ snapshot app trong RAM để không phải render lại ảnh chụp khi vuốt ra
+%hook SBAppSwitcherSettings
+- (BOOL)shouldKeepAppSnapshotsInMemory {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+%end
+
+// Render bố cục đa nhiệm bất đồng bộ, dồn toàn bộ GPU ưu tiên hoạt ảnh thoát app
+%hook SBFluidSwitcherModifier
+- (BOOL)shouldasyncRenderAppLayouts {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+%end
+
+// Bù trễ ngay khi hoạt ảnh thu nhỏ cửa sổ vừa kết thúc
+%hook SBAppToHomeWorkspaceTransaction
+- (void)_didComplete {
+    %orig;
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
 }
 %end
 
