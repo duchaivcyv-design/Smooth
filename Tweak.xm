@@ -391,7 +391,7 @@ extern "C" {
 - (void)_updatePreferredContentSize;
 - (void)startPictureInPicture;
 - (void)stopPictureInPictureAnimated:(BOOL)animated;
-- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)arg1;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart;
 - (void)setSuspended:(BOOL)suspended;
 - (BOOL)isStartingStoppingOrCancellingPictureInPicture;
 @end
@@ -700,9 +700,7 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     }
     NSString *p1 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
-    NSString *p2 = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
-    return p1;
+    return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
 
 static inline BOOL HardwareHasNative120Hz(void) {
@@ -1376,7 +1374,8 @@ static BoostConfigV285Pro *CFG285 = nil;
         }
         float target = (float)[CFG285 resolvedTargetHz];
         if (!HardwareHasNative120Hz() && target > 60.0f) target = 60.0f;
-        %orig(SafeMakeFRR(target, target, target));
+        SafeFrameRateRange safeRange = SafeMakeFRR(target, target, target);
+        %orig(safeRange);
         return;
     }
 }
@@ -1395,11 +1394,13 @@ static BoostConfigV285Pro *CFG285 = nil;
         %orig(fps);
         return;
     }
-    %orig([CFG285 resolvedTargetFPS]);
+    NSInteger targetFPS = [CFG285 resolvedTargetFPS];
+    %orig(targetFPS);
 }
 - (void)overrideDisplayCadence:(id)cadence {
     if (IS_ACTIVE) {
-        %orig(nil);
+        id nilCadence = nil;
+        %orig(nilCadence);
         return;
     }
     %orig(cadence);
@@ -1428,7 +1429,8 @@ static BoostConfigV285Pro *CFG285 = nil;
         %orig(rate);
         return;
     }
-    %orig((CGFloat)[CFG285 resolvedTargetHz]);
+    CGFloat targetHz = (CGFloat)[CFG285 resolvedTargetHz];
+    %orig(targetHz);
 }
 %end
 
@@ -1440,7 +1442,8 @@ static BoostConfigV285Pro *CFG285 = nil;
             if (!HardwareHasNative120Hz() && target > 60.0f) {
                 target = 60.0f;
             }
-            %orig(SafeMakeFRR(target, target, target));
+            SafeFrameRateRange safeRange = SafeMakeFRR(target, target, target);
+            %orig(safeRange);
             return;
         }
     }
@@ -1690,7 +1693,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
     if (newWindow && IS_ACTIVE) {
-        self.delaysContentTouches = NO;
         self.layer.drawsAsynchronously = YES;
     }
 }
