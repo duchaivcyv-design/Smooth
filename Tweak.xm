@@ -1925,6 +1925,10 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 @interface SBFluidSwitcherItemContainer : UIView
 @end
 
+// Khai báo interface cho ScrollView màn hình chính
+@interface SBIconScrollView : UIScrollView
+@end
+
 %group Group_Display_SpringBoardV285
 
 // 1. TỐI ƯU CỬ CHỈ LIÊN HOÀN (CHỐNG DELAY / KHỰNG KHI VUỐT NHANH HOẶC DÙNG ANIMATION26)
@@ -1957,6 +1961,14 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     if (IS_ACTIVE) return 1.0;
     return %orig;
 }
+
+// Cắt ngắn thời gian hoạt ảnh lò xo của icon khi đáp xuống màn hình chính
+- (double)iconZoomAnimationDuration {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        return 0.15; // Rút ngắn còn 0.15s để giải phóng RunLoop sớm cho việc lướt trang
+    }
+    return %orig;
+}
 %end
 
 %hook SBFluidSwitcherViewController
@@ -1968,8 +1980,8 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 - (double)animationDurationForTransitionRequest:(id)request {
     double orig = %orig(request);
     if (IS_ACTIVE && CFG285.enableHzControl) {
-        // Rút ngắn 25% thời gian neo giữ animation giúp màn hình chính sẵn sàng tương tác sớm hơn
-        return orig * 0.75;
+        // Rút ngắn 30% thời gian neo giữ animation giúp màn hình chính sẵn sàng tương tác sớm hơn
+        return orig * 0.70;
     }
     return orig;
 }
@@ -1985,13 +1997,17 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     %orig;
     if (IS_ACTIVE) {
         Titanium_BoostCurrentThreadBriefly();
-        Titanium_EnableZeroLatencyPipeline();
     }
 }
 
 - (void)_didComplete {
     %orig;
-    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) {
+        // Trì hoãn nhẹ nhàng lên Main RunLoop để tránh xung đột khung hình với cử chỉ trượt trang
+        dispatch_async(dispatch_get_main_queue(), ^{
+            Titanium_EnableZeroLatencyPipeline();
+        });
+    }
 }
 %end
 
@@ -2003,7 +2019,21 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 %end
 
-// 4. BẢO VỆ MÀN HÌNH CHÍNH (ĐÃ LOẠI BỎ layoutIconsNow VÀ viewDidLayoutSubviews ĐỂ KHÔNG ĐƠ ICON KHI VỀ HOME)
+// 4. MỞ KHÓA LƯỚT TRANG MÀN HÌNH CHÍNH (CHỐNG KHỰNG KHI VUỐT SANG TRANG SAU KHI VĂNG APP)
+%hook SBIconScrollView
+- (BOOL)touchesShouldCancelInContentView:(UIView *)view {
+    // Cho phép hủy ngay thao tác chạm giữ icon để nhường quyền ưu tiên cho cuộn trang tức thì
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+
+- (BOOL)delaysContentTouches {
+    // Không ngâm trễ cảm ứng cuộn trang icon
+    if (IS_ACTIVE) return NO;
+    return %orig;
+}
+%end
+
 %hook SBIconController
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
     if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
