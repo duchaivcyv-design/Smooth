@@ -1,4 +1,5 @@
 // ==================== MACH KERNEL ====================
+// ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
@@ -11,6 +12,7 @@
 #import <mach/thread_policy.h>
 #import <mach/task.h>
 #import <mach/task_info.h>
+#import <mach/task_policy.h>
 #import <mach/clock.h>
 
 // ==================== POSIX & SYSTEM ====================
@@ -137,7 +139,6 @@ extern "C" {
     const char *getprogname(void);
     extern char **environ;
     int setiopolicy_np(int iotype, int scope, int policy);
-    void malloc_zone_pressure_relief(malloc_zone_t *zone, size_t goal);
     kern_return_t IOPMAssertionCreateWithName(CFStringRef assertionType, uint32_t assertionLevel, CFStringRef assertionName, IOPMAssertionID *assertionID);
     kern_return_t IOPMAssertionRelease(IOPMAssertionID assertionID);
 #ifdef __cplusplus
@@ -219,7 +220,7 @@ extern "C" {
 @interface UITextView (TitaniumApexPrivate)
 @end
 
-@interface UIKeyboardImpl (TitaniumApexPrivate)
+@interface UIKeyboardImpl : UIView
 + (instancetype)activeInstance;
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
@@ -237,7 +238,7 @@ extern "C" {
 - (void)hideKeyboard;
 @end
 
-@interface UITextInputController (TitaniumApexPrivate)
+@interface UITextInputController : NSObject
 - (void)_insertText:(id)text;
 - (void)deleteBackward;
 - (void)replaceRange:(id)range withText:(id)text;
@@ -1386,7 +1387,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook CADisplay
 - (NSInteger)preferredFPS {
-    if (!IS_ACTIVE) return %orig;
     return HardwareHasNative120Hz() ? 120 : 60;
 }
 - (void)setPreferredFPS:(NSInteger)fps {
@@ -1519,7 +1519,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
 }
-- (void)viewDidLayoutSubviews {
+- (viewDidLayoutSubviews)viewDidLayoutSubviews {
     if (IS_ACTIVE && CFG285.reduceMultitaskLag) {
         Titanium_BoostCurrentThreadBriefly();
     }
