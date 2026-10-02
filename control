@@ -1,6 +1,6 @@
 Package: com.taojb.boostiphone6s
-Name: SmoothIOS Pro DEBUG
-Version: 5.2.0
+Name: SmoothIOS Pro test
+Version: 5.3.0-1t
 Architecture: iphoneos-arm64
 Description: Pro Update
 Maintainer: TaoJB
