@@ -149,6 +149,33 @@ jobs:
                               else:
                                   hook_tracker[cname] = l_idx
 
+                      # 2.1 Quét lỗi cú pháp method và ARC
+                      for l_idx, l_str in enumerate(lines, 1):
+                          if re.search(r"-\s*\(\s*showKeyboard\s*\)\s*showKeyboard\b", l_str):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Cú Pháp Objective-C",
+                                  "detail": "Khai báo method sai kiểu trả về: `- (showKeyboard)showKeyboard;` -> Đổi thành `- (void)showKeyboard;`.",
+                                  "code": l_str.strip()
+                              })
+                          if re.search(r"\(CFNotificationCallback\)\s*\^", l_str):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Lỗi Biên Dịch ARC",
+                                  "detail": "Ép kiểu Block Objective-C sang CFNotificationCallback bị ARC cấm -> Chuyển thành static C function pointer.",
+                                  "code": l_str.strip()
+                              })
+                          if re.match(r"^\s*Static\s+void\b", l_str):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Cú Pháp C",
+                                  "detail": "Từ khóa `static` bị viết hoa chữ cái đầu -> Đổi thành `static` chữ thường.",
+                                  "code": l_str.strip()
+                              })
+
                   # 3. Quét từng dòng theo AUDIT_RULES
                   if fpath.endswith(('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')):
                       in_block_comment = False
@@ -182,7 +209,6 @@ jobs:
                   # 4. Quét phạm vi biến cục bộ trong runCoreTweak để chặn lỗi undeclared identifier
                   if fpath.endswith(('.xm', '.x')):
                       for idx, line in enumerate(lines, 1):
-                          # Nếu runCoreTweak không nhận tham số mà bên trong lại gọi isSpringBoard/bundleID
                           if re.match(r"^\s*static\s+void\s+runCoreTweak\s*\(\s*(void)?\s*\)", line):
                               body_sub = "\n".join(lines[idx:idx + 60])
                               if re.search(r"\b(isSpringBoard|bundleID|progName)\b", body_sub):
@@ -278,7 +304,11 @@ jobs:
             echo "======================================================================"
             echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG BÓC TÁCH LỖI..."
             echo "======================================================================"
-            grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" \vert{}\vert{} tail -n 30 "$BUILD_LOG_FILE"
+            if grep -q -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE"; then
+              grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE"
+            else
+              tail -n 30 "$BUILD_LOG_FILE"
+            fi
             exit 1
           fi
           
