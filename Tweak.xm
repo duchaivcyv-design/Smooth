@@ -1554,24 +1554,37 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (HardwareHasNative120Hz()) { %orig(fps); return; }
-    if (Titanium_IsPassiveVideoPlayback()) { %orig(fps); return; }
+    if (HardwareHasNative120Hz()) {
+        %orig;
+        return;
+    }
+    if (Titanium_IsPassiveVideoPlayback()) {
+        %orig;
+        return;
+    }
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
         NSInteger target = [CFG285 resolvedTargetFPS];
         if (Titanium_ShouldLockTargetRate()) {
-            %orig(target); // Khóa cứng tuyệt đối
+            %orig(target);
             return;
         }
-        %orig(10); // Hạ về 10 FPS khi tĩnh
+        %orig(10);
         return;
     }
-    %orig(fps);
+    %orig;
 }
 
+// ĐÃ SỬA LẠI TÊN HÀM CHUẨN XÁC: setPreferredFrameRateRange
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    if (HardwareHasNative120Hz()) { %orig(range); return; }
-    if (Titanium_IsPassiveVideoPlayback()) { %orig(range); return; }
+    if (HardwareHasNative120Hz()) { 
+        %orig; 
+        return; 
+    }
+    if (Titanium_IsPassiveVideoPlayback()) { 
+        %orig; 
+        return; 
+    }
 
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
@@ -1611,8 +1624,14 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    if (HardwareHasNative120Hz()) { %orig(fps); return; }
-    if (Titanium_IsPassiveVideoPlayback()) { %orig(fps); return; }
+    if (HardwareHasNative120Hz()) { 
+        %orig; 
+        return; 
+    }
+    if (Titanium_IsPassiveVideoPlayback()) { 
+        %orig; 
+        return; 
+    }
     
     if (IS_ACTIVE) {
         NSInteger target = [CFG285 resolvedTargetFPS];
@@ -1676,7 +1695,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (HardwareHasNative120Hz()) { %orig(rate); return; }
+    if (HardwareHasNative120Hz()) { 
+        %orig; 
+        return; 
+    }
     if (IS_ACTIVE) {
         rate = (CGFloat)[CFG285 resolvedTargetHz];
         Titanium_EnableZeroLatencyPipeline();
