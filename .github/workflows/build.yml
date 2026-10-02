@@ -149,8 +149,34 @@ jobs:
                               else:
                                   hook_tracker[cname] = l_idx
 
-                      # 2.1 Quét lỗi cú pháp method và ARC
+                      # 2.1 Quét lỗi cú pháp method, cấu trúc %orig Logos và ARC
                       for l_idx, l_str in enumerate(lines, 1):
+                          # Bắt lỗi method viết nhầm tên method thành kiểu trả về: - (viewDidLayoutSubviews)viewDidLayoutSubviews
+                          method_match = re.match(r"^\s*[-+]\s*\(\s*([A-Za-z0-9_]+)\s*\)\s*([A-Za-z0-9_]+)\b", l_str)
+                          if method_match:
+                              ret_type = method_match.group(1)
+                              sel_name = method_match.group(2)
+                              if ret_type == sel_name and ret_type not in ["init", "copy", "mutableCopy"]:
+                                  critical_errors.append({
+                                      "file": fpath,
+                                      "line": l_idx,
+                                      "cat": "Sai Kiểu Trả Về Method",
+                                      "detail": f"Phương thức `- ({ret_type}){sel_name}` có kiểu trả về trùng tên selector. Cần đổi thành kiểu hợp lệ như `void` hoặc `id`.",
+                                      "code": l_str.strip()
+                                  })
+
+                          # Bắt lỗi Logos %orig có chứa hàm có dấu phẩy -> Invalid argument structure in %orig
+                          if re.search(r"%orig\s*\([^)]*,[^)]*\)", l_str):
+                              # Nếu không phải là gọi %orig(arg1, arg2) chuẩn mà lồng hàm con có dấu phẩy bên trong
+                              if re.search(r"%orig\s*\([^)]*\(.*?,.*?\)[^)]*\)", l_str) or re.search(r"%orig\s*\(\s*SafeMakeFRR\b", l_str):
+                                  critical_errors.append({
+                                      "file": fpath,
+                                      "line": l_idx,
+                                      "cat": "Logos %orig Sai Cấu Trúc",
+                                      "detail": "Truyền biểu thức chứa dấu phẩy trực tiếp vào `%orig(...)` khiến Logos phân tích nhầm số lượng tham số -> Cần gán ra biến riêng trước rồi truyền `%orig(var);` hoặc dùng `%orig;` trần.",
+                                      "code": l_str.strip()
+                                  })
+
                           if re.search(r"-\s*\(\s*showKeyboard\s*\)\s*showKeyboard\b", l_str):
                               critical_errors.append({
                                   "file": fpath,
@@ -173,6 +199,14 @@ jobs:
                                   "line": l_idx,
                                   "cat": "Cú Pháp C",
                                   "detail": "Từ khóa `static` bị viết hoa chữ cái đầu -> Đổi thành `static` chữ thường.",
+                                  "code": l_str.strip()
+                              })
+                          if re.search(r"void\s+malloc_zone_pressure_relief\s*\(", l_str):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Xung Đột Hàm Malloc SDK",
+                                  "detail": "`malloc_zone_pressure_relief` có kiểu trả về `size_t` trong SDK iOS 17.5. Không được khai báo lại kiểu `void` (gây lỗi overload). Thay bằng `#import <malloc/malloc.h>`.",
                                   "code": l_str.strip()
                               })
 
@@ -302,13 +336,16 @@ jobs:
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "======================================================================"
-            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG BÓC TÁCH LỖI..."
+            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG BÓC TÁCH LỖI VÀ SỐ DÒNG..."
             echo "======================================================================"
-            if grep -q -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE"; then
-              grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE"
-            else
-              tail -n 30 "$BUILD_LOG_FILE"
-            fi
+            
+            # Trích xuất chính xác tên file, số dòng, số cột và mô tả lỗi từ Clang và Logos
+            grep -E '(\.xm|\.x|\.m|\.mm|\.h|\.c|\.cpp):[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" || \
+            grep -E '(\.xm|\.x):[0-9]+:[[:space:]]+error:' "$BUILD_LOG_FILE" || \
+            grep -E 'error:[[:space:]]+' "$BUILD_LOG_FILE" || \
+            tail -n 40 "$BUILD_LOG_FILE"
+            
+            echo "======================================================================"
             exit 1
           fi
           
