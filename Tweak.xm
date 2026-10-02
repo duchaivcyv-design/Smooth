@@ -694,12 +694,14 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
-    NSString *p1 = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist", root];
+    if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
+        NSString *jbPath = [root stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:jbPath]) return jbPath;
+    }
+    NSString *p1 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
-    NSString *p2 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    NSString *p2 = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p2]) return p2;
-    NSString *p3 = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:p3]) return p3;
     return p1;
 }
 
@@ -790,17 +792,12 @@ static void Titanium_DisableKernelThreadThrottling(void) {
 static inline void Titanium_EnforceThreadVIPPolicy(void) {
     if (!NSThread.isMainThread) return;
 
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
     mach_port_t machThread = pthread_mach_thread_np(pthread_self());
     thread_affinity_policy_data_t affPolicy;
     affPolicy.affinity_tag = 1;
     thread_policy_set(machThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affPolicy, THREAD_AFFINITY_POLICY_COUNT);
-
-    thread_time_constraint_policy_data_t timePolicy;
-    timePolicy.period      = 16666667;
-    timePolicy.computation = 14000000;
-    timePolicy.constraint  = 16666667;
-    timePolicy.preemptible = 0;
-    thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
@@ -855,8 +852,6 @@ static void Titanium_ApplySiliconDeepOptimizations(void) {
     setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
     setenv("MTL_SHADER_VALIDATION", "0", 1);
     setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);
-    setenv("AGX_DISABLE_TEXTURE_STREAMING", "1", 1);
-    setenv("CA_COLOR_MATCH_ENABLED", "0", 1);
     setenv("CA_DEBUG_TRANSACTIONS", "0", 1);
     setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
 
@@ -1007,30 +1002,35 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 }
 
 - (void)loadSettings {
-    static BOOL s_isLoading = NO;
-    if (s_isLoading) return;
-    s_isLoading = YES;
-
     @autoreleasepool {
-        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        NSString *prefPath = Titanium_ResolvePrefPath();
         NSDictionary *diskDict = nil;
-        NSString *resolvedPath = Titanium_ResolvePrefPath();
-        if (resolvedPath && [[NSFileManager defaultManager] fileExistsAtPath:resolvedPath]) {
-            diskDict = [NSDictionary dictionaryWithContentsOfFile:resolvedPath];
+        if (prefPath && [[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+            diskDict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+        }
+
+        if (!diskDict) {
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+            CFArrayRef keyList = CFPreferencesCopyKeyList(PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (keyList) {
+                diskDict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(keyList, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+                CFRelease(keyList);
+            }
         }
 
         BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
+            if (diskDict && diskDict[k] != nil) return [diskDict[k] boolValue];
             CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
                 BOOL b = CFBooleanGetValue((CFBooleanRef)val);
                 CFRelease(val);
                 return b;
             }
-            if (diskDict && diskDict[k] != nil) return [diskDict[k] boolValue];
             return d;
         };
 
         NSInteger (^GetLiveInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
+            if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
             CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
                 int n = 0;
@@ -1038,17 +1038,16 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
                 CFRelease(val);
                 return (NSInteger)n;
             }
-            if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
             return d;
         };
 
         NSString * (^GetLiveString)(NSString *, NSString *) = ^NSString *(NSString *k, NSString *d) {
+            if (diskDict && diskDict[k] != nil) return (NSString *)diskDict[k];
             CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
                 NSString *str = (__bridge NSString *)val;
                 return str;
             }
-            if (diskDict && diskDict[k] != nil) return (NSString *)diskDict[k];
             return d;
         };
 
@@ -1089,37 +1088,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         self.antiGhostTouch = GetLiveBool(@"AntiGhostTouch", YES);
         self.chargerRippleRejection = GetLiveBool(@"ChargerRippleRejection", YES);
 
-        if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-            Titanium_ReloadSharedSyncStateV285();
-            if (g_syncPayloadV285.magic == APEX_SYNC_MAGIC_V285) {
-                self.enabled = g_syncPayloadV285.masterEnabled;
-                self.targetHz = g_syncPayloadV285.targetHz;
-                self.targetFPS = g_syncPayloadV285.targetFPS;
-                self.forceOverclock144Hz = g_syncPayloadV285.forceOverclock;
-                self.proMotionEngineBeta7 = g_syncPayloadV285.dynamicInterpolation ? YES : NO;
-                self.touchResponseBoost = g_syncPayloadV285.zeroLatencyTouch ? YES : NO;
-                self.ultraResponsiveness = self.touchResponseBoost;
-                self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
-                self.keyboardZeroLagV24 = g_syncPayloadV285.keyboardZeroLagV3 ? YES : NO;
-                self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
-                self.metalHexBuffering = YES;
-                self.neuralBufferOpt = YES;
-                self.fixAppExitStutter = g_syncPayloadV285.antiStutterExit ? YES : NO;
-                self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
-                self.quantumRenderShield = self.fixAppExitStutter;
-                self.autoCloseBackgroundApp = self.fixAppExitStutter;
-                self.reduceMultitaskLag = self.fixAppExitStutter;
-                self.reduceMultiTaskLag = self.reduceMultitaskLag;
-                self.turboAppLaunch = g_syncPayloadV285.fastAppLaunch ? YES : NO;
-                self.turboLaunch = self.turboAppLaunch;
-                self.aggressiveRamClean = g_syncPayloadV285.aggressiveRamCleaner ? YES : NO;
-                self.periodicRamClean = self.aggressiveRamClean;
-                self.machVMPurgeRam = self.aggressiveRamClean;
-                self.antiThermalThrottling = g_syncPayloadV285.thermalShield ? YES : NO;
-                self.antiThermalThrottle = self.antiThermalThrottling;
-                self.antiGhostTouch = g_syncPayloadV285.antiGhostTouch ? YES : NO;
-            }
-        } else if (Titanium_IsSpringBoard()) {
+        if (Titanium_IsSpringBoard()) {
             ApexV285ProPayload p;
             memset(&p, 0, sizeof(ApexV285ProPayload));
             p.masterEnabled = self.enabled ? 1 : 0;
@@ -1147,7 +1116,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
             });
         }
     }
-    s_isLoading = NO;
 }
 
 - (NSInteger)resolvedTargetHz {
@@ -1166,7 +1134,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 @end
 
 static BoostConfigV285Pro *CFG285 = nil;
-#define IS_ACTIVE (CFG285.enabled)
+#define IS_ACTIVE (CFG285 && CFG285.enabled)
 
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (0.0s RESPONSE)
@@ -1176,35 +1144,46 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook UIGestureRecognizer
 - (BOOL)delaysTouchesBegan {
-    return NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
+    return %orig;
 }
 - (BOOL)delaysTouchesEnded {
-    return NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
+    return %orig;
 }
 - (void)setDelaysTouchesBegan:(BOOL)flag {
-    %orig(NO);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
+    %orig(flag);
 }
 - (void)setDelaysTouchesEnded:(BOOL)flag {
-    %orig(NO);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
+    %orig(flag);
 }
 %end
 
 %hook UIControl
 - (NSTimeInterval)_touchDelayThreshold {
-    return 0.0;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) return 0.0;
+    return %orig;
 }
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(touches, event);
 }
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(touches, event);
 }
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+    }
     %orig(touches, event);
 }
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
@@ -1214,14 +1193,14 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBIconView
 - (void)setHighlighted:(BOOL)highlighted {
-    if (highlighted) {
+    if (highlighted && IS_ACTIVE && CFG285.touchResponseBoost) {
         Titanium_EnableZeroLatencyPipeline();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig(highlighted);
 }
 - (void)setTouchDownInIcon:(BOOL)touchDown {
-    if (touchDown) {
+    if (touchDown && IS_ACTIVE && CFG285.touchResponseBoost) {
         Titanium_EnableZeroLatencyPipeline();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -1231,13 +1210,14 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook UIWindow
 - (BOOL)_shouldDelayTouchForCancelEvents {
-    return NO;
+    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
+    return %orig;
 }
 - (BOOL)_ignoresHitTest {
-    return NO;
+    return %orig;
 }
 - (void)sendEvent:(UIEvent *)event {
-    if (event.type == 0) {
+    if (IS_ACTIVE && CFG285.touchResponseBoost && event.type == 0) {
         Titanium_EnableZeroLatencyPipeline();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
@@ -1255,80 +1235,92 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    %orig(3);
+    if (IS_ACTIVE && CFG285.metalHexBuffering) {
+        %orig(3);
+        return;
+    }
+    %orig(count);
 }
 - (NSUInteger)maximumDrawableCount {
-    return 3;
+    if (IS_ACTIVE && CFG285.metalHexBuffering) return 3;
+    return %orig;
 }
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    %orig(YES);
+    if (IS_ACTIVE) {
+        %orig(YES);
+        return;
+    }
+    %orig(enabled);
 }
 - (void)setFramebufferOnly:(BOOL)fb {
-    %orig(YES);
+    %orig(fb);
 }
 - (BOOL)framebufferOnly {
-    return YES;
+    return %orig;
 }
 - (void)setLowLatencyMode:(BOOL)flag {
-    %orig(YES);
+    if (IS_ACTIVE) {
+        %orig(YES);
+        return;
+    }
+    %orig(flag);
 }
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    %orig(NO);
+    %orig(allow);
 }
 - (id)nextDrawable {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     return %orig;
 }
 %end
 
 %hook CALayer
 - (void)setContentsScale:(CGFloat)scale {
-    if (Titanium_IsSpringBoard()) {
-        %orig(scale);
-        return;
-    }
-    if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        CGFloat screenScale = [UIScreen mainScreen].scale;
-        CGFloat safeScale = (scale > 0.0f) ? scale : screenScale;
-        %orig(safeScale);
-        return;
-    }
     %orig(scale);
 }
 - (void)setDrawsAsynchronously:(BOOL)draws {
-    %orig(YES);
+    if (IS_ACTIVE) {
+        %orig(YES);
+        return;
+    }
+    %orig(draws);
 }
 - (BOOL)drawsAsynchronously {
-    return YES;
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
 - (void)setContentsDrawsAsynchronously:(BOOL)flag {
-    %orig(YES);
+    if (IS_ACTIVE) {
+        %orig(YES);
+        return;
+    }
+    %orig(flag);
 }
 - (BOOL)contentsDrawsAsynchronously {
-    return YES;
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
 - (void)setAllowsGroupOpacity:(BOOL)allows {
-    %orig(NO);
+    %orig(allows);
 }
 - (void)setShouldRasterize:(BOOL)val {
-    %orig(NO);
+    %orig(val);
 }
 - (BOOL)shouldRasterize {
-    return NO;
+    return %orig;
 }
 - (void)setShadowRadius:(CGFloat)radius {
-    CGFloat safeRadius = (radius > 2.0f) ? 2.0f : radius;
-    %orig(safeRadius);
+    %orig(radius);
 }
 - (void)setNeedsDisplayOnBoundsChange:(BOOL)flag {
-    %orig(NO);
+    %orig(flag);
 }
 - (BOOL)needsDisplayOnBoundsChange {
-    return NO;
+    return %orig;
 }
 - (void)display {
-    Titanium_EnableZeroLatencyPipeline();
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -1337,10 +1329,20 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook CAContext
 - (void)setCommitPriority:(uint32_t)priority {
-    %orig(100);
+    if (Titanium_IsSpringBoard()) {
+        %orig(priority);
+        return;
+    }
+    if (IS_ACTIVE) {
+        %orig(100);
+        return;
+    }
+    %orig(priority);
 }
 - (uint32_t)commitPriority {
-    return 100;
+    if (Titanium_IsSpringBoard()) return %orig;
+    if (IS_ACTIVE) return 100;
+    return %orig;
 }
 %end
 
@@ -1358,16 +1360,13 @@ static BoostConfigV285Pro *CFG285 = nil;
         %orig(fps);
         return;
     }
-    if (HardwareHasNative120Hz()) {
-        %orig(fps);
-        return;
-    }
-    NSInteger safeFPS = (fps > 60) ? 60 : fps;
-    %orig(safeFPS);
+    NSInteger target = [CFG285 resolvedTargetFPS];
+    if (!HardwareHasNative120Hz() && target > 60) target = 60;
+    %orig(target);
 }
 - (NSInteger)preferredFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
-    return HardwareHasNative120Hz() ? 120 : 60;
+    return [CFG285 resolvedTargetFPS];
 }
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
@@ -1375,8 +1374,9 @@ static BoostConfigV285Pro *CFG285 = nil;
             %orig(range);
             return;
         }
-        float rate = HardwareHasNative120Hz() ? 120.0f : 60.0f;
-        %orig(SafeMakeFRR(rate, rate, rate));
+        float target = (float)[CFG285 resolvedTargetHz];
+        if (!HardwareHasNative120Hz() && target > 60.0f) target = 60.0f;
+        %orig(SafeMakeFRR(target, target, target));
         return;
     }
 }
@@ -1387,17 +1387,22 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook CADisplay
 - (NSInteger)preferredFPS {
-    return HardwareHasNative120Hz() ? 120 : 60;
+    if (!IS_ACTIVE) return %orig;
+    return [CFG285 resolvedTargetFPS];
 }
 - (void)setPreferredFPS:(NSInteger)fps {
-    if (HardwareHasNative120Hz()) {
+    if (!IS_ACTIVE) {
         %orig(fps);
-    } else {
-        %orig(60);
+        return;
     }
+    %orig([CFG285 resolvedTargetFPS]);
 }
 - (void)overrideDisplayCadence:(id)cadence {
-    %orig(nil);
+    if (IS_ACTIVE) {
+        %orig(nil);
+        return;
+    }
+    %orig(cadence);
 }
 - (BOOL)supportsDynamicRefresh {
     if (!IS_ACTIVE) return %orig;
@@ -1408,22 +1413,22 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
-    return HardwareHasNative120Hz() ? 120 : 60;
+    return [CFG285 resolvedTargetHz];
 }
 - (NSInteger)_maximumFramesPerSecond {
     if (!IS_ACTIVE) return %orig;
-    return HardwareHasNative120Hz() ? 120 : 60;
+    return [CFG285 resolvedTargetHz];
 }
 - (CGFloat)_refreshRate {
     if (!IS_ACTIVE) return %orig;
-    return HardwareHasNative120Hz() ? 120.0f : 60.0f;
+    return (CGFloat)[CFG285 resolvedTargetHz];
 }
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    if (HardwareHasNative120Hz()) {
+    if (!IS_ACTIVE) {
         %orig(rate);
-    } else {
-        %orig(60.0f);
+        return;
     }
+    %orig((CGFloat)[CFG285 resolvedTargetHz]);
 }
 %end
 
@@ -1445,10 +1450,12 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook NSProcessInfo
 - (BOOL)isLowPowerModeEnabled {
-    return NO;
+    if (IS_ACTIVE && CFG285.antiThermalThrottling) return NO;
+    return %orig;
 }
 - (NSProcessInfoThermalState)thermalState {
-    return NSProcessInfoThermalStateNominal;
+    if (IS_ACTIVE && CFG285.antiThermalThrottling) return NSProcessInfoThermalStateNominal;
+    return %orig;
 }
 %end
 
@@ -1462,15 +1469,13 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBFluidSwitcherModifier
 - (double)shadowOpacityForIndex:(unsigned long long)index {
-    if (index > 3) return 0.0;
     return %orig(index);
 }
 - (double)wallpaperOverlayAlphaForIndex:(unsigned long long)index {
-    if (index > 2) return 0.0;
     return %orig(index);
 }
 - (BOOL)shouldasyncRenderAppLayouts {
-    return YES;
+    return %orig;
 }
 %end
 
@@ -1488,20 +1493,20 @@ static BoostConfigV285Pro *CFG285 = nil;
     return %orig;
 }
 - (BOOL)shouldSimplifyForOptions:(long long)options {
-    return YES;
+    return %orig;
 }
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    return NO;
+    return %orig;
 }
 %end
 
 %hook SBAppSwitcherSnapshotImageCache
 - (void)reloadImagesForAllItems {
-    Titanium_BackgroundPurgeMemory();
+    if (IS_ACTIVE) Titanium_BackgroundPurgeMemory();
     %orig;
 }
 - (void)_purgeAllSnapshots {
-    Titanium_BackgroundPurgeMemory();
+    if (IS_ACTIVE) Titanium_BackgroundPurgeMemory();
     %orig;
 }
 %end
@@ -1509,11 +1514,13 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook SBAppSwitcherController
 - (void)switcherContentController:(id)contentController deletedItem:(id)deletedItem {
     %orig(contentController, deletedItem);
-    Titanium_BackgroundPurgeMemory();
+    if (IS_ACTIVE && CFG285.aggressiveRamClean) Titanium_BackgroundPurgeMemory();
 }
 - (void)viewWillAppear:(BOOL)animated {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(animated);
 }
 - (void)viewDidDisappear:(BOOL)animated {
@@ -1529,8 +1536,10 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBDeckSwitcherViewController
 - (void)viewWillAppear:(BOOL)animated {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(animated);
 }
 - (void)viewDidAppear:(BOOL)animated {
@@ -1546,14 +1555,7 @@ static BoostConfigV285Pro *CFG285 = nil;
     %orig(alpha);
 }
 - (void)setCornerRadius:(CGFloat)radius {
-    CGFloat targetRadius = radius;
-    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
-        targetRadius = 38.0f;
-        if ([self.layer respondsToSelector:@selector(setCornerCurve:)]) {
-            [self.layer setValue:@"continuous" forKey:@"cornerCurve"];
-        }
-    }
-    %orig(targetRadius);
+    %orig(radius);
 }
 %end
 
@@ -1567,20 +1569,24 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
-    Titanium_EnforceThreadVIPPolicy();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.turboAppLaunch) {
+        Titanium_EnforceThreadVIPPolicy();
+    }
     %orig(context, completion);
 }
 - (void)launchIfNecessary {
-    Titanium_EnforceThreadVIPPolicy();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.turboAppLaunch) {
+        Titanium_EnforceThreadVIPPolicy();
+    }
     %orig;
 }
 %end
 
 %hook FBProcess
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
-    Titanium_BackgroundPurgeMemory();
+    if (IS_ACTIVE && CFG285.fixAppExitStutter) {
+        Titanium_BackgroundPurgeMemory();
+    }
     %orig(reason, report, description, completion);
 }
 %end
@@ -1593,7 +1599,9 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook UIApplication
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
-    Titanium_EnforceThreadVIPPolicy();
+    if (IS_ACTIVE && CFG285.turboAppLaunch) {
+        Titanium_EnforceThreadVIPPolicy();
+    }
     %orig(scene, context, completion);
 }
 - (BOOL)_handleDelegateCallbacksWithOptions:(id)options isSuspended:(BOOL)suspended restoreState:(BOOL)restoreState {
@@ -1603,13 +1611,17 @@ static BoostConfigV285Pro *CFG285 = nil;
     return %orig(options, suspended, restoreState);
 }
 - (void)_applicationWillEnterForeground {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)_applicationDidBecomeActive {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)_applicationDidEnterBackground {
@@ -1631,23 +1643,25 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook UIScrollView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
-    if (newWindow) {
+    if (newWindow && IS_ACTIVE && CFG285.colorOs17SmoothEngine) {
         self.delaysContentTouches = NO;
         self.decelerationRate = 0.998f;
         if (self.layer) {
             self.layer.drawsAsynchronously = YES;
-            self.layer.allowsGroupOpacity = NO;
         }
     }
 }
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
-    return YES;
+    if (IS_ACTIVE && CFG285.colorOs17SmoothEngine) return YES;
+    return %orig(view);
 }
 - (void)_forcePanGestureToEndImmediately {
     %orig;
 }
 - (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2 {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(arg1, arg2);
 }
 %end
@@ -1655,7 +1669,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook UITableView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
-    if (newWindow) {
+    if (newWindow && IS_ACTIVE) {
         self.delaysContentTouches = NO;
         self.layer.drawsAsynchronously = YES;
     }
@@ -1665,7 +1679,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook UICollectionView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
-    if (newWindow) {
+    if (newWindow && IS_ACTIVE) {
         self.delaysContentTouches = NO;
         self.layer.drawsAsynchronously = YES;
     }
@@ -1675,7 +1689,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook UITextView
 - (void)willMoveToWindow:(UIWindow *)newWindow {
     %orig(newWindow);
-    if (newWindow) {
+    if (newWindow && IS_ACTIVE) {
         self.delaysContentTouches = NO;
         self.layer.drawsAsynchronously = YES;
     }
@@ -1684,54 +1698,77 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook UIKeyboardImpl
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(string, event, context);
 }
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(string, flags, context);
 }
 - (void)clearAnimations {
     %orig;
 }
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag {
-    %orig(NO);
+    BOOL safeFlag = (IS_ACTIVE && CFG285.keyboardZeroLagV24) ? NO : flag;
+    %orig(safeFlag);
 }
 - (void)updateReturnKey:(BOOL)arg1 {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(arg1);
 }
 - (void)hardwareKeyboardAvailabilityChanged {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)setReturnKeyEnabled:(BOOL)enabled {
-    %orig(YES);
+    BOOL safeEnabled = (IS_ACTIVE && CFG285.keyboardZeroLagV24) ? YES : enabled;
+    %orig(safeEnabled);
 }
 - (BOOL)returnKeyEnabled {
-    return YES;
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        return YES;
+    }
+    return %orig;
 }
 - (void)setInputMode:(id)inputMode {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(inputMode);
 }
 - (void)setDelegate:(id)delegate {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(delegate);
 }
 - (void)textChanged:(id)arg1 {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(arg1);
 }
 - (void)deleteFromInput {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)showKeyboard {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)hideKeyboard {
@@ -1741,25 +1778,35 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook UITextInputController
 - (void)_insertText:(id)text {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(text);
 }
 - (void)deleteBackward {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)replaceRange:(id)range withText:(id)text {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(range, text);
 }
 - (void)setMarkedText:(id)markedText selectedRange:(NSRange)selectedRange {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(markedText, selectedRange);
 }
 - (void)unmarkText {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 %end
@@ -1774,15 +1821,15 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBIconController
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     %orig(index, animate);
 }
 - (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     %orig(folder, animated, completion);
 }
 - (void)closeFolderAnimated:(BOOL)animated completion:(id)completion {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     %orig(animated, completion);
 }
 %end
@@ -1798,7 +1845,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBFolderView
 - (void)prepareToOpen {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     %orig;
 }
 - (void)cleanupAfterClose {
@@ -1832,7 +1879,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBLockScreenManager
 - (void)unlockUIFromSource:(int)source withOptions:(id)options {
-    Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE) Titanium_EnableZeroLatencyPipeline();
     %orig(source, options);
 }
 - (void)lockUIFromSource:(int)source withOptions:(id)options {
@@ -1860,14 +1907,14 @@ static BoostConfigV285Pro *CFG285 = nil;
 %hook PGPictureInPictureRemoteObject
 - (void)_updatePreferredContentSize {
     %orig;
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 }
 - (void)startPictureInPicture {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
 - (void)stopPictureInPictureAnimated:(BOOL)animated {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(animated);
 }
 - (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart {
@@ -1877,40 +1924,40 @@ static BoostConfigV285Pro *CFG285 = nil;
     return %orig;
 }
 - (void)setSuspended:(BOOL)suspended {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(suspended);
 }
 %end
 
 %hook SBPIPController
 - (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1 {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(arg1);
 }
 - (void)_updatePictureInPictureWindowMargin {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
 - (UIEdgeInsets)pictureInPictureWindowMargin {
     return %orig;
 }
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(pid, sceneId, animated, completion);
 }
 - (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(pid, sceneId);
 }
 %end
 
 %hook AVPictureInPictureController
 - (void)startPictureInPicture {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
 - (void)stopPictureInPicture {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
 - (BOOL)isPictureInPicturePossible {
@@ -1940,18 +1987,24 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBHomeHardwareButtonActions
 - (void)performSinglePressAction {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)performDoublePressAction {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)performTriplePressAction {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig;
 }
 - (void)performLongPressCancelled {
@@ -1965,16 +2018,18 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBFluidSwitcherViewController
 - (void)viewWillLayoutSubviews {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
 - (void)viewDidLayoutSubviews {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
 }
 - (void)handleFluidSwitcherGesture:(id)gesture {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(gesture);
 }
 %end
@@ -1989,7 +2044,7 @@ static BoostConfigV285Pro *CFG285 = nil;
 
 %hook SBApplication
 - (void)setProcessState:(id)state {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig(state);
 }
 - (id)processState {
@@ -2008,19 +2063,21 @@ static BoostConfigV285Pro *CFG285 = nil;
     return %orig;
 }
 - (void)didExitWithContext:(id)context {
-    Titanium_BackgroundPurgeMemory();
+    if (IS_ACTIVE && CFG285.aggressiveRamClean) Titanium_BackgroundPurgeMemory();
     %orig(context);
 }
 %end
 
 %hook SBMainWorkspace
 - (void)_handleApplicationProcessExited:(id)processDescription {
-    Titanium_BackgroundPurgeMemory();
+    if (IS_ACTIVE && CFG285.aggressiveRamClean) Titanium_BackgroundPurgeMemory();
     %orig(processDescription);
 }
 - (void)handleApplicationLaunch:(id)application {
-    Titanium_EnableZeroLatencyPipeline();
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (IS_ACTIVE && CFG285.turboAppLaunch) {
+        Titanium_EnableZeroLatencyPipeline();
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
     %orig(application);
 }
 - (void)handleApplicationSuspended:(id)application {
@@ -2215,6 +2272,14 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         NSString *bundleID = [mainBundle bundleIdentifier];
         if (!bundleID || [bundleID length] == 0) return;
 
+        if ([bundleID isEqualToString:@"org.coolstar.SileoStore"] ||
+            [bundleID isEqualToString:@"xyz.willy.Zebra"] ||
+            [bundleID isEqualToString:@"com.tigisoftware.Filza"] ||
+            [bundleID isEqualToString:@"org.cr4shed.gui"] ||
+            [bundleID containsString:@"TrollStore"]) {
+            return;
+        }
+
         BOOL isSpringBoard = [bundleID isEqualToString:@"com.apple.springboard"];
         BOOL isAppleStock = [bundleID hasPrefix:@"com.apple."];
         BOOL isJBApp = NO;
@@ -2223,8 +2288,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         if (bundlePath) {
             if ([bundlePath containsString:@"/Applications"] || 
                 [bundlePath containsString:@"/procursus"] || 
-                [bundlePath containsString:@"/jb"] || 
-                [bundlePath containsString:@"/TrollStore"]) {
+                [bundlePath containsString:@"/jb"]) {
                 if (![bundlePath containsString:@"/var/containers/Bundle/Application/"]) {
                     isJBApp = YES;
                 }
