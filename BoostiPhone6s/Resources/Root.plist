@@ -27,6 +27,14 @@
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
+
+		<!-- NHÓM 2: CÀI ĐẶT NGÔN NGỮ (TÁCH RIÊNG ĐỂ LUÔN HIỂN THỊ KỂ CẢ KHI TẮT TWEAK) -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>CÀI ĐẶT NGÔN NGỮ</string>
+		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
@@ -38,7 +46,7 @@
 			<string>SelectedLanguage</string>
 		</dict>
 
-		<!-- NHÓM 2: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING) -->
+		<!-- NHÓM 3: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING) -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -90,7 +98,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 3: ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ) -->
+		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ) -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -162,7 +170,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 4: BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH) -->
+		<!-- NHÓM 5: BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH) -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -214,7 +222,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 5: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP) -->
+		<!-- NHÓM 6: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP) -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -252,7 +260,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 6: GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17 -->
+		<!-- NHÓM 7: GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17 -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -281,7 +289,7 @@
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
-			<string>ReduceMultitaskLag</string>
+			<string>ReduceMultiTaskLag</string>
 			<key>label</key>
 			<string>Giảm Lag Đa Nhiệm (App Switcher)</string>
 			<key>PostNotification</key>
@@ -316,7 +324,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 7: LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER -->
+		<!-- NHÓM 8: LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -464,7 +472,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 8: BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME -->
+		<!-- NHÓM 9: BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -612,7 +620,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 9: QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN -->
+		<!-- NHÓM 10: QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -690,7 +698,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 10: BẢO MẬT & QUYỀN RIÊNG TƯ -->
+		<!-- NHÓM 11: BẢO MẬT & QUYỀN RIÊNG TƯ -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
@@ -726,7 +734,7 @@
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
-		<!-- NHÓM 11: THÔNG TIN PHÁT TRIỂN & HỖ TRỢ -->
+		<!-- NHÓM 12: THÔNG TIN PHÁT TRIỂN & HỖ TRỢ -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
