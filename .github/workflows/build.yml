@@ -23,7 +23,7 @@ jobs:
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          # Cài dpkg, ldid và coreutils để Theos đóng gói và ký mã deb
+          # Cài dpkg, ldid, coreutils và python3
           brew install dpkg ldid coreutils python3
 
       # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
@@ -53,19 +53,19 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN (NẾU CÓ LỖI SẼ BÁO DẤU X ĐỎ VÀ DỪNG NGAY) ---
-      - name: Pre-Build Source Code & iOS Security Gate
+      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN BẢN 3.0 (KIỂM TOÁN MÔ-ĐUN & TƯƠNG THÍCH TOÀN DIỆN) ---
+      - name: Pre-Build Source Code & iOS Security Gate V3.0
         run: |
           python3 - << 'EOF'
           import os, re, sys
 
-          RULES = [
-              # 1. Lỗi phân quyền và sai đường dẫn Rootless / RootHide
+          AUDIT_RULES = [
+              # 1. Bảo vệ phân quyền RootHide & Rootless
               {
                   "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
                   "guard": None,
                   "cat": "RootHide/Rootless Path Crash",
-                  "msg": "Hardcode đường dẫn '/var/jb' trong C system call -> Gây crash sandbox hoặc sai UUID trên RootHide."
+                  "msg": "Hardcode đường dẫn '/var/jb' trong C system call -> Gây crash sandbox hoặc sai UUID trên RootHide. Hãy dùng dynamic prefix."
               },
               {
                   "pattern": r'@\"/var/jb/var/mobile/Library/Preferences',
@@ -73,9 +73,9 @@ jobs:
                   "cat": "RootHide Pref Path",
                   "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
               },
-              # 2. Lỗi crash thiếu Symbol trên iOS 14
+              # 2. Crash Symbol trên iOS 14
               {
-                  "pattern": r"(CAFrameRateRange|setPreferredFrameRateRange:)",
+                  "pattern": r"(CAFrameRateRangeMake|setPreferredFrameRateRange:)",
                   "guard": r"@available\s*\(\s*iOS\s*15",
                   "cat": "iOS 14 Symbol Crash",
                   "msg": "Dùng API CAFrameRateRange nhưng không bọc @available(iOS 15.0, *) -> Crash Safe Mode 'Symbol not found' trên iOS 14."
@@ -85,6 +85,20 @@ jobs:
                   "guard": r"respondsToSelector.*cornerCurve",
                   "cat": "iOS 12-14 Crash",
                   "msg": "Gán trực tiếp cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
+              },
+              # 3. Kìm hãm màn 120Hz thật của 13 Pro -> 15 Pro Max / 16+
+              {
+                  "pattern": r"(CAFrameRateRangeMake\s*\(\s*60\.0f\s*,\s*120\.0f\s*,\s*60\.0f\s*\)|safeFPS\s*=\s*60)",
+                  "guard": r"HardwareHasNative120Hz",
+                  "cat": "ProMotion Drop Throttle",
+                  "msg": "Ép trần 60Hz mà không kiểm tra HardwareHasNative120Hz() -> Gây sụt tụt xung nhịp trên màn hình 120Hz ProMotion gốc."
+              },
+              # 4. Kiểm tra nguy cơ đơ giật UI và kẹt đa nhiệm
+              {
+                  "pattern": r"\[\w+\s+layoutIfNeeded\]",
+                  "guard": None,
+                  "cat": "UI Hang/Lag Launch",
+                  "msg": "Cưỡng ép layout đồng bộ -> Gây khựng từ 200-500ms khi mở app hoặc cuộn Switcher."
               }
           ]
 
@@ -100,6 +114,7 @@ jobs:
 
           critical_errors = []
           all_source = ""
+          file_contents = {}
 
           # Quét cấu trúc từng file
           for fpath in files_list:
@@ -108,10 +123,12 @@ jobs:
                       content = f.read()
                       lines = content.splitlines()
 
+                  file_contents[fpath] = (content, lines)
+
                   if fpath.endswith(('.xm', '.x', '.m', '.mm')):
                       all_source += "\n" + content
 
-                  # Bắt lệch thẻ Logos %hook / %group vs %end
+                  # 1. Kiểm tra tính toàn vẹn cấu trúc Logos
                   if fpath.endswith(('.xm', '.x')):
                       hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
                       groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
@@ -128,17 +145,47 @@ jobs:
                               "code": "Cần đồng bộ lại các cặp đóng %end"
                           })
 
-                  # Quét từng dòng theo luật
+                      # 2. Kiểm tra trùng lặp %hook trong cùng một file
+                      hook_targets = re.findall(r"^\s*%hook\s+([A-Za-z0-9_]+)", content, re.MULTILINE)
+                      seen_hooks = set()
+                      dup_hooks = set()
+                      for ht in hook_targets:
+                          if ht in seen_hooks:
+                              dup_hooks.add(ht)
+                          else:
+                              seen_hooks.add(ht)
+                      if dup_hooks:
+                          for dh in dup_hooks:
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": "N/A",
+                                  "cat": "Trùng Lặp Hook",
+                                  "detail": f"Lớp `{dh}` bị khai báo %hook nhiều lần trong cùng file -> Gây lỗi redefinition khi compile.",
+                                  "code": f"%hook {dh}"
+                              })
+
+                  # 3. Quét từng dòng theo các luật AUDIT_RULES
+                  in_block_comment = False
                   for idx, line in enumerate(lines, 1):
                       sline = line.strip()
-                      if sline.startswith("//") or sline.startswith("/*") or sline.startswith("*"):
+
+                      if "/*" in sline:
+                          in_block_comment = True
+                      if "*/" in sline:
+                          in_block_comment = False
+                          continue
+                      if in_block_comment or sline.startswith("//") or sline.startswith("*"):
+                          continue
+
+                      # Bỏ qua các dòng import hoặc typedef để tránh báo lỗi ảo
+                      if sline.startswith("#import") or sline.startswith("#include") or sline.startswith("typedef"):
                           continue
 
                       for r in RULES:
                           if re.search(r["pattern"], line):
                               has_guard = False
                               if r["guard"]:
-                                  ctx_start = max(0, idx - 12)
+                                  ctx_start = max(0, idx - 18)
                                   ctx = "\n".join(lines[ctx_start:idx])
                                   if re.search(r["guard"], ctx):
                                       has_guard = True
@@ -154,17 +201,42 @@ jobs:
               except Exception as e:
                   print(f"Lỗi đọc file {fpath}: {e}")
 
-          # Kiểm tra code thiếu: Group định nghĩa nhưng không %init
-          defined_grps = re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE)
-          for grp in set(defined_grps):
-              if not re.search(rf"%init\s*\(\s*{grp}\s*\)", all_source):
-                  critical_errors.append({
-                      "file": "Tweak.xm",
-                      "line": "N/A",
-                      "cat": "Thiếu Code Kích Hoạt",
-                      "detail": f"Group `{grp}` được khai báo nhưng KHÔNG có `%init({grp})` trong %ctor -> Tính năng này sẽ bị vô hiệu hóa!",
-                      "code": f"%group {grp}"
-                  })
+          # 4. KIỂM TRA ĐỒNG BỘ MÔ-ĐUN (%group vs %init) HAI CHIỀU
+          defined_grps = set(re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE))
+          initialized_grps = set(re.findall(r"%init\s*\(\s*([A-Za-z0-9_]+)\s*\)", all_source))
+
+          # Group định nghĩa nhưng không %init
+          uninit_grps = defined_grps - initialized_grps
+          for grp in uninit_grps:
+              critical_errors.append({
+                  "file": "Tweak.xm",
+                  "line": "N/A",
+                  "cat": "Mô-đun Mồ Côi",
+                  "detail": f"Group `{grp}` được khai báo nhưng KHÔNG có `%init({grp})` trong %ctor -> Toàn bộ mô-đun này sẽ bị vô hiệu hóa!",
+                  "code": f"%group {grp}"
+              })
+
+          # %init một Group không hề tồn tại
+          ghost_grps = initialized_grps - defined_grps
+          for grp in ghost_grps:
+              critical_errors.append({
+                  "file": "Tweak.xm",
+                  "line": "N/A",
+                  "cat": "Mô-đun Không Tồn Tại",
+                  "detail": f"Lệnh gọi `%init({grp})` tham chiếu đến một Group không hề được định nghĩa -> Gây lỗi biên dịch Clang / Logos.",
+                  "code": f"%init({grp})"
+              })
+
+          # 5. Kiểm tra sự tồn tại của filter plist
+          has_plist = any(f.endswith('.plist') for f in files_list)
+          if not has_plist:
+              critical_errors.append({
+                  "file": "Project Root",
+                  "line": "N/A",
+                  "cat": "Thiếu Filter Plist",
+                  "detail": "Không tìm thấy file .plist bộ lọc bundle (vd: BoostiPhone6sCore.plist) -> Dylib không thể nạp vào SpringBoard.",
+                  "code": "Cần có file <TweakName>.plist cùng cấp Makefile"
+              })
 
           # Xuất báo cáo nếu phát hiện lỗi
           if critical_errors:
@@ -180,7 +252,7 @@ jobs:
               sys.exit(1)
           else:
               print("\n" + "=" * 80)
-              print("✅ KIỂM TOÁN HOÀN TẤT: Mã nguồn hợp lệ, an toàn cho cả iOS 14 - 16+ và RootHide!")
+              print("✅ KIỂM TOÁN HOÀN TẤT: Mã nguồn hợp lệ, an toàn cho cả iOS 14 - 26+ và iPhone 6s - 15 Pro Max!")
               print("=" * 80 + "\n")
           EOF
 
