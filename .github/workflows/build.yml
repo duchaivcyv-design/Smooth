@@ -51,14 +51,13 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 2.5: CỔNG BẢO VỆ CHUYÊN SÂU (BÁO ĐÚNG TỪNG DÒNG, CHẶN ĐỨNG TRƯỚC KHI BUILD) ---
+            # --- BƯỚC 2.5: CỔNG BẢO VỆ CHUYÊN SÂU (BÁO ĐÚNG TỪNG DÒNG, CHẶN ĐỨNG TRƯỚC KHI BUILD) ---
       - name: Pre-Build Source Code & iOS Security Gate
         run: |
           python3 - << 'EOF'
           import os, re, sys
 
           AUDIT_RULES = [
-              # 1. Phân quyền RootHide / Rootless
               {
                   "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
                   "guard": None,
@@ -71,7 +70,6 @@ jobs:
                   "cat": "RootHide Pref Path",
                   "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
               },
-              # 2. Crash Symbol iOS 14
               {
                   "pattern": r"CAFrameRateRangeMake\s*\(",
                   "guard": r"@available\s*\(\s*iOS\s*15",
@@ -84,7 +82,6 @@ jobs:
                   "cat": "iOS 12-14 Crash",
                   "msg": "Gán cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
               },
-              # 3. Kìm hãm 120Hz ProMotion thật
               {
                   "pattern": r"(CAFrameRateRangeMake\s*\(\s*60\.0f\s*,\s*120\.0f\s*,\s*60\.0f\s*\)|safeFPS\s*=\s*60)",
                   "guard": r"HardwareHasNative120Hz",
@@ -149,9 +146,29 @@ jobs:
                               else:
                                   hook_tracker[cname] = l_idx
 
-                      # 2.1 Quét lỗi cú pháp method, cấu trúc %orig Logos và ARC
+                      # 2.1 QUÉT SÂU TỪNG DÒNG %ORIG VÀ METHOD LOGOS
                       for l_idx, l_str in enumerate(lines, 1):
-                          # Bắt lỗi method viết nhầm tên method thành kiểu trả về: - (viewDidLayoutSubviews)viewDidLayoutSubviews
+                          # Bắt lỗi: %orig(nil); hoặc %orig(NULL);
+                          if re.search(r"%orig\s*\(\s*(nil\vert{}NULL)\s*\)", l_str):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Logos %orig Sai Cấu Trúc (nil/NULL)",
+                                  "detail": "Truyền trực tiếp `nil` hoặc `NULL` vào `%orig(...)` gây lỗi 'Invalid argument structure in %orig'. Gán ra biến: `id empty = nil; %orig(empty);` hoặc dùng `%orig;`.",
+                                  "code": l_str.strip()
+                              })
+
+                          # Bắt lỗi: %orig(SafeMakeFRR(...)) hoặc các hàm con có dấu phẩy
+                          if re.search(r"%orig\s*\([^)]*\(.*?,.*?\)[^)]*\)", l_str) or re.search(r"%orig\s*\(\s*SafeMakeFRR\b", l_str):
+                              critical_errors.append({
+                                  "file": fpath,
+                                  "line": l_idx,
+                                  "cat": "Logos %orig Sai Cấu Trúc (Dấu Phẩy Lồng)",
+                                  "detail": "Truyền biểu thức chứa dấu phẩy trực tiếp vào `%orig(...)` làm Logos hiểu nhầm thành nhiều tham số. Cần gán ra biến riêng trước rồi gọi `%orig(var);`.",
+                                  "code": l_str.strip()
+                              })
+
+                          # Bắt lỗi method viết nhầm kiểu trả về thành tên selector
                           method_match = re.match(r"^\s*[-+]\s*\(\s*([A-Za-z0-9_]+)\s*\)\s*([A-Za-z0-9_]+)\b", l_str)
                           if method_match:
                               ret_type = method_match.group(1)
@@ -165,26 +182,6 @@ jobs:
                                       "code": l_str.strip()
                                   })
 
-                          # Bắt lỗi Logos %orig có chứa hàm có dấu phẩy -> Invalid argument structure in %orig
-                          if re.search(r"%orig\s*\([^)]*,[^)]*\)", l_str):
-                              # Nếu không phải là gọi %orig(arg1, arg2) chuẩn mà lồng hàm con có dấu phẩy bên trong
-                              if re.search(r"%orig\s*\([^)]*\(.*?,.*?\)[^)]*\)", l_str) or re.search(r"%orig\s*\(\s*SafeMakeFRR\b", l_str):
-                                  critical_errors.append({
-                                      "file": fpath,
-                                      "line": l_idx,
-                                      "cat": "Logos %orig Sai Cấu Trúc",
-                                      "detail": "Truyền biểu thức chứa dấu phẩy trực tiếp vào `%orig(...)` khiến Logos phân tích nhầm số lượng tham số -> Cần gán ra biến riêng trước rồi truyền `%orig(var);` hoặc dùng `%orig;` trần.",
-                                      "code": l_str.strip()
-                                  })
-
-                          if re.search(r"-\s*\(\s*showKeyboard\s*\)\s*showKeyboard\b", l_str):
-                              critical_errors.append({
-                                  "file": fpath,
-                                  "line": l_idx,
-                                  "cat": "Cú Pháp Objective-C",
-                                  "detail": "Khai báo method sai kiểu trả về: `- (showKeyboard)showKeyboard;` -> Đổi thành `- (void)showKeyboard;`.",
-                                  "code": l_str.strip()
-                              })
                           if re.search(r"\(CFNotificationCallback\)\s*\^", l_str):
                               critical_errors.append({
                                   "file": fpath,
