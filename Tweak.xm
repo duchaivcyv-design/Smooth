@@ -1169,13 +1169,6 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (0.0s RESPONSE)
 // ===================================================================================================
-@interface CADisplay : NSObject
-+ (CADisplay *)mainDisplay;
-@property (nonatomic, assign) double latency;
-@property (nonatomic, assign) BOOL allowsVirtualModes;
-@end
-
-// 1. TẮT CƠ CHẾ GOM TIMER CỦA KERNEL (ZERO-LATENCY WAKEUP TIER 0)
 static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
     #if defined(TASK_LATENCY_QOS_POLICY)
     task_latency_qos_policy_data_t latencyPolicy;
@@ -1185,7 +1178,7 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
 
     #if defined(TASK_THROUGHPUT_QOS_POLICY)
     task_throughput_qos_policy_data_t throughputPolicy;
-    throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0; // Băng thông I/O tối đa
+    throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0; // Băng thông tối đa
     task_policy_set(mach_task_self(), TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
     #endif
 }
@@ -1196,28 +1189,34 @@ static void Titanium_ElevateThreadToMachRealTime(void) {
     mach_timebase_info(&timebase);
 
     uint64_t period_ns = 16666667;     // Chu kỳ 60 FPS (16.6ms)
-    uint64_t computation_ns = 8000000; // Đảm bảo 8ms tính toán không ngắt quãng
+    uint64_t computation_ns = 8000000; // Đảm bảo 8ms tính toán liên tục
     uint64_t constraint_ns = 12000000;
 
     thread_time_constraint_policy_data_t policy;
     policy.period = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
     policy.computation = (uint32_t)((computation_ns * timebase.denom) / timebase.numer);
     policy.constraint = (uint32_t)((constraint_ns * timebase.denom) / timebase.numer);
-    policy.preemptible = 1; // Cho phép nhả an toàn khi có ngắt tối cao
+    policy.preemptible = 1;
 
     thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 }
 
-// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ (CADisplay SPI)
+// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ (GỌI RUNTIME AN TOÀN, KHÔNG TRÙNG INTERFACE)
 static void AppleInternal_LockHardwareCADisplay(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        Class caDisplayClass = NSClassFromString(@"CADisplay");
-        if (caDisplayClass && [caDisplayClass respondsToSelector:@selector(mainDisplay)]) {
-            CADisplay *display = [caDisplayClass mainDisplay];
+        Class caDisplayClass = objc_getClass("CADisplay");
+        if (caDisplayClass && [caDisplayClass respondsToSelector:sel_registerName("mainDisplay")]) {
+            id display = ((id (*)(id, SEL))objc_msgSend)(caDisplayClass, sel_registerName("mainDisplay"));
             if (display) {
-                if ([display respondsToSelector:@selector(setLatency:)]) [display setLatency:0.0];
-                if ([display respondsToSelector:@selector(setAllowsVirtualModes:)]) [display setAllowsVirtualModes:NO];
+                SEL selLatency = sel_registerName("setLatency:");
+                if ([display respondsToSelector:selLatency]) {
+                    ((void (*)(id, SEL, double))objc_msgSend)(display, selLatency, 0.0);
+                }
+                SEL selVirtual = sel_registerName("setAllowsVirtualModes:");
+                if ([display respondsToSelector:selVirtual]) {
+                    ((void (*)(id, SEL, BOOL))objc_msgSend)(display, selVirtual, NO);
+                }
             }
         }
     });
@@ -1442,7 +1441,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %hook CADisplayLink
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (IS_ACTIVE && CFG285.enableHzControl) {
-        fps = g_isUserTouchingScreen ? 60 : 25;
+        fps = g_isUserTouchingScreen ? [CFG285 resolvedTargetFPS] : 25;
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig(fps);
@@ -1450,13 +1449,14 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 - (NSInteger)preferredFramesPerSecond {
     if (!IS_ACTIVE || !CFG285.enableHzControl) return %orig;
-    return g_isUserTouchingScreen ? 60 : 25;
+    return g_isUserTouchingScreen ? [CFG285 resolvedTargetFPS] : 25;
 }
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
-            float target = g_isUserTouchingScreen ? 60.0f : 25.0f;
+            float target = g_isUserTouchingScreen ? (float)[CFG285 resolvedTargetHz] : 25.0f;
+            Titanium_EnableZeroLatencyPipeline();
             range = SafeMakeFRR(target, target, target);
         }
     }
@@ -1467,12 +1467,12 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %hook CADisplay
 - (NSInteger)preferredFPS {
     if (!IS_ACTIVE || !CFG285.enableHzControl) return %orig;
-    return g_isUserTouchingScreen ? 60 : 25;
+    return g_isUserTouchingScreen ? [CFG285 resolvedTargetFPS] : 25;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
     if (IS_ACTIVE && CFG285.enableHzControl) {
-        fps = g_isUserTouchingScreen ? 60 : 25;
+        fps = g_isUserTouchingScreen ? [CFG285 resolvedTargetFPS] : 25;
     }
     %orig(fps);
 }
@@ -1485,13 +1485,13 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 %hook UIScreen
 - (NSInteger)maximumFramesPerSecond {
-    if (IS_ACTIVE) return 60;
-    return %orig;
+    if (!IS_ACTIVE || !CFG285.enableHzControl) return %orig;
+    return [CFG285 resolvedTargetHz];
 }
 
 - (CGFloat)_refreshRate {
-    if (IS_ACTIVE) return 60.0;
-    return %orig;
+    if (!IS_ACTIVE || !CFG285.enableHzControl) return %orig;
+    return (CGFloat)[CFG285 resolvedTargetHz];
 }
 %end
 
@@ -1500,7 +1500,8 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
-            range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
+            float target = (float)[CFG285 resolvedTargetHz];
+            range = SafeMakeFRR(30.0f, target, target);
         }
     }
     %orig(range);
@@ -2316,3 +2317,4 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         }
     }
 }
+
