@@ -2614,6 +2614,7 @@ static NSTimeInterval g_lastSwitcherBurstTime = 0;
     if (IS_ACTIVE) return NO;
     return %orig;
 }
+%end
 
 %hook NSNotificationCenter
 - (void)postNotificationName:(NSNotificationName)aName object:(id)anObject userInfo:(NSDictionary *)aUserInfo {
