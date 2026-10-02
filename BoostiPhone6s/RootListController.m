@@ -1,7 +1,7 @@
 // ====================================================================================================
-// ROOTLISTCONTROLLER.M - TITANIUM & APEX V28.5 PRO PREFERENCE CONTROLLER
-// Master Synchronization with Tweak.xm v28.5 Pro Suite
-// Compatibility: iOS 14.0 - 26.0.1 | Environments: Rootless & RootHide Universal
+// ROOTLISTCONTROLLER.M - TITANIUM & APEX V28.7 PRO PREFERENCE CONTROLLER
+// Master Synchronization with Tweak.xm v28.7 Pro Suite
+// Compatibility: iOS 14.0 - 26.0+ | Environments: Rootless & RootHide Universal
 // ====================================================================================================
 
 #import <UIKit/UIKit.h>
@@ -96,7 +96,7 @@ static inline const char *Titanium_FindExecutable(const char *name) {
 }
 
 // ====================================================================================================
-// ĐỒNG BỘ CHUẨN XÁC 100% CẤU TRÚC STRUCT V28.5 PRO VỚI TWEAK.XM
+// ĐỒNG BỘ CHUẨN XÁC 100% CẤU TRÚC STRUCT V28.7 PRO VỚI TWEAK.XM
 // ====================================================================================================
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -361,7 +361,9 @@ static inline NSString *PM_TextV285(NSString *key) {
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
     NSDictionary *headerMap = @{
         @"CÔNG TẮC TỔNG HỆ THỐNG V28.5 PRO": @"GROUP_MASTER",
+        @"CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO": @"GROUP_MASTER",
         @"ĐẶC QUYỀN NÂNG CẤP V28.5 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
+        @"ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
         @"ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ)": @"GROUP_HZ_FPS",
         @"BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH)": @"GROUP_TOUCH_SCREEN",
         @"PHÂN BIỆT PHẦN CỨNG NÚT HOME & CỬ CHỈ VUỐT X": @"GROUP_HARDWARE_SEGREGATION",
@@ -377,7 +379,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
     NSDictionary *footerMap = @{
         @"Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định của hệ điều hành.": @"FOOTER_MASTER",
-        @"ProMotion Engine v28.5 tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối nhịp vuốt 0ms và giữ Triple Buffering phẳng lì.": @"FOOTER_SPECIAL",
+        @"ProMotion Engine v28.7 tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối nhịp vuốt 0ms và giữ Triple Buffering phẳng lì.": @"FOOTER_SPECIAL",
         @"Thay đổi tần số quét và FPS áp dụng ngay lập tức cho toàn hệ thống không cần Respring. Kẹp an toàn 15-144 Hz/FPS chống chia cho 0.": @"FOOTER_HZ_FPS",
         @"Bộ lọc Spatial Hysteresis triệt tiêu rung giật dưới 2px và bù đắp bán kính tiếp xúc ảo trên màn hình linh kiện (GX, JK, Incell).": @"FOOTER_TOUCH_SCREEN",
         @"Tách biệt độc lập luồng xử lý giữa nút Home vật lý (6s-8P) và cử chỉ vuốt Fluid Gestures (X-15PM), chống xung đột cử chỉ.": @"FOOTER_HARDWARE",
@@ -423,6 +425,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 }
 
+// ====================================================================================================
+// NÂNG CẤP V28.7: TỰ ĐỘNG THU GỌN / ẨN SPECIFIERS KHI TẮT CÔNG TẮC TỔNG (DYNAMIC COLLAPSE)
+// ====================================================================================================
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
         NSString *root = Titanium_GetRootHidePrefixPath();
@@ -437,7 +442,49 @@ static inline NSString *PM_TextV285(NSString *key) {
         [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
     }
 
-    _specifiers = [_allSavedSpecifiers mutableCopy];
+    NSDictionary *prefs = [self getMergedPreferences];
+    BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
+
+    if (!masterEnabled) {
+        // Thu gọn: Chỉ hiển thị nhóm Công Tắc Tổng, Cài Đặt Ngôn Ngữ và Thông Tin Phát Triển
+        NSMutableArray *collapsedSpecs = [NSMutableArray array];
+        BOOL inMasterGroup = NO;
+        BOOL inAllowedGroup = NO;
+
+        for (PSSpecifier *spec in _allSavedSpecifiers) {
+            NSString *label = [spec propertyForKey:@"label"];
+            NSString *key = [spec propertyForKey:@"key"];
+
+            if ([spec propertyForKey:@"cell"] && [[spec propertyForKey:@"cell"] integerValue] == PSGroupCell) {
+                if ([label containsString:@"CÔNG TẮC TỔNG"] || [label containsString:@"MASTER"]) {
+                    inMasterGroup = YES;
+                    inAllowedGroup = YES;
+                } else if ([label containsString:@"NGÔN NGỮ"] || [label containsString:@"LANGUAGE"] ||
+                           [label containsString:@"THÔNG TIN"] || [label containsString:@"DEV"]) {
+                    inMasterGroup = NO;
+                    inAllowedGroup = YES;
+                } else {
+                    inMasterGroup = NO;
+                    inAllowedGroup = NO;
+                }
+            }
+
+            if (inAllowedGroup) {
+                // Nếu đang ở nhóm công tắc tổng thì chỉ giữ lại switch Enabled
+                if (inMasterGroup) {
+                    if (!key || [key isEqualToString:@"Enabled"]) {
+                        [collapsedSpecs addObject:spec];
+                    }
+                } else {
+                    [collapsedSpecs addObject:spec];
+                }
+            }
+        }
+        _specifiers = collapsedSpecs;
+    } else {
+        _specifiers = [_allSavedSpecifiers mutableCopy];
+    }
+
     [self updateDynamicTitles];
     return _specifiers;
 }
@@ -637,7 +684,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [prefs setObject:@(rate) forKey:primaryKey];
     [prefs setObject:@(rate) forKey:secondaryKey];
     [prefs setObject:@(dynamicMode) forKey:@"ProMotionEngineBeta7"];
-    [prefs setObject:@NO forKey:@"PowerSaveMode"]; // Bỏ chế độ tiết kiệm pin khi người dùng chủ động chọn tần số
+    [prefs setObject:@NO forKey:@"PowerSaveMode"];
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
 
@@ -816,7 +863,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V28.5 SUPREME PRO";
+    return @"V28.7 SUPREME PRO";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -853,7 +900,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (void)presentActions {
-    NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.5 PRO";
+    NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (sbreload)";
@@ -875,8 +922,12 @@ static inline NSString *PM_TextV285(NSString *key) {
             }
 
             const char *killallBin = Titanium_FindExecutable("killall");
-            char *argv[] = {(char *)killallBin, (char *)"-9", (char *)"SpringBoard", (char *)"backboardd", NULL};
-            posix_spawn(&pid, killallBin, NULL, NULL, argv, environ);
+            char *argvSB[] = {(char *)killallBin, (char *)"-9", (char *)"SpringBoard", NULL};
+            posix_spawn(&pid, killallBin, NULL, NULL, argvSB, environ);
+            waitpid(pid, NULL, 0);
+
+            char *argvBB[] = {(char *)killallBin, (char *)"-9", (char *)"backboardd", NULL};
+            posix_spawn(&pid, killallBin, NULL, NULL, argvBB, environ);
             waitpid(pid, NULL, 0);
         });
     }]];
@@ -904,7 +955,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
 - (void)executeResetConfiguration {
     NSString *confirmTitle = PM_TextV285(@"RESET_CONFIRM_TITLE") ?: @"Xác Nhận Đặt Lại";
-    NSString *confirmMsg = PM_TextV285(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu nhất của v28.5 Pro.";
+    NSString *confirmMsg = PM_TextV285(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu nhất của v28.7 Pro.";
     NSString *resetNowText = PM_TextV285(@"RESET_NOW") ?: @"Đặt Lại Ngay";
     NSString *cancelText = PM_TextV285(@"BACK") ?: @"Hủy";
 
