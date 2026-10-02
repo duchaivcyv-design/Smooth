@@ -1145,17 +1145,20 @@ static BoostConfigV285Pro *CFG285 = nil;
     if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
     return %orig;
 }
+
 - (BOOL)delaysTouchesEnded {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
     return %orig;
 }
+
 - (void)setDelaysTouchesBegan:(BOOL)flag {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
-    %orig(flag);
+    BOOL actualFlag = (IS_ACTIVE && CFG285.touchResponseBoost) ? NO : flag;
+    %orig(actualFlag);
 }
+
 - (void)setDelaysTouchesEnded:(BOOL)flag {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) { %orig(NO); return; }
-    %orig(flag);
+    BOOL actualFlag = (IS_ACTIVE && CFG285.touchResponseBoost) ? NO : flag;
+    %orig(actualFlag);
 }
 %end
 
