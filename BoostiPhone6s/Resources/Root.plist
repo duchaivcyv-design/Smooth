@@ -4,12 +4,12 @@
 <dict>
 	<key>items</key>
 	<array>
-		<!-- NHÓM 1: CÔNG TẮC TỔNG HỆ THỐNG V28.5 PRO -->
+		<!-- NHÓM 1: CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>CÔNG TẮC TỔNG HỆ THỐNG V28.5 PRO</string>
+			<string>CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO</string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định của hệ điều hành.</string>
 		</dict>
@@ -38,14 +38,14 @@
 			<string>SelectedLanguage</string>
 		</dict>
 
-		<!-- NHÓM 2: ĐẶC QUYỀN NÂNG CẤP V28.5 (TRIPLE & HEX BUFFERING) -->
+		<!-- NHÓM 2: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING) -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V28.5 (TRIPLE &amp; HEX BUFFERING)</string>
+			<string>ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE &amp; HEX BUFFERING)</string>
 			<key>footerText</key>
-			<string>ProMotion Engine v28.5 tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối nhịp vuốt 0ms và giữ Triple Buffering phẳng lì.</string>
+			<string>ProMotion Engine v28.7 tự động đồng bộ cảm biến nhiệt độ phần cứng, điều phối nhịp vuốt 0ms và giữ Triple Buffering phẳng lì.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -733,7 +733,7 @@
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
 			<key>footerText</key>
-			<string>© 2026 BoostiPhone6s V28.5 PRO - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
+			<string>© 2026 BoostiPhone6s V28.7 PRO - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -761,6 +761,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V28.5 PRO</string>
+	<string>BoostiPhone6s V28.7 PRO</string>
 </dict>
 </plist>
