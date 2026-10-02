@@ -2814,7 +2814,7 @@ static void Titanium_ExecuteSystemRespring(void) {
 // ====================================================================================================
 // RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK
 // ====================================================================================================
-
+static volatile BOOL g_appLaunchWarmupActive = NO;
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
