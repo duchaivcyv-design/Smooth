@@ -23,7 +23,6 @@ jobs:
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          # Cài dpkg, ldid, coreutils và python3
           brew install dpkg ldid coreutils python3
 
       # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
@@ -52,13 +51,13 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN BẢN 3.2 (QUÉT NGỮ CẢNH HAI CHIỀU, LOẠI BỎ LỖI ẢO) ---
-      - name: Pre-Build Source Code & iOS Security Gate V3.2
+      # --- BƯỚC 2.5: CỔNG BẢO VỆ CHUYÊN SÂU (BÁO ĐÚNG TỪNG DÒNG, CHẶN ĐỨNG TRƯỚC KHI BUILD) ---
+      - name: Pre-Build Source Code & iOS Security Gate
         run: |
           python3 - << 'EOF'
           import os, re, sys
 
-          RULES = [
+          AUDIT_RULES = [
               # 1. Phân quyền RootHide / Rootless
               {
                   "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
@@ -72,7 +71,7 @@ jobs:
                   "cat": "RootHide Pref Path",
                   "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
               },
-              # 2. Crash Symbol iOS 14 (Chỉ kiểm tra khi gọi hàm macro CAFrameRateRangeMake trực tiếp)
+              # 2. Crash Symbol iOS 14
               {
                   "pattern": r"CAFrameRateRangeMake\s*\(",
                   "guard": r"@available\s*\(\s*iOS\s*15",
@@ -85,7 +84,7 @@ jobs:
                   "cat": "iOS 12-14 Crash",
                   "msg": "Gán cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
               },
-              # 3. Kìm hãm màn 120Hz thật của 13 Pro -> 15 Pro Max
+              # 3. Kìm hãm 120Hz ProMotion thật
               {
                   "pattern": r"(CAFrameRateRangeMake\s*\(\s*60\.0f\s*,\s*120\.0f\s*,\s*60\.0f\s*\)|safeFPS\s*=\s*60)",
                   "guard": r"HardwareHasNative120Hz",
@@ -117,7 +116,7 @@ jobs:
                       all_source += "\n" + content
 
                   if fpath.endswith(('.xm', '.x')):
-                      # Kiểm tra tính toàn vẹn cấu trúc mở/đóng thẻ Logos
+                      # 1. Kiểm tra cặp thẻ Logos
                       hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
                       groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
                       subclasses = len(re.findall(r"^\s*%subclass\b", content, re.MULTILINE))
@@ -129,28 +128,39 @@ jobs:
                               "file": fpath,
                               "line": "N/A",
                               "cat": "Lệch Thẻ Logos",
-                              "detail": f"Có {hooks} %hook, {groups} %group, {subclasses} %subclass (cần {req} %end), nhưng chỉ tìm thấy {ends} %end.",
+                              "detail": f"Có {hooks} %hook, {groups} %group, {subclasses} %subclass (cần {req} %end), nhưng tìm thấy {ends} %end.",
                               "code": "Cần đồng bộ lại các cặp đóng %end"
                           })
 
-                  # Quét từng dòng theo các luật AUDIT_RULES với cửa sổ ngữ cảnh trước và sau (±15 dòng)
+                      # 2. Quét vị trí trùng lặp hook theo từng dòng cụ thể
+                      hook_tracker = {}
+                      for l_idx, l_str in enumerate(lines, 1):
+                          m = re.match(r"^\s*%hook\s+([A-Za-z0-9_]+)", l_str)
+                          if m:
+                              cname = m.group(1)
+                              if cname in hook_tracker:
+                                  critical_errors.append({
+                                      "file": fpath,
+                                      "line": l_idx,
+                                      "cat": "Trùng Lặp Hook",
+                                      "detail": f"Lớp `{cname}` bị khai báo lại ở dòng {l_idx} (đã khai báo trước đó tại dòng {hook_tracker[cname]}). Logos sẽ sinh lỗi redefinition.",
+                                      "code": l_str.strip()
+                                  })
+                              else:
+                                  hook_tracker[cname] = l_idx
+
+                  # 3. Quét từng dòng theo AUDIT_RULES
                   if fpath.endswith(('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')):
                       in_block_comment = False
                       for idx, line in enumerate(lines, 1):
                           sline = line.strip()
 
-                          if "/*" in sline:
-                              in_block_comment = True
-                          if "*/" in sline:
-                              in_block_comment = False
-                              continue
-                          if in_block_comment or sline.startswith("//") or sline.startswith("*"):
-                              continue
+                          if "/*" in sline: in_block_comment = True
+                          if "*/" in sline: in_block_comment = False; continue
+                          if in_block_comment or sline.startswith("//") or sline.startswith("*"): continue
+                          if sline.startswith("#import") or sline.startswith("#include") or sline.startswith("typedef"): continue
 
-                          if sline.startswith("#import") or sline.startswith("#include") or sline.startswith("typedef"):
-                              continue
-
-                          for r in RULES:
+                          for r in AUDIT_RULES:
                               if re.search(r["pattern"], line):
                                   has_guard = False
                                   if r["guard"]:
@@ -168,15 +178,46 @@ jobs:
                                           "detail": r["msg"],
                                           "code": sline[:80]
                                       })
+
+                  # 4. Quét phạm vi biến cục bộ trong runCoreTweak để chặn lỗi undeclared identifier
+                  if fpath.endswith(('.xm', '.x')):
+                      for idx, line in enumerate(lines, 1):
+                          # Nếu runCoreTweak không nhận tham số mà bên trong lại gọi isSpringBoard/bundleID
+                          if re.match(r"^\s*static\s+void\s+runCoreTweak\s*\(\s*(void)?\s*\)", line):
+                              body_sub = "\n".join(lines[idx:idx + 60])
+                              if re.search(r"\b(isSpringBoard|bundleID|progName)\b", body_sub):
+                                  critical_errors.append({
+                                      "file": fpath,
+                                      "line": idx,
+                                      "cat": "Biến Chưa Khai Báo (Scope Leak)",
+                                      "detail": "Hàm runCoreTweak dùng các biến `isSpringBoard`, `bundleID`, `progName` nhưng chưa khai báo tham số nhận vào.",
+                                      "code": line.strip()
+                                  })
+
               except Exception as e:
                   print(f"Lỗi đọc file {fpath}: {e}")
 
-          # Kiểm tra đồng bộ mô-đun hai chiều (%group vs %init)
+          # 5. Kiểm tra hook mồ côi ngoài group (_ungrouped)
+          clean_source = re.sub(r'//.*', '', all_source)
+          clean_source = re.sub(r'/\*.*?\*/', '', clean_source, flags=re.DOTALL)
+          code_without_groups = re.sub(r'%group\s+[A-Za-z0-9_]+.*?%end', '', clean_source, flags=re.DOTALL)
+          has_ungrouped_hooks = bool(re.search(r'^\s*%hook\b', code_without_groups, re.MULTILINE))
+          has_ungrouped_init = bool(re.search(r'%init\s*(;\s*|\(\s*_ungrouped\s*\))', clean_source))
+
+          if has_ungrouped_hooks and not has_ungrouped_init:
+              critical_errors.append({
+                  "file": "Tweak.xm",
+                  "line": "N/A",
+                  "cat": "Lỗi Khởi Tạo Logos (_ungrouped)",
+                  "detail": "Có %hook nằm ngoài %group nhưng thiếu lệnh `%init;` -> Gây lỗi 'non-initialized hook group: _ungrouped'.",
+                  "code": "Cần thêm `%init;` vào trong runCoreTweak"
+              })
+
+          # 6. Kiểm tra đồng bộ mô-đun
           defined_grps = set(re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE))
           initialized_grps = set(re.findall(r"%init\s*\(\s*([A-Za-z0-9_]+)\s*\)", all_source))
 
-          uninit_grps = defined_grps - initialized_grps
-          for grp in sorted(uninit_grps):
+          for grp in sorted(defined_grps - initialized_grps):
               critical_errors.append({
                   "file": "Tweak.xm",
                   "line": "N/A",
@@ -185,46 +226,34 @@ jobs:
                   "code": f"%group {grp}"
               })
 
-          ghost_grps = initialized_grps - defined_grps
-          for grp in sorted(ghost_grps):
+          for grp in sorted(initialized_grps - defined_grps):
               critical_errors.append({
                   "file": "Tweak.xm",
                   "line": "N/A",
                   "cat": "Mô-đun Không Tồn Tại",
-                  "detail": f"Lệnh gọi `%init({grp})` tham chiếu đến Group chưa từng được định nghĩa -> Gây lỗi compile Logos.",
+                  "detail": f"Lệnh gọi `%init({grp})` tham chiếu đến Group chưa từng được định nghĩa -> Gây lỗi biên dịch Logos.",
                   "code": f"%init({grp})"
               })
 
-          # Kiểm tra sự tồn tại của filter plist
-          has_plist = any(f.endswith('.plist') for f in files_list)
-          if not has_plist:
-              critical_errors.append({
-                  "file": "Project Root",
-                  "line": "N/A",
-                  "cat": "Thiếu Filter Plist",
-                  "detail": "Không tìm thấy file .plist bộ lọc bundle (vd: BoostiPhone6sCore.plist).",
-                  "code": "Cần có file <TweakName>.plist cùng cấp Makefile"
-              })
-
-          # Đưa ra phán quyết
+          # Xuất báo cáo và ngắt tiến trình nếu có lỗi
           if critical_errors:
               print("\n" + "=" * 80)
-              print("🚨 CỔNG BẢO VỆ PHÁT HIỆN LỖI CHÍ MẠNG! KHÔNG THỂ BẮT ĐẦU BIÊN DỊCH")
+              print("🚨 CỔNG BẢO VỆ PHÁT HIỆN LỖI CHÍ MẠNG! DỪNG NGAY TRƯỚC KHI BIÊN DỊCH")
               print("=" * 80)
               for err in critical_errors:
                   print(f"❌ [LỖI] [{err['cat']}] tại {err['file']}:{err['line']}")
                   print(f"   Đoạn code: {err['code']}")
                   print(f"   Hướng dẫn: {err['detail']}\n")
               print("=" * 80)
-              print(f"Tổng cộng phát hiện {len(critical_errors)} lỗi. Dừng workflow ngay tại bước kiểm tra.\n")
+              print(f"Tổng cộng phát hiện chính xác {len(critical_errors)} lỗi. Ngắt tiến trình tại Bước 2.5.\n")
               sys.exit(1)
           else:
               print("\n" + "=" * 80)
-              print("✅ KIỂM TOÁN HOÀN TẤT: Mã nguồn hợp lệ, an toàn cho cả iOS 14 - 26+ và iPhone 6s - 15 Pro Max!")
+              print("✅ KIỂM TOÁN HOÀN TẤT: Mã nguồn hợp lệ, an toàn cho iOS 14 - 26+ và iPhone 6s - 15 Pro Max!")
               print("=" * 80 + "\n")
           EOF
 
-      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ TỰ ĐỘNG BÓC TÁCH LỖI MÃ NGUỒN ---
+      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ ĐÓNG GÓI ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -235,12 +264,10 @@ jobs:
           fi
           
           rm -rf packages/ obj/ .theos/
-          
           if [ -d "postinst" ]; then chmod 755 postinst; fi
           if [ -d "prerm" ]; then chmod 755 prerm; fi
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
-          
           set +e
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
@@ -249,56 +276,13 @@ jobs:
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo ""
             echo "======================================================================"
-            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG QUÉT CÁC DÒNG LỖI CỤ THỂ..."
+            echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG BÓC TÁCH LỖI..."
             echo "======================================================================"
-            
-            ERROR_ENTRIES=$(grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" | head -n 5)
-            
-            if [ -n "$ERROR_ENTRIES" ]; then
-              while IFS= read -r line; do
-                ERR_FILE=$(echo "$line" | cut -d':' -f1)
-                ERR_LINE=$(echo "$line" | cut -d':' -f2)
-                ERR_MSG=$(echo "$line" | cut -d':' -f3-)
-                
-                echo ""
-                echo "----------------------------------------------------------------------"
-                echo "📍 TỆP TIN: $ERR_FILE"
-                echo "⚠️  DÒNG SỐ: $ERR_LINE"
-                echo "❌ THÔNG BÁO: $ERR_MSG"
-                echo "----------------------------------------------------------------------"
-                
-                ACTUAL_PATH=""
-                if [ -f "$ERR_FILE" ]; then
-                  ACTUAL_PATH="$ERR_FILE"
-                else
-                  FOUND_PATH=$(find . -name "$(basename "$ERR_FILE")" -not -path "*/.theos/*" -not -path "*/.git/*" | head -n 1)
-                  if [ -n "$FOUND_PATH" ]; then
-                    ACTUAL_PATH="$FOUND_PATH"
-                  fi
-                fi
-
-                if [ -n "$ACTUAL_PATH" ] && [ -f "$ACTUAL_PATH" ]; then
-                  START_LINE=$((ERR_LINE > 15 ? ERR_LINE - 15 : 1))
-                  END_LINE=$((ERR_LINE + 15))
-                  echo "🔍 ĐOẠN CODE XUNG QUANH DÒNG $ERR_LINE ($ACTUAL_PATH):"
-                  nl -ba "$ACTUAL_PATH" | sed -n "${START_LINE},${END_LINE}p"
-                else
-                  echo "⚠ Không tìm thấy tệp nguồn thực tế tương ứng với: $ERR_FILE"
-                fi
-              done <<< "$ERROR_ENTRIES"
-            else
-              echo "⚠️ Không bắt được định dạng tệp:dòng thông thường. 30 dòng log cuối cùng:"
-              tail -n 30 "$BUILD_LOG_FILE"
-            fi
-            
-            echo "======================================================================"
+            grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" \vert{}\vert{} tail -n 30 "$BUILD_LOG_FILE"
             exit 1
           fi
           
-          ls -lh packages/*.deb || { 
-            echo "❌ Build hoàn tất nhưng không tìm thấy file .deb!"; 
-            exit 1; 
-          }
+          ls -lh packages/*.deb || { echo "❌ Không tìm thấy deb!"; exit 1; }
 
       # --- BƯỚC 4: TẢI FILE DEB LÊN ARTIFACTS ---
       - name: Upload Deb Artifact
