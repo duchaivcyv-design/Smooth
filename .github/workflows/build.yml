@@ -33,7 +33,6 @@ jobs:
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
           
-          # Tải nhanh SDK 16.5 bằng sparse-checkout
           mkdir -p /tmp/sdk_repo
           cd /tmp/sdk_repo
           git init
@@ -53,19 +52,19 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN BẢN 3.0 (KIỂM TOÁN MÔ-ĐUN & TƯƠNG THÍCH TOÀN DIỆN) ---
-      - name: Pre-Build Source Code & iOS Security Gate V3.0
+      # --- BƯỚC 2.5: CỔNG BẢO VỆ MÃ NGUỒN BẢN 3.1 (ĐÃ SỬA LỖI BIẾN VÀ LỌC FILE THÔNG MINH) ---
+      - name: Pre-Build Source Code & iOS Security Gate V3.1
         run: |
           python3 - << 'EOF'
           import os, re, sys
 
-          AUDIT_RULES = [
-              # 1. Bảo vệ phân quyền RootHide & Rootless
+          RULES = [
+              # 1. Phân quyền RootHide / Rootless
               {
                   "pattern": r'(access|open|fopen|chmod|chown)\s*\(\s*\"/var/jb',
                   "guard": None,
                   "cat": "RootHide/Rootless Path Crash",
-                  "msg": "Hardcode đường dẫn '/var/jb' trong C system call -> Gây crash sandbox hoặc sai UUID trên RootHide. Hãy dùng dynamic prefix."
+                  "msg": "Hardcode đường dẫn '/var/jb' trong C call -> Gây crash sandbox hoặc sai UUID trên RootHide. Dùng dynamic prefix."
               },
               {
                   "pattern": r'@\"/var/jb/var/mobile/Library/Preferences',
@@ -73,12 +72,12 @@ jobs:
                   "cat": "RootHide Pref Path",
                   "msg": "Hardcode đường dẫn Preferences tuyệt đối -> Không đọc/ghi được cấu hình trên RootHide."
               },
-              # 2. Crash Symbol trên iOS 14
+              # 2. Crash Symbol iOS 14
               {
                   "pattern": r"(CAFrameRateRangeMake|setPreferredFrameRateRange:)",
                   "guard": r"@available\s*\(\s*iOS\s*15",
                   "cat": "iOS 14 Symbol Crash",
-                  "msg": "Dùng API CAFrameRateRange nhưng không bọc @available(iOS 15.0, *) -> Crash Safe Mode 'Symbol not found' trên iOS 14."
+                  "msg": "Dùng API CAFrameRateRange nhưng không bọc @available(iOS 15.0, *) -> Crash Safe Mode trên iOS 14."
               },
               {
                   "pattern": r"\[self\.layer\s+setCornerCurve:|\.cornerCurve\s*=",
@@ -86,14 +85,14 @@ jobs:
                   "cat": "iOS 12-14 Crash",
                   "msg": "Gán trực tiếp cornerCurve trên CALayer mà không kiểm tra respondsToSelector."
               },
-              # 3. Kìm hãm màn 120Hz thật của 13 Pro -> 15 Pro Max / 16+
+              # 3. Kìm hãm 120Hz ProMotion thật
               {
                   "pattern": r"(CAFrameRateRangeMake\s*\(\s*60\.0f\s*,\s*120\.0f\s*,\s*60\.0f\s*\)|safeFPS\s*=\s*60)",
                   "guard": r"HardwareHasNative120Hz",
                   "cat": "ProMotion Drop Throttle",
-                  "msg": "Ép trần 60Hz mà không kiểm tra HardwareHasNative120Hz() -> Gây sụt tụt xung nhịp trên màn hình 120Hz ProMotion gốc."
+                  "msg": "Ép trần 60Hz mà không kiểm tra HardwareHasNative120Hz() -> Gây sụt FPS trên 13 Pro đến 15 Pro Max."
               },
-              # 4. Kiểm tra nguy cơ đơ giật UI và kẹt đa nhiệm
+              # 4. Nguy cơ treo UI
               {
                   "pattern": r"\[\w+\s+layoutIfNeeded\]",
                   "guard": None,
@@ -114,22 +113,18 @@ jobs:
 
           critical_errors = []
           all_source = ""
-          file_contents = {}
 
-          # Quét cấu trúc từng file
           for fpath in files_list:
               try:
                   with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
                       content = f.read()
                       lines = content.splitlines()
 
-                  file_contents[fpath] = (content, lines)
-
                   if fpath.endswith(('.xm', '.x', '.m', '.mm')):
                       all_source += "\n" + content
 
-                  # 1. Kiểm tra tính toàn vẹn cấu trúc Logos
                   if fpath.endswith(('.xm', '.x')):
+                      # 1. Kiểm tra toàn vẹn thẻ Logos
                       hooks = len(re.findall(r"^\s*%hook\b", content, re.MULTILINE))
                       groups = len(re.findall(r"^\s*%group\b", content, re.MULTILINE))
                       subclasses = len(re.findall(r"^\s*%subclass\b", content, re.MULTILINE))
@@ -145,7 +140,7 @@ jobs:
                               "code": "Cần đồng bộ lại các cặp đóng %end"
                           })
 
-                      # 2. Kiểm tra trùng lặp %hook trong cùng một file
+                      # 2. Kiểm tra trùng lặp hook
                       hook_targets = re.findall(r"^\s*%hook\s+([A-Za-z0-9_]+)", content, re.MULTILINE)
                       seen_hooks = set()
                       dup_hooks = set()
@@ -155,90 +150,87 @@ jobs:
                           else:
                               seen_hooks.add(ht)
                       if dup_hooks:
-                          for dh in dup_hooks:
+                          for dh in sorted(dup_hooks):
                               critical_errors.append({
                                   "file": fpath,
                                   "line": "N/A",
                                   "cat": "Trùng Lặp Hook",
-                                  "detail": f"Lớp `{dh}` bị khai báo %hook nhiều lần trong cùng file -> Gây lỗi redefinition khi compile.",
+                                  "detail": f"Lớp `{dh}` bị khai báo %hook nhiều lần trong cùng file -> Gây lỗi redefinition.",
                                   "code": f"%hook {dh}"
                               })
 
-                  # 3. Quét từng dòng theo các luật AUDIT_RULES
-                  in_block_comment = False
-                  for idx, line in enumerate(lines, 1):
-                      sline = line.strip()
+                  # 3. Quét từng dòng theo RULES (chỉ quét file mã nguồn và plist)
+                  if fpath.endswith(('.xm', '.x', '.m', '.mm', '.h', '.c', '.cpp', '.plist')):
+                      in_block_comment = False
+                      for idx, line in enumerate(lines, 1):
+                          sline = line.strip()
 
-                      if "/*" in sline:
-                          in_block_comment = True
-                      if "*/" in sline:
-                          in_block_comment = False
-                          continue
-                      if in_block_comment or sline.startswith("//") or sline.startswith("*"):
-                          continue
+                          if "/*" in sline:
+                              in_block_comment = True
+                          if "*/" in sline:
+                              in_block_comment = False
+                              continue
+                          if in_block_comment or sline.startswith("//") or sline.startswith("*"):
+                              continue
 
-                      # Bỏ qua các dòng import hoặc typedef để tránh báo lỗi ảo
-                      if sline.startswith("#import") or sline.startswith("#include") or sline.startswith("typedef"):
-                          continue
+                          if sline.startswith("#import") or sline.startswith("#include") or sline.startswith("typedef"):
+                              continue
 
-                      for r in RULES:
-                          if re.search(r["pattern"], line):
-                              has_guard = False
-                              if r["guard"]:
-                                  ctx_start = max(0, idx - 18)
-                                  ctx = "\n".join(lines[ctx_start:idx])
-                                  if re.search(r["guard"], ctx):
-                                      has_guard = True
+                          for r in RULES:
+                              if re.search(r["pattern"], line):
+                                  has_guard = False
+                                  if r["guard"]:
+                                      ctx_start = max(0, idx - 18)
+                                      ctx = "\n".join(lines[ctx_start:idx])
+                                      if re.search(r["guard"], ctx):
+                                          has_guard = True
 
-                              if not has_guard:
-                                  critical_errors.append({
-                                      "file": fpath,
-                                      "line": idx,
-                                      "cat": r["cat"],
-                                      "detail": r["msg"],
-                                      "code": sline[:80]
-                                  })
+                                  if not has_guard:
+                                      critical_errors.append({
+                                          "file": fpath,
+                                          "line": idx,
+                                          "cat": r["cat"],
+                                          "detail": r["msg"],
+                                          "code": sline[:80]
+                                      })
               except Exception as e:
                   print(f"Lỗi đọc file {fpath}: {e}")
 
-          # 4. KIỂM TRA ĐỒNG BỘ MÔ-ĐUN (%group vs %init) HAI CHIỀU
+          # 4. Kiểm tra đồng bộ mô-đun
           defined_grps = set(re.findall(r"^\s*%group\s+([A-Za-z0-9_]+)", all_source, re.MULTILINE))
           initialized_grps = set(re.findall(r"%init\s*\(\s*([A-Za-z0-9_]+)\s*\)", all_source))
 
-          # Group định nghĩa nhưng không %init
           uninit_grps = defined_grps - initialized_grps
-          for grp in uninit_grps:
+          for grp in sorted(uninit_grps):
               critical_errors.append({
                   "file": "Tweak.xm",
                   "line": "N/A",
                   "cat": "Mô-đun Mồ Côi",
-                  "detail": f"Group `{grp}` được khai báo nhưng KHÔNG có `%init({grp})` trong %ctor -> Toàn bộ mô-đun này sẽ bị vô hiệu hóa!",
+                  "detail": f"Group `{grp}` được khai báo nhưng KHÔNG có `%init({grp})` trong %ctor -> Module bị vô hiệu hóa!",
                   "code": f"%group {grp}"
               })
 
-          # %init một Group không hề tồn tại
           ghost_grps = initialized_grps - defined_grps
-          for grp in ghost_grps:
+          for grp in sorted(ghost_grps):
               critical_errors.append({
                   "file": "Tweak.xm",
                   "line": "N/A",
                   "cat": "Mô-đun Không Tồn Tại",
-                  "detail": f"Lệnh gọi `%init({grp})` tham chiếu đến một Group không hề được định nghĩa -> Gây lỗi biên dịch Clang / Logos.",
+                  "detail": f"Lệnh gọi `%init({grp})` tham chiếu đến Group chưa từng được định nghĩa -> Gây lỗi compile Logos.",
                   "code": f"%init({grp})"
               })
 
-          # 5. Kiểm tra sự tồn tại của filter plist
+          # 5. Kiểm tra plist
           has_plist = any(f.endswith('.plist') for f in files_list)
           if not has_plist:
               critical_errors.append({
                   "file": "Project Root",
                   "line": "N/A",
                   "cat": "Thiếu Filter Plist",
-                  "detail": "Không tìm thấy file .plist bộ lọc bundle (vd: BoostiPhone6sCore.plist) -> Dylib không thể nạp vào SpringBoard.",
+                  "detail": "Không tìm thấy file .plist bộ lọc bundle (vd: BoostiPhone6sCore.plist).",
                   "code": "Cần có file <TweakName>.plist cùng cấp Makefile"
               })
 
-          # Xuất báo cáo nếu phát hiện lỗi
           if critical_errors:
               print("\n" + "=" * 80)
               print("🚨 CỔNG BẢO VỆ PHÁT HIỆN LỖI CHÍ MẠNG! KHÔNG THỂ BẮT ĐẦU BIÊN DỊCH")
@@ -271,7 +263,6 @@ jobs:
           if [ -d "postinst" ]; then chmod 755 postinst; fi
           if [ -d "prerm" ]; then chmod 755 prerm; fi
           
-          # Lưu toàn bộ log đầu ra của make vào tệp tạm thời
           BUILD_LOG_FILE="/tmp/theos_build.log"
           
           set +e
@@ -285,7 +276,6 @@ jobs:
             echo "🚨 PHÁT HIỆN LỖI BIÊN DỊCH! HỆ THỐNG ĐANG QUÉT CÁC DÒNG LỖI CỤ THỂ..."
             echo "======================================================================"
             
-            # Tìm kiếm các mẫu lỗi chuẩn của Clang, GCC và Logos: "filename:line: error" hoặc "filename:line:col: error"
             ERROR_ENTRIES=$(grep -E '^[^ :]+:[0-9]+(:[0-9]+)?:[[:space:]]+error:' "$BUILD_LOG_FILE" | head -n 5)
             
             if [ -n "$ERROR_ENTRIES" ]; then
@@ -301,7 +291,6 @@ jobs:
                 echo "❌ THÔNG BÁO: $ERR_MSG"
                 echo "----------------------------------------------------------------------"
                 
-                # Tìm đường dẫn thực tế của tệp nếu đường dẫn trong log là tương đối hoặc nằm trong thư mục con
                 ACTUAL_PATH=""
                 if [ -f "$ERR_FILE" ]; then
                   ACTUAL_PATH="$ERR_FILE"
