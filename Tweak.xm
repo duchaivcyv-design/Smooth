@@ -1914,18 +1914,12 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // NHÓM 7: SPRINGBOARD DISPLAY SHELL & ICON GRID OPTIMIZATIONS
 // ====================================================================================================
 
-// Khai báo giao diện hỗ trợ chuyển cảnh và cử chỉ vuốt
 @interface SBAppToHomeWorkspaceTransaction : NSObject
 @end
 
 @interface SBFluidSwitcherGestureWorkspaceTransaction : NSObject
 @end
 
-// Khai báo interface cho container thẻ đa nhiệm (chống warning/lỗi biên dịch)
-@interface SBFluidSwitcherItemContainer : UIView
-@end
-
-// Khai báo interface cho ScrollView màn hình chính
 @interface SBIconScrollView : UIScrollView
 @end
 
@@ -2392,10 +2386,6 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // ====================================================================================================
 // NHÓM TĂNG TỐC BÀN PHÍM, NÚT 3 GẠCH & CHUYỂN TAB ỨNG DỤNG NẶNG
 // ====================================================================================================
-
-@interface UIKeyboardImpl : NSObject
-+ (instancetype)activeInstance;
-@end
 
 @interface UIKBRenderConfig : NSObject
 @property (nonatomic, assign) BOOL lightKeyboard;
