@@ -1407,7 +1407,11 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     if (IS_ACTIVE) enabled = YES;
     %orig(enabled);
 }
+%end
 
+- (void)setLowLatencyMode:(BOOL)flag {
+    %orig(flag); // Bỏ ép flag = YES để Metal không hủy khung hình nạp chậm
+}
 // Đã bỏ setLowLatencyMode để TikTok lướt qua album ảnh không bị đơ
 %end
 
@@ -1813,7 +1817,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     if (IS_ACTIVE) {
         g_isAppWarmingUp = YES;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            g_isAppWarmingUp = NO; 
+            g_isAppWarmingUp = NO;
         });
         Titanium_EnableZeroLatencyPipeline();
     }
@@ -2477,11 +2481,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// Bỏ qua thời gian dừng chờ màn hình trắng/splash screen
 %hook SBSplashBoardController
 - (double)splashScreenDelay {
-    if (IS_ACTIVE) return 0.0;
-    return %orig;
+    return %orig; // Không ép 0.0s để app có đệm load khung hình ban đầu, không bị sập đen
 }
 %end
 
