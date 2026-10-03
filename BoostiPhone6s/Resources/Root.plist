@@ -85,7 +85,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -273,7 +273,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -347,7 +347,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -389,7 +389,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -655,7 +655,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
