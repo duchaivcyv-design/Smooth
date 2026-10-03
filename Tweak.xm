@@ -2938,7 +2938,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         // =========================================================================
         %init(Group_FluidTransitions_Pacing);           // Khóa chết Hz và FPS mục tiêu
         %init(Group_ZeroLatency_Touch_Opt);             // Cảm ứng 0ms
-        %init(Group_Metal_ZeroTearing_Pacing);          // Khử xé hình đồ họa Metal
+     // %init(Group_Metal_ZeroTearing_Pacing);          // Khử xé hình đồ họa Metal
         %init(Group_Scroll_And_Keyboard_Opt);           // Cuộn mượt và bàn phím tức thì
         %init(Group_Universal_InApp_Animations);         // Hoạt ảnh cửa sổ trong app
 
