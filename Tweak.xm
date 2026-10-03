@@ -1545,17 +1545,15 @@ static void Titanium_TriggerNotificationBurst(void) {
 // NHÓM 3: KHÓA CỨNG HZ/FPS ĐỘNG (15 - 144 HZ) - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
 // ====================================================================================================
 
-// 1. CHỈ KHÓA TRẦN KHI THỰC SỰ CÓ CHUYỂN ĐỘNG / TƯƠNG TÁC
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isAppWarmingUp) return YES;             // Mở app: Giữ trần 1.0s đầu chống đen màn
+    if (g_isAppWarmingUp) return YES;             // Mở app
     if (g_isUserTouchingScreen) return YES;         // Chạm tay màn hình / chạm tương tác bên trong popup
     if (g_isScrollingActive) return YES;            // Đang cuộn feed hoặc cuộn danh sách trong popup
-    if (g_isVolumeActive) return YES;               // Bấm phím Volume / HUD Volume đang hiện
+    if (g_isVolumeActive) return YES;               // ✅ Bấm phím Volume / HUD Volume đang hiện
     if (g_isContinuousSwiping) return YES;          // Vuốt ngang thanh cử chỉ đổi tab/app
     if (g_isSwitcherActive) return YES;             // Đang ở trong App Switcher tìm app
     if (g_isNotificationBannerActive) return YES;   // Thông báo trượt xuống
-    if (g_activeAnimationCount > 0) return YES;     // ✅ THÊM LẠI: Có hoạt ảnh mở app/chuyển cảnh đang chạy
-    if (g_isAnimationRunning) return YES;           // Đang trong nhịp bung hoạt ảnh popup (350ms)
+    if (g_isAnimationRunning) return YES;           // Đang trong nhịp bung hoạt ảnh (350ms)
     return NO; // Popup đứng yên hoặc màn hình tĩnh -> Tự hạ nhịp sàn làm mát máy
 }
 
