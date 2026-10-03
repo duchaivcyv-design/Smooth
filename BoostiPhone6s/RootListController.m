@@ -67,7 +67,6 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
 
-// Nhận diện phần cứng (không dùng bóp xung 60Hz)
 static inline BOOL HardwareHasNative120Hz(void) {
     static BOOL isNative120 = NO;
     static dispatch_once_t onceToken;
@@ -105,7 +104,7 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
 }
 
 // ====================================================================================================
-// ĐỒNG BỘ CHUẨN XÁC 100% CẤU TRÚC STRUCT V28.7 PRO VỚI TWEAK.XM
+// ĐỒNG BỘ CẤU TRÚC STRUCT V28.7 PRO
 // ====================================================================================================
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -171,7 +170,7 @@ enum PSCellType {
     NSArray *_allSavedSpecifiers;
 }
 @property (nonatomic, strong) dispatch_source_t debounceSyncTimer;
-@property (nonatomic, strong) dispatch_source_t stepDownTimer; // Timer hạ nhịp từ từ
+@property (nonatomic, strong) dispatch_source_t stepDownTimer;
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
 @end
 
@@ -287,7 +286,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 // ====================================================================================================
-// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & GỬI TÍN HIỆU ĐIỀU KHIỂN
+// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & GỬI TÍN HIỆU ĐIỀU KHIỂN (ĐÃ KHÓA 0 CÁC CỜ GÂY ĐEN MÀN HÌNH)
 // ====================================================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
@@ -349,10 +348,13 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.smartBufferingLevel = 3;
         payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
         payload.shaderOptimization = 1;
-        payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+
+        // ⚠️ SỬA DỨT ĐIỂM: Khóa bằng 0 để không can thiệp Splash Screen và Framebuffer Metal
+        payload.fastAppLaunch = 0;
+        payload.metalPacingEnabled = 0;
+
         payload.lowLatencyAudio = 1;
         payload.memoryPressureRelief = 1;
-        payload.metalPacingEnabled = 1;
         payload.runloopHangGuard = 1;
         payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
         payload.aggressiveRamCleaner = prefs[@"AggressiveRamClean"] ? ([prefs[@"AggressiveRamClean"] boolValue] ? 1 : 0) : 0;
@@ -399,7 +401,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.masterEnabled = 1;
     }
 
-    // ĐỒNG BỘ CẢ 2 NẤC TRUNG GIAN TRÁNH LỆCH NHỊP V-SYNC
     payload.targetHz = (int32_t)rate;
     payload.targetFPS = (int32_t)rate;
     payload.updateSeq = (uint64_t)mach_absolute_time();
@@ -514,7 +515,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self reloadSpecifiers];
 }
 
-// Cập nhật nhãn hiển thị: KHÓA CHẶT THÔNG SỐ ĐÃ CHỌN (ĐỒNG BỘ 1:1)
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 120;
@@ -576,6 +576,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     return [NSDictionary dictionary];
 }
 
+// ====================================================================================================
+// KHỞI TẠO CẤU HÌNH MẶC ĐỊNH AN TOÀN (ĐÃ TẮT CÁC TOGGLE GÂY ĐEN MÀN HÌNH)
+// ====================================================================================================
 - (void)ensureDefaultSettingsExist {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -589,26 +592,26 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"Enabled": @YES,
              @"SelectedLanguage": @"auto",
              @"ProMotionEngineBeta7": @NO,
-             @"MetalHexBuffering": @YES,
+             @"MetalHexBuffering": @NO,            // ⚠️ TẮT: Chống sập Framebuffer Metal
              @"KeyboardZeroLagV24": @YES,
              @"EnableHzControl": @YES,
              @"TargetRefreshRate": @120,
              @"EnableFPSControl": @YES,
              @"TargetFPSRate": @120,
              @"ForceOverclock144Hz": @NO,
-             @"SyncModuleDelay": @YES,
+             @"SyncModuleDelay": @NO,             // ⚠️ TẮT: Tránh lệch nhịp V-Sync
              @"IsolateRenderPipeline": @YES,
              @"ColorOs17SmoothEngine": @YES,
              @"ReduceMultiTaskLag": @YES,
-             @"FixAppLaunchBlackScreen": @YES,
+             @"FixAppLaunchBlackScreen": @NO,      // ⚠️ TẮT: Tránh triệt tiêu Splash Screen làm đen app
              @"FixAppExitStutter": @YES,
              @"TouchResponseBoost": @YES,
-             @"QuantumRenderShield": @YES,
+             @"QuantumRenderShield": @NO,          // ⚠️ TẮT: Không đè layer đồ họa
              @"NeuralBufferOpt": @YES,
              @"PeriodicRamClean": @YES,
              @"MachVMPurgeRam": @YES,
              @"AutoCloseBackgroundApp": @NO,
-             @"TurboAppLaunch": @YES,
+             @"TurboAppLaunch": @NO,               // ⚠️ TẮT: Cho app kịp khởi tạo giao diện
              @"AntiThermalThrottling": @YES,
              @"PowerSaveMode": @NO,
              @"AntiGhostTouch": @YES,
@@ -667,7 +670,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-    // Xử lý công tắc tổng
     if ([key isEqualToString:@"Enabled"]) {
         BOOL isMasterOn = [value boolValue];
         [self syncSharedMemoryFile:isMasterOn];
@@ -689,12 +691,8 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 }
 
-// ====================================================================================================
-// THUẬT TOÁN HẠ NHỊP TỪ TỪ ĐỒNG BỘ 100% CẢ HZ LẪN FPS
-// ====================================================================================================
 - (void)executeSmoothRateTransition:(NSInteger)targetRate {
     NSDictionary *prefs = [self getMergedPreferences];
-    // Lấy nhịp hiện tại của TargetRefreshRate làm mốc
     NSInteger currentRate = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 120;
 
     if (self.stepDownTimer) {
@@ -702,13 +700,11 @@ static inline NSString *PM_TextV285(NSString *key) {
         self.stepDownTimer = nil;
     }
 
-    // 1. TĂNG XUNG: Kích xung lập tức 0ms cho cả Hz & FPS
     if (targetRate >= currentRate) {
         [self commitFinalRateValue:targetRate];
         return;
     }
 
-    // 2. HẠ XUNG: Hạ qua từng nấc 15Hz để GPU và V-Sync thích ứng
     NSMutableArray *steps = [NSMutableArray array];
     NSInteger stepRate = currentRate;
     while (stepRate - 15 > targetRate) {
@@ -728,7 +724,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
         if (stepIndex < steps.count) {
             NSInteger intermediateRate = [steps[stepIndex] integerValue];
-            [strongSelf emitTransientRate:intermediateRate]; // Bơm đồng thời Hz và FPS
+            [strongSelf emitTransientRate:intermediateRate];
             stepIndex++;
         } else {
             if (strongSelf.stepDownTimer) {
@@ -744,19 +740,15 @@ static inline NSString *PM_TextV285(NSString *key) {
     dispatch_resume(self.stepDownTimer);
 }
 
-// ====================================================================================================
-// LƯU CẢ 2 GIÁ TRỊ (TARGET HZ VÀ TARGET FPS) TRÙNG NHAU 100%
-// ====================================================================================================
 - (void)commitFinalRateValue:(NSInteger)rate {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
 
-    // ĐỒNG BỘ CẢ 2 GIÁ TRỊ VÀ BẬT ĐỒNG THỜI CẢ 2 CÔNG TẮC ĐIỀU KHIỂN
     [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
     [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
     [prefs setObject:@YES forKey:@"EnableHzControl"];
     [prefs setObject:@YES forKey:@"EnableFPSControl"];
-    [prefs setObject:@NO forKey:@"ProMotionEngineBeta7"]; // Tắt thả trôi, khóa chết
+    [prefs setObject:@NO forKey:@"ProMotionEngineBeta7"];
     [prefs setObject:@NO forKey:@"PowerSaveMode"];
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
@@ -841,7 +833,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSString *actionTitle = [NSString stringWithFormat:@"%@ %ld %@%@", lockPrefix, (long)val, unit, tag];
 
         [alert addAction:[UIAlertAction actionWithTitle:actionTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            // Khi chọn bất kỳ giá trị nào, gọi đồng bộ song hành
             [self executeSmoothRateTransition:val];
         }]];
     }
@@ -852,7 +843,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
-// Bảng chọn tần số quét (Hz) -> Đồng bộ trực tiếp sang FPS
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
     NSString *alertTitle = PM_TextV285(@"TITLE_HZ") ?: @"CHỌN TẦN SỐ QUÉT HỆ THỐNG & PIP (HZ)";
     UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -883,7 +873,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
-// Bảng chọn khung hình ứng dụng (FPS) -> Đồng bộ trực tiếp sang Hz
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     NSString *alertTitle = PM_TextV285(@"TITLE_FPS") ?: @"CHỌN KHUNG HÌNH APP (FPS)";
     UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:nil preferredStyle:UIAlertControllerStyleActionSheet];
