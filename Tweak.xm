@@ -1544,17 +1544,18 @@ static void Titanium_TriggerNotificationBurst(void) {
 // ====================================================================================================
 // NHÓM 3: KHÓA CỨNG HZ/FPS ĐỘNG (15 - 144 HZ) - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
 // ====================================================================================================
-/*
+
 // 1. CHỈ KHÓA TRẦN KHI THỰC SỰ CÓ CHUYỂN ĐỘNG / TƯƠNG TÁC
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isAppWarmingUp) return YES;             // Mở app
+    if (g_isAppWarmingUp) return YES;             // Mở app: Giữ trần 1.0s đầu chống đen màn
     if (g_isUserTouchingScreen) return YES;         // Chạm tay màn hình / chạm tương tác bên trong popup
     if (g_isScrollingActive) return YES;            // Đang cuộn feed hoặc cuộn danh sách trong popup
-    if (g_isVolumeActive) return YES;               // ✅ Bấm phím Volume / HUD Volume đang hiện
+    if (g_isVolumeActive) return YES;               // Bấm phím Volume / HUD Volume đang hiện
     if (g_isContinuousSwiping) return YES;          // Vuốt ngang thanh cử chỉ đổi tab/app
     if (g_isSwitcherActive) return YES;             // Đang ở trong App Switcher tìm app
     if (g_isNotificationBannerActive) return YES;   // Thông báo trượt xuống
-    if (g_isAnimationRunning) return YES;           // Đang trong nhịp bung hoạt ảnh (350ms)
+    if (g_activeAnimationCount > 0) return YES;     // ✅ THÊM LẠI: Có hoạt ảnh mở app/chuyển cảnh đang chạy
+    if (g_isAnimationRunning) return YES;           // Đang trong nhịp bung hoạt ảnh popup (350ms)
     return NO; // Popup đứng yên hoặc màn hình tĩnh -> Tự hạ nhịp sàn làm mát máy
 }
 
@@ -1575,11 +1576,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
         NSInteger target = [CFG285 resolvedTargetFPS];
-        // Có tương tác hoặc bấm Volume: Đẩy lên Max target
         if (Titanium_ShouldLockTargetRate()) {
             return target;
         }
-        // Tĩnh: Hạ nhịp sàn làm mát máy
         return Titanium_GetResolvedIdleFPS();
     }
     return %orig;
@@ -1659,7 +1658,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
-    %orig(cadence); // Bỏ "cadence = nil;" để giữ nhịp VSync, không bị mất layer nền
+    %orig(cadence); // Giữ nhịp VSync nguyên bản để không bị mất layer nền
 }
 
 - (BOOL)supportsDynamicRefresh {
@@ -1668,10 +1667,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     return %orig;
 }
 
-// Sửa chuẩn logic ProMotion cho màn hình
+// ✅ SỬA DỨT ĐIỂM ĐEN HÌNH NỀN: Trả về %orig khi tweak bật để không làm sập framebuffer của máy 60Hz
 - (BOOL)hasDynamicDisplayMode {
     if (HardwareHasNative120Hz()) return %orig;
-    if (IS_ACTIVE) return YES;
+    if (!IS_ACTIVE) return YES;
     return %orig;
 }
 
@@ -1724,7 +1723,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 4. ĐIỀU PHỐI HOẠT ẢNH & LÒ XO (BUNG POPUP MƯỢT NHƯNG TỰ NGẮT ĐÚNG HẠN)
+// 4. ĐIỀU PHỐI HOẠT ẢNH & LÒ XO (ĐÃ BỔ SUNG LẠI BỘ ĐẾM HOẠT ẢNH MỞ APP)
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
@@ -1735,6 +1734,14 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         }
     }
     %orig(range);
+}
+
+// ✅ THÊM LẠI: Đếm hoạt ảnh chạy khi mở app/chuyển cảnh để giữ trần FPS không bị đen màn
+- (void)setDelegate:(id)delegate {
+    %orig;
+    if (IS_ACTIVE) {
+        __sync_fetch_and_add(&g_activeAnimationCount, 1);
+    }
 }
 
 %end
@@ -1752,6 +1759,22 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     // Kích xung trọn 350ms cho lò xo nảy bung popup, sau đó tự nhả cờ để hạ sàn
     if (IS_ACTIVE) {
         Titanium_TriggerAnimationBurst(0.35);
+    }
+}
+
+%end
+
+// ✅ THÊM LẠI: Đồng bộ chu kỳ commit để nhả biến đếm khi toàn bộ hoạt ảnh hoàn tất
+%hook CATransaction
+
++ (void)commit {
+    %orig;
+    if (IS_ACTIVE && g_activeAnimationCount > 0) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (g_activeAnimationCount > 0) {
+                __sync_fetch_and_sub(&g_activeAnimationCount, 1);
+            }
+        });
     }
 }
 
@@ -1831,7 +1854,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %end
-*/
+
 // ====================================================================================================
 // NHÓM 4: ĐA NHIỆM SIÊU MƯỢT (DỨT ĐIỂM MÀN HÌNH ĐEN KHI MỞ APP)
 // ====================================================================================================
@@ -2964,7 +2987,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         // Toàn bộ các nhóm tối ưu chung cho cả hệ thống
         %init(Group_ZeroLatency_Touch_Opt);
         %init(Group_Metal_ZeroTearing_Pacing);
-    //  %init(Group_FluidTransitions_Pacing);
+        %init(Group_FluidTransitions_Pacing);
         %init(Group_FastLaunch_SuperEngineV285);
         %init(Group_Scroll_And_Keyboard_Opt);
         %init(Group_InstantActionAndMenuTransitions_Boost);
