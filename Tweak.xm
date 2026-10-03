@@ -3017,6 +3017,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 // CALLBACK KÍCH HOẠT KHI SPRINGBOARD KHỞI CHẠY (BẢO VỆ CỜ BOOT & CƯỚP QUYỀN AN TOÀN)
 // ====================================================================================================
 
+// ====================================================================================================
+// CALLBACK KÍCH HOẠT KHI SPRINGBOARD KHỞI CHẠY (BẢO VỆ CỜ BOOT & CƯỚP QUYỀN AN TOÀN)
+// ====================================================================================================
+
 static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -3031,7 +3035,9 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             Titanium_StealthKernelHijack();
             Titanium_EnableZeroLatencyPipeline();
 
-            // 2. NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
+            // =========================================================================
+            // NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
+            // =========================================================================
             if (Titanium_IsLegacy6s7P()) {
                 if (isVerified) {
                     // Đã qua bước respring an toàn -> NẠP TWEAK VÀ DỪNG VÒNG LẶP
@@ -3041,33 +3047,8 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
 
                 // Lần đầu khởi động lên (chưa có cờ verified): Đợi 2.2 giây rồi Respring tự động
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [fm createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED contents:nil attributes:nil];
-                    pid_t pid;
-                    const char *args[] = {"killall", "-9", "SpringBoard", NULL};
-                    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, NULL);
-                });
-                return;
-            }
-
-            // 3. NHÁNH 2: CÁC THIẾT BỊ KHÁC -> Nạp trực tiếp Tweak
-            runCoreTweak(YES, bundleID ? bundleID : @"com.apple.springboard", progName);
-        });
-    });
-}
-
-            // =========================================================================
-            // NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
-            // =========================================================================
-            if (Titanium_IsLegacy6s7P()) {
-                if (isVerified) {
-                    // Đã qua bước respring an toàn -> NẠP TWEAK VÀ DỪNG VÒNG LẶP
-                    runCoreTweak(YES, bundleID, progName);
-                    return;
-                }
-
-                // Lần đầu khởi động lên (chưa có cờ verified): Đợi 2.2 giây rồi Respring tự động
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     if (![fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED]) {
+                        [fm createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED contents:nil attributes:nil];
                         Titanium_ExecuteSystemRespring();
                     }
                 });
@@ -3096,7 +3077,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             }
 
             // ĐÃ QUA RESPRING HOẶC HOẠT ĐỘNG BÌNH THƯỜNG: NẠP TWEAK (CHỈ GỌI 1 LẦN DUY NHẤT)
-            runCoreTweak(YES, bundleID, progName);
+            runCoreTweak(YES, bundleID ? bundleID : @"com.apple.springboard", progName);
         });
     });
 }
