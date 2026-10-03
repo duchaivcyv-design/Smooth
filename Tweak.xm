@@ -646,9 +646,26 @@ extern "C" {
 @interface _UIContextMenuContainerView : UIView
 @end
 
+@interface SBDockView : UIView
+- (void)setBackgroundAlpha:(CGFloat)alpha;
+@end
+
+@interface SBAppToHomeAnimationSettings : NSObject
+@property (nonatomic, assign) double mass;
+@property (nonatomic, assign) double stiffness;
+@property (nonatomic, assign) double damping;
+@end
+
+@interface SBFluidSwitcherAnimationSettings : NSObject
+@property (nonatomic, assign) double mass;
+@property (nonatomic, assign) double stiffness;
+@property (nonatomic, assign) double damping;
+@end
+
 // ====================================================================================================
 // CORE IPC STRUCT & RUNTIME PAYLOAD ENGINE
 // ====================================================================================================
+
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -693,9 +710,15 @@ static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfo
 
 static BOOL g_SystemMasterReady = NO;
 
+// KHAI BÁO BIẾN TOÀN CỤC LÊN ĐẦU ĐỂ KHÔNG BỊ LỖI UNDECLARED IDENTIFIER
+static volatile BOOL g_isInstantMotion = NO;
+static volatile BOOL g_isScrollingActive = NO;
+static volatile BOOL g_isContinuousSwiping = NO;
+
 // ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION
 // ====================================================================================================
+
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
@@ -1553,7 +1576,6 @@ static inline void Titanium_StealthKernelHijack(void) {
 
 // Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang và thông báo
 static volatile int32_t g_activeAnimationCount = 0;
-static volatile BOOL g_isScrollingActive = NO; // Cờ giữ trần 120Hz/60Hz khi đang cuộn hoặc trôi quán tính
 static volatile BOOL g_isVideoPlayingActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
 static dispatch_source_t g_bannerBurstTimer = nil;
@@ -1968,7 +1990,7 @@ static volatile BOOL g_isInstantMotion = NO;
 }
 %end
 
-// 3. Khóa cứng trần 120Hz & Main Thread suốt toàn bộ quá trình co nhỏ
+// 3. Khóa cứng trần 120Hz & Main Thread suốt toàn bộ quá trình co nhỏ (KHÔNG TỤT 15Hz KHI BUÔNG TAY)
 %hook SBAppToHomeWorkspaceTransaction
 - (BOOL)shouldAnimateOrientationChangeOnCompletion {
     return NO;
@@ -1976,7 +1998,8 @@ static volatile BOOL g_isInstantMotion = NO;
 
 - (void)_willBegin {
     if (IS_ACTIVE) {
-        g_isInstantMotion = YES; // Ép trần 120Hz ngay khi app bắt đầu thu nhỏ
+        g_isAppToHomeAnimating = YES; // 👈 Bật cờ bảo vệ: Dù buông ngón tay ra vẫn KHÔNG bị tụt 15Hz
+        g_isInstantMotion = YES;
         Titanium_TriggerInstantTouchBurst();
         Titanium_StealthKernelHijack();
         Titanium_EnableZeroLatencyPipeline();
@@ -1987,6 +2010,7 @@ static volatile BOOL g_isInstantMotion = NO;
 // Bắt đúng khoảnh khắc bắt đầu hoạt ảnh: Đẩy xung tối đa trước khi vẽ frame đầu tiên
 - (void)_beginAnimation {
     if (IS_ACTIVE) {
+        g_isAppToHomeAnimating = YES;
         g_isInstantMotion = YES;
         Titanium_TriggerInstantTouchBurst();
         Titanium_StealthKernelHijack();
@@ -2000,16 +2024,17 @@ static volatile BOOL g_isInstantMotion = NO;
 - (void)_didComplete {
     %orig;
     if (IS_ACTIVE) {
-        g_isContinuousSwiping = NO; // Reset cờ vuốt
-        g_isInstantMotion = NO;     // App đã về icon Homescreen an toàn: Hạ 15Hz làm mát máy
+        g_isContinuousSwiping = NO;
+        g_isAppToHomeAnimating = NO; // 👈 Icon đã về đích 100% an toàn: Lúc này mới cho phép xả về 15Hz
+        g_isInstantMotion = NO;
 
         dispatch_async(dispatch_get_main_queue(), ^{
             Titanium_EnableZeroLatencyPipeline();
         });
 
-        // Chỉ thu hồi RAM nếu sau 2.0 giây người dùng KHÔNG chạm hoặc vuốt tiếp
+        // Chỉ thu hồi RAM nếu sau 2.0 giây người dùng KHÔNG chạm, KHÔNG vuốt và KHÔNG có hoạt cảnh thoát app
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-            if (!g_isContinuousSwiping && !g_isUserTouchingScreen) {
+            if (!g_isContinuousSwiping && !g_isUserTouchingScreen && !g_isAppToHomeAnimating) {
                 malloc_zone_pressure_relief(malloc_default_zone(), 0);
             }
         });
