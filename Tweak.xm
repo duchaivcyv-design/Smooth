@@ -1452,6 +1452,7 @@ static inline void Titanium_StealthKernelHijack(void) {
 // ====================================================================================================
 // NHÓM 2: METAL GRAPHICS, TRIPLE BUFFERING & KHÓA CHỐNG RUNG LAYER
 // ====================================================================================================
+%group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
