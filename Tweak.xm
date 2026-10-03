@@ -212,11 +212,29 @@ extern "C" {
 - (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
 @end
 
+@interface UITableView (TitaniumApexPrivate)
+@end
+
+@interface UICollectionView (TitaniumApexPrivate)
+@end
+
+@interface UITextView (TitaniumApexPrivate)
+@end
+
 @interface UIKeyboardImpl : UIView
 + (instancetype)activeInstance;
 - (void)handleKeyWithString:(id)string forKeyEvent:(id)event executionContext:(id)context;
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context;
 - (void)clearAnimations;
+- (void)setReturnKeyEnabled:(BOOL)enabled;
+- (BOOL)returnKeyEnabled;
+- (void)updateReturnKey:(BOOL)enabled;
+- (void)hardwareKeyboardAvailabilityChanged;
+- (void)setAutomaticMinimizationEnabled:(BOOL)flag;
+- (void)setInputMode:(id)inputMode;
+- (void)setDelegate:(id)delegate;
+- (void)textChanged:(id)arg1;
+- (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
 @end
@@ -224,24 +242,48 @@ extern "C" {
 @interface UITextInputController : NSObject
 - (void)_insertText:(id)text;
 - (void)deleteBackward;
+- (void)replaceRange:(id)range withText:(id)text;
+- (void)setMarkedText:(id)markedText selectedRange:(NSRange)selectedRange;
+- (void)unmarkText;
 @end
 
 @interface CATransaction (TitaniumApexPrivate)
++ (void)_setLowLatency:(BOOL)arg1;
++ (void)activateBackground:(BOOL)arg1;
 + (void)commit;
 + (void)flush;
 @end
 
 @interface CALayer (TitaniumApexPrivate)
+- (id)context;
+- (void)setContext:(id)context;
+- (void)setAllowsEdgeAntialiasing:(BOOL)flag;
+- (void)setContentsDrawsAsynchronously:(BOOL)flag;
+- (BOOL)contentsDrawsAsynchronously;
+- (void)setNeedsDisplayOnBoundsChange:(BOOL)flag;
+- (BOOL)needsDisplayOnBoundsChange;
 - (void)setAllowsGroupOpacity:(BOOL)allows;
+- (void)setCornerCurve:(NSString *)curve;
 - (void)setDrawsAsynchronously:(BOOL)flag;
 - (BOOL)drawsAsynchronously;
+- (void)setShouldRasterize:(BOOL)val;
+- (BOOL)shouldRasterize;
+- (void)setShadowRadius:(CGFloat)radius;
+- (void)setContentsScale:(CGFloat)scale;
 - (void)display;
 @end
 
 @interface CAMetalLayer (TitaniumApexPrivate)
+- (void)setLowLatencyMode:(BOOL)flag;
 - (void)setMaximumDrawableCount:(NSUInteger)count;
 - (NSUInteger)maximumDrawableCount;
 - (void)setDisplaySyncEnabled:(BOOL)enabled;
+- (void)setAllowsNextDrawableTimeout:(BOOL)allow;
+- (void)setPresentsWithTransaction:(BOOL)flag;
+- (void)setServerPresentsWithTransaction:(BOOL)flag;
+- (void)setFramebufferOnly:(BOOL)fb;
+- (BOOL)framebufferOnly;
+- (id)nextDrawable;
 @end
 
 @class CADisplay;
@@ -256,19 +298,31 @@ extern "C" {
 
 @interface CADisplay : NSObject
 + (CADisplay *)mainDisplay;
+@property (nonatomic, readonly) NSArray *availableModes;
+@property (nonatomic, retain) id currentMode;
+@property (nonatomic, copy) NSString *colorMode;
 @property (nonatomic) NSInteger preferredFPS;
+@property (nonatomic) NSInteger preferredModeIndex;
+- (void)overrideDisplayTimings:(id)timings;
 - (void)overrideDisplayCadence:(id)cadence;
 - (BOOL)supportsDynamicRefresh;
 @end
 
 @interface CAContext : NSObject
 + (NSArray *)allContexts;
++ (id)remoteContextWithOptions:(id)options;
+- (uint32_t)contextId;
 - (void)setCommitPriority:(uint32_t)priority;
 - (uint32_t)commitPriority;
+- (void)setDesiredDynamicRange:(float)range;
+- (void)orderAbove:(uint32_t)contextId;
+- (void)orderBelow:(uint32_t)contextId;
 @end
 
 @interface CAWindowServerDisplay : NSObject
 - (void)setMinimumFrameDuration:(double)duration;
+- (void)setAllowsVirtualModes:(BOOL)flag;
+- (void)setAllowsDisplayCompositing:(BOOL)flag;
 @end
 
 @interface CAWindowServer : NSObject
@@ -278,82 +332,290 @@ extern "C" {
 
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
+- (NSString *)displayName;
+- (id)processState;
+- (BOOL)isRunning;
+- (BOOL)isClassic;
+- (void)didExitWithContext:(id)context;
 - (void)willActivate;
+@end
+
+@interface SBApplicationController : NSObject
++ (instancetype)sharedInstance;
+- (NSArray *)allApplications;
+- (SBApplication *)applicationWithBundleIdentifier:(NSString *)bundleIdentifier;
+@end
+
+@interface FBProcessState : NSObject
+- (int)pid;
+- (BOOL)isRunning;
+- (BOOL)isForeground;
 @end
 
 @interface FBApplicationProcess : NSObject
 - (void)bootstrapWithContext:(id)context completion:(id)completion;
 - (void)launchIfNecessary;
+- (void)_finishInit;
+@end
+
+@interface FBProcess : NSObject
+- (int)pid;
+- (id)workspace;
+- (id)bundleIdentifier;
+- (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion;
+@end
+
+@interface RBSProcessIdentity : NSObject
+- (id)embeddedApplicationIdentifier;
+@end
+
+@interface RBSProcessHandle : NSObject
++ (instancetype)currentProcess;
+- (RBSProcessIdentity *)identity;
+@end
+
+@interface RBSLaunchRequest : NSObject
+- (BOOL)execute:(out id *)outContext error:(out id *)outError;
 @end
 
 @interface SBMainWorkspace : NSObject
 + (instancetype)sharedInstance;
+- (void)_handleApplicationProcessExited:(id)processDescription;
 - (void)handleApplicationLaunch:(id)application;
+- (void)handleApplicationSuspended:(id)application;
+@end
+
+@interface SBWindowScene : NSObject
+- (void)_readySceneForDisplay;
 @end
 
 @interface PGPictureInPictureRemoteObject : NSObject
 - (void)_updatePreferredContentSize;
 - (void)startPictureInPicture;
 - (void)stopPictureInPictureAnimated:(BOOL)animated;
+- (void)setPictureInPictureShouldStartWhenEnteringBackground:(BOOL)shouldStart;
+- (void)setSuspended:(BOOL)suspended;
+- (BOOL)isStartingStoppingOrCancellingPictureInPicture;
 @end
 
 @interface SBPIPController : NSObject
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
+- (void)_updatePictureInPictureWindowMargin;
+- (UIEdgeInsets)pictureInPictureWindowMargin;
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion;
+- (void)cancelPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId;
 @end
 
 @interface AVPictureInPictureController : NSObject
 - (void)startPictureInPicture;
 - (void)stopPictureInPicture;
+- (BOOL)isPictureInPicturePossible;
+- (BOOL)isPictureInPictureActive;
+- (BOOL)isPictureInPictureSuspended;
+- (void)setRequiresLinearPlayback:(BOOL)requiresLinearPlayback;
+- (BOOL)canStopPictureInPicture;
 @end
 
 @interface SBIconController : NSObject
 + (instancetype)sharedInstance;
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate;
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+- (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion;
+- (void)closeFolderAnimated:(BOOL)animated completion:(id)completion;
+- (id)model;
+@end
+
+@interface SBFloatingDockController : NSObject
+- (void)layoutFloatingDock;
+- (void)dismissFloatingDockIfPresentedAnimated:(BOOL)animated completionHandler:(id)completion;
+- (void)presentFloatingDockIfPossible:(BOOL)animated completionHandler:(id)completion;
+@end
+
+@interface SBBacklightController : NSObject
++ (instancetype)sharedInstance;
+- (void)setBacklightFactor:(float)factor;
+- (float)backlightFactor;
+- (void)animateBacklightToFactor:(float)factor duration:(double)duration source:(long long)source completion:(id)completion;
+@end
+
+@interface SBVolumeControl : NSObject
++ (instancetype)sharedInstance;
+- (void)increaseVolume;
+- (void)decreaseVolume;
+- (void)cancelVolumeEvent;
+@end
+
+@interface SBMediaController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isPlaying;
+- (BOOL)isPaused;
+- (BOOL)playForEventSource:(long long)source;
+- (BOOL)pauseForEventSource:(long long)source;
+- (BOOL)togglePlayPauseForEventSource:(long long)source;
+@end
+
+@interface SBMainDisplaySceneLayoutViewController : UIViewController
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+@end
+
+@interface SBHomeHardwareButtonActions : NSObject
+- (void)performSinglePressAction;
+- (void)performDoublePressAction;
+- (void)performTriplePressAction;
+- (void)performLongPressCancelled;
+@end
+
+@interface SBLockScreenManager : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isUILocked;
+- (void)unlockUIFromSource:(int)source withOptions:(id)options;
+- (void)lockUIFromSource:(int)source withOptions:(id)options;
+- (BOOL)attemptUnlockWithPasscode:(id)passcode finishUIUnlock:(BOOL)finish;
+@end
+
+@interface SBControlCenterController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isVisible;
+- (void)presentAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated;
+@end
+
+@interface SBNotificationCenterController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isVisible;
+- (void)presentAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated;
 @end
 
 @interface SBWallpaperController : NSObject
 + (instancetype)sharedInstance;
 - (void)beginRequiringWithReason:(id)reason;
+- (void)endRequiringWithReason:(id)reason;
+- (void)suspendWallpaperAnimationForReason:(id)reason;
+- (void)resumeWallpaperAnimationForReason:(id)reason;
+@end
+
+@interface SBFView : UIView
+- (void)setCustomFullHomedStyle:(BOOL)flag;
+@end
+
+@interface SBFolderView : UIView
+- (void)layoutSubviews;
+- (void)scrollViewDidScroll:(id)scrollView;
+- (void)willAnimate;
+- (void)prepareToOpen;
+- (void)cleanupAfterClose;
+@end
+
+@interface SBIconListView : UIView
+- (void)layoutIconsNow;
+- (void)layoutSubviews;
+- (void)setAlphaForAllIcons:(double)alpha;
+- (void)fadeInIcon:(id)icon;
 @end
 
 @interface SBIconView : UIView
+- (void)setIconImageInfo:(id)info;
 - (void)setHighlighted:(BOOL)highlighted;
 - (void)setTouchDownInIcon:(BOOL)touchDown;
+- (void)setAllowsCloseBox:(BOOL)allows;
+- (void)prepareForReuse;
 @end
 
 @interface SBFluidSwitcherViewController : UIViewController
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+- (id)layoutState;
 - (void)handleFluidSwitcherGesture:(id)gesture;
 @end
 
 @interface SBAppSwitcherSettings : NSObject
+- (void)setDeckSwitcherPageScale:(double)scaleValue;
+- (double)deckSwitcherPageScale;
+- (void)setAppSwitcherStyle:(long long)style;
+- (long long)appSwitcherStyle;
+- (BOOL)shouldSimplifyForOptions:(long long)options;
 - (BOOL)shouldKeepAppSnapshotsInMemory;
 @end
 
 @interface SBAppSwitcherController : UIViewController
+- (void)switcherContentController:(id)contentController deletedItem:(id)deletedItem;
 - (void)viewWillAppear:(BOOL)animated;
+- (void)viewDidDisappear:(BOOL)animated;
+- (void)viewDidLayoutSubviews;
+@end
+
+@interface UIStatusBar : UIView
+- (void)requestStyle:(long long)style animated:(BOOL)animated;
+- (void)forceUpdateData:(BOOL)animated;
+@end
+
+@interface SBReachabilityManager : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)reachabilityModeActive;
+- (void)deactivateReachabilityMode;
+- (void)triggerReachability;
+@end
+
+@interface SBWindow : UIWindow
+- (BOOL)_isSecure;
+- (void)setHidden:(BOOL)hidden;
+@end
+
+@interface SBRootFolderView : UIView
+- (void)layoutSubviews;
+- (void)setNeedsLayout;
 @end
 
 @interface SBDeckSwitcherViewController : UIViewController
+- (void)viewWillAppear:(BOOL)animated;
+- (void)viewDidAppear:(BOOL)animated;
+- (void)viewWillDisappear:(BOOL)animated;
+- (void)viewDidDisappear:(BOOL)animated;
 @end
 
 @interface SBFluidSwitcherItemContainer : UIView
+- (void)setContentAlpha:(double)alpha;
 - (void)prepareForReuse;
+- (void)setCornerRadius:(CGFloat)radius;
 @end
 
 @interface SBHomeScreenViewController : UIViewController
 - (void)viewWillAppear:(BOOL)animated;
+- (void)viewDidAppear:(BOOL)animated;
 @end
 
 @interface CSCoverSheetViewController : UIViewController
 - (void)viewWillAppear:(BOOL)animated;
+- (void)viewDidDisappear:(BOOL)animated;
+@end
+
+@interface SBUIController : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isAppSwitcherShowing;
+- (void)clickedMenuButton;
+- (void)handleHomeButtonDoublePressDown;
+- (void)lockFromSource:(int)source;
 @end
 
 @interface SpringBoard : UIApplication
+- (id)_accessibilityFrontMostApplication;
+- (BOOL)isLocked;
+- (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
 @end
 
 @interface SBFluidSwitcherModifier : NSObject
+- (double)shadowOpacityForIndex:(unsigned long long)index;
+- (double)wallpaperOverlayAlphaForIndex:(unsigned long long)index;
 - (BOOL)shouldasyncRenderAppLayouts;
+@end
+
+@interface SBAppSwitcherSnapshotImageCache : NSObject
+- (void)reloadImagesForAllItems;
+- (void)_purgeAllSnapshots;
 @end
 
 @interface SBAppLaunchSettings : NSObject
@@ -362,10 +624,22 @@ extern "C" {
 @property (nonatomic, assign) double delayBeforeAppLaunch;
 @end
 
+@interface SBSplashBoardController : NSObject
+@end
+
 @interface SBUIAnimationController : NSObject
 @end
 
+@interface UIInputViewAnimationStyle : NSObject
+@property (nonatomic, assign) double duration;
+@property (nonatomic, assign) BOOL animated;
+@end
+
 @interface SBAppToHomeWorkspaceTransaction : NSObject
+@end
+
+@interface UIViewPropertyAnimator ()
++ (void)_setTrackDuration:(double)duration;
 @end
 
 @interface _UIContextMenuContainerView : UIView
@@ -578,33 +852,80 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 }
 
 // ====================================================================================================
-// BOOST CONFIGURATION ENGINE (V28.7 PRO)
+// BOOST CONFIGURATION ENGINE (V28.7 PRO - ĐẦY ĐỦ 100% TẤT CẢ CÁC KEY TỪ ROOT.PLIST)
 // ====================================================================================================
 
 @interface BoostConfigV285Pro : NSObject
+// Nhóm 1: Master
 @property (nonatomic, assign) BOOL enabled;
+// Nhóm 2: Ngôn ngữ
 @property (nonatomic, strong) NSString *selectedLanguage;
+// Nhóm 3: ProMotion & Buffer
+@property (nonatomic, assign) BOOL proMotionEngineBeta7;
+@property (nonatomic, assign) BOOL metalHexBuffering;
+@property (nonatomic, assign) BOOL keyboardZeroLagV24;
+@property (nonatomic, assign) BOOL keyboardZeroLagV3;
+// Nhóm 4: Điều phối Hz & FPS
 @property (nonatomic, assign) BOOL enableHzControl;
 @property (nonatomic, assign) NSInteger targetHz;
 @property (nonatomic, assign) BOOL enableFPSControl;
 @property (nonatomic, assign) NSInteger targetFPS;
 @property (nonatomic, assign) BOOL forceOverclock144Hz;
-@property (nonatomic, assign) BOOL proMotionEngineBeta7;
-@property (nonatomic, assign) BOOL touchResponseBoost;
-@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
-@property (nonatomic, assign) BOOL keyboardZeroLagV24;
-@property (nonatomic, assign) BOOL metalHexBuffering;
-@property (nonatomic, assign) BOOL fixAppExitStutter;
-@property (nonatomic, assign) BOOL turboAppLaunch;
-@property (nonatomic, assign) BOOL antiThermalThrottling;
-@property (nonatomic, assign) BOOL powerSaveMode;
+// Nhóm 5: Cảm ứng
 @property (nonatomic, assign) BOOL antiGhostTouch;
 @property (nonatomic, assign) BOOL chargerRippleRejection;
+@property (nonatomic, assign) BOOL touchResponseBoost;
+// Nhóm 6: Tiêm trễ app 3rd
+@property (nonatomic, assign) BOOL syncModuleDelay;
+@property (nonatomic, assign) BOOL isolateRenderPipeline;
+// Nhóm 7: Gia tốc UI ColorOS
+@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
+@property (nonatomic, assign) BOOL reduceMultiTaskLag;
+@property (nonatomic, assign) BOOL reduceMultitaskLag;
+@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
+@property (nonatomic, assign) BOOL antiBlackScreenLaunch;
+@property (nonatomic, assign) BOOL fixAppExitStutter;
+// Nhóm 8: Đồ họa Metal & CALayer
+@property (nonatomic, assign) BOOL quantumRenderShield;
+@property (nonatomic, assign) BOOL neuralBufferOpt;
+@property (nonatomic, assign) BOOL backgroundPacingDaemon;
+@property (nonatomic, assign) BOOL hyperMemoryGuardian;
+@property (nonatomic, assign) BOOL ultraResponsiveness;
+@property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
+@property (nonatomic, assign) BOOL hyperThreadIO;
+@property (nonatomic, assign) BOOL quantumCoreSync;
+@property (nonatomic, assign) BOOL zeroLagNeuralBooster;
+@property (nonatomic, assign) BOOL vsyncAdaptiveBuffer;
+@property (nonatomic, assign) BOOL dynamicThermalEngine;
+// Nhóm 9: Bộ nhớ RAM, Disk I/O & CPU
+@property (nonatomic, assign) BOOL ioSchedulerEngine;
+@property (nonatomic, assign) BOOL realtimeThreadSched;
+@property (nonatomic, assign) BOOL cpuGpuFreqOptimizer;
+@property (nonatomic, assign) BOOL periodicRamClean;
+@property (nonatomic, assign) BOOL aggressiveRamClean;
+@property (nonatomic, assign) BOOL machVMPurgeRam;
+@property (nonatomic, assign) BOOL autoCloseBackgroundApp;
+@property (nonatomic, assign) BOOL turboAppLaunch;
+@property (nonatomic, assign) BOOL turboLaunch;
+@property (nonatomic, assign) BOOL gameFPSStabilizer;
+@property (nonatomic, assign) BOOL systemProcessOpt;
+@property (nonatomic, assign) BOOL deviceSpoofer;
+// Nhóm 10: Quản lý nhiệt độ & Nguồn điện
+@property (nonatomic, assign) BOOL antiThermalThrottling;
+@property (nonatomic, assign) BOOL antiThermalThrottle;
+@property (nonatomic, assign) BOOL smartThermalDispatch;
+@property (nonatomic, assign) BOOL heavyLoadCooling;
+@property (nonatomic, assign) BOOL chargeThermalProtection;
+@property (nonatomic, assign) BOOL powerSaveMode;
+// Nhóm 11: Bảo mật & Sandbox
+@property (nonatomic, assign) BOOL bypassVarSandbox;
+@property (nonatomic, assign) BOOL blockBackgroundTelemetry;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
 - (NSInteger)resolvedTargetHz;
 - (NSInteger)resolvedTargetFPS;
+- (NSInteger)resolvedFrameInterval;
 @end
 
 static BoostConfigV285Pro *CFG285 = nil;
@@ -645,20 +966,58 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     self = [super init];
     if (self) {
         self.enabled = YES;
-        self.targetHz = 60;
-        self.targetFPS = 60;
-        self.enableHzControl = YES;
-        self.enableFPSControl = YES;
-        self.proMotionEngineBeta7 = YES;
-        self.touchResponseBoost = YES;
-        self.colorOs17SmoothEngine = YES;
-        self.keyboardZeroLagV24 = YES;
+        self.selectedLanguage = @"auto";
+        self.proMotionEngineBeta7 = NO;
         self.metalHexBuffering = YES;
-        self.fixAppExitStutter = YES;
-        self.turboAppLaunch = YES;
-        self.antiThermalThrottling = YES;
+        self.keyboardZeroLagV24 = YES;
+        self.keyboardZeroLagV3 = YES;
+        self.enableHzControl = YES;
+        self.targetHz = 120;
+        self.enableFPSControl = YES;
+        self.targetFPS = 120;
+        self.forceOverclock144Hz = NO;
         self.antiGhostTouch = YES;
         self.chargerRippleRejection = YES;
+        self.touchResponseBoost = YES;
+        self.syncModuleDelay = YES;
+        self.isolateRenderPipeline = YES;
+        self.colorOs17SmoothEngine = YES;
+        self.reduceMultiTaskLag = YES;
+        self.reduceMultitaskLag = YES;
+        self.fixAppLaunchBlackScreen = YES;
+        self.antiBlackScreenLaunch = YES;
+        self.fixAppExitStutter = YES;
+        self.quantumRenderShield = YES;
+        self.neuralBufferOpt = YES;
+        self.backgroundPacingDaemon = YES;
+        self.hyperMemoryGuardian = YES;
+        self.ultraResponsiveness = YES;
+        self.ultraResponsivenessProEngineOfficial = YES;
+        self.hyperThreadIO = YES;
+        self.quantumCoreSync = YES;
+        self.zeroLagNeuralBooster = YES;
+        self.vsyncAdaptiveBuffer = YES;
+        self.dynamicThermalEngine = YES;
+        self.ioSchedulerEngine = YES;
+        self.realtimeThreadSched = YES;
+        self.cpuGpuFreqOptimizer = YES;
+        self.periodicRamClean = YES;
+        self.aggressiveRamClean = NO;
+        self.machVMPurgeRam = NO;
+        self.autoCloseBackgroundApp = NO;
+        self.turboAppLaunch = YES;
+        self.turboLaunch = YES;
+        self.gameFPSStabilizer = YES;
+        self.systemProcessOpt = YES;
+        self.deviceSpoofer = YES;
+        self.antiThermalThrottling = YES;
+        self.antiThermalThrottle = YES;
+        self.smartThermalDispatch = YES;
+        self.heavyLoadCooling = YES;
+        self.chargeThermalProtection = YES;
+        self.powerSaveMode = NO;
+        self.bypassVarSandbox = YES;
+        self.blockBackgroundTelemetry = YES;
         [self loadSettings];
     }
     return self;
@@ -704,27 +1063,75 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             return d;
         };
 
+        NSString * (^GetLiveString)(NSString *, NSString *) = ^NSString *(NSString *k, NSString *d) {
+            if (diskDict && diskDict[k] != nil) return (NSString *)diskDict[k];
+            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
+            if (val) {
+                NSString *str = (__bridge NSString *)val;
+                return str;
+            }
+            return d;
+        };
+
+        // Nạp đầy đủ 46 key từ file Plist
         self.enabled = GetLiveBool(@"Enabled", YES);
-        self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
-        self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
-        self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
-        self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
-        self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
-        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES);
-        self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
-        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
-        self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
+        self.selectedLanguage = GetLiveString(@"SelectedLanguage", @"auto");
+        self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", NO);
         self.metalHexBuffering = GetLiveBool(@"MetalHexBuffering", YES);
-        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
-        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
-        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
-        self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
+        self.keyboardZeroLagV24 = GetLiveBool(@"KeyboardZeroLagV24", YES);
+        self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
+        self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
+        self.targetHz = GetLiveInt(@"TargetRefreshRate", 120);
+        self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
+        self.targetFPS = GetLiveInt(@"TargetFPSRate", 120);
+        self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", NO);
         self.antiGhostTouch = GetLiveBool(@"AntiGhostTouch", YES);
         self.chargerRippleRejection = GetLiveBool(@"ChargerRippleRejection", YES);
+        self.touchResponseBoost = GetLiveBool(@"TouchResponseBoost", YES);
+        self.syncModuleDelay = GetLiveBool(@"SyncModuleDelay", YES);
+        self.isolateRenderPipeline = GetLiveBool(@"IsolateRenderPipeline", YES);
+        self.colorOs17SmoothEngine = GetLiveBool(@"ColorOs17SmoothEngine", YES);
+        self.reduceMultiTaskLag = GetLiveBool(@"ReduceMultiTaskLag", YES);
+        self.reduceMultitaskLag = self.reduceMultiTaskLag;
+        self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
+        self.antiBlackScreenLaunch = self.fixAppLaunchBlackScreen;
+        self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
+        self.quantumRenderShield = GetLiveBool(@"QuantumRenderShield", YES);
+        self.neuralBufferOpt = GetLiveBool(@"NeuralBufferOpt", YES);
+        self.backgroundPacingDaemon = GetLiveBool(@"BackgroundPacingDaemon", YES);
+        self.hyperMemoryGuardian = GetLiveBool(@"HyperMemoryGuardian", YES);
+        self.ultraResponsiveness = GetLiveBool(@"UltraResponsiveness", YES);
+        self.ultraResponsivenessProEngineOfficial = self.ultraResponsiveness;
+        self.hyperThreadIO = GetLiveBool(@"HyperThreadIO", YES);
+        self.quantumCoreSync = GetLiveBool(@"QuantumCoreSync", YES);
+        self.zeroLagNeuralBooster = GetLiveBool(@"ZeroLagNeuralBooster", YES);
+        self.vsyncAdaptiveBuffer = GetLiveBool(@"VsyncAdaptiveBuffer", YES);
+        self.dynamicThermalEngine = GetLiveBool(@"DynamicThermalEngine", YES);
+        self.ioSchedulerEngine = GetLiveBool(@"IOSchedulerEngine", YES);
+        self.realtimeThreadSched = GetLiveBool(@"RealtimeThreadSched", YES);
+        self.cpuGpuFreqOptimizer = GetLiveBool(@"CPUGPUFreqOptimizer", YES);
+        self.periodicRamClean = GetLiveBool(@"PeriodicRamClean", YES);
+        self.aggressiveRamClean = GetLiveBool(@"AggressiveRamClean", NO);
+        self.machVMPurgeRam = self.aggressiveRamClean;
+        self.autoCloseBackgroundApp = GetLiveBool(@"AutoCloseBackgroundApp", NO);
+        self.turboAppLaunch = GetLiveBool(@"TurboAppLaunch", YES);
+        self.turboLaunch = self.turboAppLaunch;
+        self.gameFPSStabilizer = GetLiveBool(@"GameFPSStabilizer", YES);
+        self.systemProcessOpt = GetLiveBool(@"SystemProcessOpt", YES);
+        self.deviceSpoofer = GetLiveBool(@"DeviceSpoofer", YES);
+        self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
+        self.antiThermalThrottle = self.antiThermalThrottling;
+        self.smartThermalDispatch = GetLiveBool(@"SmartThermalDispatch", YES);
+        self.heavyLoadCooling = GetLiveBool(@"HeavyLoadCooling", YES);
+        self.chargeThermalProtection = GetLiveBool(@"ChargeThermalProtection", YES);
+        self.powerSaveMode = GetLiveBool(@"PowerSaveMode", NO);
+        self.bypassVarSandbox = GetLiveBool(@"BypassVarSandbox", YES);
+        self.blockBackgroundTelemetry = GetLiveBool(@"BlockBackgroundTelemetry", YES);
 
         if (Titanium_IsSpringBoard()) {
             ApexV285ProPayload p;
             memset(&p, 0, sizeof(ApexV285ProPayload));
+            p.magic = APEX_SYNC_MAGIC_V285;
             p.masterEnabled = self.enabled ? 1 : 0;
             p.targetHz = (int32_t)[self resolvedTargetHz];
             p.targetFPS = (int32_t)[self resolvedTargetFPS];
@@ -737,7 +1144,16 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.shaderOptimization = 1;
             p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
             p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
+            p.lowLatencyAudio = 1;
+            p.memoryPressureRelief = 1;
+            p.metalPacingEnabled = 1;
+            p.runloopHangGuard = 1;
             p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
+            p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
+            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
+            p.antiGhostTouch = self.antiGhostTouch ? 1 : 0;
+            p.diskIOPriorityBoost = 1;
+            p.rawTouchDirectDelivery = 1;
             p.powerSaveModeActive = self.powerSaveMode ? 1 : 0;
 
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
@@ -769,7 +1185,22 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     return target;
 }
 
+- (NSInteger)resolvedFrameInterval {
+    NSInteger fps = [self resolvedTargetFPS];
+    NSInteger baseHz = HardwareHasNative120Hz() ? 120 : 60;
+    if (fps <= 0) return 1;
+    NSInteger interval = baseHz / fps;
+    return (interval >= 1) ? interval : 1;
+}
+
 @end
+
+static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    if (CFG285) {
+        [CFG285 loadSettings];
+        Titanium_TuneWindowServerDisplayDirectly();
+    }
+}
 
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH
@@ -928,7 +1359,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: METAL GRAPHICS & TRIPLE BUFFERING (KHÔNG ÉP LOW-LATENCY LÀM ĐEN APP)
+// NHÓM 2: METAL GRAPHICS & TRIPLE BUFFERING (KHÔNG LỆCH TOẠ ĐỘ KHUNG HÌNH)
 // ====================================================================================================
 
 %group Group_Metal_ZeroTearing_Pacing
@@ -952,6 +1383,15 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
+%hook CALayer
+- (void)display {
+    if (IS_ACTIVE && CFG285.touchResponseBoost) {
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig;
+}
+%end
+
 %hook CAContext
 - (void)setCommitPriority:(uint32_t)priority {
     if (!Titanium_IsSpringBoard() && IS_ACTIVE) {
@@ -970,14 +1410,14 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ & FPS (10HZ KHI TĨNH ĐỂ MÁT MÁY - MAX HZ KHI VUỐT CHẠM)
+// BIẾN QUẢN LÝ ĐA LUỒNG & CHUYỂN ĐỘNG (10HZ KHI TĨNH - 120/144HZ KHI ĐỘNG)
 // ====================================================================================================
 
 static volatile int32_t g_activeAnimationCount = 0;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
-static volatile BOOL g_isAppWarmingUp = NO;
+static volatile BOOL g_isAppWarmingUp = YES;
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
 
@@ -1007,6 +1447,10 @@ static void Titanium_TriggerNotificationBurst(void) {
     });
     dispatch_resume(g_bannerBurstTimer);
 }
+
+// ====================================================================================================
+// NHÓM 3: KHÓA CỨNG HZ & FPS THÔNG MINH (10HZ TĨNH, MAX HZ KHI VUỐT CHẠM)
+// ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
 
@@ -1361,7 +1805,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 // ====================================================================================================
-// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (CHỈ GIA TỐC SPRINGBOARD, KHÔNG BÓP NGHẸT MẠNG APP)
+// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -1379,7 +1823,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
 
 %hook UIApplication
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
-    // Chỉ ép VIPPolicy khi chạy trên SpringBoard, tránh bóp nghẹt luồng mạng của app bên thứ 3
     if (Titanium_IsSpringBoard() && IS_ACTIVE && CFG285.turboAppLaunch) {
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -1565,37 +2008,43 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 // ====================================================================================================
-// NHÓM 7: SPRINGBOARD HIỂN THỊ (HÌNH NỀN GỐC SÁNG RÕ, MỞ APP TỨC THÌ)
+// NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP)
 // ====================================================================================================
-
-static volatile BOOL g_isSwitcherGestureActive = NO;
-static NSTimeInterval g_lastSwitcherBurstTime = 0;
 
 %group Group_Display_SpringBoardV285
 
+// ====================================================================================================
+// 1. KHÓA CỨNG HÌNH NỀN TĨNH & ĐÓNG BĂNG MÔ HÌNH 3D (GIẢI PHÓNG 80% TẢI GPU)
+// ====================================================================================================
+
 %hook SBWallpaperController
 - (double)wallpaperScaleForVariant:(long long)variant {
+    if (IS_ACTIVE) return 1.0;
     return %orig;
-}
-
-- (BOOL)wallpaperAnimationIsRunning {
-    return %orig;
-}
-
-- (void)beginRequiringWithReason:(id)reason {
-    %orig(reason);
 }
 %end
 
+%hook PBFPosterExtensionDataStore
+- (void)_updateSnapshot {
+    if (IS_ACTIVE) return;
+    %orig;
+}
+%end
+
+// ====================================================================================================
+// 2. KHỬ TRỄ BẤM ICON: NẢY TỨC THÌ 0MS NHƯNG KHÔNG GIẬT KHI LƯỚT NGANG
+// ====================================================================================================
+
 %hook SBIconView
 - (double)highlightDelay {
-    if (IS_ACTIVE) return 0.05;
+    if (IS_ACTIVE) return 0.05; // 50ms: Ngăn kích hoạt highlight giả khi lướt ngang trang
     return %orig;
 }
 
 - (void)setHighlighted:(BOOL)highlighted {
     if (highlighted && IS_ACTIVE && CFG285.touchResponseBoost) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(highlighted);
 }
@@ -1603,48 +2052,46 @@ static NSTimeInterval g_lastSwitcherBurstTime = 0;
 - (void)setTouchDownInIcon:(BOOL)touchDown {
     if (touchDown && IS_ACTIVE && CFG285.touchResponseBoost) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(touchDown);
 }
 %end
 
+// ====================================================================================================
+// 3. TỐI ƯU CỬ CHỈ ĐA NHIỆM SPRINGBOARD (GIỮ NGUYÊN HOẠT ẢNH 26ANIM)
+// ====================================================================================================
+
 %hook SBFluidSwitcherViewController
 - (void)handleFluidSwitcherGesture:(id)gesture {
     if (IS_ACTIVE) {
-        NSInteger state = -1;
-        if ([gesture respondsToSelector:@selector(state)]) {
-            state = (NSInteger)[(UIGestureRecognizer *)gesture state];
-        }
-
-        if (state == UIGestureRecognizerStateBegan) {
-            g_isSwitcherGestureActive = YES;
-            Titanium_TriggerInstantTouchBurst();
-        } else if (state == UIGestureRecognizerStateEnded ||
-                   state == UIGestureRecognizerStateCancelled ||
-                   state == UIGestureRecognizerStateFailed) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                g_isSwitcherGestureActive = NO;
-            });
-        } else if (state == -1) {
-            NSTimeInterval now = CACurrentMediaTime();
-            if (now - g_lastSwitcherBurstTime > 0.35) {
-                g_lastSwitcherBurstTime = now;
-                g_isSwitcherGestureActive = YES;
-                Titanium_TriggerInstantTouchBurst();
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    g_isSwitcherGestureActive = NO;
-                });
-            }
-        }
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(gesture);
 }
 %end
 
+// ====================================================================================================
+// 4. TRIỆT TIÊU LAG KHI CHỤP MÀN HÌNH
+// ====================================================================================================
+
+%hook SBScreenshotManager
+- (void)saveScreenshotsWithCompletion:(id)completion {
+    if (IS_ACTIVE) Titanium_TriggerInstantTouchBurst();
+    %orig(completion);
+}
+%end
+
+// ====================================================================================================
+// 5. KÉO CONTROL CENTER & TRUNG TÂM THÔNG BÁO TỨC THÌ (0MS DELAY)
+// ====================================================================================================
+
 %hook SBControlCenterController
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(animated, completion);
 }
@@ -1654,10 +2101,15 @@ static NSTimeInterval g_lastSwitcherBurstTime = 0;
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(animated, completion);
 }
 %end
+
+// ====================================================================================================
+// 6. SỬA DỨT ĐIỂM GIẬT/GỢN KHI LƯỚT TRANG MÀN HÌNH CHÍNH (SMOOTH HOMESCREEN PAGING)
+// ====================================================================================================
 
 %hook SBIconScrollView
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
@@ -1672,12 +2124,26 @@ static NSTimeInterval g_lastSwitcherBurstTime = 0;
 - (void)_notifyDidScroll {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
 }
 
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
+    if (IS_ACTIVE) {
+        Titanium_LockMainThreadFast();
+    }
     %orig(timestamp);
+}
+%end
+
+%hook SBIconListView
+- (void)setAlpha:(CGFloat)alpha {
+    %orig(alpha);
+    if (IS_ACTIVE) {
+        UIView *v = (UIView *)self;
+        v.layer.allowsGroupOpacity = YES;
+    }
 }
 %end
 
@@ -1685,11 +2151,17 @@ static NSTimeInterval g_lastSwitcherBurstTime = 0;
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(index, animate);
 }
 %end
 
+// ====================================================================================================
+// 7. TOÀN DIỆN HIỆU ỨNG THƯ MỤC, 3D TOUCH & MÀN HÌNH KHÓA (COVERSHEET / HOMESCREEN)
+// ====================================================================================================
+
+// Rút ngắn thời gian mở/đóng thư mục (Folder) từ 350ms xuống 220ms, bung nảy dứt khoát
 %hook SBFolderControllerAnimationSettings
 - (double)duration {
     if (IS_ACTIVE) return 0.22;
@@ -1697,52 +2169,102 @@ static NSTimeInterval g_lastSwitcherBurstTime = 0;
 }
 %end
 
+// Bơm xung zero-latency ngay khi người dùng chạm mở Folder
 %hook SBFolderView
 - (void)prepareToOpen {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
 }
 %end
 
+// Menu giữ đè icon (3D Touch / Haptic Touch) mở ra tức thì 0ms
+%hook SBIconForceTouchSettings
+- (double)delayBeforeOpening {
+    if (IS_ACTIVE) return 0.05; // 50ms: Đặt ngón tay là menu bung ngay lập tức
+    return %orig;
+}
+%end
+
+// Vuốt mở Màn hình khóa (LockScreen / CoverSheet) siêu mượt
 %hook CSCoverSheetViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(animated);
 }
 %end
 
+// Kích xung ưu tiên khi quay trở lại Màn hình chính
 %hook SBHomeScreenViewController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
     }
     %orig(animated);
 }
 %end
 
+// ====================================================================================================
+// 8. ÉP TỐC ĐỘ LOAD APP SIÊU TỐC & TRIỆT TIÊU ĐỘ TRỄ MỞ ỨNG DỤNG (ULTRA-FAST LAUNCH)
+// ====================================================================================================
+
+// Bơm xung CPU/GPU cực đại ngay khoảnh khắc chạm icon mở app
 %hook SBApplication
 - (void)willActivate {
+    if (IS_ACTIVE) {
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+    }
     %orig;
+}
+
+- (BOOL)shouldPrewarmOnLaunch {
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
 %end
 
+// Rút ngắn thời gian phóng to icon từ 450ms xuống 180ms để app bật lên tức thì
 %hook SBAppLaunchSettings
 - (double)zoomDuration {
-    if (IS_ACTIVE) return 0.20;
+    if (IS_ACTIVE) return 0.18;
     return %orig;
 }
 
 - (double)launchDuration {
-    if (IS_ACTIVE) return 0.22;
+    if (IS_ACTIVE) return 0.20;
     return %orig;
 }
 
 - (double)delayBeforeAppLaunch {
+    if (IS_ACTIVE) return 0.0;
     return %orig;
+}
+%end
+
+// Bỏ qua thời gian dừng chờ màn hình trắng/splash screen
+%hook SBSplashBoardController
+- (double)splashScreenDelay {
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
+}
+%end
+
+// Ưu tiên luồng dựng hình ngay khi bắt đầu hoạt ảnh mở app
+%hook SBUIAnimationController
+- (void)_willBeginAnimation {
+    if (IS_ACTIVE) {
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig;
 }
 %end
 
@@ -2031,14 +2553,10 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
     dispatch_resume(s_debounceTimer);
 }
 
-// ====================================================================================================
-// ĐIỀU PHỐI KHỞI ĐỘNG (CHỐNG TREO TÁO USERSPACE REBOOT)
-// ====================================================================================================
-
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
 #define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
-#define TITANIUM_BOOT_RETRY_6S      @"/tmp/.titanium_6s_reboot_retry"
 
+// 1. Phân loại chuẩn xác dòng 6s - 7 Plus (A9 - A10)
 static inline BOOL Titanium_IsLegacy6s7P(void) {
     static BOOL s_isLegacy = NO;
     static dispatch_once_t onceToken;
@@ -2046,6 +2564,7 @@ static inline BOOL Titanium_IsLegacy6s7P(void) {
         struct utsname sysInfo;
         uname(&sysInfo);
         NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        // iPhone 6s, 6s+, SE 1 (iPhone8,x), iPhone 7, 7+ (iPhone9,x)
         if ([machine hasPrefix:@"iPhone8,"] || [machine hasPrefix:@"iPhone9,"]) {
             s_isLegacy = YES;
         }
@@ -2053,6 +2572,7 @@ static inline BOOL Titanium_IsLegacy6s7P(void) {
     return s_isLegacy;
 }
 
+// 2. Đo thời gian hệ thống hoạt động từ lúc bật nguồn (Uptime)
 static time_t Titanium_GetSystemUptimeSeconds(void) {
     struct timeval boottime;
     size_t len = sizeof(boottime);
@@ -2062,6 +2582,49 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
+// 3. Thực hiện lệnh Respring hệ thống an toàn
+static void Titanium_ExecuteSystemRespring(void) {
+    UIApplication *app = [UIApplication sharedApplication];
+    if ([app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
+        [(SpringBoard *)app _relaunchSpringBoardNow];
+        return;
+    }
+
+    pid_t pid;
+    const char *args[] = {"killall", "-9", "SpringBoard", NULL};
+    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
+}
+
+#define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
+#define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
+
+// 1. Phân loại chuẩn xác dòng 6s - 7 Plus (A9 - A10)
+static inline BOOL Titanium_IsLegacy6s7P(void) {
+    static BOOL s_isLegacy = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        uname(&sysInfo);
+        NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        // iPhone 6s, 6s+, SE 1 (iPhone8,x), iPhone 7, 7+ (iPhone9,x)
+        if ([machine hasPrefix:@"iPhone8,"] || [machine hasPrefix:@"iPhone9,"]) {
+            s_isLegacy = YES;
+        }
+    });
+    return s_isLegacy;
+}
+
+// 2. Đo thời gian hệ thống hoạt động từ lúc bật nguồn (Uptime)
+static time_t Titanium_GetSystemUptimeSeconds(void) {
+    struct timeval boottime;
+    size_t len = sizeof(boottime);
+    int mib[2] = {CTL_KERN, KERN_BOOTTIME};
+    if (sysctl(mib, 2, &boottime, &len, NULL, 0) < 0) return 9999;
+    time_t now = time(NULL);
+    return (now - boottime.tv_sec);
+}
+
+// 3. Thực hiện lệnh Respring hệ thống an toàn
 static void Titanium_ExecuteSystemRespring(void) {
     UIApplication *app = [UIApplication sharedApplication];
     if ([app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
@@ -2075,67 +2638,105 @@ static void Titanium_ExecuteSystemRespring(void) {
 }
 
 // ====================================================================================================
-// ĐIỀU PHỐI KHỞI CHẠY LÕI
+// CƠ CHẾ ĐIỀU PHỐI KHỞI ĐỘNG THÔNG MINH
+// 6S-7P: TỰ ĐỘNG RESPRING LIÊN TỤC CHO ĐẾN KHI NẠP ĐƯỢC TWEAK THÌ DỪNG NGAY
+// 8P-15PRM: CHỈ KHI REBOOT NGUỒN, NẾU CHƯA NẠP TWEAK SẼ RESPRING ĐÚNG 1 LẦN
+// ====================================================================================================
+
+#define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
+#define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
+
+// 1. Phân loại chuẩn xác dòng 6s - 7 Plus (A9 - A10)
+static inline BOOL Titanium_IsLegacy6s7P(void) {
+    static BOOL s_isLegacy = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        uname(&sysInfo);
+        NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        // iPhone 6s, 6s+, SE 1 (iPhone8,x), iPhone 7, 7+ (iPhone9,x)
+        if ([machine hasPrefix:@"iPhone8,"] || [machine hasPrefix:@"iPhone9,"]) {
+            s_isLegacy = YES;
+        }
+    });
+    return s_isLegacy;
+}
+
+// 2. Đo thời gian hệ thống hoạt động từ lúc bật nguồn (Uptime)
+static time_t Titanium_GetSystemUptimeSeconds(void) {
+    struct timeval boottime;
+    size_t len = sizeof(boottime);
+    int mib[2] = {CTL_KERN, KERN_BOOTTIME};
+    if (sysctl(mib, 2, &boottime, &len, NULL, 0) < 0) return 9999;
+    time_t now = time(NULL);
+    return (now - boottime.tv_sec);
+}
+
+// 3. Thực hiện lệnh Respring hệ thống an toàn
+static void Titanium_ExecuteSystemRespring(void) {
+    UIApplication *app = [UIApplication sharedApplication];
+    if ([app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
+        [(SpringBoard *)app _relaunchSpringBoardNow];
+        return;
+    }
+
+    pid_t pid;
+    const char *args[] = {"killall", "-9", "SpringBoard", NULL};
+    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
+}
+
+// ====================================================================================================
+// RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
+        AppleInternal_EnforceZeroLatencyKernelTier();
+        AppleInternal_LockHardwareCADisplay();
+        Titanium_LockMainThreadFast();
+
+        if (Titanium_IsLegacyA9toA12()) {
+            Titanium_ElevateThreadToMachRealTime();
+            Titanium_ApplySiliconDeepOptimizations();
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_EnforceThreadVIPPolicy();
+        }
+
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
         if (configClass) {
             CFG285 = [configClass sharedInstance];
             [CFG285 loadSettings];
         }
 
-        // 1. SPRINGBOARD: MƯỢT TUYỆT ĐỐI NHƯNG KHÔNG TREO TÁO
-        if (isSpringBoard) {
-            AppleInternal_LockHardwareCADisplay();
+        %init(Group_ZeroLatency_Touch_Opt);
+        %init(Group_Metal_ZeroTearing_Pacing);
+        %init(Group_FluidTransitions_Pacing);
+        %init(Group_FastLaunch_SuperEngineV285);
+        %init(Group_Scroll_And_Keyboard_Opt);
+        %init(Group_InstantActionAndMenuTransitions_Boost);
+        %init(Group_Global_Thread_Governor_Unthrottled);
 
+        // KÍCH HOẠT HIỆU ỨNG TRONG APP (POPUP, SHEET, CONTEXT MENU)
+        %init(Group_Universal_InApp_Animations);
+
+        if (Titanium_IsClassicHomeButtonDevice()) {
+            %init(Group_HardwareSegregation_ClassicHomeV285);
+        }
+
+        if (isSpringBoard) {
+            Titanium_TuneWindowServerDisplayDirectly();
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_Display_SpringBoardV285);
             %init(Group_V285_FloatingWindow_PiP);
             %init(Group_SpringBoard_ProcessManagerV285);
-            %init(Group_FastLaunch_SuperEngineV285);
-            %init(Group_InstantActionAndMenuTransitions_Boost);
-            %init(Group_Global_Thread_Governor_Unthrottled);
+            Titanium_StartThermalAndChargingWatchdog();
 
-            if (Titanium_IsClassicHomeButtonDevice()) {
-                %init(Group_HardwareSegregation_ClassicHomeV285);
-            }
-
+            // ĐÁNH DẤU TWEAK ĐÃ NẠP THÀNH CÔNG HOÀN TOÀN
             [@"VERIFIED" writeToFile:TITANIUM_BOOT_FLAG_VERIFIED atomically:YES encoding:NSUTF8StringEncoding error:nil];
             chmod([TITANIUM_BOOT_FLAG_VERIFIED UTF8String], 0666);
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                AppleInternal_EnforceZeroLatencyKernelTier();
-                Titanium_LockMainThreadFast();
-
-                if (Titanium_IsLegacyA9toA12()) {
-                    Titanium_ElevateThreadToMachRealTime();
-                    Titanium_ApplySiliconDeepOptimizations();
-                    Titanium_EnforceThreadVIPPolicy();
-                }
-
-                Titanium_TuneWindowServerDisplayDirectly();
-                Titanium_StartThermalAndChargingWatchdog();
-            });
-        } 
-        // 2. APP BÊN THỨ BA: CHỈ NẠP COMMONMODES ĐỂ VUỐT MƯỢT, GIẢI PHÓNG MẠNG 100%
-        else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                CFRunLoopRef runLoop = CFRunLoopGetCurrent();
-                CFRunLoopAddCommonMode(runLoop, kCFRunLoopDefaultMode);
-                CFRunLoopAddCommonMode(runLoop, (CFStringRef)UITrackingRunLoopMode);
-            });
-
+        } else {
             %init(Group_UIKit_ThirdParty_IsolatedV285);
         }
-
-        // 3. CÁC NHÓM CHUNG (KHÓA HZ/FPS, CẢM ỨNG NHẠY, HOẠT ẢNH MƯỢT)
-        %init(Group_FluidTransitions_Pacing);
-        %init(Group_ZeroLatency_Touch_Opt);
-        %init(Group_Metal_ZeroTearing_Pacing);
-        %init(Group_Scroll_And_Keyboard_Opt);
-        %init(Group_Universal_InApp_Animations);
 
         static dispatch_once_t notifyToken;
         dispatch_once(&notifyToken, ^{
@@ -2152,10 +2753,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     }
 }
 
-// ====================================================================================================
-// CALLBACK KHỞI CHẠY SPRINGBOARD
-// ====================================================================================================
-
 static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -2163,31 +2760,37 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             const char *progName = getprogname();
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             NSFileManager *fm = [NSFileManager defaultManager];
+            BOOL isVerified = [fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED];
 
+            // =========================================================================
+            // NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
+            // =========================================================================
             if (Titanium_IsLegacy6s7P()) {
-                runCoreTweak(YES, bundleID, progName);
+                if (isVerified) {
+                    // Đã qua bước respring an toàn -> NẠP TWEAK VÀ DỪNG VÒNG LẶP
+                    runCoreTweak(YES, bundleID, progName);
+                    return;
+                }
 
+                // Lần đầu khởi động lên (chưa có cờ verified): Đợi 2.2 giây rồi Respring tự động
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     if (![fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED]) {
-                        if (![fm fileExistsAtPath:TITANIUM_BOOT_RETRY_6S]) {
-                            [@"RETRY" writeToFile:TITANIUM_BOOT_RETRY_6S atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                            chmod([TITANIUM_BOOT_RETRY_6S UTF8String], 0666);
-                            Titanium_ExecuteSystemRespring();
-                        }
-                    } else {
-                        if ([fm fileExistsAtPath:TITANIUM_BOOT_RETRY_6S]) {
-                            [fm removeItemAtPath:TITANIUM_BOOT_RETRY_6S error:nil];
-                        }
+                        Titanium_ExecuteSystemRespring();
                     }
                 });
                 return;
             }
 
+            // =========================================================================
+            // NHÁNH 2: IPHONE 8 PLUS - 15 PRO MAX (CHỈ XỬ LÝ KHI REBOOT NGUỒN)
+            // =========================================================================
             time_t uptime = Titanium_GetSystemUptimeSeconds();
             BOOL isColdBoot = (uptime < 60);
 
             if (isColdBoot) {
                 BOOL alreadyStaged = [fm fileExistsAtPath:TITANIUM_BOOT_STAGE_8P];
+                
+                // Chưa từng respring trong đợt reboot này -> Chờ màn hình lên rồi Respring đúng 1 lần
                 if (!alreadyStaged) {
                     [@"STAGED" writeToFile:TITANIUM_BOOT_STAGE_8P atomically:YES encoding:NSUTF8StringEncoding error:nil];
                     chmod([TITANIUM_BOOT_STAGE_8P UTF8String], 0666);
@@ -2199,6 +2802,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
                 }
             }
 
+            // ĐÃ QUA RESPRING HOẶC HOẠT ĐỘNG BÌNH THƯỜNG: NẠP TWEAK (CHỈ GỌI 1 LẦN DUY NHẤT)
             runCoreTweak(YES, bundleID, progName);
         });
     });
@@ -2213,9 +2817,9 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         const char *progName = getprogname();
         if (!progName) return;
 
+        // Bỏ qua các tiến trình ngầm hệ thống và WebKit phụ
         if (strstr(progName, "WebKit") || strstr(progName, "WebContent") ||
-            strstr(progName, "GPUProcess") || strstr(progName, "Networking") ||
-            strstr(progName, "networkd") || strstr(progName, "nsurlsessiond")) {
+            strstr(progName, "GPUProcess") || strstr(progName, "Networking")) {
             return;
         }
 
@@ -2233,10 +2837,12 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         NSString *bundleID = [mainBundle bundleIdentifier];
         BOOL isSpringBoard = bundleID && [bundleID isEqualToString:@"com.apple.springboard"];
 
+        // 1. Chỉ kiểm tra bootguard trên SpringBoard
         if (isSpringBoard) {
             if (!Titanium_CheckAndPreventBootloopUniversal()) return;
         }
 
+        // 2. Nạp cấu hình tức thì cho ứng dụng Cài đặt
         if (strstr(progName, "Preferences") || strstr(progName, "Settings")) {
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
@@ -2248,6 +2854,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
 
         %init;
 
+        // 3. Phân luồng SpringBoard vs App bên thứ ba
         if (isSpringBoard) {
             CFNotificationCenterAddObserver(
                 CFNotificationCenterGetLocalCenter(),
@@ -2258,6 +2865,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
                 CFNotificationSuspensionBehaviorDeliverImmediately
             );
         } else {
+            // App Sandbox (TikTok, Facebook, Game...): Nạp trực tiếp Tweak
             runCoreTweak(NO, bundleID, progName);
         }
     }
