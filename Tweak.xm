@@ -233,7 +233,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -1365,13 +1365,24 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
-// ✅ VỊ TRÍ 1 ĐÃ SỬA: BỎ HOÀN TOÀN CGRectIntegral ĐỂ KHÔNG BỊ CẮT LẸM CHỮ, SỐ PIN VÀ MẬT MÃ
+// 3. KHÓA TỌA ĐỘ NGUYÊN PIXEL CHỐNG RUNG CHỮ (CHỈ LÀM TRÒN KHI BỊ LỆCH SUB-PIXEL)
 %hook UILabel
 - (void)setFrame:(CGRect)frame {
+    if (IS_ACTIVE) {
+        // Chỉ làm tròn nếu toạ độ bị lẻ thập phân, tránh tính toán thừa trong feed dài
+        if (frame.origin.x != floorf(frame.origin.x) || frame.origin.y != floorf(frame.origin.y)) {
+            frame = CGRectIntegral(frame);
+        }
+    }
     %orig(frame);
 }
 
 - (void)setBounds:(CGRect)bounds {
+    if (IS_ACTIVE) {
+        if (bounds.origin.x != floorf(bounds.origin.x) || bounds.origin.y != floorf(bounds.origin.y)) {
+            bounds = CGRectIntegral(bounds);
+        }
+    }
     %orig(bounds);
 }
 %end
@@ -1432,8 +1443,12 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     %orig;
 }
 
-// ✅ VỊ TRÍ 2 ĐÃ SỬA: BỎ LỆNH round() ĐỂ LAYER KHÔNG BỊ LỆCH TỌA ĐỘ VÀ KHÔNG BỊ LẸM ICON
+// Khóa vị trí layer thành số nguyên để chống rung khi phóng to/thu nhỏ icon
 - (void)setPosition:(CGPoint)position {
+    if (IS_ACTIVE) {
+        position.x = round(position.x);
+        position.y = round(position.y);
+    }
     %orig(position);
 }
 %end
@@ -2164,9 +2179,9 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // 1. KHÓA CỨNG HÌNH NỀN TĨNH & ĐÓNG BĂNG MÔ HÌNH 3D (GIẢI PHÓNG 80% TẢI GPU)
 // ====================================================================================================
 
-// ✅ VỊ TRÍ 3 ĐÃ SỬA: BỎ return 1.0; TRẢ VỀ TỈ LỆ GỐC CỦA APPLE ĐỂ WIDGET VÀ HÌNH NỀN KHÔNG BỊ CẮT LỆCH
 %hook SBWallpaperController
 - (double)wallpaperScaleForVariant:(long long)variant {
+    if (IS_ACTIVE) return 1.0;
     return %orig;
 }
 %end
