@@ -1368,21 +1368,10 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // 3. KHÓA TỌA ĐỘ NGUYÊN PIXEL CHỐNG RUNG CHỮ (CHỈ LÀM TRÒN KHI BỊ LỆCH SUB-PIXEL)
 %hook UILabel
 - (void)setFrame:(CGRect)frame {
-    if (IS_ACTIVE) {
-        // Chỉ làm tròn nếu toạ độ bị lẻ thập phân, tránh tính toán thừa trong feed dài
-        if (frame.origin.x != floorf(frame.origin.x) || frame.origin.y != floorf(frame.origin.y)) {
-            frame = CGRectIntegral(frame);
-        }
-    }
     %orig(frame);
 }
 
 - (void)setBounds:(CGRect)bounds {
-    if (IS_ACTIVE) {
-        if (bounds.origin.x != floorf(bounds.origin.x) || bounds.origin.y != floorf(bounds.origin.y)) {
-            bounds = CGRectIntegral(bounds);
-        }
-    }
     %orig(bounds);
 }
 %end
@@ -1445,10 +1434,6 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 // Khóa vị trí layer thành số nguyên để chống rung khi phóng to/thu nhỏ icon
 - (void)setPosition:(CGPoint)position {
-    if (IS_ACTIVE) {
-        position.x = round(position.x);
-        position.y = round(position.y);
-    }
     %orig(position);
 }
 %end
@@ -2181,7 +2166,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
 
 %hook SBWallpaperController
 - (double)wallpaperScaleForVariant:(long long)variant {
-    if (IS_ACTIVE) return 1.0;
     return %orig;
 }
 %end
