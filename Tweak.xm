@@ -2158,7 +2158,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 // 5. CUỘN FEED TIKTOK / FACEBOOK / SAFARI TRÔI MƯỢT QUÁN TÍNH%hook UIScrollView
-
+%hook UIScrollView
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
     if (IS_ACTIVE) {
         g_isScrollingActive = YES;
