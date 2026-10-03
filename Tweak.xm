@@ -1868,6 +1868,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_EnableZeroLatencyPipeline();
     }
 }
+%end
 
 // Ép dải tần số quét tối đa cho toàn bộ UIView Animation trên iOS 16+
 %hook UIView
