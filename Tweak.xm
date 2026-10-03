@@ -55,6 +55,7 @@
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
 
+static void Titanium_StealthKernelHijack(void);
 #ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
@@ -2156,8 +2157,8 @@ static volatile BOOL g_isContinuousSwiping = NO;
 }
 %end
 
-// 5. CUỘN FEED TIKTOK / FACEBOOK / SAFARI TRÔI MƯỢT QUÁN TÍNH
-%hook UIScrollView
+// 5. CUỘN FEED TIKTOK / FACEBOOK / SAFARI TRÔI MƯỢT QUÁN TÍNH%hook UIScrollView
+
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
     if (IS_ACTIVE) {
         g_isScrollingActive = YES;
@@ -2193,24 +2194,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
     %orig;
 }
 
-// Cướp quyền CPU xử lý quán tính trôi: Không bị drop frame giữa chừng
-- (void)_smoothScrollWithTimestamp:(double)timestamp {
-    if (IS_ACTIVE) {
-        g_isScrollingActive = YES;
-        Titanium_StealthKernelHijack(); // 👈 Giữ ưu tiên Mach Realtime liên tục cho từng bước trôi
-        Titanium_LockMainThreadFast();
-    }
-    %orig(timestamp);
-}
-
-// Dừng trôi hẳn: Nhả cờ để hệ thống tự hạ về 15Hz làm mát máy
-- (void)_stopScrollDecelerationNotify:(BOOL)notify {
-    %orig(notify);
-    if (IS_ACTIVE) {
-        g_isScrollingActive = NO;
-    }
-}
-
 - (void)_scrollViewDidEndDecelerating {
     %orig;
     if (IS_ACTIVE) {
@@ -2224,6 +2207,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
         g_isScrollingActive = NO;
     }
 }
+
 %end
 
 // 6. GIỮ ĐỘ PHẢN HỒI CELL NHANH NHƯNG BẢO TOÀN NỀN SAFARI VÀ ICON EMOJI
@@ -2611,7 +2595,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // NHÓM 10: QUẢN LÝ TIẾN TRÌNH & BẢO VỆ JETSAM
 // ====================================================================================================
 
-%group Group_SpringBoard_ProcessManagerV285%group Group_SpringBoard_ProcessManagerV285
+%group Group_SpringBoard_ProcessManagerV285
 
 %hook SBApplication
 - (void)setProcessState:(id)state {
