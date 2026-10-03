@@ -2240,7 +2240,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 // NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP, VOLUME)
 // ====================================================================================================
-/*
+
 %group Group_Display_SpringBoardV285
 
 // ====================================================================================================
@@ -2540,7 +2540,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %end
-*/
+
 // ====================================================================================================
 // NHÓM 8: PIPELINE CHO PICTURE-IN-PICTURE (PIP 60FPS MƯỢT MÀ)
 // ====================================================================================================
@@ -2637,6 +2637,42 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig(application);
+}
+%end
+
+%end
+
+// ====================================================================================================
+// NHÓM 11: NÂNG CẤP TOÀN BỘ ỨNG DỤNG BÊN THỨ BA (TIKTOK, ZALO, TỆP, APP STORE)
+// ====================================================================================================
+
+//%group Group_UIKit_ThirdParty_IsolatedV285
+
+%hook UIWindow
+- (void)makeKeyAndVisible {
+    if (IS_ACTIVE) {
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig;
+}
+%end
+
+%hook UIViewController
+- (void)viewWillAppear:(BOOL)animated {
+    if (IS_ACTIVE) {
+        Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(animated);
+}
+
+- (void)viewDidLoad {
+    if (IS_ACTIVE) {
+        Titanium_LockMainThreadFast();
+    }
+    %orig;
 }
 %end
 
@@ -2892,7 +2928,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             AppleInternal_LockHardwareCADisplay();
 
             %init(Group_Switcher30Apps_Virtualization);
-         // %init(Group_Display_SpringBoardV285);
+            %init(Group_Display_SpringBoardV285);
             %init(Group_V285_FloatingWindow_PiP);
             %init(Group_SpringBoard_ProcessManagerV285);
 
@@ -2922,7 +2958,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 CFRunLoopAddCommonMode(runLoop, kCFRunLoopDefaultMode);
                 CFRunLoopAddCommonMode(runLoop, (CFStringRef)UITrackingRunLoopMode);
             });
-          // %init(Group_UIKit_ThirdParty_IsolatedV285);
+             %init(Group_UIKit_ThirdParty_IsolatedV285);
         }
 
         // Toàn bộ các nhóm tối ưu chung cho cả hệ thống
