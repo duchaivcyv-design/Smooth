@@ -854,9 +854,9 @@ static inline void Titanium_PurgeProcessMemoryAggressively(void) {
 
 static void Titanium_ApplySiliconDeepOptimizations(void) {
     setenv("MTL_FORCE_SERIAL_DISPATCH", "0", 1);
-    setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
+    // setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1); // 👈 Tắt dòng này để Metal nạp ảnh/texture
     setenv("MTL_SHADER_VALIDATION", "0", 1);
-    setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);
+    // setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);             // 👈 Tắt dòng này để không hủy frame
     setenv("CA_DEBUG_TRANSACTIONS", "0", 1);
     setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
 
@@ -1832,7 +1832,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)_applicationDidBecomeActive:(id)arg1 {
     %orig;
     if (IS_ACTIVE) {
-        g_isAppWarmingUp = YES;
+        g_isAppWarmingUp = YES; // 👈 Giữ Max FPS trong 1 giây đầu khi vừa vào app
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             g_isAppWarmingUp = NO;
         });
@@ -2500,7 +2500,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %hook SBSplashBoardController
 - (double)splashScreenDelay {
-    return %orig; // Không ép 0.0s để app có đệm load khung hình ban đầu, không bị sập đen
+    return %orig; // 👈 Giữ màn hình chờ gốc để không bị rơi vào khoảng đen
 }
 %end
 
@@ -2675,7 +2675,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)makeKeyAndVisible {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
-        Titanium_LockMainThreadFast();
+        // Titanium_LockMainThreadFast(); // 👈 Thêm // ngắt dòng này để nhả CPU cho app vẽ khung hình đầu
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
