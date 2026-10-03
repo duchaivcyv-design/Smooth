@@ -1483,6 +1483,10 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // BIẾN QUẢN LÝ ĐA LUỒNG & CHUYỂN ĐỘNG (10HZ KHI TĨNH - 120/144HZ KHI ĐỘNG - VÁ ĐIỂM MÙ MỞ APP)
 // ====================================================================================================
 
+// ====================================================================================================
+// BIẾN QUẢN LÝ ĐA LUỒNG & CHUYỂN ĐỘNG (CHUẨN CÚ PHÁP, VÁ TRIỆT ĐỂ ĐEN APP & NGHẼN MẠNG)
+// ====================================================================================================
+
 static volatile int32_t g_activeAnimationCount = 0;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;
@@ -2899,7 +2903,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         // 2. DÀNH CHO APP BÊN THỨ BA (TIKTOK, YOUTUBE, FACEBOOK, SAFARI, GAME...):
         // ⚠️ ĐÃ FIX: BỎ ÉP LUỒNG SCHED_RR VÀ BỘ ĐỆM TRỄ -> MẠNG LOAD 100%, KHÔNG ĐEN MÀN
         // =========================================================================
-        else {
+                else {
+            // App bên thứ ba: Chỉ kích hoạt RunLoop nhận sự kiện song song, KHÔNG ép sched_param, KHÔNG warmup
             dispatch_async(dispatch_get_main_queue(), ^{
                 CFRunLoopRef runLoop = CFRunLoopGetCurrent();
                 CFRunLoopAddCommonMode(runLoop, kCFRunLoopDefaultMode);
