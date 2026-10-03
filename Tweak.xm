@@ -1586,11 +1586,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 // 1. ĐIỀU PHỐI DẢI TẦN SỐ QUÉT ĐỘNG CAFrameRateRange TRÊN iOS 16+
 // ====================================================================================================
-%group Group_FluidTransitions_Pacing
-
-// ====================================================================================================
-// 1. ĐIỀU PHỐI DẢI TẦN SỐ QUÉT ĐỘNG CAFrameRateRange TRÊN iOS 16+
-// ====================================================================================================
 %hook CADisplayLink
 
 - (NSInteger)preferredFramesPerSecond {
