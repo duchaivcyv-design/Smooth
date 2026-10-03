@@ -1443,7 +1443,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // ====================================================================================================
 // BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO, POPUP, VOLUME VÀ THÔNG BÁO HỆ THỐNG
 // ====================================================================================================
-/*
+
 // Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang, volume và thông báo
 static volatile BOOL g_isAnimationRunning = NO;      // Cờ hoạt ảnh chuyển cảnh/bung popup (tự ngắt sau 350ms)
 static volatile BOOL g_isScrollingActive = NO;       // Cờ giữ trần khi đang cuộn feed hoặc cuộn trong popup
@@ -1544,7 +1544,7 @@ static void Titanium_TriggerNotificationBurst(void) {
 // ====================================================================================================
 // NHÓM 3: KHÓA CỨNG HZ/FPS ĐỘNG (15 - 144 HZ) - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
 // ====================================================================================================
-
+/*
 // 1. CHỈ KHÓA TRẦN KHI THỰC SỰ CÓ CHUYỂN ĐỘNG / TƯƠNG TÁC
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
     if (g_isAppWarmingUp) return YES;             // Mở app
