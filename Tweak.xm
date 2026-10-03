@@ -2240,7 +2240,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 // NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP, VOLUME)
 // ====================================================================================================
-
+/*
 %group Group_Display_SpringBoardV285
 
 // ====================================================================================================
@@ -2540,7 +2540,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %end
-
+/*
 // ====================================================================================================
 // NHÓM 8: PIPELINE CHO PICTURE-IN-PICTURE (PIP 60FPS MƯỢT MÀ)
 // ====================================================================================================
@@ -2892,7 +2892,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             AppleInternal_LockHardwareCADisplay();
 
             %init(Group_Switcher30Apps_Virtualization);
-            %init(Group_Display_SpringBoardV285);
+         // %init(Group_Display_SpringBoardV285);
             %init(Group_V285_FloatingWindow_PiP);
             %init(Group_SpringBoard_ProcessManagerV285);
 
