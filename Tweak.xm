@@ -714,6 +714,7 @@ static BOOL g_SystemMasterReady = NO;
 static volatile BOOL g_isInstantMotion = NO;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isContinuousSwiping = NO;
+static volatile BOOL g_isAppToHomeAnimating = NO; // Cờ giữ trần 120Hz cho cú vuốt đơn lẻ
 
 // ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION
@@ -1341,13 +1342,6 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     dispatch_resume(g_touchBurstTimer);
 }
 
-// ====================================================================================================
-// HÀM CƯỚP QUYỀN TẦNG NHÂN MACH ĐỒNG BỘ THEO TARGET HZ/FPS (0MS JITTER, KHÔNG ĐEN APP)
-// ====================================================================================================
-// ====================================================================================================
-// CƯỚP QUYỀN LUỒNG KERNEL AN TOÀN (CHỐNG NGHẼN MẠNG & CHỐNG ĐEN APP WEB)
-// ====================================================================================================
-
 static inline void Titanium_StealthKernelHijack(void) {
     if (!NSThread.isMainThread) return;
 
@@ -1480,10 +1474,9 @@ static inline void Titanium_StealthKernelHijack(void) {
                 g_isInstantMotion = YES;
                 Titanium_TriggerInstantTouchBurst();
                 break;
-            } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
-                if (!g_isScrollingActive && !g_isContinuousSwiping) {
-                    g_isInstantMotion = NO; // Buông tay: Nhả cờ về 15Hz ngay
-                }
+                       } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
+                if (!g_isScrollingActive && !g_isContinuousSwiping && !g_isAppToHomeAnimating) {
+                    g_isInstantMotion = NO; // Buông tay nhưng app còn đang bay thì KHÔNG được hạ 15Hz
             }
         }
     }
@@ -1613,7 +1606,8 @@ static void Titanium_TriggerNotificationBurst(void) {
 // ====================================================================================================
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isInstantMotion) return YES;              // 👈 Đón đầu ngay lập tức khi cử chỉ bắt đầu
+    if (g_isAppToHomeAnimating) return YES;         // Khóa cứng 120Hz suốt đường bay dù đã buông tay
+    if (g_isInstantMotion) return YES;              // Đón đầu ngay lập tức khi cử chỉ bắt đầu
     if (g_isContinuousSwiping) return YES;          // Đang vuốt đổi app liên tục
     if (g_isUserTouchingScreen) return YES;         // Chạm tay vuốt màn hình
     if (g_isScrollingActive) return YES;            // Đang cuộn feed hoặc trôi quán tính
@@ -1934,10 +1928,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // NHÓM 4: ĐA NHIỆM SIÊU MƯỢT (DỨT ĐIỂM MÀN HÌNH ĐEN KHI MỞ APP)
 // ====================================================================================================
 
-// Khai báo cờ chống xung đột dọn RAM khi vuốt liên hoàn
-static volatile BOOL g_isContinuousSwiping = NO;
-static volatile BOOL g_isInstantMotion = NO;
-
 %group Group_Switcher30Apps_Virtualization
 
 // 1. BẮT ĐẦU CỬ CHỈ VUỐT: Bắt từ bộ nhận diện cử chỉ (0ms) để không bị trễ frame đầu
@@ -2085,6 +2075,17 @@ static volatile BOOL g_isInstantMotion = NO;
         UIView *v = (UIView *)self;
         v.layer.drawsAsynchronously = YES;
     }
+}
+%end
+
+// Xóa giật bóng mờ khi thẻ app tiếp đất thành icon trên màn hình chính
+%hook SBIconView
+- (void)setAllowsGroupOpacity:(BOOL)allows {
+    if (IS_ACTIVE && (g_isAppToHomeAnimating || g_isContinuousSwiping)) {
+        %orig(NO);
+        return;
+    }
+    %orig(allows);
 }
 %end
 
