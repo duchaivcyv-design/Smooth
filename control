@@ -1,6 +1,6 @@
 Package: com.taojb.boostiphone6s
 Name: SmoothIOS Pro
-Version: 1.2.0-1u
+Version: 1.2.0-2a
 Architecture: iphoneos-arm64
 Description: Dynamic variable refresh rate, zero stutter, and seamless animation pacing without overheating.(Tự động điều chỉnh tần số quét, triệt tiêu khựng giật, tối ưu hoạt ảnh và giữ máy mát mẻ) Hỗ trợ ios 14-26.0.1 iphone 6s-15prm
 Maintainer: TaoJB, NoJB
