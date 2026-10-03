@@ -2922,7 +2922,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 CFRunLoopAddCommonMode(runLoop, kCFRunLoopDefaultMode);
                 CFRunLoopAddCommonMode(runLoop, (CFStringRef)UITrackingRunLoopMode);
             });
-            %init(Group_UIKit_ThirdParty_IsolatedV285);
+          // %init(Group_UIKit_ThirdParty_IsolatedV285);
         }
 
         // Toàn bộ các nhóm tối ưu chung cho cả hệ thống
