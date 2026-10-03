@@ -1408,7 +1408,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     %orig(enabled);
 }
 
-// ✅ ĐÃ XÓA setLowLatencyMode ĐỂ TIKTOK LƯỚT QUA ẢNH TRÔI TUỘT, KHÔNG BỊ TREO ĐƠ APP
+// Đã bỏ setLowLatencyMode để TikTok lướt qua album ảnh không bị đơ
 %end
 
 %hook CALayer
@@ -1443,25 +1443,80 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %end
 
 // ====================================================================================================
-// BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO, ĐA NHIỆM VÀ THÔNG BÁO HỆ THỐNG
+// BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO, POPUP, VOLUME VÀ THÔNG BÁO HỆ THỐNG
 // ====================================================================================================
 
-// Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang và thông báo
-static volatile int32_t g_activeAnimationCount = 0;
-static volatile BOOL g_isScrollingActive = NO;       // Cờ giữ trần khi đang cuộn hoặc trôi quán tính
-static volatile BOOL g_isVideoPlayingActive = NO;
+// Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang, volume và thông báo
+static volatile BOOL g_isAnimationRunning = NO;      // Cờ hoạt ảnh chuyển cảnh/bung popup (tự ngắt sau 350ms)
+static volatile BOOL g_isScrollingActive = NO;       // Cờ giữ trần khi đang cuộn feed hoặc cuộn trong popup
+static volatile BOOL g_isVideoPlayingActive = NO;    // Cờ trạng thái phát video
 static volatile BOOL g_isNotificationBannerActive = NO;
+static volatile BOOL g_isVolumeActive = NO;          // ✅ CỜ VOLUME: Khóa trần khi bấm phím âm lượng cứng
 static volatile BOOL g_isAppWarmingUp = NO;           // Giữ nhịp cao lúc vừa bật app chống đen màn
 static volatile BOOL g_isContinuousSwiping = NO;      // Vuốt thanh Home Bar chuyển tab liên tục
 static volatile BOOL g_isSwitcherActive = NO;         // Giữ max FPS xuyên suốt lúc tìm app trong App Switcher
+
+static dispatch_source_t g_animBurstTimer = nil;
+static dispatch_queue_t g_animBurstQueue = nil;
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
+static dispatch_source_t g_volumeBurstTimer = nil;
+static dispatch_queue_t g_volumeBurstQueue = nil;
+
+// Kích xung hoạt ảnh chuyển cảnh/bung popup: Tự động nhả cờ sau 350ms để popup đứng yên tự hạ sàn
+static void Titanium_TriggerAnimationBurst(NSTimeInterval duration) {
+    g_isAnimationRunning = YES;
+    Titanium_EnableZeroLatencyPipeline();
+
+    static dispatch_once_t aToken;
+    dispatch_once(&aToken, ^{
+        g_animBurstQueue = dispatch_queue_create("com.titanium.animburst", DISPATCH_QUEUE_SERIAL);
+    });
+
+    if (g_animBurstTimer) {
+        dispatch_source_cancel(g_animBurstTimer);
+        g_animBurstTimer = nil;
+    }
+
+    int64_t ms = (int64_t)((duration > 0.0 ? duration : 0.35) * 1000);
+    g_animBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_animBurstQueue);
+    dispatch_source_set_timer(g_animBurstTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(ms * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+    dispatch_source_set_event_handler(g_animBurstTimer, ^{
+        g_isAnimationRunning = NO;
+        g_animBurstTimer = nil;
+    });
+    dispatch_resume(g_animBurstTimer);
+}
+
+// ✅ KÍCH XUNG VOLUME: Khóa trần Hz/FPS trong 1.5 giây để thanh âm lượng co giãn mượt mà
+static void Titanium_TriggerVolumeBurst(void) {
+    g_isVolumeActive = YES;
+    Titanium_EnableZeroLatencyPipeline();
+
+    static dispatch_once_t vToken;
+    dispatch_once(&vToken, ^{
+        g_volumeBurstQueue = dispatch_queue_create("com.titanium.volumeburst", DISPATCH_QUEUE_SERIAL);
+    });
+
+    if (g_volumeBurstTimer) {
+        dispatch_source_cancel(g_volumeBurstTimer);
+        g_volumeBurstTimer = nil;
+    }
+
+    g_volumeBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_volumeBurstQueue);
+    dispatch_source_set_timer(g_volumeBurstTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+    dispatch_source_set_event_handler(g_volumeBurstTimer, ^{
+        g_isVolumeActive = NO;
+        g_volumeBurstTimer = nil;
+    });
+    dispatch_resume(g_volumeBurstTimer);
+}
 
 // Hàm tính toán nhịp nghỉ thông minh: Tự động co giãn theo dải 15-144 Hz/FPS bạn chọn trong Cài đặt
 static inline NSInteger Titanium_GetResolvedIdleFPS(void) {
     NSInteger target = CFG285 ? [CFG285 resolvedTargetFPS] : 60;
     NSInteger idle = Titanium_IsSpringBoard() ? 10 : 30;
-    return (idle > target) ? target : idle; // Không bao giờ vượt quá mức Target bạn cài
+    return (idle > target) ? target : idle;
 }
 
 // Kích xung nhịp CPU/GPU cực đại tức thì 0ms khi có thông báo xuất hiện
@@ -1492,17 +1547,20 @@ static void Titanium_TriggerNotificationBurst(void) {
 // NHÓM 3: KHÓA CỨNG HZ/FPS ĐỘNG (15 - 144 HZ) - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
 // ====================================================================================================
 
+// 1. CHỈ KHÓA TRẦN KHI THỰC SỰ CÓ CHUYỂN ĐỘNG / TƯƠNG TÁC
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isAppWarmingUp) return YES;             // Mở app: Luôn chạy max Hz
-    if (g_isUserTouchingScreen) return YES;         // Chạm tay vuốt màn hình
-    if (g_isScrollingActive) return YES;            // Đang cuộn feed
+    if (g_isAppWarmingUp) return YES;             // Mở app
+    if (g_isUserTouchingScreen) return YES;         // Chạm tay màn hình / chạm tương tác bên trong popup
+    if (g_isScrollingActive) return YES;            // Đang cuộn feed hoặc cuộn danh sách trong popup
+    if (g_isVolumeActive) return YES;               // ✅ Bấm phím Volume / HUD Volume đang hiện
     if (g_isContinuousSwiping) return YES;          // Vuốt ngang thanh cử chỉ đổi tab/app
     if (g_isSwitcherActive) return YES;             // Đang ở trong App Switcher tìm app
     if (g_isNotificationBannerActive) return YES;   // Thông báo trượt xuống
-    if (g_activeAnimationCount > 0) return YES;     // Có hiệu ứng chuyển cảnh
-    return NO; 
+    if (g_isAnimationRunning) return YES;           // Đang trong nhịp bung hoạt ảnh (350ms)
+    return NO; // Popup đứng yên hoặc màn hình tĩnh -> Tự hạ nhịp sàn làm mát máy
 }
 
+// 2. VIDEO THỤ ĐỘNG: Đang chạy video VÀ không chạm tay VÀ không cuộn
 static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive);
 }
@@ -1514,13 +1572,16 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (NSInteger)preferredFramesPerSecond {
     if (HardwareHasNative120Hz()) return %orig;
+    // Video thụ động: Giữ nguyên FPS gốc của video, không ép xung trần
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
         NSInteger target = [CFG285 resolvedTargetFPS];
+        // Có tương tác hoặc bấm Volume: Đẩy lên Max target
         if (Titanium_ShouldLockTargetRate()) {
             return target;
         }
+        // Tĩnh: Hạ nhịp sàn làm mát máy
         return Titanium_GetResolvedIdleFPS();
     }
     return %orig;
@@ -1600,18 +1661,19 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
-    %orig(cadence); // Giữ VSync để khử xé hình
+    %orig(cadence); // Giữ VSync để khử xé hình khi Crop ảnh / PiP
 }
 
 - (BOOL)supportsDynamicRefresh {
     if (HardwareHasNative120Hz()) return %orig;
-    if (!IS_ACTIVE) return %orig;
-    return YES;
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
 
+// Sửa chuẩn logic ProMotion cho màn hình
 - (BOOL)hasDynamicDisplayMode {
     if (HardwareHasNative120Hz()) return %orig;
-    if (!IS_ACTIVE) return YES;
+    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
@@ -1664,7 +1726,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 4. KHÓA CỨNG TẤT CẢ HIỆU ỨNG HOẠT ẢNH & LÒ XO (26ANIM)
+// 4. ĐIỀU PHỐI HOẠT ẢNH & LÒ XO (BUNG POPUP MƯỢT NHƯNG TỰ NGẮT ĐÚNG HẠN)
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
@@ -1675,13 +1737,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         }
     }
     %orig(range);
-}
-
-- (void)setDelegate:(id)delegate {
-    %orig;
-    if (IS_ACTIVE) {
-        __sync_fetch_and_add(&g_activeAnimationCount, 1);
-    }
 }
 
 %end
@@ -1696,20 +1751,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         }
     }
     %orig(range);
-}
-
-%end
-
-%hook CATransaction
-
-+ (void)commit {
-    %orig;
-    if (IS_ACTIVE && g_activeAnimationCount > 0) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            if (g_activeAnimationCount > 0) {
-                __sync_fetch_and_sub(&g_activeAnimationCount, 1);
-            }
-        });
+    // Kích xung trọn 350ms cho lò xo nảy bung popup, sau đó tự nhả cờ để hạ sàn
+    if (IS_ACTIVE) {
+        Titanium_TriggerAnimationBurst(0.35);
     }
 }
 
@@ -1727,7 +1771,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 6. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN: KÍCH XUNG LÊN TRẦN HZ/FPS ĐÃ KHÓA TRƯỚC 0MS
+// 6. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN
 %hook NCNotificationDispatcher
 
 - (void)postNotificationWithRequest:(id)request {
@@ -1761,7 +1805,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 7. VÁ ĐIỂM MÙ MỞ APP (ĐÃ XÓA LOAD SETTINGS TRÁNH KẸT SANDBOX)
+// 7. VÁ ĐIỂM MÙ MỞ APP (CHỐNG MÀN HÌNH ĐEN)
 %hook UIApplication
 
 - (void)_applicationDidBecomeActive:(id)arg1 {
@@ -2196,7 +2240,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP)
+// NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP, VOLUME)
 // ====================================================================================================
 
 %group Group_Display_SpringBoardV285
@@ -2405,7 +2449,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)willActivate {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
-        // ✅ ĐÃ BỎ Titanium_LockMainThreadFast() để giải phóng toàn bộ CPU cho tiến trình app mới nạp dữ liệu
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
@@ -2452,6 +2495,53 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     }
     %orig;
 }
+%end
+
+// ====================================================================================================
+// 9. ĐÓN ĐẦU PHÍM BẤM VOLUME CỨNG & THANH TRƯỢT VOLUME HUD (TRIỆT TIÊU GIẬT LAG 100%)
+// ====================================================================================================
+
+%hook SBVolumeControl
+
+- (void)changeVolumeByDelta:(float)delta {
+    if (IS_ACTIVE) {
+        Titanium_TriggerVolumeBurst();
+    }
+    %orig(delta);
+}
+
+- (void)increaseVolume {
+    if (IS_ACTIVE) {
+        Titanium_TriggerVolumeBurst();
+    }
+    %orig;
+}
+
+- (void)decreaseVolume {
+    if (IS_ACTIVE) {
+        Titanium_TriggerVolumeBurst();
+    }
+    %orig;
+}
+
+%end
+
+%hook SBVolumeHUDViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    if (IS_ACTIVE) {
+        Titanium_TriggerVolumeBurst();
+    }
+    %orig(animated);
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    if (IS_ACTIVE) {
+        g_isVolumeActive = NO; // Thanh volume biến mất -> Cho phép hạ sàn làm mát máy
+    }
+    %orig(animated);
+}
+
 %end
 
 %end
