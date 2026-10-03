@@ -2062,7 +2062,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
     if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
-    }
     %orig(string, event, context);
 }
 
