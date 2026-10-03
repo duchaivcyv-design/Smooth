@@ -2822,25 +2822,39 @@ static void Titanium_ExecuteSystemRespring(void) {
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
+        AppleInternal_EnforceZeroLatencyKernelTier();
+        AppleInternal_LockHardwareCADisplay();
+        Titanium_LockMainThreadFast();
+
+        if (Titanium_IsLegacyA9toA12()) {
+            Titanium_ElevateThreadToMachRealTime();
+            Titanium_ApplySiliconDeepOptimizations();
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_EnforceThreadVIPPolicy();
+        }
+
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
         if (configClass) {
             CFG285 = [configClass sharedInstance];
             [CFG285 loadSettings];
         }
 
+        %init(Group_ZeroLatency_Touch_Opt);
+        %init(Group_Metal_ZeroTearing_Pacing);
+        %init(Group_FluidTransitions_Pacing);
+        %init(Group_FastLaunch_SuperEngineV285);
+        %init(Group_Scroll_And_Keyboard_Opt);
+        %init(Group_InstantActionAndMenuTransitions_Boost);
+        %init(Group_Global_Thread_Governor_Unthrottled);
+
+        // KÍCH HOẠT HIỆU ỨNG TRONG APP (POPUP, SHEET, CONTEXT MENU)
+        %init(Group_Universal_InApp_Animations);
+
+        if (Titanium_IsClassicHomeButtonDevice()) {
+            %init(Group_HardwareSegregation_ClassicHomeV285);
+        }
+
         if (isSpringBoard) {
-            // 1. SPRINGBOARD: Giữ nguyên toàn bộ cơ chế ép xung Mach Real-Time cực mạnh
-            AppleInternal_EnforceZeroLatencyKernelTier();
-            AppleInternal_LockHardwareCADisplay();
-            Titanium_LockMainThreadFast();
-
-            if (Titanium_IsLegacyA9toA12()) {
-                Titanium_ElevateThreadToMachRealTime();
-                Titanium_ApplySiliconDeepOptimizations();
-                Titanium_EnableZeroLatencyPipeline();
-                Titanium_EnforceThreadVIPPolicy();
-            }
-
             Titanium_TuneWindowServerDisplayDirectly();
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_Display_SpringBoardV285);
@@ -2852,27 +2866,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             [@"VERIFIED" writeToFile:TITANIUM_BOOT_FLAG_VERIFIED atomically:YES encoding:NSUTF8StringEncoding error:nil];
             chmod([TITANIUM_BOOT_FLAG_VERIFIED UTF8String], 0666);
         } else {
-            // 2. APP BÊN THỨ BA: KHÔNG ép Mach Real-Time & SCHED_RR -> Giải phóng socket mạng cho TikTok, YouTube
-            dispatch_async(dispatch_get_main_queue(), ^{
-                CFRunLoopRef runLoop = CFRunLoopGetCurrent();
-                CFRunLoopAddCommonMode(runLoop, kCFRunLoopDefaultMode);
-                CFRunLoopAddCommonMode(runLoop, (CFStringRef)UITrackingRunLoopMode);
-            });
             %init(Group_UIKit_ThirdParty_IsolatedV285);
-        }
-
-        // Toàn bộ các nhóm ép Hz/FPS, Cảm ứng 0ms, Cuộn mượt, Metal hoạt động cho cả hệ thống
-        %init(Group_ZeroLatency_Touch_Opt);
-        %init(Group_Metal_ZeroTearing_Pacing);
-        %init(Group_FluidTransitions_Pacing);
-        %init(Group_FastLaunch_SuperEngineV285);
-        %init(Group_Scroll_And_Keyboard_Opt);
-        %init(Group_InstantActionAndMenuTransitions_Boost);
-        %init(Group_Global_Thread_Governor_Unthrottled);
-        %init(Group_Universal_InApp_Animations);
-
-        if (Titanium_IsClassicHomeButtonDevice()) {
-            %init(Group_HardwareSegregation_ClassicHomeV285);
         }
 
         static dispatch_once_t notifyToken;
