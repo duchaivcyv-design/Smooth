@@ -1474,9 +1474,10 @@ static inline void Titanium_StealthKernelHijack(void) {
                 g_isInstantMotion = YES;
                 Titanium_TriggerInstantTouchBurst();
                 break;
-                       } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
+            } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
                 if (!g_isScrollingActive && !g_isContinuousSwiping && !g_isAppToHomeAnimating) {
-                    g_isInstantMotion = NO; // Buông tay nhưng app còn đang bay thì KHÔNG được hạ 15Hz
+                    g_isInstantMotion = NO;
+                }
             }
         }
     }
@@ -1484,7 +1485,7 @@ static inline void Titanium_StealthKernelHijack(void) {
 }
 %end
 
-%end
+%end // KẾT THÚC %group Group_ZeroLatency_Touch_Opt
 
 // ====================================================================================================
 // NHÓM 2: METAL GRAPHICS, TRIPLE BUFFERING & KHÓA CHỐNG RUNG LAYER
