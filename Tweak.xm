@@ -1483,7 +1483,7 @@ static volatile int32_t g_activeAnimationCount = 0;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
-// g_appLaunchWarmupActive đã được khai báo ở đầu file (hoặc dòng 1486)
+static volatile BOOL g_appLaunchWarmupActive = NO; // 👈 THÊM DÒNG NÀY VÀO ĐÂY
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
 
