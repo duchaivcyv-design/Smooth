@@ -1661,7 +1661,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
-    %orig(cadence); // Giữ VSync để khử xé hình khi Crop ảnh / PiP
+    %orig(cadence); // Bỏ "cadence = nil;" để giữ nhịp VSync, không bị mất layer nền
 }
 
 - (BOOL)supportsDynamicRefresh {
@@ -2257,8 +2257,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %hook PBFPosterExtensionDataStore
 - (void)_updateSnapshot {
-    if (IS_ACTIVE) return;
-    %orig;
+    %orig; // Bỏ "return;" để hệ thống chụp và nạp lại ảnh nền, không bị đen xì
 }
 %end
 
