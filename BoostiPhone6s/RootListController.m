@@ -286,7 +286,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 // ====================================================================================================
-// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & GỬI TÍN HIỆU ĐIỀU KHIỂN (ĐÃ KHÓA 0 CÁC CỜ GÂY ĐEN MÀN HÌNH)
+// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & GỬI TÍN HIỆU ĐIỀU KHIỂN (ĐÃ ĐỒNG BỘ CHUẨN XÁC VỚI TWEAK.XM)
 // ====================================================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
@@ -296,6 +296,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     payload.magic = APEX_SYNC_MAGIC_V285;
     payload.masterEnabled = enabled ? 1 : 0;
 
+    // 1. KHI TẮT TỔNG: NGẮT TUYỆT ĐỐI TOÀN BỘ CÁC TÍNH NĂNG TRONG 0MS
     if (!enabled) {
         payload.targetHz = 60;
         payload.targetFPS = 60;
@@ -303,7 +304,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.pipSyncEnabled = 0;
         payload.thermalShield = 0;
         payload.antiStutterExit = 0;
-        payload.smartBufferingLevel = 3;
+        payload.smartBufferingLevel = 0;
         payload.zeroLatencyTouch = 0;
         payload.shaderOptimization = 0;
         payload.dynamicInterpolation = 0;
@@ -320,6 +321,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.rawTouchDirectDelivery = 0;
         payload.powerSaveModeActive = 0;
     } else {
+        // 2. KHI BẬT TỔNG: ĐỒNG BỘ CHUẨN XÁC DẢI 15 - 144 HZ VÀ MỌI CÔNG TẮC
         int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 120;
         int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 120;
         BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
@@ -341,7 +343,9 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.targetHz = hz;
         payload.targetFPS = fps;
         payload.forceOverclock = isOverclock ? 1 : 0;
-        payload.dynamicInterpolation = 0; // Khóa cứng tuyệt đối
+        
+        // Đồng bộ chuẩn xác công tắc ProMotion Engine:
+        payload.dynamicInterpolation = prefs[@"ProMotionEngineBeta7"] ? ([prefs[@"ProMotionEngineBeta7"] boolValue] ? 1 : 0) : 1;
         payload.pipSyncEnabled = 1;
         payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
         payload.antiStutterExit = prefs[@"FixAppExitStutter"] ? ([prefs[@"FixAppExitStutter"] boolValue] ? 1 : 0) : 1;
@@ -349,9 +353,9 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
         payload.shaderOptimization = 1;
 
-        // ⚠️ SỬA DỨT ĐIỂM: Khóa bằng 0 để không can thiệp Splash Screen và Framebuffer Metal
-        payload.fastAppLaunch = 0;
-        payload.metalPacingEnabled = 0;
+        // Bật đồng bộ theo đúng cấu hình người dùng (đã fix lỗi kẹt luồng mạng ở Tweak.xm)
+        payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
+        payload.metalPacingEnabled = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 1 : 0) : 1;
 
         payload.lowLatencyAudio = 1;
         payload.memoryPressureRelief = 1;
@@ -471,6 +475,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
+    // Ngắt tuyệt đối: Khi tắt tổng, ẩn sạch mọi nhóm can thiệp
     if (!masterEnabled) {
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
         NSString *currentGroupID = nil;
@@ -539,7 +544,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isPowerSave) {
                 spec.name = @"🔋 Tần Số Quét: Khóa 30 Hz (Tiết Kiệm Pin)";
-            } else if (isOverclock) {
+            } else if (isOverclock || hz == 144) {
                 spec.name = @"⚡ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
             } else {
                 spec.name = [NSString stringWithFormat:hzLockText, (long)hz];
@@ -577,7 +582,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 // ====================================================================================================
-// KHỞI TẠO CẤU HÌNH MẶC ĐỊNH AN TOÀN (ĐÃ TẮT CÁC TOGGLE GÂY ĐEN MÀN HÌNH)
+// KHỞI TẠO CẤU HÌNH MẶC ĐỊNH HOÀN CHỈNH (CHO PHÉP BẬT TOÀN BỘ CÔNG TẮC AN TOÀN)
 // ====================================================================================================
 - (void)ensureDefaultSettingsExist {
     NSString *prefPath = Titanium_ResolvePrefPath();
@@ -591,27 +596,27 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
              @"Enabled": @YES,
              @"SelectedLanguage": @"auto",
-             @"ProMotionEngineBeta7": @NO,
-             @"MetalHexBuffering": @NO,            // ⚠️ TẮT: Chống sập Framebuffer Metal
+             @"ProMotionEngineBeta7": @YES,        // ✅ BẬT: Giả lập ProMotion mượt toàn hệ thống
+             @"MetalHexBuffering": @YES,           // ✅ BẬT: Đã tối ưu không lag TikTok
              @"KeyboardZeroLagV24": @YES,
              @"EnableHzControl": @YES,
              @"TargetRefreshRate": @120,
              @"EnableFPSControl": @YES,
              @"TargetFPSRate": @120,
              @"ForceOverclock144Hz": @NO,
-             @"SyncModuleDelay": @NO,             // ⚠️ TẮT: Tránh lệch nhịp V-Sync
+             @"SyncModuleDelay": @NO,
              @"IsolateRenderPipeline": @YES,
              @"ColorOs17SmoothEngine": @YES,
              @"ReduceMultiTaskLag": @YES,
-             @"FixAppLaunchBlackScreen": @NO,      // ⚠️ TẮT: Tránh triệt tiêu Splash Screen làm đen app
+             @"FixAppLaunchBlackScreen": @YES,
              @"FixAppExitStutter": @YES,
              @"TouchResponseBoost": @YES,
-             @"QuantumRenderShield": @NO,          // ⚠️ TẮT: Không đè layer đồ họa
+             @"QuantumRenderShield": @NO,
              @"NeuralBufferOpt": @YES,
              @"PeriodicRamClean": @YES,
              @"MachVMPurgeRam": @YES,
              @"AutoCloseBackgroundApp": @NO,
-             @"TurboAppLaunch": @NO,               // ⚠️ TẮT: Cho app kịp khởi tạo giao diện
+             @"TurboAppLaunch": @YES,              // ✅ BẬT: Đã gỡ bỏ nghẽn mạng
              @"AntiThermalThrottling": @YES,
              @"PowerSaveMode": @NO,
              @"AntiGhostTouch": @YES,
@@ -740,6 +745,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     dispatch_resume(self.stepDownTimer);
 }
 
+// ====================================================================================================
+// KHÓA CỨNG HZ/FPS ĐÃ CHỌN - BẢO TOÀN CÔNG TẮC PROMOTION ENGINE
+// ====================================================================================================
 - (void)commitFinalRateValue:(NSInteger)rate {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
@@ -748,8 +756,19 @@ static inline NSString *PM_TextV285(NSString *key) {
     [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
     [prefs setObject:@YES forKey:@"EnableHzControl"];
     [prefs setObject:@YES forKey:@"EnableFPSControl"];
-    [prefs setObject:@NO forKey:@"ProMotionEngineBeta7"];
+    
+    // Tự động bật cờ 144Hz nếu chọn mức 144
+    if (rate == 144) {
+        [prefs setObject:@YES forKey:@"ForceOverclock144Hz"];
+        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanTrue, PREF_DOMAIN);
+    } else {
+        [prefs setObject:@NO forKey:@"ForceOverclock144Hz"];
+        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanFalse, PREF_DOMAIN);
+    }
+
     [prefs setObject:@NO forKey:@"PowerSaveMode"];
+    
+    // ✅ ĐÃ SỬA: KHÔNG ÉP TẮT ProMotionEngineBeta7 để giữ nguyên giả lập ProMotion mượt chuyển cảnh
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
 
@@ -757,7 +776,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("EnableHzControl"), kCFBooleanTrue, PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("EnableFPSControl"), kCFBooleanTrue, PREF_DOMAIN);
-    CFPreferencesSetAppValue(CFSTR("ProMotionEngineBeta7"), kCFBooleanFalse, PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("PowerSaveMode"), kCFBooleanFalse, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
