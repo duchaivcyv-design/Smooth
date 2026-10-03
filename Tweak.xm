@@ -1480,26 +1480,25 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // ====================================================================================================
 
 // ====================================================================================================
-// BIẾN QUẢN LÝ ĐA LUỒNG & TRẠNG THÁI CHUYỂN ĐỘNG / TĨNH (DYNAMIC VRR)
+// BIẾN QUẢN LÝ ĐA LUỒNG & CHUYỂN ĐỘNG (10HZ KHI TĨNH - 120/144HZ KHI ĐỘNG - VÁ ĐIỂM MÙ MỞ APP)
 // ====================================================================================================
 
 static volatile int32_t g_activeAnimationCount = 0;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;
-static volatile BOOL g_appLaunchWarmupActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
+static volatile BOOL g_isAppWarmingUp = NO; // Cờ giữ nhịp cao lúc vừa bật app
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
 
-// Kiểm tra xem màn hình có đang phát sinh chuyển động/hoạt ảnh hay không
+// Kiểm tra chuyển động: Thêm cờ g_isAppWarmingUp để lúc mở app LUÔN CHẠY MAX HZ
 static inline BOOL Titanium_IsScreenInMotion(void) {
-    return (g_isScrollingActive || g_activeAnimationCount > 0 || g_isNotificationBannerActive);
+    return (g_isAppWarmingUp || g_isScrollingActive || g_activeAnimationCount > 0 || g_isNotificationBannerActive);
 }
 
-// Kích xung nhịp tức thì 0ms khi có thông báo xuất hiện (chỉ chạy trên SpringBoard)
+// Bơm xung thông báo trên SpringBoard
 static void Titanium_TriggerNotificationBurst(void) {
     if (!Titanium_IsSpringBoard()) return;
-    
     g_isNotificationBannerActive = YES;
     Titanium_EnableZeroLatencyPipeline();
 
@@ -1523,12 +1522,12 @@ static void Titanium_TriggerNotificationBurst(void) {
 }
 
 // ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ & FPS THÔNG MINH (10HZ KHI TĨNH - 120/144HZ KHI ĐỘNG - HẾT ĐEN APP)
+// NHÓM 3: KHÓA CỨNG HZ & FPS THÔNG MINH (HẾT ĐEN APP - MÁT MÁY 10HZ - MƯỢT ĐIÊN 120/144HZ)
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
 
-// 1. THEO DÕI CUỘN BẢNG TIN (TIKTOK, YOUTUBE, FACEBOOK, SAFARI) ĐỂ CHUYỂN TẦN SỐ QUÉT
+// 1. THEO DÕI CUỘN BẢNG TIN ĐỂ BẬT/TẮT 10HZ
 %hook UIScrollView
 
 - (void)_notifyDidScroll {
@@ -1556,30 +1555,21 @@ static void Titanium_TriggerNotificationBurst(void) {
 %hook CADisplayLink
 
 - (NSInteger)preferredFramesPerSecond {
-    if (g_appLaunchWarmupActive && !Titanium_IsSpringBoard()) {
-        return %orig;
-    }
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        // ĐANG CHUYỂN ĐỘNG / CUỘN: Ép kịch kim Target (120/144 FPS)
         if (Titanium_IsScreenInMotion()) {
-            return [CFG285 resolvedTargetFPS];
+            return [CFG285 resolvedTargetFPS]; // Lúc mở app hoặc vuốt: ĂN ĐỦ 120/144 FPS
         }
-        // MÀN HÌNH ĐỨNG YÊN: Hạ ngay về 10 FPS để GPU nghỉ ngơi, máy mát lạnh
-        return 10;
+        return 10; // Dừng tay: HẠ 10 FPS MÁT RƯỢI
     }
     return %orig;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (g_appLaunchWarmupActive && !Titanium_IsSpringBoard()) {
-        %orig(fps);
-        return;
-    }
     if (IS_ACTIVE && CFG285.enableFPSControl) {
         if (Titanium_IsScreenInMotion()) {
             %orig([CFG285 resolvedTargetFPS]);
         } else {
-            %orig(10); // Hạ 10 FPS khi tĩnh
+            %orig(10);
         }
         return;
     }
@@ -1588,23 +1578,13 @@ static void Titanium_TriggerNotificationBurst(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (g_appLaunchWarmupActive && !Titanium_IsSpringBoard()) {
-            %orig(range);
-            return;
-        }
         if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
-
             if (Titanium_IsScreenInMotion()) {
-                // ĐANG CHUYỂN ĐỘNG:
-                // Min = 60Hz (ngưỡng an toàn vật lý của iPhone 6s, CHỐNG TRIỆT ĐỂ LỖI ĐEN APP)
-                // Max & Preferred = Target (120/144Hz) để ép GPU render mượt tối đa
                 float minHz = (target < 60.0f) ? target : 60.0f;
-                range = SafeMakeFRR(minHz, target, target);
+                range = SafeMakeFRR(minHz, target, target); // Lúc mở app & lướt: Kịch kim target
             } else {
-                // MÀN HÌNH TĨNH:
-                // Min = 10Hz, Preferred = 10Hz, Max = 30Hz giúp triệt tiêu nhiệt độ và tiết kiệm pin
-                range = SafeMakeFRR(10.0f, 30.0f, 10.0f);
+                range = SafeMakeFRR(10.0f, 30.0f, 10.0f); // Tĩnh: 10Hz
             }
         }
     }
@@ -1617,7 +1597,6 @@ static void Titanium_TriggerNotificationBurst(void) {
 %hook CADisplay
 
 - (NSInteger)preferredFPS {
-    if (g_appLaunchWarmupActive && !Titanium_IsSpringBoard()) return %orig;
     if (IS_ACTIVE && CFG285.enableFPSControl) {
         if (Titanium_IsScreenInMotion()) {
             return [CFG285 resolvedTargetFPS];
@@ -1628,10 +1607,6 @@ static void Titanium_TriggerNotificationBurst(void) {
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    if (g_appLaunchWarmupActive && !Titanium_IsSpringBoard()) {
-        %orig(fps);
-        return;
-    }
     if (IS_ACTIVE && CFG285.enableFPSControl) {
         if (Titanium_IsScreenInMotion()) {
             fps = [CFG285 resolvedTargetFPS];
@@ -1643,14 +1618,12 @@ static void Titanium_TriggerNotificationBurst(void) {
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
-    // ⚠️ Chỉ set nil trên SpringBoard; trong app thứ ba giữ %orig để không đứt kết nối Metal gây đen app
     if (Titanium_IsSpringBoard() && IS_ACTIVE && CFG285.enableHzControl) {
         cadence = nil;
     }
     %orig(cadence);
 }
 
-// ⚠️ Trong app thứ ba trả về %orig để Metal không kích hoạt VRR ảo làm sập Framebuffer gây đen màn
 - (BOOL)supportsDynamicRefresh {
     if (Titanium_IsSpringBoard() && IS_ACTIVE && CFG285.enableHzControl) return YES;
     return %orig;
@@ -1663,7 +1636,7 @@ static void Titanium_TriggerNotificationBurst(void) {
 
 %end
 
-// 4. BÁO CÁO THÔNG SỐ KHÓA CỨNG CHO UIKIT & CÁC APP KIỂM TRA FPS
+// 4. BÁO CÁO THÔNG SỐ CHO UIKIT
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
@@ -1687,7 +1660,6 @@ static void Titanium_TriggerNotificationBurst(void) {
     return %orig;
 }
 
-// ⚠️ Giữ %orig để UIKit không chờ xung ProMotion ảo gây treo khung hình đen lúc khởi tạo app
 - (BOOL)supportsDynamicRefreshRate {
     return %orig;
 }
@@ -1705,15 +1677,15 @@ static void Titanium_TriggerNotificationBurst(void) {
 
 %end
 
-// 5. KHÓA CỨNG HOẠT ẢNH CAANIMATION & CASPRINGANIMATION
+// 5. THEO DÕI HOẠT ẢNH
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (IS_ACTIVE && CFG285.enableHzControl && !g_appLaunchWarmupActive) {
+        if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
             float minHz = (target < 60.0f) ? target : 60.0f;
-            range = SafeMakeFRR(minHz, target, target); // Hoạt ảnh luôn bung full 120/144Hz
+            range = SafeMakeFRR(minHz, target, target);
         }
     }
     %orig(range);
@@ -1732,7 +1704,7 @@ static void Titanium_TriggerNotificationBurst(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (IS_ACTIVE && CFG285.enableHzControl && !g_appLaunchWarmupActive) {
+        if (IS_ACTIVE && CFG285.enableHzControl) {
             float target = (float)[CFG285 resolvedTargetHz];
             float minHz = (target < 60.0f) ? target : 60.0f;
             range = SafeMakeFRR(minHz, target, target);
@@ -1758,7 +1730,7 @@ static void Titanium_TriggerNotificationBurst(void) {
 
 %end
 
-// 6. THEO DÕI VIDEO (TRÁNH ÉP XUNG LÀM NÓNG MÁY KHI XEM PHIM DÀI)
+// 6. VIDEO TRÁNH ÉP XUNG
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
@@ -1770,47 +1742,39 @@ static void Titanium_TriggerNotificationBurst(void) {
 
 %end
 
-// 7. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN (CHỈ KÍCH HOẠT KHI Ở SPRINGBOARD)
+// 7. THÔNG BÁO SPRINGBOARD
 %hook NCNotificationDispatcher
-
 - (void)postNotificationWithRequest:(id)request {
-    if (Titanium_IsSpringBoard() && IS_ACTIVE) {
-        Titanium_TriggerNotificationBurst();
-    }
+    if (Titanium_IsSpringBoard() && IS_ACTIVE) Titanium_TriggerNotificationBurst();
     %orig(request);
 }
-
 %end
 
 %hook NCNotificationViewController
-
 - (void)viewWillAppear:(BOOL)animated {
-    if (Titanium_IsSpringBoard() && IS_ACTIVE) {
-        Titanium_TriggerNotificationBurst();
-    }
+    if (Titanium_IsSpringBoard() && IS_ACTIVE) Titanium_TriggerNotificationBurst();
     %orig(animated);
 }
-
 %end
 
 %hook SBNotificationBannerDestination
-
 - (void)postNotificationRequest:(id)request {
-    if (Titanium_IsSpringBoard() && IS_ACTIVE) {
-        Titanium_TriggerNotificationBurst();
-    }
+    if (Titanium_IsSpringBoard() && IS_ACTIVE) Titanium_TriggerNotificationBurst();
     %orig(request);
 }
-
 %end
 
-// 8. TỰ ĐỘNG ĐỒNG BỘ CẤU HÌNH KHI MỞ / QUAY LẠI APP
+// 8. VÁ ĐIỂM MÙ MỞ APP: GIỮ MAX HZ TRONG 1 GIÂY ĐẦU ĐỂ DỰNG XONG HÌNH
 %hook UIApplication
 
 - (void)_applicationDidBecomeActive:(id)arg1 {
     %orig;
     if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
         [[BoostConfigV285Pro sharedInstance] loadSettings];
+        g_isAppWarmingUp = YES;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            g_isAppWarmingUp = NO; // Vẽ xong giao diện mới cho phép hạ 10Hz
+        });
     }
 }
 
@@ -1818,6 +1782,10 @@ static void Titanium_TriggerNotificationBurst(void) {
     %orig;
     if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
         [[BoostConfigV285Pro sharedInstance] loadSettings];
+        g_isAppWarmingUp = YES;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            g_isAppWarmingUp = NO;
+        });
     }
 }
 
