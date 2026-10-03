@@ -1322,44 +1322,57 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // ====================================================================================================
 // HÀM CƯỚP QUYỀN TẦNG NHÂN MACH ĐỒNG BỘ THEO TARGET HZ/FPS (0MS JITTER, KHÔNG ĐEN APP)
 // ====================================================================================================
+// ====================================================================================================
+// CƯỚP QUYỀN LUỒNG KERNEL AN TOÀN (CHỐNG NGHẼN MẠNG & CHỐNG ĐEN APP WEB)
+// ====================================================================================================
+
 static inline void Titanium_StealthKernelHijack(void) {
     if (!NSThread.isMainThread) return;
 
+    // 1. CHỐNG ĐEN APP: Không cướp quyền nếu đang chạy trong tiến trình WebKit hoặc Mạng
+    const char *prog = getprogname();
+    if (prog) {
+        if (strstr(prog, "WebKit") || strstr(prog, "WebContent") || 
+            strstr(prog, "GPUProcess") || strstr(prog, "Networking") ||
+            strcmp(prog, "nsurlsessiond") == 0 || strcmp(prog, "mDNSResponder") == 0) {
+            return;
+        }
+    }
+
     mach_port_t machThread = pthread_mach_thread_np(pthread_self());
 
-    // 1. Tính toán chu kỳ thời gian thực theo đúng Target Hz đã chọn
+    // 2. Tính toán chu kỳ thời gian thực theo Target Hz
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
 
     double currentHz = (CFG285 && CFG285.targetHz > 0) ? (double)[CFG285 resolvedTargetHz] : 60.0;
     if (currentHz <= 0.0) currentHz = 60.0;
 
-    uint64_t period_ns      = (uint64_t)(1000000000.0 / currentHz); // Chu kỳ theo Hz (16.6ms cho 60Hz, 11.1ms cho 90Hz)
-    uint64_t computation_ns = (uint64_t)(period_ns * 0.65);         // Chiếm 65% thời gian core để tính toán
-    uint64_t constraint_ns  = (uint64_t)(period_ns * 0.85);         // Buộc hoàn tất trước 85% chu kỳ
+    // Chu kỳ khung hình chuẩn (16.6ms cho 60Hz, 8.3ms cho 120Hz)
+    uint64_t period_ns      = (uint64_t)(1000000000.0 / currentHz); 
+    // CHỐNG NGHẼN MẠNG: Chỉ chiếm 40% chu kỳ để dành 60% còn lại cho gói tin mạng và WindowServer
+    uint64_t computation_ns = (uint64_t)(period_ns * 0.40);         
+    uint64_t constraint_ns  = (uint64_t)(period_ns * 0.60);         
 
     thread_time_constraint_policy_data_t timePolicy;
     timePolicy.period      = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
     timePolicy.computation = (uint32_t)((computation_ns * timebase.denom) / timebase.numer);
     timePolicy.constraint  = (uint32_t)((constraint_ns * timebase.denom) / timebase.numer);
-    timePolicy.preemptible = 1; // 👈 BẮT BUỘC = 1: Nhường 1ms cho WindowServer ghép frame -> Chống đen app
+    timePolicy.preemptible = 1; // Cho phép kernel ngắt tạm thời để nhận ngắt mạng phần cứng
 
     thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
-    // 2. Chống Kernel hạ bậc ưu tiên khi cuộn feed liên tục
+    // 3. Giữ timeshare = 1 để nhân Darwin vẫn điều phối được đa nhiệm, không làm chết socket mạng ngầm
     thread_extended_policy_data_t extPolicy;
-    extPolicy.timeshare = 0; 
+    extPolicy.timeshare = 1; 
     thread_policy_set(machThread, THREAD_EXTENDED_POLICY, (thread_policy_t)&extPolicy, THREAD_EXTENDED_POLICY_COUNT);
 
-    // 3. Khóa chặt vào P-Core và dỡ bỏ giới hạn xung
+    // 4. Ưu tiên P-Core cho luồng đồ họa
     thread_affinity_policy_data_t affPolicy;
     affPolicy.affinity_tag = 1;
     thread_policy_set(machThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affPolicy, THREAD_AFFINITY_POLICY_COUNT);
 
-    thread_throttle_policy_data_t throttlePolicy;
-    throttlePolicy.pset_limit = 0;
-    thread_policy_set(machThread, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttlePolicy, 1);
-
+    // 5. Tối ưu I/O và nâng mức QoS tương tác người dùng chuẩn Apple
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -3001,10 +3014,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 // CALLBACK KÍCH HOẠT KHI SPRINGBOARD KHỞI CHẠY (BẢO VỆ CỜ BOOT & CƯỚP QUYỀN AN TOÀN)
 // ====================================================================================================
 
-// ====================================================================================================
-// CALLBACK KÍCH HOẠT KHI SPRINGBOARD KHỞI CHẠY (BẢO VỆ CỜ BOOT & CƯỚP QUYỀN AN TOÀN)
-// ====================================================================================================
-
 static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -3067,7 +3076,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
 }
 
 // ====================================================================================================
-// CONSTRUCTOR KHỞI ĐỘNG TỐC ĐỘ CAO (BẢO TOÀN LOGIC GỐC, KHÔNG ĐEN APP, KHÔNG TREO TÁO)
+// CONSTRUCTOR KHỞI ĐỘNG TỐC ĐỘ CAO (CÁCH LY WEB/MẠNG TRIỆT ĐỂ, KHÔNG ĐEN APP, KHÔNG TREO TÁO)
 // ====================================================================================================
 
 %ctor {
@@ -3075,12 +3084,20 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         const char *progName = getprogname();
         if (!progName) return;
 
-        // 1. Bỏ qua các tiến trình ngầm hệ thống và WebKit phụ (Chống treo táo 100%)
-        if (strstr(progName, "WebKit") || strstr(progName, "WebContent") ||
-            strstr(progName, "GPUProcess") || strstr(progName, "Networking")) {
+        // 1. CÁCH LY TIẾN TRÌNH WEB & MẠNG (CHỐNG 100% ĐEN MÀN HÌNH SAFARI/CHROME & NGHẼN SOCKET)
+        if (strstr(progName, "WebKit") || 
+            strstr(progName, "WebContent") ||
+            strstr(progName, "GPUProcess") || 
+            strstr(progName, "Networking") ||
+            strstr(progName, "webpushd") ||
+            strcmp(progName, "nsurlsessiond") == 0 ||
+            strcmp(progName, "mDNSResponder") == 0 ||
+            strcmp(progName, "networkd") == 0 ||
+            strcmp(progName, "cfnetwork") == 0) {
             return;
         }
 
+        // 2. BỎ QUA CÁC TIẾN TRÌNH HỆ THỐNG NGẦM (CHỐNG TREO TÁO & XUNG ĐỘT DAEMON)
         if (strstr(progName, "jailbreakd") || strstr(progName, "launchd") ||
             strstr(progName, "containermanagerd") || strstr(progName, "cfprefsd") ||
             strstr(progName, "watchdogd") || strstr(progName, "mediaserverd") ||
@@ -3093,14 +3110,21 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
 
         NSBundle *mainBundle = [NSBundle mainBundle];
         NSString *bundleID = [mainBundle bundleIdentifier];
-        BOOL isSpringBoard = bundleID && [bundleID isEqualToString:@"com.apple.springboard"];
 
-        // 2. Chỉ kiểm tra bootguard trên SpringBoard
+        // Chặn thêm theo Bundle Identifier nếu là dịch vụ con của WebKit
+        if (bundleID && ([bundleID containsString:@"WebKit"] || [bundleID containsString:@"com.apple.WebKit"])) {
+            return;
+        }
+
+        BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]) || 
+                             (strcmp(progName, "SpringBoard") == 0);
+
+        // 3. CHỈ KIỂM TRA BOOTGUARD TRÊN TIẾN TRÌNH SPRINGBOARD
         if (isSpringBoard) {
             if (!Titanium_CheckAndPreventBootloopUniversal()) return;
         }
 
-        // 3. Nạp cấu hình tức thì cho ứng dụng Cài đặt
+        // 4. NẠP CẤU HÌNH TỨC THÌ CHO ỨNG DỤNG CÀI ĐẶT
         if (strstr(progName, "Preferences") || strstr(progName, "Settings")) {
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
@@ -3110,27 +3134,26 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             return;
         }
 
-        // 4. CƯỚP QUYỀN ĐỌC BỘ NHỚ FLASH & ĐẨY XUNG CPU CHO TIẾN TRÌNH KHỞI CHẠY (AN TOÀN TUYỆT ĐỐI)
-        // - Ép băng thông đọc file dyld và tài nguyên app ở mức cao nhất
-        // - Nâng QoS lên USER_INTERACTIVE giúp SpringBoard & App load nhanh gấp 2 lần nhưng không làm rụng Framebuffer
+        // 5. TỐI ƯU HÓA I/O & NÂNG QOS CHO SPRINGBOARD / APP THƯỜNG
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
         setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
         %init;
 
-        // 5. Phân luồng SpringBoard vs App bên thứ ba
+        // 6. PHÂN LUỒNG SPRINGBOARD VS ỨNG DỤNG NGƯỜI DÙNG
         if (isSpringBoard) {
+            // Đăng ký nhận thông báo SpringBoard qua Darwin Center chuẩn của iOS
             CFNotificationCenterAddObserver(
-                CFNotificationCenterGetLocalCenter(),
+                CFNotificationCenterGetDarwinNotifyCenter(),
                 NULL,
                 SpringBoardDidLaunchCallback,
-                (CFStringRef)UIApplicationDidFinishLaunchingNotification,
+                CFSTR("SBSpringBoardDidLaunchNotification"),
                 NULL,
                 CFNotificationSuspensionBehaviorDeliverImmediately
             );
         } else {
-            // App Sandbox (TikTok, Facebook, Game...): Nạp trực tiếp Tweak
+            // App Sandbox bên thứ ba (TikTok, Facebook, Game...): Nạp core trực tiếp
             runCoreTweak(NO, bundleID, progName);
         }
     }
