@@ -17,11 +17,11 @@
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.2.0-1u</string>
+    <string>1.2.0-2a</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
-    <string>5.1.0</string>
+    <string>1.2.0-2a</string>
     <key>PrincipalClass</key>
     <string>RootListController</string>
     <key>CFBundleIconFile</key>
