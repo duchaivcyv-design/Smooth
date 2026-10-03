@@ -1418,26 +1418,6 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
-%hook CAContext
-- (void)setCommitPriority:(uint32_t)priority {
-    if (!Titanium_IsSpringBoard() && IS_ACTIVE) {
-        priority = 100;
-    }
-    %orig(priority);
-}
-
-- (uint32_t)commitPriority {
-    if (Titanium_IsSpringBoard()) return %orig;
-    if (IS_ACTIVE) return 100;
-    return %orig;
-}
-
-- (void)setDesiredDynamicRange:(float)range {
-    if (IS_ACTIVE) range = 1.0f;
-    %orig(range);
-}
-%end
-
 %end
 
 // ====================================================================================================
