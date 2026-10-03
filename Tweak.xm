@@ -1486,6 +1486,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 static volatile int32_t g_activeAnimationCount = 0;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;
+static volatile BOOL g_appLaunchWarmupActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
 static volatile BOOL g_isAppWarmingUp = NO; // Cờ giữ nhịp cao lúc vừa bật app
 static dispatch_source_t g_bannerBurstTimer = nil;
@@ -1920,16 +1921,21 @@ static volatile BOOL g_isContinuousSwiping = NO;
 
 %hook UIApplication
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
-    if (IS_ACTIVE && CFG285.turboAppLaunch) Titanium_EnforceThreadVIPPolicy();
+    // ⚠️ Chỉ can thiệp VIP Policy trên SpringBoard, app bên thứ ba giữ %orig để mạng load thông suốt
+    if (Titanium_IsSpringBoard() && IS_ACTIVE && CFG285.turboAppLaunch) {
+        Titanium_EnforceThreadVIPPolicy();
+    }
     %orig(scene, context, completion);
 }
+
 - (void)_applicationWillEnterForeground {
+    %orig; // Gọi %orig trước để hệ thống dựng xong cửa sổ
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
     }
-    %orig;
 }
+
 %end
 
 %end
