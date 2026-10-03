@@ -2646,7 +2646,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // NHÓM 11: NÂNG CẤP TOÀN BỘ ỨNG DỤNG BÊN THỨ BA (TIKTOK, ZALO, TỆP, APP STORE)
 // ====================================================================================================
 
-//%group Group_UIKit_ThirdParty_IsolatedV285
+%group Group_UIKit_ThirdParty_IsolatedV285
 
 %hook UIWindow
 - (void)makeKeyAndVisible {
