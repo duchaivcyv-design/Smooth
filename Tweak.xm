@@ -2643,42 +2643,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 11: NÂNG CẤP TOÀN BỘ ỨNG DỤNG BÊN THỨ BA (TIKTOK, ZALO, TỆP, APP STORE)
-// ====================================================================================================
-
-//%group Group_UIKit_ThirdParty_IsolatedV285
-
-%hook UIWindow
-- (void)makeKeyAndVisible {
-    if (IS_ACTIVE) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_LockMainThreadFast();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig;
-}
-%end
-
-%hook UIViewController
-- (void)viewWillAppear:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_LockMainThreadFast();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(animated);
-}
-
-- (void)viewDidLoad {
-    if (IS_ACTIVE) {
-        Titanium_LockMainThreadFast();
-    }
-    %orig;
-}
-%end
-
-%end
-
-// ====================================================================================================
 // NHÓM 12: BÀN PHÍM STREAM TEXT & CẢM ỨNG NÚT BẤM (ĐÃ LỌC BỎ CÁC HOOK TRÙNG)
 // ====================================================================================================
 
