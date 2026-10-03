@@ -854,9 +854,9 @@ static inline void Titanium_PurgeProcessMemoryAggressively(void) {
 
 static void Titanium_ApplySiliconDeepOptimizations(void) {
     setenv("MTL_FORCE_SERIAL_DISPATCH", "0", 1);
-    setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
+    // setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
     setenv("MTL_SHADER_VALIDATION", "0", 1);
-    setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);
+    // setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);
     setenv("CA_DEBUG_TRANSACTIONS", "0", 1);
     setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
 
@@ -2675,7 +2675,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)makeKeyAndVisible {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
-        Titanium_LockMainThreadFast();
+        // Titanium_LockMainThreadFast();
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
