@@ -2140,8 +2140,16 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // SỬA TRIỆT ĐỂ: PHỤC HỒI HÌNH NỀN GỐC, KHÔNG LÀM ĐEN APP KHI BUNG CỬA SỔ
 // ====================================================================================================
 
+// ====================================================================================================
+// BIẾN QUẢN LÝ CỬ CHỈ ĐA NHIỆM SPRINGBOARD (BẢN GỐC CHUẨN)
+// ====================================================================================================
+
 static volatile BOOL g_isSwitcherGestureActive = NO;
 static NSTimeInterval g_lastSwitcherBurstTime = 0;
+
+// ====================================================================================================
+// NHÓM HIỂN THỊ SPRINGBOARD: HÌNH NỀN SÁNG RÕ, MỞ APP TỨC THÌ KHÔNG ĐEN FRAME
+// ====================================================================================================
 
 %group Group_Display_SpringBoardV285
 
@@ -2830,6 +2838,10 @@ static void Titanium_ExecuteSystemRespring(void) {
 // ĐIỀU PHỐI KHỞI CHẠY LÕI (TIÊM TẦNG THẤP CHO APP THỨ BA - LOAD MẠNG 100% & KHÓA HZ/FPS)
 // ====================================================================================================
 
+// ====================================================================================================
+// ĐIỀU PHỐI KHỞI CHẠY LÕI (GIỮ NGUYÊN BẢN GỐC - SỬA TRIỆT ĐỂ LỖI LOAD MẠNG APP)
+// ====================================================================================================
+
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
@@ -2839,7 +2851,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         // =========================================================================
-        // 1. DÀNH CHO SPRINGBOARD (MÀN HÌNH CHÍNH & HỆ THỐNG)
+        // 1. DÀNH CHO SPRINGBOARD (MÀN HÌNH CHÍNH & HỆ THỐNG) - GIỮ NGUYÊN GỐC
         // =========================================================================
         if (isSpringBoard) {
             AppleInternal_LockHardwareCADisplay();
@@ -2861,7 +2873,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             [@"VERIFIED" writeToFile:TITANIUM_BOOT_FLAG_VERIFIED atomically:YES encoding:NSUTF8StringEncoding error:nil];
             chmod([TITANIUM_BOOT_FLAG_VERIFIED UTF8String], 0666);
 
-            // ⚠️ CHỐNG TREO TÁO USERSPACE REBOOT:
             // Trì hoãn 1.2s để SpringBoard bắt tay hoàn tất với backboardd rồi mới kích hoạt Mach Real-Time
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 AppleInternal_EnforceZeroLatencyKernelTier();
@@ -2880,18 +2891,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         } 
         // =========================================================================
         // 2. DÀNH CHO APP BÊN THỨ BA (TIKTOK, YOUTUBE, FACEBOOK, SAFARI, GAME...):
-        // TIÊM PHÂN TẦNG THẤP: CHỈ ÉP TẦNG DỰNG HÌNH & GIA TỐC RENDER
+        // ⚠️ ĐÃ FIX: BỎ ÉP LUỒNG SCHED_RR VÀ BỘ ĐỆM TRỄ -> MẠNG LOAD 100%, KHÔNG ĐEN MÀN
         // =========================================================================
         else {
-            struct sched_param param;
-            param.sched_priority = 47;
-            pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-
-            g_appLaunchWarmupActive = YES;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(250 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                g_appLaunchWarmupActive = NO;
-            });
-
             dispatch_async(dispatch_get_main_queue(), ^{
                 CFRunLoopRef runLoop = CFRunLoopGetCurrent();
                 CFRunLoopAddCommonMode(runLoop, kCFRunLoopDefaultMode);
@@ -2927,7 +2929,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 }
 
 // ====================================================================================================
-// CALLBACK KHỞI CHẠY SPRINGBOARD - ĐÃ SỬA DỨT ĐIỂM NGHỊCH LÝ GÀ VÀ TRỨNG
+// CALLBACK KHỞI CHẠY SPRINGBOARD - GIỮ NGUYÊN GỐC
 // ====================================================================================================
 
 static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
@@ -2942,20 +2944,16 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             // NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
             // =========================================================================
             if (Titanium_IsLegacy6s7P()) {
-                // 1. Luôn nạp runCoreTweak để tạo cờ VERIFIED
                 runCoreTweak(YES, bundleID, progName);
 
-                // 2. Kiểm tra an toàn sau 2.2 giây: Nếu vì lý do đặc biệt mà cờ chưa được tạo
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     if (![fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED]) {
-                        // Kiểm tra bộ đệm chống vòng lặp vô hạn (chỉ cho phép respring thử lại tối đa 1 lần)
                         if (![fm fileExistsAtPath:TITANIUM_BOOT_RETRY_6S]) {
                             [@"RETRY" writeToFile:TITANIUM_BOOT_RETRY_6S atomically:YES encoding:NSUTF8StringEncoding error:nil];
                             chmod([TITANIUM_BOOT_RETRY_6S UTF8String], 0666);
                             Titanium_ExecuteSystemRespring();
                         }
                     } else {
-                        // Đã nạp thành công -> Dọn dẹp cờ retry để sẵn sàng cho lần reboot tiếp theo
                         if ([fm fileExistsAtPath:TITANIUM_BOOT_RETRY_6S]) {
                             [fm removeItemAtPath:TITANIUM_BOOT_RETRY_6S error:nil];
                         }
@@ -2989,7 +2987,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
 }
 
 // ====================================================================================================
-// CONSTRUCTOR CHÍNH CỦA DYLIB
+// CONSTRUCTOR CHÍNH CỦA DYLIB - GIỮ NGUYÊN GỐC
 // ====================================================================================================
 
 %ctor {
