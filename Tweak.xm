@@ -1409,12 +1409,6 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
-- (void)setLowLatencyMode:(BOOL)flag {
-    %orig(flag); // Bỏ ép flag = YES để Metal không hủy khung hình nạp chậm
-}
-// Đã bỏ setLowLatencyMode để TikTok lướt qua album ảnh không bị đơ
-%end
-
 %hook CALayer
 - (void)display {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
