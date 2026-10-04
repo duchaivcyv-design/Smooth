@@ -7,39 +7,45 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-BUNDLE_NAME = BoostiPhone6sPrefs
+# ĐỒNG BỘ CHÍNH XÁC TÊN BUNDLE VỚI ENTRY.PLIST VÀ THƯ MỤC
+BUNDLE_NAME = BoostiPhone6s
 
-BoostiPhone6sPrefs_FILES = RootListController.m
-BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = 
-BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
+BoostiPhone6s_FILES = RootListController.m
+BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics Foundation
+# 👈 BẮT BUỘC PHẢI CÓ Preferences ĐỂ KHÔNG BỊ DYLD ERROR KHI LOAD BUNDLE
+BoostiPhone6s_PRIVATE_FRAMEWORKS = Preferences
+BoostiPhone6s_INSTALL_PATH = /Library/PreferenceBundles
 
-BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
-                            -O3 \
-                            -Wall \
-                            -Wno-error \
-                            -Wno-deprecated-declarations \
-                            -Wno-unused-variable \
-                            -Wno-unused-function \
-                            -Wno-implicit-function-declaration \
-                            -Wno-deprecated-non-prototype \
-                            -I$(THEOS)/include \
-                            -I$(THEOS)/vendor/include \
-                            -I../Headers \
-                            -I../Modules \
-                            -I../ \
-                            -I.
+BoostiPhone6s_CFLAGS = -fobjc-arc \
+                       -O3 \
+                       -Wall \
+                       -Wno-error \
+                       -Wno-deprecated-declarations \
+                       -Wno-unused-variable \
+                       -Wno-unused-function \
+                       -Wno-implicit-function-declaration \
+                       -Wno-deprecated-non-prototype \
+                       -I$(THEOS)/include \
+                       -I$(THEOS)/vendor/include \
+                       -I../Headers \
+                       -I../Modules \
+                       -I../ \
+                       -I.
 
-BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
-                            -Wl,-undefined,dynamic_lookup \
-                            -Wl,-install_name,@rpath/BoostiPhone6sPrefs \
-                            -Wl,-rpath,/System/Library/PrivateFrameworks \
-                            -Wl,-rpath,/Library/Frameworks \
-                            -Wl,-rpath,/var/jb/Library/Frameworks \
-                            -Wl,-rpath,/usr/lib \
-                            -Wl,-rpath,/var/jb/usr/lib
+BoostiPhone6s_LDFLAGS = -Wl,-dead_strip \
+                       -Wl,-undefined,dynamic_lookup \
+                       -Wl,-rpath,/System/Library/PrivateFrameworks \
+                       -Wl,-rpath,/Library/Frameworks \
+                       -Wl,-rpath,/var/jb/Library/Frameworks \
+                       -Wl,-rpath,/usr/lib \
+                       -Wl,-rpath,/var/jb/usr/lib
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 
-after-package::
-	rm -rf .theos/ _/
+# TỰ ĐỘNG ĐƯA ENTRY.PLIST VÀO PREFERENCELOADER ĐỂ HIỆN TRONG SETTINGS
+internal-stage::
+	@mkdir -p "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences"
+	@if [ -f "entry.plist" ]; then \
+		cp entry.plist "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist"; \
+		chmod 644 "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist"; \
+	fi
