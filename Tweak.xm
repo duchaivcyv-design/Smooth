@@ -3330,7 +3330,7 @@ static inline const char *Titanium_GetRootlessPath(const char *subpath) {
 // ====================================================================================================
 // HỖ TRỢ SONG SONG ROOTLESS (RLESS - /var/jb) VÀ ROOTHIDE (RHIDE - jbroot)
 // ====================================================================================================
-
+static inline const char *Titanium_GetRootlessPath(const char *subpath) {
     static char fullPath[PATH_MAX];
     
     // 1. Hỗ trợ Roothide (rhide): Tự động phân giải đường dẫn gốc ngẫu nhiên
