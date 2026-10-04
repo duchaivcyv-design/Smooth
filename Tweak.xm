@@ -1187,15 +1187,11 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     }
 }
 
-/// ====================================================================================================
+// ====================================================================================================
 // KHAI BÁO BIẾN TOÀN CỤC DUY NHẤT (ĐẢM BẢO ĐẦY ĐỦ CÁC CỜ HỆ THỐNG - KHÔNG LỖI UNDECLARED)
 // ====================================================================================================
 
 #include <stdatomic.h>
-
-#ifndef HAS_DEVICE_CHARGING_FLAG
-extern BOOL g_isDeviceChargingV285 __attribute__((weak));
-#endif
 
 static volatile BOOL g_isContinuousSwiping = NO;
 static volatile BOOL g_isUserTouchingScreen = NO;
@@ -1240,6 +1236,25 @@ static inline void Titanium_EnsureMachTimebaseInit(void) {
     Titanium_InitTouchMachTimebase();
 }
 
+// Khởi tạo Mach Timebase riêng cho Banner thông báo
+static inline void Titanium_InitBannerMachTimebase(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        mach_timebase_info_data_t timebase;
+        if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.numer > 0) {
+            uint64_t nanos = 850ULL * 1000000ULL; // 850ms bao trọn chu kỳ banner trượt xuống và neo ổn định
+            g_bannerDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
+        }
+    });
+}
+
+// Kiểm tra banner còn hiệu lực theo Mach Time (2ns phản hồi)
+static inline BOOL Titanium_IsNotificationBannerActive(void) {
+    if (g_lastBannerMachTime == 0) return NO;
+    uint64_t now = mach_absolute_time();
+    return ((now - g_lastBannerMachTime) < g_bannerDurationMachTicks);
+}
+
 // 2. Nâng ưu tiên luồng chính: Thêm cờ khóa tránh spam syscall pthread liên tục mỗi frame
 static inline void Titanium_LockMainThreadFast(void) {
     static pthread_t s_lastElevatedThread = NULL;
@@ -1270,8 +1285,8 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     static atomic_int_fast64_t s_touchSeq = 0;
     int64_t currentSeq = atomic_fetch_add_explicit(&s_touchSeq, 1, memory_order_relaxed) + 1;
 
-    // Kiểm tra an toàn biến cắm sạc (tránh crash null pointer)
-    BOOL isCharging = (&g_isDeviceChargingV285 != NULL) ? g_isDeviceChargingV285 : NO;
+    // Sử dụng trực tiếp biến static g_isDeviceChargingV285 từ dòng 688 (TRIỆT TIÊU TOÀN BỘ CẢNH BÁO BUILD)
+    BOOL isCharging = g_isDeviceChargingV285;
     int64_t burstDuration = isCharging ? (int64_t)(180 * NSEC_PER_MSEC) : (int64_t)(350 * NSEC_PER_MSEC);
 
     // Điều phối nhả cờ trên Main Runloop
@@ -1281,6 +1296,29 @@ static void Titanium_TriggerInstantTouchBurst(void) {
         }
     });
 }
+
+// ====================================================================================================
+// HÀM ĐIỀU PHỐI KHÓA TARGET RATE TOÀN CỤC (PHẢI NẰM TẠI ĐÂY ĐỂ CALAYER DÒNG 1436 GỌI ĐƯỢC)
+// ====================================================================================================
+
+static inline BOOL Titanium_ShouldLockTargetRate(void) {
+    if (g_isContinuousSwiping || g_isUserTouchingScreen || g_isNotificationBannerActive || Titanium_IsNotificationBannerActive()) {
+        return YES;
+    }
+
+    if (g_lastInteractionMachTime == 0) return NO;
+
+    if (g_burstDurationMachTicks == 0) {
+        Titanium_EnsureMachTimebaseInit();
+    }
+
+    uint64_t now = mach_absolute_time();
+    BOOL isCharging = g_isDeviceChargingV285;
+    uint64_t limitTicks = isCharging ? g_burstDurationChargingMachTicks : g_burstDurationMachTicks;
+
+    return ((now - g_lastInteractionMachTime) < limitTicks);
+}
+
 
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (ĐIỀU PHỐI KERNEL & PHẦN CỨNG)
