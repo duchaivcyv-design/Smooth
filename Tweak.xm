@@ -1854,7 +1854,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // 7. TẢI LẠI CẤU HÌNH KHI APP ACTIVE
-%%hook CATransaction
+%hook CATransaction
 + (void)commit {
     if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
         Titanium_EnableZeroLatencyPipeline();
