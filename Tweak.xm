@@ -3323,8 +3323,6 @@ static inline const char *Titanium_GetRootlessPath(const char *subpath) {
 // ====================================================================================================
 // KHAI BÁO BIẾN BẢO VỆ KHỞI ĐỘNG WATCHDOG (ĐẶT TRƯỚC TẤT CẢ CÁC HÀM)
 // ====================================================================================================
-static volatile BOOL g_SpringBoardUIReady = NO;
-static dispatch_source_t g_bootSafetyTimer = nil;
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
 #define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
@@ -3332,7 +3330,7 @@ static dispatch_source_t g_bootSafetyTimer = nil;
 // ====================================================================================================
 // HỖ TRỢ SONG SONG ROOTLESS (RLESS - /var/jb) VÀ ROOTHIDE (RHIDE - jbroot)
 // ====================================================================================================
-static inline const char *Titanium_GetRootlessPath(const char *subpath) {
+
     static char fullPath[PATH_MAX];
     
     // 1. Hỗ trợ Roothide (rhide): Tự động phân giải đường dẫn gốc ngẫu nhiên
