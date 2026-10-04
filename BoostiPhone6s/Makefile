@@ -13,7 +13,7 @@ BUNDLE_NAME = BoostiPhone6s
 BoostiPhone6s_FILES = RootListController.m
 BoostiPhone6s_FRAMEWORKS = UIKit CoreGraphics Foundation
 # 👈 BẮT BUỘC PHẢI CÓ Preferences ĐỂ KHÔNG BỊ DYLD ERROR KHI LOAD BUNDLE
-BoostiPhone6s_PRIVATE_FRAMEWORKS = Preferences
+BoostiPhone6s_PRIVATE_FRAMEWORKS =
 BoostiPhone6s_INSTALL_PATH = /Library/PreferenceBundles
 
 BoostiPhone6s_CFLAGS = -fobjc-arc \
