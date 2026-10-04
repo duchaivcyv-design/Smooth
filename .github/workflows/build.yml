@@ -23,7 +23,7 @@ jobs:
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          brew install dpkg ldid coreutils
+          brew install dpkg ldid coreutils python3
 
       # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
       - name: Clone Theos & Install SDK
@@ -51,12 +51,136 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 3: DỌN DẸP, BIÊN DỊCH VÀ BÓC TÁCH LỖI CHÍNH XÁC ---
+      # --- BƯỚC 3: QUÉT TRÙNG LẶP %HOOK & CHỈ RÕ NÊN GIỮ Ở NHÓM NÀO ---
+      - name: Scan & Check Duplicate %hook
+        run: |
+          python3 - << 'EOF'
+          import re
+          import sys
+          import glob
+
+          files = glob.glob("**/*.xm", recursive=True) + glob.glob("**/*.x", recursive=True)
+          if not files:
+              print("⚠️ Không tìm thấy file .xm nào để quét!")
+              sys.exit(0)
+
+          has_duplicate = False
+
+          for filepath in files:
+              with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                  lines = f.readlines()
+
+              current_group_id = "__GLOBAL__"
+              current_group_title = "Phần code chung (Ngoài nhóm)"
+              latest_comment_header = ""
+
+              # Cấu trúc: hooks[class_name] = [ { group_id, group_title, start_line, end_line, body } ]
+              hooks = {}
+              in_hook = False
+              curr_class = ""
+              curr_start_line = 0
+              curr_body_lines = []
+
+              for idx, raw_line in enumerate(lines, 1):
+                  line = raw_line.strip()
+
+                  # Bắt tiêu đề Tiếng Việt dạng: // NHÓM X: ...
+                  group_title_match = re.search(r'//\s*(=+\s*)?(NHÓM\s+\d+[^=\n\r]*)', line, re.IGNORECASE)
+                  if group_title_match:
+                      latest_comment_header = group_title_match.group(2).strip()
+
+                  # Bắt khai báo %group
+                  group_match = re.match(r'^%group\s+([A-Za-z0-9_]+)', line)
+                  if group_match:
+                      current_group_id = group_match.group(1)
+                      if latest_comment_header:
+                          current_group_title = f"{latest_comment_header} (%group {current_group_id})"
+                      else:
+                          current_group_title = f"%group {current_group_id}"
+                      continue
+
+                  # Bắt đầu %hook ClassName
+                  hook_match = re.match(r'^%hook\s+([A-Za-z0-9_]+)', line)
+                  if hook_match:
+                      in_hook = True
+                      curr_class = hook_match.group(1)
+                      curr_start_line = idx
+                      curr_body_lines = []
+                      continue
+
+                  if in_hook:
+                      if line.startswith("%end"):
+                          in_hook = False
+                          if curr_class not in hooks:
+                              hooks[curr_class] = []
+                          hooks[curr_class].append({
+                              "group_id": current_group_id,
+                              "group_title": current_group_title,
+                              "start_line": curr_start_line,
+                              "end_line": idx,
+                              "body": "".join(curr_body_lines)
+                          })
+                      else:
+                          curr_body_lines.append(raw_line)
+
+              # Đánh giá và so sánh mức độ tối ưu của từng block
+              for class_name, occurrences in hooks.items():
+                  # Nhóm các block bị trùng theo group_id
+                  same_group_dups = {}
+                  for item in occurrences:
+                      gid = item["group_id"]
+                      same_group_dups.setdefault(gid, []).append(item)
+
+                  for gid, items in same_group_dups.items():
+                      if len(items) > 1:
+                          has_duplicate = True
+                          print("\n" + "="*80)
+                          print(f"🚨 PHÁT HIỆN TRÙNG LẶP: Class [%hook {class_name}] trong file: {filepath}")
+                          print("="*80)
+
+                          # Tính điểm tối ưu: code chứa 144Hz, ZeroLatency, CATransaction flush có độ ưu tiên cao hơn
+                          def calculate_score(hook_item):
+                              body = hook_item["body"]
+                              score = len(body)
+                              if "144" in body: score += 5000
+                              if "Titanium_" in body: score += 2000
+                              if "ZeroLatency" in body: score += 2000
+                              if "flush" in body: score += 1000
+                              if "%orig;" in body and len(body.strip()) < 100: score -= 3000
+                              return score
+
+                          sorted_items = sorted(items, key=calculate_score, reverse=True)
+                          best_item = sorted_items[0]
+                          to_delete = sorted_items[1:]
+
+                          print(f"❌ Class [%hook {class_name}] xuất hiện {len(items)} lần trong cùng phạm vi:")
+                          for idx_occ, itm in enumerate(items, 1):
+                              print(f"   🔹 Lần {idx_occ}: Dòng {itm['start_line']} -> {itm['end_line']} | Thuộc: [{itm['group_title']}]")
+
+                          print("\n🎯 KẾT LUẬN & HƯỚNG DẪN XỬ LÝ CHÍNH XÁC:")
+                          print(f"   ✅ NÊN GIỮ LẠI Ở: [{best_item['group_title']}] (Dòng {best_item['start_line']} -> {best_item['end_line']})")
+                          print(f"      👉 Lý do: Đây là đoạn code tối ưu xung nhịp 144Hz mới nhất và đầy đủ logic nhất.")
+                          
+                          print("\n   ❌ CẦN MỞ FILE VÀ XOÁ BỎ Ở:")
+                          for del_item in to_delete:
+                              print(f"      🗑️ Xoá bỏ khối tại [{del_item['group_title']}] (Từ dòng {del_item['start_line']} đến dòng {del_item['end_line']})")
+                              print(f"      👉 Lý do: Đây là code cũ/thừa thãi, gây lỗi 'redefinition' khi biên dịch Clang.")
+                          print("-" * 80)
+
+          if has_duplicate:
+              print("\n🛑 DỪNG BUILD: Hãy mở file .xm ra và xoá bỏ các block %hook thừa ở nhóm được chỉ định ở trên!")
+              print("="*80 + "\n")
+              sys.exit(1)
+          else:
+              print("✅ Quét hoàn tất: Không có %hook nào bị trùng lặp nhóm! Tiến hành biên dịch...")
+          EOF
+
+      # --- BƯỚC 4: DỌN DẸP, BIÊN DỊCH VÀ BÓC TÁCH LỖI CHÍNH XÁC ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
           
-          if [ ! -f Makefile ]; then
+          if ! [ -f Makefile ]; then
             echo "❌ Error: Không tìm thấy Makefile tại thư mục gốc!"
             exit 1
           fi
@@ -76,7 +200,6 @@ jobs:
             echo "🚨 BIÊN DỊCH THẤT BẠI! BÁO CÁO CHI TIẾT TỪ TRÌNH BIÊN DỊCH CLANG:"
             echo "======================================================================"
 
-            # Bóc tách trực tiếp các dòng chứa error từ Clang/Theos
             grep -E '(error:|fatal error:)' "$BUILD_LOG_FILE" || true
             
             echo ""
@@ -90,7 +213,7 @@ jobs:
           
           ls -lh packages/*.deb || { echo "❌ Không tìm thấy deb!"; exit 1; }
 
-      # --- BƯỚC 4: TẢI FILE DEB LÊN ARTIFACTS ---
+      # --- BƯỚC 5: TẢI FILE DEB LÊN ARTIFACTS ---
       - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
         with:
