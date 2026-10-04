@@ -2772,15 +2772,13 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 }
 
 // ====================================================================================================
-// CƠ CHẾ ĐIỀU PHỐI KHỞI ĐỘNG THÔNG MINH
-// 6S-7P: TỰ ĐỘNG RESPRING LIÊN TỤC CHO ĐẾN KHI NẠP ĐƯỢC TWEAK THÌ DỪNG NGAY
-// 8P-15PRM: CHỈ KHI REBOOT NGUỒN, NẾU CHƯA NẠP TWEAK SẼ RESPRING ĐÚNG 1 LẦN
+// ĐIỀU PHỐI KHỞI ĐỘNG THUẦN ROOTLESS & ROOTHIDE (CHỐNG TREO TÁO / TREO REBOOT 100%)
 // ====================================================================================================
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
 #define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
 
-// 1. Phân loại chuẩn xác dòng 6s - 7 Plus (A9 - A10)
+// 1. Phân loại thiết bị
 static inline BOOL Titanium_IsLegacy6s7P(void) {
     static BOOL s_isLegacy = NO;
     static dispatch_once_t onceToken;
@@ -2788,7 +2786,6 @@ static inline BOOL Titanium_IsLegacy6s7P(void) {
         struct utsname sysInfo;
         uname(&sysInfo);
         NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-        // iPhone 6s, 6s+, SE 1 (iPhone8,x), iPhone 7, 7+ (iPhone9,x)
         if ([machine hasPrefix:@"iPhone8,"] || [machine hasPrefix:@"iPhone9,"]) {
             s_isLegacy = YES;
         }
@@ -2796,7 +2793,7 @@ static inline BOOL Titanium_IsLegacy6s7P(void) {
     return s_isLegacy;
 }
 
-// 2. Đo thời gian hệ thống hoạt động từ lúc bật nguồn (Uptime)
+// 2. Đo thời gian uptime từ lúc bật nguồn
 static time_t Titanium_GetSystemUptimeSeconds(void) {
     struct timeval boottime;
     size_t len = sizeof(boottime);
@@ -2806,7 +2803,7 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
-// 3. Thực hiện lệnh Respring hệ thống an toàn
+// 3. Thực thi Respring an toàn tương thích hoàn toàn đường dẫn Rootless/RootHide
 static void Titanium_ExecuteSystemRespring(void) {
     UIApplication *app = [UIApplication sharedApplication];
     if ([app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
@@ -2814,9 +2811,24 @@ static void Titanium_ExecuteSystemRespring(void) {
         return;
     }
 
+    NSString *jbRoot = Titanium_GetRootHidePrefixPath();
+    NSFileManager *fm = [NSFileManager defaultManager];
+    
+    // Tìm nhị phân sbreload hoặc killall trong $JBROOT
+    NSString *sbreload = [jbRoot stringByAppendingPathComponent:@"usr/bin/sbreload"];
+    if (![fm fileExistsAtPath:sbreload]) sbreload = @"/var/jb/usr/bin/sbreload";
+
+    NSString *killall = [jbRoot stringByAppendingPathComponent:@"usr/bin/killall"];
+    if (![fm fileExistsAtPath:killall]) killall = @"/var/jb/usr/bin/killall";
+
     pid_t pid;
-    const char *args[] = {"killall", "-9", "SpringBoard", NULL};
-    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
+    if ([fm fileExistsAtPath:sbreload]) {
+        const char *args[] = {"sbreload", NULL};
+        posix_spawn(&pid, [sbreload UTF8String], NULL, NULL, (char *const *)args, environ);
+    } else if ([fm fileExistsAtPath:killall]) {
+        const char *args[] = {"killall", "-9", "SpringBoard", NULL};
+        posix_spawn(&pid, [killall UTF8String], NULL, NULL, (char *const *)args, environ);
+    }
 }
 
 // ====================================================================================================
@@ -2829,11 +2841,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         AppleInternal_LockHardwareCADisplay();
         Titanium_LockMainThreadFast();
 
-        if (Titanium_IsLegacyA9toA12()) {
-            Titanium_ElevateThreadToMachRealTime();
+        // Chỉ nâng Mach Real-Time cho SpringBoard, app bên thứ ba trong RootHide chạy an toàn
+        if (isSpringBoard && Titanium_IsLegacyA9toA12()) {
             Titanium_ApplySiliconDeepOptimizations();
             Titanium_EnableZeroLatencyPipeline();
             Titanium_EnforceThreadVIPPolicy();
+            Titanium_ElevateThreadToMachRealTime();
         }
 
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
@@ -2854,7 +2867,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_Universal_InApp_Animations);
         %init(Group_LiquidGlass_Opt);
 
-
         if (Titanium_IsClassicHomeButtonDevice()) {
             %init(Group_HardwareSegregation_ClassicHomeV285);
         }
@@ -2867,9 +2879,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_SpringBoard_ProcessManagerV285);
             Titanium_StartThermalAndChargingWatchdog();
 
-            // ĐÁNH DẤU TWEAK ĐÃ NẠP THÀNH CÔNG HOÀN TOÀN
-            [@"VERIFIED" writeToFile:TITANIUM_BOOT_FLAG_VERIFIED atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            chmod([TITANIUM_BOOT_FLAG_VERIFIED UTF8String], 0666);
+            // ĐÁNH DẤU TWEAK ĐÃ NẠP THÀNH CÔNG (Tương thích sandbox Rootless)
+            NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
+            [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED contents:verifiedData attributes:@{NSFilePosixPermissions: @(0666)}];
         } else {
             %init(Group_UIKit_ThirdParty_IsolatedV285);
         }
@@ -2889,57 +2901,32 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     }
 }
 
+// ====================================================================================================
+// CƠ CHẾ NẠP TRỄ: ĐỢI LÊN NGUỒN HOÀN TẤT MỚI CƯỚP QUYỀN TIÊM TWEAK
+// ====================================================================================================
+
 static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         dispatch_async(dispatch_get_main_queue(), ^{
             const char *progName = getprogname();
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-            NSFileManager *fm = [NSFileManager defaultManager];
-            BOOL isVerified = [fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED];
 
-            // =========================================================================
-            // NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
-            // =========================================================================
-            if (Titanium_IsLegacy6s7P()) {
-                if (isVerified) {
-                    // Đã qua bước respring an toàn -> NẠP TWEAK VÀ DỪNG VÒNG LẶP
-                    runCoreTweak(YES, bundleID, progName);
-                    return;
-                }
-
-                // Lần đầu khởi động lên (chưa có cờ verified): Đợi 2.2 giây rồi Respring tự động
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    if (![fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED]) {
-                        Titanium_ExecuteSystemRespring();
-                    }
-                });
-                return;
-            }
-
-            // =========================================================================
-            // NHÁNH 2: IPHONE 8 PLUS - 15 PRO MAX (CHỈ XỬ LÝ KHI REBOOT NGUỒN)
-            // =========================================================================
             time_t uptime = Titanium_GetSystemUptimeSeconds();
-            BOOL isColdBoot = (uptime < 60);
+            BOOL isColdBootOrReboot = (uptime < 90);
 
-            if (isColdBoot) {
-                BOOL alreadyStaged = [fm fileExistsAtPath:TITANIUM_BOOT_STAGE_8P];
-                
-                // Chưa từng respring trong đợt reboot này -> Chờ màn hình lên rồi Respring đúng 1 lần
-                if (!alreadyStaged) {
-                    [@"STAGED" writeToFile:TITANIUM_BOOT_STAGE_8P atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                    chmod([TITANIUM_BOOT_STAGE_8P UTF8String], 0666);
+            // NẾU VỪA BẬT NGUỒN HOẶC REBOOT JAILBREAK:
+            // Đợi 2.5s để SpringBoard load xong hoàn toàn giao diện LockScreen, không tự Respring bừa bãi.
+            // Sau đó mới cướp quyền luồng đồ họa và tiêm tweak 144Hz.
+            int64_t waitTime = isColdBootOrReboot ? (int64_t)(2.5 * NSEC_PER_SEC) : (int64_t)(0.8 * NSEC_PER_SEC);
 
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        Titanium_ExecuteSystemRespring();
-                    });
-                    return;
-                }
-            }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitTime), dispatch_get_main_queue(), ^{
+                Titanium_LockMainThreadFast();
+                Titanium_EnableZeroLatencyPipeline();
 
-            // ĐÃ QUA RESPRING HOẶC HOẠT ĐỘNG BÌNH THƯỜNG: NẠP TWEAK (CHỈ GỌI 1 LẦN DUY NHẤT)
-            runCoreTweak(YES, bundleID, progName);
+                // NẠP THẲNG TWEAK VÀO HỆ THỐNG
+                runCoreTweak(YES, bundleID, progName);
+            });
         });
     });
 }
