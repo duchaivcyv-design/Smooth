@@ -1874,7 +1874,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 // NHÓM 4: CƯỚP QUYỀN ĐA NHIỆM & ĐỒNG BỘ 144HZ TOÀN DIỆN (CHUYỂN CẢNH SIÊU MƯỢT 0.0S)
 // ====================================================================================================
-/*
+
 static volatile BOOL g_isContinuousSwiping = NO;
 
 %group Group_Switcher30Apps_Virtualization
@@ -2006,7 +2006,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-*/
+
 // ====================================================================================================
 // NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (TURBO ENGINE)
 // ====================================================================================================
@@ -2240,7 +2240,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // ====================================================================================================
 // NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP)
 // ====================================================================================================
-/*
+
 %group Group_Display_SpringBoardV285
 
 // ====================================================================================================
@@ -2444,7 +2444,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // Menu giữ đè icon (3D Touch / Haptic Touch) mở ra tức thì 0ms
 %hook SBIconForceTouchSettings
 - (double)delayBeforeOpening {
-    if (IS_ACTIVE) return 0.02; // 50ms: Đặt ngón tay là menu bung ngay lập tức
+    if (IS_ACTIVE) return 0.05; // 50ms: Đặt ngón tay là menu bung ngay lập tức
     return %orig;
 }
 %end
@@ -2551,7 +2551,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-*/
+
 // ====================================================================================================
 // NHÓM 8: PIPELINE CHO PICTURE-IN-PICTURE (PIP 60FPS MƯỢT MÀ)
 // ====================================================================================================
@@ -3396,8 +3396,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             if (isSpringBoard) {
                 Titanium_TuneWindowServerDisplayDirectly();
-              //  %init(Group_Switcher30Apps_Virtualization);
-               // %init(Group_Display_SpringBoardV285);
+                %init(Group_Switcher30Apps_Virtualization);
+                %init(Group_Display_SpringBoardV285);
                 %init(Group_V285_FloatingWindow_PiP);
                 %init(Group_SpringBoard_ProcessManagerV285);
                 Titanium_StartThermalAndChargingWatchdog();
