@@ -3368,23 +3368,6 @@ static inline NSString *Titanium_GetJBRoot(void) {
     return cachedRoot;
 }
 
-// Đường dẫn file cờ an toàn: Chỉ ghi vào <JBRoot>/tmp
-static inline NSString *Titanium_ResolveFlagPath(NSString *subPath) {
-    NSString *root = Titanium_GetJBRoot();
-    NSString *jbTmp = [root stringByAppendingPathComponent:@"tmp"];
-    
-    NSFileManager *fm = [NSFileManager defaultManager];
-    if (![fm fileExistsAtPath:jbTmp]) {
-        [fm createDirectoryAtPath:jbTmp withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
-    }
-    return [jbTmp stringByAppendingPathComponent:subPath];
-}
-
-#undef TITANIUM_BOOT_FLAG_VERIFIED
-#undef TITANIUM_BOOT_STAGE_8P
-#define TITANIUM_BOOT_FLAG_VERIFIED Titanium_ResolveFlagPath(@"com.titanium.boot.verified")
-#define TITANIUM_BOOT_STAGE_8P      Titanium_ResolveFlagPath(@"com.titanium.boot.stage8p")
-
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
         static dispatch_once_t coreToken;
