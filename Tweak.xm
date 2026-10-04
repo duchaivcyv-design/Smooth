@@ -1370,28 +1370,6 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 }
 
 // ====================================================================================================
-// HÀM ĐIỀU PHỐI KHÓA TARGET RATE TOÀN CỤC (DUY TRÌ 144HZ KHI CÓ TƯƠNG TÁC THỰC SỰ)
-// ====================================================================================================
-
-static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isContinuousSwiping || g_isUserTouchingScreen || g_isNotificationBannerActive) {
-        return YES;
-    }
-
-    if (g_lastInteractionMachTime == 0) return NO;
-
-    if (g_burstDurationMachTicks == 0) {
-        Titanium_EnsureMachTimebaseInit();
-    }
-
-    uint64_t now = mach_absolute_time();
-    BOOL isCharging = (&g_isDeviceChargingV285 != NULL) ? g_isDeviceChargingV285 : NO;
-    uint64_t limitTicks = isCharging ? g_burstDurationChargingMachTicks : g_burstDurationMachTicks;
-
-    return ((now - g_lastInteractionMachTime) < limitTicks);
-}
-
-// ====================================================================================================
 // NHÓM 1: CẢM ỨNG 0MS (ĐÃ KIỂM SOÁT AN TOÀN 100% - CHỐNG ĐEN APP, CHỐNG NÓNG MÁY, 0MS ĐỘ TRỄ)
 // ====================================================================================================
 
