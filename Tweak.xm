@@ -1,26 +1,16 @@
 // ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
-#import <mach/mach_host.h>
 #import <mach/mach_time.h>
-#import <mach/mach_types.h>
-#import <mach/vm_map.h>
-#import <mach/vm_region.h>
 #import <mach/vm_statistics.h>
-#import <mach/vm_types.h>
-#import <mach/thread_act.h>
-#import <mach/thread_policy.h>
-#import <mach/task.h>
-#import <mach/task_info.h>
-#import <mach/task_policy.h>
-#import <mach/clock.h>
 
-// ==================== POSIX & SYSTEM ====================
+// ==================== POSIX, C & TIME ====================
 #import <pthread.h>
 #import <pthread/qos.h>
 #import <sched.h>
 #import <unistd.h>
 #import <stdlib.h>
 #import <string.h>
+#import <time.h>          // 👈 Bắt buộc cho time(NULL)
 #import <spawn.h>
 #import <fcntl.h>
 #import <dlfcn.h>
@@ -29,6 +19,7 @@
 
 // ==================== SYS HEADERS ====================
 #import <sys/sysctl.h>
+#import <sys/time.h>        // 👈 Bắt buộc cho struct timeval
 #import <sys/resource.h>
 #import <sys/utsname.h>
 #import <sys/wait.h>
@@ -36,23 +27,27 @@
 #import <sys/stat.h>
 #import <sys/types.h>
 
-// ==================== OBJC & SECURITY ====================
+// ==================== OBJC RUNTIME & TWEAK ENGINE ====================
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <substrate.h>
 
 // ==================== APPLE FRAMEWORKS ====================
-#import <CoreFoundation/CoreFoundation.h>
-#import <AVFoundation/AVFoundation.h>
-#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
-#import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
+#import <AVFoundation/AVFoundation.h>
 #import <WebKit/WebKit.h>
+
+// BẢO VỆ IOKIT: Chỉ nạp khi SDK có sẵn, tránh gãy build trên GitHub Actions
+#if __has_include(<IOKit/IOKitLib.h>)
 #import <IOKit/IOKitLib.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
+#endif
+
+// ==================== EXTERN GLOBAL VARIABLES ====================
+extern char **environ;     // 👈 Bắt buộc cho posix_spawn trong lệnh Respring
 
 static void Titanium_StealthKernelHijack(void);
 #ifndef VM_PURGABLE_PURGE_ALL
@@ -159,7 +154,7 @@ extern "C" {
 #define APEX_SYNC_MAGIC_V285 0x56323835
 
 // ====================================================================================================
-// SYSTEM PRIVATE INTERFACES
+// SYSTEM PRIVATE INTERFACES (ĐÃ GỘP CHUẨN 100% - KHÔNG TRÙNG LẶP - ĐỦ SELECTOR)
 // ====================================================================================================
 
 @interface UIEvent (TitaniumApexPrivate)
@@ -327,6 +322,7 @@ extern "C" {
 - (void)setLatency:(double)latency;
 - (void)setMinimumFrameDuration:(double)duration;
 - (void)setAllowsDisplayCompositing:(BOOL)compositing;
+- (void)setThermalState:(int)state;
 @end
 
 @interface CAWindowServer : NSObject
@@ -334,7 +330,7 @@ extern "C" {
 - (NSArray *)displays;
 @end
 
-// ĐÃ GỘP CHUẨN: SBApplication chỉ khai báo 1 lần duy nhất chứa đủ method willActivate
+// GỘP CHUẨN: SBApplication có đầy đủ willActivate và pid
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
 - (NSString *)displayName;
@@ -343,6 +339,8 @@ extern "C" {
 - (BOOL)isClassic;
 - (void)didExitWithContext:(id)context;
 - (void)willActivate;
+- (pid_t)pid;
+- (BOOL)shouldPrewarmOnLaunch;
 @end
 
 @interface SBApplicationController : NSObject
@@ -361,6 +359,8 @@ extern "C" {
 - (void)bootstrapWithContext:(id)context completion:(id)completion;
 - (void)launchIfNecessary;
 - (void)_finishInit;
+- (pid_t)pid;
+- (BOOL)isNowPlayingProcess;
 @end
 
 @interface FBProcess : NSObject
@@ -458,6 +458,7 @@ extern "C" {
 - (BOOL)playForEventSource:(long long)source;
 - (BOOL)pauseForEventSource:(long long)source;
 - (BOOL)togglePlayPauseForEventSource:(long long)source;
+- (id)nowPlayingApplication;
 @end
 
 @interface SBMainDisplaySceneLayoutViewController : UIViewController
@@ -527,6 +528,7 @@ extern "C" {
 - (void)setTouchDownInIcon:(BOOL)touchDown;
 - (void)setAllowsCloseBox:(BOOL)allows;
 - (void)prepareForReuse;
+- (void)setIconContentScalingEnabled:(BOOL)enabled;
 @end
 
 @interface SBFluidSwitcherViewController : UIViewController
@@ -543,6 +545,7 @@ extern "C" {
 - (long long)appSwitcherStyle;
 - (BOOL)shouldSimplifyForOptions:(long long)options;
 - (BOOL)shouldKeepAppSnapshotsInMemory;
+- (CGFloat)decelerationRate;
 @end
 
 @interface SBAppSwitcherController : UIViewController
@@ -597,19 +600,23 @@ extern "C" {
 - (void)viewDidDisappear:(BOOL)animated;
 @end
 
+// GỘP CHUẨN: SBUIController duy nhất, có đủ finishLaunching
 @interface SBUIController : NSObject
 + (instancetype)sharedInstance;
 - (BOOL)isAppSwitcherShowing;
 - (void)clickedMenuButton;
 - (void)handleHomeButtonDoublePressDown;
 - (void)lockFromSource:(int)source;
+- (void)finishLaunching;
 @end
 
+// GỘP CHUẨN: SpringBoard duy nhất, có đủ applicationDidFinishLaunching và relaunch
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
 - (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
+- (void)applicationDidFinishLaunching:(id)application;
 @end
 
 @interface SBFluidSwitcherModifier : NSObject
@@ -618,9 +625,13 @@ extern "C" {
 - (BOOL)shouldAsyncRenderAppLayouts;
 @end
 
+// GỘP CHUẨN: Có đủ purgeLowPrioritySnapshots và shouldPreloadSnapshots
 @interface SBAppSwitcherSnapshotImageCache : NSObject
++ (instancetype)sharedInstance;
 - (void)reloadImagesForAllItems;
 - (void)_purgeAllSnapshots;
+- (void)purgeLowPrioritySnapshots;
+- (BOOL)shouldPreloadSnapshots;
 @end
 
 @interface SBAppLaunchSettings : NSObject
@@ -641,9 +652,18 @@ extern "C" {
 @end
 
 @interface SBAppToHomeWorkspaceTransaction : NSObject
+- (BOOL)shouldAnimateOrientationChangeOnCompletion;
+- (void)_willBegin;
+- (void)_beginAnimation;
+- (void)_didComplete;
 @end
 
-@interface UIViewPropertyAnimator ()
+@interface SBHomeScreenBackdropView : UIView
+- (void)beginRequiringLiveBackdropViewForReason:(id)reason;
+@end
+
+// SỬA TỪ () THÀNH CATEGORY CÓ TÊN (TitaniumPrivate) ĐỂ KHÔNG BÁO LỖI CLANG
+@interface UIViewPropertyAnimator (TitaniumPrivate)
 + (void)_setTrackDuration:(double)duration;
 @end
 
@@ -658,21 +678,28 @@ extern "C" {
 @property (nonatomic, assign) double mass;
 @property (nonatomic, assign) double stiffness;
 @property (nonatomic, assign) double damping;
+- (void)setDefaultValues;
 @end
 
 @interface SBFluidSwitcherAnimationSettings : NSObject
 @property (nonatomic, assign) double mass;
 @property (nonatomic, assign) double stiffness;
 @property (nonatomic, assign) double damping;
+- (void)setDefaultValues;
 @end
 
-// ====================================================================================================
-// PRIVATE APPLE INTERNAL INTERFACES (NHÓM 14)
-// ====================================================================================================
+@interface FBWorkspace : NSObject
+- (void)server:(id)server handleTemplateWorkspaceTransaction:(id)transaction;
+@end
+
+@interface BKSDisplayBrightnessController : NSObject
+- (void)setBrightnessLevel:(float)level reason:(id)reason;
+@end
 
 @interface BKSHIDEventDeliveryManager : NSObject
 + (instancetype)sharedInstance;
 - (void)selectDispatches:(id)arg1;
+- (void)dispatchDiscreteEvents:(id)events;
 @end
 
 @interface CARenderServer : NSObject
@@ -3331,10 +3358,6 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 // 6S-7P: TỰ ĐỘNG RESPRING LIÊN TỤC CHO ĐẾN KHI NẠP ĐƯỢC TWEAK THÌ DỪNG NGAY
 // 8P-15PRM: CHỈ KHI REBOOT NGUỒN, NẾU CHƯA NẠP TWEAK SẼ RESPRING ĐÚNG 1 LẦN
 // ====================================================================================================
-
-#import <sys/utsname.h>
-#import <sys/sysctl.h>
-#import <spawn.h>
 
 extern char **environ;
 
