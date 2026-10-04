@@ -30,7 +30,7 @@ extern char **environ;
 @end
 
 // ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ / ROOTLESS / ROOTHIDE
 // ====================================================================================================
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
@@ -57,29 +57,22 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     return cachedJbRoot;
 }
 
-// Giải quyết đường dẫn file tạm tương thích 100% Rootless & Hide Jailbreak
-static inline NSString *Titanium_ResolveTempPath(NSString *subPath) {
-    NSString *baseDir = @"/tmp";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
-        baseDir = @"/var/jb/tmp";
-    }
-    if (![[NSFileManager defaultManager] fileExistsAtPath:baseDir]) {
-        [[NSFileManager defaultManager] createDirectoryAtPath:baseDir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
-    }
-    return [baseDir stringByAppendingPathComponent:subPath];
-}
-
-#define SHARED_SYNC_FILE Titanium_ResolveTempPath(@".boost_hz_sync")
-#define BOOT_GUARD_FILE  Titanium_ResolveTempPath(@".boost_boot_counter")
-
+// Đường dẫn file Plist tương thích tuyệt đối Rootless và RootHide
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
     if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
         NSString *jbPath = [root stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
-        return jbPath;
+        if ([[NSFileManager defaultManager] fileExistsAtPath:jbPath]) return jbPath;
     }
+    NSString *p1 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
+
+// Đồng bộ chính xác với /tmp/.boost_hz_sync của Tweak.xm
+#define PRIMARY_SYNC_FILE @"/tmp/.boost_hz_sync"
+#define SECONDARY_SYNC_FILE @"/var/jb/tmp/.boost_hz_sync"
+#define BOOT_GUARD_FILE  @"/tmp/.boost_boot_counter"
 
 static inline BOOL HardwareHasNative120Hz(void) {
     static BOOL isNative120 = NO;
@@ -115,6 +108,23 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
         }
     }
     return name;
+}
+
+// Ghi payload an toàn vào cả 2 đường dẫn để Tweak luôn đọc được
+static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t size) {
+    NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
+    for (NSString *path in paths) {
+        NSString *dir = [path stringByDeletingLastPathComponent];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+        }
+        int fd = open([path UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd >= 0) {
+            write(fd, payloadData, size);
+            close(fd);
+            chmod([path UTF8String], 0666);
+        }
+    }
 }
 
 // ====================================================================================================
@@ -331,15 +341,16 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.rawTouchDirectDelivery = 0;
         payload.powerSaveModeActive = 0;
     } else {
-        int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 120;
-        int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 120;
+        // MẶC ĐỊNH ÉP THẲNG 144HZ / 144FPS
+        int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 144;
+        int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 144;
         BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
-        BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : NO;
+        BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : YES;
 
         if (isPowerSave) {
-            hz = 30;
-            fps = 30;
-        } else if (isOverclock) {
+            hz = 60;
+            fps = 60;
+        } else if (isOverclock || hz >= 144) {
             hz = 144;
             fps = 144;
         } else {
@@ -351,7 +362,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
         payload.targetHz = hz;
         payload.targetFPS = fps;
-        payload.forceOverclock = isOverclock ? 1 : 0;
+        payload.forceOverclock = 1;
         
         payload.dynamicInterpolation = prefs[@"ProMotionEngineBeta7"] ? ([prefs[@"ProMotionEngineBeta7"] boolValue] ? 1 : 0) : 1;
         payload.pipSyncEnabled = 1;
@@ -368,7 +379,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.memoryPressureRelief = 1;
         payload.runloopHangGuard = 1;
         payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
-        payload.aggressiveRamCleaner = prefs[@"AggressiveRamClean"] ? ([prefs[@"AggressiveRamClean"] boolValue] ? 1 : 0) : 0;
+        payload.aggressiveRamCleaner = 0; // Tắt dọn RAM gắt để không khựng 1 nhịp
         payload.lockFixedFpsWhenThermal = payload.thermalShield;
         payload.antiGhostTouch = prefs[@"AntiGhostTouch"] ? ([prefs[@"AntiGhostTouch"] boolValue] ? 1 : 0) : 1;
         payload.diskIOPriorityBoost = 1;
@@ -379,12 +390,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     payload.updateSeq = (uint64_t)mach_absolute_time();
     payload.lastHeartbeat = payload.updateSeq;
 
-    int fd = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd >= 0) {
-        write(fd, &payload, sizeof(ApexV285ProPayload));
-        close(fd);
-        chmod([SHARED_SYNC_FILE UTF8String], 0666);
-    }
+    Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
 
     Class configClass = NSClassFromString(@"BoostConfigV285Pro");
     if (configClass) {
@@ -402,7 +408,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     ApexV285ProPayload payload;
     memset(&payload, 0, sizeof(ApexV285ProPayload));
     
-    int fdRead = open([SHARED_SYNC_FILE UTF8String], O_RDONLY);
+    int fdRead = open([PRIMARY_SYNC_FILE UTF8String], O_RDONLY);
     if (fdRead >= 0) {
         read(fdRead, &payload, sizeof(ApexV285ProPayload));
         close(fdRead);
@@ -416,12 +422,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     payload.updateSeq = (uint64_t)mach_absolute_time();
     payload.lastHeartbeat = payload.updateSeq;
 
-    int fdWrite = open([SHARED_SYNC_FILE UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fdWrite >= 0) {
-        write(fdWrite, &payload, sizeof(ApexV285ProPayload));
-        close(fdWrite);
-        chmod([SHARED_SYNC_FILE UTF8String], 0666);
-    }
+    Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
 
     notify_post(NOTIFY_FPS_CHANGED);
     notify_post(NOTIFY_HARDWARE_SYNC);
@@ -527,9 +528,9 @@ static inline NSString *PM_TextV285(NSString *key) {
 
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
-    NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 120;
-    NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 120;
-    BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : NO;
+    NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
+    NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 144;
+    BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : YES;
     BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
 
     NSString *hzLockText = PM_TextV285(@"LOCK_HZ_TITLE") ?: @"🔒 Tần Số Quét: Khóa Cứng %ld Hz";
@@ -548,8 +549,8 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isPowerSave) {
-                spec.name = @"🔋 Tần Số Quét: Khóa 30 Hz (Tiết Kiệm Pin)";
-            } else if (isOverclock || hz == 144) {
+                spec.name = @"🔋 Tần Số Quét: Khóa 60 Hz (Tiết Kiệm Pin)";
+            } else if (isOverclock || hz >= 144) {
                 spec.name = @"⚡ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
             } else {
                 spec.name = [NSString stringWithFormat:hzLockText, (long)hz];
@@ -557,7 +558,9 @@ static inline NSString *PM_TextV285(NSString *key) {
             [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
             if (isPowerSave) {
-                spec.name = @"🔋 Khung Hình App: Khóa 30 FPS (Tiết Kiệm Pin)";
+                spec.name = @"🔋 Khung Hình App: Khóa 60 FPS (Tiết Kiệm Pin)";
+            } else if (fps >= 144) {
+                spec.name = @"⚡ Khung Hình App: ÉP XUNG 144 FPS TOÀN MÁY";
             } else {
                 spec.name = [NSString stringWithFormat:fpsLockText, (long)fps];
             }
@@ -602,10 +605,10 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"MetalHexBuffering": @YES,
              @"KeyboardZeroLagV24": @YES,
              @"EnableHzControl": @YES,
-             @"TargetRefreshRate": @120,
+             @"TargetRefreshRate": @144, // MẶC ĐỊNH 144HZ
              @"EnableFPSControl": @YES,
-             @"TargetFPSRate": @120,
-             @"ForceOverclock144Hz": @NO,
+             @"TargetFPSRate": @144,    // MẶC ĐỊNH 144FPS
+             @"ForceOverclock144Hz": @YES,
              @"SyncModuleDelay": @NO,
              @"IsolateRenderPipeline": @YES,
              @"ColorOs17SmoothEngine": @YES,
@@ -615,8 +618,8 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"TouchResponseBoost": @YES,
              @"QuantumRenderShield": @NO,
              @"NeuralBufferOpt": @YES,
-             @"PeriodicRamClean": @YES,
-             @"MachVMPurgeRam": @YES,
+             @"PeriodicRamClean": @NO,
+             @"MachVMPurgeRam": @NO,
              @"AutoCloseBackgroundApp": @NO,
              @"TurboAppLaunch": @YES,
              @"AntiThermalThrottling": @YES,
@@ -699,52 +702,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (void)executeSmoothRateTransition:(NSInteger)targetRate {
-    NSDictionary *prefs = [self getMergedPreferences];
-    NSInteger currentRate = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 120;
-
-    if (self.stepDownTimer) {
-        dispatch_source_cancel(self.stepDownTimer);
-        self.stepDownTimer = nil;
-    }
-
-    if (targetRate >= currentRate) {
-        [self commitFinalRateValue:targetRate];
-        return;
-    }
-
-    NSMutableArray *steps = [NSMutableArray array];
-    NSInteger stepRate = currentRate;
-    while (stepRate - 15 > targetRate) {
-        stepRate -= 15;
-        [steps addObject:@(stepRate)];
-    }
-    [steps addObject:@(targetRate)];
-
-    __block NSUInteger stepIndex = 0;
-    self.stepDownTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self.syncQueue);
-    dispatch_source_set_timer(self.stepDownTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(70 * NSEC_PER_MSEC)), (uint64_t)(70 * NSEC_PER_MSEC), (uint64_t)(5 * NSEC_PER_MSEC));
-
-    __weak typeof(self) weakSelf = self;
-    dispatch_source_set_event_handler(self.stepDownTimer, ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
-        if (stepIndex < steps.count) {
-            NSInteger intermediateRate = [steps[stepIndex] integerValue];
-            [strongSelf emitTransientRate:intermediateRate];
-            stepIndex++;
-        } else {
-            if (strongSelf.stepDownTimer) {
-                dispatch_source_cancel(strongSelf.stepDownTimer);
-                strongSelf.stepDownTimer = nil;
-            }
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [strongSelf commitFinalRateValue:targetRate];
-            });
-        }
-    });
-
-    dispatch_resume(self.stepDownTimer);
+    [self commitFinalRateValue:targetRate];
 }
 
 - (void)commitFinalRateValue:(NSInteger)rate {
@@ -756,7 +714,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [prefs setObject:@YES forKey:@"EnableHzControl"];
     [prefs setObject:@YES forKey:@"EnableFPSControl"];
     
-    if (rate == 144) {
+    if (rate >= 144) {
         [prefs setObject:@YES forKey:@"ForceOverclock144Hz"];
         CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanTrue, PREF_DOMAIN);
     } else {
@@ -923,7 +881,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (id)getVersionString:(PSSpecifier *)specifier {
-    return @"V28.7 SUPREME PRO";
+    return @"V28.7 SUPREME PRO (144Hz)";
 }
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
@@ -959,14 +917,14 @@ static inline NSString *PM_TextV285(NSString *key) {
     self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
-// Xử lý Respring an toàn chống sập nguồn / kẹt táo
+// Xử lý Respring an toàn chống sập nguồn / kẹt táo trên Rootless & RootHide
 - (void)presentActions {
     NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (An Toàn)";
     NSString *srebootText = PM_TextV285(@"SREBOOT") ?: @"🔥 Khởi Động Userspace (SReboot)";
-    NSString *resetText = PM_TextV285(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định";
+    NSString *resetText = PM_TextV285(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định (144Hz)";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
 
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -1030,7 +988,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
 - (void)executeResetConfiguration {
     NSString *confirmTitle = PM_TextV285(@"RESET_CONFIRM_TITLE") ?: @"Xác Nhận Đặt Lại";
-    NSString *confirmMsg = PM_TextV285(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu nhất của v28.7 Pro.";
+    NSString *confirmMsg = PM_TextV285(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu 144Hz của v28.7 Pro.";
     NSString *resetNowText = PM_TextV285(@"RESET_NOW") ?: @"Đặt Lại Ngay";
     NSString *cancelText = PM_TextV285(@"BACK") ?: @"Hủy";
 
@@ -1038,7 +996,8 @@ static inline NSString *PM_TextV285(NSString *key) {
     [alert addAction:[UIAlertAction actionWithTitle:resetNowText style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         NSString *prefPath = Titanium_ResolvePrefPath();
         [[NSFileManager defaultManager] removeItemAtPath:prefPath error:nil];
-        [[NSFileManager defaultManager] removeItemAtPath:SHARED_SYNC_FILE error:nil];
+        [[NSFileManager defaultManager] removeItemAtPath:PRIMARY_SYNC_FILE error:nil];
+        [[NSFileManager defaultManager] removeItemAtPath:SECONDARY_SYNC_FILE error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:BOOT_GUARD_FILE error:nil];
 
         CFPreferencesAppSynchronize(PREF_DOMAIN);
