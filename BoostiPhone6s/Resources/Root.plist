@@ -69,7 +69,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -85,7 +85,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -115,7 +115,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (KHÓA CỨNG TUYỆT ĐỐI - HẠ NHỊP TỪ TỪ CHỐNG LAG)                            -->
+		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (KHÓA CỨNG TUYỆT ĐỐI 144HZ)                                               -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -123,7 +123,7 @@
 			<key>label</key>
 			<string>ĐIỀU PHỐI HZ &amp; FPS ĐỘNG (15HZ - 144HZ)</string>
 			<key>footerText</key>
-			<string>Khóa cứng Hz và FPS tức thì theo mức đã chọn. Khi hạ tần số quét xuống thấp, hệ thống tự động kích hoạt thuật toán hạ nhịp từ từ (Smooth Step-Down) để GPU và V-Sync thích ứng mượt mà, triệt tiêu khựng lag tức thì.</string>
+			<string>Khóa cứng 144Hz và 144FPS toàn hệ thống. Màn hình tĩnh tự động hạ về 10Hz làm mát máy, khi chạm tay vào vọt thẳng lên 144Hz tức thì trong 0ms.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -185,7 +185,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -347,7 +347,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -607,7 +607,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<true/>
+			<false/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
@@ -655,7 +655,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>default</key>
-			<false/>
+			<true/>
 			<key>defaults</key>
 			<string>com.taojb.boostiphone6s</string>
 			<key>key</key>
