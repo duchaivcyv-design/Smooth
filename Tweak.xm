@@ -1386,22 +1386,23 @@ static inline void Titanium_StealthKernelHijack(void) {
     double currentHz = (CFG285 && CFG285.targetHz > 0) ? (double)[CFG285 resolvedTargetHz] : 60.0;
     if (currentHz <= 0.0) currentHz = 60.0;
 
-    // KHÓA CỨNG MACH REAL-TIME: ÉP NHÂN DARWIN CẤP 85% NĂNG LỰC P-CORE CHO LUỒNG ĐỒ HỌA
+    /    // [MỤC 5] CÔNG THỨC DEADLINE THỜI GIAN THỰC 80%
     uint64_t period_ns      = (uint64_t)(1000000000.0 / currentHz); 
-    uint64_t computation_ns = (uint64_t)(period_ns * 0.85); // Ép giữ 85% chu kỳ cho tác vụ vẽ
-    uint64_t constraint_ns  = period_ns;                    // Không cho phép nới lỏng deadline
+    uint64_t computation_ns = (uint64_t)(period_ns * 0.80); // 80% thời lượng chu kỳ dành riêng cho vẽ
+    uint64_t constraint_ns  = period_ns;                    // Khóa cứng deadline
 
     thread_time_constraint_policy_data_t timePolicy;
     timePolicy.period      = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
     timePolicy.computation = (uint32_t)((computation_ns * timebase.denom) / timebase.numer);
     timePolicy.constraint  = (uint32_t)((constraint_ns * timebase.denom) / timebase.numer);
-    timePolicy.preemptible = 1; // Cho phép ngắt mạng phần cứng hoạt động xuyên suốt
+    timePolicy.preemptible = 1; // Giữ ngắt mạng thông suốt
 
     thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
     // 3. Giữ timeshare = 1 để nhân Darwin vẫn điều phối được đa nhiệm, không làm chết socket mạng ngầm
     thread_extended_policy_data_t extPolicy;
     extPolicy.timeshare = 1; 
+
     thread_policy_set(machThread, THREAD_EXTENDED_POLICY, (thread_policy_t)&extPolicy, THREAD_EXTENDED_POLICY_COUNT);
 
     // 4. Ưu tiên P-Core cho luồng đồ họa
@@ -1474,17 +1475,14 @@ static inline void Titanium_StealthKernelHijack(void) {
 
 // 4. CƯỚP QUYỀN PHÂN PHỐI SỰ KIỆN CỬA SỔ (UIWINDOW) TỨC THÌ 0MS
 %hook UIWindow
-- (BOOL)_shouldDelayTouchForCancelEvents {
-    return %orig; // Giữ nguyên để cử chỉ web/mạng không bị drop nhầm
-}
-
 - (void)sendEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG285.touchResponseBoost && event.type == 0) { // 0 = UIEventTypeTouches
+    if (IS_ACTIVE && CFG285.touchResponseBoost && event.type == 0) {
         UITouch *touch = [[event allTouches] anyObject];
         if (touch) {
             if (touch.phase == UITouchPhaseBegan) {
                 g_isInstantMotion = YES;
-                Titanium_TriggerInstantTouchBurst(); // Chạm là cướp xung P-Core ngay frame đầu tiên
+                Titanium_ForceWakeMainRunLoop(); // 👈 [MỤC 2]: Đánh thức RunLoop ngay frame chạm đầu tiên
+                Titanium_TriggerInstantTouchBurst();
             } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
                 if (!g_isScrollingActive && !g_isContinuousSwiping && !g_isAppToHomeAnimating) {
                     g_isInstantMotion = NO;
@@ -1504,11 +1502,9 @@ static inline void Titanium_StealthKernelHijack(void) {
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
-// 1. CƯỚP QUYỀN BỘ ĐỆM KHUNG HÌNH (TRIPLE BUFFERING) ĐỂ ĐẨY 144HZ MƯỢT LÂU DÀI
+// [MỤC 3] ÉP TRIPLE BUFFERING (3 BỘ ĐỆM GỐI ĐẦU)
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        count = 3; // Luôn sẵn 1 frame gối đầu, chống tụt FPS khi tải nặng
-    }
+    if (IS_ACTIVE && CFG285.metalHexBuffering) count = 3;
     %orig(count);
 }
 
@@ -1517,26 +1513,23 @@ static inline void Titanium_StealthKernelHijack(void) {
     return %orig;
 }
 
-// 2. KHÓA CỨNG ĐỒNG BỘ VSYNC TRIỆT TIÊU 100% HIỆN TƯỢNG XÉ HÌNH
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     if (IS_ACTIVE) enabled = YES;
     %orig(enabled);
 }
 
-// 3. CẤM GPU TIMEOUT: ÉP CHIP A9 HOÀN TẤT MỌI FRAME, KHÔNG BỎ RƠI KHUNG HÌNH
+// [MỤC 3] ÉP KHÔNG TIMEOUT ĐỂ GPU KHÔNG HỦY KHUNG HÌNH
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     if (IS_ACTIVE) allow = NO;
     %orig(allow);
 }
 
-// 4. CHỐNG ĐEN APP TUYỆT ĐỐI: Không ép cờ NO bừa bãi, bảo toàn frame nạp đầu tiên
 - (void)setPresentsWithTransaction:(BOOL)flag {
     %orig(flag);
 }
 %end
 
 %hook CALayer
-// 5. CƯỚP QUYỀN RENDER THỜI GIAN THỰC (CHỈ KÍCH HOẠT KHI TƯƠNG TÁC ĐỂ TRÁNH NÓNG MÁY)
 - (void)display {
     if (IS_ACTIVE && CFG285.touchResponseBoost && g_isInstantMotion) {
         Titanium_EnableZeroLatencyPipeline();
@@ -1544,11 +1537,16 @@ static inline void Titanium_StealthKernelHijack(void) {
     %orig;
 }
 
-- (void)setPosition:(CGPoint)position {
-    %orig(position);
+// [MỤC 4] TRIỆT TIÊU OFFSCREEN RENDERING KHI BO GÓC
+- (void)setCornerRadius:(CGFloat)radius {
+    %orig(radius);
+    if (radius > 0.0 && IS_ACTIVE) {
+        if ([self respondsToSelector:@selector(setCornerCurve:)]) {
+            self.cornerCurve = kCACornerCurveContinuous; // Bo góc bằng toán học GPU trực tiếp
+        }
+    }
 }
 
-// 6. GIỮ NGUYÊN LUỒNG GỐC CỦA HỆ THỐNG: KHÔNG ĐỤNG ĐẾN SOCKET MẠNG
 - (void)setDrawsAsynchronously:(BOOL)flag {
     %orig(flag);
 }
