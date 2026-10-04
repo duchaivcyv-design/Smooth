@@ -975,7 +975,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 static BoostConfigV285Pro *CFG285 = nil;
 #define IS_ACTIVE (CFG285 && CFG285.enabled)
 
-// SỬA CHUẨN ĐỒNG BỘ: Đặt sau khi class BoostConfigV285Pro đã được khai báo
+// SỬA CHUẨN ĐỒNG BỘ: ÉP NHỊP 144HZ VÀ TẮT CHẾ ĐỘ ẢO ĐỂ KHÔNG BỊ CẮT/LỆCH MÀN HÌNH
 static void Titanium_TuneWindowServerDisplayDirectly(void) {
     Class wsClass = NSClassFromString(@"CAWindowServer");
     if (!wsClass) return;
@@ -985,18 +985,19 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     if (displays && displays.count > 0) {
         CAWindowServerDisplay *mainDisp = displays[0];
         
-        NSInteger currentHz = CFG285 ? [CFG285 resolvedTargetHz] : 60;
-        if (currentHz <= 0) currentHz = 60;
-        double minDuration = 1.0 / (double)currentHz;
+        // Ép chu kỳ tối thiểu về mức 144Hz (1 frame = ~0.00694 giây)
+        double minDuration = 1.0 / 144.0;
 
         if ([mainDisp respondsToSelector:@selector(setMinimumFrameDuration:)]) {
             [mainDisp setMinimumFrameDuration:minDuration];
         }
+        // ĐÃ SỬA: Chuyển về NO để WindowServer không đổi tỷ lệ viewport ảo gây cắt xén phím và chấm mật mã
         if ([mainDisp respondsToSelector:@selector(setAllowsVirtualModes:)]) {
-            [mainDisp setAllowsVirtualModes:YES];
+            [mainDisp setAllowsVirtualModes:NO];
         }
+        // ĐÃ SỬA: Chuyển về NO để khóa đúng kích thước pixel vật lý của iPhone 6s
         if ([mainDisp respondsToSelector:@selector(setAllowsDisplayCompositing:)]) {
-            [mainDisp setAllowsDisplayCompositing:YES];
+            [mainDisp setAllowsDisplayCompositing:NO];
         }
     }
 }
@@ -1155,28 +1156,19 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 }
 
 - (NSInteger)resolvedTargetHz {
-    if (!self.enabled || !self.enableHzControl) return 60;
-    if (self.powerSaveMode) return 30;
-    
-    NSInteger target = (NSInteger)ClampSafeFPS((float)self.targetHz);
-    // Khóa trần phần cứng 60Hz cho iPhone 6s - 12 Pro Max
-    if (!HardwareHasNative120Hz() && !self.forceOverclock144Hz) {
-        if (target > 60) target = 60;
-    }
-    return target;
+    if (!self.enabled) return 144;
+    if (self.powerSaveMode) return 60;
+    // BẺ KHÓA TOÀN BỘ: ÉP THẲNG 144HZ CHO MỌI TIẾN TRÌNH
+    return 144;
 }
 
 - (NSInteger)resolvedTargetFPS {
-    if (!self.enabled || !self.enableFPSControl) return 60;
-    if (self.powerSaveMode) return 30;
-    
-    NSInteger target = (NSInteger)ClampSafeFPS((float)self.targetFPS);
-    // Khóa trần phần cứng 60FPS cho màn hình 60Hz vật lý
-    if (!HardwareHasNative120Hz() && !self.forceOverclock144Hz) {
-        if (target > 60) target = 60;
-    }
-    return target;
+    if (!self.enabled) return 144;
+    if (self.powerSaveMode) return 60;
+    // BẺ KHÓA TOÀN BỘ: ÉP THẲNG 144FPS ĐỒNG BỘ
+    return 144;
 }
+
 
 - (NSInteger)resolvedFrameInterval {
     NSInteger fps = [self resolvedTargetFPS];
@@ -1377,28 +1369,6 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
-// 3. KHÓA TỌA ĐỘ NGUYÊN PIXEL CHỐNG RUNG CHỮ (CHỈ LÀM TRÒN KHI BỊ LỆCH SUB-PIXEL)
-%hook UILabel
-- (void)setFrame:(CGRect)frame {
-    if (IS_ACTIVE) {
-        // Chỉ làm tròn nếu toạ độ bị lẻ thập phân, tránh tính toán thừa trong feed dài
-        if (frame.origin.x != floorf(frame.origin.x) || frame.origin.y != floorf(frame.origin.y)) {
-            frame = CGRectIntegral(frame);
-        }
-    }
-    %orig(frame);
-}
-
-- (void)setBounds:(CGRect)bounds {
-    if (IS_ACTIVE) {
-        if (bounds.origin.x != floorf(bounds.origin.x) || bounds.origin.y != floorf(bounds.origin.y)) {
-            bounds = CGRectIntegral(bounds);
-        }
-    }
-    %orig(bounds);
-}
-%end
-
 // 4. ĐÓN ĐẦU CHẠM TOÀN MÀN HÌNH TẠI CỬA SỔ GỐC: THỨC DẬY 144HZ TRONG 0MS
 %hook UIWindow
 - (BOOL)_shouldDelayTouchForCancelEvents {
@@ -1456,15 +1426,6 @@ static void Titanium_TriggerInstantTouchBurst(void) {
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
-}
-
-// Khóa vị trí layer thành số nguyên để chống rung khi phóng to/thu nhỏ icon
-- (void)setPosition:(CGPoint)position {
-    if (IS_ACTIVE) {
-        position.x = round(position.x);
-        position.y = round(position.y);
-    }
-    %orig(position);
 }
 %end
 
