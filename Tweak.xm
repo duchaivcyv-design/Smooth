@@ -1936,11 +1936,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// 2. ÉP RENDER BẤT ĐỒNG BỘ CARD ĐA NHIỆM (ĐÃ SỬA CHỮ 'A' VIẾT HOA CHUẨN XÁC)
+// TẮT RENDER BẤT ĐỒNG BỘ: CHO PHÉP HỆ THỐNG VÀ TWEAK CỬ CHỈ CẮT BO TRÒN THẺ ĐA NHIỆM
 %hook SBFluidSwitcherModifier
 - (BOOL)shouldAsyncRenderAppLayouts {
-    if (IS_ACTIVE) return YES; // Chuẩn selector của Apple: Vẽ ngầm trước tránh khựng
-    return %orig;
+    return NO; // Bắt buộc là NO để mask bo góc không bị vỡ thành hình vuông
 }
 %end
 
@@ -2074,8 +2073,23 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// TRẢ VỀ RENDER ĐỒNG BỘ: Không dùng drawsAsynchronously để thẻ không bị chớp hay trễ frame
+// ÉP BO TRÒN ĐA NHIỆM: FIX LỖI THẺ BỊ VUÔNG VỨC KHI DÙNG FAKE CỬ CHỈ
 %hook SBFluidSwitcherItemContainer
+- (void)setCornerRadius:(CGFloat)radius {
+    // Nếu radius bị hệ thống trả về 0 hoặc lỗi fake cử chỉ, ép bo cong mượt chuẩn Apple
+    if (IS_ACTIVE && radius <= 0.0) {
+        radius = 21.0; // Bo góc tự nhiên của thẻ đa nhiệm
+    }
+    %orig(radius);
+    
+    // Khóa mặt nạ cắt góc để nội dung bên trong không bị lòi góc nhọn
+    UIView *view = (UIView *)self;
+    view.layer.masksToBounds = YES;
+    if ([view.layer respondsToSelector:@selector(setCornerCurve:)]) {
+        view.layer.cornerCurve = kCACornerCurveContinuous; // Bo góc cong mịn liên tục
+    }
+}
+
 - (void)prepareForReuse {
     %orig;
 }
