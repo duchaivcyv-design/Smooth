@@ -1428,9 +1428,6 @@ static inline void Titanium_StealthKernelHijack(void) {
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) {
-        Titanium_EnableZeroLatencyPipeline();
-    }
     %orig(touches, event);
 }
 
@@ -1875,27 +1872,19 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // 7. TẢI LẠI CẤU HÌNH KHI APP ACTIVE
-%hook UIApplication
+%hook CATransaction
 
-- (void)_applicationDidBecomeActive:(id)arg1 {
++ (void)commit {
     %orig;
-    if (IS_ACTIVE) {
-        if (!Titanium_IsSpringBoard()) {
-            [[BoostConfigV285Pro sharedInstance] loadSettings];
-        }
-        Titanium_EnableZeroLatencyPipeline();
+    if (IS_ACTIVE && g_activeAnimationCount > 0) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (g_activeAnimationCount > 0) {
+                __sync_fetch_and_sub(&g_activeAnimationCount, 1);
+            }
+        });
     }
 }
 
-- (void)applicationDidBecomeActive:(id)arg1 {
-    %orig;
-    if (IS_ACTIVE) {
-        if (!Titanium_IsSpringBoard()) {
-            [[BoostConfigV285Pro sharedInstance] loadSettings];
-        }
-        Titanium_EnableZeroLatencyPipeline();
-    }
-}
 %end
 
 // Ép dải tần số quét tối đa cho toàn bộ UIView Animation trên iOS 16+
