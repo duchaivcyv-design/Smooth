@@ -1423,27 +1423,11 @@ static inline void Titanium_StealthKernelHijack(void) {
 
 %group Group_ZeroLatency_Touch_Opt
 
-// 1. TRIỆT TIÊU ĐỘ TRỄ NHẬN DIỆN CỬ CHỈ GESTURE
 %hook UIGestureRecognizer
-- (BOOL)delaysTouchesBegan {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
-    return %orig;
-}
-
-- (BOOL)delaysTouchesEnded {
-    if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
-    return %orig;
-}
-
-- (void)setDelaysTouchesBegan:(BOOL)flag {
-    BOOL actualFlag = (IS_ACTIVE && CFG285.touchResponseBoost) ? NO : flag;
-    %orig(actualFlag);
-}
-
-- (void)setDelaysTouchesEnded:(BOOL)flag {
-    BOOL actualFlag = (IS_ACTIVE && CFG285.touchResponseBoost) ? NO : flag;
-    %orig(actualFlag);
-}
+- (BOOL)delaysTouchesBegan { return %orig; }
+- (BOOL)delaysTouchesEnded { return %orig; }
+- (void)setDelaysTouchesBegan:(BOOL)flag { %orig(flag); }
+- (void)setDelaysTouchesEnded:(BOOL)flag { %orig(flag); }
 %end
 
 // 2. PHẢN HỒI NÚT BẤM VÀ ĐIỀU HƯỚNG TỨC THÌ
@@ -1869,8 +1853,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 + (void)commit {
     if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
         Titanium_EnableZeroLatencyPipeline();
-        // KHÓA CỨNG FLUSH: Ép xuất lệnh vẽ ngay lập tức sang RenderServer, không lưu đệm
-        [CATransaction flush];
     }
     %orig;
     if (IS_ACTIVE && g_activeAnimationCount > 0) {
@@ -1880,15 +1862,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
             }
         });
     }
-}
-
-// Chặn đứng hoàn toàn việc hệ thống tự ý chèn độ trễ animation phụ
-+ (void)setAnimationDuration:(NSTimeInterval)dur {
-    if (IS_ACTIVE && (g_isAppToHomeAnimating || g_isAppOpeningAnimating)) {
-        // Khóa đúng chu kỳ chuẩn xác của phần cứng, cấm bị kéo dãn thời gian ngoài ý muốn
-        if (dur > 0.35) dur = 0.28;
-    }
-    %orig(dur);
 }
 
 %end
@@ -2034,9 +2007,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// 3. Khóa cứng trần 120Hz & Main Thread suốt toàn bộ quá trình co nhỏ (KHÔNG TỤT 15Hz KHI BUÔNG TAY)
-// KIỂM SOÁT TRỌN VẸN ĐƯỜNG BAY CỦA APP VỀ ICON VÀ DOCK: DUY TRÌ 120Hz KHÔNG ĐỨNG/DROP FRAME
-// KIỂM SOÁT TRỌN VẸN ĐƯỜNG BAY CỦA APP VỀ ICON VÀ DOCK: DUY TRÌ 120Hz KHÔNG ĐỨNG/DROP FRAME
 %hook SBAppToHomeWorkspaceTransaction
 - (BOOL)shouldAnimateOrientationChangeOnCompletion {
     return NO;
