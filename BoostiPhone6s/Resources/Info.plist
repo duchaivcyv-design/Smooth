@@ -7,13 +7,13 @@
     <key>CFBundleDisplayName</key>
     <string>BoostiPhone6s V28.7 PRO</string>
     <key>CFBundleExecutable</key>
-    <string>BoostiPhone6sPrefs</string>
+    <string>BoostiPhone6s</string>
     <key>CFBundleIdentifier</key>
     <string>com.taojb.boostiphone6s.prefs</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>BoostiPhone6sPrefs</string>
+    <string>BoostiPhone6s</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
