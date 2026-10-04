@@ -3316,43 +3316,23 @@ static inline const char *Titanium_GetRootlessPath(const char *subpath) {
 
 %end // KẾT THÚC Group_Rootless_BootSafeguard_Watchdog
 
-// ====================================================================================================
-// GIÁM SÁT SẠC PIN & ĐỒNG BỘ CẤU HÌNH AN TOÀN
-// ====================================================================================================
-
-// ====================================================================================================
-// KHAI BÁO BIẾN BẢO VỆ KHỞI ĐỘNG WATCHDOG (ĐẶT TRƯỚC TẤT CẢ CÁC HÀM)
-// ====================================================================================================
-
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
 #define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
 
 // ====================================================================================================
 // HỖ TRỢ SONG SONG ROOTLESS (RLESS - /var/jb) VÀ ROOTHIDE (RHIDE - jbroot)
 // ====================================================================================================
-static inline const char *Titanium_GetRootlessPath(const char *subpath) {
-    static char fullPath[PATH_MAX];
-    
-    // 1. Hỗ trợ Roothide (rhide): Tự động phân giải đường dẫn gốc ngẫu nhiên
-    typedef char *(*jbroot_fn_t)(const char *);
-    static jbroot_fn_t s_jbroot = NULL;
-    static dispatch_once_t rhToken;
-    dispatch_once(&rhToken, ^{
-        s_jbroot = (jbroot_fn_t)dlsym(RTLD_DEFAULT, "jbroot");
-    });
-    if (s_jbroot) {
-        char *rhPath = s_jbroot(subpath);
-        if (rhPath) return rhPath;
-    }
 
-    // 2. Hỗ trợ Rootless tiêu chuẩn (rless / Dopamine / Palera1n)
-    if (access("/var/jb", F_OK) == 0) {
-        snprintf(fullPath, sizeof(fullPath), "/var/jb%s", subpath);
-        return fullPath;
-    }
+// Tìm đúng file thực thi sbreload / killall trên cả Rootless và Roothide
+static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
+    char subpath[PATH_MAX];
+    snprintf(subpath, sizeof(subpath), "/usr/bin/%s", binaryName);
+    const char *fullPath = Titanium_GetRootlessPath(subpath);
+    if (fullPath && access(fullPath, X_OK) == 0) return fullPath;
 
-    // 3. Rootful truyền thống
-    return subpath;
+    // Dự phòng đường dẫn gốc chuẩn
+    if (access(subpath, X_OK) == 0) return subpath;
+    return NULL;
 }
 
 // Tìm đúng file thực thi sbreload / killall trên cả Rootless và Roothide
