@@ -1191,6 +1191,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (0.0s RESPONSE)
 // ===================================================================================================
+// 1. CƯỚP QUYỀN NHÂN MACH: 0MS DELAY ĐÁNH THỨC CPU VÀ I/O
 static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
     #if defined(TASK_LATENCY_QOS_POLICY)
     task_latency_qos_policy_data_t latencyPolicy;
@@ -1205,14 +1206,15 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
     #endif
 }
 
-// 2. CẤP QUYỀN THỜI GIAN THỰC MACH CHO LUỒNG VẼ GIAO DIỆN
+// 2. CƯỚP QUYỀN MACH REAL-TIME ĐỒNG BỘ 144HZ (CHU KỲ 6.94MS MỖI FRAME - KHÔNG LỆCH NHỊP)
 static void Titanium_ElevateThreadToMachRealTime(void) {
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
 
-    uint64_t period_ns = 16666667;     // Chu kỳ 60 FPS (16.6ms)
-    uint64_t computation_ns = 8000000; // Đảm bảo 8ms tính toán liên tục
-    uint64_t constraint_ns = 12000000;
+    // 1 giây / 144 = 6.944.444 ns (Ép nhân Mach nhả frame ở tốc độ 144Hz)
+    uint64_t period_ns = 6944444;      
+    uint64_t computation_ns = 4500000; // Cấp trọn 4.5ms tính toán liên tục không bị ngắt
+    uint64_t constraint_ns = 6500000;  // Chặn trễ tối đa 6.5ms
 
     thread_time_constraint_policy_data_t policy;
     policy.period = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
@@ -1223,7 +1225,7 @@ static void Titanium_ElevateThreadToMachRealTime(void) {
     thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 }
 
-// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ (RUNTIME CALL AN TOÀN, KHÔNG BỊ DUPLICATE INTERFACE)
+// 3. KHÓA TẤM NỀN CADISPLAY: 0MS LATENCY & TẮT VIRTUAL MODES (CHỐNG LỆCH HÌNH VÀ CẮT XÉN)
 static void AppleInternal_LockHardwareCADisplay(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -1244,7 +1246,7 @@ static void AppleInternal_LockHardwareCADisplay(void) {
     });
 }
 
-// 4. PHÂN TÁCH PHẦN CỨNG TỰ ĐỘNG (CHỈ ÉP MAX CHO CHIP A9 - A12)
+// 4. PHÂN TÁCH PHẦN CỨNG TỰ ĐỘNG
 static BOOL Titanium_IsLegacyA9toA12(void) {
     static BOOL s_isLegacy = NO;
     static dispatch_once_t onceToken;
@@ -1263,24 +1265,28 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
     return s_isLegacy;
 }
 
-// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR (CHẠM 0S BƠM 60FPS, BUÔNG TAY HẠ 25HZ MÁT MÁY KHI SẠC)
+// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR THÔNG MINH (CHẠM BƠM 144HZ, BUÔNG TAY HẠ XUNG CHỐNG NÓNG ĐÚNG LUỒNG)
 static volatile BOOL g_isUserTouchingScreen = NO;
 static dispatch_source_t g_touchBurstTimer = nil;
 static dispatch_queue_t g_touchBurstQueue = nil;
 
-// CƯỚP QUYỀN MACH KERNEL REAL-TIME: GIA TỐC XUNG MAX TRONG 0MS, NHẢ XUNG ĐÚNG LÚC CHỐNG NÓNG
 static inline void Titanium_LockMainThreadFast(void) {
     if (!NSThread.isMainThread) return;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
-    // Đẩy luồng lên mức Real-Time trần (priority 63) của nhân XNU
     struct sched_param param;
-    param.sched_priority = 63;
+    param.sched_priority = 63; // Real-time trần
     pthread_setschedparam(pthread_self(), SCHED_RR, &param);
 
-    // Cướp quyền I/O ổ đĩa, tắt ghi nhật ký thời gian truy cập (atime) để giải phóng CPU
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
+}
+
+static inline void Titanium_RestoreMainThreadNormal(void) {
+    if (!NSThread.isMainThread) return;
+    struct sched_param normalParam;
+    normalParam.sched_priority = 31;
+    pthread_setschedparam(pthread_self(), SCHED_OTHER, &normalParam);
 }
 
 static void Titanium_TriggerInstantTouchBurst(void) {
@@ -1297,17 +1303,16 @@ static void Titanium_TriggerInstantTouchBurst(void) {
         g_touchBurstTimer = nil;
     }
 
-    // Burst 120ms đủ để bao trọn frame đầu, sau đó nhả xung để chip A9 hạ nhiệt
     int64_t burstDuration = g_isDeviceChargingV285 ? (int64_t)(100 * NSEC_PER_MSEC) : (int64_t)(120 * NSEC_PER_MSEC);
 
     g_touchBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_touchBurstQueue);
     dispatch_source_set_timer(g_touchBurstTimer, dispatch_time(DISPATCH_TIME_NOW, burstDuration), DISPATCH_TIME_FOREVER, 0);
     dispatch_source_set_event_handler(g_touchBurstTimer, ^{
         g_isUserTouchingScreen = NO;
-        // Khôi phục mức ưu tiên bình thường khi buông tay để tránh ăn pin và nóng bo mạch
-        struct sched_param normalParam;
-        normalParam.sched_priority = 31;
-        pthread_setschedparam(pthread_self(), SCHED_OTHER, &normalParam);
+        // ĐÃ SỬA: Phải đẩy về Main Thread để trả xung nhịp luồng chính về 31, tránh chip A9 bị kẹt ở Max xung gây sôi máy
+        dispatch_async(dispatch_get_main_queue(), ^{
+            Titanium_RestoreMainThreadNormal();
+        });
         g_touchBurstTimer = nil;
     });
     dispatch_resume(g_touchBurstTimer);
@@ -1609,6 +1614,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // 3. BÁO CÁO THÔNG SỐ KHÓA CỨNG 144HZ CHO UIKIT
+// 3. BÁO CÁO ĐỒNG BỘ TRẦN 144HZ CHO TOÀN BỘ UIKIT
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
@@ -1651,9 +1657,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
-            float target = (float)[CFG285 resolvedTargetHz];
-            range = SafeMakeFRR(target, target, target); // Khóa cứng hoạt ảnh
+        if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
+            // ĐỒNG BỘ HOẠT ẢNH HỆ THỐNG ĐẠT ĐỈNH 144HZ
+            range = SafeMakeFRR(144.0f, 144.0f, 144.0f);
         }
     }
     %orig(range);
@@ -1664,6 +1670,20 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     if (IS_ACTIVE) {
         __sync_fetch_and_add(&g_activeAnimationCount, 1);
     }
+}
+
+%end
+
+%hook CASpringAnimation
+
+- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
+            // ĐỒNG BỘ HOẠT ẢNH LÒ XO ĐA NHIỆM CHẠY TRẦN 144HZ
+            range = SafeMakeFRR(144.0f, 144.0f, 144.0f);
+        }
+    }
+    %orig(range);
 }
 
 %end
