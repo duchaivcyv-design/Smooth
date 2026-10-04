@@ -1460,46 +1460,55 @@ static void Titanium_ScheduleCooldownTo10Hz(void) {
 %end
 
 // 4. ĐÓN ĐẦU CHẠM TOÀN MÀN HÌNH TẠI CỬA SỔ GỐC (KÍCH HOẠT ĐỆM 500MS, KHÔNG HẠ XUNG ĐỘT NGỘT)
+// 4. ĐÓN ĐẦU CHẠM TOÀN MÀN HÌNH TẠI CỬA SỔ GỐC (KÍCH HOẠT ĐỆM 500MS, AN TOÀN TUYỆT ĐỐI)
 %hook UIWindow
+
 - (BOOL)_shouldDelayTouchForCancelEvents {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
     return %orig;
 }
 
 - (void)sendEvent:(UIEvent *)event {
-    // 0 = UIEventTypeTouches: Bắt sự kiện cảm ứng
+    // 0 = UIEventTypeTouches: Bắt sự kiện cảm ứng ngón tay
     if (IS_ACTIVE && event.type == 0) {
         NSSet *allTouches = [event allTouches];
         
-        BOOL hasActiveTouches = NO;
-        BOOL hasJustBegan = NO;
-        
-        for (UITouch *touch in allTouches) {
-            if (touch.phase == UITouchPhaseBegan) {
-                hasJustBegan = YES;
-                hasActiveTouches = YES;
-                break;
-            } else if (touch.phase == UITouchPhaseMoved || touch.phase == UITouchPhaseStationary) {
-                hasActiveTouches = YES;
+        if (allTouches && allTouches.count > 0) {
+            BOOL hasActiveTouches = NO;
+            BOOL hasJustBegan = NO;
+            
+            for (UITouch *touch in allTouches) {
+                UITouchPhase phase = touch.phase;
+                if (phase == UITouchPhaseBegan) {
+                    hasJustBegan = YES;
+                    hasActiveTouches = YES;
+                    break;
+                } else if (phase == UITouchPhaseMoved || phase == UITouchPhaseStationary) {
+                    hasActiveTouches = YES;
+                }
             }
-        }
-        
-        if (hasJustBegan) {
-            // VỪA CHẠM XUỐNG: Bứt tốc lên 144Hz trong 0ms, hủy bộ đếm cooldown
-            Titanium_TriggerInstantTouchBurst();
-            Titanium_EnableZeroLatencyPipeline();
-            [CATransaction flush];
-        } else if (hasActiveTouches) {
-            // ĐANG GIỮ HOẶC KÉO: Giữ vững cờ 144Hz, không ngắt quãng
-            g_isUserTouchingScreen = YES;
-        } else {
-            // TẤT CẢ CÁC NGÓN ĐÃ RỜI MÀN HÌNH:
-            // Đợi 500ms để hoạt ảnh quán tính trôi hết ở 144Hz rồi mới hạ về 10Hz làm mát
-            Titanium_ScheduleCooldownTo10Hz();
+            
+            if (hasJustBegan) {
+                // VỪA CHẠM XUỐNG: Bứt tốc lên 144Hz trong 0ms, hủy bộ đếm cooldown
+                Titanium_TriggerInstantTouchBurst();
+                Titanium_EnableZeroLatencyPipeline();
+                
+                // Xả frame cảm ứng an toàn không phá vỡ transaction context của SpringBoard
+                [CATransaction begin];
+                [CATransaction commit];
+            } else if (hasActiveTouches) {
+                // ĐANG GIỮ HOẶC KÉO: Giữ vững cờ 144Hz liên tục
+                g_isUserTouchingScreen = YES;
+            } else {
+                // TẤT CẢ CÁC NGÓN ĐÃ RỜI MÀN HÌNH:
+                // Kích hoạt bộ đệm 500ms để lướt quán tính 144Hz rồi mới hạ 10Hz làm mát
+                Titanium_ScheduleCooldownTo10Hz();
+            }
         }
     }
     %orig(event);
 }
+
 %end
 
 %end
@@ -1889,20 +1898,22 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %group Group_Switcher30Apps_Virtualization
 
 // 1. CƯỚP QUYỀN CỬ CHỈ GỐC: KÍCH XUNG 144HZ VÀ XẢ VẼ NGAY LẬP TỨC TRONG 0MS
-%hook SBHomeGestureInteraction
+%h%hook SBHomeGestureInteraction
+
 - (BOOL)_isGestureRunning {
     return %orig;
 }
 
-// Ép nhận diện điểm dừng cử chỉ lập tức khi ngón tay nhấc khỏi màn hình
+// Nhận diện điểm dừng cử chỉ lập tức mà không phá vỡ transaction của SpringBoard
 - (void)_handleGestureEnded:(id)gesture {
     if (IS_ACTIVE) {
         Titanium_LockMainThreadFast();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
+        // Tuyệt đối KHÔNG dùng [CATransaction flush] ở đây
     }
     %orig(gesture);
 }
+
 %end
 
 // 2. CHO PHÉP NGẮT ĐÈ CỬ CHỈ: VUỐT LIÊN HOÀN NHANH KHÔNG BỊ TRỄ KHUNG HÌNH CŨ
@@ -1935,7 +1946,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
         Titanium_LockMainThreadFast();
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig;
 }
@@ -1950,7 +1960,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
     %orig;
     if (IS_ACTIVE) {
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
 }
 %end
@@ -1996,7 +2005,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
         Titanium_LockMainThreadFast();
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig(animated);
 }
@@ -2424,7 +2432,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
         Titanium_LockMainThreadFast();
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig;
 }
@@ -2504,7 +2511,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
                 setpriority(PRIO_PROCESS, appPid, -20);
             }
         }
-        [CATransaction flush];
     }
     %orig;
 }
@@ -2553,7 +2559,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
     if (IS_ACTIVE) {
         Titanium_LockMainThreadFast();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig;
 }
@@ -2919,7 +2924,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
         Titanium_LockMainThreadFast();
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig;
 }
@@ -2940,7 +2944,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
     if (IS_ACTIVE) {
         Titanium_LockMainThreadFast();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig(animated);
 }
@@ -2990,7 +2993,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
         Titanium_LockMainThreadFast();
         Titanium_TriggerInstantTouchBurst();
         Titanium_EnableZeroLatencyPipeline();
-        [CATransaction flush];
     }
     %orig(animated);
 }
@@ -3157,7 +3159,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         Titanium_LockMainThreadFast();
-        [CATransaction flush];
     }
     %orig(animated);
 }
