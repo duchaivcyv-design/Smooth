@@ -52,6 +52,7 @@
 #import <Metal/Metal.h>
 #import <WebKit/WebKit.h>
 #import <IOKit/IOKitLib.h>
+#import <IOKit/pwr_mgt/IOPMLib.h>
 
 static void Titanium_StealthKernelHijack(void);
 #ifndef VM_PURGABLE_PURGE_ALL
@@ -1247,7 +1248,42 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (0.0s RESPONSE)
-// ===================================================================================================
+// ====================================================================================================
+
+// 0. FORWARD DECLARATION ĐỂ CÁC HÀM GỌI NHAU KHÔNG BỊ LỖI THỨ TỰ BIÊN DỊCH
+static inline void Titanium_StealthKernelHijack(void);
+
+// ====================================================================================================
+// [MỤC 1 & 2] ÉP XUNG P-CORE 0MS & ĐÁNH THỨC RUNLOOP TỨC THÌ
+// ====================================================================================================
+
+static IOPMAssertionID g_powerAssertion = kIOPMNullAssertionID;
+
+static inline void Titanium_ForcePeakPowerState(void) {
+    if (g_powerAssertion != kIOPMNullAssertionID) return;
+    CFStringRef reason = CFSTR("TitaniumInstantInteractionBurst");
+    IOPMAssertionCreateWithName(
+        kIOPMAssertionTypePreventUserIdleSystemSleep,
+        kIOPMAssertionLevelOn,
+        reason,
+        &g_powerAssertion
+    );
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(250 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        if (g_powerAssertion != kIOPMNullAssertionID) {
+            IOPMAssertionRelease(g_powerAssertion);
+            g_powerAssertion = kIOPMNullAssertionID;
+        }
+    });
+}
+
+static inline void Titanium_ForceWakeMainRunLoop(void) {
+    CFRunLoopRef mainRL = CFRunLoopGetMain();
+    if (mainRL) {
+        CFRunLoopWakeUp(mainRL);
+    }
+}
+
+// 1. ÁP ĐẶT TẦNG KERNEL ZERO-LATENCY QOS
 static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
     #if defined(TASK_LATENCY_QOS_POLICY)
     task_latency_qos_policy_data_t latencyPolicy;
@@ -1280,7 +1316,7 @@ static void Titanium_ElevateThreadToMachRealTime(void) {
     thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 }
 
-// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ (RUNTIME CALL AN TOÀN, KHÔNG BỊ DUPLICATE INTERFACE)
+// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ
 static void AppleInternal_LockHardwareCADisplay(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -1320,46 +1356,18 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
     return s_isLegacy;
 }
 
-// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR (CHẠM 0S BƠM 60FPS, BUÔNG TAY HẠ 25HZ MÁT MÁY KHI SẠC)
+// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR
 static volatile BOOL g_isUserTouchingScreen = NO;
 static dispatch_source_t g_touchBurstTimer = nil;
 static dispatch_queue_t g_touchBurstQueue = nil;
 
 static inline void Titanium_LockMainThreadFast(void) {
-    // Chỉ nâng mức QoS ưu tiên tương tác mượt mà, không ép SCHED_RR 47 để tránh nghẽn CPU sau respring
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 }
 
 // ====================================================================================================
-// BỘ ĐIỀU PHỐI BURST CẢM ỨNG & CƯỚP QUYỀN TẦNG NHÂN MACH (KHÔNG ĐEN APP, 0MS JITTER)
+// CƯỚP QUYỀN TẦNG NHÂN MACH (CÔNG THỨC DEADLINE 80% - ĐÃ LOẠI BỎ DẤU GẠCH CHÉO LỖI)
 // ====================================================================================================
-
-static void Titanium_TriggerInstantTouchBurst(void) {
-    g_isUserTouchingScreen = YES;
-    Titanium_LockMainThreadFast();
-    Titanium_StealthKernelHijack(); // 👈 Gọi cướp quyền tức thì ngay khi ngón tay vừa chạm kính!
-
-    static dispatch_once_t qToken;
-    dispatch_once(&qToken, ^{
-        g_touchBurstQueue = dispatch_queue_create("com.titanium.burstqueue", DISPATCH_QUEUE_SERIAL);
-    });
-
-    if (g_touchBurstTimer) {
-        dispatch_source_cancel(g_touchBurstTimer);
-        g_touchBurstTimer = nil;
-    }
-
-    // Nếu đang sạc pin: Giữ burst ngắn 180ms để chống nóng bo mạch tuyệt đối
-    int64_t burstDuration = g_isDeviceChargingV285 ? (int64_t)(180 * NSEC_PER_MSEC) : (int64_t)(350 * NSEC_PER_MSEC);
-
-    g_touchBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_touchBurstQueue);
-    dispatch_source_set_timer(g_touchBurstTimer, dispatch_time(DISPATCH_TIME_NOW, burstDuration), DISPATCH_TIME_FOREVER, 0);
-    dispatch_source_set_event_handler(g_touchBurstTimer, ^{
-        g_isUserTouchingScreen = NO;
-        g_touchBurstTimer = nil;
-    });
-    dispatch_resume(g_touchBurstTimer);
-}
 
 static inline void Titanium_StealthKernelHijack(void) {
     if (!NSThread.isMainThread) return;
@@ -1386,7 +1394,7 @@ static inline void Titanium_StealthKernelHijack(void) {
     double currentHz = (CFG285 && CFG285.targetHz > 0) ? (double)[CFG285 resolvedTargetHz] : 60.0;
     if (currentHz <= 0.0) currentHz = 60.0;
 
-    /    // [MỤC 5] CÔNG THỨC DEADLINE THỜI GIAN THỰC 80%
+    // [MỤC 5] CÔNG THỨC DEADLINE THỜI GIAN THỰC 80% (CHUẨN CÚ PHÁP)
     uint64_t period_ns      = (uint64_t)(1000000000.0 / currentHz); 
     uint64_t computation_ns = (uint64_t)(period_ns * 0.80); // 80% thời lượng chu kỳ dành riêng cho vẽ
     uint64_t constraint_ns  = period_ns;                    // Khóa cứng deadline
@@ -1399,10 +1407,9 @@ static inline void Titanium_StealthKernelHijack(void) {
 
     thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
-    // 3. Giữ timeshare = 1 để nhân Darwin vẫn điều phối được đa nhiệm, không làm chết socket mạng ngầm
+    // 3. Giữ timeshare = 1 để nhân Darwin điều phối đa nhiệm, không làm chết socket mạng ngầm
     thread_extended_policy_data_t extPolicy;
     extPolicy.timeshare = 1; 
-
     thread_policy_set(machThread, THREAD_EXTENDED_POLICY, (thread_policy_t)&extPolicy, THREAD_EXTENDED_POLICY_COUNT);
 
     // 4. Ưu tiên P-Core cho luồng đồ họa
@@ -1410,10 +1417,41 @@ static inline void Titanium_StealthKernelHijack(void) {
     affPolicy.affinity_tag = 1;
     thread_policy_set(machThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affPolicy, THREAD_AFFINITY_POLICY_COUNT);
 
-    // 5. Tối ưu I/O và nâng mức QoS tương tác người dùng chuẩn Apple
+    // 5. Tối ưu I/O và nâng mức QoS tương tác chuẩn Apple
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+}
+
+// ====================================================================================================
+// BỘ ĐIỀU PHỐI BURST CẢM ỨNG & KÍCH XUNG TỨC THÌ
+// ====================================================================================================
+
+static void Titanium_TriggerInstantTouchBurst(void) {
+    g_isUserTouchingScreen = YES;
+    Titanium_ForcePeakPowerState();  // 👈 Kích P-Core giữ xung đỉnh tức thì
+    Titanium_LockMainThreadFast();
+    Titanium_StealthKernelHijack();   // 👈 Cướp quyền nhân Mach ngay khi chạm kính
+
+    static dispatch_once_t qToken;
+    dispatch_once(&qToken, ^{
+        g_touchBurstQueue = dispatch_queue_create("com.titanium.burstqueue", DISPATCH_QUEUE_SERIAL);
+    });
+
+    if (g_touchBurstTimer) {
+        dispatch_source_cancel(g_touchBurstTimer);
+        g_touchBurstTimer = nil;
+    }
+
+    int64_t burstDuration = g_isDeviceChargingV285 ? (int64_t)(180 * NSEC_PER_MSEC) : (int64_t)(350 * NSEC_PER_MSEC);
+
+    g_touchBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_touchBurstQueue);
+    dispatch_source_set_timer(g_touchBurstTimer, dispatch_time(DISPATCH_TIME_NOW, burstDuration), DISPATCH_TIME_FOREVER, 0);
+    dispatch_source_set_event_handler(g_touchBurstTimer, ^{
+        g_isUserTouchingScreen = NO;
+        g_touchBurstTimer = nil;
+    });
+    dispatch_resume(g_touchBurstTimer);
 }
 
 // ====================================================================================================
