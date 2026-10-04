@@ -733,7 +733,8 @@ static BOOL g_SystemMasterReady = NO;
 static volatile BOOL g_isInstantMotion = NO;
 static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isContinuousSwiping = NO;
-static volatile BOOL g_isAppToHomeAnimating = NO; // Cờ giữ trần 120Hz cho cú vuốt đơn lẻ
+static volatile BOOL g_isAppToHomeAnimating = NO;
+static volatile BOOL g_isAppOpeningAnimating = NO;
 
 // ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION
@@ -2623,7 +2624,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // Ưu tiên luồng dựng hình ngay khi bắt đầu hoạt ảnh mở app
-%// ÉP KIỂM SOÁT HOÀN TOÀN QUÁ TRÌNH MỞ APP: KHÔNG RỤNG FRAME NÀO ĐẾN KHI APP HIỆN ĐỦ 100%
 %hook SBUIAnimationController
 - (void)_willBeginAnimation {
     if (IS_ACTIVE) {
