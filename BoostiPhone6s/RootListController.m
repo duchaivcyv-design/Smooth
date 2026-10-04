@@ -34,26 +34,53 @@ extern char **environ;
 // BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ
 // ====================================================================================================
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
-    // Ưu tiên hỗ trợ Roothide runtime API
-    typedef char *(*jbroot_fn_t)(const char *);
-    jbroot_fn_t jbroot = (jbroot_fn_t)dlsym(RTLD_DEFAULT, "jbroot");
-    if (jbroot) {
-        char *path = jbroot("/");
-        if (path) return [NSString stringWithUTF8String:path];
-    }
-
-    if (access("/var/jb", F_OK) == 0) {
-        return @"/var/jb";
-    }
-    return @"";
+    static NSString *cachedJbRoot = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        Dl_info info;
+        if (dladdr((const void *)Titanium_GetRootHidePrefixPath, &info) && info.dli_fname) {
+            NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
+            NSRange range = [dylibPath rangeOfString:@"/var/jb"];
+            if (range.location != NSNotFound) {
+                NSRange sub = [dylibPath rangeOfString:@"/" options:0 range:NSMakeRange(range.location + 7, dylibPath.length - (range.location + 7))];
+                if (sub.location != NSNotFound) {
+                    cachedJbRoot = [dylibPath substringToIndex:sub.location];
+                } else {
+                    cachedJbRoot = @"/var/jb";
+                }
+            } else {
+                cachedJbRoot = @"/var/jb";
+            }
+        } else {
+            cachedJbRoot = @"/var/jb";
+        }
+    });
+    return cachedJbRoot;
 }
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
     if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
-        return [root stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        NSString *jbPath = [root stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        return jbPath;
     }
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+}
+
+static inline BOOL HardwareHasNative120Hz(void) {
+    static BOOL isNative120 = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        uname(&sysInfo);
+        NSString *dev = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+        if ([dev hasPrefix:@"iPhone14,2"] || [dev hasPrefix:@"iPhone14,3"] ||
+            [dev hasPrefix:@"iPhone15,2"] || [dev hasPrefix:@"iPhone15,3"] ||
+            [dev hasPrefix:@"iPhone16,"] || [dev hasPrefix:@"iPhone17,"]) {
+            isNative120 = YES;
+        }
+    });
+    return isNative120;
 }
 
 static inline NSString *Titanium_FindExecutablePath(NSString *name) {
@@ -126,8 +153,8 @@ enum PSCellType {
     id _specifiers;
 }
 - (id)specifiers;
-- (NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target bundle:(NSBundle *)bundle;
 - (void)reloadSpecifiers;
+- (id)loadSpecifiersFromPlistName:(NSString *)name target:(id)target bundle:(NSBundle *)bundle;
 @end
 
 @interface PSSpecifier : NSObject
@@ -142,6 +169,7 @@ enum PSCellType {
 @interface RootListController : PSListController {
     NSArray *_allSavedSpecifiers;
 }
+@property (nonatomic, strong) dispatch_source_t debounceSyncTimer;
 @property (nonatomic, strong) dispatch_source_t stepDownTimer;
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
 @end
@@ -190,13 +218,15 @@ static void PM_LoadLocalizationIfNeededV285(void) {
     
     NSString *root = Titanium_GetRootHidePrefixPath();
     NSArray *possiblePaths = @[
-        [[NSBundle bundleForClass:[RootListController class]] pathForResource:@"Localization" ofType:@"plist"] ?: @"",
         [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist"],
+        [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"],
         @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
-        @"/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist"
+        @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist",
+        @"/Library/PreferenceBundles/BoostiPhone6s.bundle/Localization.plist",
+        @"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"
     ];
     for (NSString *p in possiblePaths) {
-        if (p.length > 0 && [[NSFileManager defaultManager] fileExistsAtPath:p]) {
+        if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
             g_LocDictV285 = [[NSDictionary alloc] initWithContentsOfFile:p];
             break;
         }
@@ -255,6 +285,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     return self;
 }
 
+// ====================================================================================================
+// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & GỬI TÍN HIỆU ĐIỀU KHIỂN (ĐÃ ĐỒNG BỘ CHUẨN XÁC VỚI TWEAK.XM)
+// ====================================================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
     
@@ -263,10 +296,32 @@ static inline NSString *PM_TextV285(NSString *key) {
     payload.magic = APEX_SYNC_MAGIC_V285;
     payload.masterEnabled = enabled ? 1 : 0;
 
+    // 1. KHI TẮT TỔNG: NGẮT TUYỆT ĐỐI TOÀN BỘ CÁC TÍNH NĂNG TRONG 0MS
     if (!enabled) {
         payload.targetHz = 60;
         payload.targetFPS = 60;
+        payload.forceOverclock = 0;
+        payload.pipSyncEnabled = 0;
+        payload.thermalShield = 0;
+        payload.antiStutterExit = 0;
+        payload.smartBufferingLevel = 0;
+        payload.zeroLatencyTouch = 0;
+        payload.shaderOptimization = 0;
+        payload.dynamicInterpolation = 0;
+        payload.fastAppLaunch = 0;
+        payload.lowLatencyAudio = 0;
+        payload.memoryPressureRelief = 0;
+        payload.metalPacingEnabled = 0;
+        payload.runloopHangGuard = 0;
+        payload.keyboardZeroLagV3 = 0;
+        payload.aggressiveRamCleaner = 0;
+        payload.lockFixedFpsWhenThermal = 0;
+        payload.antiGhostTouch = 0;
+        payload.diskIOPriorityBoost = 0;
+        payload.rawTouchDirectDelivery = 0;
+        payload.powerSaveModeActive = 0;
     } else {
+        // 2. KHI BẬT TỔNG: ĐỒNG BỘ CHUẨN XÁC DẢI 15 - 144 HZ VÀ MỌI CÔNG TẮC
         int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 120;
         int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 120;
         BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
@@ -288,6 +343,8 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.targetHz = hz;
         payload.targetFPS = fps;
         payload.forceOverclock = isOverclock ? 1 : 0;
+        
+        // Đồng bộ chuẩn xác công tắc ProMotion Engine:
         payload.dynamicInterpolation = prefs[@"ProMotionEngineBeta7"] ? ([prefs[@"ProMotionEngineBeta7"] boolValue] ? 1 : 0) : 1;
         payload.pipSyncEnabled = 1;
         payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
@@ -295,8 +352,11 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.smartBufferingLevel = 3;
         payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
         payload.shaderOptimization = 1;
+
+        // Bật đồng bộ theo đúng cấu hình người dùng (đã fix lỗi kẹt luồng mạng ở Tweak.xm)
         payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
         payload.metalPacingEnabled = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 1 : 0) : 1;
+
         payload.lowLatencyAudio = 1;
         payload.memoryPressureRelief = 1;
         payload.runloopHangGuard = 1;
@@ -319,6 +379,11 @@ static inline NSString *PM_TextV285(NSString *key) {
         chmod([SHARED_SYNC_FILE UTF8String], 0666);
     }
 
+    Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+    if (configClass) {
+        [[configClass sharedInstance] loadSettings];
+    }
+
     notify_post(NOTIFY_RELOAD);
     notify_post(NOTIFY_UIKIT_RELOAD);
     notify_post(NOTIFY_HARDWARE_SYNC);
@@ -326,6 +391,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     notify_post(NOTIFY_TITANIUM_CHANGED);
 }
 
+// Bơm nấc trung gian hạ nhịp đồng bộ CẢ HZ LẪN FPS song song
 - (void)emitTransientRate:(NSInteger)rate {
     ApexV285ProPayload payload;
     memset(&payload, 0, sizeof(ApexV285ProPayload));
@@ -392,63 +458,53 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 }
 
-// ====================================================================================================
-// LOAD SPECIFIERS AN TOÀN TRÊN ROOTLESS/ROOTHIDE
-// ====================================================================================================
 - (id)specifiers {
     if (!_allSavedSpecifiers) {
-        // Ưu tiên nạp bundle theo chính class hiện hành
-        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-        if (!bundle || ![bundle pathForResource:@"Root" ofType:@"plist"]) {
-            NSString *root = Titanium_GetRootHidePrefixPath();
-            bundle = [NSBundle bundleWithPath:[root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"]];
-        }
-        if (!bundle || ![bundle pathForResource:@"Root" ofType:@"plist"]) {
-            bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
-        }
+        NSString *root = Titanium_GetRootHidePrefixPath();
+        NSString *bundlePath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"];
+        NSBundle *bundle = [NSBundle bundleWithPath:bundlePath];
+        if (!bundle) bundle = [NSBundle bundleWithPath:[root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"]];
+        if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
+        if (!bundle) bundle = [NSBundle bundleForClass:[self class]];
 
         _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:bundle];
         [self ensureDefaultSettingsExist];
-        if (_allSavedSpecifiers) {
-            [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
-        }
+        [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
     }
 
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
-    // Sử dụng NSMutableArray để tương thích hoàn toàn cấu trúc PSListController
-    NSMutableArray *displaySpecs = [NSMutableArray array];
-
+    // Ngắt tuyệt đối: Khi tắt tổng, ẩn sạch mọi nhóm can thiệp
     if (!masterEnabled) {
+        NSMutableArray *collapsedSpecs = [NSMutableArray array];
         NSString *currentGroupID = nil;
+
         for (PSSpecifier *spec in _allSavedSpecifiers) {
             if (Titanium_IsGroupCell(spec)) {
                 currentGroupID = Titanium_GetGroupID(spec);
                 if ([currentGroupID isEqualToString:@"GROUP_MASTER"] ||
                     [currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
                     [currentGroupID isEqualToString:@"GROUP_DEV"]) {
-                    [displaySpecs addObject:spec];
+                    [collapsedSpecs addObject:spec];
                 }
             } else {
                 if ([currentGroupID isEqualToString:@"GROUP_MASTER"]) {
                     NSString *key = [spec propertyForKey:@"key"];
                     if ([key isEqualToString:@"Enabled"]) {
-                        [displaySpecs addObject:spec];
+                        [collapsedSpecs addObject:spec];
                     }
                 } else if ([currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
                            [currentGroupID isEqualToString:@"GROUP_DEV"]) {
-                    [displaySpecs addObject:spec];
+                    [collapsedSpecs addObject:spec];
                 }
             }
         }
+        _specifiers = collapsedSpecs;
     } else {
-        if (_allSavedSpecifiers) {
-            [displaySpecs addObjectsFromArray:_allSavedSpecifiers];
-        }
+        _specifiers = [_allSavedSpecifiers mutableCopy];
     }
 
-    _specifiers = displaySpecs;
     [self updateDynamicTitles];
     return _specifiers;
 }
@@ -509,32 +565,39 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (NSDictionary *)getMergedPreferences {
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+        NSDictionary *fileDict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+        if (fileDict && fileDict.count > 0) return fileDict;
+    }
+    
     CFPreferencesAppSynchronize(PREF_DOMAIN);
     CFArrayRef keyList = CFPreferencesCopyKeyList(PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     if (keyList) {
         NSDictionary *dict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(keyList, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         CFRelease(keyList);
-        if (dict && dict.count > 0) return dict;
+        if (dict) return dict;
     }
-
-    NSString *prefPath = Titanium_ResolvePrefPath();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
-        NSDictionary *fileDict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
-        if (fileDict) return fileDict;
-    }
-
     return [NSDictionary dictionary];
 }
 
+// ====================================================================================================
+// KHỞI TẠO CẤU HÌNH MẶC ĐỊNH HOÀN CHỈNH (CHO PHÉP BẬT TOÀN BỘ CÔNG TẮC AN TOÀN)
+// ====================================================================================================
 - (void)ensureDefaultSettingsExist {
-    CFPreferencesAppSynchronize(PREF_DOMAIN);
-    CFPropertyListRef exists = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
-    if (!exists) {
-        NSDictionary *defaults = @{
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:prefPath]) {
+        NSString *dir = [prefPath stringByDeletingLastPathComponent];
+        if (![fm fileExistsAtPath:dir]) {
+            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+        }
+
+        NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
              @"Enabled": @YES,
              @"SelectedLanguage": @"auto",
-             @"ProMotionEngineBeta7": @YES,
-             @"MetalHexBuffering": @YES,
+             @"ProMotionEngineBeta7": @YES,        // ✅ BẬT: Giả lập ProMotion mượt toàn hệ thống
+             @"MetalHexBuffering": @YES,           // ✅ BẬT: Đã tối ưu không lag TikTok
              @"KeyboardZeroLagV24": @YES,
              @"EnableHzControl": @YES,
              @"TargetRefreshRate": @120,
@@ -553,39 +616,28 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"PeriodicRamClean": @YES,
              @"MachVMPurgeRam": @YES,
              @"AutoCloseBackgroundApp": @NO,
-             @"TurboAppLaunch": @YES,
+             @"TurboAppLaunch": @YES,              // ✅ BẬT: Đã gỡ bỏ nghẽn mạng
              @"AntiThermalThrottling": @YES,
              @"PowerSaveMode": @NO,
              @"AntiGhostTouch": @YES,
              @"ChargerRippleRejection": @YES
-        };
+        }];
+
+        [defaults writeToFile:prefPath atomically:YES];
+        chmod([prefPath UTF8String], 0666);
 
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
         }
         CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-        NSString *prefPath = Titanium_ResolvePrefPath();
-        NSString *dir = [prefPath stringByDeletingLastPathComponent];
-        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
-        [defaults writeToFile:prefPath atomically:YES];
-        chmod([prefPath UTF8String], 0666);
-
         [self syncSharedMemoryFile:YES];
-    } else {
-        CFRelease(exists);
     }
 }
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return [specifier propertyForKey:@"default"];
-
-    CFPreferencesAppSynchronize(PREF_DOMAIN);
-    CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
-    if (val) {
-        return (__bridge_transfer id)val;
-    }
 
     NSString *prefPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
@@ -595,6 +647,12 @@ static inline NSString *PM_TextV285(NSString *key) {
         }
     }
 
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
+    if (val) {
+        return (__bridge_transfer id)val;
+    }
+
     return [specifier propertyForKey:@"default"];
 }
 
@@ -602,14 +660,20 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return;
 
-    CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
-    CFPreferencesAppSynchronize(PREF_DOMAIN);
-
     NSString *prefPath = Titanium_ResolvePrefPath();
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dir = [prefPath stringByDeletingLastPathComponent];
+    if (![fm fileExistsAtPath:dir]) {
+        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+    }
+
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
     [prefs setObject:value forKey:key];
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
+
+    CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
 
     if ([key isEqualToString:@"Enabled"]) {
         BOOL isMasterOn = [value boolValue];
@@ -620,10 +684,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         return;
     }
 
-    CFPropertyListRef masterVal = CFPreferencesCopyAppValue(CFSTR("Enabled"), PREF_DOMAIN);
-    BOOL currentEnabled = masterVal ? [(__bridge id)masterVal boolValue] : YES;
-    if (masterVal) CFRelease(masterVal);
-
+    BOOL currentEnabled = [prefs[@"Enabled"] boolValue];
     [self syncSharedMemoryFile:currentEnabled];
 
     if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"] || [key isEqualToString:@"PowerSaveMode"]) {
@@ -684,30 +745,39 @@ static inline NSString *PM_TextV285(NSString *key) {
     dispatch_resume(self.stepDownTimer);
 }
 
+// ====================================================================================================
+// KHÓA CỨNG HZ/FPS ĐÃ CHỌN - BẢO TOÀN CÔNG TẮC PROMOTION ENGINE
+// ====================================================================================================
 - (void)commitFinalRateValue:(NSInteger)rate {
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
+
+    [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
+    [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
+    [prefs setObject:@YES forKey:@"EnableHzControl"];
+    [prefs setObject:@YES forKey:@"EnableFPSControl"];
+    
+    // Tự động bật cờ 144Hz nếu chọn mức 144
+    if (rate == 144) {
+        [prefs setObject:@YES forKey:@"ForceOverclock144Hz"];
+        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanTrue, PREF_DOMAIN);
+    } else {
+        [prefs setObject:@NO forKey:@"ForceOverclock144Hz"];
+        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanFalse, PREF_DOMAIN);
+    }
+
+    [prefs setObject:@NO forKey:@"PowerSaveMode"];
+    
+    // ✅ ĐÃ SỬA: KHÔNG ÉP TẮT ProMotionEngineBeta7 để giữ nguyên giả lập ProMotion mượt chuyển cảnh
+    [prefs writeToFile:prefPath atomically:YES];
+    chmod([prefPath UTF8String], 0666);
+
     CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("EnableHzControl"), kCFBooleanTrue, PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("EnableFPSControl"), kCFBooleanTrue, PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("PowerSaveMode"), kCFBooleanFalse, PREF_DOMAIN);
-
-    if (rate == 144) {
-        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanTrue, PREF_DOMAIN);
-    } else {
-        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanFalse, PREF_DOMAIN);
-    }
     CFPreferencesAppSynchronize(PREF_DOMAIN);
-
-    NSString *prefPath = Titanium_ResolvePrefPath();
-    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
-    [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
-    [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
-    [prefs setObject:@YES forKey:@"EnableHzControl"];
-    [prefs setObject:@YES forKey:@"EnableFPSControl"];
-    [prefs setObject:(rate == 144 ? @YES : @NO) forKey:@"ForceOverclock144Hz"];
-    [prefs setObject:@NO forKey:@"PowerSaveMode"];
-    [prefs writeToFile:prefPath atomically:YES];
-    chmod([prefPath UTF8String], 0666);
 
     [self syncSharedMemoryFile:YES];
     [self updateDynamicTitles];
@@ -737,14 +807,15 @@ static inline NSString *PM_TextV285(NSString *key) {
     for (NSDictionary *item in langs) {
         [alert addAction:[UIAlertAction actionWithTitle:item[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             NSString *code = item[@"code"];
-            CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
-            CFPreferencesAppSynchronize(PREF_DOMAIN);
-
+            
             NSString *prefPath = Titanium_ResolvePrefPath();
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
             prefs[@"SelectedLanguage"] = code;
             [prefs writeToFile:prefPath atomically:YES];
             chmod([prefPath UTF8String], 0666);
+
+            CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
 
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_TITANIUM_CHANGED);
@@ -897,7 +968,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
     NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (sbreload)";
     NSString *srebootText = PM_TextV285(@"SREBOOT") ?: @"🔥 Khởi Động Userspace (SReboot)";
-    NSString *resetText = PM_TextV285(@"RESET") ?: @"♻️️ Đặt Lại Cấu Hình Mặc Định";
+    NSString *resetText = PM_TextV285(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
 
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
