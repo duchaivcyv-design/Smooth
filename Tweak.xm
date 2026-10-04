@@ -47,9 +47,8 @@
 #endif
 
 // ==================== EXTERN GLOBAL VARIABLES ====================
-extern char **environ;     // 👈 Bắt buộc cho posix_spawn trong lệnh Respring
-
 static void Titanium_StealthKernelHijack(void);
+
 #ifndef VM_PURGABLE_PURGE_ALL
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
@@ -128,12 +127,15 @@ typedef struct {
 typedef uint32_t IOPMAssertionID;
 #define kIOPMNullAssertionID 0
 
+// ====================================================================================================
+// C C-LINKAGE DECLARATIONS (ĐẶT DUY NHẤT 1 NƠI TRONG EXTERN "C")
+// ====================================================================================================
 #ifdef __cplusplus
 extern "C" {
 #endif
     kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
     const char *getprogname(void);
-    extern char **environ;
+    extern char **environ; // 👈 GIỮ DUY NHẤT Ở ĐÂY VỚI CHUẨN C LINKAGE CHO POSIX_SPAWN
     int setiopolicy_np(int iotype, int scope, int policy);
     kern_return_t IOPMAssertionCreateWithName(CFStringRef assertionType, uint32_t assertionLevel, CFStringRef assertionName, IOPMAssertionID *assertionID);
     kern_return_t IOPMAssertionRelease(IOPMAssertionID assertionID);
@@ -3256,6 +3258,18 @@ static inline void Titanium_PurgeInactiveMemoryBuffers(void) {
 // NHÓM 16: CƯỚP QUYỀN BỘ GIÁM SÁT HỆ THỐNG & ĐÓN ĐẦU HIỂN THỊ SPRINGBOARD
 // ====================================================================================================
 
+static volatile BOOL g_SpringBoardUIReady = NO;
+static dispatch_source_t g_bootSafetyTimer = nil;
+
+static inline const char *Titanium_GetRootlessPath(const char *subpath) {
+    static char fullPath[PATH_MAX];
+    if (access("/var/jb", F_OK) == 0) {
+        snprintf(fullPath, sizeof(fullPath), "/var/jb%s", subpath);
+        return fullPath;
+    }
+    return subpath;
+}
+
 %group Group_Rootless_BootSafeguard_Watchdog
 
 // 1. CHẶN ĐỨNG APPLE WATCHDOG GIẾT SPRINGBOARD GÂY REBOOT MẤT JB
@@ -3306,6 +3320,75 @@ static inline void Titanium_PurgeInactiveMemoryBuffers(void) {
 // GIÁM SÁT SẠC PIN & ĐỒNG BỘ CẤU HÌNH AN TOÀN
 // ====================================================================================================
 
+// ====================================================================================================
+// KHAI BÁO BIẾN BẢO VỆ KHỞI ĐỘNG WATCHDOG (ĐẶT TRƯỚC TẤT CẢ CÁC HÀM)
+// ====================================================================================================
+static volatile BOOL g_SpringBoardUIReady = NO;
+static dispatch_source_t g_bootSafetyTimer = nil;
+
+#define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
+#define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
+
+// ====================================================================================================
+// HỖ TRỢ SONG SONG ROOTLESS (RLESS - /var/jb) VÀ ROOTHIDE (RHIDE - jbroot)
+// ====================================================================================================
+static inline const char *Titanium_GetRootlessPath(const char *subpath) {
+    static char fullPath[PATH_MAX];
+    
+    // 1. Hỗ trợ Roothide (rhide): Tự động phân giải đường dẫn gốc ngẫu nhiên
+    typedef char *(*jbroot_fn_t)(const char *);
+    static jbroot_fn_t s_jbroot = NULL;
+    static dispatch_once_t rhToken;
+    dispatch_once(&rhToken, ^{
+        s_jbroot = (jbroot_fn_t)dlsym(RTLD_DEFAULT, "jbroot");
+    });
+    if (s_jbroot) {
+        char *rhPath = s_jbroot(subpath);
+        if (rhPath) return rhPath;
+    }
+
+    // 2. Hỗ trợ Rootless tiêu chuẩn (rless / Dopamine / Palera1n)
+    if (access("/var/jb", F_OK) == 0) {
+        snprintf(fullPath, sizeof(fullPath), "/var/jb%s", subpath);
+        return fullPath;
+    }
+
+    // 3. Rootful truyền thống
+    return subpath;
+}
+
+// Tìm đúng file thực thi sbreload / killall trên cả Rootless và Roothide
+static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
+    static char pathBuf[PATH_MAX];
+    char subpath[PATH_MAX];
+    snprintf(subpath, sizeof(subpath), "/usr/bin/%s", binaryName);
+
+    // 1. Quét qua Roothide
+    typedef char *(*jbroot_fn_t)(const char *);
+    static jbroot_fn_t s_jbroot = NULL;
+    static dispatch_once_t rhToken;
+    dispatch_once(&rhToken, ^{
+        s_jbroot = (jbroot_fn_t)dlsym(RTLD_DEFAULT, "jbroot");
+    });
+    if (s_jbroot) {
+        char *rhPath = s_jbroot(subpath);
+        if (rhPath && access(rhPath, X_OK) == 0) return rhPath;
+    }
+
+    // 2. Quét qua Rootless (/var/jb/usr/bin/...)
+    snprintf(pathBuf, sizeof(pathBuf), "/var/jb/usr/bin/%s", binaryName);
+    if (access(pathBuf, X_OK) == 0) return pathBuf;
+
+    // 3. Quét qua Rootful (/usr/bin/...)
+    snprintf(pathBuf, sizeof(pathBuf), "/usr/bin/%s", binaryName);
+    if (access(pathBuf, X_OK) == 0) return pathBuf;
+
+    return NULL;
+}
+
+// ====================================================================================================
+// BỘ THEO DÕI PIN, NHIỆT ĐỘ VÀ ĐỒNG BỘ CÀI ĐẶT
+// ====================================================================================================
 static void Titanium_StartThermalAndChargingWatchdog(void) {
     static dispatch_source_t s_batteryTimer = nil;
     static dispatch_once_t onceToken;
@@ -3354,36 +3437,10 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 }
 
 // ====================================================================================================
-// CƠ CHẾ ĐIỀU PHỐI KHỞI ĐỘNG THÔNG MINH
-// 6S-7P: TỰ ĐỘNG RESPRING LIÊN TỤC CHO ĐẾN KHI NẠP ĐƯỢC TWEAK THÌ DỪNG NGAY
-// 8P-15PRM: CHỈ KHI REBOOT NGUỒN, NẾU CHƯA NẠP TWEAK SẼ RESPRING ĐÚNG 1 LẦN
+// CƠ CHẾ ĐIỀU PHỐI KHỞI ĐỘNG THÔNG MINH (CHỐNG TREO TÁO - RESPRING AN TOÀN)
 // ====================================================================================================
 
-extern char **environ;
-
-#define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
-#define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
-
-// Khai báo an toàn để Theos không báo lỗi interface
-@interface SpringBoard : UIApplication
-- (void)_relaunchSpringBoardNow;
-@end
-
-// Helper tìm đúng đường dẫn nhị phân cho Rootless (/var/jb)
-static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
-    static char pathBuf[PATH_MAX];
-    // 1. Kiểm tra môi trường Rootless (/var/jb/usr/bin/...)
-    snprintf(pathBuf, sizeof(pathBuf), "/var/jb/usr/bin/%s", binaryName);
-    if (access(pathBuf, X_OK) == 0) return pathBuf;
-
-    // 2. Kiểm tra môi trường Rootful truyền thống (/usr/bin/...)
-    snprintf(pathBuf, sizeof(pathBuf), "/usr/bin/%s", binaryName);
-    if (access(pathBuf, X_OK) == 0) return pathBuf;
-
-    return NULL;
-}
-
-// 1. PHÂN LOẠI CHUẨN XÁC DÒNG 6S - 7 PLUS (A9 - A10)
+// 1. Phân loại thiết bị A9 - A10 (6s - 7 Plus)
 static inline BOOL Titanium_IsLegacy6s7P(void) {
     static BOOL s_isLegacy = NO;
     static dispatch_once_t onceToken;
@@ -3391,7 +3448,6 @@ static inline BOOL Titanium_IsLegacy6s7P(void) {
         struct utsname sysInfo;
         uname(&sysInfo);
         NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-        // iPhone 6s, 6s+, SE 1 (iPhone8,x), iPhone 7, 7+ (iPhone9,x)
         if ([machine hasPrefix:@"iPhone8,"] || [machine hasPrefix:@"iPhone9,"]) {
             s_isLegacy = YES;
         }
@@ -3399,7 +3455,7 @@ static inline BOOL Titanium_IsLegacy6s7P(void) {
     return s_isLegacy;
 }
 
-// 2. ĐO THỜI GIAN HỆ THỐNG HOẠT ĐỘNG TỪ LÚC BẬT NGUỒN (UPTIME)
+// 2. Đo thời gian hệ thống hoạt động từ lúc bật nguồn (Uptime)
 static time_t Titanium_GetSystemUptimeSeconds(void) {
     struct timeval boottime;
     size_t len = sizeof(boottime);
@@ -3409,16 +3465,16 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
-// 3. THỰC HIỆN RESPRING AN TOÀN TRÊN CẢ ROOTLESS & ROOTFUL
+// 3. Thực hiện Respring an toàn (Đã xóa bỏ @interface thừa ở dòng 3368)
 static void Titanium_ExecuteSystemRespring(void) {
-    // Ưu tiên 1: Gọi API nội bộ của SpringBoard (Êm nhất, không rớt Daemon)
     UIApplication *app = [UIApplication sharedApplication];
+    // Ép kiểu qua (id) để gọi trực tiếp selector nội bộ mà không cần khai báo @interface
     if (app && [app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
-        [(SpringBoard *)app _relaunchSpringBoardNow];
+        [(id)app _relaunchSpringBoardNow];
         return;
     }
 
-    // Ưu tiên 2: Sử dụng sbreload (công cụ respring chuẩn của Rootless / Dopamine)
+    // Gọi sbreload (Hỗ trợ chuẩn cả Rootless và Roothide)
     const char *sbreload = Titanium_SafeBinaryPath("sbreload");
     if (sbreload) {
         pid_t pid;
@@ -3427,7 +3483,7 @@ static void Titanium_ExecuteSystemRespring(void) {
         return;
     }
 
-    // Ưu tiên 3: Dự phòng cuối cùng bằng killall (tìm đúng đường dẫn động)
+    // Dự phòng bằng killall
     const char *killall = Titanium_SafeBinaryPath("killall");
     if (killall) {
         pid_t pid;
@@ -3436,13 +3492,8 @@ static void Titanium_ExecuteSystemRespring(void) {
         return;
     }
 
-    // Cùng đường: Tự kết liễu tiến trình hiện tại để launchd tự tái sinh SpringBoard
     kill(getpid(), SIGTERM);
 }
-
-// ====================================================================================================
-// RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK
-// ====================================================================================================
 
 // ====================================================================================================
 // HÀM KHỞI CHẠY LÕI TWEAK: CÁCH LY TIẾN TRÌNH MẠNG - CHỐNG ĐEN APP - GIỮ NGUYÊN 144HZ BÁM TAY
@@ -3450,9 +3501,7 @@ static void Titanium_ExecuteSystemRespring(void) {
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     @autoreleasepool {
-        // ====================================================================================
-        // 1. VÁ LỖI NGHẼN MẠNG: CÁCH LY TUYỆT ĐỐI CÁC TIẾN TRÌNH MẠNG, SÓNG VÀ WEBKIT
-        // ====================================================================================
+        // 1. CÁCH LY TUYỆT ĐỐI TIẾN TRÌNH MẠNG & WEBKIT (CHỐNG NGHẼN MẠNG)
         if (progName) {
             if (strstr(progName, "WebKit") || strstr(progName, "WebContent") || 
                 strstr(progName, "GPUProcess") || strstr(progName, "Networking") ||
@@ -3461,16 +3510,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 strcmp(progName, "nsurlsessiond") == 0 || strcmp(progName, "mDNSResponder") == 0 ||
                 strcmp(progName, "networkd") == 0 || strcmp(progName, "symptomsd") == 0 ||
                 strcmp(progName, "containermanagerd") == 0 || strcmp(progName, "securityd") == 0) {
-                // Thoát ngay lập tức: Tuyệt đối không cướp quyền thread/CPU của tiến trình mạng
                 return; 
             }
         }
 
-        // ====================================================================================
-        // 2. VÁ LỖI ĐEN APP: PHÂN TÁCH RÕ RÀNG TIỀN CẢNH (SPRINGBOARD VS APP BÊN THỨ 3)
-        // ====================================================================================
+        // 2. CHỐNG ĐEN APP: CHỈ SPRINGBOARD MỚI KHÓA PHẦN CỨNG CADISPLAY
         if (isSpringBoard) {
-            // Chỉ SpringBoard mới được phép khóa phần cứng hiển thị và can thiệp Kernel cấp cao
             AppleInternal_EnforceZeroLatencyKernelTier();
             AppleInternal_LockHardwareCADisplay();
             Titanium_LockMainThreadFast();
@@ -3482,21 +3527,16 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Titanium_EnforceThreadVIPPolicy();
             }
         } else {
-            // VỚI APP BÊN THỨ 3 / GAME: KHÔNG ép Zero-Latency khi khởi động để tránh màn hình đen!
-            // Chỉ tối ưu bộ nhớ và chuẩn bị nhịp QoS tương tác thông thường
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
 
-        // Đọc cấu hình tweak
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
         if (configClass) {
             CFG285 = [configClass sharedInstance];
             [CFG285 loadSettings];
         }
 
-        // ====================================================================================
-        // 3. KHỞI TẠO CÁC NHÓM CỐT LÕI (CHẠY TOÀN HỆ THỐNG VÀ GAME/APP)
-        // ====================================================================================
+        // 3. KHỞI TẠO CÁC NHÓM CỐT LÕI
         %init(Group_ZeroLatency_Touch_Opt);
         %init(Group_Metal_ZeroTearing_Pacing);
         %init(Group_FluidTransitions_Pacing);
@@ -3505,25 +3545,20 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_InstantActionAndMenuTransitions_Boost);
         %init(Group_Global_Thread_Governor_Unthrottled);
 
-        // CƯỚP QUYỀN ĐIỀU TỐC NHIỆT & KHÓA PHẲNG XUNG NHỊP (CHỐNG TỤT FPS/HẠ SÁNG TRONG GAME)
         Class bksBrightnessClass = objc_getClass("BKSDisplayBrightnessController");
         Class caWSDisplayClass = objc_getClass("CAWindowServerDisplay");
         %init(Group_ThermalGovernor_FlatClock,
               BKSDisplayBrightnessController = bksBrightnessClass,
               CAWindowServerDisplay = caWSDisplayClass);
 
-        // KÍCH HOẠT HIỆU ỨNG TRONG APP (POPUP, SHEET, CONTEXT MENU)
         %init(Group_Universal_InApp_Animations);
 
         if (Titanium_IsClassicHomeButtonDevice()) {
             %init(Group_HardwareSegregation_ClassicHomeV285);
         }
 
-        // ====================================================================================
         // 4. PHÂN ĐỊNH KHU VỰC HOẠT ĐỘNG
-        // ====================================================================================
         if (isSpringBoard) {
-            // Khởi chạy Nhóm 16 bảo vệ SpringBoard không bị sập hay mất Jailbreak
             %init(Group_Rootless_BootSafeguard_Watchdog);
 
             Titanium_TuneWindowServerDisplayDirectly();
@@ -3541,7 +3576,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_UIKit_ThirdParty_IsolatedV285);
         }
 
-        // Lắng nghe cập nhật cài đặt
         static dispatch_once_t notifyToken;
         dispatch_once(&notifyToken, ^{
             CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
@@ -3558,7 +3592,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 }
 
 // ====================================================================================================
-// CALLBACK KÍCH HOẠT KHI SPRINGBOARD KHỞI CHẠY (BẢO VỆ CỜ BOOT & CHỐNG TREO ROOTLESS)
+// CALLBACK KÍCH HOẠT KHI SPRINGBOARD KHỞI CHẠY (BẢO VỆ CỜ BOOT & CHỐNG TREO)
 // ====================================================================================================
 
 static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
@@ -3570,21 +3604,16 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             NSFileManager *fm = [NSFileManager defaultManager];
             BOOL isVerified = [fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED];
 
-            // 1. Tinh chỉnh WindowServer an toàn
             Titanium_TuneWindowServerDisplayDirectly();
             Titanium_StealthKernelHijack();
 
-            // =========================================================================
-            // NHÁNH 1: IPHONE 6S - 7 PLUS (COLD REBOOT & USERSPACE REBOOT)
-            // =========================================================================
+            // Nhánh 6s - 7 Plus
             if (Titanium_IsLegacy6s7P()) {
                 if (isVerified) {
-                    // Đã qua bước respring an toàn -> NẠP TWEAK VÀ DỪNG VÒNG LẶP
                     runCoreTweak(YES, bundleID ? bundleID : @"com.apple.springboard", progName);
                     return;
                 }
 
-                // Lần đầu khởi động lên (chưa có cờ verified): Đợi 2.0 giây nếu chưa xong thì Respring cứu máy
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     if (![fm fileExistsAtPath:TITANIUM_BOOT_FLAG_VERIFIED]) {
                         [fm createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED contents:nil attributes:nil];
@@ -3594,16 +3623,12 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
                 return;
             }
 
-            // =========================================================================
-            // NHÁNH 2: IPHONE 8 PLUS - 15 PRO MAX (CHỈ XỬ LÝ KHI REBOOT NGUỒN)
-            // =========================================================================
+            // Nhánh 8 Plus - 15 Pro Max
             time_t uptime = Titanium_GetSystemUptimeSeconds();
             BOOL isColdBoot = (uptime < 60);
 
             if (isColdBoot) {
                 BOOL alreadyStaged = [fm fileExistsAtPath:TITANIUM_BOOT_STAGE_8P];
-                
-                // Chưa từng respring trong đợt reboot này -> Chờ 2.0s rồi Respring 1 lần dứt điểm
                 if (!alreadyStaged) {
                     [@"STAGED" writeToFile:TITANIUM_BOOT_STAGE_8P atomically:YES encoding:NSUTF8StringEncoding error:nil];
                     chmod([TITANIUM_BOOT_STAGE_8P UTF8String], 0666);
@@ -3615,7 +3640,6 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
                 }
             }
 
-            // ĐÃ QUA BƯỚC KHỞI ĐỘNG AN TOÀN: NẠP TWEAK TRỰC TIẾP
             runCoreTweak(YES, bundleID ? bundleID : @"com.apple.springboard", progName);
         });
     });
