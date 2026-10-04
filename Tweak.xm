@@ -3046,15 +3046,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
     %orig;
     if (IS_ACTIVE) {
         self.layer.drawsAsynchronously = YES;
-        self.layer.shouldRasterize = YES;
-        self.layer.rasterizationScale = [UIScreen mainScreen].scale;
     }
-}
-
-// Giải phóng texture của các thẻ đã lướt qua khỏi bộ đệm ngay lập tức để tránh tràn RAM
-- (void)setShouldPurgeContentWhenHidden:(BOOL)flag {
-    if (IS_ACTIVE) flag = YES;
-    %orig(flag);
 }
 
 %end
@@ -3427,8 +3419,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 }
             });
 
-            // CƯỚP QUYỀN AN TOÀN TRÊN RUNLOOP CHÍNH (Triệt tiêu 100% Safe Mode khi vừa hiện màn hình khóa)
-            CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+                       // TRÌ HOÃN 0.8S: CHỜ LOCKSCREEN LÊN ỔN ĐỊNH RỒI MỚI CƯỚP QUYỀN (CHỐNG SAFE MODE 1-2S)
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 AppleInternal_LockHardwareCADisplay();
                 Titanium_LockMainThreadFast();
 
@@ -3440,7 +3432,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     Titanium_EnforceThreadVIPPolicy();
                 }
             });
-            CFRunLoopWakeUp(CFRunLoopGetMain());
 
             g_SystemMasterReady = YES;
         });
