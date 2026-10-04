@@ -658,15 +658,7 @@ extern "C" {
 @property (nonatomic, copy) NSArray *filters;
 @end
 
-@interface SBControlCenterController : NSObject
-+ (id)sharedInstance;
-- (BOOL)isPresented;
-@end
-
 @interface CCUIModularControlCenterOverlayViewController : UIViewController
-@end
-
-@interface CSCoverSheetViewController : UIViewController
 @end
 
 @interface NCNotificationShortLookView : UIView
@@ -1238,6 +1230,10 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (0.0s RESPONSE)
 // ===================================================================================================
+// ====================================================================================================
+// KHỐI HỆ THỐNG NỘI BỘ: MACH REAL-TIME, ĐIỀU PHỐI ĐỆM 500MS & CẢM ỨNG 0MS
+// ====================================================================================================
+
 // 1. CƯỚP QUYỀN NHÂN MACH: 0MS DELAY ĐÁNH THỨC CPU VÀ I/O
 static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
     #if defined(TASK_LATENCY_QOS_POLICY)
@@ -1312,23 +1308,30 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
     return s_isLegacy;
 }
 
-// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR THÔNG MINH (CHẠM BƠM 144HZ, BUÔNG TAY HẠ XUNG CHỐNG NÓNG ĐÚNG LUỒNG)
+// 5. BIẾN ĐIỀU PHỐI ĐỆM VÀ QUẢN LÝ XUNG NHỊP
 static volatile BOOL g_isUserTouchingScreen = NO;
-static dispatch_source_t g_touchBurstTimer = nil;
-static dispatch_queue_t g_touchBurstQueue = nil;
+static dispatch_source_t g_cooldownTimer = nil;
+static dispatch_queue_t g_governorQueue = nil;
 
+// Khóa luồng giao diện chính ở mức ưu tiên thực thi 144Hz phẳng (Priority 47)
 static inline void Titanium_LockMainThreadFast(void) {
     if (!NSThread.isMainThread) return;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
     struct sched_param param;
-    param.sched_priority = 63; // Real-time trần
+    param.sched_priority = 47; // Mức ưu tiên đồ họa phẳng, không ép 63 để chống nghẽn I/O
     pthread_setschedparam(pthread_self(), SCHED_RR, &param);
 
+    #if defined(IOPOL_TYPE_DISK) && defined(IOPOL_IMPORTANT)
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
+    #endif
+    
+    #if defined(IOPOL_TYPE_VFS_ATIME_UPDATES) && defined(IOPOL_ATIME_UPDATES_OFF)
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
+    #endif
 }
 
+// Trả luồng về trạng thái bình thường khi máy bước vào chế độ 10Hz làm mát
 static inline void Titanium_RestoreMainThreadNormal(void) {
     if (!NSThread.isMainThread) return;
     struct sched_param normalParam;
@@ -1336,39 +1339,9 @@ static inline void Titanium_RestoreMainThreadNormal(void) {
     pthread_setschedparam(pthread_self(), SCHED_OTHER, &normalParam);
 }
 
+// Kích hoạt khi chạm: Đánh thức 144Hz ngay tức thì trong 0ms
 static void Titanium_TriggerInstantTouchBurst(void) {
     g_isUserTouchingScreen = YES;
-    Titanium_LockMainThreadFast();
-
-    static dispatch_once_t qToken;
-    dispatch_once(&qToken, ^{
-        g_touchBurstQueue = dispatch_queue_create("com.titanium.burstqueue", DISPATCH_QUEUE_SERIAL);
-    });
-
-    if (g_touchBurstTimer) {
-        dispatch_source_cancel(g_touchBurstTimer);
-        g_touchBurstTimer = nil;
-    }
-
-    int64_t burstDuration = g_isDeviceChargingV285 ? (int64_t)(100 * NSEC_PER_MSEC) : (int64_t)(120 * NSEC_PER_MSEC);
-
-    g_touchBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_touchBurstQueue);
-    dispatch_source_set_timer(g_touchBurstTimer, dispatch_time(DISPATCH_TIME_NOW, burstDuration), DISPATCH_TIME_FOREVER, 0);
-    dispatch_source_set_event_handler(g_touchBurstTimer, ^{
-        g_isUserTouchingScreen = NO;
-        // ĐÃ SỬA: Phải đẩy về Main Thread để trả xung nhịp luồng chính về 31, tránh chip A9 bị kẹt ở Max xung gây sôi máy
-        dispatch_async(dispatch_get_main_queue(), ^{
-            Titanium_RestoreMainThreadNormal();
-        });
-        g_touchBurstTimer = nil;
-    });
-    dispatch_resume(g_touchBurstTimer);
-}
-
-static void Titanium_TriggerInstantTouchBurst(void) {
-    g_isUserTouchingScreen = YES;
-    
-    // Gọi trực tiếp hàm vừa định nghĩa ở trên
     Titanium_LockMainThreadFast();
 
     static dispatch_once_t qToken;
@@ -1382,38 +1355,27 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     }
 }
 
-// ====================================================================================================
-// CƯỚP QUYỀN LUỒNG GIAO DIỆN CHÍNH: KHÓA MỨC REAL-TIME & GIẢI PHÓNG BĂNG THÔNG I/O
-// ====================================================================================================
+// Hẹn giờ buông tay: Chờ 500ms lướt quán tính rồi mới hạ về 10Hz làm mát
+static void Titanium_ScheduleCooldownTo10Hz(void) {
+    if (!g_governorQueue) {
+        g_governorQueue = dispatch_queue_create("com.titanium.governor", DISPATCH_QUEUE_SERIAL);
+    }
 
-static inline void Titanium_LockMainThreadFast(void) {
-    if (!NSThread.isMainThread) return;
-    
-    // 1. Đưa luồng lên mức ưu tiên tương tác người dùng cao nhất (User Interactive)
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    if (g_cooldownTimer) {
+        dispatch_source_cancel(g_cooldownTimer);
+        g_cooldownTimer = nil;
+    }
 
-    // 2. Gán độ ưu tiên Mach/POSIX (Priority 47) trên chính sách Round-Robin để dựng frame 144Hz
-    struct sched_param param;
-    param.sched_priority = 47;
-    pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-
-    // 3. Tối ưu I/O ổ đĩa và tắt cập nhật access time (atime) để không chặn luồng vẽ giao diện
-    #if defined(IOPOL_TYPE_DISK) && defined(IOPOL_IMPORTANT)
-    setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-    #endif
-    
-    #if defined(IOPOL_TYPE_VFS_ATIME_UPDATES) && defined(IOPOL_ATIME_UPDATES_OFF)
-    setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
-    #endif
-}
-
-// Khôi phục mức ưu tiên bình thường khi máy bước vào trạng thái nghỉ 10Hz
-static inline void Titanium_RestoreMainThreadNormal(void) {
-    if (!NSThread.isMainThread) return;
-    
-    struct sched_param normalParam;
-    normalParam.sched_priority = 31;
-    pthread_setschedparam(pthread_self(), SCHED_OTHER, &normalParam);
+    g_cooldownTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_governorQueue);
+    dispatch_source_set_timer(g_cooldownTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+    dispatch_source_set_event_handler(g_cooldownTimer, ^{
+        g_isUserTouchingScreen = NO;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            Titanium_RestoreMainThreadNormal();
+        });
+        g_cooldownTimer = nil;
+    });
+    dispatch_resume(g_cooldownTimer);
 }
 
 // ====================================================================================================
@@ -1443,7 +1405,7 @@ static inline void Titanium_RestoreMainThreadNormal(void) {
 }
 %end
 
-// 2. PHẢN HỒI NÚT BẤM VÀ ĐIỀU HƯỚNG TỨC THÌ (XÓA SẠCH HOOK RỖNG THỪA THÃI)
+// 2. PHẢN HỒI NÚT BẤM VÀ ĐIỀU HƯỚNG TỨC THÌ
 %hook UIControl
 - (NSTimeInterval)_touchDelayThreshold {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return 0.0;
@@ -1637,7 +1599,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %group Group_FluidTransitions_Pacing
 
-%%hook CADisplayLink
+%hook CADisplayLink
 
 - (NSInteger)preferredFramesPerSecond {
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
@@ -1682,8 +1644,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-
-// 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY: 144 KHI VUỐT - 10 KHI TĨNH
 // ====================================================================================================
 // KHÓA ĐỒNG BỘ TẤM NỀN CADISPLAY: 144HZ KHI CHẠM - 10HZ LÀM MÁT CHUẨN ĐỆM 500MS
 // ====================================================================================================
@@ -3353,26 +3313,26 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
-// 3. Thực hiện lệnh Respring hệ thống an toàn (Đa tầng: Hỗ trợ Rootless / var/jb / FBSSystemService)
 static void Titanium_ExecuteSystemRespring(void) {
-    // Cách 1: Tận dụng API nội bộ SpringBoard chuẩn
+    // 1. Thử API SpringBoard gốc
     UIApplication *app = [UIApplication sharedApplication];
     if ([app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
         [(SpringBoard *)app _relaunchSpringBoardNow];
         return;
     }
 
-    // Cách 2: Gọi dịch vụ FrontBoard Services (Relaunch an toàn nhất trên iOS 15 - 16)
+    // 2. Gọi FBSSystemService qua dynamic message send (Không báo lỗi Clang)
     Class fbsClass = NSClassFromString(@"FBSSystemService");
-    if (fbsClass && [fbsClass respondsToSelector:@selector(sharedService)]) {
-        id service = [fbsClass sharedService];
-        if (service && [service respondsToSelector:@selector(exitAndRelaunch:)]) {
-            [service exitAndRelaunch:YES];
+    if (fbsClass && [fbsClass respondsToSelector:NSSelectorFromString(@"sharedService")]) {
+        id service = ((id (*)(id, SEL))objc_msgSend)(fbsClass, NSSelectorFromString(@"sharedService"));
+        SEL relaunchSel = NSSelectorFromString(@"exitAndRelaunch:");
+        if (service && [service respondsToSelector:relaunchSel]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(service, relaunchSel, YES);
             return;
         }
     }
 
-    // Cách 3: fallback qua posix_spawn nhận diện đúng đường dẫn Rootless
+    // 3. Fallback qua killall hỗ trợ chuẩn Rootless
     const char *killallPath = "/usr/bin/killall";
     if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/usr/bin/killall"]) {
         killallPath = "/var/jb/usr/bin/killall";
