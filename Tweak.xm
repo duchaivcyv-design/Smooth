@@ -1594,25 +1594,19 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
-- (void)setMaximumDrawableCount:(NSUInteger)count {
-    %orig(3); // 3 bộ đệm gối đầu chống drop frame
+
+- (id)nextDrawable {
+    id drawable = %orig;
+    if (IS_ACTIVE && drawable) {
+        // Chỉ gán affinity khi drawable đã thực sự được phân bổ thành công
+        mach_port_t machThread = pthread_mach_thread_np(pthread_self());
+        thread_affinity_policy_data_t affPolicy;
+        affPolicy.affinity_tag = 1;
+        thread_policy_set(machThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affPolicy, THREAD_AFFINITY_POLICY_COUNT);
+    }
+    return drawable;
 }
 
-- (NSUInteger)maximumDrawableCount {
-    return 3;
-}
-
-- (void)setDisplaySyncEnabled:(BOOL)enabled {
-    %orig(YES); // Khóa VSync chống xé hình
-}
-
-- (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    %orig(NO);
-}
-
-- (void)setPresentsWithTransaction:(BOOL)flag {
-    %orig(flag);
-}
 %end
 
 %hook CALayer
@@ -3510,7 +3504,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         // 4. PHÂN ĐỊNH KHU VỰC HOẠT ĐỘNG
-        if (isSpringBoard) {
+                if (isSpringBoard) {
             %init(Group_Rootless_BootSafeguard_Watchdog);
 
             Titanium_TuneWindowServerDisplayDirectly();
@@ -3525,7 +3519,14 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             [@"VERIFIED" writeToFile:TITANIUM_BOOT_FLAG_VERIFIED atomically:YES encoding:NSUTF8StringEncoding error:nil];
             chmod([TITANIUM_BOOT_FLAG_VERIFIED UTF8String], 0666);
         } else {
+            // VỚI APP BÊN THỨ 3: 
+            // 1. Chỉ nạp hook an toàn, không đụng vào Render Server ban đầu
             %init(Group_UIKit_ThirdParty_IsolatedV285);
+
+            // 2. Chờ 0.5s sau khi App load xong Window mới nạp hiệu ứng sâu (Chống 100% đen màn hình)
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            });
         }
 
         static dispatch_once_t notifyToken;
