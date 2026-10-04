@@ -1,4 +1,3 @@
-// ==================== MACH KERNEL ====================
 // ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
