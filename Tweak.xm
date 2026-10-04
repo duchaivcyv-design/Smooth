@@ -3320,28 +3320,21 @@ static inline const char *Titanium_GetRootlessPath(const char *subpath) {
 #define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
 
 // ====================================================================================================
-// HỖ TRỢ SONG SONG ROOTLESS (RLESS - /var/jb) VÀ ROOTHIDE (RHIDE - jbroot)
+// HỖ TRỢ AN TOÀN ROOTLESS & ROOTHIDE (TRÁNH LỖI CON TRỎ STACK VÀ TRÙNG LẶP)
 // ====================================================================================================
-
-// Tìm đúng file thực thi sbreload / killall trên cả Rootless và Roothide
 static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
-    char subpath[PATH_MAX];
-    snprintf(subpath, sizeof(subpath), "/usr/bin/%s", binaryName);
-    const char *fullPath = Titanium_GetRootlessPath(subpath);
-    if (fullPath && access(fullPath, X_OK) == 0) return fullPath;
+    static char s_fullPathBuf[PATH_MAX];
+    snprintf(s_fullPathBuf, sizeof(s_fullPathBuf), "/usr/bin/%s", binaryName);
 
-    // Dự phòng đường dẫn gốc chuẩn
-    if (access(subpath, X_OK) == 0) return subpath;
-    return NULL;
-}
+    const char *resolved = Titanium_GetRootlessPath(s_fullPathBuf);
+    if (resolved && access(resolved, X_OK) == 0) {
+        return resolved;
+    }
 
-static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
-    char subpath[PATH_MAX];
-    snprintf(subpath, sizeof(subpath), "/usr/bin/%s", binaryName);
-    const char *fullPath = Titanium_GetRootlessPath(subpath);
-    if (fullPath && access(fullPath, X_OK) == 0) return fullPath;
+    if (access(s_fullPathBuf, X_OK) == 0) {
+        return s_fullPathBuf;
+    }
 
-    if (access(subpath, X_OK) == 0) return subpath;
     return NULL;
 }
 
