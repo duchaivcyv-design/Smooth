@@ -2783,7 +2783,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // ====================================================================================================
 // CƯỚP QUYỀN TOÀN DIỆN LIQUID GLASS & COREANIMATION SHADER: MƯỢT 144HZ, MÁT MÁY CHIP A9
 // ====================================================================================================
-/+
+/*
 %group Group_LiquidGlass_Hijack_Ultra
 
 // 1. CƯỚP QUYỀN SHADER BỘ LỌC CAFILTER: KHỐNG CHẾ BÁN KÍNH LÀM MỜ (INPUTRADIUS)
