@@ -1898,7 +1898,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %group Group_Switcher30Apps_Virtualization
 
 // 1. CƯỚP QUYỀN CỬ CHỈ GỐC: KÍCH XUNG 144HZ VÀ XẢ VẼ NGAY LẬP TỨC TRONG 0MS
-%h%hook SBHomeGestureInteraction
+%hook SBHomeGestureInteraction
 
 - (BOOL)_isGestureRunning {
     return %orig;
