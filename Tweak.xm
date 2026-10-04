@@ -2783,7 +2783,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // ====================================================================================================
 // CƯỚP QUYỀN TOÀN DIỆN LIQUID GLASS & COREANIMATION SHADER: MƯỢT 144HZ, MÁT MÁY CHIP A9
 // ====================================================================================================
-
+/+
 %group Group_LiquidGlass_Hijack_Ultra
 
 // 1. CƯỚP QUYỀN SHADER BỘ LỌC CAFILTER: KHỐNG CHẾ BÁN KÍNH LÀM MỜ (INPUTRADIUS)
@@ -2886,7 +2886,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-
+*/
 // ====================================================================================================
 // NHÓM: CƯỚP QUYỀN TRUNG TÂM ĐIỀU KHIỂN (CC) & TRUNG TÂM THÔNG BÁO (NC) - 144HZ KHÔNG DELAY
 // ====================================================================================================
@@ -3000,6 +3000,8 @@ static volatile BOOL g_isContinuousSwiping = NO;
         v.layer.allowsGroupOpacity = NO;
     }
 }
+
+%end
 
 %end
 
