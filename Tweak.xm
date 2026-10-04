@@ -1423,10 +1423,21 @@ static inline void Titanium_StealthKernelHijack(void) {
 %group Group_ZeroLatency_Touch_Opt
 
 %hook UIGestureRecognizer
-- (BOOL)delaysTouchesBegan { return %orig; }
-- (BOOL)delaysTouchesEnded { return %orig; }
-- (void)setDelaysTouchesBegan:(BOOL)flag { %orig(flag); }
-- (void)setDelaysTouchesEnded:(BOOL)flag { %orig(flag); }
+- (BOOL)delaysTouchesBegan { 
+    return %orig; 
+}
+
+- (BOOL)delaysTouchesEnded { 
+    return %orig; 
+}
+
+- (void)setDelaysTouchesBegan:(BOOL)flag { 
+    %orig; 
+}
+
+- (void)setDelaysTouchesEnded:(BOOL)flag { 
+    %orig; 
+}
 %end
 
 // 2. PHẢN HỒI NÚT BẤM VÀ ĐIỀU HƯỚNG TỨC THÌ
