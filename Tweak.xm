@@ -3160,10 +3160,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             Titanium_TuneWindowServerDisplayDirectly();
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_Display_SpringBoardV285);
-            
-            // TẮT HẲN NHÓM NÀY: ÉP IPHONE CHẠY TOÀN MÀN HÌNH NATIVE 100%, KHÔNG TẠO Ô THU NHỎ
-            // %init(Group_V285_FloatingWindow_PiP); 
-
+            %init(Group_V285_FloatingWindow_PiP); 
             %init(Group_SpringBoard_ProcessManagerV285);
             %init(Group_Apple_DeepInternal_SubsystemV285);
 
