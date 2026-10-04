@@ -1395,7 +1395,9 @@ static inline void Titanium_StealthKernelHijack(void) {
     timePolicy.period      = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
     timePolicy.computation = (uint32_t)((computation_ns * timebase.denom) / timebase.numer);
     timePolicy.constraint  = (uint32_t)((constraint_ns * timebase.denom) / timebase.numer);
-    timePolicy.preemptible = 0; // 👈 KHÓA CỨNG: CẤM BỊ NGẮT GIỮA CHỪNG KHI ĐANG VẼ FRAME
+    timePolicy.preemptible = 1; // 👈 BẮT BUỘC = 1: Cho phép ngắt mạng phần cứng hoạt động xuyên suốt
+
+    thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
     thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
