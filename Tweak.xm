@@ -655,7 +655,7 @@ extern "C" {
 @property (nonatomic) BOOL captureOnly;
 @property (nonatomic) BOOL disablesOccludedBackdropBlurs;
 @property (nonatomic) BOOL allowsInPlaceFiltering;
-@property (nonatomic, copy) NSArray *filters;
+@property (copy) NSArray *filters;
 @end
 
 @interface CCUIModularControlCenterOverlayViewController : UIViewController
