@@ -23,7 +23,7 @@ jobs:
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          brew install dpkg ldid coreutils python3
+          brew install dpkg ldid coreutils
 
       # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
       - name: Clone Theos & Install SDK
@@ -62,50 +62,28 @@ jobs:
           fi
           
           rm -rf packages/ obj/ .theos/
-          if [ -d "postinst" ]; then chmod 755 postinst; fi
-          if [ -d "prerm" ]; then chmod 755 prerm; fi
+          if [ -d "layout/DEBIAN" ]; then chmod -R 755 layout/DEBIAN; fi
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
-          set +e
-          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE"
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          set -e
+          
+          # Thực thi biên dịch với cờ bắt log đầy đủ
+          set -o pipefail
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE" || BUILD_FAILED=1
 
-          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+          if [ "$BUILD_FAILED" = "1" ]; then
             echo ""
             echo "======================================================================"
-            echo "🚨 BIÊN DỊCH THẤT BẠI! ĐANG BÓC TÁCH CHÍNH XÁC SỐ DÒNG VÀ ĐOẠN CODE LỖI:"
+            echo "🚨 BIÊN DỊCH THẤT BẠI! BÁO CÁO CHI TIẾT TỪ TRÌNH BIÊN DỊCH CLANG:"
             echo "======================================================================"
 
-            ERR_LINES=$(grep -E '^[^\s:]+\.(xm|x|m|mm|h|c|cpp):[0-9]+(:[0-9]+)?:\s*error:' "$BUILD_LOG_FILE" || true)
-
-            if [ -z "$ERR_LINES" ]; then
-              echo "⚠️ Toàn bộ nhật ký lỗi cuối cùng từ Theos:"
-              tail -n 40 "$BUILD_LOG_FILE"
-            else
-              echo "$ERR_LINES" | while IFS= read -r line; do
-                echo "----------------------------------------------------------------------"
-                echo "🔴 $line"
-                
-                FILE_NAME=$(echo "$line" | cut -d: -f1)
-                LINE_NUM=$(echo "$line" | cut -d: -f2)
-
-                if [ -f "$FILE_NAME" ] && [ -n "$LINE_NUM" ]; then
-                  echo "🔍 Đoạn code thực tế quanh dòng $LINE_NUM trong file $FILE_NAME:"
-                  START_LINE=$((LINE_NUM > 3 ? LINE_NUM - 3 : 1))
-                  END_LINE=$((LINE_NUM + 3))
-                  sed -n "${START_LINE},${END_LINE}p" "$FILE_NAME" | nl -ba -v "$START_LINE" | while IFS= read -r code_line; do
-                    NUM=$(echo "$code_line" | awk '{print $1}')
-                    if [ "$NUM" -eq "$LINE_NUM" ]; then
-                      echo "👉 $code_line"
-                    else
-                      echo "   $code_line"
-                    fi
-                  done
-                fi
-                echo "----------------------------------------------------------------------"
-              done
-            fi
+            # Bóc tách trực tiếp các dòng chứa error từ Clang/Theos
+            grep -E '(error:|fatal error:)' "$BUILD_LOG_FILE" || true
+            
+            echo ""
+            echo "----------------------------------------------------------------------"
+            echo "🔍 TOÀN BỘ 60 DÒNG LOG CUỐI CÙNG TRƯỚC KHI GÃY BUILD:"
+            echo "----------------------------------------------------------------------"
+            tail -n 60 "$BUILD_LOG_FILE"
             echo "======================================================================"
             exit 1
           fi
