@@ -3154,7 +3154,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-*/
+
 // ====================================================================================================
 // GIA TỐC TOÀN BỘ HIỆU ỨNG BÊN TRONG ỨNG DỤNG (MODAL, POPUP, SHEET, CONTEXT MENU)
 // ====================================================================================================
@@ -3203,7 +3203,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-
+*/
 // ====================================================================================================
 // GIÁM SÁT SẠC PIN (CHỐNG NÓNG MÁY KHI CẮM SẠC)
 // ====================================================================================================
@@ -3388,7 +3388,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
            // %init(Group_SmartAppScheduler_Cooling);
 
             // KÍCH HOẠT HIỆU ỨNG TRONG APP (POPUP, SHEET, CONTEXT MENU)
-            %init(Group_Universal_InApp_Animations);
+          //  %init(Group_Universal_InApp_Animations);
 
             if (Titanium_IsClassicHomeButtonDevice()) {
                 %init(Group_HardwareSegregation_ClassicHomeV285);
