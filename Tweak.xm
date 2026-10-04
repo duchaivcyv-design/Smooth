@@ -1315,6 +1315,58 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 
 // ====================================================================================================
+// KHAI BÁO BIẾN TOÀN CỤC DÙNG CHUNG CHO TOÀN BỘ CÁC NHÓM (TRÁNH LỖI UNDECLARED IDENTIFIER)
+// ====================================================================================================
+
+// Cờ điều phối cử chỉ và trạng thái hệ thống
+static volatile BOOL g_isContinuousSwiping = NO;
+static volatile BOOL g_isUserTouchingScreen = NO;
+static volatile BOOL g_isVideoPlayingActive = NO;
+static volatile BOOL g_isNotificationBannerActive = NO;
+
+// Mốc thời gian Mach và chu kỳ xung nhịp
+static volatile uint64_t g_lastInteractionMachTime = 0;
+static uint64_t g_burstDurationMachTicks = 0;
+static uint64_t g_burstDurationChargingMachTicks = 0;
+
+// Khởi tạo base Mach Time nếu chưa có
+static inline void Titanium_EnsureMachTimebaseInit(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        mach_timebase_info_data_t timebase;
+        mach_timebase_info(&timebase);
+        uint64_t nanos = 350ULL * 1000000ULL;         // 350ms khi dùng pin bình thường
+        uint64_t nanosCharging = 180ULL * 1000000ULL; // 180ms khi sạc pin
+        g_burstDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
+        g_burstDurationChargingMachTicks = (nanosCharging * timebase.denom) / timebase.numer;
+    });
+}
+
+// ====================================================================================================
+// HÀM ĐIỀU PHỐI KHÓA 144HZ TOÀN CỤC (CẦN THIẾT CHO NHÓM 2, NHÓM 3 VÀ CALAYER)
+// ====================================================================================================
+
+static inline BOOL Titanium_ShouldLockTargetRate(void) {
+    // 1. Khi đang vuốt cử chỉ X hoặc đang giữ ngón tay trên màn hình: Luôn khóa 144Hz
+    if (g_isContinuousSwiping) return YES;
+    
+    // 2. Khi có banner thông báo đang trượt: Luôn khóa 144Hz
+    if (g_isNotificationBannerActive) return YES;
+    
+    // 3. Khi không có tương tác nào: Cho phép nhả xung nhịp làm mát máy
+    if (g_lastInteractionMachTime == 0) return NO;
+    
+    // Đảm bảo timebase đã được nạp
+    if (g_burstDurationMachTicks == 0) {
+        Titanium_EnsureMachTimebaseInit();
+    }
+    
+    // Kiểm tra thời gian Mach tuyệt đối (chỉ mất 2 nano giây)
+    uint64_t now = mach_absolute_time();
+    return ((now - g_lastInteractionMachTime) < g_burstDurationMachTicks);
+}
+
+// ====================================================================================================
 // NHÓM 1: CẢM ỨNG 0MS (ĐÃ KIỂM SOÁT AN TOÀN 100% - CHỐNG ĐEN APP, CHỐNG NÓNG MÁY, 0MS ĐỘ TRỄ)
 // ====================================================================================================
 
@@ -1735,9 +1787,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 // NHÓM 4: ĐA NHIỆM SIÊU MƯỢT (DỨT ĐIỂM MÀN HÌNH ĐEN KHI MỞ APP & MÉO TO NHỎ KHI VUỐT GIỮ)
 // ====================================================================================================
-
-// Khai báo cờ chống xung đột dọn RAM khi vuốt liên hoàn
-static volatile BOOL g_isContinuousSwiping = NO;
 
 %group Group_Switcher30Apps_Virtualization
 
