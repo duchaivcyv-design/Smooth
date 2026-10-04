@@ -3335,32 +3335,13 @@ static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
     return NULL;
 }
 
-// Tìm đúng file thực thi sbreload / killall trên cả Rootless và Roothide
 static inline const char *Titanium_SafeBinaryPath(const char *binaryName) {
-    static char pathBuf[PATH_MAX];
     char subpath[PATH_MAX];
     snprintf(subpath, sizeof(subpath), "/usr/bin/%s", binaryName);
+    const char *fullPath = Titanium_GetRootlessPath(subpath);
+    if (fullPath && access(fullPath, X_OK) == 0) return fullPath;
 
-    // 1. Quét qua Roothide
-    typedef char *(*jbroot_fn_t)(const char *);
-    static jbroot_fn_t s_jbroot = NULL;
-    static dispatch_once_t rhToken;
-    dispatch_once(&rhToken, ^{
-        s_jbroot = (jbroot_fn_t)dlsym(RTLD_DEFAULT, "jbroot");
-    });
-    if (s_jbroot) {
-        char *rhPath = s_jbroot(subpath);
-        if (rhPath && access(rhPath, X_OK) == 0) return rhPath;
-    }
-
-    // 2. Quét qua Rootless (/var/jb/usr/bin/...)
-    snprintf(pathBuf, sizeof(pathBuf), "/var/jb/usr/bin/%s", binaryName);
-    if (access(pathBuf, X_OK) == 0) return pathBuf;
-
-    // 3. Quét qua Rootful (/usr/bin/...)
-    snprintf(pathBuf, sizeof(pathBuf), "/usr/bin/%s", binaryName);
-    if (access(pathBuf, X_OK) == 0) return pathBuf;
-
+    if (access(subpath, X_OK) == 0) return subpath;
     return NULL;
 }
 
