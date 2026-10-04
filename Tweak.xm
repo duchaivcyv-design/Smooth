@@ -2627,13 +2627,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-%hook SBSplashBoardController
-- (double)splashScreenDelay {
-    return %orig; // Giữ nguyên luồng tải Splash gốc để app vẽ đủ khung hình toàn màn hình
-}
-%end
-
-
 // BUNG MÀN HÌNH CHỜ/LOADING TỨC THÌ NHƯNG LUÔN CÓ HÌNH BỌC LÓT (CHỐNG MÀN HÌNH ĐEN)
 %hook SBSplashBoardController
 - (double)splashScreenDelay {
