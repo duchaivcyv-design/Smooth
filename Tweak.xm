@@ -3333,7 +3333,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_CC_NC_UltraPacing);
         %init(Group_Popups_InstantPacing);
         %init(Group_MassiveSwitcher_Virtualization);
-        %init(Group_Popups_InstantPacing);
+        %init(Group_SmartAppScheduler_Cooling);
+
 
         // KÍCH HOẠT HIỆU ỨNG TRONG APP (POPUP, SHEET, CONTEXT MENU)
         %init(Group_Universal_InApp_Animations);
