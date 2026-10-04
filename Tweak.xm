@@ -1188,8 +1188,84 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     }
 }
 
+#include <mach/mach_time.h>
+#include <pthread.h>
+#include <stdatomic.h>
+
+// ----------------------------------------------------------------------------------------------------
+// KHAI BÁO DEPENDENCY NGOÀI (ĐẢM BẢO KHÔNG LỖI BIÊN DỊCH NẾU TÁCH FILE)
+// ----------------------------------------------------------------------------------------------------
+extern volatile BOOL g_isUserTouchingScreen;
+extern volatile uint64_t g_lastInteractionMachTime;
+extern uint64_t g_burstDurationMachTicks;
+extern uint64_t g_burstDurationChargingMachTicks;
+
+#ifndef HAS_DEVICE_CHARGING_FLAG
+extern BOOL g_isDeviceChargingV285 __attribute__((weak));
+#endif
+
 // ====================================================================================================
-// NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (0.0s RESPONSE)
+// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR NGUYÊN TỬ (AN TOÀN ĐA LUỒNG & KHÔNG OVERHEAD SYSCALL)
+// ====================================================================================================
+
+// 1. Khởi tạo Timebase: Có guard kiểm tra numer > 0 chống crash chia cho 0
+static inline void Titanium_InitTouchMachTimebase(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        mach_timebase_info_data_t timebase;
+        if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.numer > 0) {
+            uint64_t nanos = 350ULL * 1000000ULL;         // 350ms khi dùng pin
+            uint64_t nanosCharging = 180ULL * 1000000ULL; // 180ms khi sạc pin
+            g_burstDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
+            g_burstDurationChargingMachTicks = (nanosCharging * timebase.denom) / timebase.numer;
+        }
+    });
+}
+
+// 2. Nâng ưu tiên luồng chính: Thêm cờ khóa tránh spam syscall pthread liên tục mỗi frame
+static inline void Titanium_LockMainThreadFast(void) {
+    static pthread_t s_lastElevatedThread = NULL;
+    pthread_t currentThread = pthread_self();
+
+    // Chỉ thực thi một lần cho luồng hiện tại, tránh gọi syscall tốn chu kỳ CPU khi chạm liên tục
+    if (s_lastElevatedThread != currentThread) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        struct sched_param param;
+        param.sched_priority = 47;
+        pthread_setschedparam(currentThread, SCHED_RR, &param);
+        s_lastElevatedThread = currentThread;
+    }
+}
+
+// 3. Kích xung nhịp tương tác tức thì: Nguyên tử hóa bộ đếm Token và ngắt timer rác
+static void Titanium_TriggerInstantTouchBurst(void) {
+    Titanium_InitTouchMachTimebase();
+
+    // Cập nhật mốc thời gian Mach tuyệt đối (chỉ ~2ns)
+    g_lastInteractionMachTime = mach_absolute_time();
+    g_isUserTouchingScreen = YES;
+
+    // Nâng priority an toàn
+    Titanium_LockMainThreadFast();
+
+    // Dùng Atomic Increment: Đảm bảo an toàn tuyệt đối nếu Touch Event đến từ Background Thread (IOHID)
+    static atomic_int_fast64_t s_touchSeq = 0;
+    int64_t currentSeq = atomic_fetch_add_explicit(&s_touchSeq, 1, memory_order_relaxed) + 1;
+
+    // Kiểm tra an toàn biến cắm sạc (tránh crash null pointer)
+    BOOL isCharging = (&g_isDeviceChargingV285 != NULL) ? g_isDeviceChargingV285 : NO;
+    int64_t burstDuration = isCharging ? (int64_t)(180 * NSEC_PER_MSEC) : (int64_t)(350 * NSEC_PER_MSEC);
+
+    // Điều phối nhả cờ trên Main Runloop
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, burstDuration), dispatch_get_main_queue(), ^{
+        if (atomic_load_explicit(&s_touchSeq, memory_order_relaxed) == currentSeq) {
+            g_isUserTouchingScreen = NO;
+        }
+    });
+}
+
+// ====================================================================================================
+// NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH
 // ====================================================================================================
 
 // 1. CẤP QUYỀN QOS CAO NHẤT TẠI NHÂN HỆ THỐNG XNU KERNEL
@@ -1207,15 +1283,15 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
     #endif
 }
 
-// 2. CẤP QUYỀN THỜI GIAN THỰC MACH CHO LUỒNG VẼ GIAO DIỆN (ĐỒNG BỘ CHU KỲ 144HZ ~6.94MS)
+// 2. CẤP QUYỀN THỜI GIAN THỰC MACH CHO LUỒNG VẼ GIAO DIỆN
 static void Titanium_ElevateThreadToMachRealTime(void) {
     mach_timebase_info_data_t timebase;
-    mach_timebase_info(&timebase);
+    if (mach_timebase_info(&timebase) != KERN_SUCCESS || timebase.numer == 0) return;
 
-    // Chu kỳ 144Hz chuẩn: 1.0s / 144 = 6.944ms = 6,944,444 ns (KHÔNG KHÓA 16.6MS CỦA 60FPS)
-    uint64_t period_ns = 6944444;      // Chu kỳ 144 FPS chuẩn xác
-    uint64_t computation_ns = 4000000; // Đảm bảo 4.0ms tính toán liên tục không bị gián đoạn
-    uint64_t constraint_ns = 6000000;  // Giới hạn hoàn tất trong 6.0ms để nhả frame đúng nhịp V-Sync
+    // Chu kỳ 144Hz: ~6.94ms (Lưu ý: Màn hình ProMotion của iOS vật lý tối đa 120Hz ~ 8.33ms)
+    uint64_t period_ns = 6944444;      
+    uint64_t computation_ns = 4000000; // 4.0ms tính toán
+    uint64_t constraint_ns = 6000000;  // Giới hạn trong 6.0ms để nhả frame đúng nhịp
 
     thread_time_constraint_policy_data_t policy;
     policy.period = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
@@ -1226,69 +1302,56 @@ static void Titanium_ElevateThreadToMachRealTime(void) {
     thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 }
 
-// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ (RUNTIME CALL AN TOÀN, KHÔNG BỊ DUPLICATE INTERFACE)
+// 3. KHÓA BỘ ĐIỀU KHIỂN TẤM NỀN MÀN HÌNH NỘI BỘ (AN TOÀN BỘ NHỚ VÀ SELECTOR RUNTIME)
 static void AppleInternal_LockHardwareCADisplay(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         Class caDisplayClass = objc_getClass("CADisplay");
-        if (caDisplayClass && [caDisplayClass respondsToSelector:sel_registerName("mainDisplay")]) {
-            id display = ((id (*)(id, SEL))objc_msgSend)(caDisplayClass, sel_registerName("mainDisplay"));
-            if (display) {
-                SEL selLatency = sel_registerName("setLatency:");
-                if ([display respondsToSelector:selLatency]) {
-                    ((void (*)(id, SEL, double))objc_msgSend)(display, selLatency, 0.0);
-                }
-                SEL selVirtual = sel_registerName("setAllowsVirtualModes:");
-                if ([display respondsToSelector:selVirtual]) {
-                    ((void (*)(id, SEL, BOOL))objc_msgSend)(display, selVirtual, NO);
-                }
-            }
+        if (!caDisplayClass) return;
+
+        SEL selMainDisplay = sel_registerName("mainDisplay");
+        if (![caDisplayClass respondsToSelector:selMainDisplay]) return;
+
+        id (*getMainDisplay)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
+        id display = getMainDisplay(caDisplayClass, selMainDisplay);
+        if (!display) return;
+
+        SEL selLatency = sel_registerName("setLatency:");
+        if ([display respondsToSelector:selLatency]) {
+            void (*setLatency)(id, SEL, double) = (void (*)(id, SEL, double))objc_msgSend;
+            setLatency(display, selLatency, 0.0);
+        }
+
+        SEL selVirtual = sel_registerName("setAllowsVirtualModes:");
+        if ([display respondsToSelector:selVirtual]) {
+            void (*setAllowsVirtual)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))objc_msgSend;
+            setAllowsVirtual(display, selVirtual, NO);
         }
     });
 }
 
-// 4. PHÂN TÁCH PHẦN CỨNG TỰ ĐỘNG (CHỈ ÉP MAX CHO CHIP A9 - A12)
+// 4. NHẬN DIỆN PHẦN CỨNG (A9 - A12)
 static BOOL Titanium_IsLegacyA9toA12(void) {
     static BOOL s_isLegacy = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         struct utsname sysInfo;
-        uname(&sysInfo);
-        NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-        if ([machine hasPrefix:@"iPhone8,"] || [machine hasPrefix:@"iPhone9,"] || 
-            [machine hasPrefix:@"iPhone10,"] || [machine hasPrefix:@"iPhone11,"] ||
-            [machine hasPrefix:@"iPad6,"] || [machine hasPrefix:@"iPad7,"]) {
-            s_isLegacy = YES;
-        } else {
-            s_isLegacy = NO;
+        if (uname(&sysInfo) == 0) {
+            NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+            if (machine) {
+                s_isLegacy = ([machine hasPrefix:@"iPhone8,"] ||  // A9
+                              [machine hasPrefix:@"iPhone9,"] ||  // A10
+                              [machine hasPrefix:@"iPhone10,"] || // A11
+                              [machine hasPrefix:@"iPhone11,"] || // A12
+                              [machine hasPrefix:@"iPad6,"] || 
+                              [machine hasPrefix:@"iPad7,"]);
+            }
         }
     });
     return s_isLegacy;
 }
 
-// 5. BỘ ĐIỀU PHỐI BURST GOVERNOR NGUYÊN TỬ (MACH TIME 2NS - 0 CẤP PHÁT BỘ NHỚ, TRIỆT TIÊU NÓNG MÁY)
-static volatile BOOL g_isUserTouchingScreen = NO;
-static dispatch_source_t g_touchBurstTimer = nil; // Giữ nguyên khai báo biến để tương thích hoàn toàn
-static dispatch_queue_t g_touchBurstQueue = nil;
-
-// Bộ đếm thời gian Mach tuyệt đối cho cảm ứng
-static volatile uint64_t g_lastInteractionMachTime = 0;
-static uint64_t g_burstDurationMachTicks = 0;
-static uint64_t g_burstDurationChargingMachTicks = 0;
-
-static inline void Titanium_InitTouchMachTimebase(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        mach_timebase_info_data_t timebase;
-        mach_timebase_info(&timebase);
-        uint64_t nanos = 350ULL * 1000000ULL;         // 350ms khi dùng pin bình thường
-        uint64_t nanosCharging = 180ULL * 1000000ULL; // 180ms khi đang cắm sạc để làm mát máy
-        g_burstDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
-        g_burstDurationChargingMachTicks = (nanosCharging * timebase.denom) / timebase.numer;
-    });
-}
-
-// Khóa luồng chính lên mức ưu tiên cao nhất: Không gọi syscall trùng lặp
+// 5. NÂNG ƯU TIÊN LUỒNG CHÍNH (TRÁNH LỖI WATCHDOG 0x8badf00d)
 static inline void Titanium_LockMainThreadFast(void) {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     struct sched_param param;
@@ -1296,19 +1359,19 @@ static inline void Titanium_LockMainThreadFast(void) {
     pthread_setschedparam(pthread_self(), SCHED_RR, &param);
 }
 
-// Kích xung nhịp tương tác tức thì 0ms: KHÔNG HỦY VÀ TẠO MỚI TIMER RÁC, CHỐNG NÓNG BO MẠCH TUYỆT ĐỐI
+// 6. KÍCH XUNG NHỊP TƯƠNG TÁC TỨC THÌ (SEQUENCE TOKEN TRÊN MAIN QUEUE)
 static void Titanium_TriggerInstantTouchBurst(void) {
-    Titanium_InitTouchMachTimebase();
-    g_lastInteractionMachTime = mach_absolute_time(); // Ghi nhận thời gian Mach siêu tốc (2ns)
+    Titanium_EnsureMachTimebaseInit();
+    g_lastInteractionMachTime = mach_absolute_time();
     g_isUserTouchingScreen = YES;
     Titanium_LockMainThreadFast();
 
-    // Dùng Sequence Token trên luồng chính thay thế việc liên tục tạo/hủy dispatch_source_t:
-    // TRIỆT TIÊU 100% NGUYÊN NHÂN GÂY NÓNG MÁY VÀ LAG TRONG BỘ CHỌN ẢNH (VIDEO 1)
     static int64_t s_touchSeq = 0;
     int64_t currentSeq = ++s_touchSeq;
-    
-    int64_t burstDuration = g_isDeviceChargingV285 ? (int64_t)(180 * NSEC_PER_MSEC) : (int64_t)(350 * NSEC_PER_MSEC);
+
+    // Kiểm tra an toàn trạng thái sạc nếu cờ ngoài tồn tại
+    BOOL isCharging = (&g_isDeviceChargingV285 != NULL) ? g_isDeviceChargingV285 : NO;
+    int64_t burstDuration = isCharging ? (int64_t)(180 * NSEC_PER_MSEC) : (int64_t)(350 * NSEC_PER_MSEC);
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, burstDuration), dispatch_get_main_queue(), ^{
         if (s_touchSeq == currentSeq) {
@@ -1318,56 +1381,27 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 
 // ====================================================================================================
-// KHAI BÁO BIẾN TOÀN CỤC DÙNG CHUNG CHO TOÀN BỘ CÁC NHÓM (TRÁNH LỖI UNDECLARED IDENTIFIER)
-// ====================================================================================================
-
-// Cờ điều phối cử chỉ và trạng thái hệ thống
-static volatile BOOL g_isContinuousSwiping = NO;
-static volatile BOOL g_isUserTouchingScreen = NO;
-static volatile BOOL g_isVideoPlayingActive = NO;
-static volatile BOOL g_isNotificationBannerActive = NO;
-
-// Mốc thời gian Mach và chu kỳ xung nhịp
-static volatile uint64_t g_lastInteractionMachTime = 0;
-static uint64_t g_burstDurationMachTicks = 0;
-static uint64_t g_burstDurationChargingMachTicks = 0;
-
-// Khởi tạo base Mach Time nếu chưa có
-static inline void Titanium_EnsureMachTimebaseInit(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        mach_timebase_info_data_t timebase;
-        mach_timebase_info(&timebase);
-        uint64_t nanos = 350ULL * 1000000ULL;         // 350ms khi dùng pin bình thường
-        uint64_t nanosCharging = 180ULL * 1000000ULL; // 180ms khi sạc pin
-        g_burstDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
-        g_burstDurationChargingMachTicks = (nanosCharging * timebase.denom) / timebase.numer;
-    });
-}
-
-// ====================================================================================================
-// HÀM ĐIỀU PHỐI KHÓA 144HZ TOÀN CỤC (CẦN THIẾT CHO NHÓM 2, NHÓM 3 VÀ CALAYER)
+// HÀM ĐIỀU PHỐI KHÓA TARGET RATE TOÀN CỤC
 // ====================================================================================================
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    // 1. Khi đang vuốt cử chỉ X hoặc đang giữ ngón tay trên màn hình: Luôn khóa 144Hz
-    if (g_isContinuousSwiping) return YES;
-    
-    // 2. Khi có banner thông báo đang trượt: Luôn khóa 144Hz
-    if (g_isNotificationBannerActive) return YES;
-    
-    // 3. Khi không có tương tác nào: Cho phép nhả xung nhịp làm mát máy
+    if (g_isContinuousSwiping || g_isUserTouchingScreen || g_isNotificationBannerActive) {
+        return YES;
+    }
+
     if (g_lastInteractionMachTime == 0) return NO;
-    
-    // Đảm bảo timebase đã được nạp
+
     if (g_burstDurationMachTicks == 0) {
         Titanium_EnsureMachTimebaseInit();
     }
-    
-    // Kiểm tra thời gian Mach tuyệt đối (chỉ mất 2 nano giây)
+
     uint64_t now = mach_absolute_time();
-    return ((now - g_lastInteractionMachTime) < g_burstDurationMachTicks);
+    BOOL isCharging = (&g_isDeviceChargingV285 != NULL) ? g_isDeviceChargingV285 : NO;
+    uint64_t limitTicks = isCharging ? g_burstDurationChargingMachTicks : g_burstDurationMachTicks;
+
+    return ((now - g_lastInteractionMachTime) < limitTicks);
 }
+
 
 // ====================================================================================================
 // NHÓM 1: CẢM ỨNG 0MS (ĐÃ KIỂM SOÁT AN TOÀN 100% - CHỐNG ĐEN APP, CHỐNG NÓNG MÁY, 0MS ĐỘ TRỄ)
