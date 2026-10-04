@@ -1807,24 +1807,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-%hook CATransaction
-
-+ (void)commit {
-    if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig;
-    if (IS_ACTIVE && g_activeAnimationCount > 0) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            if (g_activeAnimationCount > 0) {
-                __sync_fetch_and_sub(&g_activeAnimationCount, 1);
-            }
-        });
-    }
-}
-
-%end
-
 // 5. THEO DÕI VIDEO
 %hook AVPlayer
 
@@ -1872,9 +1854,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // 7. TẢI LẠI CẤU HÌNH KHI APP ACTIVE
-%hook CATransaction
-
+%%hook CATransaction
 + (void)commit {
+    if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
+        Titanium_EnableZeroLatencyPipeline();
+    }
     %orig;
     if (IS_ACTIVE && g_activeAnimationCount > 0) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
@@ -1884,7 +1868,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         });
     }
 }
-
 %end
 
 // Ép dải tần số quét tối đa cho toàn bộ UIView Animation trên iOS 16+
