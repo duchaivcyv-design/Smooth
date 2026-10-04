@@ -1688,20 +1688,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-%hook CASpringAnimation
-
-- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    if (@available(iOS 15.0, *)) {
-        if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
-            float target = (float)[CFG285 resolvedTargetHz];
-            range = SafeMakeFRR(target, target, target); // Khóa cứng lò xo
-        }
-    }
-    %orig(range);
-}
-
-%end
-
 %hook CATransaction
 
 + (void)commit {
