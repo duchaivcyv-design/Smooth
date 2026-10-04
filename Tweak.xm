@@ -1790,7 +1790,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
 
 // 1. ĐÓN ĐẦU CỬ CHỈ & CHO PHÉP VUỐT LIÊN HOÀN (BẢO TOÀN ĐỘ ĐÀN HỒI LÒ XO 26ANIM)
 %hook SBHomeGestureInteraction
-
 - (void)_handleGestureBegan:(id)gesture {
     if (IS_ACTIVE) {
         g_isContinuousSwiping = YES;
@@ -1799,38 +1798,23 @@ static volatile BOOL g_isContinuousSwiping = NO;
     }
     %orig(gesture);
 }
-
-// Giữ vững pipeline 144Hz cho đến khi ngón tay rời màn hình và thẻ app neo vào vị trí
-- (void)_handleGestureEnded:(id)gesture {
-    if (IS_ACTIVE) {
-        Titanium_LockMainThreadFast();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(gesture);
-}
-
 %end
 
 // Cho phép cử chỉ mới cướp quyền ngay lập tức, vuốt nhanh liên tục không phải chờ cử chỉ cũ
 %hook SBFluidSwitcherGestureWorkspaceTransaction
-
 - (BOOL)canInterruptActiveGesture {
-    return IS_ACTIVE ? YES : %orig;
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
 
 - (BOOL)_shouldSuppressGestures {
-    return IS_ACTIVE ? NO : %orig;
+    if (IS_ACTIVE) return NO;
+    return %orig;
 }
-
-- (BOOL)completesWhenChildrenComplete {
-    return IS_ACTIVE ? YES : %orig;
-}
-
 %end
 
-// 2. THOÁT APP: XÓA SẠCH LỆNH DỌN RAM GÂY KHỰNG 1 NHỊP KHI VUỐT RA
+// 2. THOÁT APP: XÓA SẠCH DỌN RAM GÂY KHỰNG 1 NHỊP KHI VUỐT RA
 %hook SBAppToHomeWorkspaceTransaction
-
 - (BOOL)shouldAnimateOrientationChangeOnCompletion {
     return NO;
 }
@@ -1845,51 +1829,37 @@ static volatile BOOL g_isContinuousSwiping = NO;
     %orig;
 }
 
-// Bỏ qua trễ crossfade chuyển động thừa
-- (BOOL)shouldPerformCrossfadeForReduceMotion {
-    return IS_ACTIVE ? NO : %orig;
-}
-
 - (void)_didComplete {
     %orig;
     if (IS_ACTIVE) {
         Titanium_EnableZeroLatencyPipeline();
-        // TUYỆT ĐỐI KHÔNG GỌI malloc_zone_pressure_relief Ở ĐÂY ĐỂ TRIỆT TIÊU DELAY 1 NHỊP
+        // ĐÃ XÓA SẠCH malloc_zone_pressure_relief Ở ĐÂY ĐỂ TRIỆT TIÊU KHỰNG/DELAY 1 NHỊP
     }
 }
-
 %end
 
-// 3. RENDER LAYOUT BẤT ĐỒNG BỘ & TẮT ĐỔ BÓNG NẶNG NỀ (CỨU NÓNG MÁY / TRÀN GPU KHI 30+ APP)
+// 3. RENDER LAYOUT BẤT ĐỒNG BỘ
 %hook SBFluidSwitcherModifier
-
 - (BOOL)shouldasyncRenderAppLayouts {
-    return IS_ACTIVE ? YES : %orig;
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
-
-// Tắt hoàn toàn đổ bóng phức tạp của các card để GPU tập trung duy trì 144 FPS
-- (double)shadowOpacityForIndex:(unsigned long long)index {
-    return IS_ACTIVE ? 0.0 : %orig(index);
-}
-
 %end
 
-// 4. QUẢN LÝ BỘ NHỚ ĐỆM SNAPSHOT & LƯỚT QUÁN TÍNH DỨT KHOÁT
+// 4. QUẢN LÝ BỘ NHỚ ĐỆM SNAPSHOT & CUỘN THẺ ĐA NHIỆM DỨT KHOÁT
 %hook SBAppSwitcherSettings
-
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    return IS_ACTIVE ? YES : %orig;
+    if (IS_ACTIVE) return YES;
+    return %orig;
 }
 
-// Cuộn trôi thẻ app dứt khoát, nhẹ tay như màn hình tần số quét cao
 - (CGFloat)decelerationRate {
-    return IS_ACTIVE ? UIScrollViewDecelerationRateFast : %orig;
+    if (IS_ACTIVE) return UIScrollViewDecelerationRateFast; // Lướt nhanh dứt khoát 144Hz
+    return %orig;
 }
-
 %end
 
 %hook SBAppSwitcherController
-
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
         g_isUserTouchingScreen = YES;
@@ -1899,12 +1869,9 @@ static volatile BOOL g_isContinuousSwiping = NO;
     }
     %orig(animated);
 }
-
 %end
 
-// 5. CACHE VÀ VẼ THẺ CARD BẤT ĐỒNG BỘ TRÊN LUỒNG ĐỒ HỌA
 %hook SBFluidSwitcherItemContainer
-
 - (void)prepareForReuse {
     %orig;
     if (IS_ACTIVE) {
@@ -1912,7 +1879,6 @@ static volatile BOOL g_isContinuousSwiping = NO;
         v.layer.drawsAsynchronously = YES;
     }
 }
-
 %end
 
 %end
@@ -2158,25 +2124,9 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // ====================================================================================================
 
 %hook SBWallpaperController
-// Giữ nguyên quá trình vẽ snapshot và scale để không bao giờ bị đen hình nền
-- (void)beginRequiringWithReason:(id)reason {
-    %orig(reason);
-}
-
-// Bơm xung zero-latency khi hình nền động chuyển trạng thái để duy trì 144Hz mượt mà
-- (void)suspendWallpaperAnimationForReason:(id)reason {
-    if (IS_ACTIVE) {
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(reason);
-}
-
-- (void)resumeWallpaperAnimationForReason:(id)reason {
-    if (IS_ACTIVE) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(reason);
+// Trả về gốc để hình nền động tự do co giãn theo chuyển động 144Hz, không bao giờ bị đen hình nền
+- (double)wallpaperScaleForVariant:(long long)variant {
+    return %orig;
 }
 %end
 
@@ -2332,7 +2282,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // Menu giữ đè icon (3D Touch / Haptic Touch) mở ra tức thì 0ms
 %hook SBIconForceTouchSettings
 - (double)delayBeforeOpening {
-    if (IS_ACTIVE) return 0.0; // Bung menu tức thì không delay
+    if (IS_ACTIVE) return 0.0;
     return %orig;
 }
 %end
@@ -2363,22 +2313,13 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // 8. ÉP TỐC ĐỘ LOAD APP SIÊU TỐC & KHÔNG CAN THIỆP GÂY ĐEN MÀN HÌNH APP
 // ====================================================================================================
 
-// Bơm xung CPU/GPU cực đại ngay khoảnh khắc chạm icon mở app
+// Bơm xung CPU/GPU cực đại ngay khoảnh khắc chạm icon mở app (An toàn tuyệt đối)
 %hook SBApplication
 - (void)willActivate {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
         Titanium_EnableZeroLatencyPipeline();
-
-        // Ưu tiên CPU tối đa cho app đích khởi chạy
-        id state = [self processState];
-        if (state && [state respondsToSelector:@selector(pid)]) {
-            int appPid = ((int (*)(id, SEL))objc_msgSend)(state, @selector(pid));
-            if (appPid > 0) {
-                setpriority(PRIO_PROCESS, appPid, -20);
-            }
-        }
     }
     %orig;
 }
