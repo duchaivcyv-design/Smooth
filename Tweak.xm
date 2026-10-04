@@ -2579,7 +2579,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // Menu giữ đè icon (3D Touch / Haptic Touch) mở ra tức thì 0ms
 %hook SBIconForceTouchSettings
 - (double)delayBeforeOpening {
-    if (IS_ACTIVE) return 0.05; // 50ms: Đặt ngón tay là menu bung ngay lập tức
+    if (IS_ACTIVE) return 0.01; // 50ms: Đặt ngón tay là menu bung ngay lập tức
     return %orig;
 }
 %end
@@ -2610,19 +2610,18 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // 8. ÉP TỐC ĐỘ LOAD APP SIÊU TỐC & TRIỆT TIÊU ĐỘ TRỄ MỞ ỨNG DỤNG (ULTRA-FAST LAUNCH)
 // ====================================================================================================
 
-// PHẢN HỒI CHẠM 0MS & BUNG CỬA SỔ NHANH GẤP ĐÔI NHƯNG KHÔNG BỊ HỤT KHUNG HÌNH
-// TRẢ VỀ HOẠT CẢNH PHÓNG TO GỐC CỦA APPLE: BUNG TOÀN MÀN HÌNH TỰ NHIÊN, KHÔNG KẸT Ô VUÔNG
+// TRẢ VỀ CHU KỲ NỘI SUY GỐC CỦA APPLE: ICON NỞ ĐỀU RA TOÀN MÀN HÌNH, KHÔNG BỊ MÉO TRÒN
 %hook SBAppLaunchSettings
 - (double)zoomDuration {
-    return %orig;
+    return %orig; // Giữ nguyên để bán kính bo góc dãn khớp 100% với khung hình
 }
 
 - (double)launchDuration {
-    return %orig;
+    return %orig; // Giữ nguyên để app có đủ thời gian vẽ frame đầu tiên
 }
 
 - (double)delayBeforeAppLaunch {
-    if (IS_ACTIVE) return 0.0; // Giữ phản hồi tức thì 0ms khi chạm
+    if (IS_ACTIVE) return 0.0; // Chỉ xóa độ trễ nhận diện khi bấm chạm
     return %orig;
 }
 %end
@@ -2630,18 +2629,16 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // BUNG MÀN HÌNH CHỜ/LOADING TỨC THÌ NHƯNG LUÔN CÓ HÌNH BỌC LÓT (CHỐNG MÀN HÌNH ĐEN)
 %hook SBSplashBoardController
 - (double)splashScreenDelay {
-    if (IS_ACTIVE) return 0.01; // 20ms: Bung ra ngay tức thì nhưng đảm bảo layer Loading đã nạp xong
+    if (IS_ACTIVE) return 0.10; // 20ms: Bung ra ngay tức thì nhưng đảm bảo layer Loading đã nạp xong
     return %orig; 
 }
 %end
 
-// Ưu tiên luồng dựng hình ngay khi bắt đầu hoạt ảnh mở app
 %hook SBUIAnimationController
 - (void)_willBeginAnimation {
     if (IS_ACTIVE) {
-        g_isAppOpeningAnimating = YES; // Khóa cứng 120Hz từ frame mở đầu tiên
+        g_isAppOpeningAnimating = YES;
         Titanium_TriggerInstantTouchBurst();
-        Titanium_StealthKernelHijack();
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
@@ -2650,8 +2647,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)_cleanupAnimation {
     %orig;
     if (IS_ACTIVE) {
-        // App đã hiển thị trọn vẹn toàn màn hình: Đợi thêm 150ms để app ổn định rồi mới nhả cờ
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        // App đã bung xong toàn màn hình: Đợi 200ms để khung hình ổn định hoàn toàn rồi mới hạ xung
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
             g_isAppOpeningAnimating = NO;
         });
     }
@@ -2754,8 +2751,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)willActivate {
     if (IS_ACTIVE) {
+        g_isAppOpeningAnimating = YES;
         Titanium_TriggerInstantTouchBurst();
-        Titanium_LockMainThreadFast();
+        // BỎ Titanium_LockMainThreadFast để CPU chia tài nguyên cho App con kịp vẽ khung hình
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
@@ -3007,13 +3005,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// TRẢ VỀ MẶC ĐỊNH: TẮT CHẾ ĐỘ CỬA SỔ NỔI THỬ NGHIỆM ĐỂ APP MỞ TOÀN MÀN HÌNH
-%hook SBPrototypeController
-- (BOOL)isPrototypingEnabled {
-    return %orig;
-}
-%end
-
 // 4. KÍCH HOẠT IOKIT POWER ASSERTION: ÉP PHẦN CỨNG GIỮ NGUYÊN ĐIỆN ÁP ĐỈNH KHI THAO TÁC
 %hook SBBacklightController
 - (void)animateBacklightToFactor:(float)factor duration:(double)duration source:(long long)source completion:(id)completion {
@@ -3165,12 +3156,17 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_HardwareSegregation_ClassicHomeV285);
         }
 
-        if (isSpringBoard) {
+         if (isSpringBoard) {
             Titanium_TuneWindowServerDisplayDirectly();
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_Display_SpringBoardV285);
-            %init(Group_V285_FloatingWindow_PiP);
+            
+            // TẮT HẲN NHÓM NÀY: ÉP IPHONE CHẠY TOÀN MÀN HÌNH NATIVE 100%, KHÔNG TẠO Ô THU NHỎ
+            // %init(Group_V285_FloatingWindow_PiP); 
+
             %init(Group_SpringBoard_ProcessManagerV285);
+            %init(Group_Apple_DeepInternal_SubsystemV285);
+
             
             // 👈 KÍCH HOẠT NHÓM 14: TẦNG SÂU NỘI BỘ APPLE CHO RIÊNG SPRINGBOARD
             %init(Group_Apple_DeepInternal_SubsystemV285);
