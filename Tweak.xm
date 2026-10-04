@@ -3164,10 +3164,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_SpringBoard_ProcessManagerV285);
             %init(Group_Apple_DeepInternal_SubsystemV285);
 
-            
-            // 👈 KÍCH HOẠT NHÓM 14: TẦNG SÂU NỘI BỘ APPLE CHO RIÊNG SPRINGBOARD
-            %init(Group_Apple_DeepInternal_SubsystemV285);
-
             Titanium_StartThermalAndChargingWatchdog();
 
             // ĐÁNH DẤU TWEAK ĐÃ NẠP THÀNH CÔNG HOÀN TOÀN
