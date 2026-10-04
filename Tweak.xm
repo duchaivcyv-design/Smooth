@@ -1466,18 +1466,15 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 %end
 
 // ====================================================================================================
-// BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (TỐI ƯU 144HZ, 0MS DELAY)
+// BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (ĐÃ BỎ BIẾN TRÙNG LẶP)
 // ====================================================================================================
 
-// Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang và thông báo (BẢO TOÀN ĐẦY ĐỦ 100%)
 static volatile int32_t g_activeAnimationCount = 0;
-static volatile BOOL g_isScrollingActive = NO; // Cờ giữ trần 144Hz khi đang cuộn hoặc trôi quán tính
-static volatile BOOL g_isVideoPlayingActive = NO;
-static volatile BOOL g_isNotificationBannerActive = NO;
+static volatile BOOL g_isScrollingActive = NO;
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
 
-// Bộ đếm thời gian Mach tuyệt đối cho Banner: 0 cấp phát bộ nhớ, 0 xung đột hàng đợi GCD
+// Bộ đếm thời gian Mach tuyệt đối cho Banner
 static volatile uint64_t g_lastBannerMachTime = 0;
 static uint64_t g_bannerDurationMachTicks = 0;
 
