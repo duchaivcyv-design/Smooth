@@ -2099,7 +2099,7 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 %hook FBApplicationProcess
 - (void)bootstrapWithContext:(id)context completion:(id)completion {
     if (IS_ACTIVE && CFG285.turboAppLaunch) {
-        // Cướp quyền đọc đĩa I/O ở mức ưu tiên cao nhất để nạp Binary/Dylib siêu tốc
+        // Ép băng thông đọc ổ cứng NVMe ở mức cao nhất, app nạp dylib cực nhanh
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
         Titanium_StealthKernelHijack();
     }
@@ -2542,7 +2542,7 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 // BUNG MÀN HÌNH CHỜ/LOADING TỨC THÌ NHƯNG LUÔN CÓ HÌNH BỌC LÓT (CHỐNG MÀN HÌNH ĐEN)
 %hook SBSplashBoardController
 - (double)splashScreenDelay {
-    if (IS_ACTIVE) return 0.05; // 50ms: bung frame chờ cực nhanh nhưng không làm rớt layer
+    if (IS_ACTIVE) return 0.01; // 50ms: bung frame chờ cực nhanh nhưng không làm rớt layer
     return %orig; 
 }
 %end
