@@ -1081,7 +1081,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             if (diskDict && diskDict[k] != nil) return (NSString *)diskDict[k];
             CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
-                NSString *str = (__bridge NSString *)val;
+                // SỬ DỤNG __bridge_transfer ĐỂ ARC QUẢN LÝ VÀ TỰ GIẢI PHÓNG (TRIỆT TIÊU 100% RÒ RỈ RAM)
+                NSString *str = (__bridge_transfer NSString *)val;
                 return str;
             }
             return d;
@@ -1147,8 +1148,10 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.rawTouchDirectDelivery = 1;
             p.powerSaveModeActive = self.powerSaveMode ? 1 : 0;
 
+            // SAO CHÉP DỮ LIỆU SANG BIẾN CAPTURED: TRIỆT TIÊU LỖI CON TRỎ NGĂN XẾP RÁC KHI CHẠY NỀN
+            ApexV285ProPayload capturedPayload = p;
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                Titanium_WriteSyncPayloadV285(&p);
+                Titanium_WriteSyncPayloadV285(&capturedPayload);
             });
         }
     }
