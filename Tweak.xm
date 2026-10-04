@@ -3006,7 +3006,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // ----------------------------------------------------------------------------------------------------
 // PHẦN 3: KHỐNG CHẾ NỀN KÍNH LIQUID GLASS TRONG SUỐT CHO RIÊNG CC & NC (CHỐNG NÓNG MÁY)
 // ----------------------------------------------------------------------------------------------------
-
+/*
 // 6. Ép vật liệu nền mờ của CC và NC không ăn quá 20% băng thông GPU A9
 %hook MTMaterialView
 
@@ -3033,7 +3033,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-
+*/
 // ====================================================================================================
 // NHÓM 2: ẢO HÓA CARD ĐA NHIỆM KHI MỞ NHIỀU ỨNG DỤNG (CHỐNG KHỰNG KHI LƯỚT 30+ APP)
 // ====================================================================================================
@@ -3379,7 +3379,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Scroll_And_Keyboard_Opt);
             %init(Group_InstantActionAndMenuTransitions_Boost);
             %init(Group_Global_Thread_Governor_Unthrottled);
-            %init(Group_LiquidGlass_Hijack_Ultra);
+         //   %init(Group_LiquidGlass_Hijack_Ultra);
             %init(Group_CC_NC_UltraPacing);
             %init(Group_Popups_InstantPacing);
             %init(Group_MassiveSwitcher_Virtualization);
