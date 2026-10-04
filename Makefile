@@ -69,13 +69,32 @@ BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
 after-stage::
 	@echo ""
-	@echo "=== [BoostiPhone6sCore] Đồng bộ Filter Plist chuẩn hóa ==="
+	@echo "=== [BoostiPhone6s] ĐỒNG BỘ FILTER & PREFERENCELOADER VÀO GÓI ROOTLESS ==="
+	@# 1. ĐỒNG BỘ FILTER CHO DYLIB (LOẠI BỎ PREFERENCES ĐỂ CHỐNG XUNG ĐỘT RENDER)
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"; \
 	mkdir -p "$$TARGET_DIR"; \
 	printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	echo "[OK] Đã xuất Filter Plist sạch (đã loại bỏ Preferences để chống crash Settings)!"; \
-	echo ""
+	echo "[OK] Filter Plist đã cấu hình: $$TARGET_DIR/$(BOOST_PLIST_NAME)";
+	
+	@# 2. ĐỒNG BỘ ENTRY.PLIST VÀO PREFERENCELOADER (BẮT BUỘC ĐỂ HIỆN TRONG SETTINGS)
+	@PREF_LOADER_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences"; \
+	mkdir -p "$$PREF_LOADER_DIR"; \
+	if [ -f "BoostiPhone6s/entry.plist" ]; then \
+		cp "BoostiPhone6s/entry.plist" "$$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+		chmod 644 "$$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+		echo "[OK] Nạp entry.plist từ thư mục BoostiPhone6s -> $$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+	elif [ -f "layout/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist" ]; then \
+		cp "layout/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist" "$$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+		chmod 644 "$$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+		echo "[OK] Nạp từ thư mục layout -> $$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+	else \
+		echo "⚠️ Tự động tạo BoostiPhone6s.plist cho PreferenceLoader..."; \
+		printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>entry</key>\n\t<dict>\n\t\t<key>bundle</key>\n\t\t<string>BoostiPhone6s</string>\n\t\t<key>cell</key>\n\t\t<string>PSLinkCell</string>\n\t\t<key>detail</key>\n\t\t<string>RootListController</string>\n\t\t<key>isController</key>\n\t\t<true/>\n\t\t<key>label</key>\n\t\t<string>BoostiPhone6s</string>\n\t</dict>\n</dict>\n</plist>' > "$$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+		chmod 644 "$$PREF_LOADER_DIR/BoostiPhone6s.plist"; \
+		echo "[OK] Đã tự tạo thành công plist cho PreferenceLoader!"; \
+	fi
+	@echo ""
 
 before-package::
 	@echo ""
@@ -90,5 +109,15 @@ before-package::
 		echo "  [OK] Filter Plist: $$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
 	else \
 		echo "  [LỖI] Filter Plist thiếu!"; exit 1; \
+	fi; \
+	if [ -d "$$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6s.bundle" ]; then \
+		echo "  [OK] Preference Bundle: $$PREFIX_PATH/Library/PreferenceBundles/BoostiPhone6s.bundle"; \
+	else \
+		echo "  [LỖI] Thiếu BoostiPhone6s.bundle trong PreferenceBundles!"; exit 1; \
+	fi; \
+	if [ -f "$$PREFIX_PATH/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist" ]; then \
+		echo "  [OK] PreferenceLoader Plist: $$PREFIX_PATH/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist"; \
+	else \
+		echo "  [LỖI] Thiếu file nạp Settings trong PreferenceLoader/Preferences!"; exit 1; \
 	fi
 	@echo ""
