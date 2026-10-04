@@ -48,7 +48,6 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# Đã bỏ BackBoardServices để tránh lỗi thiếu SDK trên GitHub Actions
 BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
@@ -70,24 +69,13 @@ BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
 after-stage::
 	@echo ""
-	@echo "=== [BoostiPhone6sCore] Đồng bộ Filter Plist vào Staging ==="
+	@echo "=== [BoostiPhone6sCore] Đồng bộ Filter Plist chuẩn hóa ==="
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"; \
 	mkdir -p "$$TARGET_DIR"; \
-	if [ -f "$(BOOST_PLIST_NAME)" ]; then \
-		cp "$(BOOST_PLIST_NAME)" "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-		chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-		echo "[OK] Nạp filter plist từ root: $$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	elif [ -f "BoostiPhone6s.plist" ]; then \
-		cp "BoostiPhone6s.plist" "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-		chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-		echo "[OK] Nạp filter plist từ BoostiPhone6s.plist đổi tên thành $(BOOST_PLIST_NAME)"; \
-	else \
-		echo "[WARN] Tạo tự động filter plist tiêu chuẩn cho $(BOOST_PLIST_NAME)..."; \
-		printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t\t<string>com.apple.TextInputUI</string>\n\t\t\t<string>com.apple.InputUI</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t\t<string>Preferences</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-		chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-		echo "[OK] Đã xuất filter plist tự động!"; \
-	fi
-	@echo ""
+	printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
+	echo "[OK] Đã xuất Filter Plist sạch (đã loại bỏ Preferences để chống crash Settings)!"; \
+	echo ""
 
 before-package::
 	@echo ""
