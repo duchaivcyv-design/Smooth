@@ -320,9 +320,11 @@ extern "C" {
 @end
 
 @interface CAWindowServerDisplay : NSObject
-- (void)setMinimumFrameDuration:(double)duration;
+- (BOOL)allowsVirtualModes;
 - (void)setAllowsVirtualModes:(BOOL)flag;
-- (void)setAllowsDisplayCompositing:(BOOL)flag;
+- (BOOL)isMirroringEnabled;
+- (double)latency;
+- (void)setLatency:(double)latency;
 @end
 
 @interface CAWindowServer : NSObject
@@ -1366,13 +1368,13 @@ static inline void Titanium_LockMainThreadFast(void) {
 }
 
 // ====================================================================================================
-// CƯỚP QUYỀN TẦNG NHÂN MACH (CÔNG THỨC DEADLINE 80% - ĐÃ LOẠI BỎ DẤU GẠCH CHÉO LỖI)
+// CƯỚP QUYỀN TẦNG NHÂN MACH (CÔNG THỨC DEADLINE THỜI GIAN THỰC - CÁCH LY MẠNG TUYỆT ĐỐI)
 // ====================================================================================================
 
 static inline void Titanium_StealthKernelHijack(void) {
     if (!NSThread.isMainThread) return;
 
-    // 1. CÁCH LY TUYỆT ĐỐI TOÀN BỘ TIẾN TRÌNH VÀ DAEMON MẠNG/SÓNG
+    // 1. CÁCH LY TUYỆT ĐỐI TIẾN TRÌNH MẠNG & WEBKIT (CHỐNG TREO MẠNG VÀ CHỐNG ĐEN APP)
     const char *prog = getprogname();
     if (prog) {
         if (strstr(prog, "WebKit") || strstr(prog, "WebContent") || 
@@ -1394,30 +1396,31 @@ static inline void Titanium_StealthKernelHijack(void) {
     double currentHz = (CFG285 && CFG285.targetHz > 0) ? (double)[CFG285 resolvedTargetHz] : 60.0;
     if (currentHz <= 0.0) currentHz = 60.0;
 
-    // [MỤC 5] CÔNG THỨC DEADLINE THỜI GIAN THỰC 80% (CHUẨN CÚ PHÁP)
+    // Chu kỳ khung hình: 144Hz = ~6.94ms (6,944,444 ns)
     uint64_t period_ns      = (uint64_t)(1000000000.0 / currentHz); 
-    uint64_t computation_ns = (uint64_t)(period_ns * 0.80); // 80% thời lượng chu kỳ dành riêng cho vẽ
-    uint64_t constraint_ns  = period_ns;                    // Khóa cứng deadline
+    // Cấp 50% chu kỳ cho P-Core xử lý đồ họa, 50% còn lại cho CPU nghỉ làm mát và đón ngắt mạng
+    uint64_t computation_ns = (uint64_t)(period_ns * 0.50); 
+    uint64_t constraint_ns  = period_ns;                    
 
     thread_time_constraint_policy_data_t timePolicy;
     timePolicy.period      = (uint32_t)((period_ns * timebase.denom) / timebase.numer);
     timePolicy.computation = (uint32_t)((computation_ns * timebase.denom) / timebase.numer);
     timePolicy.constraint  = (uint32_t)((constraint_ns * timebase.denom) / timebase.numer);
-    timePolicy.preemptible = 1; // Giữ ngắt mạng thông suốt
+    timePolicy.preemptible = 1; // Giữ ngắt phần cứng thông suốt cho socket mạng
 
     thread_policy_set(machThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
-    // 3. Giữ timeshare = 1 để nhân Darwin điều phối đa nhiệm, không làm chết socket mạng ngầm
+    // 3. Giữ timeshare = 1 để Darwin không giết chết các background daemon
     thread_extended_policy_data_t extPolicy;
     extPolicy.timeshare = 1; 
     thread_policy_set(machThread, THREAD_EXTENDED_POLICY, (thread_policy_t)&extPolicy, THREAD_EXTENDED_POLICY_COUNT);
 
-    // 4. Ưu tiên P-Core cho luồng đồ họa
+    // 4. Ưu tiên P-Core cho luồng vẽ giao diện
     thread_affinity_policy_data_t affPolicy;
     affPolicy.affinity_tag = 1;
     thread_policy_set(machThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affPolicy, THREAD_AFFINITY_POLICY_COUNT);
 
-    // 5. Tối ưu I/O và nâng mức QoS tương tác chuẩn Apple
+    // 5. Cấp quyền I/O và gán QoS User Interactive
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1429,9 +1432,9 @@ static inline void Titanium_StealthKernelHijack(void) {
 
 static void Titanium_TriggerInstantTouchBurst(void) {
     g_isUserTouchingScreen = YES;
-    Titanium_ForcePeakPowerState();  // 👈 Kích P-Core giữ xung đỉnh tức thì
+    Titanium_ForcePeakPowerState();  
     Titanium_LockMainThreadFast();
-    Titanium_StealthKernelHijack();   // 👈 Cướp quyền nhân Mach ngay khi chạm kính
+    Titanium_StealthKernelHijack();   
 
     static dispatch_once_t qToken;
     dispatch_once(&qToken, ^{
@@ -1469,7 +1472,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
-        Titanium_TriggerInstantTouchBurst(); // Kích xung Mach ngay khi vừa chạm
+        Titanium_TriggerInstantTouchBurst();
     }
     %orig(touches, event);
 }
@@ -1519,7 +1522,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
         if (touch) {
             if (touch.phase == UITouchPhaseBegan) {
                 g_isInstantMotion = YES;
-                Titanium_ForceWakeMainRunLoop(); // 👈 [MỤC 2]: Đánh thức RunLoop ngay frame chạm đầu tiên
+                Titanium_ForceWakeMainRunLoop();
                 Titanium_TriggerInstantTouchBurst();
             } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
                 if (!g_isScrollingActive && !g_isContinuousSwiping && !g_isAppToHomeAnimating) {
@@ -1532,28 +1535,46 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
+%hook UIPanGestureRecognizer
+- (void)_setHysteresis:(CGFloat)hysteresis {
+    if (IS_ACTIVE) hysteresis = 0.0; // Xóa bỏ 10 pixel trễ khi đổi hướng vuốt
+    %orig(hysteresis);
+}
+
+- (CGFloat)_hysteresis {
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
+}
+
+- (BOOL)_shouldTryToBeginWithEvent:(UIEvent *)event {
+    if (IS_ACTIVE) {
+        Titanium_TriggerInstantTouchBurst();
+    }
+    return %orig(event);
+}
+%end
+
 %end // KẾT THÚC %group Group_ZeroLatency_Touch_Opt
 
 // ====================================================================================================
 // NHÓM 2: METAL GRAPHICS, TRIPLE BUFFERING & KHÓA CHỐNG RUNG LAYER
 // ====================================================================================================
+
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    %orig(3); // Triple-Buffering: Luôn có sẵn khung hình nạp trước, chống drop frame
+    %orig(3); // 3 bộ đệm gối đầu chống drop frame
 }
 
 - (NSUInteger)maximumDrawableCount {
     return 3;
 }
 
-// Khóa đồng bộ tấm nền phần cứng: Triệt tiêu 100% hiện tượng xé khung hình
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    %orig(YES);
+    %orig(YES); // Khóa VSync chống xé hình
 }
 
-// Tránh lỗi timeout làm rớt frame khi vuốt nhanh
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     %orig(NO);
 }
@@ -1565,18 +1586,18 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 
 %hook CALayer
 - (void)display {
-    if (IS_ACTIVE && CFG285.touchResponseBoost && g_isInstantMotion) {
+    // Chỉ kích hoạt khi ngón tay đang chạm để tránh ép low-latency làm đen background modal/sheet
+    if (IS_ACTIVE && CFG285.touchResponseBoost && g_isInstantMotion && g_isUserTouchingScreen) {
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig;
 }
 
-// [MỤC 4] TRIỆT TIÊU OFFSCREEN RENDERING KHI BO GÓC
 - (void)setCornerRadius:(CGFloat)radius {
     %orig(radius);
     if (radius > 0.0 && IS_ACTIVE) {
         if ([self respondsToSelector:@selector(setCornerCurve:)]) {
-            self.cornerCurve = kCACornerCurveContinuous; // Bo góc bằng toán học GPU trực tiếp
+            self.cornerCurve = kCACornerCurveContinuous; // Bo góc phần cứng trực tiếp
         }
     }
 }
@@ -1592,18 +1613,16 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
 // ====================================================================================================
 
-// Quản lý biến an toàn đa luồng cho hoạt ảnh, video, cuộn trang và thông báo
 static volatile int32_t g_activeAnimationCount = 0;
 static volatile BOOL g_isVideoPlayingActive = NO;
 static volatile BOOL g_isNotificationBannerActive = NO;
 static dispatch_source_t g_bannerBurstTimer = nil;
 static dispatch_queue_t g_bannerBurstQueue = nil;
 
-// Kích xung nhịp CPU/GPU cực đại tức thì 0ms khi có thông báo xuất hiện
 static void Titanium_TriggerNotificationBurst(void) {
     g_isNotificationBannerActive = YES;
     Titanium_LockMainThreadFast();
-    Titanium_EnableZeroLatencyPipeline();
+    Titanium_StealthKernelHijack();
 
     static dispatch_once_t bToken;
     dispatch_once(&bToken, ^{
@@ -1615,7 +1634,6 @@ static void Titanium_TriggerNotificationBurst(void) {
         g_bannerBurstTimer = nil;
     }
 
-    // Giữ trần FPS trong 850ms để bao trọn thời lượng banner rơi xuống và neo mượt mà
     g_bannerBurstTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_bannerBurstQueue);
     dispatch_source_set_timer(g_bannerBurstTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(850 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
     dispatch_source_set_event_handler(g_bannerBurstTimer, ^{
@@ -1624,16 +1642,6 @@ static void Titanium_TriggerNotificationBurst(void) {
     });
     dispatch_resume(g_bannerBurstTimer);
 }
-
-// ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ/FPS TÙY CHỌN - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
-// (CHỈ ÁP DỤNG IPHONE 6S - 12 PRO MAX)
-// ====================================================================================================
-
-// BỘ ĐIỀU TỐC SUY GIẢM 10HZ TỪ TỪ - BẢO VỆ VSYNC KHÔNG BỊ SỐC NHỊP
-static volatile NSInteger g_currentDynamicHz = 144;
-static dispatch_source_t g_hzDecayTimer = nil;
-static dispatch_queue_t g_hzDecayQueue = nil;
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
     if (g_isSwitcherActive) return YES;
@@ -1652,89 +1660,108 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive);
 }
 
-static inline NSInteger Titanium_GetGradualSteppedHz(void) {
+// ====================================================================================================
+// [KHẮC PHỤC TRIỆT ĐỂ LỖI THIẾU HÀM]: ĐỌC HZ CÀI ĐẶT (THAO TÁC = 144HZ, TĨNH = 10HZ)
+// ====================================================================================================
+
+static inline NSInteger Titanium_GetLockedConfiguredHz(void) {
     if (Titanium_ShouldLockTargetRate()) {
-        g_currentDynamicHz = 144;
-        return 144;
-    }
-
-    static dispatch_once_t qToken;
-    dispatch_once(&qToken, ^{
-        g_hzDecayQueue = dispatch_queue_create("com.titanium.hzdecay", DISPATCH_QUEUE_SERIAL);
-    });
-
-    if (!g_hzDecayTimer && g_currentDynamicHz > 60) {
-        g_hzDecayTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, g_hzDecayQueue);
-        dispatch_source_set_timer(g_hzDecayTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), (uint64_t)(100 * NSEC_PER_MSEC), 0);
-        dispatch_source_set_event_handler(g_hzDecayTimer, ^{
-            if (!Titanium_ShouldLockTargetRate()) {
-                if (g_currentDynamicHz > 60) {
-                    g_currentDynamicHz -= 10;
-                    if (g_currentDynamicHz < 60) g_currentDynamicHz = 60;
-                } else {
-                    dispatch_source_cancel(g_hzDecayTimer);
-                    g_hzDecayTimer = nil;
-                }
-            } else {
-                g_currentDynamicHz = 144;
-                dispatch_source_cancel(g_hzDecayTimer);
-                g_hzDecayTimer = nil;
+        NSInteger chosenHz = 144;
+        if (CFG285) {
+            if ([CFG285 respondsToSelector:@selector(resolvedTargetHz)]) {
+                chosenHz = (NSInteger)[CFG285 resolvedTargetHz];
+            } else if (CFG285.targetHz > 0) {
+                chosenHz = (NSInteger)CFG285.targetHz;
             }
-        });
-        dispatch_resume(g_hzDecayTimer);
+        }
+        return (chosenHz > 0) ? chosenHz : 144;
     }
-
-    return g_currentDynamicHz;
+    // Màn hình đứng yên: Khóa chuẩn 10Hz để GPU nghỉ ngơi, máy mát lạnh
+    return 10;
 }
+
+// ====================================================================================================
+// KHAI BÁO PRIVATE INTERFACE CHO WINDOW SERVER ĐỂ THEOS BIÊN DỊCH KHÔNG LỖI
+// ====================================================================================================
+@interface CAWindowServerDisplay : NSObject
+- (BOOL)allowsVirtualModes;
+- (void)setAllowsVirtualModes:(BOOL)flag;
+- (BOOL)isMirroringEnabled;
+- (double)latency;
+- (void)setLatency:(double)latency;
+@end
+
+// ====================================================================================================
+// NHÓM 3: KHÓA CỨNG HZ/FPS TÙY CHỌN - TỰ HẠ 10HZ KHI TĨNH - CƯỚP QUYỀN VSYNC TOÀN DIỆN
+// ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
 
-// ====================================================================================================
-// 1. ĐIỀU PHỐI DẢI TẦN SỐ QUÉT ĐỘNG - HẠ BẬC THANG 10HZ MƯỢT TUYỆT ĐỐI
-// ====================================================================================================
 %hook CADisplayLink
 
 - (NSInteger)preferredFramesPerSecond {
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        return Titanium_GetGradualSteppedHz();
+        return Titanium_GetLockedConfiguredHz();
     }
     return %orig;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if (Titanium_IsPassiveVideoPlayback()) {
-        %orig;
+        %orig(fps);
         return;
     }
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        NSInteger target = Titanium_GetGradualSteppedHz();
+        NSInteger target = Titanium_GetLockedConfiguredHz();
         %orig(target);
         return;
     }
-    %orig;
+    %orig(fps);
+}
+
+// CƯỚP QUYỀN DỰ BÁO VSYNC: ÉP TOÁN HỌC NẢY LÒ XO TÍNH TOÁN Ở BƯỚC NHẢY 6.94MS (144HZ)
+- (CFTimeInterval)targetTimestamp {
+    CFTimeInterval origTarget = %orig;
+    if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
+        CFTimeInterval current = self.timestamp;
+        if (current > 0.0) {
+            return current + (1.0 / 144.0);
+        }
+    }
+    return origTarget;
 }
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (Titanium_IsPassiveVideoPlayback()) { 
-        %orig; 
+        %orig(range); 
         return; 
     }
 
     if (@available(iOS 15.0, *)) {
-        if (IS_ACTIVE && CFG285.enableHzControl) {
-            float steppedHz = (float)Titanium_GetGradualSteppedHz();
-            range = SafeMakeFRR(60.0f, steppedHz, steppedHz);
+        if (IS_ACTIVE && (CFG285.enableHzControl || CFG285.enableFPSControl)) {
+            float targetHz = (float)Titanium_GetLockedConfiguredHz();
+            if (targetHz > 10.0f) {
+                // Đang thao tác: Khóa dải 60 - 144Hz
+                range = SafeMakeFRR(60.0f, targetHz, targetHz);
+            } else {
+                // Tĩnh: Khóa cứng 10Hz
+                range = SafeMakeFRR(10.0f, 10.0f, 10.0f);
+            }
         }
     }
     %orig(range);
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE && CFG285.enableHzControl) {
-        interval = 1;
+    if (!HardwareHasNative120Hz() && !Titanium_IsPassiveVideoPlayback() && IS_ACTIVE && (CFG285.enableHzControl || CFG285.enableFPSControl)) {
+        if (Titanium_ShouldLockTargetRate()) {
+            interval = 1; // Quét từng nhịp VSync khi thao tác
+        } else {
+            interval = 6; // 60Hz / 6 = 10Hz toán học khi tĩnh
+        }
     }
     %orig(interval);
 }
@@ -1742,39 +1769,23 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 %end
 
 // ====================================================================================================
-// 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY - ĐỒNG BỘ THEO NHỊP GIẢM TỪ TỪ
+// CƯỚP QUYỀN VSYNC TẦNG PHẦN CỨNG QUARTZCORE (CADISPLAY)
 // ====================================================================================================
+
 %hook CADisplay
 
-- (NSInteger)preferredFPS {
-    if (HardwareHasNative120Hz() || Titanium_IsPassiveVideoPlayback()) return %orig;
-    if (!IS_ACTIVE) return %orig;
-    
-    return Titanium_GetGradualSteppedHz();
+- (double)latency {
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
 }
 
-- (void)setPreferredFPS:(NSInteger)fps {
-    if (HardwareHasNative120Hz() || Titanium_IsPassiveVideoPlayback()) { 
-        %orig; 
-        return; 
-    }
-    
-    if (IS_ACTIVE) {
-        fps = Titanium_GetGradualSteppedHz();
-    }
-    %orig(fps);
+- (void)setLatency:(double)latency {
+    if (IS_ACTIVE) latency = 0.0;
+    %orig(latency);
 }
 
-- (void)overrideDisplayCadence:(id)cadence {
-    if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
-        %orig(nil);
-        return;
-    }
-    %orig(cadence);
-}
-
-- (BOOL)supportsDynamicRefresh {
-    if (IS_ACTIVE) return YES;
+- (BOOL)allowsVirtualModes {
+    if (IS_ACTIVE) return NO;
     return %orig;
 }
 
@@ -1783,17 +1794,33 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
     %orig(allows);
 }
 
-- (BOOL)hasDynamicDisplayMode {
-    if (HardwareHasNative120Hz()) return %orig;
-    if (!IS_ACTIVE) return YES;
+- (NSInteger)preferredFPS {
+    if (Titanium_IsPassiveVideoPlayback()) return %orig;
+    if (IS_ACTIVE) {
+        return Titanium_ShouldLockTargetRate() ? 144 : 10;
+    }
     return %orig;
+}
+
+- (void)setPreferredFPS:(NSInteger)fps {
+    if (Titanium_IsPassiveVideoPlayback()) {
+        %orig(fps);
+        return;
+    }
+    if (IS_ACTIVE) {
+        NSInteger target = Titanium_ShouldLockTargetRate() ? 144 : 10;
+        %orig(target);
+        return;
+    }
+    %orig(fps);
 }
 
 %end
 
 // ====================================================================================================
-// 3. MỞ KHÓA PROMOTION 144HZ TOÀN HỆ THỐNG (UISCREEN)
+// MỞ KHÓA PROMOTION 144HZ TOÀN HỆ THỐNG (UISCREEN)
 // ====================================================================================================
+
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
@@ -1838,8 +1865,9 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 %end
 
 // ====================================================================================================
-// 4. KHÓA TỐC ĐỘ DỰNG HOẠT ẢNH VÀ LÒ XO (ANIMATION & SPRING)
+// KHÓA TỐC ĐỘ DỰNG HOẠT ẢNH VÀ LÒ XO (CAANIMATION & CASPRINGANIMATION)
 // ====================================================================================================
+
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
@@ -1873,7 +1901,10 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 
 %end
 
-// 5. THEO DÕI VIDEO
+// ====================================================================================================
+// BẢO TOÀN FPS GỐC KHI XEM VIDEO (AVPLAYER)
+// ====================================================================================================
+
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
@@ -1885,7 +1916,10 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 
 %end
 
-// 6. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN
+// ====================================================================================================
+// ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN
+// ====================================================================================================
+
 %hook NCNotificationDispatcher
 
 - (void)postNotificationWithRequest:(id)request {
@@ -1919,7 +1953,10 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 
 %end
 
-// 7. COMMIT GIAO DỊCH (ĐÃ LOẠI BỎ LỆNH GÂY NGHẼN MẠNG)
+// ====================================================================================================
+// COMMIT GIAO DỊCH AN TOÀN
+// ====================================================================================================
+
 %hook CATransaction
 + (void)commit {
     %orig;
@@ -1933,7 +1970,10 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 }
 %end
 
-// 8. ÉP DẢI TẦN SỐ QUÉT CHO UIVIEW ANIMATION
+// ====================================================================================================
+// ÉP DẢI TẦN SỐ QUÉT CHO UIVIEW ANIMATION
+// ====================================================================================================
+
 %hook UIView
 
 + (void)_setPreferredFrameRateRange:(SafeFrameRateRange)range {
@@ -1944,9 +1984,43 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
     }
     %orig(range);
 }
-%end
 
 %end
+
+// ====================================================================================================
+// KHÓA ĐỒNG BỘ VSYNC TẠI WINDOW SERVER (CAWINDOWSERVERDISPLAY)
+// ====================================================================================================
+
+%hook CAWindowServerDisplay
+
+- (BOOL)allowsVirtualModes {
+    if (IS_ACTIVE) return NO;
+    return %orig;
+}
+
+- (void)setAllowsVirtualModes:(BOOL)flag {
+    if (IS_ACTIVE) flag = NO;
+    %orig(flag);
+}
+
+- (BOOL)isMirroringEnabled {
+    if (IS_ACTIVE) return NO;
+    return %orig;
+}
+
+- (double)latency {
+    if (IS_ACTIVE) return 0.0;
+    return %orig;
+}
+
+- (void)setLatency:(double)latency {
+    if (IS_ACTIVE) latency = 0.0;
+    %orig(latency);
+}
+
+%end
+
+%end // KẾT THÚC %group Group_FluidTransitions_Pacing
 
 // ====================================================================================================
 // NHÓM 4: ĐA NHIỆM SIÊU MƯỢT (DỨT ĐIỂM MÀN HÌNH ĐEN KHI MỞ APP & CƯỚP QUYỀN SÂU 144HZ)
