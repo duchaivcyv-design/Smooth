@@ -2240,7 +2240,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 // ====================================================================================================
 // NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG BÊN NGOÀI (FOLDER, LOCKSCREEN, 3D TOUCH, CC/NC, LOAD APP)
 // ====================================================================================================
-
+/*
 %group Group_Display_SpringBoardV285
 
 // ====================================================================================================
@@ -2551,7 +2551,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-
+*/
 // ====================================================================================================
 // NHÓM 8: PIPELINE CHO PICTURE-IN-PICTURE (PIP 60FPS MƯỢT MÀ)
 // ====================================================================================================
@@ -3399,7 +3399,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
               //  %init(Group_Switcher30Apps_Virtualization);
                 %init(Group_Display_SpringBoardV285);
                 %init(Group_V285_FloatingWindow_PiP);
-                %init(Group_SpringBoard_ProcessManagerV285);
+              //  %init(Group_SpringBoard_ProcessManagerV285);
                 Titanium_StartThermalAndChargingWatchdog();
 
                 // ĐÁNH DẤU TWEAK ĐÃ NẠP THÀNH CÔNG (Thuần Rootless/RootHide)
