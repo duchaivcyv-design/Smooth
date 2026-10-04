@@ -1874,7 +1874,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 // NHÓM 4: CƯỚP QUYỀN ĐA NHIỆM & ĐỒNG BỘ 144HZ TOÀN DIỆN (CHUYỂN CẢNH SIÊU MƯỢT 0.0S)
 // ====================================================================================================
-
+/*
 static volatile BOOL g_isContinuousSwiping = NO;
 
 %group Group_Switcher30Apps_Virtualization
@@ -2006,7 +2006,7 @@ static volatile BOOL g_isContinuousSwiping = NO;
 %end
 
 %end
-
+*/
 // ====================================================================================================
 // NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (TURBO ENGINE)
 // ====================================================================================================
@@ -3396,7 +3396,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             if (isSpringBoard) {
                 Titanium_TuneWindowServerDisplayDirectly();
-                %init(Group_Switcher30Apps_Virtualization);
+              //  %init(Group_Switcher30Apps_Virtualization);
                 %init(Group_Display_SpringBoardV285);
                 %init(Group_V285_FloatingWindow_PiP);
                 %init(Group_SpringBoard_ProcessManagerV285);
