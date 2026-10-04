@@ -1540,26 +1540,22 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
-// [MỤC 3] ÉP TRIPLE BUFFERING (3 BỘ ĐỆM GỐI ĐẦU)
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    if (IS_ACTIVE && CFG285.metalHexBuffering) count = 3;
-    %orig(count);
+    %orig(3); // Triple-Buffering: Luôn có sẵn khung hình nạp trước, chống drop frame
 }
 
 - (NSUInteger)maximumDrawableCount {
-    if (IS_ACTIVE && CFG285.metalHexBuffering) return 3;
-    return %orig;
+    return 3;
 }
 
+// Khóa đồng bộ tấm nền phần cứng: Triệt tiêu 100% hiện tượng xé khung hình
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    if (IS_ACTIVE) enabled = YES;
-    %orig(enabled);
+    %orig(YES);
 }
 
-// [MỤC 3] ÉP KHÔNG TIMEOUT ĐỂ GPU KHÔNG HỦY KHUNG HÌNH
+// Tránh lỗi timeout làm rớt frame khi vuốt nhanh
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    if (IS_ACTIVE) allow = NO;
-    %orig(allow);
+    %orig(NO);
 }
 
 - (void)setPresentsWithTransaction:(BOOL)flag {
@@ -2057,15 +2053,15 @@ static inline NSInteger Titanium_GetGradualSteppedHz(void) {
 }
 %end
 
-%hook SBAppSwitcherController
-- (void)viewWillAppear:(BOOL)animated {
+%hook SBFluidSwitcherViewController
+- (void)handleFluidSwitcherGesture:(id)gesture {
     if (IS_ACTIVE) {
-        g_isSwitcherActive = YES; // Kích trần 144Hz ngay khi mở đa nhiệm
+        g_isSwitcherActive = YES;
+        g_isInstantMotion = YES;
         Titanium_TriggerInstantTouchBurst();
         Titanium_StealthKernelHijack();
-        Titanium_EnableZeroLatencyPipeline();
     }
-    %orig(animated);
+    %orig(gesture);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
