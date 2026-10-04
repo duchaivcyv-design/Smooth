@@ -1421,26 +1421,6 @@ static inline void Titanium_StealthKernelHijack(void) {
 // ====================================================================================================
 
 %group Group_ZeroLatency_Touch_Opt
-
-%hook UIGestureRecognizer
-- (BOOL)delaysTouchesBegan { 
-    return %orig; 
-}
-
-- (BOOL)delaysTouchesEnded { 
-    return %orig; 
-}
-
-- (void)setDelaysTouchesBegan:(BOOL)flag { 
-    %orig; 
-}
-
-- (void)setDelaysTouchesEnded:(BOOL)flag { 
-    %orig; 
-}
-%end
-
-// 2. PHẢN HỒI NÚT BẤM VÀ ĐIỀU HƯỚNG TỨC THÌ
 %hook UIControl
 - (NSTimeInterval)_touchDelayThreshold {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return 0.0;
@@ -1557,36 +1537,6 @@ static inline void Titanium_StealthKernelHijack(void) {
     if (IS_ACTIVE) flag = YES;
     %orig(flag);
 }
-%end
-
-// GỘP HOÀN CHỈNH: TỐI ƯU HÓA RENDER SERVER & XẾP LỚP LAYER (KHÔNG TEO NHỎ APP)
-%hook CAContext
-- (void)orderAbove:(uint32_t)contextId {
-    if (IS_ACTIVE && Titanium_IsSpringBoard()) {
-        Titanium_EnableZeroLatencyPipeline();
-    }
-    %orig(contextId);
-}
-
-- (void)setCommitPriority:(uint32_t)priority {
-    if (!Titanium_IsSpringBoard() && IS_ACTIVE) {
-        priority = 100;
-    }
-    %orig(priority);
-}
-
-- (uint32_t)commitPriority {
-    if (Titanium_IsSpringBoard()) return %orig;
-    if (IS_ACTIVE) return 100;
-    return %orig;
-}
-
-- (void)setDesiredDynamicRange:(float)range {
-    if (IS_ACTIVE) range = 1.0f;
-    %orig(range);
-}
-%end
-
 %end
 
 // ====================================================================================================
