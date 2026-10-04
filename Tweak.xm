@@ -1187,21 +1187,35 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     }
 }
 
-// ----------------------------------------------------------------------------------------------------
-// KHAI BÁO DEPENDENCY NGOÀI (ĐẢM BẢO KHÔNG LỖI BIÊN DỊCH NẾU TÁCH FILE HOẶC CHƯA KHAI BÁO ĐẦU FILE)
-// ----------------------------------------------------------------------------------------------------
-#include <stdatomic.h>
+/// ====================================================================================================
+// KHAI BÁO BIẾN TOÀN CỤC DUY NHẤT (ĐẢM BẢO ĐẦY ĐỦ CÁC CỜ HỆ THỐNG - KHÔNG LỖI UNDECLARED)
+// ====================================================================================================
 
-extern volatile BOOL g_isContinuousSwiping;
-extern volatile BOOL g_isNotificationBannerActive;
-extern volatile BOOL g_isUserTouchingScreen;
-extern volatile uint64_t g_lastInteractionMachTime;
-extern uint64_t g_burstDurationMachTicks;
-extern uint64_t g_burstDurationChargingMachTicks;
+#include <stdatomic.h>
 
 #ifndef HAS_DEVICE_CHARGING_FLAG
 extern BOOL g_isDeviceChargingV285 __attribute__((weak));
 #endif
+
+static volatile BOOL g_isContinuousSwiping = NO;
+static volatile BOOL g_isUserTouchingScreen = NO;
+static volatile BOOL g_isVideoPlayingActive = NO;       // Cờ cho Video & PiP Nhóm 8
+static volatile BOOL g_isNotificationBannerActive = NO;
+static volatile BOOL g_isScrollingActive = NO;
+static volatile int32_t g_activeAnimationCount = 0;
+
+// Các mốc Mach Time và hàng đợi dùng chung toàn hệ thống
+static volatile uint64_t g_lastInteractionMachTime = 0;
+static uint64_t g_burstDurationMachTicks = 0;
+static uint64_t g_burstDurationChargingMachTicks = 0;
+
+static volatile uint64_t g_lastBannerMachTime = 0;
+static uint64_t g_bannerDurationMachTicks = 0;
+
+static dispatch_source_t g_touchBurstTimer = nil;
+static dispatch_queue_t g_touchBurstQueue = nil;
+static dispatch_source_t g_bannerBurstTimer = nil;
+static dispatch_queue_t g_bannerBurstQueue = nil;
 
 // ====================================================================================================
 // 5. BỘ ĐIỀU PHỐI BURST GOVERNOR NGUYÊN TỬ (AN TOÀN ĐA LUỒNG & KHÔNG OVERHEAD SYSCALL)
@@ -1474,26 +1488,18 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 %end
 
 // ====================================================================================================
-// BIẾN QUẢN LÝ TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (ĐÃ BỎ BIẾN TRÙNG LẶP)
+// ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (KHÔNG TRÙNG LẶP BIẾN)
 // ====================================================================================================
-
-static volatile int32_t g_activeAnimationCount = 0;
-static volatile BOOL g_isScrollingActive = NO;
-static dispatch_source_t g_bannerBurstTimer = nil;
-static dispatch_queue_t g_bannerBurstQueue = nil;
-
-// Bộ đếm thời gian Mach tuyệt đối cho Banner
-static volatile uint64_t g_lastBannerMachTime = 0;
-static uint64_t g_bannerDurationMachTicks = 0;
 
 static inline void Titanium_InitBannerMachTimebase(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         mach_timebase_info_data_t timebase;
-        mach_timebase_info(&timebase);
-        // Khóa chặt 850ms bao trọn chu kỳ banner trượt xuống và neo ổn định
-        uint64_t nanos = 850ULL * 1000000ULL;
-        g_bannerDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
+        if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.numer > 0) {
+            // Khóa chặt 850ms bao trọn chu kỳ banner trượt xuống và neo ổn định
+            uint64_t nanos = 850ULL * 1000000ULL;
+            g_bannerDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
+        }
     });
 }
 
