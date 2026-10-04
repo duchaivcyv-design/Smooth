@@ -3397,9 +3397,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             if (isSpringBoard) {
                 Titanium_TuneWindowServerDisplayDirectly();
               //  %init(Group_Switcher30Apps_Virtualization);
-                %init(Group_Display_SpringBoardV285);
+               // %init(Group_Display_SpringBoardV285);
                 %init(Group_V285_FloatingWindow_PiP);
-              //  %init(Group_SpringBoard_ProcessManagerV285);
+                %init(Group_SpringBoard_ProcessManagerV285);
                 Titanium_StartThermalAndChargingWatchdog();
 
                 // ĐÁNH DẤU TWEAK ĐÃ NẠP THÀNH CÔNG (Thuần Rootless/RootHide)
