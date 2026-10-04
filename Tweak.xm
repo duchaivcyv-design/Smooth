@@ -3025,7 +3025,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // 3. MỞ KHÓA TOÀN BỘ GIỚI HẠN DAO ĐỘNG PROTOTYPE NỘI BỘ APPLE (SPRINGBOARD PHYSICS)
-%%hook SBPrototypeController
+%hook SBPrototypeController
 - (BOOL)isPrototypingEnabled {
     return %orig; // Trả về mặc định để tắt giao diện cửa sổ nổi thử nghiệm
 }
