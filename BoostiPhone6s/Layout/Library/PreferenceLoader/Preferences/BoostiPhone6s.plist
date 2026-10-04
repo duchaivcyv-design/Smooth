@@ -5,7 +5,9 @@
     <key>entry</key>
     <dict>
         <key>bundle</key>
-        <string>BoostiPhone6sPrefs</string>
+        <string><key>CFBundleExecutable</key>
+        <string>BoostiPhone6s</string>
+        </string>
         <key>cell</key>
         <string>PSLinkCell</string>
         <key>detail</key>
