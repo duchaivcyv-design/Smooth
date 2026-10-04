@@ -735,6 +735,8 @@ static volatile BOOL g_isScrollingActive = NO;
 static volatile BOOL g_isContinuousSwiping = NO;
 static volatile BOOL g_isAppToHomeAnimating = NO;
 static volatile BOOL g_isAppOpeningAnimating = NO;
+static volatile BOOL g_isSwitcherActive = NO; // Cờ giữ cứng 120Hz/60Hz khi đang ở màn hình đa nhiệm
+
 
 // ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION
@@ -1041,8 +1043,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     if ([mainDisp respondsToSelector:@selector(setMinimumFrameDuration:)]) {
         [mainDisp setMinimumFrameDuration:minDuration];
     }
-    if ([mainDisp respondsToSelector:@selector(setAllowsVirtualModes:)]) {
-        [mainDisp setAllowsVirtualModes:YES];
+     if ([mainDisp respondsToSelector:@selector(setAllowsVirtualModes:)]) {
+        [mainDisp setAllowsVirtualModes:NO]; // Khóa cứng chạy chế độ Native toàn màn hình
     }
     if ([mainDisp respondsToSelector:@selector(setAllowsDisplayCompositing:)]) {
         [mainDisp setAllowsDisplayCompositing:YES];
@@ -1565,7 +1567,15 @@ static inline void Titanium_StealthKernelHijack(void) {
 }
 %end
 
+// GỘP HOÀN CHỈNH: TỐI ƯU HÓA RENDER SERVER & XẾP LỚP LAYER (KHÔNG TEO NHỎ APP)
 %hook CAContext
+- (void)orderAbove:(uint32_t)contextId {
+    if (IS_ACTIVE && Titanium_IsSpringBoard()) {
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(contextId);
+}
+
 - (void)setCommitPriority:(uint32_t)priority {
     if (!Titanium_IsSpringBoard() && IS_ACTIVE) {
         priority = 100;
@@ -1630,14 +1640,15 @@ static void Titanium_TriggerNotificationBurst(void) {
 // ====================================================================================================
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isAppOpeningAnimating) return YES;        // Giữ 120Hz suốt quá trình mở app
-    if (g_isAppToHomeAnimating) return YES;         // Giữ 120Hz suốt quá trình đóng app
-    if (g_isInstantMotion) return YES;              
-    if (g_isContinuousSwiping) return YES;          
-    if (g_isUserTouchingScreen) return YES;         
-    if (g_isScrollingActive) return YES;            
-    if (g_isNotificationBannerActive) return YES;   
-    if (g_activeAnimationCount > 0) return YES;     
+    if (g_isSwitcherActive) return YES;         // 👈 Đang mở đa nhiệm: Giữ trần 120Hz, cấm rụng 15Hz khi buông tay
+    if (g_isAppOpeningAnimating) return YES;
+    if (g_isAppToHomeAnimating) return YES;
+    if (g_isInstantMotion) return YES; 
+    if (g_isContinuousSwiping) return YES; 
+    if (g_isUserTouchingScreen) return YES; 
+    if (g_isScrollingActive) return YES; 
+    if (g_isNotificationBannerActive) return YES; 
+    if (g_activeAnimationCount > 0) return YES; 
     return NO; 
 }
 
@@ -2090,44 +2101,53 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 
 %hook SBAppSwitcherSettings
+// KHÔNG GIỮ TOÀN BỘ SNAPSHOT TRONG RAM: Cho phép dọn bớt thẻ ở xa để không nghẽn GPU khi lướt ngang
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
-// Đổi sang DecelerationRateFast để vuốt chuyển app lướt nhanh và dứt khoát
 - (CGFloat)decelerationRate {
-    if (IS_ACTIVE) return UIScrollViewDecelerationRateFast;
-    return %orig;
+    return %orig; // Trả về quán tính mượt tự nhiên của Apple
 }
 %end
-
-// ====================================================================================================
-// 5. BƠM XUNG CƯỚP QUYỀN KHI MỞ TRÌNH ĐA NHIỆM (SWITCHER)
-// ====================================================================================================
 
 %hook SBAppSwitcherController
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) {
+        g_isSwitcherActive = YES; // Bật cờ giữ 120Hz ngay khi bước vào đa nhiệm
         Titanium_TriggerInstantTouchBurst();
         Titanium_StealthKernelHijack();
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig(animated);
 }
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+    if (IS_ACTIVE) {
+        g_isSwitcherActive = NO; // Rời khỏi đa nhiệm: Nhả cờ an toàn
+    }
+}
+
+// TRIỆT TIÊU GIẬT KHI VUỐT BỎ TAB (KILL APP):
+// Giữ trần 120Hz để thẻ bay vút lên và các thẻ xung quanh dồn vào nhau mượt mà
+- (void)switcherContentController:(id)contentController deletedItem:(id)deletedItem {
+    if (IS_ACTIVE) {
+        g_isSwitcherActive = YES;
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_EnableZeroLatencyPipeline();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(450 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            // Sau khi các thẻ dồn vào xong vẫn duy trì theo trạng thái switcher
+        });
+    }
+    %orig(contentController, deletedItem);
+}
 %end
 
-// ====================================================================================================
-// 6. VẼ CARD BẤT ĐỒNG BỘ GIẢM TẢI GPU KHI CHUYỂN APP
-// ====================================================================================================
-
+// TRẢ VỀ RENDER ĐỒNG BỘ: Không dùng drawsAsynchronously để thẻ không bị chớp hay trễ frame
 %hook SBFluidSwitcherItemContainer
 - (void)prepareForReuse {
     %orig;
-    if (IS_ACTIVE) {
-        UIView *v = (UIView *)self;
-        v.layer.drawsAsynchronously = YES;
-    }
 }
 %end
 
@@ -2785,17 +2805,16 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// 5. ĐỒNG BỘ DAO ĐỘNG VẬT LÝ VỚI ANIM26 & SWITCHER BÁM TAY 1:1
+// CÂN BẰNG LÒ XO ĐA NHIỆM: LƯỚT NGANG BÁM TAY VÀ VUỐT BAY LÊN KHÔNG BỊ KHỰNG
 %hook SBFluidSwitcherAnimationSettings
 - (void)setDefaultValues {
     %orig;
     if (IS_ACTIVE) {
-        self.mass = 0.85;       // Giảm quán tính nặng của thẻ app
-        self.stiffness = 420.0; // Phản hồi lò xo bám chặt ngón tay
-        self.damping = 38.0;    // Dập tắt rung giật khi dừng
+        self.mass = 1.0;        // Trọng lượng tự nhiên
+        self.stiffness = 320.0; // Độ nảy vừa phải, không ghì giật thẻ
+        self.damping = 34.0;    // Dập rung êm ru khi thẻ dừng lại
     }
 }
-
 %end
 
 %end // KẾT THÚC %group Group_SpringBoard_ProcessManagerV285
@@ -2828,18 +2847,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)viewDidLoad {
     if (IS_ACTIVE) {
         Titanium_StealthKernelHijack();
-    }
-    %orig;
-}
-%end
-
-// 1. CƯỚP QUYỀN MẠNG: ÉP TÁC VỤ TẢI DỮ LIỆU/AI CHẠY ƯU TIÊN CAO NHẤT (PRIORITY 1.0)
-%hook NSURLSessionTask
-- (void)resume {
-    if (IS_ACTIVE) {
-        if ([self respondsToSelector:@selector(setPriority:)]) {
-            [self setPriority:1.0f]; // 1.0f = Mức ưu tiên mạng cao nhất của iOS
-        }
     }
     %orig;
 }
@@ -3017,23 +3024,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// 2. ÉP RENDER SERVER BỎ QUA HÀNG ĐỢI GỘP LAYER (DIRECT-TO-DISPLAY COMPOSITING)
-%hook CAContext
-- (void)orderAbove:(uint32_t)contextId {
-    if (IS_ACTIVE && Titanium_IsSpringBoard()) {
-        // Tăng commit priority lên mức tuyệt đối cho ngữ cảnh hiển thị của SpringBoard
-        [self setCommitPriority:1000];
-    }
-    %orig(contextId);
-}
-%end
-
 // 3. MỞ KHÓA TOÀN BỘ GIỚI HẠN DAO ĐỘNG PROTOTYPE NỘI BỘ APPLE (SPRINGBOARD PHYSICS)
-%hook SBPrototypeController
+%%hook SBPrototypeController
 - (BOOL)isPrototypingEnabled {
-    // Mở khóa các cờ cho phép SpringBoard dùng pipeline chuyển động nguyên mẫu của Apple
-    if (IS_ACTIVE) return YES;
-    return %orig;
+    return %orig; // Trả về mặc định để tắt giao diện cửa sổ nổi thử nghiệm
 }
 %end
 
@@ -3297,6 +3291,7 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         if (!progName) return;
 
         // 1. CÁCH LY TUYỆT ĐỐI SÓNG SIM, VIỄN THÔNG, MẠNG & WEBKIT
+                // CÁCH LY TUYỆT ĐỐI DAEMONS MẠNG, WI-FI, SÓNG SIM & WEBKIT
         if (strstr(progName, "WebKit") || 
             strstr(progName, "WebContent") || 
             strstr(progName, "GPUProcess") || 
@@ -3309,7 +3304,8 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
             strcmp(progName, "nsurlsessiond") == 0 || 
             strcmp(progName, "mDNSResponder") == 0 || 
             strcmp(progName, "networkd") == 0 || 
-            strcmp(progName, "cfnetwork") == 0) { 
+            strcmp(progName, "cfnetwork") == 0 ||
+            strcmp(progName, "symptomsd") == 0) { 
             return; 
         }
 
