@@ -1302,10 +1302,19 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 // ====================================================================================================
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isContinuousSwiping || g_isUserTouchingScreen || g_isNotificationBannerActive || Titanium_IsNotificationBannerActive()) {
-        return YES;
-    }
+    // 1. Chạm tay hoặc vuốt cử chỉ X
+    if (g_isContinuousSwiping || g_isUserTouchingScreen) return YES;
 
+    // 2. Đang cuộn feed hoặc trôi quán tính (TikTok, FB, Safari, Album ảnh)
+    if (g_isScrollingActive) return YES;
+
+    // 3. Có thông báo đang trượt xuống hoặc đang neo
+    if (g_isNotificationBannerActive || Titanium_IsNotificationBannerActive()) return YES;
+
+    // 4. Có hiệu ứng chuyển cảnh hệ thống, đóng mở app, lò xo
+    if (g_activeAnimationCount > 0) return YES;
+
+    // 5. Kiểm tra thời gian nhả xung Mach Time
     if (g_lastInteractionMachTime == 0) return NO;
 
     if (g_burstDurationMachTicks == 0) {
@@ -1318,7 +1327,6 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 
     return ((now - g_lastInteractionMachTime) < limitTicks);
 }
-
 
 // ====================================================================================================
 // NHÓM 1: ZERO-LATENCY TOUCH PIPELINE & RAW EVENT DISPATCH (ĐIỀU PHỐI KERNEL & PHẦN CỨNG)
@@ -1532,15 +1540,6 @@ static void Titanium_TriggerNotificationBurst(void) {
 // NHÓM 3: KHÓA CỨNG HZ/FPS TÙY CHỌN - TỰ HẠ KHI TĨNH - ĐÓN ĐẦU THÔNG BÁO - BẢO VỆ VIDEO
 // (CHỈ ÁP DỤNG IPHONE 6S - 12 PRO MAX)
 // ====================================================================================================
-
-// 1. Kiểm tra trạng thái chuyển cảnh, chạm tay hoặc có thông báo
-static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isUserTouchingScreen) return YES;         // Chạm tay vuốt màn hình
-    if (g_isScrollingActive) return YES;            // Đang cuộn feed hoặc trôi quán tính (TikTok, FB, Safari)
-    if (g_isNotificationBannerActive) return YES;   // Thông báo đang/chuẩn bị trượt xuống
-    if (g_activeAnimationCount > 0) return YES;     // Có hiệu ứng chuyển cảnh, đóng mở app, lò xo
-    return NO; // Màn hình tĩnh 100% -> Cho phép hạ tần số quét làm mát máy
-}
 
 // 2. Kiểm tra xem có đang ở chế độ xem video thụ động (không tương tác tay) hay không
 static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
