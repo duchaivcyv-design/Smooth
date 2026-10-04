@@ -1327,10 +1327,8 @@ static dispatch_source_t g_touchBurstTimer = nil;
 static dispatch_queue_t g_touchBurstQueue = nil;
 
 static inline void Titanium_LockMainThreadFast(void) {
+    // Chỉ nâng mức QoS ưu tiên tương tác mượt mà, không ép SCHED_RR 47 để tránh nghẽn CPU sau respring
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    struct sched_param param;
-    param.sched_priority = 47;
-    pthread_setschedparam(pthread_self(), SCHED_RR, &param);
 }
 
 // ====================================================================================================
@@ -2544,11 +2542,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %hook SBIconListView
 - (void)setAlpha:(CGFloat)alpha {
-    %orig(alpha);
-    if (IS_ACTIVE) {
-        UIView *v = (UIView *)self;
-        v.layer.allowsGroupOpacity = YES;
-    }
+    %orig(alpha); // Không ép allowsGroupOpacity để tránh vẽ offscreen gây nháy widget
 }
 %end
 
@@ -2566,20 +2560,17 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // 7. TOÀN DIỆN HIỆU ỨNG THƯ MỤC, 3D TOUCH & MÀN HÌNH KHÓA (COVERSHEET / HOMESCREEN)
 // ====================================================================================================
 
-// Rút ngắn thời gian mở/đóng thư mục (Folder) từ 350ms xuống 220ms, bung nảy dứt khoát
+// TRẢ VỀ CHU KỲ VẬT LÝ GỐC: XÓA BỎ HOÀN TOÀN HIỆN TƯỢNG NHẤP NHÁY THƯ MỤC
 %hook SBFolderControllerAnimationSettings
 - (double)duration {
-    if (IS_ACTIVE) return 0.22;
-    return %orig;
+    return %orig; // Đồng bộ thời gian với hiệu ứng làm mờ nền của iOS
 }
 %end
 
-// Bơm xung zero-latency ngay khi người dùng chạm mở Folder
 %hook SBFolderView
 - (void)prepareToOpen {
     if (IS_ACTIVE) {
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnableZeroLatencyPipeline();
+        Titanium_TriggerInstantTouchBurst(); // Chỉ kích xung nhịp, không bật LowLatency trên lớp mờ
     }
     %orig;
 }
@@ -2620,27 +2611,33 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 
 // PHẢN HỒI CHẠM 0MS & BUNG CỬA SỔ NHANH GẤP ĐÔI NHƯNG KHÔNG BỊ HỤT KHUNG HÌNH
+// TRẢ VỀ HOẠT CẢNH PHÓNG TO GỐC CỦA APPLE: BUNG TOÀN MÀN HÌNH TỰ NHIÊN, KHÔNG KẸT Ô VUÔNG
 %hook SBAppLaunchSettings
 - (double)zoomDuration {
-    if (IS_ACTIVE) return 0.22; // Rút ngắn còn 220ms: Cửa sổ bung ra ngay trước mắt
     return %orig;
 }
 
 - (double)launchDuration {
-    if (IS_ACTIVE) return 0.24;
     return %orig;
 }
 
 - (double)delayBeforeAppLaunch {
-    if (IS_ACTIVE) return 0.0; // Bấm chạm icon là phản hồi bung ra ngay 0.0s
+    if (IS_ACTIVE) return 0.0; // Giữ phản hồi tức thì 0ms khi chạm
     return %orig;
 }
 %end
 
+%hook SBSplashBoardController
+- (double)splashScreenDelay {
+    return %orig; // Giữ nguyên luồng tải Splash gốc để app vẽ đủ khung hình toàn màn hình
+}
+%end
+
+
 // BUNG MÀN HÌNH CHỜ/LOADING TỨC THÌ NHƯNG LUÔN CÓ HÌNH BỌC LÓT (CHỐNG MÀN HÌNH ĐEN)
 %hook SBSplashBoardController
 - (double)splashScreenDelay {
-    if (IS_ACTIVE) return 0.02; // 20ms: Bung ra ngay tức thì nhưng đảm bảo layer Loading đã nạp xong
+    if (IS_ACTIVE) return 0.01; // 20ms: Bung ra ngay tức thì nhưng đảm bảo layer Loading đã nạp xong
     return %orig; 
 }
 %end
@@ -2902,41 +2899,34 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // NHÓM 13: KHÓA CỨNG TRẦN 60.00 FPS & CHẶN BÓP XUNG NHIỆT ĐỘ APPLE
 // ====================================================================================================
 
+// TRẢ VỀ CƠ CHẾ ĐIỀU NHIỆT VÀ QUẢN LÝ TIẾN TRÌNH CỦA APPLE: HẠ NHIỆT MÁY VÀ GIẢI PHÓNG RAM
 %group Group_Global_Thread_Governor_Unthrottled
 
 %hook RBSProcessState
 - (unsigned char)taskState {
-    if (IS_ACTIVE) return 4;
-    return %orig;
+    return %orig; // Cho phép hệ thống hạ ưu tiên các tiến trình chạy ngầm
 }
 %end
 
 %hook FBProcess
 - (BOOL)isPendingExit {
-    return NO;
+    return %orig; // Cho phép dọn dẹp các app không sử dụng để tránh cạn kiệt RAM
 }
 %end
 
 %hook NSProcessInfo
 - (NSProcessInfoThermalState)thermalState {
-    if (IS_ACTIVE) return NSProcessInfoThermalStateNominal;
-    return %orig;
+    return %orig; // Bật lại cảm biến nhiệt để phần cứng tự điều tiết an toàn
 }
 
 - (BOOL)isLowPowerModeEnabled {
-    if (IS_ACTIVE) return NO;
     return %orig;
 }
 %end
 
 %hook NSNotificationCenter
 - (void)postNotificationName:(NSNotificationName)aName object:(id)anObject userInfo:(NSDictionary *)aUserInfo {
-    if (IS_ACTIVE && aName) {
-        if ([aName isEqualToString:NSProcessInfoThermalStateDidChangeNotification]) {
-            return;
-        }
-    }
-    %orig(aName, anObject, aUserInfo);
+    %orig(aName, anObject, aUserInfo); // Không chặn thông báo cảnh báo nhiệt độ
 }
 %end
 
@@ -3024,10 +3014,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
-// 3. MỞ KHÓA TOÀN BỘ GIỚI HẠN DAO ĐỘNG PROTOTYPE NỘI BỘ APPLE (SPRINGBOARD PHYSICS)
+// TRẢ VỀ MẶC ĐỊNH: TẮT CHẾ ĐỘ CỬA SỔ NỔI THỬ NGHIỆM ĐỂ APP MỞ TOÀN MÀN HÌNH
 %hook SBPrototypeController
 - (BOOL)isPrototypingEnabled {
-    return %orig; // Trả về mặc định để tắt giao diện cửa sổ nổi thử nghiệm
+    return %orig;
 }
 %end
 
