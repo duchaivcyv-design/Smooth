@@ -7,7 +7,6 @@
         <key>bundle</key>
         <string><key>CFBundleExecutable</key>
         <string>BoostiPhone6s</string>
-        </string>
         <key>cell</key>
         <string>PSLinkCell</string>
         <key>detail</key>
