@@ -1339,24 +1339,6 @@ static volatile BOOL g_isUserTouchingScreen = NO;
 static dispatch_source_t g_cooldownTimer = nil;
 static dispatch_queue_t g_governorQueue = nil;
 
-// Khóa luồng giao diện chính ở mức ưu tiên thực thi 144Hz phẳng (Priority 47)
-static inline void Titanium_LockMainThreadFast(void) {
-    if (!NSThread.isMainThread) return;
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-    struct sched_param param;
-    param.sched_priority = 47; // Mức ưu tiên đồ họa phẳng, không ép 63 để chống nghẽn I/O
-    pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-
-    #if defined(IOPOL_TYPE_DISK) && defined(IOPOL_IMPORTANT)
-    setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-    #endif
-    
-    #if defined(IOPOL_TYPE_VFS_ATIME_UPDATES) && defined(IOPOL_ATIME_UPDATES_OFF)
-    setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
-    #endif
-}
-
 // Trả luồng về trạng thái bình thường khi máy bước vào chế độ 10Hz làm mát
 static inline void Titanium_RestoreMainThreadNormal(void) {
     if (!NSThread.isMainThread) return;
@@ -3283,12 +3265,18 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 // KHỐI ĐIỀU HƯỚNG ROOTLESS / HIDE JAILBREAK & XỬ LÝ RESPRING CHỐNG TREO TÁO
 // ====================================================================================================
 
-// Tự động giải quyết đường dẫn file cờ: Khớp cả Rootless (/var/jb) và Rootful chuẩn xác
+// ====================================================================================================
+// ĐIỀU PHỐI ĐƯỜNG DẪN CỜ: ĐỘC QUYỀN CHO ROOTLESS & ROOTHIDE (KHÔNG DÙNG ROOTFUL)
+// ====================================================================================================
 static inline NSString *Titanium_ResolveFlagPath(NSString *subPath) {
-    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
-        return [@"/var/jb/tmp" stringByAppendingPathComponent:subPath];
+    NSString *root = Titanium_GetRootHidePrefixPath();
+    NSString *jbTmp = [root stringByAppendingPathComponent:@"tmp"];
+    
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:jbTmp]) {
+        [fm createDirectoryAtPath:jbTmp withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
     }
-    return [@"/tmp" stringByAppendingPathComponent:subPath];
+    return [jbTmp stringByAppendingPathComponent:subPath];
 }
 
 #define TITANIUM_BOOT_FLAG_VERIFIED Titanium_ResolveFlagPath(@"com.titanium.boot.verified")
@@ -3349,14 +3337,6 @@ static void Titanium_ExecuteSystemRespring(void) {
     const char *args[] = {"killall", "-9", "SpringBoard", NULL};
     posix_spawn(&pid, killallPath, NULL, NULL, (char *const *)args, environ);
 }
-
-// ====================================================================================================
-// RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK
-// ====================================================================================================
-
-// ====================================================================================================
-// RUNTIME INITIALIZER: ĐỘC QUYỀN CHO ROOTLESS & ROOTHIDE (KHÔNG DÙNG ROOTFUL)
-// ====================================================================================================
 
 // Bộ nhận diện Base Path động: Tự động trỏ đúng đường dẫn ẩn của RootHide hoặc /var/jb của Rootless
 static inline NSString *Titanium_GetJBRoot(void) {
