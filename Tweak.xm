@@ -1504,27 +1504,8 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %end
 
 // ====================================================================================================
-// ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (KHÔNG TRÙNG LẶP BIẾN)
+// ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (ĐÃ BỎ ĐỊNH NGHĨA TRÙNG LẶP)
 // ====================================================================================================
-
-static inline void Titanium_InitBannerMachTimebase(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        mach_timebase_info_data_t timebase;
-        if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.numer > 0) {
-            // Khóa chặt 850ms bao trọn chu kỳ banner trượt xuống và neo ổn định
-            uint64_t nanos = 850ULL * 1000000ULL;
-            g_bannerDurationMachTicks = (nanos * timebase.denom) / timebase.numer;
-        }
-    });
-}
-
-// Kiểm tra trạng thái banner theo Mach Time: Phản hồi trong 2 nano giây, chính xác tuyệt đối
-static inline BOOL Titanium_IsNotificationBannerActive(void) {
-    if (g_lastBannerMachTime == 0) return NO;
-    uint64_t now = mach_absolute_time();
-    return ((now - g_lastBannerMachTime) < g_bannerDurationMachTicks);
-}
 
 // Kích xung nhịp CPU/GPU cực đại tức thì 0ms khi có thông báo: KHÔNG TẠO TIMER RÁC, CHỐNG GIẬT KHỰNG BANNER
 static void Titanium_TriggerNotificationBurst(void) {
