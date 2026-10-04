@@ -3457,12 +3457,12 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
                     return;
                 }
 
-                // Ghi nhận trước cờ verified để đảm bảo lần respring tiếp theo cướp quyền thẳng
-                [@"VERIFIED" writeToFile:TITANIUM_BOOT_FLAG_VERIFIED atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                chmod([TITANIUM_BOOT_FLAG_VERIFIED UTF8String], 0666);
+                // Ghi nhận trước cờ verified đồng bộ ngay lập tức để không bị lặp vòng Respring
+                NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
+                [fm createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED contents:verifiedData attributes:@{NSFilePosixPermissions: @(0666)}];
 
-                // Lần đầu khởi động lên: Đợi giao diện ổn định rồi Respring chuẩn xác
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                // Đợi SpringBoard hoàn tất dựng cảnh trước khi thực thi Respring an toàn
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     Titanium_ExecuteSystemRespring();
                 });
                 return;
@@ -3478,10 +3478,10 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
                 BOOL alreadyStaged = [fm fileExistsAtPath:TITANIUM_BOOT_STAGE_8P];
                 
                 if (!alreadyStaged) {
-                    [@"STAGED" writeToFile:TITANIUM_BOOT_STAGE_8P atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                    chmod([TITANIUM_BOOT_STAGE_8P UTF8String], 0666);
+                    NSData *stagedData = [@"STAGED" dataUsingEncoding:NSUTF8StringEncoding];
+                    [fm createFileAtPath:TITANIUM_BOOT_STAGE_8P contents:stagedData attributes:@{NSFilePosixPermissions: @(0666)}];
 
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         Titanium_ExecuteSystemRespring();
                     });
                     return;
