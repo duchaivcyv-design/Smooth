@@ -1,4 +1,3 @@
-// ==================== MACH KERNEL ====================
 // ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_host.h>
@@ -36,6 +35,7 @@
 #import <sys/mman.h>
 #import <sys/stat.h>
 #import <sys/types.h>
+#import <sys/iopolicy.h>
 
 // ==================== OBJC & SECURITY ====================
 #import <objc/runtime.h>
@@ -45,7 +45,6 @@
 
 // ==================== APPLE FRAMEWORKS ====================
 #import <CoreFoundation/CoreFoundation.h>
-#import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -1367,6 +1366,57 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     dispatch_resume(g_touchBurstTimer);
 }
 
+static void Titanium_TriggerInstantTouchBurst(void) {
+    g_isUserTouchingScreen = YES;
+    
+    // Gọi trực tiếp hàm vừa định nghĩa ở trên
+    Titanium_LockMainThreadFast();
+
+    static dispatch_once_t qToken;
+    dispatch_once(&qToken, ^{
+        g_governorQueue = dispatch_queue_create("com.titanium.governor", DISPATCH_QUEUE_SERIAL);
+    });
+
+    if (g_cooldownTimer) {
+        dispatch_source_cancel(g_cooldownTimer);
+        g_cooldownTimer = nil;
+    }
+}
+
+// ====================================================================================================
+// CƯỚP QUYỀN LUỒNG GIAO DIỆN CHÍNH: KHÓA MỨC REAL-TIME & GIẢI PHÓNG BĂNG THÔNG I/O
+// ====================================================================================================
+
+static inline void Titanium_LockMainThreadFast(void) {
+    if (!NSThread.isMainThread) return;
+    
+    // 1. Đưa luồng lên mức ưu tiên tương tác người dùng cao nhất (User Interactive)
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    // 2. Gán độ ưu tiên Mach/POSIX (Priority 47) trên chính sách Round-Robin để dựng frame 144Hz
+    struct sched_param param;
+    param.sched_priority = 47;
+    pthread_setschedparam(pthread_self(), SCHED_RR, &param);
+
+    // 3. Tối ưu I/O ổ đĩa và tắt cập nhật access time (atime) để không chặn luồng vẽ giao diện
+    #if defined(IOPOL_TYPE_DISK) && defined(IOPOL_IMPORTANT)
+    setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
+    #endif
+    
+    #if defined(IOPOL_TYPE_VFS_ATIME_UPDATES) && defined(IOPOL_ATIME_UPDATES_OFF)
+    setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
+    #endif
+}
+
+// Khôi phục mức ưu tiên bình thường khi máy bước vào trạng thái nghỉ 10Hz
+static inline void Titanium_RestoreMainThreadNormal(void) {
+    if (!NSThread.isMainThread) return;
+    
+    struct sched_param normalParam;
+    normalParam.sched_priority = 31;
+    pthread_setschedparam(pthread_self(), SCHED_OTHER, &normalParam);
+}
+
 // ====================================================================================================
 // NHÓM 1: CẢM ỨNG 0.0S - ĐÁNH THỨC 144HZ TỨC THÌ - KHÔNG NGHẼN RENDER LOOP
 // ====================================================================================================
@@ -1422,7 +1472,7 @@ static void Titanium_TriggerInstantTouchBurst(void) {
 }
 %end
 
-// 4. ĐÓN ĐẦU CHẠM TOÀN MÀN HÌNH TẠI CỬA SỔ GỐC (CHỈ FLUSH KHI CHẠM ĐẦU, KHÔNG NGHẼN KHI VUỐT)
+// 4. ĐÓN ĐẦU CHẠM TOÀN MÀN HÌNH TẠI CỬA SỔ GỐC (KÍCH HOẠT ĐỆM 500MS, KHÔNG HẠ XUNG ĐỘT NGỘT)
 %hook UIWindow
 - (BOOL)_shouldDelayTouchForCancelEvents {
     if (IS_ACTIVE && CFG285.touchResponseBoost) return NO;
@@ -1433,23 +1483,32 @@ static void Titanium_TriggerInstantTouchBurst(void) {
     // 0 = UIEventTypeTouches: Bắt sự kiện cảm ứng
     if (IS_ACTIVE && event.type == 0) {
         NSSet *allTouches = [event allTouches];
-        UITouch *touch = [allTouches anyObject];
         
-        if (touch) {
+        BOOL hasActiveTouches = NO;
+        BOOL hasJustBegan = NO;
+        
+        for (UITouch *touch in allTouches) {
             if (touch.phase == UITouchPhaseBegan) {
-                // CHẠM FRAME ĐẦU TIÊN: Đánh thức hệ thống từ 10Hz vọt lên 144Hz trong 0ms
-                g_isUserTouchingScreen = YES;
-                Titanium_LockMainThreadFast();
-                Titanium_TriggerInstantTouchBurst();
-                Titanium_EnableZeroLatencyPipeline();
-                [CATransaction flush]; // Chỉ xả frame ngay tại khoảnh khắc vừa chạm
-            } else if (touch.phase == UITouchPhaseMoved) {
-                // ĐANG VUỐT / KÉO: Giữ cờ hoạt động mà KHÔNG gọi [CATransaction flush] liên tục
-                g_isUserTouchingScreen = YES;
-            } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
-                // RỜI TAY: Tự động kích hoạt cơ chế chuẩn bị trả về trạng thái tĩnh mát máy
-                g_isUserTouchingScreen = NO;
+                hasJustBegan = YES;
+                hasActiveTouches = YES;
+                break;
+            } else if (touch.phase == UITouchPhaseMoved || touch.phase == UITouchPhaseStationary) {
+                hasActiveTouches = YES;
             }
+        }
+        
+        if (hasJustBegan) {
+            // VỪA CHẠM XUỐNG: Bứt tốc lên 144Hz trong 0ms, hủy bộ đếm cooldown
+            Titanium_TriggerInstantTouchBurst();
+            Titanium_EnableZeroLatencyPipeline();
+            [CATransaction flush];
+        } else if (hasActiveTouches) {
+            // ĐANG GIỮ HOẶC KÉO: Giữ vững cờ 144Hz, không ngắt quãng
+            g_isUserTouchingScreen = YES;
+        } else {
+            // TẤT CẢ CÁC NGÓN ĐÃ RỜI MÀN HÌNH:
+            // Đợi 500ms để hoạt ảnh quán tính trôi hết ở 144Hz rồi mới hạ về 10Hz làm mát
+            Titanium_ScheduleCooldownTo10Hz();
         }
     }
     %orig(event);
@@ -1579,15 +1638,13 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %group Group_FluidTransitions_Pacing
 
-// 1. ĐIỀU PHỐI VÒNG LẶP DỰNG HÌNH CADISPLAYLINK (144FPS KHI VUỐT - 10FPS KHI TĨNH HẲN)
-%hook CADisplayLink
+%%hook CADisplayLink
 
 - (NSInteger)preferredFramesPerSecond {
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
-
     if (IS_ACTIVE) {
-        // Chạm/vuốt/chuyển cảnh: Bung thẳng 144 FPS. Tĩnh hẳn: Hạ 10 FPS làm mát chip A9
-        return Titanium_ShouldLockTargetRate() ? 144 : 10;
+        // Chạm: 144 FPS. Thả tay sau 500ms: Hạ về 10 FPS làm mát GPU
+        return g_isUserTouchingScreen ? 144 : 10;
     }
     return %orig;
 }
@@ -1597,9 +1654,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         %orig;
         return;
     }
-
     if (IS_ACTIVE) {
-        %orig(Titanium_ShouldLockTargetRate() ? 144 : 10);
+        %orig(g_isUserTouchingScreen ? 144 : 10);
         return;
     }
     %orig;
@@ -1613,12 +1669,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE) {
-            if (Titanium_ShouldLockTargetRate()) {
-                // KHI CHẠM / VUỐT: KHÓA CỨNG TOÀN BỘ MIN - MAX - PREFERRED Ở 144HZ
+            if (g_isUserTouchingScreen) {
+                // ĐANG CHẠM: Khóa cứng dải 144Hz để không rớt khung
                 range = SafeMakeFRR(144.0f, 144.0f, 144.0f);
-                Titanium_EnableZeroLatencyPipeline();
             } else {
-                // KHI TĨNH HẲN: Sàn 10Hz làm mát máy, nhưng TRẦN GIỮ 144HZ để bứt tốc ngay lập tức trong 0.0s khi chạm
+                // TĨNH: Sàn 10Hz làm mát máy, nhưng TRẦN VẪN GIỮ 144Hz để chạm vào là vọt lên ngay lập tức
                 range = SafeMakeFRR(10.0f, 144.0f, 10.0f);
             }
         }
@@ -1626,23 +1681,22 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     %orig(range);
 }
 
-- (void)setFrameInterval:(NSInteger)interval {
-    if (IS_ACTIVE && !Titanium_IsPassiveVideoPlayback()) {
-        interval = 1;
-    }
-    %orig(interval);
-}
-
 %end
 
+
 // 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY: 144 KHI VUỐT - 10 KHI TĨNH
+// ====================================================================================================
+// KHÓA ĐỒNG BỘ TẤM NỀN CADISPLAY: 144HZ KHI CHẠM - 10HZ LÀM MÁT CHUẨN ĐỆM 500MS
+// ====================================================================================================
+
 %hook CADisplay
 
 - (NSInteger)preferredFPS {
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
     if (!IS_ACTIVE) return %orig;
     
-    return Titanium_ShouldLockTargetRate() ? 144 : 10;
+    // Đồng bộ trực tiếp với cờ đệm: Chạm là 144, buông tay qua 500ms hạ 10Hz làm mát
+    return g_isUserTouchingScreen ? 144 : 10;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
@@ -1652,18 +1706,20 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     }
     
     if (IS_ACTIVE) {
-        fps = Titanium_ShouldLockTargetRate() ? 144 : 10;
+        fps = g_isUserTouchingScreen ? 144 : 10;
     }
     %orig(fps);
 }
 
 - (void)overrideDisplayCadence:(id)cadence {
+    // Xóa bỏ cadence gốc của tấm nền 60Hz để không ép hệ thống bóp xung ngược lại
     if (IS_ACTIVE && !Titanium_IsPassiveVideoPlayback()) {
         cadence = nil;
     }
     %orig(cadence);
 }
 
+// Bắt buộc mở cờ ProMotion ảo để iOS cho phép chuyển đổi dải tần số 10Hz - 144Hz linh hoạt
 - (BOOL)supportsDynamicRefresh {
     if (IS_ACTIVE) return YES;
     return %orig;
@@ -3257,8 +3313,20 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 // 8P-15PRM: CHỈ KHI REBOOT NGUỒN, NẾU CHƯA NẠP TWEAK SẼ RESPRING ĐÚNG 1 LẦN
 // ====================================================================================================
 
-#define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
-#define TITANIUM_BOOT_STAGE_8P      @"/tmp/.titanium_8p_reboot_staged"
+// ====================================================================================================
+// KHỐI ĐIỀU HƯỚNG ROOTLESS / HIDE JAILBREAK & XỬ LÝ RESPRING CHỐNG TREO TÁO
+// ====================================================================================================
+
+// Tự động giải quyết đường dẫn file cờ: Khớp cả Rootless (/var/jb) và Rootful chuẩn xác
+static inline NSString *Titanium_ResolveFlagPath(NSString *subPath) {
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
+        return [@"/var/jb/tmp" stringByAppendingPathComponent:subPath];
+    }
+    return [@"/tmp" stringByAppendingPathComponent:subPath];
+}
+
+#define TITANIUM_BOOT_FLAG_VERIFIED Titanium_ResolveFlagPath(@"com.titanium.boot.verified")
+#define TITANIUM_BOOT_STAGE_8P      Titanium_ResolveFlagPath(@"com.titanium.boot.stage8p")
 
 // 1. Phân loại chuẩn xác dòng 6s - 7 Plus (A9 - A10)
 static inline BOOL Titanium_IsLegacy6s7P(void) {
@@ -3286,17 +3354,34 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
-// 3. Thực hiện lệnh Respring hệ thống an toàn
+// 3. Thực hiện lệnh Respring hệ thống an toàn (Đa tầng: Hỗ trợ Rootless / var/jb / FBSSystemService)
 static void Titanium_ExecuteSystemRespring(void) {
+    // Cách 1: Tận dụng API nội bộ SpringBoard chuẩn
     UIApplication *app = [UIApplication sharedApplication];
     if ([app respondsToSelector:@selector(_relaunchSpringBoardNow)]) {
         [(SpringBoard *)app _relaunchSpringBoardNow];
         return;
     }
 
+    // Cách 2: Gọi dịch vụ FrontBoard Services (Relaunch an toàn nhất trên iOS 15 - 16)
+    Class fbsClass = NSClassFromString(@"FBSSystemService");
+    if (fbsClass && [fbsClass respondsToSelector:@selector(sharedService)]) {
+        id service = [fbsClass sharedService];
+        if (service && [service respondsToSelector:@selector(exitAndRelaunch:)]) {
+            [service exitAndRelaunch:YES];
+            return;
+        }
+    }
+
+    // Cách 3: fallback qua posix_spawn nhận diện đúng đường dẫn Rootless
+    const char *killallPath = "/usr/bin/killall";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/usr/bin/killall"]) {
+        killallPath = "/var/jb/usr/bin/killall";
+    }
+
     pid_t pid;
     const char *args[] = {"killall", "-9", "SpringBoard", NULL};
-    posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, environ);
+    posix_spawn(&pid, killallPath, NULL, NULL, (char *const *)args, environ);
 }
 
 // ====================================================================================================
