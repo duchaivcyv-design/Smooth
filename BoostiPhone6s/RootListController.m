@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import <spawn.h>
 #import <sys/wait.h>
 #import <sys/stat.h>
@@ -12,8 +13,6 @@
 #import <mach/mach_time.h>
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
-#define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
-#define BOOT_GUARD_FILE @"/tmp/.boost_boot_counter"
 
 #define NOTIFY_RELOAD "com.taojb.boostiphone6s/ReloadPrefs"
 #define NOTIFY_UIKIT_RELOAD "com.taojb.boostiphone6s/ReloadUIKitPrefs"
@@ -57,6 +56,21 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     });
     return cachedJbRoot;
 }
+
+// Giải quyết đường dẫn file tạm tương thích 100% Rootless & Hide Jailbreak
+static inline NSString *Titanium_ResolveTempPath(NSString *subPath) {
+    NSString *baseDir = @"/tmp";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]) {
+        baseDir = @"/var/jb/tmp";
+    }
+    if (![[NSFileManager defaultManager] fileExistsAtPath:baseDir]) {
+        [[NSFileManager defaultManager] createDirectoryAtPath:baseDir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+    }
+    return [baseDir stringByAppendingPathComponent:subPath];
+}
+
+#define SHARED_SYNC_FILE Titanium_ResolveTempPath(@".boost_hz_sync")
+#define BOOT_GUARD_FILE  Titanium_ResolveTempPath(@".boost_boot_counter")
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
@@ -285,9 +299,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     return self;
 }
 
-// ====================================================================================================
-// ĐỒNG BỘ BỘ NHỚ CHIA SẺ & GỬI TÍN HIỆU ĐIỀU KHIỂN (ĐÃ ĐỒNG BỘ CHUẨN XÁC VỚI TWEAK.XM)
-// ====================================================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
     
@@ -296,7 +307,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     payload.magic = APEX_SYNC_MAGIC_V285;
     payload.masterEnabled = enabled ? 1 : 0;
 
-    // 1. KHI TẮT TỔNG: NGẮT TUYỆT ĐỐI TOÀN BỘ CÁC TÍNH NĂNG TRONG 0MS
     if (!enabled) {
         payload.targetHz = 60;
         payload.targetFPS = 60;
@@ -321,7 +331,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.rawTouchDirectDelivery = 0;
         payload.powerSaveModeActive = 0;
     } else {
-        // 2. KHI BẬT TỔNG: ĐỒNG BỘ CHUẨN XÁC DẢI 15 - 144 HZ VÀ MỌI CÔNG TẮC
         int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 120;
         int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 120;
         BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
@@ -344,7 +353,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.targetFPS = fps;
         payload.forceOverclock = isOverclock ? 1 : 0;
         
-        // Đồng bộ chuẩn xác công tắc ProMotion Engine:
         payload.dynamicInterpolation = prefs[@"ProMotionEngineBeta7"] ? ([prefs[@"ProMotionEngineBeta7"] boolValue] ? 1 : 0) : 1;
         payload.pipSyncEnabled = 1;
         payload.thermalShield = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
@@ -353,7 +361,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.zeroLatencyTouch = prefs[@"TouchResponseBoost"] ? ([prefs[@"TouchResponseBoost"] boolValue] ? 1 : 0) : 1;
         payload.shaderOptimization = 1;
 
-        // Bật đồng bộ theo đúng cấu hình người dùng (đã fix lỗi kẹt luồng mạng ở Tweak.xm)
         payload.fastAppLaunch = prefs[@"TurboAppLaunch"] ? ([prefs[@"TurboAppLaunch"] boolValue] ? 1 : 0) : 1;
         payload.metalPacingEnabled = prefs[@"MetalHexBuffering"] ? ([prefs[@"MetalHexBuffering"] boolValue] ? 1 : 0) : 1;
 
@@ -391,7 +398,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     notify_post(NOTIFY_TITANIUM_CHANGED);
 }
 
-// Bơm nấc trung gian hạ nhịp đồng bộ CẢ HZ LẪN FPS song song
 - (void)emitTransientRate:(NSInteger)rate {
     ApexV285ProPayload payload;
     memset(&payload, 0, sizeof(ApexV285ProPayload));
@@ -475,7 +481,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
-    // Ngắt tuyệt đối: Khi tắt tổng, ẩn sạch mọi nhóm can thiệp
     if (!masterEnabled) {
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
         NSString *currentGroupID = nil;
@@ -581,9 +586,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     return [NSDictionary dictionary];
 }
 
-// ====================================================================================================
-// KHỞI TẠO CẤU HÌNH MẶC ĐỊNH HOÀN CHỈNH (CHO PHÉP BẬT TOÀN BỘ CÔNG TẮC AN TOÀN)
-// ====================================================================================================
 - (void)ensureDefaultSettingsExist {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -596,8 +598,8 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
              @"Enabled": @YES,
              @"SelectedLanguage": @"auto",
-             @"ProMotionEngineBeta7": @YES,        // ✅ BẬT: Giả lập ProMotion mượt toàn hệ thống
-             @"MetalHexBuffering": @YES,           // ✅ BẬT: Đã tối ưu không lag TikTok
+             @"ProMotionEngineBeta7": @YES,
+             @"MetalHexBuffering": @YES,
              @"KeyboardZeroLagV24": @YES,
              @"EnableHzControl": @YES,
              @"TargetRefreshRate": @120,
@@ -616,7 +618,7 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"PeriodicRamClean": @YES,
              @"MachVMPurgeRam": @YES,
              @"AutoCloseBackgroundApp": @NO,
-             @"TurboAppLaunch": @YES,              // ✅ BẬT: Đã gỡ bỏ nghẽn mạng
+             @"TurboAppLaunch": @YES,
              @"AntiThermalThrottling": @YES,
              @"PowerSaveMode": @NO,
              @"AntiGhostTouch": @YES,
@@ -745,9 +747,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     dispatch_resume(self.stepDownTimer);
 }
 
-// ====================================================================================================
-// KHÓA CỨNG HZ/FPS ĐÃ CHỌN - BẢO TOÀN CÔNG TẮC PROMOTION ENGINE
-// ====================================================================================================
 - (void)commitFinalRateValue:(NSInteger)rate {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
@@ -757,7 +756,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     [prefs setObject:@YES forKey:@"EnableHzControl"];
     [prefs setObject:@YES forKey:@"EnableFPSControl"];
     
-    // Tự động bật cờ 144Hz nếu chọn mức 144
     if (rate == 144) {
         [prefs setObject:@YES forKey:@"ForceOverclock144Hz"];
         CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanTrue, PREF_DOMAIN);
@@ -768,7 +766,6 @@ static inline NSString *PM_TextV285(NSString *key) {
 
     [prefs setObject:@NO forKey:@"PowerSaveMode"];
     
-    // ✅ ĐÃ SỬA: KHÔNG ÉP TẮT ProMotionEngineBeta7 để giữ nguyên giả lập ProMotion mượt chuyển cảnh
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
 
@@ -962,11 +959,12 @@ static inline NSString *PM_TextV285(NSString *key) {
     self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
+// Xử lý Respring an toàn chống sập nguồn / kẹt táo
 - (void)presentActions {
     NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (sbreload)";
+    NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (An Toàn)";
     NSString *srebootText = PM_TextV285(@"SREBOOT") ?: @"🔥 Khởi Động Userspace (SReboot)";
     NSString *resetText = PM_TextV285(@"RESET") ?: @"♻️ Đặt Lại Cấu Hình Mặc Định";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
@@ -974,11 +972,12 @@ static inline NSString *PM_TextV285(NSString *key) {
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
-            pid_t pid;
-            int status = 0;
-            
+
+            // 1. Thử sbreload trước (mượt và nhanh nhất trên jailbreak hiện đại)
             NSString *sbreloadBin = Titanium_FindExecutablePath(@"sbreload");
             if (access([sbreloadBin UTF8String], X_OK) == 0) {
+                pid_t pid;
+                int status = 0;
                 char *argv[] = {(char *)[sbreloadBin UTF8String], NULL};
                 if (posix_spawn(&pid, [sbreloadBin UTF8String], NULL, NULL, argv, environ) == 0) {
                     waitpid(pid, &status, 0);
@@ -988,13 +987,22 @@ static inline NSString *PM_TextV285(NSString *key) {
                 }
             }
 
+            // 2. Gọi dịch vụ FBSSystemService nếu có
+            Class fbsClass = NSClassFromString(@"FBSSystemService");
+            if (fbsClass && [fbsClass respondsToSelector:NSSelectorFromString(@"sharedService")]) {
+                id service = ((id (*)(id, SEL))objc_msgSend)(fbsClass, NSSelectorFromString(@"sharedService"));
+                SEL relaunchSel = NSSelectorFromString(@"exitAndRelaunch:");
+                if (service && [service respondsToSelector:relaunchSel]) {
+                    ((void (*)(id, SEL, BOOL))objc_msgSend)(service, relaunchSel, YES);
+                    return;
+                }
+            }
+
+            // 3. Fallback killall an toàn: CHỈ kill SpringBoard (KHÔNG kill backboardd tránh kernel panic)
             NSString *killallBin = Titanium_FindExecutablePath(@"killall");
+            pid_t pid;
             char *argvSB[] = {(char *)[killallBin UTF8String], (char *)"-9", (char *)"SpringBoard", NULL};
             posix_spawn(&pid, [killallBin UTF8String], NULL, NULL, argvSB, environ);
-            waitpid(pid, NULL, 0);
-
-            char *argvBB[] = {(char *)[killallBin UTF8String], (char *)"-9", (char *)"backboardd", NULL};
-            posix_spawn(&pid, [killallBin UTF8String], NULL, NULL, argvBB, environ);
             waitpid(pid, NULL, 0);
         });
     }]];
