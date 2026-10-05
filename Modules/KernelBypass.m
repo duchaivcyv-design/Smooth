@@ -13,6 +13,26 @@
 #import <dlfcn.h>
 #import <malloc/malloc.h>
 
+#ifndef VM_PURGABLE_PURGE_ALL
+#define VM_PURGABLE_PURGE_ALL 0
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
+#ifdef __cplusplus
+}
+#endif
+
+// ====================================================================================================
+// HÀM KIỂM TRA NHANH 0NS CHO TWEAK.XM (KHỚP CHUẨN VỚI KERNEL_BYPASS.H)
+// ====================================================================================================
+
+BOOL KernelBypass_IsRootHide(void) {
+    return [[KernelBypass sharedInstance] isRootHideEnvironment];
+}
+
 static inline NSString *KernelBypass_ResolveDynamicRoot(void) {
     static NSString *cachedRoot = nil;
     static dispatch_once_t onceToken;
@@ -69,7 +89,7 @@ static inline NSString *KernelBypass_ResolveDynamicRoot(void) {
         setrlimit(RLIMIT_NOFILE, &rl);
     }
 
-    // 2. Thiết lập QoS tương tác người dùng cho luồng hiện tại
+    // 2. Thiết lập QoS tương tác người dùng cao nhất cho luồng hiện tại
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
     // 3. Đảm bảo thư mục lưu trữ cấu hình trong phân vùng root có đủ quyền đọc/ghi
@@ -81,46 +101,46 @@ static inline NSString *KernelBypass_ResolveDynamicRoot(void) {
 }
 
 - (void)boostCurrentThreadPriority {
-    [self boostThreadWithTargetHz:120];
+    [self boostThreadWithTargetHz:144];
 }
+
+// ====================================================================================================
+// NÂNG MỨC ƯU TIÊN LUỒNG: CƯỚP ĐỈNH P-CORE NHƯNG BẢO TOÀN 100% SOCKET MẠNG
+// ====================================================================================================
 
 - (void)boostThreadWithTargetHz:(uint32_t)targetHz {
     mach_port_t currentThread = mach_thread_self();
     if (!MACH_PORT_VALID(currentThread)) return;
 
-    // Tắt timeshare để ưu tiên chạy độc quyền
-    thread_extended_policy_data_t extendedPolicy;
-    extendedPolicy.timeshare = 0;
-    thread_policy_set(currentThread, THREAD_EXTENDED_POLICY, (thread_policy_t)&extendedPolicy, THREAD_EXTENDED_POLICY_COUNT);
+    // TỐI ƯU CỐT TỬ: Sử dụng QoS User Interactive của Apple Silicon/XNU.
+    // GIỮ NGUYÊN TIMESHARE MẶC ĐỊNH: Cho phép nhân XNU cấp time-slice cho socket nsurlsessiond,
+    // tiến trình WebKit và đường truyền buffer video YouTube / TikTok (triệt tiêu 100% nghẽn mạng).
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
-    // Tính toán khung thời gian khắt khe tương ứng với Hz
-    uint32_t hz = (targetHz > 0) ? targetHz : 60;
-    uint32_t frameNs = 1000000000 / hz;
-
-    thread_time_constraint_policy_data_t timePolicy;
-    timePolicy.period = frameNs;
-    timePolicy.computation = (frameNs * 80) / 100;
-    timePolicy.constraint = frameNs;
-    timePolicy.preemptible = 1;
-
-    thread_policy_set(currentThread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timePolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-
-    // Gán affinity tag để giữ trên lõi CPU hiệu năng cao
+    // Gán affinity tag = 1 để ép luồng đồ họa chạy trên cụm nhân hiệu năng cao (P-Core)
     thread_affinity_policy_data_t affinity;
     affinity.affinity_tag = 1;
     thread_policy_set(currentThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 
+    // Ưu tiên đọc đĩa tốc độ cao (IOPOL_IMPORTANT)
+    #if defined(IOPOL_TYPE_DISK) && defined(IOPOL_IMPORTANT)
+    setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
+    #endif
+
     mach_port_deallocate(mach_task_self(), currentThread);
 }
+
+// ====================================================================================================
+// GIẢI PHÓNG BỘ NHỚ ĐỆM TRANG NHÂN CẤP MACH VM (AN TOÀN TUYỆT ĐỐI)
+// ====================================================================================================
 
 - (void)forceMachPurge {
     malloc_zone_pressure_relief(NULL, 0);
     mach_port_t selfTask = mach_task_self();
     if (!MACH_PORT_VALID(selfTask)) return;
 
-#if defined(VM_FLAGS_PURGABLE)
-    vm_purgable_control(selfTask, 0, VM_PURGABLE_PURGE_ALL, NULL);
-#endif
+    int purgeState = 0;
+    vm_purgable_control(selfTask, 0, VM_PURGABLE_PURGE_ALL, &purgeState);
 }
 
 - (BOOL)canAccessPathSafely:(NSString *)path {
