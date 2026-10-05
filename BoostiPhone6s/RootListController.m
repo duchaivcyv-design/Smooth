@@ -221,7 +221,6 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 @implementation RootListController {
-    NSMutableArray *_specifiers;
     NSMutableArray *_allSavedSpecifiers;
     dispatch_queue_t _syncQueue;
 }
@@ -385,6 +384,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
 
+    NSMutableArray *targetSpecs = nil;
     if (!masterEnabled) {
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
         NSString *currentGroupID = nil;
@@ -409,13 +409,14 @@ static inline NSString *PM_TextV285(NSString *key) {
                 }
             }
         }
-        self->_specifiers = collapsedSpecs;
+        targetSpecs = collapsedSpecs;
     } else {
-        self->_specifiers = [self->_allSavedSpecifiers mutableCopy];
+        targetSpecs = [self->_allSavedSpecifiers mutableCopy];
     }
 
+    [self setSpecifiers:targetSpecs];
     [self updateDynamicTitles];
-    return self->_specifiers;
+    return targetSpecs;
 }
 
 - (void)viewDidLoad {
@@ -449,7 +450,8 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSString *currentLangName = langNames[langCode] ?: @"Auto";
     NSString *langLabelFormat = PM_TextV285(@"LANGUAGE_BTN_FORMAT") ?: @"Ngôn Ngữ: %@";
 
-    for (PSSpecifier *spec in (NSArray *)self->_specifiers) {
+    NSArray *currentSpecs = [self specifiers];
+    for (PSSpecifier *spec in currentSpecs) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isPowerSave) {
