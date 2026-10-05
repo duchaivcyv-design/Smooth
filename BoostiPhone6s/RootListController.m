@@ -221,6 +221,8 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 @implementation RootListController {
+    NSMutableArray *_specifiers;
+    NSMutableArray *_allSavedSpecifiers;
     dispatch_queue_t _syncQueue;
 }
 
