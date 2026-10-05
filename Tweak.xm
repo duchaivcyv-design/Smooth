@@ -230,7 +230,7 @@ extern "C" {
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
-- (void)_scrollViewAnimationEnded:(id)1 finished:(BOOL)2;
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2; // Đã sửa arg1, arg2
 - (BOOL)isDragging;
 - (BOOL)isDecelerating;
 - (CGFloat)decelerationRate;
@@ -282,7 +282,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1; // Đã sửa arg1
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -315,7 +315,8 @@ extern "C" {
 - (void)completeTransition:(BOOL)didComplete;
 @end
 
-@interface UIPresentationController : NSObject
+// ĐÃ SỬA: Dùng Category để không trùng lặp định nghĩa với UIKit SDK
+@interface UIPresentationController (TitaniumApexPrivate)
 - (void)presentationTransitionWillBegin;
 - (void)presentationTransitionDidEnd:(BOOL)completed;
 - (void)dismissalTransitionWillBegin;
@@ -427,7 +428,7 @@ extern "C" {
 @property (nonatomic) NSInteger preferredFPS;
 @property (nonatomic) NSInteger preferredModeIndex;
 - (void)overrideDisplayTimings:(id)timings;
-- (overrideDisplayCadence:(id)cadence)overrideDisplayCadence:(id)cadence;
+- (void)overrideDisplayCadence:(id)cadence; // Đã sửa cú pháp (void)
 - (BOOL)supportsDynamicRefresh;
 - (BOOL)hasDynamicDisplayMode;
 - (NSInteger)minimumFPS;
@@ -863,6 +864,7 @@ extern "C" {
 - (double)deckSwipeSpeedFactor;
 - (double)cardFlyInDuration;
 @end
+
 
 // ====================================================================================================
 // CORE IPC STRUCT & RUNTIME PAYLOAD ENGINE (PRO MOTION MULTI-TIER ARCHITECTURE)
