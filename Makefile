@@ -54,18 +54,13 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                WebKit \
                                CoreVideo \
                                Accelerate \
-                               CoreServices
+                               CoreServices \
+                               IOKit
 
-# GIẢI PHÓNG TOÀN BỘ SYMBOL CẤP THẤP QUA DYNAMIC_LOOKUP (TƯƠNG THÍCH CẢ ROOTLESS & ROOTHIDE)
+# BẢO ĐẢM TƯƠNG THÍCH MỌI MÔI TRƯỜNG JAILBREAK ROOTLESS & ROOTHIDE
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
-                            -Wl,-install_name,@rpath/BoostiPhone6sCore.dylib \
-                            -Wl,-rpath,/Library/Frameworks \
-                            -Wl,-rpath,/var/jb/Library/Frameworks \
-                            -Wl,-rpath,/usr/lib \
-                            -Wl,-rpath,/var/jb/usr/lib \
-                            -Wl,-rpath,/Library/MobileSubstrate/DynamicLibraries \
-                            -Wl,-rpath,/var/jb/Library/MobileSubstrate/DynamicLibraries
+                            -lpthread
 
 include $(THEOS_MAKE_PATH)/library.mk
 
