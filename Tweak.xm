@@ -2067,7 +2067,8 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     // ÉP TẮT V-SYNC ĐỂ GPU XUẤT FPS VƯỢT TRẦN MÀN HÌNH VẬT LÝ
     if (IS_ACTIVE) {
-        %orig(NO);
+        enabled = NO;
+        %orig;
         return;
     }
     %orig;
@@ -2080,16 +2081,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ACTIVE) count = 3;
-    %orig;
-}
-
-- (BOOL)allowsNextDrawableTimeout {
-    if (IS_ACTIVE) return NO;
-    return %orig;
-}
-
-- (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    if (IS_ACTIVE) allow = NO;
     %orig;
 }
 
@@ -3767,11 +3758,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook FBSceneWatchdog
 
 - (id)initWithTimeout:(double)timeout {
-    // Ép timeout lên mức vô cực (99999s) để hệ thống không bao giờ bị tính là bị treo (Hang)
-    return %orig(99999.0);
+    timeout = 99999.0;
+    return %orig;
 }
-
-%end
 
 // 4. Bỏ qua cờ phát hiện ứng dụng/SpringBoard không phản hồi (Unresponsive)
 %hook BKSProcessAssertion
@@ -4062,15 +4051,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-%hook CADisplay
-
-- (BOOL)allowsVirtualModes {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
-%end
-
 %hook CALayer
 
 - (BOOL)clearsContextBeforeDrawing {
@@ -4260,38 +4240,6 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
     });
     dispatch_resume(s_debounceTimer);
 }
-
-// ====================================================================================================
-// NHÓM ĐẶC QUYỀN: VÔ HIỆU HÓA WATCHDOG (CHỐNG SAFE MODE 100% & BẢO VỆ SPRINGBOARD)
-// ====================================================================================================
-
-%group Group_AntiWatchdog_Immunity
-
-%hook FBProcessWatchdog
-
-- (void)start {
-    return;
-}
-
-%end
-
-%hook FBSceneWatchdog
-
-- (id)initWithTimeout:(double)timeout {
-    return %orig(99999.0);
-}
-
-%end
-
-%hook BKSProcessAssertion
-
-- (BOOL)isValid {
-    return YES;
-}
-
-%end
-
-%end
 
 // ====================================================================================================
 // ĐIỀU PHỐI KHỞI ĐỘNG THUẦN ROOTLESS & ROOTHIDE (BẢO VỆ CHỐNG TREO REBOOT & CHỐNG TREO TÁO 100%)
