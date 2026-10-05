@@ -1831,34 +1831,53 @@ static void Titanium_TriggerNotificationBurst(void) {
 }
 
 // ====================================================================================================
-// NHÓM 3: ĐIỀU PHỐI HZ/FPS THÔNG MINH (CHỐNG ĐEN APP 100%, HẾT NGHẼN MẠNG YOUTUBE, PHÂN TẦNG A9-A17)
+// NHÓM 3: ĐỘNG CƠ DUAL-GEAR (TƯƠNG TÁC 144HZ CĂNG TRẦN - TĨNH HẲN 100% HẠ 30HZ - KHÔNG ĐEN APP)
 // ====================================================================================================
 
+static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
+    if (!IS_ACTIVE || !CFG285) return 144;
+    
+    NSInteger userHz = 144;
+    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+        userHz = (NSInteger)[CFG285 targetHz];
+    } else if ([CFG285 respondsToSelector:@selector(customFPS)]) {
+        userHz = (NSInteger)[CFG285 customFPS];
+    } else if ([CFG285 respondsToSelector:@selector(selectedFPS)]) {
+        userHz = (NSInteger)[CFG285 selectedFPS];
+    }
+    
+    if (userHz < 30) userHz = 30;
+    if (userHz > 144) userHz = 144;
+    return userHz;
+}
+
+// Kiểm tra trạng thái xem video thụ động để trả lại FPS gốc cho video
 static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive && g_activeAnimationCount == 0);
 }
 
 %group Group_FluidTransitions_Pacing
 
-// 1. ĐIỀU PHỐI VÒNG LẶP DỰNG HÌNH CADISPLAYLINK
+// ----------------------------------------------------------------------------------------------------
+// 1. ĐIỀU PHỐI VÒNG LẶP DỰNG HÌNH CADISPLAYLINK (CHUYỂN ĐỘNG 144HZ - TĨNH HẲN 30HZ)
+// ----------------------------------------------------------------------------------------------------
 %hook CADisplayLink
 
 - (CFTimeInterval)targetTimestamp {
-    CFTimeInterval ts = %orig;
-    if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
-        g_lastInteractionMachTime = mach_absolute_time(); // Căn pha nhịp V-Sync
-    }
-    return ts;
+    return %orig;
 }
 
 - (NSInteger)preferredFramesPerSecond {
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
+        NSInteger maxTarget = Titanium_GetTargetConfiguredHz();
+        // CÒN TƯƠNG TÁC / VUỐT / HOẠT ẢNH: ĐẨY CĂNG TRẦN 144HZ
         if (Titanium_ShouldLockTargetRate()) {
-            return 144;
+            return maxTarget;
         }
-        return %orig > 60 ? %orig : 60; // SÀN 60 FPS: TUYỆT ĐỐI KHÔNG HẠ 10 FPS ĐỂ CHỐNG ĐEN APP
+        // TĨNH HẲN 100%: HẠ AN TOÀN VỀ 30 FPS (MÁT MÁY NHƯNG FRAMEBUFFER LUÔN SỐNG, CHỐNG ĐEN APP 100%)
+        return 30;
     }
     return %orig;
 }
@@ -1870,12 +1889,14 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     }
 
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        %orig(Titanium_ShouldLockTargetRate() ? 144 : (fps > 0 ? fps : 60));
+        NSInteger maxTarget = Titanium_GetTargetConfiguredHz();
+        %orig(Titanium_ShouldLockTargetRate() ? maxTarget : 30);
         return;
     }
     %orig;
 }
 
+// KHÓA DẢI DYNAMIC REFRESH: TRẦN LUÔN SẴN SÀNG 144HZ TRONG 0MS
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (Titanium_IsPassiveVideoPlayback()) { 
         %orig; 
@@ -1884,20 +1905,13 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE && CFG285.enableHzControl) {
-            if (HardwareHasNative120Hz()) {
-                // TRÊN 13 PRO - 15 PRO MAX (PROMOTION 120HZ):
-                if (Titanium_ShouldLockTargetRate()) {
-                    range = SafeMakeFRR(120.0f, 120.0f, 120.0f);
-                } else {
-                    range = SafeMakeFRR(10.0f, 120.0f, 10.0f);
-                }
+            float maxTarget = (float)Titanium_GetTargetConfiguredHz();
+            if (Titanium_ShouldLockTargetRate()) {
+                // TƯƠNG TÁC / CHUYỂN CẢNH: KHÓA CHẶT TRẦN 144HZ
+                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             } else {
-                // TRÊN 6S - 12 PRO MAX (MÀN HÌNH 60HZ LCD/OLED):
-                if (Titanium_ShouldLockTargetRate()) {
-                    range = SafeMakeFRR(144.0f, 144.0f, 144.0f);
-                } else {
-                    range = SafeMakeFRR(60.0f, 144.0f, 60.0f); // Bảo vệ không đen app
-                }
+                // TĨNH HẲN: SÀN 30HZ, PREFERRED 30HZ (MÁT MÁY), TRẦN 144HZ BẬT LÊN TRONG 0MS KHI CHẠM
+                range = SafeMakeFRR(30.0f, maxTarget, 30.0f);
             }
         }
     }
@@ -1906,20 +1920,23 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)setFrameInterval:(NSInteger)interval {
     if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE && CFG285.enableHzControl) {
-        interval = 1;
+        // Đang tương tác: interval = 1 (vẽ từng frame không bỏ nhịp). Tĩnh hẳn: interval = 2 (hạ về 30fps trên màn 60Hz)
+        interval = Titanium_ShouldLockTargetRate() ? 1 : 2;
     }
     %orig(interval);
 }
 
 %end
 
-// 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY LÊN TRẦN 144HZ
+// ----------------------------------------------------------------------------------------------------
+// 2. KHÓA TẤM NỀN PHẦN CỨNG CADISPLAY (TRẦN LUÔN GIỮ 144HZ ĐỂ VỌT LÊN KHÔNG KHỰNG)
+// ----------------------------------------------------------------------------------------------------
 %hook CADisplay
 
 - (NSInteger)preferredFPS {
     if (Titanium_IsPassiveVideoPlayback()) return %orig;
     if (!IS_ACTIVE) return %orig;
-    return 144;
+    return Titanium_GetTargetConfiguredHz();
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
@@ -1928,9 +1945,17 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         return; 
     }
     if (IS_ACTIVE) {
-        fps = 144;
+        fps = Titanium_GetTargetConfiguredHz();
     }
     %orig(fps);
+}
+
+// Sàn phần cứng an toàn: Tĩnh không bao giờ cho phép tụt dưới 30Hz gây đen app
+- (NSInteger)minimumFPS {
+    if (IS_ACTIVE && CFG285.enableFPSControl) {
+        return 30;
+    }
+    return %orig;
 }
 
 - (BOOL)supportsDynamicRefresh {
@@ -1945,21 +1970,61 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 3. BÁO CÁO ĐỒNG BỘ THÔNG SỐ 144HZ CHO TOÀN BỘ UIKIT
+// ----------------------------------------------------------------------------------------------------
+// 3. ĐIỀU PHỐI WINDOWSERVER DISPLAY (SÀN 30HZ - TRẦN 144HZ)
+// ----------------------------------------------------------------------------------------------------
+%hook CAWindowServerDisplay
+
+- (double)minimumRefreshRate {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        return 30.0; // Sàn tĩnh 30Hz an toàn
+    }
+    return %orig;
+}
+
+- (double)maximumRefreshRate {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        return (double)Titanium_GetTargetConfiguredHz(); // Trần 144Hz
+    }
+    return %orig;
+}
+
+- (double)idealRefreshRate {
+    if (IS_ACTIVE && CFG285.enableHzControl) {
+        return (double)Titanium_GetTargetConfiguredHz();
+    }
+    return %orig;
+}
+
+- (BOOL)allowsVirtualModes {
+    if (IS_ACTIVE) return YES;
+    return %orig;
+}
+
+- (void)setAllowsVirtualModes:(BOOL)allows {
+    if (IS_ACTIVE) allows = YES;
+    %orig(allows);
+}
+
+%end
+
+// ----------------------------------------------------------------------------------------------------
+// 4. BÁO CÁO THÔNG SỐ UISCREEN ĐỒNG BỘ 144HZ CHO TOÀN BỘ UIKIT
+// ----------------------------------------------------------------------------------------------------
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
-    if (IS_ACTIVE) return 144;
+    if (IS_ACTIVE) return Titanium_GetTargetConfiguredHz();
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    if (IS_ACTIVE) return 144;
+    if (IS_ACTIVE) return Titanium_GetTargetConfiguredHz();
     return %orig;
 }
 
 - (CGFloat)_refreshRate {
-    if (IS_ACTIVE) return 144.0;
+    if (IS_ACTIVE) return (CGFloat)Titanium_GetTargetConfiguredHz();
     return %orig;
 }
 
@@ -1975,20 +2040,23 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (IS_ACTIVE) {
-        rate = 144.0;
+        rate = (CGFloat)Titanium_GetTargetConfiguredHz();
     }
     %orig(rate);
 }
 
 %end
 
-// 4. KHÓA CỨNG HOẠT ẢNH & LÒ XO (CAANIMATION) ĐẠT ĐỈNH 144HZ
+// ----------------------------------------------------------------------------------------------------
+// 5. KHÓA CỨNG TOÀN BỘ HOẠT ẢNH & LÒ XO (CAANIMATION) ĐẠT ĐỈNH 144HZ
+// ----------------------------------------------------------------------------------------------------
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
-            range = SafeMakeFRR(144.0f, 144.0f, 144.0f);
+            float maxTarget = (float)Titanium_GetTargetConfiguredHz();
+            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             g_lastInteractionMachTime = mach_absolute_time();
         }
     }
@@ -2002,7 +2070,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
-            range = SafeMakeFRR(144.0f, 144.0f, 144.0f);
+            float maxTarget = (float)Titanium_GetTargetConfiguredHz();
+            // Đảm bảo lò xo nảy đạt trọn vẹn 144Hz cho tới điểm tiếp đất
+            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             g_lastInteractionMachTime = mach_absolute_time();
         }
     }
@@ -2011,7 +2081,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 5. THEO DÕI VIDEO (ĐẢM BẢO YOUTUBE VÀ VIDEO KHÔNG BỊ KHỰNG HAY NGHẼN MẠNG)
+// ----------------------------------------------------------------------------------------------------
+// 6. THEO DÕI VIDEO (ĐẢM BẢO YOUTUBE VÀ VIDEO KHÔNG BỊ KHỰNG HAY NGHẼN MẠNG)
+// ----------------------------------------------------------------------------------------------------
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
@@ -2023,7 +2095,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 6. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN: KÍCH XUNG 144HZ TỨC THÌ TRONG 0MS
+// ----------------------------------------------------------------------------------------------------
+// 7. ĐÓN ĐẦU THÔNG BÁO XUẤT HIỆN: KÍCH XUNG 144HZ TỨC THÌ TRONG 0MS
+// ----------------------------------------------------------------------------------------------------
 %hook NCNotificationDispatcher
 
 - (void)postNotificationWithRequest:(id)request {
@@ -2057,7 +2131,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 7. BẢO VỆ KHỞI CHẠY APP: KHÓA 144HZ TRONG 1.5S ĐẦU ĐỂ TRIỆT TIÊU 100% LỖI ĐEN MÀN HÌNH
+// ----------------------------------------------------------------------------------------------------
+// 8. BẢO VỆ KHỞI CHẠY APP: VÙNG AN TOÀN 1.5S ĐẦU 144HZ TRIỆT TIÊU 100% LỖI ĐEN MÀN HÌNH
+// ----------------------------------------------------------------------------------------------------
 %hook UIApplication
 
 - (void)_applicationDidBecomeActive:(id)arg1 {
