@@ -147,7 +147,7 @@
 			<key>label</key>
 			<string>Kích Hoạt Điều Phối Tần Số Quét (Hz)</string>
 			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/HardwareSync</string>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -203,7 +203,7 @@
 			<key>label</key>
 			<string>Ép Xung Cố Định 144Hz Toàn Máy</string>
 			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/HardwareSync</string>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
 		<!-- ==================================================================================================== -->
