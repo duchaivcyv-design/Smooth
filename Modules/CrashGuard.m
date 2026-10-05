@@ -4,12 +4,21 @@
 #import <dlfcn.h>
 #import <mach/mach.h>
 #import <sys/stat.h>
+#import <fcntl.h>
 
 #define MAX_ALLOWED_CRASHES 3
 #define CRASH_WINDOW_SECONDS 15.0
 
-static NSString * const kCrashGuardCounterPath = @"/tmp/.boost_boot_counter";
-static NSString * const kCrashGuardSafeFlag = @"/tmp/.boost_safe_mode";
+static const char *kCrashGuardCounterPath = "/tmp/.boost_boot_counter";
+static const char *kCrashGuardSafeFlag = "/tmp/.boost_safe_mode";
+
+// ====================================================================================================
+// HÀM KIỂM TRA NHANH 0NS CHO %CTOR TRONG TWEAK.XM (KHÔNG DÙNG HEAP / OBJC RUNTIME)
+// ====================================================================================================
+
+BOOL CrashGuard_IsSafeModeActive(void) {
+    return (access(kCrashGuardSafeFlag, F_OK) == 0);
+}
 
 static inline NSString *CrashGuard_ResolvePrefix(void) {
     static NSString *cachedRoot = nil;
@@ -32,26 +41,39 @@ static inline NSString *CrashGuard_ResolvePrefix(void) {
     return cachedRoot;
 }
 
+// ====================================================================================================
+// ASYNC-SIGNAL-SAFE TRAP: TUYỆT ĐỐI CHỈ DÙNG SYSCALL POSIX (CHỐNG DEADLOCK & CHỐNG TREO MÁY)
+// ====================================================================================================
+
 static void CrashGuard_SignalHandler(int sig) {
-    // Ghi nhận tín hiệu crash nghiêm trọng trước khi tiến trình sập
-    NSDictionary *counterDict = [NSDictionary dictionaryWithContentsOfFile:kCrashGuardCounterPath];
-    NSInteger count = counterDict ? [counterDict[@"count"] integerValue] + 1 : 1;
-    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
-    
-    NSDictionary *newCounter = @{
-        @"count": @(count),
-        @"time": @(now),
-        @"signal": @(sig)
-    };
-    [newCounter writeToFile:kCrashGuardCounterPath atomically:YES];
-    chmod([kCrashGuardCounterPath UTF8String], 0666);
-    
-    if (count >= MAX_ALLOWED_CRASHES) {
-        int fd = open([kCrashGuardSafeFlag UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd >= 0) close(fd);
+    // 1. Đọc và cập nhật số lần crash thuần POSIX (không gọi malloc hay Obj-C runtime)
+    int count = 0;
+    int fd = open(kCrashGuardCounterPath, O_RDWR | O_CREAT, 0666);
+    if (fd >= 0) {
+        char buf[16] = {0};
+        ssize_t bytesRead = read(fd, buf, sizeof(buf) - 1);
+        if (bytesRead > 0) {
+            count = atoi(buf);
+        }
+        count++;
+        
+        // Ghi đè lại counter mới
+        lseek(fd, 0, SEEK_SET);
+        char outBuf[16] = {0};
+        int len = snprintf(outBuf, sizeof(outBuf), "%d", count);
+        write(fd, outBuf, len);
+        close(fd);
     }
     
-    // Nhả lại handler mặc định để hệ thống xử lý dump crashlog bình thường
+    // 2. Kích hoạt cờ Safe Mode nếu vượt ngưỡng sập liên tục
+    if (count >= MAX_ALLOWED_CRASHES) {
+        int sfd = open(kCrashGuardSafeFlag, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (sfd >= 0) {
+            close(sfd);
+        }
+    }
+    
+    // 3. Trả lại signal mặc định để hệ thống sinh CrashReport sạch sẽ
     signal(sig, SIG_DFL);
     raise(sig);
 }
@@ -88,29 +110,23 @@ static void CrashGuard_ExceptionHandler(NSException *exception) {
 
 - (void)inspectEnvironment {
     NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *safeFlagStr = [NSString stringWithUTF8String:kCrashGuardSafeFlag];
+    NSString *counterPathStr = [NSString stringWithUTF8String:kCrashGuardCounterPath];
     
-    if ([fm fileExistsAtPath:kCrashGuardSafeFlag]) {
+    if ([fm fileExistsAtPath:safeFlagStr]) {
         _status = GuardStatusSafeMode;
         return;
     }
     
-    if ([fm fileExistsAtPath:kCrashGuardCounterPath]) {
-        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:kCrashGuardCounterPath];
-        if (dict) {
-            _crashes = [dict[@"count"] integerValue];
-            NSTimeInterval lastTime = [dict[@"time"] doubleValue];
-            NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
-            
-            if (now - lastTime < CRASH_WINDOW_SECONDS) {
-                if (_crashes >= MAX_ALLOWED_CRASHES) {
-                    _status = GuardStatusCritical;
-                } else if (_crashes >= 2) {
-                    _status = GuardStatusSafeMode;
-                }
-            } else {
-                // Quá cửa sổ theo dõi mà không crash dồn dập -> xóa đếm
-                [fm removeItemAtPath:kCrashGuardCounterPath error:nil];
-                _crashes = 0;
+    if ([fm fileExistsAtPath:counterPathStr]) {
+        NSError *err = nil;
+        NSString *content = [NSString stringWithContentsOfFile:counterPathStr encoding:NSUTF8StringEncoding error:&err];
+        if (content) {
+            _crashes = [content integerValue];
+            if (_crashes >= MAX_ALLOWED_CRASHES) {
+                _status = GuardStatusCritical;
+            } else if (_crashes >= 2) {
+                _status = GuardStatusSafeMode;
             }
         }
     }
@@ -120,7 +136,7 @@ static void CrashGuard_ExceptionHandler(NSException *exception) {
     if (_monitoringStarted) return;
     _monitoringStarted = YES;
     
-    // Thiết lập bẫy tín hiệu bảo vệ
+    // Đăng ký bẫy tín hiệu bảo vệ nhân
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = CrashGuard_SignalHandler;
@@ -134,23 +150,8 @@ static void CrashGuard_ExceptionHandler(NSException *exception) {
     
     NSSetUncaughtExceptionHandler(&CrashGuard_ExceptionHandler);
     
-    // Ghi nhận lần khởi động này
-    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
-    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:kCrashGuardCounterPath];
-    NSInteger currentCount = 1;
-    if (dict) {
-        NSTimeInterval lastTime = [dict[@"time"] doubleValue];
-        if (now - lastTime < CRASH_WINDOW_SECONDS) {
-            currentCount = [dict[@"count"] integerValue] + 1;
-        }
-    }
-    
-    NSDictionary *counterDict = @{@"count": @(currentCount), @"time": @(now)};
-    [counterDict writeToFile:kCrashGuardCounterPath atomically:YES];
-    chmod([kCrashGuardCounterPath UTF8String], 0666);
-    
-    // Nếu app chạy sống sót qua 12 giây liên tục -> tự động xóa cờ cảnh báo
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // Tự động xóa cờ boot counter sau 3.5s nếu hệ thống hoạt động ổn định
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self markAppSuccessfullyLaunched];
     });
 }
@@ -161,18 +162,16 @@ static void CrashGuard_ExceptionHandler(NSException *exception) {
 }
 
 - (void)markAppSuccessfullyLaunched {
-    NSFileManager *fm = [NSFileManager defaultManager];
-    if ([fm fileExistsAtPath:kCrashGuardCounterPath]) {
-        [fm removeItemAtPath:kCrashGuardCounterPath error:nil];
-    }
+    unlink(kCrashGuardCounterPath);
     _crashes = 0;
-    _status = GuardStatusNormal;
+    if (_status != GuardStatusSafeMode) {
+        _status = GuardStatusNormal;
+    }
 }
 
 - (void)resetSafeModeManually {
-    NSFileManager *fm = [NSFileManager defaultManager];
-    [fm removeItemAtPath:kCrashGuardSafeFlag error:nil];
-    [fm removeItemAtPath:kCrashGuardCounterPath error:nil];
+    unlink(kCrashGuardSafeFlag);
+    unlink(kCrashGuardCounterPath);
     _crashes = 0;
     _status = GuardStatusNormal;
 }
@@ -181,7 +180,7 @@ static void CrashGuard_ExceptionHandler(NSException *exception) {
     _crashes++;
     if (_crashes >= MAX_ALLOWED_CRASHES) {
         _status = GuardStatusCritical;
-        int fd = open([kCrashGuardSafeFlag UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        int fd = open(kCrashGuardSafeFlag, O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (fd >= 0) close(fd);
     }
 }
