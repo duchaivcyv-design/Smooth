@@ -1494,19 +1494,15 @@ static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
     // Giữ priority offset ở mức 0 để Scheduler vẫn phân bổ Time-Slice cho luồng mạng
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
-    // 3. Khống chế ngưỡng Mach Constraint: chỉ giới hạn trong chu kỳ vẽ khung hình
-    // Không chiếm trọn 100% CPU mà để lại 25% chu kỳ cho các luồng I/O socket mạng
-    static mach_port_t s_lastThread = MACH_PORT_NULL;
-    mach_port_t current = mach_thread_self();
+    // 3. Khống chế mức ưu tiên cao nhất qua chuẩn POSIX (Tương thích sạch sẽ với iOS 16.5 SDK)
+    static pthread_t s_lastThread = NULL;
+    pthread_t current = pthread_self();
     if (s_lastThread != current) {
         s_lastThread = current;
-        
-        // Đặt mức ưu tiên thời gian thực an toàn (Soft-RealTime)
-        struct thread_standard_priority std_prio;
-        std_prio.priority = 47; // Mức ưu tiên cao nhất của UI UIKit (dưới mức kernel, trên mức network)
-        thread_policy_set(current, THREAD_STANDARD_PRIORITY_POLICY, (thread_policy_t)&std_prio, THREAD_STANDARD_PRIORITY_POLICY_COUNT);
+        struct sched_param param;
+        param.sched_priority = 47; // Mức ưu tiên trần của UI Main Thread (không chặn socket mạng)
+        pthread_setschedparam(current, SCHED_RR, &param);
     }
-    mach_port_deallocate(mach_task_self(), current);
 }
 
 // ====================================================================================================
