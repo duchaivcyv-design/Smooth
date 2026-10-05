@@ -11,7 +11,6 @@ BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = 
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
 # CỜ BIÊN DỊCH: ĐỒNG BỘ HOÀN TOÀN VỚI MAKEFILE CHA & DẬP TẮT CẢNH BÁO RUNNER
@@ -31,7 +30,6 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I$(THEOS)/include \
                             -I$(THEOS)/vendor/include \
                             -I../Headers \
-                            -I../Modules \
                             -I../ \
                             -I.
 
@@ -46,12 +44,15 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 
-# ĐỒNG BỘ SYMLINK TỰ ĐỘNG: ĐẢM BẢO PREFERENCELOADER GỌI TÊN NÀO CŨNG NẠP ĐƯỢC 100%
+# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & CẤP QUYỀN CHUẨN ROOTLESS CHO PREFERENCELOADER
 after-stage::
-	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink Bundle vào Staging ==="
+	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink & Quyền Bundle vào Staging ==="
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceBundles"; \
 	mkdir -p "$$TARGET_DIR"; \
 	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ] && [ ! -e "$$TARGET_DIR/BoostiPhone6s.bundle" ]; then \
 		ln -sf "BoostiPhone6sPrefs.bundle" "$$TARGET_DIR/BoostiPhone6s.bundle"; \
 		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
-	fi
+	fi; \
+	chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
+	chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
+	echo "  [OK] Đã gán quyền 0755 cho Bundle!"
