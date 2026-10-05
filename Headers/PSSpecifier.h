@@ -32,9 +32,9 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 @property (nonatomic, copy, nullable) NSString *name;
 @property (nonatomic, assign) PSCellType cellType;
 @property (nonatomic, assign, nullable) id target;
-@property (nonatomic, assign) SEL getter;
-@property (nonatomic, assign) SEL setter;
-@property (nonatomic, assign) SEL action;
+@property (nonatomic, assign, nullable) SEL getter;
+@property (nonatomic, assign, nullable) SEL setter;
+@property (nonatomic, assign, nullable) SEL action;
 @property (nonatomic, retain, nullable) id defaultValue;
 @property (nonatomic, copy, nullable) NSString *defaultsDomain;
 @property (nonatomic, copy, nullable) NSString *key;
@@ -49,17 +49,27 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 @property (nonatomic, copy, nullable) NSString *iconName;
 @property (nonatomic, copy, nullable) NSString *postNotificationName;
 @property (nonatomic, copy, nullable) NSString *keyboardType;
-@property (nonatomic, retain, nullable) NSDictionary *properties;
+
+// Bảng thuộc tính chuẩn của Preferences.framework là NSMutableDictionary
+@property (nonatomic, retain, nullable) NSMutableDictionary *properties;
 
 + (instancetype)preferenceSpecifierNamed:(nullable NSString *)name
-                                   target:(nullable id)target
-                                      set:(nullable SEL)setSelector
-                                      get:(nullable SEL)getSelector
-                                   detail:(nullable Class)detailClass
-                                     cell:(PSCellType)cellType
-                                     edit:(nullable Class)editClass;
+                                  target:(nullable id)target
+                                     set:(nullable SEL)setSelector
+                                     get:(nullable SEL)getSelector
+                                  detail:(nullable Class)detailClass
+                                    cell:(PSCellType)cellType
+                                    edit:(nullable Class)editClass;
+
++ (instancetype)emptyGroupSpecifier;
++ (instancetype)groupSpecifierWithName:(nullable NSString *)name;
 
 - (instancetype)init;
+
+// 2 phương thức cốt lõi bắt buộc phải có cho Preferences/PreferenceLoader
+- (nullable id)propertyForKey:(NSString *)key;
+- (void)setProperty:(nullable id)value forKey:(NSString *)key;
+
 - (nullable id)performGetter;
 - (void)performSetterWithValue:(nullable id)value;
 - (void)performAction;
@@ -68,4 +78,5 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 @end
 
 NS_ASSUME_NONNULL_END
-#endif
+
+#endif /* PSSPECIFIER_H */
