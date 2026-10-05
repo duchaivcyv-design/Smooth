@@ -1529,8 +1529,8 @@ static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
@@ -3208,8 +3208,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     if (IS_ACTIVE) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
@@ -3224,8 +3224,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
@@ -3254,8 +3254,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_TriggerInstantTouchBurst();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
@@ -3421,8 +3421,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
@@ -3438,8 +3438,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
 }
@@ -3453,8 +3453,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
