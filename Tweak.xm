@@ -2847,31 +2847,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %end
 
-// 5. TỐI ƯU HOÁ TABLEVIEW & COLLECTIONVIEW (PHOTOS, CÀI ĐẶT, DANH SÁCH BÀI VIẾT)
-%hook UITableView
-
-- (void)didMoveToWindow {
-    %orig;
-    if (IS_ACTIVE && self.window && !Titanium_IsSpringBoard()) {
-        self.delaysContentTouches = NO;
-        self.canCancelContentTouches = YES;
-    }
-}
-
-%end
-
-%hook UICollectionView
-
-- (void)didMoveToWindow {
-    %orig;
-    if (IS_ACTIVE && self.window && !Titanium_IsSpringBoard()) {
-        self.delaysContentTouches = NO;
-        self.canCancelContentTouches = YES;
-    }
-}
-
-%end
-
 %end
 
 // ====================================================================================================
@@ -3399,6 +3374,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 - (void)didMoveToWindow {
     %orig;
     if (IS_ACTIVE && self.window && !Titanium_IsSpringBoard()) {
+        self.delaysContentTouches = NO;
+        self.canCancelContentTouches = YES;
         if (!g_isDeviceChargingV285) {
             self.layer.drawsAsynchronously = YES; // GPU vẽ nền bất đồng bộ giúp cuộn siêu nhẹ
         }
@@ -3412,6 +3389,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 - (void)didMoveToWindow {
     %orig;
     if (IS_ACTIVE && self.window && !Titanium_IsSpringBoard()) {
+        self.delaysContentTouches = NO;
+        self.canCancelContentTouches = YES;
         if (!g_isDeviceChargingV285) {
             self.layer.drawsAsynchronously = YES;
             self.prefetchingEnabled = YES; // Nạp trước khung hình mượt mà
@@ -3742,15 +3721,15 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook CASpringAnimation
 
 - (void)setMass:(CGFloat)mass {
-    %orig(mass);
+    %orig;
 }
 
 - (void)setStiffness:(CGFloat)stiffness {
-    %orig(stiffness);
+    %orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
-    %orig(damping);
+    %orig;
 }
 
 %end
