@@ -2549,8 +2549,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook SBAppSwitcherController
 
-- (voidviewWillAppear:(BOOL)animated {
-    %orig;
+- (void)viewWillAppear:(BOOL)animated {
+    %orig(animated);
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
         Titanium_LockMainThreadFast();
@@ -2558,7 +2558,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
-    %orig;
+    %orig(animated);
     if (IS_ACTIVE) {
         g_isUserTouchingScreen = NO;
         g_isContinuousSwiping = NO;
