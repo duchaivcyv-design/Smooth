@@ -1482,7 +1482,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 }
 
 // ====================================================================================================
-// NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE
+// NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE & WINDOWSERVER LOW-LATENCY
 // ====================================================================================================
 
 %group Group_Apple_Internal_ProMotion_Apex
@@ -1786,10 +1786,23 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     NSInteger userHz = 144;
     if ([CFG285 respondsToSelector:@selector(targetHz)]) {
         userHz = (NSInteger)[CFG285 targetHz];
-    } else if ([CFG285 respondsToSelector:@selector(customFPS)]) {
-        userHz = (NSInteger)[CFG285 customFPS];
-    } else if ([CFG285 respondsToSelector:@selector(selectedFPS)]) {
-        userHz = (NSInteger)[CFG285 selectedFPS];
+    } else {
+        id dynamicCfg = (id)CFG285;
+        SEL sCustom = NSSelectorFromString(@"customFPS");
+        SEL sSelected = NSSelectorFromString(@"selectedFPS");
+        if ([dynamicCfg respondsToSelector:sCustom]) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:[dynamicCfg methodSignatureForSelector:sCustom]];
+            [inv setSelector:sCustom];
+            [inv setTarget:dynamicCfg];
+            [inv invoke];
+            [inv getReturnValue:&userHz];
+        } else if ([dynamicCfg respondsToSelector:sSelected]) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:[dynamicCfg methodSignatureForSelector:sSelected]];
+            [inv setSelector:sSelected];
+            [inv setTarget:dynamicCfg];
+            [inv invoke];
+            [inv getReturnValue:&userHz];
+        }
     }
     
     if (userHz < 30) userHz = 30;
@@ -2682,7 +2695,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %hook SBIconListView
-- (void)setAlpha:(CGFloat)alpha { %orig; }
+- (void)setAlpha:(CGFloat)alpha {
+    %orig;
+}
 %end
 
 %hook SBIconController
@@ -3009,8 +3024,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    if (IS_ACTIVE) {
-        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+    if (IS_ACTIVE && g_activeAnimationCount > 0) {
+        g_activeAnimationCount--;
     }
 }
 
@@ -3030,8 +3045,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig;
-    if (IS_ACTIVE) {
-        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+    if (IS_ACTIVE && g_activeAnimationCount > 0) {
+        g_activeAnimationCount--;
     }
 }
 
@@ -3096,8 +3111,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)presentationTransitionDidEnd:(BOOL)completed {
     %orig;
-    if (IS_ACTIVE) {
-        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+    if (IS_ACTIVE && g_activeAnimationCount > 0) {
+        g_activeAnimationCount--;
     }
 }
 
@@ -3116,8 +3131,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 - (void)dismissalTransitionDidEnd:(BOOL)completed {
     %orig;
-    if (IS_ACTIVE) {
-        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+    if (IS_ACTIVE && g_activeAnimationCount > 0) {
+        g_activeAnimationCount--;
     }
 }
 
@@ -3769,3 +3784,5 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         }
     }
 }
+
+```
