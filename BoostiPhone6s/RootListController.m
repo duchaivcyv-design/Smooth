@@ -220,7 +220,11 @@ static inline NSString *PM_TextV285(NSString *key) {
     return enSection ? enSection[key] : nil;
 }
 
-@implementation RootListController
+@implementation RootListController {
+    NSMutableArray *_specifiers;
+    NSMutableArray *_allSavedSpecifiers;
+    dispatch_queue_t _syncQueue;
+}
 
 - (instancetype)init {
     self = [super init];
@@ -878,7 +882,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
     NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (An Toàn)";
     NSString *srebootText = PM_TextV285(@"SREBOOT") ?: @"🔥 Khởi Động Userspace (SReboot)";
-    NSString *resetText = PM_TextV285(@"RESET") ?: @"♻️️ Đặt Lại Cấu Hình Mặc Định (144Hz)";
+    NSString *resetText = PM_TextV285(@"RESET") ?: @"♻ Đặt Lại Cấu Hình Mặc Định (144Hz)";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
 
     [sheet addAction:[UIAlertAction actionWithTitle:respringText style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
