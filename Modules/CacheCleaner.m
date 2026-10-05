@@ -6,13 +6,8 @@
 #import <dlfcn.h>
 #import <sys/stat.h>
 
-// Khai báo extern an toàn cho vm_purgable_control thay vì import mach_vm.h
 #ifndef VM_PURGABLE_PURGE_ALL
-#define VM_PURGABLE_PURGE_ALL 3
-#endif
-
-#ifndef VM_FLAGS_PURGABLE
-#define VM_FLAGS_PURGABLE 0x0001
+#define VM_PURGABLE_PURGE_ALL 0
 #endif
 
 #ifdef __cplusplus
@@ -46,6 +41,7 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
 
 @implementation CacheCleaner {
     dispatch_source_t _cleanerTimer;
+    dispatch_queue_t _workerQueue;
 }
 
 + (instancetype)sharedInstance {
@@ -57,42 +53,63 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
     return inst;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        // Hàng đợi Background cô lập hoàn toàn: Không chiếm tài nguyên mạng và P-Core
+        _workerQueue = dispatch_queue_create("com.taojb.cachecleaner.worker", DISPATCH_QUEUE_SERIAL);
+        dispatch_set_target_queue(_workerQueue, dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0));
+    }
+    return self;
+}
+
 + (void)forceMemoryPurge {
     malloc_zone_pressure_relief(NULL, 0);
 }
 
 + (void)forceDeepMemoryPurge {
+    // 1. Giải phóng vùng nhớ không sử dụng của Malloc
     malloc_zone_pressure_relief(NULL, 0);
-    mach_port_t selfTask = mach_task_self();
 
+    // 2. Thu hồi trang nhớ Purgeable của Task hiện tại theo mã chuẩn XNU
+    mach_port_t selfTask = mach_task_self();
     int purgeState = 0;
     vm_purgable_control(selfTask, 0, VM_PURGABLE_PURGE_ALL, &purgeState);
 
-    // Phát thông báo cảnh báo bộ nhớ an toàn trên main thread
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidReceiveMemoryWarningNotification object:nil];
-    });
+    // 3. Xóa URL Cache đã lưu trong bộ nhớ RAM của tiến trình (giải phóng RAM mà không ngắt kết nối socket)
+    [[NSURLCache sharedURLCache] removeAllCachedResponses];
 }
 
 + (void)cleanAppTemporaryCaches {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSString *tmpDir = NSTemporaryDirectory();
-        NSArray *tmpFiles = [fm contentsOfDirectoryAtPath:tmpDir error:nil];
-        for (NSString *file in tmpFiles) {
-            if ([file isEqualToString:@".boost_hz_sync"] || [file isEqualToString:@".boost_boot_counter"]) {
-                continue;
+    dispatch_async([self sharedInstance]->_workerQueue, ^{
+        @autoreleasepool {
+            NSFileManager *fm = [NSFileManager defaultManager];
+            
+            // DỌN DẸP THƯ MỤC TẠM NSTemporaryDirectory
+            NSString *tmpDir = NSTemporaryDirectory();
+            if (tmpDir) {
+                NSArray *tmpFiles = [fm contentsOfDirectoryAtPath:tmpDir error:nil];
+                for (NSString *file in tmpFiles) {
+                    // Bảo vệ tuyệt đối các tệp IPC đồng bộ cấu hình và file socket
+                    if ([file hasPrefix:@".boost_"] || 
+                        [file hasPrefix:@".titanium_"] || 
+                        [file hasSuffix:@".sock"]) {
+                        continue;
+                    }
+                    [fm removeItemAtPath:[tmpDir stringByAppendingPathComponent:file] error:nil];
+                }
             }
-            [fm removeItemAtPath:[tmpDir stringByAppendingPathComponent:file] error:nil];
-        }
 
-        NSArray *cacheDirs = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
-        if (cacheDirs.count > 0) {
-            NSString *cacheDir = cacheDirs.firstObject;
-            NSArray *cacheFiles = [fm contentsOfDirectoryAtPath:cacheDir error:nil];
-            for (NSString *file in cacheFiles) {
-                if ([file containsString:@"WebKit"] || [file containsString:@"Cache.db"]) {
-                    [fm removeItemAtPath:[cacheDir stringByAppendingPathComponent:file] error:nil];
+            // DỌN DẸP BỘ ĐỆM AN TOÀN (KHÔNG CHẠM VÀO SOCKET WEBKIT ĐANG STREAMING)
+            NSArray *cacheDirs = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+            if (cacheDirs.count > 0) {
+                NSString *cacheDir = cacheDirs.firstObject;
+                NSArray *cacheFiles = [fm contentsOfDirectoryAtPath:cacheDir error:nil];
+                for (NSString *file in cacheFiles) {
+                    // BẢO VỆ MẠNG: Chỉ xóa Cache.db cũ hoặc snapshot rác, KHÔNG xóa thư mục WebKit đang active
+                    if ([file isEqualToString:@"Cache.db"] || [file isEqualToString:@"Cache.db-wal"]) {
+                        [fm removeItemAtPath:[cacheDir stringByAppendingPathComponent:file] error:nil];
+                    }
                 }
             }
         }
@@ -100,11 +117,16 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
 }
 
 + (void)cleanSystemCachesAndSnapshots {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-        NSString *jbRoot = CacheCleaner_GetJbRoot();
-        NSString *prefCache = [NSString stringWithFormat:@"%@/var/mobile/Library/Caches/com.taojb.boostiphone6s", jbRoot];
-        [[NSFileManager defaultManager] removeItemAtPath:prefCache error:nil];
-        [[NSFileManager defaultManager] removeItemAtPath:@"/var/mobile/Library/Caches/com.taojb.boostiphone6s" error:nil];
+    dispatch_async([self sharedInstance]->_workerQueue, ^{
+        @autoreleasepool {
+            NSString *jbRoot = CacheCleaner_GetJbRoot();
+            NSString *prefCache = [NSString stringWithFormat:@"%@/var/mobile/Library/Caches/com.taojb.boostiphone6s", jbRoot];
+            [[NSFileManager defaultManager] removeItemAtPath:prefCache error:nil];
+            [[NSFileManager defaultManager] removeItemAtPath:@"/var/mobile/Library/Caches/com.taojb.boostiphone6s" error:nil];
+            
+            // Xóa snapshot giao diện cũ của SpringBoard để giải phóng bộ nhớ đệm hình ảnh
+            [[NSFileManager defaultManager] removeItemAtPath:@"/var/mobile/Library/Caches/Snapshots" error:nil];
+        }
     });
 }
 
@@ -118,13 +140,27 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
 
 - (void)startTimer:(NSTimeInterval)interval {
     [self stopTimer];
-    dispatch_queue_t queue = dispatch_queue_create("com.taojb.cachecleaner.timer", DISPATCH_QUEUE_SERIAL);
-    _cleanerTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+
+    // Khóa trần an toàn tối thiểu 30s để tránh làm thức CPU liên tục gây nóng máy
+    if (interval < 30.0) {
+        interval = 30.0;
+    }
+
+    _cleanerTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _workerQueue);
+    if (!_cleanerTimer) return;
+
     uint64_t intervalNs = (uint64_t)(interval * NSEC_PER_SEC);
-    dispatch_source_set_timer(_cleanerTimer, dispatch_time(DISPATCH_TIME_NOW, intervalNs), intervalNs, 1.0 * NSEC_PER_SEC);
+    // Cho phép độ trễ nới lỏng (leeway 5s) để kernel gom tác vụ dọn dẹp, tiết kiệm tối đa pin
+    dispatch_source_set_timer(_cleanerTimer, 
+                              dispatch_time(DISPATCH_TIME_NOW, intervalNs), 
+                              intervalNs, 
+                              (uint64_t)(5.0 * NSEC_PER_SEC));
+
     dispatch_source_set_event_handler(_cleanerTimer, ^{
         [CacheCleaner forceDeepMemoryPurge];
+        [CacheCleaner cleanAppTemporaryCaches];
     });
+
     dispatch_resume(_cleanerTimer);
 }
 
@@ -133,6 +169,10 @@ static inline NSString *CacheCleaner_GetJbRoot(void) {
         dispatch_source_cancel(_cleanerTimer);
         _cleanerTimer = nil;
     }
+}
+
+- (void)dealloc {
+    [self stopTimer];
 }
 
 @end
