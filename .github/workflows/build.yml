@@ -51,7 +51,7 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 3: QUÉT TOÀN DIỆN: TRÙNG LẶP XUYÊN NHÓM + LỖI CÚ PHÁP %ORIG ---
+      # --- BƯỚC 3: QUÉT CHUẨN XÁC: PHÂN TÍCH SELECTOR THỰC TẾ & LỖI %ORIG ---
       - name: Deep Scan Duplicates & Syntax Errors
         run: |
           python3 - << 'EOF'
@@ -66,14 +66,41 @@ jobs:
 
           has_critical_error = False
 
-          def clean_selector(method_head):
-              tokens = re.findall(r'([A-Za-z0-9_]+)\s*:', method_head)
+          def strip_parens(s):
+              res = []
+              depth = 0
+              for char in s:
+                  if char == '(':
+                      depth += 1
+                  elif char == ')':
+                      if depth > 0:
+                          depth -= 1
+                  elif depth == 0:
+                      res.append(char)
+              return "".join(res)
+
+          def extract_method_info(method_decl):
+              method_decl = method_decl.strip()
+              match_type = re.match(r'^([-+])', method_decl)
+              if not match_type:
+                  return None, None
+              m_type = match_type.group(1)
+              
+              stripped = strip_parens(method_decl)
+              stripped = stripped[1:].strip()
+              if stripped.endswith('{'):
+                  stripped = stripped[:-1].strip()
+                  
+              tokens = re.findall(r'([A-Za-z0-9_]+)\s*:', stripped)
               if tokens:
-                  return ":".join(tokens) + ":"
-              match = re.search(r'[-+]\s*\([^)]+\)\s*([A-Za-z0-9_]+)', method_head)
-              if match:
-                  return match.group(1)
-              return method_head.strip()
+                  selector = ":".join(tokens) + ":"
+                  return m_type, selector
+              else:
+                  match_sel = re.search(r'\b([A-Za-z0-9_]+)\b', stripped)
+                  if match_sel:
+                      return m_type, match_sel.group(1)
+                      
+              return None, None
 
           for filepath in files:
               with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -85,25 +112,30 @@ jobs:
 
               in_hook = False
               curr_class = ""
-              curr_method = ""
-              curr_method_start = 0
-              curr_method_body = []
-              in_method = False
 
-              # Map: method_registry[(class_name, clean_sel)] = [ {group, title, start, end, body} ]
+              in_method_decl = False
+              method_decl_lines = []
+              method_start_line = 0
+
+              in_method_body = False
+              method_body_lines = []
+              brace_depth = 0
+              curr_method_info = None
+
               method_registry = {}
               orig_syntax_warnings = []
 
               for idx, raw_line in enumerate(lines, 1):
-                  line = raw_line.strip()
+                  line_stripped = raw_line.strip()
+                  code_line = re.sub(r'//.*$', '', raw_line).strip()
 
-                  # Bắt tiêu đề nhóm dạng: // NHÓM X: ...
-                  group_title_match = re.search(r'//\s*(=+\s*)?(NHÓM\s+\d+[^=\n\r]*)', line, re.IGNORECASE)
+                  # Bắt tiêu đề nhóm Tiếng Việt dạng: // NHÓM X: ...
+                  group_title_match = re.search(r'//\s*(=+\s*)?(NHÓM\s+\d+[^=\n\r]*)', raw_line, re.IGNORECASE)
                   if group_title_match:
                       latest_comment_header = group_title_match.group(2).strip()
 
                   # Bắt khai báo %group
-                  group_match = re.match(r'^%group\s+([A-Za-z0-9_]+)', line)
+                  group_match = re.match(r'^%group\s+([A-Za-z0-9_]+)', code_line)
                   if group_match:
                       current_group_id = group_match.group(1)
                       if latest_comment_header:
@@ -113,71 +145,98 @@ jobs:
                       continue
 
                   # Bắt đầu %hook ClassName
-                  hook_match = re.match(r'^%hook\s+([A-Za-z0-9_]+)', line)
+                  hook_match = re.match(r'^%hook\s+([A-Za-z0-9_]+)', code_line)
                   if hook_match:
                       in_hook = True
                       curr_class = hook_match.group(1)
                       continue
 
-                  if in_hook and line.startswith("%end"):
-                      in_hook = False
-                      curr_class = ""
+                  if not in_method_body and not in_method_decl and code_line.startswith("%end"):
+                      if in_hook:
+                          in_hook = False
+                          curr_class = ""
+                      else:
+                          current_group_id = "__GLOBAL__"
+                          current_group_title = "Phần code chung (Ngoài nhóm)"
                       continue
 
-                  # Quét khai báo phương thức Objective-C bên trong %hook
-                  if in_hook:
-                      method_match = re.match(r'^([-+]\s*\([^{]+?\{?)', line)
-                      if method_match and not in_method:
-                          in_method = True
-                          curr_method = clean_selector(method_match.group(1))
-                          curr_method_start = idx
-                          curr_method_body = [raw_line]
+                  # Bắt đầu khai báo phương thức Objective-C (- hoặc +)
+                  if in_hook and not in_method_decl and not in_method_body:
+                      if re.match(r'^[-+]\s*\(', code_line):
+                          in_method_decl = True
+                          method_start_line = idx
+                          method_decl_lines = [code_line]
+
+                  if in_method_decl:
+                      if idx != method_start_line:
+                          method_decl_lines.append(code_line)
+                      if '{' in code_line:
+                          in_method_decl = False
+                          full_decl = " ".join(method_decl_lines)
+                          curr_method_info = extract_method_info(full_decl)
+                          if curr_method_info and curr_method_info[1]:
+                              in_method_body = True
+                              method_body_lines = [raw_line]
+                              brace_part = code_line[code_line.find('{')+1:]
+                              brace_depth = 1 + brace_part.count('{') - brace_part.count('}')
+                              if brace_depth <= 0:
+                                  in_method_body = False
+                                  m_type, sel = curr_method_info
+                                  key = (curr_class, m_type, sel)
+                                  method_registry.setdefault(key, []).append({
+                                      "group_id": current_group_id,
+                                      "group_title": current_group_title,
+                                      "start_line": method_start_line,
+                                      "end_line": idx,
+                                      "body": "".join(method_body_lines)
+                                  })
                           continue
 
-                      if in_method:
-                          curr_method_body.append(raw_line)
-                          
-                          # Bắt lỗi nguy cơ gây "Invalid argument structure in %orig"
-                          if re.search(r'%orig\s*\([^)]+?\)\s*;', line):
-                              orig_syntax_warnings.append({
-                                  "line": idx,
-                                  "class": curr_class,
-                                  "method": curr_method,
-                                  "content": line
-                              })
+                  if in_method_body:
+                      method_body_lines.append(raw_line)
+                      
+                      # Phát hiện cú pháp %orig(...) dễ làm vỡ Clang
+                      if re.search(r'%orig\s*\([^)]+?\)\s*;', code_line):
+                          m_type, sel = curr_method_info
+                          orig_syntax_warnings.append({
+                              "line": idx,
+                              "class": curr_class,
+                              "method": f"{m_type}{sel}",
+                              "content": line_stripped
+                          })
 
-                          # Kết thúc method khi gặp dấu ngoặc nhọn đóng ở đầu dòng
-                          if line.startswith("}"):
-                              in_method = False
-                              key = (curr_class, curr_method)
-                              if key not in method_registry:
-                                  method_registry[key] = []
-                              method_registry[key].append({
-                                  "group_id": current_group_id,
-                                  "group_title": current_group_title,
-                                  "start_line": curr_method_start,
-                                  "end_line": idx,
-                                  "body": "".join(curr_method_body)
-                              })
+                      brace_depth += code_line.count('{') - code_line.count('}')
+                      if brace_depth <= 0:
+                          in_method_body = False
+                          m_type, sel = curr_method_info
+                          key = (curr_class, m_type, sel)
+                          method_registry.setdefault(key, []).append({
+                              "group_id": current_group_id,
+                              "group_title": current_group_title,
+                              "start_line": method_start_line,
+                              "end_line": idx,
+                              "body": "".join(method_body_lines)
+                          })
 
-              # --- 1. KIỂM TRA LỖI NGUY CƠ CÚ PHÁP %ORIG(...) ---
+              # --- 1. CẢNH BÁO CÚ PHÁP %ORIG(...) ---
               if orig_syntax_warnings:
                   print("\n" + "="*80)
-                  print(f"⚠️ CẢNH BÁO CÚ PHÁP DỄ GÃY BUILD (Invalid argument structure): {filepath}")
+                  print(f"⚠️ CẢNH BÁO CÚ PHÁP %ORIG TRUYỀN THAM SỐ: {filepath}")
                   print("="*80)
                   for warn in orig_syntax_warnings:
                       print(f"📍 Dòng {warn['line']} trong [{warn['class']} {warn['method']}]:")
-                      print(f"   Code hiện tại: {warn['content']}")
-                      print(f"   👉 KHẮC PHỤC: Hãy đổi thành '%orig;' (bỏ ngoặc đơn và đối số) để Theos tự forward an toàn.\n")
+                      print(f"   Code: {warn['content']}")
+                      print(f"   👉 KHẮC PHỤC: Nên đổi thành '%orig;' để Theos tự chuyển tiếp qua Register.\n")
 
-              # --- 2. BẮT TRÙNG LẶP PHƯƠNG THỨC XUYÊN NHÓM ---
-              for (class_name, method_sel), occurrences in method_registry.items():
+              # --- 2. KIỂM TRA TRÙNG LẶP PHƯƠNG THỨC THỰC TẾ ---
+              for (class_name, m_type, method_sel), occurrences in method_registry.items():
                   if len(occurrences) > 1:
                       has_critical_error = True
+                      method_display = f"{m_type}[{class_name} {method_sel}]"
                       print("\n" + "="*80)
-                      print(f"🚨 PHÁT HIỆN HOOK TRÙNG LẶP: -[{class_name} {method_sel}] trong file {filepath}")
+                      print(f"🚨 PHÁT HIỆN HOOK TRÙNG LẶP THỰC TẾ: {method_display} trong file {filepath}")
                       print("="*80)
-                      
+
                       def score_block(b):
                           body = b["body"]
                           score = len(body)
@@ -185,13 +244,14 @@ jobs:
                           if "Titanium_" in body: score += 2000
                           if "ZeroLatency" in body: score += 2000
                           if "flush" in body: score += 1000
+                          if "mach_absolute_time" in body: score += 1000
                           return score
 
                       sorted_occ = sorted(occurrences, key=score_block, reverse=True)
                       best_block = sorted_occ[0]
                       del_blocks = sorted_occ[1:]
 
-                      print(f"❌ Phương thức này bị hook tới {len(occurrences)} lần xuyên các nhóm:")
+                      print(f"❌ Phương thức này bị hook {len(occurrences)} lần:")
                       for i, occ in enumerate(occurrences, 1):
                           print(f"   🔹 Lần {i}: Dòng {occ['start_line']} -> {occ['end_line']} | Thuộc: [{occ['group_title']}]")
 
@@ -203,10 +263,10 @@ jobs:
                       print("-" * 80)
 
           if has_critical_error:
-              print("\n🛑 DỪNG BUILD: Hãy xóa các phương thức bị hook trùng lặp theo danh sách chỉ định ở trên!")
+              print("\n🛑 DỪNG BUILD: Phát hiện phương thức bị hook trùng lặp! Hãy xử lý theo hướng dẫn trên.")
               sys.exit(1)
           else:
-              print("✅ Quét thành công: Code sạch 100%, không bị trùng lặp hook xuyên nhóm!")
+              print("✅ Quét hoàn tất: Không có phương thức nào bị hook trùng lặp! Bắt đầu biên dịch...")
           EOF
 
       # --- BƯỚC 4: DỌN DẸP, BIÊN DỊCH VÀ BÓC TÁCH LỖI CHÍNH XÁC ---
