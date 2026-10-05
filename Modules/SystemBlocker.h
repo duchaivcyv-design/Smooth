@@ -3,6 +3,20 @@
 
 #import <Foundation/Foundation.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Kiểm tra nhanh tiến trình daemon trong 0ns cho %ctor của Tweak.xm
+BOOL SystemBlocker_ShouldBypassDaemon(const char * _Nullable procName);
+
+// Nhận diện tiến trình mạng để cách ly hoàn toàn, bảo vệ 100% kết nối
+BOOL SystemBlocker_IsNetworkProcess(const char * _Nullable procName);
+
+#ifdef __cplusplus
+}
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface SystemBlocker : NSObject
@@ -15,7 +29,7 @@ NS_ASSUME_NONNULL_BEGIN
 // Khởi tạo các rào chắn hệ thống, chặn telemetry và tối ưu I/O
 - (void)initBlockers;
 
-// Kiểm tra xem một URL hoặc endpoint có thuộc danh sách telemetry ngầm bị chặn hay không
+// Kiểm tra xem một URL hoặc endpoint có thuộc danh sách telemetry ngầm bị chặn hay không (Không chặn domain media)
 - (BOOL)shouldBlockTelemetryURL:(NSURL *)url;
 
 // Kiểm tra xem tiến trình hoặc daemon có cần bị cách ly logging hay không
@@ -25,4 +39,4 @@ NS_ASSUME_NONNULL_BEGIN
 
 NS_ASSUME_NONNULL_END
 
-#endif
+#endif /* SYSTEM_BLOCKER_H */
