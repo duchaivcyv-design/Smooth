@@ -2118,6 +2118,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 // ====================================================================================================
 // NHÓM 3: ĐỘNG CƠ PHÂN TẦNG NHỊP THÍCH ỨNG 5 NẤC (CHUẨN PROMOTION PRO MAX)
+// Mặc định: 144Hz | Màn hình tĩnh: 60Hz | Dải điều phối mở rộng: 15Hz - 144Hz
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -2133,10 +2134,14 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
         if (Titanium_IsCurrentAppAGame()) {
             return %orig;
         }
+        // Khi phát video thụ động hoặc màn hình tĩnh: duy trì 60 FPS chuẩn
         if (Titanium_IsPassiveVideoPlayback()) {
             return 60;
         }
-        return Titanium_GetTargetConfiguredHz();
+        if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+            return 60; // Trạng thái tĩnh hoàn toàn: giữ 60 FPS
+        }
+        return Titanium_GetTargetConfiguredHz(); // Mặc định khi tương tác: 144 FPS
     }
     return %orig;
 }
@@ -2148,6 +2153,11 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             return;
         }
         if (Titanium_IsPassiveVideoPlayback()) {
+            fps = 60;
+            %orig;
+            return;
+        }
+        if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
             fps = 60;
             %orig;
             return;
@@ -2164,12 +2174,19 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             return;
         }
 
-        float targetFPS = (float)Titanium_GetTargetConfiguredHz();
+        float maxTarget = (float)Titanium_GetTargetConfiguredHz();
+        if (maxTarget < 15.0f) maxTarget = 15.0f;
+        if (maxTarget > 144.0f) maxTarget = 144.0f;
+
         if (Titanium_IsPassiveVideoPlayback()) {
             range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
+        } else if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+            // Màn hình tĩnh: Min 60Hz, Max 60Hz, Preferred 60Hz
+            range = SafeMakeFRR(60.0f, 60.0f, 60.0f);
         } else {
-            float minSafe = (targetFPS <= 60.0f) ? 30.0f : 60.0f;
-            range = SafeMakeFRR(minSafe, targetFPS, targetFPS);
+            // Đang chạm lướt: bung hết lực lên trần cấu hình (144Hz)
+            float minRate = (maxTarget <= 60.0f) ? 15.0f : 60.0f;
+            range = SafeMakeFRR(minRate, maxTarget, maxTarget);
         }
     }
     %orig;
@@ -2191,25 +2208,33 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook CADisplay
 
 - (NSInteger)preferredFPS {
-    if (Titanium_IsPassiveVideoPlayback()) return %orig;
+    if (Titanium_IsPassiveVideoPlayback()) return 60;
     if (!IS_ACTIVE) return %orig;
-    return Titanium_GetTargetConfiguredHz();
+    if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+        return 60; // Tĩnh: 60 FPS
+    }
+    return Titanium_GetTargetConfiguredHz(); // Mặc định: 144 FPS
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
     if (Titanium_IsPassiveVideoPlayback()) { 
+        fps = 60;
         %orig; 
         return; 
     }
     if (IS_ACTIVE) {
-        fps = Titanium_GetTargetConfiguredHz();
+        if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+            fps = 60;
+        } else {
+            fps = Titanium_GetTargetConfiguredHz();
+        }
     }
     %orig;
 }
 
 - (NSInteger)minimumFPS {
     if (IS_ACTIVE && CFG285.enableFPSControl) {
-        return 15;
+        return 15; // Giới hạn sàn 15 FPS
     }
     return %orig;
 }
@@ -2222,43 +2247,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 - (BOOL)hasDynamicDisplayMode {
     if (IS_ACTIVE) return YES;
     return %orig;
-}
-
-%end
-
-%hook CAWindowServerDisplay
-
-- (double)minimumRefreshRate {
-    if (IS_ACTIVE && CFG285.enableHzControl) {
-        return 15.0;
-    }
-    return %orig;
-}
-
-- (double)maximumRefreshRate {
-    if (IS_ACTIVE && CFG285.enableHzControl) {
-        return (double)Titanium_GetTargetConfiguredHz();
-    }
-    return %orig;
-}
-
-- (double)idealRefreshRate {
-    if (IS_ACTIVE && CFG285.enableHzControl) {
-        return (double)Titanium_GetTargetConfiguredHz();
-    }
-    return %orig;
-}
-
-- (BOOL)allowsVirtualModes {
-    return %orig;
-}
-
-- (void)setAllowsVirtualModes:(BOOL)allows {
-    %orig;
-}
-
-- (void)setTag:(NSInteger)tag {
-    %orig;
 }
 
 %end
@@ -2280,16 +2268,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     return %orig;
 }
 
-- (BOOL)supportsDynamicRefreshRate {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
-- (BOOL)_supportsDynamicRefreshRate {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (IS_ACTIVE) {
         rate = (CGFloat)Titanium_GetTargetConfiguredHz();
@@ -2303,10 +2281,19 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
+        if (IS_ACTIVE) {
             float maxTarget = (float)Titanium_GetTargetConfiguredHz();
-            float minTarget = (maxTarget <= 60.0f) ? 30.0f : 60.0f;
-            range = SafeMakeFRR(minTarget, maxTarget, maxTarget);
+            if (maxTarget < 15.0f) maxTarget = 15.0f;
+            if (maxTarget > 144.0f) maxTarget = 144.0f;
+
+            if (Titanium_IsPassiveVideoPlayback()) {
+                range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
+            } else if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+                range = SafeMakeFRR(60.0f, 60.0f, 60.0f);
+            } else {
+                float minTarget = (maxTarget <= 60.0f) ? 15.0f : 60.0f;
+                range = SafeMakeFRR(minTarget, maxTarget, maxTarget);
+            }
         }
     }
     %orig;
@@ -2318,10 +2305,19 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (!Titanium_IsPassiveVideoPlayback() && IS_ACTIVE) {
+        if (IS_ACTIVE) {
             float maxTarget = (float)Titanium_GetTargetConfiguredHz();
-            float minTarget = (maxTarget <= 60.0f) ? 30.0f : 60.0f;
-            range = SafeMakeFRR(minTarget, maxTarget, maxTarget);
+            if (maxTarget < 15.0f) maxTarget = 15.0f;
+            if (maxTarget > 144.0f) maxTarget = 144.0f;
+
+            if (Titanium_IsPassiveVideoPlayback()) {
+                range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
+            } else if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+                range = SafeMakeFRR(60.0f, 60.0f, 60.0f);
+            } else {
+                float minTarget = (maxTarget <= 60.0f) ? 15.0f : 60.0f;
+                range = SafeMakeFRR(minTarget, maxTarget, maxTarget);
+            }
         }
     }
     %orig;
@@ -2356,6 +2352,34 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %end
 
 %end
+
+// ====================================================================================================
+// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
+// ====================================================================================================
+
+static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
+    return YES;
+}
+
+static void Titanium_ForceInjectDynamicRefreshSupport(void) {
+    Class screenCls = objc_getClass("UIScreen");
+    if (!screenCls) return;
+
+    SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
+    SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
+
+    if (class_getInstanceMethod(screenCls, sel1)) {
+        class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    } else {
+        class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    }
+
+    if (class_getInstanceMethod(screenCls, sel2)) {
+        class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    } else {
+        class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    }
+}
 
 // ====================================================================================================
 // NHÓM 4: ĐA NHIỆM SIÊU MƯỢT & CỬ CHỈ NGẮT LIÊN HOÀN (CHUẨN VIDEO 2 - INTERRUPTIBLE ENGINE)
@@ -3998,6 +4022,38 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 // GIÁM SÁT SẠC PIN THÔNG MINH (DÙNG NOTIFICATION HỆ THỐNG - TRIỆT TIÊU 100% NÓNG MÁY KHI CẮM SẠC)
 // ====================================================================================================
 
+// ====================================================================================================
+// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
+// ====================================================================================================
+
+static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
+    return YES;
+}
+
+static void Titanium_ForceInjectDynamicRefreshSupport(void) {
+    Class screenCls = objc_getClass("UIScreen");
+    if (!screenCls) return;
+
+    SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
+    SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
+
+    if (class_getInstanceMethod(screenCls, sel1)) {
+        class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    } else {
+        class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    }
+
+    if (class_getInstanceMethod(screenCls, sel2)) {
+        class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    } else {
+        class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
+    }
+}
+
+// ====================================================================================================
+// GIÁM SÁT SẠC PIN THÔNG MINH (DÙNG NOTIFICATION HỆ THỐNG - TRIỆT TIÊU 100% NÓNG MÁY KHI CẮM SẠC)
+// ====================================================================================================
+
 static void Titanium_StartThermalAndChargingWatchdog(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -4078,7 +4134,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     static dispatch_once_t s_coreInitToken;
     dispatch_once(&s_coreInitToken, ^{
         @autoreleasepool {
-            AppleInternal_EnforceZeroLatencyKernelTier();
+            // Tiêm hỗ trợ Dynamic Refresh Rate vào UIScreen trước khi hook chạy
+            Titanium_ForceInjectDynamicRefreshSupport();
+
             AppleInternal_LockHardwareCADisplay();
 
             if (isSpringBoard) {
@@ -4134,12 +4192,19 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_SpringBoard_ProcessManagerV285);
                 Titanium_StartThermalAndChargingWatchdog();
 
+                // Trì hoãn kích hoạt Kernel Realtime để SpringBoard dựng xong UI, tránh bị Watchdog chặn
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    AppleInternal_EnforceZeroLatencyKernelTier();
+                    Titanium_EnforceMachFrameConstraint();
+                });
+
                 NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
                 [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED 
                                                         contents:verifiedData 
                                                       attributes:@{NSFilePosixPermissions: @(0666)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
+                AppleInternal_EnforceZeroLatencyKernelTier();
             }
 
             static dispatch_once_t notifyToken;
