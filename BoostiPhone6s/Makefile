@@ -14,6 +14,7 @@ BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
 BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = 
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
+# CỜ BIÊN DỊCH: ĐỒNG BỘ HOÀN TOÀN VỚI MAKEFILE CHA & DẬP TẮT CẢNH BÁO RUNNER
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
                             -Wall \
@@ -23,6 +24,10 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -Wno-unused-function \
                             -Wno-implicit-function-declaration \
                             -Wno-deprecated-non-prototype \
+                            -Wno-unused-command-line-argument \
+                            -Wno-unguarded-availability-new \
+                            -Wno-unguarded-availability \
+                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
                             -I$(THEOS)/include \
                             -I$(THEOS)/vendor/include \
                             -I../Headers \
@@ -30,9 +35,9 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I../ \
                             -I.
 
+# LINKER FLAGS: LOẠI BỎ CẢNH BÁO -install_name TRÊN MACH-O BUNDLE
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
-                            -Wl,-install_name,@rpath/BoostiPhone6sPrefs \
                             -Wl,-rpath,/System/Library/PrivateFrameworks \
                             -Wl,-rpath,/Library/Frameworks \
                             -Wl,-rpath,/var/jb/Library/Frameworks \
@@ -41,5 +46,12 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 
-after-package::
-	rm -rf .theos/ _/
+# ĐỒNG BỘ SYMLINK TỰ ĐỘNG: ĐẢM BẢO PREFERENCELOADER GỌI TÊN NÀO CŨNG NẠP ĐƯỢC 100%
+after-stage::
+	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink Bundle vào Staging ==="
+	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceBundles"; \
+	mkdir -p "$$TARGET_DIR"; \
+	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ] && [ ! -e "$$TARGET_DIR/BoostiPhone6s.bundle" ]; then \
+		ln -sf "BoostiPhone6sPrefs.bundle" "$$TARGET_DIR/BoostiPhone6s.bundle"; \
+		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
+	fi
