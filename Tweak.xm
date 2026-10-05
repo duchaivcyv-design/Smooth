@@ -3761,6 +3761,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     timeout = 99999.0;
     return %orig;
 }
+%end
 
 // 4. Bỏ qua cờ phát hiện ứng dụng/SpringBoard không phản hồi (Unresponsive)
 %hook BKSProcessAssertion
