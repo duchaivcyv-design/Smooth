@@ -11,14 +11,8 @@ LIBRARY_NAME = BoostiPhone6sCore
 
 BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
-BoostiPhone6sCore_FILES = Tweak.xm \
-                          Modules/CacheCleaner.m \
-                          Modules/CrashGuard.m \
-                          Modules/SmartThermal.m \
-                          Modules/DeepExploit.c \
-                          Modules/KernelBypass.m \
-                          Modules/SystemBlocker.m
-
+BoostiPhone6sCore_FILES = Tweak.xm
+                          
 # CỜ BIÊN DỊCH C / OBJC: TỐI ƯU HÓA O3 & GIẢM DUNG LƯỢNG BINARY
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
