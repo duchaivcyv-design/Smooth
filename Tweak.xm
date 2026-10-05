@@ -306,7 +306,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -4110,34 +4110,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 %end
-
-// ====================================================================================================
-// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
-// ====================================================================================================
-
-static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
-    return YES;
-}
-
-static void Titanium_ForceInjectDynamicRefreshSupport(void) {
-    Class screenCls = objc_getClass("UIScreen");
-    if (!screenCls) return;
-
-    SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
-    SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
-
-    if (class_getInstanceMethod(screenCls, sel1)) {
-        class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    } else {
-        class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    }
-
-    if (class_getInstanceMethod(screenCls, sel2)) {
-        class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    } else {
-        class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    }
-}
 
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (MOBILEGESTALT & TOUCH POLLING)
