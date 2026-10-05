@@ -1943,13 +1943,12 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     return %orig;
 }
 
+// BẢO VỆ CHỐNG THU NHỎ APP: Trả về nguyên bản hệ thống để WindowServer không scale nhầm viewport
 - (BOOL)allowsVirtualModes {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
 - (void)setAllowsVirtualModes:(BOOL)allows {
-    if (IS_ACTIVE) allows = YES;
     %orig;
 }
 
@@ -2269,7 +2268,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (TURBO ENGINE - TRIỆT TIÊU 100% ĐEN APP & KHÔNG NGHẼN MẠNG)
+// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (TURBO ENGINE - SẠCH NGHẼN MẠNG & CHỐNG THU NHỎ APP 100%)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -2302,16 +2301,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
             Titanium_LockMainThreadFast();
             Titanium_EnforceThreadVIPPolicy();
             Titanium_EnforceMachFrameConstraintDynamic(144);
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
 
     %orig;
-
-    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
-        [CATransaction flush];
-    }
 }
 
 - (void)_applicationWillEnterForeground {
@@ -2323,9 +2316,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
             Titanium_LockMainThreadFast();
             Titanium_EnforceThreadVIPPolicy();
             Titanium_EnforceMachFrameConstraintDynamic(144);
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            [CATransaction flush];
         }
     }
 }
@@ -3008,6 +2998,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 // ====================================================================================================
 // NHÓM 11: NÂNG CẤP TOÀN BỘ APP THỨ BA & CHUYỂN TIẾP VIEWCONTROLLER CHUẨN XNU
+// (SẠCH NGHẼN MẠNG YOUTUBE, BẢO TOÀN SNAPSHOT MỞ APP & CHỐNG THU NHỎ CỬA SỔ 100%)
 // ====================================================================================================
 
 %group Group_UIKit_ThirdParty_IsolatedV285
@@ -3021,8 +3012,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
             Titanium_EnforceThreadVIPPolicy();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
 }
@@ -3038,8 +3027,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
             Titanium_EnforceThreadVIPPolicy();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
 }
@@ -3056,8 +3043,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
 }
@@ -3077,8 +3062,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
 }
@@ -3118,18 +3101,12 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
                             transition:(id)transition {
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        }
     }
     %orig;
 }
 
 - (void)completeTransition:(BOOL)didComplete {
     %orig;
-    if (IS_ACTIVE) {
-        [CATransaction flush];
-    }
 }
 
 %end
@@ -3142,8 +3119,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
     %orig;
@@ -3162,8 +3137,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else if ([NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
     %orig;
