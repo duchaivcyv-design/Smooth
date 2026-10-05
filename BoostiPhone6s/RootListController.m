@@ -57,7 +57,6 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     return cachedJbRoot;
 }
 
-// Đường dẫn file Plist tương thích tuyệt đối Rootless và RootHide
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
     if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
@@ -69,7 +68,6 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
 
-// Đồng bộ chính xác với /tmp/.boost_hz_sync của Tweak.xm
 #define PRIMARY_SYNC_FILE @"/tmp/.boost_hz_sync"
 #define SECONDARY_SYNC_FILE @"/var/jb/tmp/.boost_hz_sync"
 #define BOOT_GUARD_FILE  @"/tmp/.boost_boot_counter"
@@ -110,7 +108,6 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
     return name;
 }
 
-// Ghi payload an toàn vào cả 2 đường dẫn để Tweak luôn đọc được
 static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t size) {
     NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
     for (NSString *path in paths) {
@@ -309,6 +306,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     return self;
 }
 
+// ====================================================================================================
+// ĐỒNG BỘ PAYLOAD HẠT NHÂN: KHÓA CỨNG MỨC CHỈNH TỪ 15 ĐẾN 144 HZ/FPS (KHÔNG TỰ Ý ÉP VỀ 144)
+// ====================================================================================================
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
     
@@ -341,28 +341,25 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.rawTouchDirectDelivery = 0;
         payload.powerSaveModeActive = 0;
     } else {
-        // MẶC ĐỊNH ÉP THẲNG 144HZ / 144FPS
         int32_t hz = prefs[@"TargetRefreshRate"] ? (int32_t)[prefs[@"TargetRefreshRate"] intValue] : 144;
         int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 144;
         BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
-        BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : YES;
+
+        // Giới hạn tuyệt đối trong dải 15 - 144
+        if (hz < 15) hz = 15;
+        if (hz > 144) hz = 144;
+        if (fps < 15) fps = 15;
+        if (fps > 144) fps = 144;
 
         if (isPowerSave) {
             hz = 60;
             fps = 60;
-        } else if (isOverclock || hz >= 144) {
-            hz = 144;
-            fps = 144;
-        } else {
-            if (hz < 15) hz = 15;
-            if (hz > 144) hz = 144;
-            if (fps < 15) fps = 15;
-            if (fps > 144) fps = 144;
         }
 
+        // KHÓA CỨNG MỨC ĐÃ CHỌN VÀO HẠT NHÂN IPC
         payload.targetHz = hz;
         payload.targetFPS = fps;
-        payload.forceOverclock = 1;
+        payload.forceOverclock = (hz >= 144 || fps >= 144) ? 1 : 0;
         
         payload.dynamicInterpolation = prefs[@"ProMotionEngineBeta7"] ? ([prefs[@"ProMotionEngineBeta7"] boolValue] ? 1 : 0) : 1;
         payload.pipSyncEnabled = 1;
@@ -379,8 +376,10 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.memoryPressureRelief = 1;
         payload.runloopHangGuard = 1;
         payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
-        payload.aggressiveRamCleaner = 0; // Tắt dọn RAM gắt để không khựng 1 nhịp
-        payload.lockFixedFpsWhenThermal = payload.thermalShield;
+        payload.aggressiveRamCleaner = 0;
+        
+        // CỜ KHÓA CỐ ĐỊNH: Chống thermal throttling tự ý hạ xung khi máy nóng
+        payload.lockFixedFpsWhenThermal = 1;
         payload.antiGhostTouch = prefs[@"AntiGhostTouch"] ? ([prefs[@"AntiGhostTouch"] boolValue] ? 1 : 0) : 1;
         payload.diskIOPriorityBoost = 1;
         payload.rawTouchDirectDelivery = 1;
@@ -405,6 +404,9 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (void)emitTransientRate:(NSInteger)rate {
+    if (rate < 15) rate = 15;
+    if (rate > 144) rate = 144;
+
     ApexV285ProPayload payload;
     memset(&payload, 0, sizeof(ApexV285ProPayload));
     
@@ -419,6 +421,8 @@ static inline NSString *PM_TextV285(NSString *key) {
 
     payload.targetHz = (int32_t)rate;
     payload.targetFPS = (int32_t)rate;
+    payload.forceOverclock = (rate >= 144) ? 1 : 0;
+    payload.lockFixedFpsWhenThermal = 1;
     payload.updateSeq = (uint64_t)mach_absolute_time();
     payload.lastHeartbeat = payload.updateSeq;
 
@@ -526,15 +530,17 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self reloadSpecifiers];
 }
 
+// CẬP NHẬT TIÊU ĐỀ: HIỂN THỊ CHÍNH XÁC MỨC ĐÃ KHÓA
 - (void)updateDynamicTitles {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 144;
-    BOOL isOverclock = prefs[@"ForceOverclock144Hz"] ? [prefs[@"ForceOverclock144Hz"] boolValue] : YES;
     BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
 
-    NSString *hzLockText = PM_TextV285(@"LOCK_HZ_TITLE") ?: @"🔒 Tần Số Quét: Khóa Cứng %ld Hz";
-    NSString *fpsLockText = PM_TextV285(@"LOCK_FPS_TITLE") ?: @"🔒 Khung Hình App: Khóa Cứng %ld FPS";
+    if (hz < 15) hz = 15;
+    if (hz > 144) hz = 144;
+    if (fps < 15) fps = 15;
+    if (fps > 144) fps = 144;
 
     NSString *langCode = PM_GetCurrentLanguageCodeV285();
     NSDictionary *langNames = @{
@@ -549,20 +555,20 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isPowerSave) {
-                spec.name = @"🔋 Tần Số Quét: Khóa 60 Hz (Tiết Kiệm Pin)";
-            } else if (isOverclock || hz >= 144) {
-                spec.name = @"⚡ Tần Số Quét: ÉP XUNG 144Hz TOÀN MÁY";
+                spec.name = @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)";
+            } else if (hz >= 144) {
+                spec.name = @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)";
             } else {
-                spec.name = [NSString stringWithFormat:hzLockText, (long)hz];
+                spec.name = [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz];
             }
             [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
             if (isPowerSave) {
-                spec.name = @"🔋 Khung Hình App: Khóa 60 FPS (Tiết Kiệm Pin)";
+                spec.name = @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)";
             } else if (fps >= 144) {
-                spec.name = @"⚡ Khung Hình App: ÉP XUNG 144 FPS TOÀN MÁY";
+                spec.name = @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)";
             } else {
-                spec.name = [NSString stringWithFormat:fpsLockText, (long)fps];
+                spec.name = [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps];
             }
             [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"SelectedLanguage"]) {
@@ -605,9 +611,9 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"MetalHexBuffering": @YES,
              @"KeyboardZeroLagV24": @YES,
              @"EnableHzControl": @YES,
-             @"TargetRefreshRate": @144, // MẶC ĐỊNH 144HZ
+             @"TargetRefreshRate": @144,
              @"EnableFPSControl": @YES,
-             @"TargetFPSRate": @144,    // MẶC ĐỊNH 144FPS
+             @"TargetFPSRate": @144,
              @"ForceOverclock144Hz": @YES,
              @"SyncModuleDelay": @NO,
              @"IsolateRenderPipeline": @YES,
@@ -701,35 +707,55 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 }
 
-- (void)executeSmoothRateTransition:(NSInteger)targetRate {
-    [self commitFinalRateValue:targetRate];
-}
+// ====================================================================================================
+// HÀM LƯU & KHÓA CHÍNH XÁC TẦN SỐ QUÉT (HZ)
+// ====================================================================================================
+- (void)commitFinalHzValue:(NSInteger)hz {
+    if (hz < 15) hz = 15;
+    if (hz > 144) hz = 144;
 
-- (void)commitFinalRateValue:(NSInteger)rate {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
 
-    [prefs setObject:@(rate) forKey:@"TargetRefreshRate"];
-    [prefs setObject:@(rate) forKey:@"TargetFPSRate"];
+    [prefs setObject:@(hz) forKey:@"TargetRefreshRate"];
     [prefs setObject:@YES forKey:@"EnableHzControl"];
-    [prefs setObject:@YES forKey:@"EnableFPSControl"];
-    
-    if (rate >= 144) {
-        [prefs setObject:@YES forKey:@"ForceOverclock144Hz"];
-        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanTrue, PREF_DOMAIN);
-    } else {
-        [prefs setObject:@NO forKey:@"ForceOverclock144Hz"];
-        CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), kCFBooleanFalse, PREF_DOMAIN);
-    }
-
     [prefs setObject:@NO forKey:@"PowerSaveMode"];
     
+    BOOL isOverclock = (hz >= 144);
+    [prefs setObject:@(isOverclock) forKey:@"ForceOverclock144Hz"];
+
     [prefs writeToFile:prefPath atomically:YES];
     chmod([prefPath UTF8String], 0666);
 
-    CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
-    CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
+    CFPreferencesSetAppValue(CFSTR("TargetRefreshRate"), (__bridge CFPropertyListRef)@(hz), PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("EnableHzControl"), kCFBooleanTrue, PREF_DOMAIN);
+    CFPreferencesSetAppValue(CFSTR("PowerSaveMode"), kCFBooleanFalse, PREF_DOMAIN);
+    CFPreferencesSetAppValue(CFSTR("ForceOverclock144Hz"), isOverclock ? kCFBooleanTrue : kCFBooleanFalse, PREF_DOMAIN);
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+
+    [self syncSharedMemoryFile:YES];
+    [self updateDynamicTitles];
+    [self reloadSpecifiers];
+}
+
+// ====================================================================================================
+// HÀM LƯU & KHÓA CHÍNH XÁC KHUNG HÌNH APP (FPS)
+// ====================================================================================================
+- (void)commitFinalFPSValue:(NSInteger)fps {
+    if (fps < 15) fps = 15;
+    if (fps > 144) fps = 144;
+
+    NSString *prefPath = Titanium_ResolvePrefPath();
+    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
+
+    [prefs setObject:@(fps) forKey:@"TargetFPSRate"];
+    [prefs setObject:@YES forKey:@"EnableFPSControl"];
+    [prefs setObject:@NO forKey:@"PowerSaveMode"];
+
+    [prefs writeToFile:prefPath atomically:YES];
+    chmod([prefPath UTF8String], 0666);
+
+    CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(fps), PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("EnableFPSControl"), kCFBooleanTrue, PREF_DOMAIN);
     CFPreferencesSetAppValue(CFSTR("PowerSaveMode"), kCFBooleanFalse, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -737,6 +763,15 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self syncSharedMemoryFile:YES];
     [self updateDynamicTitles];
     [self reloadSpecifiers];
+}
+
+- (void)executeSmoothRateTransition:(NSInteger)targetRate {
+    [self commitFinalHzValue:targetRate];
+    [self commitFinalFPSValue:targetRate];
+}
+
+- (void)commitFinalRateValue:(NSInteger)rate {
+    [self executeSmoothRateTransition:rate];
 }
 
 - (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
@@ -789,24 +824,63 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
-- (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit {
+// ====================================================================================================
+// POPUP NHẬP SỐ TÙY CHỈNH TỪ 15 ĐẾN 144
+// ====================================================================================================
+- (void)showCustomRateInputAlertForHz:(BOOL)isHz {
+    NSString *unit = isHz ? @"Hz" : @"FPS";
+    NSString *title = [NSString stringWithFormat:@"⌨️ NHẬP %@ TÙY CHỈNH", unit];
+    NSString *msg = [NSString stringWithFormat:@"Nhập giá trị mong muốn từ 15 đến 144 %@ để khóa cứng:", unit];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        textField.placeholder = [NSString stringWithFormat:@"Giá trị (15 - 144 %@", unit];
+    }];
+
+    NSString *saveBtn = @"Khóa Cứng Ngay";
+    [alert addAction:[UIAlertAction actionWithTitle:saveBtn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        UITextField *tf = alert.textFields.firstObject;
+        NSInteger val = [tf.text integerValue];
+        if (val < 15) val = 15;
+        if (val > 144) val = 144;
+
+        if (isHz) {
+            [self commitFinalHzValue:val];
+        } else {
+            [self commitFinalFPSValue:val];
+        }
+    }]];
+
+    NSString *cancelBtn = PM_TextV285(@"BACK") ?: @"Hủy";
+    [alert addAction:[UIAlertAction actionWithTitle:cancelBtn style:UIAlertActionStyleCancel handler:nil]];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+// MENU CON CHỌN DANH SÁCH MỨC
+- (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isHz:(BOOL)isHz {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *lockPrefix = PM_TextV285(@"LOCK_AT") ?: @"🔒 Khóa cứng";
+    NSString *lockPrefix = @"🔒 Khóa cứng";
     NSString *backText = PM_TextV285(@"BACK") ?: @"Quay lại";
 
     for (NSNumber *r in rates) {
         NSInteger val = [r integerValue];
         NSString *tag = @"";
-        if (val <= 30) tag = PM_TextV285(@"TAG_SAVER") ?: @" - Siêu tiết kiệm";
-        else if (val == 60) tag = PM_TextV285(@"TAG_BALANCED") ?: @" - Cân bằng chuẩn";
-        else if (val == 90 || val == 120) tag = PM_TextV285(@"TAG_ULTRA") ?: @" - Siêu mượt (ProMotion)";
-        else if (val == 144) tag = PM_TextV285(@"TAG_MAX") ?: @" - Ép xung tối đa";
+        if (val <= 30) tag = @" - Siêu tiết kiệm";
+        else if (val == 60) tag = @" - Tiêu chuẩn 60Hz";
+        else if (val == 90 || val == 120) tag = @" - Siêu mượt ProMotion";
+        else if (val == 144) tag = @" - Ép xung cực đại";
 
         NSString *actionTitle = [NSString stringWithFormat:@"%@ %ld %@%@", lockPrefix, (long)val, unit, tag];
 
         [alert addAction:[UIAlertAction actionWithTitle:actionTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self executeSmoothRateTransition:val];
+            if (isHz) {
+                [self commitFinalHzValue:val];
+            } else {
+                [self commitFinalFPSValue:val];
+            }
         }]];
     }
 
@@ -816,28 +890,36 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
+// ====================================================================================================
+// POPUP LỰA CHỌN TẦN SỐ QUÉT (HZ): ĐẦY ĐỦ 15 - 144 HZ VÀ Ô NHẬP TÙY CHỌN
+// ====================================================================================================
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    NSString *alertTitle = PM_TextV285(@"TITLE_HZ") ?: @"CHỌN TẦN SỐ QUÉT HỆ THỐNG & PIP (HZ)";
-    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *alertTitle = @"CHỌN VÀ KHÓA TẦN SỐ QUÉT (HZ)";
+    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:@"Chọn nhóm tần số hoặc nhập chính xác số bạn muốn:" preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *saveText = PM_TextV285(@"BATTERY_SAVER") ?: @"🟢 1. TIẾT KIỆM PIN (15Hz - 40Hz)";
-    NSString *balText = PM_TextV285(@"BALANCED") ?: @"🟡 2. BÌNH THƯỜNG (45Hz - 80Hz)";
-    NSString *maxText = PM_TextV285(@"MAX_PERF") ?: @"🔴 3. CAO NHẤT (85Hz - 144Hz)";
+    NSString *saveText = @"🟢 1. TIẾT KIỆM PIN (15Hz - 40Hz)";
+    NSString *balText = @"🟡 2. CÂN BẰNG & MƯỢT (45Hz - 80Hz)";
+    NSString *maxText = @"🔴 3. HIỆU NĂNG CAO (85Hz - 144Hz)";
+    NSString *customText = @"⌨️ TỰ NHẬP SỐ CHÍNH XÁC (15 - 144 Hz)...";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
 
+    [mainAlert addAction:[UIAlertAction actionWithTitle:customText style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:YES];
+    }]];
+
     [mainAlert addAction:[UIAlertAction actionWithTitle:saveText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSArray *rates = @[@15, @20, @25, @30, @35, @40];
-        [self showSubMenuWithOptions:rates title:saveText unit:@"Hz"];
+        NSArray *rates = @[@15, @20, @24, @30, @35, @40];
+        [self showSubMenuWithOptions:rates title:saveText unit:@"Hz" isHz:YES];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:balText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@45, @50, @55, @60, @65, @70, @75, @80];
-        [self showSubMenuWithOptions:rates title:balText unit:@"Hz"];
+        [self showSubMenuWithOptions:rates title:balText unit:@"Hz" isHz:YES];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:maxText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
-        [self showSubMenuWithOptions:rates title:maxText unit:@"Hz"];
+        [self showSubMenuWithOptions:rates title:maxText unit:@"Hz" isHz:YES];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
@@ -846,28 +928,36 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
+// ====================================================================================================
+// POPUP LỰA CHỌN KHUNG HÌNH APP (FPS): ĐẦY ĐỦ 15 - 144 FPS VÀ Ô NHẬP TÙY CHỌN
+// ====================================================================================================
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    NSString *alertTitle = PM_TextV285(@"TITLE_FPS") ?: @"CHỌN KHUNG HÌNH APP (FPS)";
-    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *alertTitle = @"CHỌN VÀ KHÓA KHUNG HÌNH ỨNG DỤNG (FPS)";
+    UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:@"Chọn nhóm khung hình hoặc nhập chính xác số bạn muốn:" preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *saveText = PM_TextV285(@"BATTERY_SAVER") ?: @"🟢 1. TIẾT KIỆM PIN (15 FPS - 40 FPS)";
-    NSString *balText = PM_TextV285(@"BALANCED") ?: @"🟡 2. BÌNH THƯỜNG (45 FPS - 80 FPS)";
-    NSString *maxText = PM_TextV285(@"MAX_PERF") ?: @"🔴 3. CAO NHẤT (85 FPS - 144 FPS)";
+    NSString *saveText = @"🟢 1. TIẾT KIỆM PIN (15 FPS - 40 FPS)";
+    NSString *balText = @"🟡 2. CÂN BẰNG & MƯỢT (45 FPS - 80 FPS)";
+    NSString *maxText = @"🔴 3. HIỆU NĂNG CAO (85 FPS - 144 FPS)";
+    NSString *customText = @"⌨️ TỰ NHẬP SỐ CHÍNH XÁC (15 - 144 FPS)...";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
 
+    [mainAlert addAction:[UIAlertAction actionWithTitle:customText style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:NO];
+    }]];
+
     [mainAlert addAction:[UIAlertAction actionWithTitle:saveText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSArray *rates = @[@15, @20, @25, @30, @35, @40];
-        [self showSubMenuWithOptions:rates title:saveText unit:@"FPS"];
+        NSArray *rates = @[@15, @20, @24, @30, @35, @40];
+        [self showSubMenuWithOptions:rates title:saveText unit:@"FPS" isHz:NO];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:balText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@45, @50, @55, @60, @65, @70, @75, @80];
-        [self showSubMenuWithOptions:rates title:balText unit:@"FPS"];
+        [self showSubMenuWithOptions:rates title:balText unit:@"FPS" isHz:NO];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:maxText style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSArray *rates = @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
-        [self showSubMenuWithOptions:rates title:maxText unit:@"FPS"];
+        [self showSubMenuWithOptions:rates title:maxText unit:@"FPS" isHz:NO];
     }]];
 
     [mainAlert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
@@ -917,7 +1007,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
-// Xử lý Respring an toàn chống sập nguồn / kẹt táo trên Rootless & RootHide
 - (void)presentActions {
     NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -931,7 +1020,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-            // 1. Thử sbreload trước (mượt và nhanh nhất trên jailbreak hiện đại)
             NSString *sbreloadBin = Titanium_FindExecutablePath(@"sbreload");
             if (access([sbreloadBin UTF8String], X_OK) == 0) {
                 pid_t pid;
@@ -945,7 +1033,6 @@ static inline NSString *PM_TextV285(NSString *key) {
                 }
             }
 
-            // 2. Gọi dịch vụ FBSSystemService nếu có
             Class fbsClass = NSClassFromString(@"FBSSystemService");
             if (fbsClass && [fbsClass respondsToSelector:NSSelectorFromString(@"sharedService")]) {
                 id service = ((id (*)(id, SEL))objc_msgSend)(fbsClass, NSSelectorFromString(@"sharedService"));
@@ -956,7 +1043,6 @@ static inline NSString *PM_TextV285(NSString *key) {
                 }
             }
 
-            // 3. Fallback killall an toàn: CHỈ kill SpringBoard (KHÔNG kill backboardd tránh kernel panic)
             NSString *killallBin = Titanium_FindExecutablePath(@"killall");
             pid_t pid;
             char *argvSB[] = {(char *)[killallBin UTF8String], (char *)"-9", (char *)"SpringBoard", NULL};
