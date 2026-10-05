@@ -15,6 +15,68 @@
 
 extern char **environ;
 
+// ====================================================================================================
+// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC (KHỚP 100% VỚI TWEAK.XM)
+// ====================================================================================================
+
+#define APEX_SYNC_MAGIC_V285 0x41505837
+#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
+#define PRIMARY_SYNC_FILE    @"/tmp/.boost_hz_sync"
+#define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
+#define BOOT_GUARD_FILE      @"/tmp/.titanium_boot_guard"
+
+#define NOTIFY_RELOAD        "com.taojb.boostiphone6s/ReloadPrefs"
+#define NOTIFY_UIKIT_RELOAD  "com.taojb.boostiphone6s/ReloadUIKitPrefs"
+#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
+#define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
+#define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
+
+// ====================================================================================================
+// CẤU TRÚC GIAO TIẾP HẠT NHÂN IPC (ATOMIC IPC PAYLOAD - KHÓA CỨNG 15 - 144 HZ)
+// ====================================================================================================
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t masterEnabled;
+    int32_t  targetHz;
+    int32_t  targetFPS;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t smartBufferingLevel;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
+    uint32_t keyboardZeroLagV3;
+    uint32_t aggressiveRamCleaner;
+    uint32_t lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch;
+    uint32_t diskIOPriorityBoost;
+    uint32_t rawTouchDirectDelivery;
+    uint32_t powerSaveModeActive;
+    uint64_t updateSeq;
+    uint64_t lastHeartbeat;
+    char     reserved[48];
+} ApexV285ProPayload;
+
+// ====================================================================================================
+// FORWARD DECLARATIONS ĐẦY ĐỦ CHO PREFERENCES SDK
+// ====================================================================================================
+
+@interface PSSpecifier : NSObject
+@property (nonatomic, retain) NSString *name;
+@property (nonatomic, retain) id target;
+- (id)propertyForKey:(NSString *)key;
+- (void)setProperty:(id)value forKey:(NSString *)key;
+- (NSInteger)cellType;
+@end
+
 @interface BoostConfigV285Pro : NSObject
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -28,6 +90,7 @@ extern char **environ;
 // ====================================================================================================
 // BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ / ROOTLESS / ROOTHIDE
 // ====================================================================================================
+
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
     static dispatch_once_t onceToken;
@@ -64,20 +127,18 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
 }
 
-#define PRIMARY_SYNC_FILE @"/tmp/.boost_hz_sync"
-#define SECONDARY_SYNC_FILE @"/var/jb/tmp/.boost_hz_sync"
-
 static inline BOOL HardwareHasNative120Hz(void) {
     static BOOL isNative120 = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         struct utsname sysInfo;
-        uname(&sysInfo);
-        NSString *dev = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-        if ([dev hasPrefix:@"iPhone14,2"] || [dev hasPrefix:@"iPhone14,3"] ||
-            [dev hasPrefix:@"iPhone15,2"] || [dev hasPrefix:@"iPhone15,3"] ||
-            [dev hasPrefix:@"iPhone16,"] || [dev hasPrefix:@"iPhone17,"]) {
-            isNative120 = YES;
+        if (uname(&sysInfo) == 0) {
+            NSString *dev = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+            if ([dev hasPrefix:@"iPhone14,2"] || [dev hasPrefix:@"iPhone14,3"] ||
+                [dev hasPrefix:@"iPhone15,2"] || [dev hasPrefix:@"iPhone15,3"] ||
+                [dev hasPrefix:@"iPhone16,"]   || [dev hasPrefix:@"iPhone17,"]) {
+                isNative120 = YES;
+            }
         }
     });
     return isNative120;
@@ -220,7 +281,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     return enSection ? enSection[key] : nil;
 }
 
-// ĐÃ DỌN SẠCH KHAI BÁO TRÙNG LẶP (Vì RootListController.h đã định nghĩa sẵn _allSavedSpecifiers và _specifiers)
 @implementation RootListController {
     dispatch_queue_t _syncQueue;
 }
@@ -272,7 +332,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         int32_t fps = prefs[@"TargetFPSRate"] ? (int32_t)[prefs[@"TargetFPSRate"] intValue] : 144;
         BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
 
-        // Giới hạn tuyệt đối trong dải 15 - 144
         if (hz < 15) hz = 15;
         if (hz > 144) hz = 144;
         if (fps < 15) fps = 15;
@@ -283,7 +342,6 @@ static inline NSString *PM_TextV285(NSString *key) {
             fps = 60;
         }
 
-        // KHÓA CỨNG MỨC ĐÃ CHỌN VÀO HẠT NHÂN IPC
         payload.targetHz = hz;
         payload.targetFPS = fps;
         payload.forceOverclock = (hz >= 144 || fps >= 144) ? 1 : 0;
@@ -305,7 +363,6 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
         payload.aggressiveRamCleaner = 0;
         
-        // CỜ KHÓA CỐ ĐỊNH: Chống thermal throttling tự ý hạ xung khi máy nóng
         payload.lockFixedFpsWhenThermal = 1;
         payload.antiGhostTouch = prefs[@"AntiGhostTouch"] ? ([prefs[@"AntiGhostTouch"] boolValue] ? 1 : 0) : 1;
         payload.diskIOPriorityBoost = 1;
@@ -414,8 +471,9 @@ static inline NSString *PM_TextV285(NSString *key) {
         targetSpecs = [self->_allSavedSpecifiers mutableCopy];
     }
 
+    // ĐÃ SỬA: Cập nhật tiêu đề trực tiếp trên mảng targetSpecs (Triệt tiêu 100% đệ quy vô tận)
+    [self updateDynamicTitlesForSpecifiers:targetSpecs];
     [self setSpecifiers:targetSpecs];
-    [self updateDynamicTitles];
     return targetSpecs;
 }
 
@@ -429,8 +487,10 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self setupNavigationItems];
 }
 
-// CẬP NHẬT TIÊU ĐỀ: HIỂN THỊ CHÍNH XÁC MỨC ĐÃ KHÓA
-- (void)updateDynamicTitles {
+// CẬP NHẬT TIÊU ĐỀ AN TOÀN TRÊN DANH SÁCH ĐƯỢC CHỈ ĐỊNH
+- (void)updateDynamicTitlesForSpecifiers:(NSArray *)targetSpecs {
+    if (!targetSpecs || targetSpecs.count == 0) return;
+
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
     NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 144;
@@ -450,8 +510,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSString *currentLangName = langNames[langCode] ?: @"Auto";
     NSString *langLabelFormat = PM_TextV285(@"LANGUAGE_BTN_FORMAT") ?: @"Ngôn Ngữ: %@";
 
-    NSArray *currentSpecs = [self specifiers];
-    for (PSSpecifier *spec in currentSpecs) {
+    for (PSSpecifier *spec in targetSpecs) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isPowerSave) {
@@ -476,6 +535,10 @@ static inline NSString *PM_TextV285(NSString *key) {
             [spec setProperty:spec.name forKey:@"label"];
         }
     }
+}
+
+- (void)updateDynamicTitles {
+    [self updateDynamicTitlesForSpecifiers:self->_allSavedSpecifiers];
 }
 
 - (NSDictionary *)getMergedPreferences {
@@ -730,7 +793,6 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// MENU CON CHỌN DANH SÁCH MỨC (KHỚP HOÀN TOÀN SELECTOR CỦA HEADER)
 - (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
