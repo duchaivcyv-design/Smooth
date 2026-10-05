@@ -17,7 +17,6 @@ extern char **environ;
 
 // ====================================================================================================
 // ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
-// Bọc bằng #ifndef để tránh lỗi Redefinition nếu RootListController.h đã có
 // ====================================================================================================
 
 #ifndef APEX_SYNC_MAGIC_V285
@@ -49,45 +48,7 @@ extern char **environ;
 #endif
 
 // ====================================================================================================
-// CẤU TRÚC GIAO TIẾP HẠT NHÂN IPC
-// Bọc bằng #ifndef để tránh lỗi "typedef redefinition"
-// ====================================================================================================
-
-#ifndef APEX_PAYLOAD_DEFINED
-#define APEX_PAYLOAD_DEFINED
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[48];
-} ApexV285ProPayload;
-#endif
-
-// ====================================================================================================
-// FORWARD DECLARATIONS (Đã gỡ bỏ PSSpecifier vì RootListController.h thừa kế từ PSListController đã có)
+// FORWARD DECLARATIONS
 // ====================================================================================================
 
 @interface BoostConfigV285Pro : NSObject
@@ -193,7 +154,7 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t s
     }
 }
 
-static inline BOOL Titanium_IsGroupCell(id spec) {
+static inline BOOL Titanium_IsGroupCell(PSSpecifier *spec) {
     id cellVal = [spec propertyForKey:@"cell"];
     if ([cellVal isKindOfClass:[NSString class]]) {
         return [cellVal isEqualToString:@"PSGroupCell"];
@@ -207,10 +168,10 @@ static inline BOOL Titanium_IsGroupCell(id spec) {
     return NO;
 }
 
-static inline NSString *Titanium_GetGroupID(id spec) {
+static inline NSString *Titanium_GetGroupID(PSSpecifier *spec) {
     NSString *gid = [spec propertyForKey:@"groupID"];
     if (gid) return gid;
-    NSString *lbl = [spec propertyForKey:@"label"] ?: [spec performSelector:@selector(name)] ?: @"";
+    NSString *lbl = [spec propertyForKey:@"label"] ?: spec.name ?: @"";
     if ([lbl containsString:@"CÔNG TẮC TỔNG"] || [lbl containsString:@"MASTER"]) return @"GROUP_MASTER";
     if ([lbl containsString:@"NGÔN NGỮ"] || [lbl containsString:@"LANGUAGE"]) return @"GROUP_LANGUAGE";
     if ([lbl containsString:@"THÔNG TIN"] || [lbl containsString:@"DEV"] || [lbl containsString:@"HỖ TRỢ"]) return @"GROUP_DEV";
@@ -413,13 +374,13 @@ static inline NSString *PM_TextV285(NSString *key) {
         @"THÔNG TIN PHÁT TRIỂN & HỖ TRỢ": @"GROUP_DEV"
     };
 
-    for (id spec in specs) {
+    for (PSSpecifier *spec in specs) {
         NSString *header = [spec propertyForKey:@"label"];
         if (header && headerMap[header]) {
             NSString *transHeader = PM_TextV285(headerMap[header]);
             if (transHeader) {
                 [spec setProperty:transHeader forKey:@"label"];
-                [spec performSelector:@selector(setName:) withObject:transHeader];
+                spec.name = transHeader;
             }
         }
 
@@ -427,7 +388,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         if (key) {
             NSString *translated = PM_TextV285(key);
             if (translated) {
-                [spec performSelector:@selector(setName:) withObject:translated];
+                spec.name = translated;
                 [spec setProperty:translated forKey:@"label"];
             }
         }
@@ -456,7 +417,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
         NSString *currentGroupID = nil;
 
-        for (id spec in self->_allSavedSpecifiers) {
+        for (PSSpecifier *spec in self->_allSavedSpecifiers) {
             if (Titanium_IsGroupCell(spec)) {
                 currentGroupID = Titanium_GetGroupID(spec);
                 if ([currentGroupID isEqualToString:@"GROUP_MASTER"] ||
@@ -518,34 +479,29 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSString *currentLangName = langNames[langCode] ?: @"Auto";
     NSString *langLabelFormat = PM_TextV285(@"LANGUAGE_BTN_FORMAT") ?: @"Ngôn Ngữ: %@";
 
-    for (id spec in targetSpecs) {
+    for (PSSpecifier *spec in targetSpecs) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
-            NSString *newName;
             if (isPowerSave) {
-                newName = @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)";
+                spec.name = @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)";
             } else if (hz >= 144) {
-                newName = @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)";
+                spec.name = @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)";
             } else {
-                newName = [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz];
+                spec.name = [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz];
             }
-            [spec performSelector:@selector(setName:) withObject:newName];
-            [spec setProperty:newName forKey:@"label"];
+            [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
-            NSString *newName;
             if (isPowerSave) {
-                newName = @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)";
+                spec.name = @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)";
             } else if (fps >= 144) {
-                newName = @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)";
+                spec.name = @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)";
             } else {
-                newName = [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps];
+                spec.name = [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps];
             }
-            [spec performSelector:@selector(setName:) withObject:newName];
-            [spec setProperty:newName forKey:@"label"];
+            [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"SelectedLanguage"]) {
-            NSString *newName = [NSString stringWithFormat:langLabelFormat, currentLangName];
-            [spec performSelector:@selector(setName:) withObject:newName];
-            [spec setProperty:newName forKey:@"label"];
+            spec.name = [NSString stringWithFormat:langLabelFormat, currentLangName];
+            [spec setProperty:spec.name forKey:@"label"];
         }
     }
 }
@@ -622,7 +578,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 }
 
-- (id)readPreferenceValue:(id)specifier {
+- (id)readPreferenceValue:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return [specifier propertyForKey:@"default"];
 
@@ -643,7 +599,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     return [specifier propertyForKey:@"default"];
 }
 
-- (void)setPreferenceValue:(id)value specifier:(id)specifier {
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return;
 
@@ -723,7 +679,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self reloadSpecifiers];
 }
 
-- (void)showLanguagePickerPopup:(id)specifier {
+- (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
     NSString *title = PM_TextV285(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -739,8 +695,8 @@ static inline NSString *PM_TextV285(NSString *key) {
         @{@"code": @"es",   @"name": @"🇪🇸 Español (Spanish)"},
         @{@"code": @"pt",   @"name": @"🇧🇷 Português (Portuguese)"},
         @{@"code": @"fr",   @"name": @"🇫🇷 Français (French)"},
-        @{@"code": @"de",   @"name": @"🇩🇪 Deutsch (German)"},
-        @{@"code": @"ar",   @"name": @"🇸🇦 العربية (Arabic)"}
+        @{@"code": @"de",   @"name": @"Deutsch (German)"},
+        @{@"code": @"ar",   @"name": @"العربية (Arabic)"}
     ];
 
     for (NSDictionary *item in langs) {
@@ -827,7 +783,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
-- (void)showHzPickerPopup:(id)specifier {
+- (void)showHzPickerPopup:(PSSpecifier *)specifier {
     NSString *alertTitle = @"CHỌN VÀ KHÓA TẦN SỐ QUÉT (HZ)";
     UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:@"Chọn nhóm tần số hoặc nhập chính xác số bạn muốn:" preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -862,7 +818,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
-- (void)showFPSPickerPopup:(id)specifier {
+- (void)showFPSPickerPopup:(PSSpecifier *)specifier {
     NSString *alertTitle = @"CHỌN VÀ KHÓA KHUNG HÌNH ỨNG DỤNG (FPS)";
     UIAlertController *mainAlert = [UIAlertController alertControllerWithTitle:alertTitle message:@"Chọn nhóm khung hình hoặc nhập chính xác số bạn muốn:" preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -897,15 +853,15 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
-- (id)getAuthorName:(id)specifier {
+- (id)getAuthorName:(PSSpecifier *)specifier {
     return @"ĐỨC LONG";
 }
 
-- (id)getVersionString:(id)specifier {
+- (id)getVersionString:(PSSpecifier *)specifier {
     return @"V28.7 SUPREME PRO (144Hz)";
 }
 
-- (void)openSupportLink:(id)specifier {
+- (void)openSupportLink:(PSSpecifier *)specifier {
     NSURL *webURL = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
         Class workspaceClass = objc_getClass("LSApplicationWorkspace");
