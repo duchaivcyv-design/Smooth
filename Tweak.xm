@@ -2405,14 +2405,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 // 1. CỬ CHỈ HOME: BÁM DÍNH NGÓN TAY TỨC THÌ, KHÔNG CHỜ TIMELINE
 %hook SBHomeGestureInteraction
 
-- (BOOL)canInterruptActiveGesture {
-    return %orig;
-}
-
-- (BOOL)_shouldSuppressGestures {
-    return %orig;
-}
-
 - (void)_handleGestureBegan:(id)gesture {
     %orig;
     if (IS_ACTIVE) {
@@ -2606,15 +2598,18 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %end
 
-// 3. BẢO ĐẢM HOẠT ẢNH MỞ APP CÓ THỂ NGẮT ĐƯỢC (CHỐNG TREO MỜ MÀN HÌNH)
+// 3. ĐIỀU PHỐI TIẾN TRÌNH HOẠT ẢNH MỞ APP (ĐÚNG CHUẨN VÒNG ĐỜI GỐC ĐỂ KHÔNG KẸT MÀN HÌNH MỜ)
 %hook SBUIAnimationController
 
-- (BOOL)isInterruptible {
-    return %orig;
+- (void)_willBeginAnimation {
+    %orig;
+    if (IS_ACTIVE) {
+        g_lastInteractionMachTime = mach_absolute_time();
+    }
 }
 
-- (BOOL)canBeInterrupted {
-    return %orig;
+- (void)_didCompleteAnimation {
+    %orig;
 }
 
 %end
