@@ -2529,15 +2529,19 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %hook UITableView
+
 - (void)willMoveToWindow:(UIWindow *)newWindow { 
     %orig; 
 }
+
 %end
 
 %hook UICollectionView
+
 - (void)willMoveToWindow:(UIWindow *)newWindow { 
     %orig; 
 }
+
 %end
 
 %end
@@ -2549,12 +2553,15 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %group Group_Display_SpringBoardV285
 
 %hook SBWallpaperController
+
 - (double)wallpaperScaleForVariant:(long long)variant {
     return %orig;
 }
+
 %end
 
 %hook SBFluidSwitcherViewController
+
 - (void)handleFluidSwitcherGesture:(id)gesture {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
@@ -2562,9 +2569,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     }
     %orig;
 }
+
 %end
 
 %hook SBScreenshotManager
+
 - (void)saveScreenshotsWithCompletion:(id)completion {
     if (IS_ACTIVE) {
         Titanium_LockMainThreadFast();
@@ -2572,9 +2581,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     }
     %orig;
 }
+
 %end
 
 %hook SBVolumeControl
+
 - (void)increaseVolume {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
@@ -2598,6 +2609,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     }
     %orig;
 }
+
 %end
 
 %hook SBControlCenterController
@@ -2695,24 +2707,30 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %hook SBIconListView
+
 - (void)setAlpha:(CGFloat)alpha {
     %orig;
 }
+
 %end
 
 %hook SBIconController
+
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
     }
     %orig;
 }
+
 %end
 
 %hook SBFolderControllerAnimationSettings
+
 - (double)duration {
     return %orig;
 }
+
 %end
 
 %hook SBFolderView
@@ -2759,21 +2777,29 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %hook SBIconForceTouchSettings
-- (double)delayBeforeOpening { return %orig; }
+
+- (double)delayBeforeOpening {
+    return %orig;
+}
+
 %end
 
 %hook CSCoverSheetViewController
+
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_TriggerInstantTouchBurst();
     %orig;
 }
+
 %end
 
 %hook SBHomeScreenViewController
+
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE) Titanium_TriggerInstantTouchBurst();
     %orig;
 }
+
 %end
 
 %hook SBApplication
@@ -2794,13 +2820,27 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 %hook SBAppLaunchSettings
-- (double)zoomDuration { return %orig; }
-- (double)launchDuration { return %orig; }
-- (double)delayBeforeAppLaunch { return %orig; }
+
+- (double)zoomDuration {
+    return %orig;
+}
+
+- (double)launchDuration {
+    return %orig;
+}
+
+- (double)delayBeforeAppLaunch {
+    return %orig;
+}
+
 %end
 
 %hook SBSplashBoardController
-- (double)splashScreenDelay { return %orig; }
+
+- (double)splashScreenDelay {
+    return %orig;
+}
+
 %end
 
 %hook SBUIAnimationController
@@ -3784,5 +3824,3 @@ static void SpringBoardDidLaunchCallback(CFNotificationCenterRef center, void *o
         }
     }
 }
-
-```
