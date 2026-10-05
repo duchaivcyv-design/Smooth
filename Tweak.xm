@@ -2526,7 +2526,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 }
 
 - (CGFloat)decelerationRate {
-    if (IS_ACTIVE) return UIScrollViewDecelerationRateNormal;
     return %orig;
 }
 
@@ -2535,14 +2534,14 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBAppSwitcherController
 
 - (void)viewWillAppear:(BOOL)animated {
-    %orig(animated);
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
-    %orig(animated);
+    %orig;
     if (IS_ACTIVE) {
         g_isUserTouchingScreen = NO;
         g_isContinuousSwiping = NO;
@@ -2814,24 +2813,24 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %end
 
-// 4. ĐỘNG CƠ CUỘN SCROLLVIEW: BẢO VỆ NGUYÊN VẸN PAGING TIKTOK & BĂNG THÔNG MẠNG
+// 4. ĐỘNG CƠ CUỘN SCROLLVIEW: BẢO VỆ NGUYÊN VẸN CỬ CHỈ HỆ THỐNG VÀ PAGING TIKTOK
 %hook UIScrollView
 
 - (UIPanGestureRecognizer *)panGestureRecognizer {
     UIPanGestureRecognizer *pan = %orig;
-    if (IS_ACTIVE && pan) {
+    if (IS_ACTIVE && !Titanium_IsSpringBoard() && pan) {
         pan.delaysTouchesBegan = NO;
     }
     return pan;
 }
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
-    if (IS_ACTIVE) return YES;
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) return YES;
     return %orig;
 }
 
 - (BOOL)delaysContentTouches {
-    if (IS_ACTIVE) return NO;
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) return NO;
     return %orig;
 }
 
@@ -2860,7 +2859,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 }
 
 - (CGFloat)decelerationRate {
-    if (IS_ACTIVE) {
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
         if (self.isPagingEnabled) return %orig;
         return UIScrollViewDecelerationRateNormal;
     }
@@ -2895,7 +2894,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (void)didMoveToWindow {
     %orig;
-    if (IS_ACTIVE && self.window) {
+    if (IS_ACTIVE && self.window && !Titanium_IsSpringBoard()) {
         self.delaysContentTouches = NO;
         self.canCancelContentTouches = YES;
     }
@@ -2907,7 +2906,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (void)didMoveToWindow {
     %orig;
-    if (IS_ACTIVE && self.window) {
+    if (IS_ACTIVE && self.window && !Titanium_IsSpringBoard()) {
         self.delaysContentTouches = NO;
         self.canCancelContentTouches = YES;
     }
@@ -3022,12 +3021,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBIconScrollView
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
 - (BOOL)delaysContentTouches {
-    if (IS_ACTIVE) return NO;
     return %orig;
 }
 
@@ -3106,7 +3103,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     }
 }
 
-- (void)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
+- (closeFolderAnimated:(BOOL)animated withCompletion:(id)completion)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
@@ -3131,6 +3128,13 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook CSCoverSheetViewController
 
 - (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    if (IS_ACTIVE) {
+        g_lastInteractionMachTime = mach_absolute_time();
+    }
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
@@ -3162,18 +3166,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 - (BOOL)shouldPrewarmOnLaunch {
     if (IS_ACTIVE) return YES;
     return %orig;
-}
-
-%end
-
-%hook SBUIAnimationController
-
-- (void)_willBeginAnimation {
-    %orig;
-}
-
-- (void)_didCompleteAnimation {
-    %orig;
 }
 
 %end
@@ -3742,24 +3734,15 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook CASpringAnimation
 
 - (void)setMass:(CGFloat)mass {
-    if (IS_ACTIVE && mass > 0.6f) {
-        mass = 0.58f;
-    }
-    %orig;
+    %orig(mass);
 }
 
 - (void)setStiffness:(CGFloat)stiffness {
-    if (IS_ACTIVE && stiffness < 320.0f) {
-        stiffness = 340.0f;
-    }
-    %orig;
+    %orig(stiffness);
 }
 
 - (void)setDamping:(CGFloat)damping {
-    if (IS_ACTIVE && damping < 26.0f) {
-        damping = 28.5f;
-    }
-    %orig;
+    %orig(damping);
 }
 
 %end
@@ -3872,11 +3855,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 }
 
 - (double)_edgeRegionSize {
-    double origSize = %orig;
-    if (IS_ACTIVE && CFG285.touchResponseBoost) {
-        return origSize > 0.0 ? (origSize * 1.20) : 24.0;
-    }
-    return origSize;
+    return %orig;
 }
 
 %end
@@ -3945,7 +3924,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook NSRunLoop
 
 - (void)runMode:(NSRunLoopMode)mode beforeDate:(NSDate *)limitDate {
-    if (IS_ACTIVE) {
+    if (IS_ACTIVE && [NSThread isMainThread]) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     %orig;
@@ -4010,7 +3989,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook MTMaterialView
 
-- (void)didMoveToWindow {
+- (didMoveToWindow)didMoveToWindow {
     %orig;
     if (IS_ACTIVE && self.window) {
         self.layer.allowsGroupOpacity = YES;
