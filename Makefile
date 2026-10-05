@@ -32,12 +32,12 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
-                           -IModules \
                            -I.
 
 # ĐỒNG BỘ CỜ CHO TWEAK.XM.MM: NẠP CHUẨN C++17 VÀ KẾ THỪA CFLAGS
 BoostiPhone6sCore_OBJCXXFLAGS = $(BoostiPhone6sCore_CFLAGS) -std=gnu++17
 
+# PUBLIC FRAMEWORKS CHUẨN CỦA APPLE
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -48,8 +48,13 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                WebKit \
                                CoreVideo \
                                Accelerate \
-                               CoreServices \
-                               IOKit
+                               CoreServices
+
+# CHUYỂN IOKIT SANG ĐÚNG PHÂN VÙNG PRIVATE FRAMEWORK TRÁNH LỖI CLANG
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
+
+# LIÊN KẾT SUBSTRATE CHO ROOTLESS / ROOTHIDE (ELLEKIT, LIBHOOKER)
+BoostiPhone6sCore_LIBRARIES = substrate
 
 # BẢO ĐẢM TƯƠNG THÍCH MỌI MÔI TRƯỜNG JAILBREAK ROOTLESS & ROOTHIDE
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
