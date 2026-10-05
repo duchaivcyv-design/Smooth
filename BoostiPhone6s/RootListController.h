@@ -30,7 +30,10 @@ NS_ASSUME_NONNULL_BEGIN
 #define NOTIFY_FPS_CHANGED "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 
-#define APEX_SYNC_MAGIC_V285 0x56323835
+// Chuẩn hóa đồng nhất 100% với Tweak.xm: 0x41505837
+#ifndef APEX_SYNC_MAGIC_V285
+#define APEX_SYNC_MAGIC_V285 0x41505837
+#endif
 
 // ====================================================================================================
 // CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO (PACKED CHỐNG LỆCH OFFSET GIỮA SPRINGBOARD & PREFS)
@@ -69,6 +72,7 @@ typedef struct __attribute__((packed)) {
 // ROOTLISTCONTROLLER INTERFACE
 // ====================================================================================================
 @interface RootListController : PSListController {
+@public
     NSMutableArray *_allSavedSpecifiers;
 }
 
