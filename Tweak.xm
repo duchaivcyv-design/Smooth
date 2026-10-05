@@ -2874,6 +2874,56 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         if (g_activeAnimationCount > 0) g_activeAnimationCount--;
     }
 }
+%end
+
+%hook SBDeviceApplicationSceneViewContainedViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    if (IS_ACTIVE) {
+        UIView *v = [self view];
+        if (v) {
+            // 1. Phá bỏ ma trận thu nhỏ, ép về tỉ lệ gốc 1.0 (toàn màn hình)
+            v.transform = CGAffineTransformIdentity;
+            
+            // 2. Ép frame bung hết kích thước màn hình thiết bị
+            CGRect screenBounds = [UIScreen mainScreen].bounds;
+            v.frame = screenBounds;
+            v.bounds = screenBounds;
+            
+            // 3. Reset layer transform
+            v.layer.transform = CATransform3DIdentity;
+        }
+    }
+}
+
+- (void)viewDidLayoutSubviews {
+    %orig;
+    if (IS_ACTIVE) {
+        UIView *v = [self view];
+        if (v) {
+            // Giữ vững kích thước toàn màn hình nếu bị can thiệp ép scale
+            if (!CGAffineTransformIsIdentity(v.transform)) {
+                v.transform = CGAffineTransformIdentity;
+            }
+        }
+    }
+}
+
+%end
+
+%hook SBAppContainerViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    if (IS_ACTIVE) {
+        UIView *v = [self view];
+        if (v) {
+            v.transform = CGAffineTransformIdentity;
+            v.frame = [UIScreen mainScreen].bounds;
+        }
+    }
+}
 
 %end
 
