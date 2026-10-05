@@ -2420,7 +2420,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (IS_ACTIVE) {
         g_isContinuousSwiping = YES;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2437,7 +2436,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (IS_ACTIVE) {
         g_isContinuousSwiping = NO;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2467,7 +2465,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2505,7 +2502,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2526,7 +2522,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2555,7 +2550,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig(animated);
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2955,7 +2949,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -2967,7 +2960,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -3003,19 +2995,17 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBControlCenterController
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
-    %orig;
 }
 
 - (void)dismissAnimated:(BOOL)animated completion:(id)completion {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
-    %orig;
 }
 
 %end
@@ -3023,19 +3013,17 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBNotificationCenterController
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
-    %orig;
 }
 
 - (void)dismissAnimated:(BOOL)animated completion:(id)completion {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
-    %orig;
 }
 
 %end
@@ -3086,7 +3074,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -3109,7 +3096,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -3125,19 +3111,17 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBFolderController
 
 - (void)openFolderAnimated:(BOOL)animated withCompletion:(id)completion {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
-    %orig;
 }
 
 - (void)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
-    %orig;
 }
 
 %end
@@ -3183,7 +3167,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
     }
 }
 
@@ -3198,9 +3181,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (void)_willBeginAnimation {
     %orig;
-    if (IS_ACTIVE) {
-        Titanium_LockMainThreadFast();
-    }
 }
 
 - (void)_didCompleteAnimation {
@@ -3354,7 +3334,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3366,7 +3345,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3378,7 +3356,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3390,7 +3367,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3404,11 +3380,11 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (BOOL)animateAlongsideTransition:(void (^)(id context))animation
                         completion:(void (^)(id context))completion {
+    BOOL result = %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
-    return %orig;
+    return result;
 }
 
 %end
@@ -3421,7 +3397,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3437,7 +3412,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3449,7 +3423,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -3470,10 +3443,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook UIKeyboardTaskQueue
 
 - (void)performTask:(id)task {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig;
 }
 
 %end
@@ -3484,11 +3457,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        if (Titanium_IsSpringBoard()) {
-            Titanium_LockMainThreadFast();
-        } else {
-            Titanium_BoostRenderWithoutStarvingNetwork();
-        }
     }
 }
 
@@ -3506,11 +3474,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook UIButton
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_TriggerInstantTouchBurst();
     }
-    %orig;
 }
 
 %end
