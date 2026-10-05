@@ -214,6 +214,10 @@ extern "C" {
 - (void)makeKeyAndVisible;
 @end
 
+@interface UIWindowScene (TitaniumApexPrivate)
+@property (nonatomic, assign) SafeFrameRateRange preferredFrameRateRange;
+@end
+
 @interface UIViewController (TitaniumApexPrivate)
 - (void)viewWillAppear:(BOOL)animated;
 - (void)viewDidAppear:(BOOL)animated;
@@ -344,8 +348,8 @@ extern "C" {
 
 // --- QUARTZCORE & METAL PIPELINE ---
 @interface CATransaction (TitaniumApexPrivate)
-+ (void)_setLowLatency:(BOOL)1;
-+ (void)activateBackground:(BOOL)1;
++ (void)_setLowLatency:(BOOL)flag;
++ (void)activateBackground:(BOOL)flag;
 + (void)commit;
 + (void)flush;
 @end
@@ -3264,7 +3268,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
         if (@available(iOS 15.0, *)) {
             if (self.windowScene && !Titanium_IsSpringBoard()) {
                 float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                self.windowScene.preferredFrameRateRange = SafeMakeFRR(60.0f, targetHz, targetHz);
+                SafeFrameRateRange range = SafeMakeFRR(60.0f, targetHz, targetHz);
+                if ([self.windowScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    [(id)self.windowScene setPreferredFrameRateRange:range];
+                }
             }
         }
     }
