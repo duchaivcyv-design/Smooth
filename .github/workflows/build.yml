@@ -51,8 +51,8 @@ jobs:
              exit 1
           fi
 
-      # --- BƯỚC 3: QUÉT TRÙNG LẶP %HOOK & CHỈ RÕ NÊN GIỮ Ở NHÓM NÀO ---
-      - name: Scan & Check Duplicate %hook
+      # --- BƯỚC 3: QUÉT TOÀN DIỆN: TRÙNG LẶP XUYÊN NHÓM + LỖI CÚ PHÁP %ORIG ---
+      - name: Deep Scan Duplicates & Syntax Errors
         run: |
           python3 - << 'EOF'
           import re
@@ -64,7 +64,16 @@ jobs:
               print("⚠️ Không tìm thấy file .xm nào để quét!")
               sys.exit(0)
 
-          has_duplicate = False
+          has_critical_error = False
+
+          def clean_selector(method_head):
+              tokens = re.findall(r'([A-Za-z0-9_]+)\s*:', method_head)
+              if tokens:
+                  return ":".join(tokens) + ":"
+              match = re.search(r'[-+]\s*\([^)]+\)\s*([A-Za-z0-9_]+)', method_head)
+              if match:
+                  return match.group(1)
+              return method_head.strip()
 
           for filepath in files:
               with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -74,17 +83,21 @@ jobs:
               current_group_title = "Phần code chung (Ngoài nhóm)"
               latest_comment_header = ""
 
-              # Cấu trúc: hooks[class_name] = [ { group_id, group_title, start_line, end_line, body } ]
-              hooks = {}
               in_hook = False
               curr_class = ""
-              curr_start_line = 0
-              curr_body_lines = []
+              curr_method = ""
+              curr_method_start = 0
+              curr_method_body = []
+              in_method = False
+
+              # Map: method_registry[(class_name, clean_sel)] = [ {group, title, start, end, body} ]
+              method_registry = {}
+              orig_syntax_warnings = []
 
               for idx, raw_line in enumerate(lines, 1):
                   line = raw_line.strip()
 
-                  # Bắt tiêu đề Tiếng Việt dạng: // NHÓM X: ...
+                  # Bắt tiêu đề nhóm dạng: // NHÓM X: ...
                   group_title_match = re.search(r'//\s*(=+\s*)?(NHÓM\s+\d+[^=\n\r]*)', line, re.IGNORECASE)
                   if group_title_match:
                       latest_comment_header = group_title_match.group(2).strip()
@@ -104,75 +117,96 @@ jobs:
                   if hook_match:
                       in_hook = True
                       curr_class = hook_match.group(1)
-                      curr_start_line = idx
-                      curr_body_lines = []
                       continue
 
+                  if in_hook and line.startswith("%end"):
+                      in_hook = False
+                      curr_class = ""
+                      continue
+
+                  # Quét khai báo phương thức Objective-C bên trong %hook
                   if in_hook:
-                      if line.startswith("%end"):
-                          in_hook = False
-                          if curr_class not in hooks:
-                              hooks[curr_class] = []
-                          hooks[curr_class].append({
-                              "group_id": current_group_id,
-                              "group_title": current_group_title,
-                              "start_line": curr_start_line,
-                              "end_line": idx,
-                              "body": "".join(curr_body_lines)
-                          })
-                      else:
-                          curr_body_lines.append(raw_line)
+                      method_match = re.match(r'^([-+]\s*\([^{]+?\{?)', line)
+                      if method_match and not in_method:
+                          in_method = True
+                          curr_method = clean_selector(method_match.group(1))
+                          curr_method_start = idx
+                          curr_method_body = [raw_line]
+                          continue
 
-              # Đánh giá và so sánh mức độ tối ưu của từng block
-              for class_name, occurrences in hooks.items():
-                  # Nhóm các block bị trùng theo group_id
-                  same_group_dups = {}
-                  for item in occurrences:
-                      gid = item["group_id"]
-                      same_group_dups.setdefault(gid, []).append(item)
-
-                  for gid, items in same_group_dups.items():
-                      if len(items) > 1:
-                          has_duplicate = True
-                          print("\n" + "="*80)
-                          print(f"🚨 PHÁT HIỆN TRÙNG LẶP: Class [%hook {class_name}] trong file: {filepath}")
-                          print("="*80)
-
-                          # Tính điểm tối ưu: code chứa 144Hz, ZeroLatency, CATransaction flush có độ ưu tiên cao hơn
-                          def calculate_score(hook_item):
-                              body = hook_item["body"]
-                              score = len(body)
-                              if "144" in body: score += 5000
-                              if "Titanium_" in body: score += 2000
-                              if "ZeroLatency" in body: score += 2000
-                              if "flush" in body: score += 1000
-                              if "%orig;" in body and len(body.strip()) < 100: score -= 3000
-                              return score
-
-                          sorted_items = sorted(items, key=calculate_score, reverse=True)
-                          best_item = sorted_items[0]
-                          to_delete = sorted_items[1:]
-
-                          print(f"❌ Class [%hook {class_name}] xuất hiện {len(items)} lần trong cùng phạm vi:")
-                          for idx_occ, itm in enumerate(items, 1):
-                              print(f"   🔹 Lần {idx_occ}: Dòng {itm['start_line']} -> {itm['end_line']} | Thuộc: [{itm['group_title']}]")
-
-                          print("\n🎯 KẾT LUẬN & HƯỚNG DẪN XỬ LÝ CHÍNH XÁC:")
-                          print(f"   ✅ NÊN GIỮ LẠI Ở: [{best_item['group_title']}] (Dòng {best_item['start_line']} -> {best_item['end_line']})")
-                          print(f"      👉 Lý do: Đây là đoạn code tối ưu xung nhịp 144Hz mới nhất và đầy đủ logic nhất.")
+                      if in_method:
+                          curr_method_body.append(raw_line)
                           
-                          print("\n   ❌ CẦN MỞ FILE VÀ XOÁ BỎ Ở:")
-                          for del_item in to_delete:
-                              print(f"      🗑️ Xoá bỏ khối tại [{del_item['group_title']}] (Từ dòng {del_item['start_line']} đến dòng {del_item['end_line']})")
-                              print(f"      👉 Lý do: Đây là code cũ/thừa thãi, gây lỗi 'redefinition' khi biên dịch Clang.")
-                          print("-" * 80)
+                          # Bắt lỗi nguy cơ gây "Invalid argument structure in %orig"
+                          if re.search(r'%orig\s*\([^)]+?\)\s*;', line):
+                              orig_syntax_warnings.append({
+                                  "line": idx,
+                                  "class": curr_class,
+                                  "method": curr_method,
+                                  "content": line
+                              })
 
-          if has_duplicate:
-              print("\n🛑 DỪNG BUILD: Hãy mở file .xm ra và xoá bỏ các block %hook thừa ở nhóm được chỉ định ở trên!")
-              print("="*80 + "\n")
+                          # Kết thúc method khi gặp dấu ngoặc nhọn đóng ở đầu dòng
+                          if line.startswith("}"):
+                              in_method = False
+                              key = (curr_class, curr_method)
+                              if key not in method_registry:
+                                  method_registry[key] = []
+                              method_registry[key].append({
+                                  "group_id": current_group_id,
+                                  "group_title": current_group_title,
+                                  "start_line": curr_method_start,
+                                  "end_line": idx,
+                                  "body": "".join(curr_method_body)
+                              })
+
+              # --- 1. KIỂM TRA LỖI NGUY CƠ CÚ PHÁP %ORIG(...) ---
+              if orig_syntax_warnings:
+                  print("\n" + "="*80)
+                  print(f"⚠️ CẢNH BÁO CÚ PHÁP DỄ GÃY BUILD (Invalid argument structure): {filepath}")
+                  print("="*80)
+                  for warn in orig_syntax_warnings:
+                      print(f"📍 Dòng {warn['line']} trong [{warn['class']} {warn['method']}]:")
+                      print(f"   Code hiện tại: {warn['content']}")
+                      print(f"   👉 KHẮC PHỤC: Hãy đổi thành '%orig;' (bỏ ngoặc đơn và đối số) để Theos tự forward an toàn.\n")
+
+              # --- 2. BẮT TRÙNG LẶP PHƯƠNG THỨC XUYÊN NHÓM ---
+              for (class_name, method_sel), occurrences in method_registry.items():
+                  if len(occurrences) > 1:
+                      has_critical_error = True
+                      print("\n" + "="*80)
+                      print(f"🚨 PHÁT HIỆN HOOK TRÙNG LẶP: -[{class_name} {method_sel}] trong file {filepath}")
+                      print("="*80)
+                      
+                      def score_block(b):
+                          body = b["body"]
+                          score = len(body)
+                          if "144" in body: score += 5000
+                          if "Titanium_" in body: score += 2000
+                          if "ZeroLatency" in body: score += 2000
+                          if "flush" in body: score += 1000
+                          return score
+
+                      sorted_occ = sorted(occurrences, key=score_block, reverse=True)
+                      best_block = sorted_occ[0]
+                      del_blocks = sorted_occ[1:]
+
+                      print(f"❌ Phương thức này bị hook tới {len(occurrences)} lần xuyên các nhóm:")
+                      for i, occ in enumerate(occurrences, 1):
+                          print(f"   🔹 Lần {i}: Dòng {occ['start_line']} -> {occ['end_line']} | Thuộc: [{occ['group_title']}]")
+
+                      print("\n🎯 KẾT LUẬN & HƯỚNG DẪN XỬ LÝ CHÍNH XÁC:")
+                      print(f"   ✅ NÊN GIỮ LẠI TẠI: [{best_block['group_title']}] (Dòng {best_block['start_line']} -> {best_block['end_line']})")
+                      print(f"   ❌ PHẢI XOÁ BỎ TẠI:")
+                      for d in del_blocks:
+                          print(f"      🗑️ Xóa từ dòng {d['start_line']} đến dòng {d['end_line']} tại: [{d['group_title']}]")
+                      print("-" * 80)
+
+          if has_critical_error:
+              print("\n🛑 DỪNG BUILD: Hãy xóa các phương thức bị hook trùng lặp theo danh sách chỉ định ở trên!")
               sys.exit(1)
           else:
-              print("✅ Quét hoàn tất: Không có %hook nào bị trùng lặp nhóm! Tiến hành biên dịch...")
+              print("✅ Quét thành công: Code sạch 100%, không bị trùng lặp hook xuyên nhóm!")
           EOF
 
       # --- BƯỚC 4: DỌN DẸP, BIÊN DỊCH VÀ BÓC TÁCH LỖI CHÍNH XÁC ---
@@ -190,7 +224,6 @@ jobs:
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
           
-          # Thực thi biên dịch với cờ bắt log đầy đủ
           set -o pipefail
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE" || BUILD_FAILED=1
 
