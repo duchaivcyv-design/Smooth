@@ -19,8 +19,10 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           Modules/KernelBypass.m \
                           Modules/SystemBlocker.m
 
+# CỜ BIÊN DỊCH C / OBJC: TỐI ƯU HÓA O3 & GIẢM DUNG LƯỢNG BINARY
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
+                           -fvisibility=hidden \
                            -Wall \
                            -Wno-error \
                            -Wno-unused-variable \
@@ -32,16 +34,16 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wno-module-import-in-extern-c \
                            -Wno-unguarded-availability-new \
                            -Wno-unguarded-availability \
+                           -Wno-unused-command-line-argument \
                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
                            -IModules \
                            -I.
 
-# ĐỒNG BỘ CỜ CHO TWEAK.XM (TRÁNH LỖI CLANG++ BỎ QUÊN CỜ KHI BUILD FILE .MM)
-BoostiPhone6sCore_OBJCXXFLAGS = $(BoostiPhone6sCore_CFLAGS)
+# ĐỒNG BỘ CỜ CHO TWEAK.XM.MM: NẠP CHUẨN C++17 VÀ KẾ THỪA CFLAGS
+BoostiPhone6sCore_OBJCXXFLAGS = $(BoostiPhone6sCore_CFLAGS) -std=gnu++17
 
-# ĐÃ BỔ SUNG ĐẦY ĐỦ: WebKit và CoreFoundation
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -54,10 +56,7 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# ĐÃ BỎ IOKit ĐỂ TRÁNH LỖI "framework not found IOKit" TRÊN GITHUB ACTIONS
-# (Các symbol IOKit sẽ được giải quyết sạch sẽ thông qua dynamic_lookup bên dưới)
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = 
-
+# GIẢI PHÓNG TOÀN BỘ SYMBOL CẤP THẤP QUA DYNAMIC_LOOKUP (TƯƠNG THÍCH CẢ ROOTLESS & ROOTHIDE)
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -Wl,-install_name,@rpath/BoostiPhone6sCore.dylib \
