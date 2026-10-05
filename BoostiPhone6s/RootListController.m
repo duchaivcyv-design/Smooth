@@ -16,72 +16,6 @@
 extern char **environ;
 
 // ====================================================================================================
-// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
-// ====================================================================================================
-
-#ifndef APEX_SYNC_MAGIC_V285
-#define APEX_SYNC_MAGIC_V285 0x41505837
-#endif
-
-#ifndef PREF_DOMAIN
-#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
-#endif
-
-#ifndef PRIMARY_SYNC_FILE
-#define PRIMARY_SYNC_FILE    @"/tmp/.boost_hz_sync"
-#endif
-
-#ifndef SECONDARY_SYNC_FILE
-#define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
-#endif
-
-#ifndef BOOT_GUARD_FILE
-#define BOOT_GUARD_FILE      @"/tmp/.titanium_boot_guard"
-#endif
-
-#ifndef NOTIFY_RELOAD
-#define NOTIFY_RELOAD        "com.taojb.boostiphone6s/ReloadPrefs"
-#define NOTIFY_UIKIT_RELOAD  "com.taojb.boostiphone6s/ReloadUIKitPrefs"
-#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
-#define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
-#define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
-#endif
-
-// ====================================================================================================
-// STRUCT IPC ĐỒNG NHẤT 100% VỚI TWEAK.XM (BẢO TOÀN DỮ LIỆU ĐỌC XUYÊN SANDBOX)
-// ====================================================================================================
-
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[48];
-} ApexV285ProPayload;
-
-// ====================================================================================================
 // FORWARD DECLARATIONS
 // ====================================================================================================
 
@@ -290,7 +224,6 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 @interface RootListController () {
-    NSMutableArray *_allSavedSpecifiers;
     dispatch_queue_t _syncQueue;
 }
 @end
