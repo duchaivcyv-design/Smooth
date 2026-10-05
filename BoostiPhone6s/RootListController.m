@@ -221,8 +221,6 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 @implementation RootListController {
-    NSMutableArray *_specifiers;
-    NSMutableArray *_allSavedSpecifiers;
     dispatch_queue_t _syncQueue;
 }
 
@@ -369,7 +367,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 - (id)specifiers {
-    if (!_allSavedSpecifiers) {
+    if (!self->_allSavedSpecifiers) {
         NSString *root = Titanium_GetRootHidePrefixPath();
         NSString *bundlePath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"];
         NSBundle *bundle = [NSBundle bundleWithPath:bundlePath];
@@ -377,9 +375,9 @@ static inline NSString *PM_TextV285(NSString *key) {
         if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
         if (!bundle) bundle = [NSBundle bundleForClass:[self class]];
 
-        _allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+        self->_allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
         [self ensureDefaultSettingsExist];
-        [self applyFullLocalizationToSpecifiers:_allSavedSpecifiers];
+        [self applyFullLocalizationToSpecifiers:self->_allSavedSpecifiers];
     }
 
     NSDictionary *prefs = [self getMergedPreferences];
@@ -389,7 +387,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         NSMutableArray *collapsedSpecs = [NSMutableArray array];
         NSString *currentGroupID = nil;
 
-        for (PSSpecifier *spec in _allSavedSpecifiers) {
+        for (PSSpecifier *spec in self->_allSavedSpecifiers) {
             if (Titanium_IsGroupCell(spec)) {
                 currentGroupID = Titanium_GetGroupID(spec);
                 if ([currentGroupID isEqualToString:@"GROUP_MASTER"] ||
@@ -409,13 +407,13 @@ static inline NSString *PM_TextV285(NSString *key) {
                 }
             }
         }
-        _specifiers = collapsedSpecs;
+        self->_specifiers = collapsedSpecs;
     } else {
-        _specifiers = [_allSavedSpecifiers mutableCopy];
+        self->_specifiers = [self->_allSavedSpecifiers mutableCopy];
     }
 
     [self updateDynamicTitles];
-    return _specifiers;
+    return self->_specifiers;
 }
 
 - (void)viewDidLoad {
@@ -449,7 +447,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSString *currentLangName = langNames[langCode] ?: @"Auto";
     NSString *langLabelFormat = PM_TextV285(@"LANGUAGE_BTN_FORMAT") ?: @"Ngôn Ngữ: %@";
 
-    for (PSSpecifier *spec in (NSArray *)_specifiers) {
+    for (PSSpecifier *spec in (NSArray *)self->_specifiers) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
             if (isPowerSave) {
