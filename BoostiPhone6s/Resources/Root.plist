@@ -115,7 +115,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (KHÓA CỨNG TUYỆT ĐỐI 144HZ)                                               -->
+		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (KHÓA CỨNG MỨC CHỈNH TỪ 15 ĐẾN 144)                                      -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -123,7 +123,7 @@
 			<key>label</key>
 			<string>ĐIỀU PHỐI HZ &amp; FPS ĐỘNG (15HZ - 144HZ)</string>
 			<key>footerText</key>
-			<string>Khóa cứng 144Hz và 144FPS toàn hệ thống. Màn hình tĩnh tự động hạ về 10Hz làm mát máy, khi chạm tay vào vọt thẳng lên 144Hz tức thì trong 0ms.</string>
+			<string>Hỗ trợ tùy chọn hoặc tự nhập bất kỳ mức nào từ 15 đến 144. Hệ thống sẽ khóa chết mức đã chọn vào hạt nhân IPC, chống tụt xung khi máy ấm.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -137,7 +137,7 @@
 			<key>id</key>
 			<string>EnableHzControl</string>
 			<key>label</key>
-			<string>Khóa Cứng Tần Số Quét (Hz)</string>
+			<string>Kích Hoạt Điều Phối Tần Số Quét (Hz)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -145,7 +145,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>Chọn Mức Tần Số Quét (Hz)</string>
+			<string>Chọn / Nhập Mức Tần Số Quét (Hz)</string>
 			<key>action</key>
 			<string>showHzPickerPopup:</string>
 			<key>key</key>
@@ -165,7 +165,7 @@
 			<key>id</key>
 			<string>EnableFPSControl</string>
 			<key>label</key>
-			<string>Khóa Cứng Khung Hình (FPS)</string>
+			<string>Kích Hoạt Điều Phối Khung Hình (FPS)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -173,7 +173,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>Chọn Mức Khung Hình (FPS)</string>
+			<string>Chọn / Nhập Mức Khung Hình (FPS)</string>
 			<key>action</key>
 			<string>showFPSPickerPopup:</string>
 			<key>key</key>
@@ -193,7 +193,7 @@
 			<key>id</key>
 			<string>ForceOverclock144Hz</string>
 			<key>label</key>
-			<string>Ép Xung 144Hz Toàn Máy</string>
+			<string>Ép Xung Cố Định 144Hz Toàn Máy</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
@@ -801,7 +801,7 @@
 			<key>id</key>
 			<string>PowerSaveMode</string>
 			<key>label</key>
-			<string>Chế Độ Tiết Kiệm Pin Cực Đại (30Hz)</string>
+			<string>Chế Độ Tiết Kiệm Pin (Khóa 60Hz/FPS)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
