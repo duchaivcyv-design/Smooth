@@ -4,6 +4,18 @@
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Truy vấn trạng thái nhiệt độ và sạc nhanh trong 0ns cho %ctor và các hook đồ họa của Tweak.xm
+BOOL SmartThermal_IsDeviceChargingFast(void);
+BOOL SmartThermal_IsThermalThrottlingActive(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface SmartThermal : NSObject
@@ -14,7 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)sharedInstance;
 
-// Bắt đầu theo dõi nhiệt độ phần cứng, trạng thái sạc và tải CPU/GPU
+// Bắt đầu theo dõi nhiệt độ phần cứng, trạng thái sạc và tải CPU/GPU thụ động
 - (void)startThermalMonitoring;
 
 // Hệ số tốc độ hoạt ảnh giao diện theo nhiệt độ
@@ -34,4 +46,4 @@ NS_ASSUME_NONNULL_BEGIN
 
 NS_ASSUME_NONNULL_END
 
-#endif
+#endif /* SMART_THERMAL_H */
