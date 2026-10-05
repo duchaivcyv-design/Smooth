@@ -220,8 +220,8 @@ static inline NSString *PM_TextV285(NSString *key) {
     return enSection ? enSection[key] : nil;
 }
 
+// ĐÃ DỌN SẠCH KHAI BÁO TRÙNG LẶP (Vì RootListController.h đã định nghĩa sẵn _allSavedSpecifiers và _specifiers)
 @implementation RootListController {
-    NSMutableArray *_allSavedSpecifiers;
     dispatch_queue_t _syncQueue;
 }
 
