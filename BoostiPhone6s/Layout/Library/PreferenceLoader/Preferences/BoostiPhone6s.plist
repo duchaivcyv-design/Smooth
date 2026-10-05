@@ -16,10 +16,6 @@
         <true/>
         <key>label</key>
         <string>BoostiPhone6s V28.7 Pro</string>
-        <key>defaults</key>
-        <string>com.taojb.boostiphone6s</string>
-        <key>PostNotification</key>
-        <string>com.taojb.boostiphone6s/ReloadPrefs</string>
     </dict>
 </dict>
 </plist>
