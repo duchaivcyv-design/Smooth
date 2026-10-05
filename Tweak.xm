@@ -1273,12 +1273,6 @@ static BoostConfigV285Pro *CFG285 = nil;
 static volatile NSInteger g_cachedResolvedHz = 144;
 static volatile NSInteger g_cachedResolvedFPS = 144;
 
-// HÀM GHI PAYLOAD AN TOÀN CHUẨN ĐƯỜNG DẪN ĐA PHÂN VÙNG
-static inline void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload) {
-    if (!payload) return;
-    Titanium_WriteSyncPayloadUniversal(payload, sizeof(ApexV285ProPayload));
-}
-
 // ĐIỀU PHỐI WINDOWSERVER AN TOÀN TUYỆT ĐỐI (CHUẨN DẢI 15 - 144HZ, CHỐNG CO VIEWPORT & CHỐNG ĐEN APP)
 static void Titanium_TuneWindowServerDisplayDirectly(void) {
     Class wsClass = NSClassFromString(@"CAWindowServer");
