@@ -3,6 +3,17 @@
 
 #import <Foundation/Foundation.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Khai báo an toàn cho các tác vụ kiểm tra nhanh từ Tweak.xm
+BOOL KernelBypass_IsRootHide(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface KernelBypass : NSObject
@@ -15,7 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 // Khởi tạo môi trường, nhận diện tiền tố jailbreak động và mở rộng sandbox /var
 - (void)initEnvironment;
 
-// Nâng mức ưu tiên luồng hiện tại lên thời gian thực (Time-Constraint / Realtime)
+// Nâng mức ưu tiên luồng hiện tại bằng QoS User Interactive & P-Core Affinity (Không bỏ đói socket mạng)
 - (void)boostCurrentThreadPriority;
 - (void)boostThreadWithTargetHz:(uint32_t)targetHz;
 
@@ -29,4 +40,4 @@ NS_ASSUME_NONNULL_BEGIN
 
 NS_ASSUME_NONNULL_END
 
-#endif
+#endif /* KERNEL_BYPASS_H */
