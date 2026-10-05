@@ -1,16 +1,23 @@
 #!/bin/sh
 set -e
 
-# TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ROOTLESS / ROOTHIDE)
+# ====================================================================================================
+# 1. TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ROOTLESS / ROOTHIDE / STANDARD)
+# ====================================================================================================
 JB_ROOT=""
 if [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
     JB_ROOT="$ROOTLESS_PATH"
 elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
     JB_ROOT="$JB_ROOT_PATH"
-elif [ -d "/var/jb" ]; then
+elif [ -L "/var/jb" ] || [ -d "/var/jb" ]; then
     JB_ROOT="/var/jb"
 else
-    ROOTHIDE_DIR=$(find /var -maxdepth 1 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    # Quét thư mục RootHide ngẫu nhiên trên phân vùng /private/preboot hoặc /var
+    ROOTHIDE_DIR=$(find /private/preboot -maxdepth 2 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    if [ -z "$ROOTHIDE_DIR" ]; then
+        ROOTHIDE_DIR=$(find /var -maxdepth 1 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    fi
+
     if [ -n "$ROOTHIDE_DIR" ] && [ -d "$ROOTHIDE_DIR" ]; then
         JB_ROOT="$ROOTHIDE_DIR"
     else
@@ -18,7 +25,9 @@ else
     fi
 fi
 
-# PHÂN QUYỀN BUNDLE CÀI ĐẶT
+# ====================================================================================================
+# 2. PHÂN QUYỀN CHUẨN CHO BUNDLE CÀI ĐẶT & THƯ VIỆN NHỊ PHÂN (ROOT:WHEEL)
+# ====================================================================================================
 BUNDLE_PATHS="
 $JB_ROOT/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 $JB_ROOT/Library/PreferenceBundles/BoostiPhone6s.bundle
@@ -29,15 +38,28 @@ $JB_ROOT/Library/PreferenceBundles/BoostiPhone6s.bundle
 for B_PATH in $BUNDLE_PATHS; do
     if [ -d "$B_PATH" ]; then
         chmod -R 755 "$B_PATH" 2>/dev/null || true
-        chown -R mobile:mobile "$B_PATH" 2>/dev/null || true
-        # Đưa uicache chạy ngầm độc lập hoàn toàn để không bao giờ bị kẹt thanh loading Sileo
-        if command -v uicache &> /dev/null; then
-            nohup uicache -p "$B_PATH" >/dev/null 2>&1 &
-        fi
+        chown -R root:wheel "$B_PATH" 2>/dev/null || true
     fi
 done
 
-# PHÂN QUYỀN PREFERENCELOADER PLIST
+# Phân quyền cho dylib và filter plist trong DynamicLibraries
+DYLIB_PATHS="
+$JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
+$JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
+/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
+/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
+"
+
+for D_PATH in $DYLIB_PATHS; do
+    if [ -f "$D_PATH" ]; then
+        chmod 644 "$D_PATH" 2>/dev/null || true
+        chown root:wheel "$D_PATH" 2>/dev/null || true
+    fi
+done
+
+# ====================================================================================================
+# 3. PHÂN QUYỀN ENTRY PLIST PREFERENCELOADER
+# ====================================================================================================
 PLIST_PATHS="
 $JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
 $JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist
@@ -49,27 +71,50 @@ $JB_ROOT/Library/PreferenceLoader/BoostiPhone6sPrefs.plist
 for P_PATH in $PLIST_PATHS; do
     if [ -f "$P_PATH" ]; then
         chmod 644 "$P_PATH" 2>/dev/null || true
-        chown mobile:mobile "$P_PATH" 2>/dev/null || true
+        chown root:wheel "$P_PATH" 2>/dev/null || true
     fi
 done
 
-# KHỞI TẠO THƯ MỤC CHỨA CẤU HÌNH MOBILE
-PREF_DIR="$JB_ROOT/var/mobile/Library/Preferences"
-if [ -n "$JB_ROOT" ] && [ ! -d "$PREF_DIR" ]; then
-    mkdir -p "$PREF_DIR" 2>/dev/null || true
-    chmod 755 "$PREF_DIR" 2>/dev/null || true
-    chown mobile:mobile "$PREF_DIR" 2>/dev/null || true
-fi
+# ====================================================================================================
+# 4. KHỞI TẠO THƯ MỤC CẤU HÌNH MOBILE & CẤP QUYỀN MOBILE:MOBILE
+# ====================================================================================================
+PREF_DIR_LIST="
+/var/mobile/Library/Preferences
+$JB_ROOT/var/mobile/Library/Preferences
+/var/jb/var/mobile/Library/Preferences
+"
 
-# XÓA TRẠNG THÁI SAFE MODE CŨ NẾU CÓ
+for P_DIR in $PREF_DIR_LIST; do
+    if [ -n "$JB_ROOT" ] || [ "$P_DIR" = "/var/mobile/Library/Preferences" ]; then
+        if [ ! -d "$P_DIR" ]; then
+            mkdir -p "$P_DIR" 2>/dev/null || true
+        fi
+        chmod 755 "$P_DIR" 2>/dev/null || true
+        chown mobile:mobile "$P_DIR" 2>/dev/null || true
+    fi
+done
+
+# ====================================================================================================
+# 5. DỌN CỜ AN TOÀN/SAFE MODE CŨ VÀ ĐẶT LẠI TRẠNG THÁI KHỞI CHẠY MỚI
+# ====================================================================================================
 defaults delete com.taojb.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
 defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
 
-# LÀM SẠCH BỘ NHỚ ĐỆM CẤU HÌNH & GỬI TÍN HIỆU ĐỒNG BỘ
+rm -f /tmp/.boost_boot_counter 2>/dev/null || true
+rm -f /tmp/.titanium_boot_guard 2>/dev/null || true
+rm -f "$JB_ROOT/tmp/.boost_boot_counter" 2>/dev/null || true
+rm -f /var/jb/tmp/.boost_boot_counter 2>/dev/null || true
+
+# ====================================================================================================
+# 6. LÀM SẠCH DAEMON CFPREFSD & GỬI TÍN HIỆU DARWIN KÍCH HOẠT TỨC THÌ (POSIX CHUẨN)
+# ====================================================================================================
 killall -9 cfprefsd 2>/dev/null || true
 
-if command -v notifyutil &> /dev/null; then
-    notifyutil -p com.taojb.boostiphone6s/ReloadPrefs 2>/dev/null || true
+if command -v notifyutil >/dev/null 2>&1; then
+    notifyutil -p com.taojb.boostiphone6s/ReloadPrefs >/dev/null 2>&1 || true
+    notifyutil -p com.taojb.boostiphone6s/ReloadUIKitPrefs >/dev/null 2>&1 || true
+    notifyutil -p com.taojb.boostiphone6s/FPSChanged >/dev/null 2>&1 || true
+    notifyutil -p com.titanium.v285.prefschanged >/dev/null 2>&1 || true
 fi
 
 exit 0
