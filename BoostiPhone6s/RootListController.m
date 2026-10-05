@@ -411,10 +411,17 @@ static inline NSString *PM_TextV285(NSString *key) {
     memset(&payload, 0, sizeof(ApexV285ProPayload));
     
     int fdRead = open([PRIMARY_SYNC_FILE UTF8String], O_RDONLY);
+    BOOL readValid = NO;
     if (fdRead >= 0) {
-        read(fdRead, &payload, sizeof(ApexV285ProPayload));
+        ssize_t bytes = read(fdRead, &payload, sizeof(ApexV285ProPayload));
         close(fdRead);
-    } else {
+        if (bytes == sizeof(ApexV285ProPayload) && payload.magic == APEX_SYNC_MAGIC_V285) {
+            readValid = YES;
+        }
+    }
+    
+    if (!readValid) {
+        memset(&payload, 0, sizeof(ApexV285ProPayload));
         payload.magic = APEX_SYNC_MAGIC_V285;
         payload.masterEnabled = 1;
     }
@@ -527,7 +534,6 @@ static inline NSString *PM_TextV285(NSString *key) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self setupNavigationItems];
-    [self reloadSpecifiers];
 }
 
 // CẬP NHẬT TIÊU ĐỀ: HIỂN THỊ CHÍNH XÁC MỨC ĐÃ KHÓA
@@ -699,7 +705,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self syncSharedMemoryFile:currentEnabled];
 
     if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"] || [key isEqualToString:@"PowerSaveMode"]) {
-        _allSavedSpecifiers = nil;
+        self->_allSavedSpecifiers = nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self setupNavigationItems];
             [self reloadSpecifiers];
@@ -809,7 +815,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_TITANIUM_CHANGED);
-            _allSavedSpecifiers = nil;
+            self->_allSavedSpecifiers = nil;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self setupNavigationItems];
                 [self reloadSpecifiers];
@@ -835,7 +841,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
         textField.keyboardType = UIKeyboardTypeNumberPad;
-        textField.placeholder = [NSString stringWithFormat:@"Giá trị (15 - 144 %@", unit];
+        textField.placeholder = [NSString stringWithFormat:@"Giá trị (15 - 144 %@)", unit];
     }];
 
     NSString *saveBtn = @"Khóa Cứng Ngay";
@@ -1007,6 +1013,9 @@ static inline NSString *PM_TextV285(NSString *key) {
     self.navigationItem.rightBarButtonItem = actionBtn;
 }
 
+// ====================================================================================================
+// MENU HÀNH ĐỘNG: RESPRING THẬT 100% (CHUẨN ROOTLESS / ROOTHIDE / DOPAMINE / PALERA1N)
+// ====================================================================================================
 - (void)presentActions {
     NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -1020,6 +1029,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             CFPreferencesAppSynchronize(PREF_DOMAIN);
 
+            // 1. Thử qua sbreload (cách an toàn và chuẩn nhất trên Rootless)
             NSString *sbreloadBin = Titanium_FindExecutablePath(@"sbreload");
             if (access([sbreloadBin UTF8String], X_OK) == 0) {
                 pid_t pid;
@@ -1033,21 +1043,23 @@ static inline NSString *PM_TextV285(NSString *key) {
                 }
             }
 
-            Class fbsClass = NSClassFromString(@"FBSSystemService");
-            if (fbsClass && [fbsClass respondsToSelector:NSSelectorFromString(@"sharedService")]) {
-                id service = ((id (*)(id, SEL))objc_msgSend)(fbsClass, NSSelectorFromString(@"sharedService"));
-                SEL relaunchSel = NSSelectorFromString(@"exitAndRelaunch:");
-                if (service && [service respondsToSelector:relaunchSel]) {
-                    ((void (*)(id, SEL, BOOL))objc_msgSend)(service, relaunchSel, YES);
+            // 2. Thử qua launchctl kickstart SpringBoard
+            NSString *launchctlBin = Titanium_FindExecutablePath(@"launchctl");
+            if (access([launchctlBin UTF8String], X_OK) == 0) {
+                pid_t pid;
+                char *argvKick[] = {(char *)[launchctlBin UTF8String], (char *)"kickstart", (char *)"-k", (char *)"system/com.apple.SpringBoard", NULL};
+                if (posix_spawn(&pid, [launchctlBin UTF8String], NULL, NULL, argvKick, environ) == 0) {
+                    waitpid(pid, NULL, 0);
                     return;
                 }
             }
 
+            // 3. Fallback dứt điểm: killall -9 SpringBoard (Đảm bảo chắc chắn SpringBoard khởi động lại)
             NSString *killallBin = Titanium_FindExecutablePath(@"killall");
-            pid_t pid;
+            pid_t pidKill;
             char *argvSB[] = {(char *)[killallBin UTF8String], (char *)"-9", (char *)"SpringBoard", NULL};
-            posix_spawn(&pid, [killallBin UTF8String], NULL, NULL, argvSB, environ);
-            waitpid(pid, NULL, 0);
+            posix_spawn(&pidKill, [killallBin UTF8String], NULL, NULL, argvSB, environ);
+            waitpid(pidKill, NULL, 0);
         });
     }]];
 
@@ -1107,7 +1119,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
-        _allSavedSpecifiers = nil;
+        self->_allSavedSpecifiers = nil;
         [self setupNavigationItems];
         [self reloadSpecifiers];
     }]];
