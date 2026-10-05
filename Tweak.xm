@@ -1482,6 +1482,34 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 }
 
 // ====================================================================================================
+// ĐIỀU PHỐI CÂN BẰNG: CPU TẬP TRUNG ĐỒ HOẠ NHƯNG BẢO TOÀN 100% BĂNG THÔNG MẠNG
+// ====================================================================================================
+static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
+    if (![NSThread isMainThread]) return;
+
+    // 1. Chỉ kích xung đồ hoạ nếu có tương tác thực tế
+    if (!Titanium_ShouldLockTargetRate()) return;
+
+    // 2. Cấp QoS cao nhất cho UI nhưng không chiếm độc quyền CPU
+    // Giữ priority offset ở mức 0 để Scheduler vẫn phân bổ Time-Slice cho luồng mạng
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    // 3. Khống chế ngưỡng Mach Constraint: chỉ giới hạn trong chu kỳ vẽ khung hình
+    // Không chiếm trọn 100% CPU mà để lại 25% chu kỳ cho các luồng I/O socket mạng
+    static mach_port_t s_lastThread = MACH_PORT_NULL;
+    mach_port_t current = mach_thread_self();
+    if (s_lastThread != current) {
+        s_lastThread = current;
+        
+        // Đặt mức ưu tiên thời gian thực an toàn (Soft-RealTime)
+        struct thread_standard_priority std_prio;
+        std_prio.priority = 47; // Mức ưu tiên cao nhất của UI UIKit (dưới mức kernel, trên mức network)
+        thread_policy_set(current, THREAD_STANDARD_PRIORITY_POLICY, (thread_policy_t)&std_prio, THREAD_STANDARD_PRIORITY_POLICY_COUNT);
+    }
+    mach_port_deallocate(mach_task_self(), current);
+}
+
+// ====================================================================================================
 // NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE & WINDOWSERVER LOW-LATENCY
 // ====================================================================================================
 
@@ -3012,6 +3040,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
             Titanium_EnforceThreadVIPPolicy();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
 }
@@ -3027,6 +3057,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
             Titanium_EnforceThreadVIPPolicy();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
 }
@@ -3043,6 +3075,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
 }
@@ -3062,6 +3096,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
 }
@@ -3101,6 +3137,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
                             transition:(id)transition {
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
+        if (!Titanium_IsSpringBoard()) {
+            Titanium_BoostRenderWithoutStarvingNetwork();
+        }
     }
     %orig;
 }
@@ -3119,6 +3158,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
@@ -3137,6 +3178,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
     %orig;
