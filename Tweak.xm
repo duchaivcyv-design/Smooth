@@ -2876,12 +2876,15 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 %end
 
+// ====================================================================================================
+// CƯỠNG BỨC TOÀN MÀN HÌNH (FORCE FULLSCREEN FRAME & TRANSFORM RESET - SẠCH LỖI FORWARD DECLARATION)
+// ====================================================================================================
 %hook SBDeviceApplicationSceneViewContainedViewController
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
     if (IS_ACTIVE) {
-        UIView *v = [self view];
+        UIView *v = [(UIViewController *)self view];
         if (v) {
             // 1. Phá bỏ ma trận thu nhỏ, ép về tỉ lệ gốc 1.0 (toàn màn hình)
             v.transform = CGAffineTransformIdentity;
@@ -2900,9 +2903,8 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)viewDidLayoutSubviews {
     %orig;
     if (IS_ACTIVE) {
-        UIView *v = [self view];
+        UIView *v = [(UIViewController *)self view];
         if (v) {
-            // Giữ vững kích thước toàn màn hình nếu bị can thiệp ép scale
             if (!CGAffineTransformIsIdentity(v.transform)) {
                 v.transform = CGAffineTransformIdentity;
             }
@@ -2917,7 +2919,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
     if (IS_ACTIVE) {
-        UIView *v = [self view];
+        UIView *v = [(UIViewController *)self view];
         if (v) {
             v.transform = CGAffineTransformIdentity;
             v.frame = [UIScreen mainScreen].bounds;
