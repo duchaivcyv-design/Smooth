@@ -48,6 +48,40 @@ extern char **environ;
 #endif
 
 // ====================================================================================================
+// STRUCT IPC ĐỒNG NHẤT 100% VỚI TWEAK.XM (BẢO TOÀN DỮ LIỆU ĐỌC XUYÊN SANDBOX)
+// ====================================================================================================
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t masterEnabled;
+    int32_t  targetHz;
+    int32_t  targetFPS;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t smartBufferingLevel;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
+    uint32_t keyboardZeroLagV3;
+    uint32_t aggressiveRamCleaner;
+    uint32_t lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch;
+    uint32_t diskIOPriorityBoost;
+    uint32_t rawTouchDirectDelivery;
+    uint32_t powerSaveModeActive;
+    uint64_t updateSeq;
+    uint64_t lastHeartbeat;
+    char     reserved[48];
+} ApexV285ProPayload;
+
+// ====================================================================================================
 // FORWARD DECLARATIONS
 // ====================================================================================================
 
@@ -255,9 +289,13 @@ static inline NSString *PM_TextV285(NSString *key) {
     return enSection ? enSection[key] : nil;
 }
 
-@implementation RootListController {
+@interface RootListController () {
+    NSMutableArray *_allSavedSpecifiers;
     dispatch_queue_t _syncQueue;
 }
+@end
+
+@implementation RootListController
 
 - (instancetype)init {
     self = [super init];
