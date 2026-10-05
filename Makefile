@@ -38,18 +38,25 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -IModules \
                            -I.
 
+# ĐỒNG BỘ CỜ CHO TWEAK.XM (TRÁNH LỖI CLANG++ BỎ QUÊN CỜ KHI BUILD FILE .MM)
+BoostiPhone6sCore_OBJCXXFLAGS = $(BoostiPhone6sCore_CFLAGS)
+
+# ĐÃ BỔ SUNG ĐẦY ĐỦ: WebKit và CoreFoundation
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
                                AVFoundation \
                                Foundation \
+                               CoreFoundation \
                                Metal \
+                               WebKit \
                                CoreVideo \
                                Accelerate \
                                CoreServices
 
-# Đã bỏ BackBoardServices để tránh lỗi thiếu SDK trên GitHub Actions
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
+# ĐÃ BỎ IOKit ĐỂ TRÁNH LỖI "framework not found IOKit" TRÊN GITHUB ACTIONS
+# (Các symbol IOKit sẽ được giải quyết sạch sẽ thông qua dynamic_lookup bên dưới)
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = 
 
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
