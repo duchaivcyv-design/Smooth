@@ -2340,7 +2340,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY (BẢO TOÀN NỀN SAFARI VÀ ICON EMOJI - MÁT MÁY 100%)
+// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY (CHUẨN HÓA LOGOS %ORIG - SẠCH LỖI BIÊN DỊCH 100%)
 // ====================================================================================================
 
 %group Group_Scroll_And_Keyboard_Opt
@@ -2349,7 +2349,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %hook UIInputViewAnimationStyle
 
 - (double)duration {
-    if (IS_ACTIVE) return 0.12;
+    if (IS_ACTIVE) return 0.05;
     return %orig;
 }
 
@@ -2369,14 +2369,14 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig(string, event, context);
+    %orig; // Forward đối số tự động: triệt tiêu lỗi Invalid argument structure
 }
 
 - (void)addInputString:(id)string withFlags:(NSUInteger)flags executionContext:(id)context {
     if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig(string, flags, context);
+    %orig;
 }
 
 %end
@@ -2387,7 +2387,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     if (IS_ACTIVE && CFG285.keyboardZeroLagV24) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig(text);
+    %orig;
 }
 
 - (void)deleteBackward {
@@ -2406,7 +2406,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     if (IS_ACTIVE) {
         Titanium_TriggerInstantTouchBurst();
     }
-    %orig(action, target, event);
+    %orig;
 }
 
 %end
@@ -2419,7 +2419,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
     }
-    %orig(index);
+    %orig;
 }
 
 - (void)setSelectedViewController:(UIViewController *)selectedViewController {
@@ -2427,7 +2427,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
     }
-    %orig(selectedViewController);
+    %orig;
 }
 
 %end
@@ -2442,7 +2442,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         g_lastInteractionMachTime = mach_absolute_time();
         [CATransaction flush];
     }
-    %orig(viewController, animated);
+    %orig;
 }
 
 - (UIViewController *)popViewControllerAnimated:(BOOL)animated {
@@ -2451,7 +2451,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_LockMainThreadFast();
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    return %orig(animated);
+    return %orig;
 }
 
 %end
@@ -2463,12 +2463,12 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         Titanium_TriggerInstantTouchBurst();
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig(viewControllerToPresent, flag, completion);
+    %orig; // Sửa lỗi xung đột block completion với parser Logos
 }
 
 %end
 
-// 5. CUỘN DANH SÁCH TOÀN HỆ THỐNG & APP THỨ BA (GOM CHUẨN VỀ DUY NHẤT 1 NƠI)
+// 5. CUỘN DANH SÁCH TOÀN HỆ THỐNG & APP THỨ BA (TRÔI ÊM QUÁN TÍNH)
 %hook UIScrollView
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
@@ -2476,7 +2476,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
         if (self.isDragging) return YES;
         return NO;
     }
-    return %orig(view);
+    return %orig;
 }
 
 - (BOOL)delaysContentTouches {
@@ -2507,7 +2507,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
     }
-    %orig(timestamp);
+    %orig;
 }
 
 - (CGFloat)decelerationRate {
@@ -2516,7 +2516,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)_stopScrollDecelerationNotify:(BOOL)notify {
-    %orig(notify);
+    %orig;
     if (IS_ACTIVE) {
         g_isScrollingActive = NO;
     }
@@ -2530,7 +2530,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)_scrollViewDidEndDraggingForChildScrollView:(id)view {
-    %orig(view);
+    %orig;
     if (IS_ACTIVE && !self.isDecelerating) {
         g_isScrollingActive = NO;
     }
@@ -2538,13 +2538,17 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-// 6. GIỮ ĐỘ PHẢN HỒI CELL NHANH NHƯNG BẢO TOÀN NỀN SAFARI, ICON EMOJI VÀ BỘ CHỌN ẢNH
+// 6. GIỮ ĐỘ PHẢN HỒI CELL NHANH NHƯNG BẢO TOÀN NỀN SAFARI VÀ ICON EMOJI
 %hook UITableView
-- (void)willMoveToWindow:(UIWindow *)newWindow { %orig(newWindow); }
+- (void)willMoveToWindow:(UIWindow *)newWindow { 
+    %orig; 
+}
 %end
 
 %hook UICollectionView
-- (void)willMoveToWindow:(UIWindow *)newWindow { %orig(newWindow); }
+- (void)willMoveToWindow:(UIWindow *)newWindow { 
+    %orig; 
+}
 %end
 
 %end
