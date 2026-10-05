@@ -4004,7 +4004,6 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
 // ====================================================================================================
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
-#define TITANIUM_BOOT_GUARD_FILE    @"/tmp/.titanium_boot_guard"
 
 static time_t Titanium_GetSystemUptimeSeconds(void) {
     struct timeval boottime;
@@ -4015,44 +4014,8 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
-// CƠ CHẾ SAFEGUARD: Nếu thiết bị khởi động lại quá 3 lần liên tiếp trong 25 giây -> Tự động dừng tweak để vào máy an toàn
-static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
-    @autoreleasepool {
-        NSString *guardPath = TITANIUM_BOOT_GUARD_FILE;
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:guardPath];
-        NSInteger failCount = 0;
-        NSTimeInterval lastBoot = 0;
-        NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
-
-        if (dict) {
-            failCount = [dict[@"count"] integerValue];
-            lastBoot = [dict[@"time"] doubleValue];
-        }
-
-        if (now - lastBoot < 25.0) {
-            failCount++;
-        } else {
-            failCount = 1;
-        }
-
-        NSDictionary *newDict = @{@"count": @(failCount), @"time": @(now)};
-        [newDict writeToFile:guardPath atomically:YES];
-
-        if (failCount >= 3) {
-            // Phát hiện nguy cơ kẹt vòng lặp khởi động: Tạm dừng tiêm để bảo vệ Jailbreak
-            return NO;
-        }
-
-        // Sau 15 giây hệ thống chạy ổn định -> Xóa cờ guard, xác nhận hệ thống an toàn
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if ([fm fileExistsAtPath:guardPath]) {
-                [fm removeItemAtPath:guardPath error:nil];
-            }
-        });
-        return YES;
-    }
-}
+// (LƯU Ý: Khối hàm Titanium_CheckAndPreventBootloopUniversal đã được đưa lên trên phần Core IPC, 
+//  ở đây không định nghĩa lại để tránh lỗi redefinition của Clang)
 
 // ====================================================================================================
 // RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK (NẠP ĐẦY ĐỦ 15 NHÓM ĐỘC QUYỀN)
@@ -4066,7 +4029,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             AppleInternal_LockHardwareCADisplay();
 
             if (isSpringBoard) {
-                // Chỉ cấp quyền ưu tiên luồng giao diện mượt mà, KHÔNG ép Mach Realtime cứng khi mới bật máy
+                // Ưu tiên luồng UI mượt mà chuẩn POSIX, không ép realtime cứng khi SpringBoard vừa nạp
                 Titanium_LockMainThreadFast();
             } else {
                 pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -4190,10 +4153,10 @@ static void SpringBoardBootstrapTrigger(void) {
         NSString *bundleID = [mainBundle bundleIdentifier];
         BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
 
-        // 3. NẾU LÀ SPRINGBOARD: KIỂM TRA CHỐNG BOOTLOOP TRƯỚC TIÊN
+        // 3. NẾU LÀ SPRINGBOARD: KIỂM TRA CHỐNG BOOTLOOP TRƯỚC TIÊN (GỌI HÀM ĐÃ ĐỊNH NGHĨA Ở PHẦN TRÊN)
         if (isSpringBoard) {
             if (!Titanium_CheckAndPreventBootloopUniversal()) {
-                return; // Dừng tiêm nếu phát hiện reboot liên tục để cứu máy
+                return;
             }
         }
 
@@ -4218,7 +4181,7 @@ static void SpringBoardBootstrapTrigger(void) {
                 SpringBoardBootstrapTrigger();
             }];
 
-            // CƠ CHẾ DỰ PHÒNG (FALLBACK): Nếu sự kiện khởi động đã trôi qua trước khi tiêm dylib -> Kích hoạt sau 2.0s
+            // CƠ CHẾ DỰ PHÒNG (FALLBACK): Kích hoạt sau 2.0s nếu sự kiện đã trôi qua trước khi tiêm dylib
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 SpringBoardBootstrapTrigger();
             });
