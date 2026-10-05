@@ -1804,10 +1804,11 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
     return s_isLegacy;
 }
 
+// ====================================================================================================
 // THIẾT LẬP CHU KỲ REALTIME AN TOÀN TUYỆT ĐỐI (CHỈ CHẠY TRÊN SPRINGBOARD - CHỐNG ĐEN APP 100%)
+// ====================================================================================================
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     // CHỐNG ĐEN APP: KHÔNG BAO GIỜ ép ràng buộc Mach cứng vào App bên thứ ba!
-    // App bên thứ 3 cần tự do nạp view; ép Mach constraint trong app sẽ gây đóng băng và đen màn hình.
     if (!Titanium_IsSpringBoard()) return;
 
     if (g_isDeviceChargingV285) {
@@ -1830,9 +1831,9 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (targetHz > 144) targetHz = 144;
 
     uint64_t period_ns = 1000000000ULL / (uint64_t)targetHz;
-    // Tỷ lệ an toàn: Giảm computation xuống 25% để nhường chu kỳ xử lý cho các tác vụ khác
-    uint64_t computation_ns = (period_ns * 25ULL) / 100ULL;
-    uint64_t constraint_ns  = (period_ns * 85ULL) / 100ULL;
+    // Tối ưu hóa tỷ lệ an toàn để không bị nghẽn RunLoop gây chậm chuyển động
+    uint64_t computation_ns = (period_ns * 35ULL) / 100ULL;
+    uint64_t constraint_ns  = (period_ns * 90ULL) / 100ULL;
 
     thread_time_constraint_policy_data_t policy;
     policy.period      = (uint32_t)((period_ns * s_timebase.denom) / s_timebase.numer);
@@ -1862,6 +1863,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
     }
     Titanium_EnforceMachFrameConstraintDynamic(targetHz > 0 ? targetHz : 60);
 }
+
 
 // ====================================================================================================
 // 7. NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (TỐC ĐỘ 0NS - KHÔNG GỌI RECURSION)
