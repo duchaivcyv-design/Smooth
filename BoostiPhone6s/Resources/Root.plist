@@ -12,6 +12,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO</string>
+			<key>groupID</key>
+			<string>GROUP_MASTER</string>
 			<key>footerText</key>
 			<string>Khi tắt công tắc tổng, toàn bộ các chức năng bên dưới sẽ được tự động ẩn đi và nhả hook về mặc định của hệ điều hành.</string>
 		</dict>
@@ -40,6 +42,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>CÀI ĐẶT NGÔN NGỮ</string>
+			<key>groupID</key>
+			<string>GROUP_LANGUAGE</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -62,6 +66,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE &amp; HEX BUFFERING)</string>
+			<key>groupID</key>
+			<string>GROUP_SPECIAL</string>
 			<key>footerText</key>
 			<string>Triple Buffering giữ hàng đợi khung hình phẳng lì. Bàn phím 0ms khử hoàn toàn độ trễ khi soạn thảo văn bản và chat ứng dụng.</string>
 		</dict>
@@ -122,6 +128,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>ĐIỀU PHỐI HZ &amp; FPS ĐỘNG (15HZ - 144HZ)</string>
+			<key>groupID</key>
+			<string>GROUP_HZ_FPS</string>
 			<key>footerText</key>
 			<string>Hỗ trợ tùy chọn hoặc tự nhập bất kỳ mức nào từ 15 đến 144. Hệ thống sẽ khóa chết mức đã chọn vào hạt nhân IPC, chống tụt xung khi máy ấm.</string>
 		</dict>
@@ -139,7 +147,7 @@
 			<key>label</key>
 			<string>Kích Hoạt Điều Phối Tần Số Quét (Hz)</string>
 			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+			<string>com.taojb.boostiphone6s/HardwareSync</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -167,7 +175,7 @@
 			<key>label</key>
 			<string>Kích Hoạt Điều Phối Khung Hình (FPS)</string>
 			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+			<string>com.taojb.boostiphone6s/FPSChanged</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -195,7 +203,7 @@
 			<key>label</key>
 			<string>Ép Xung Cố Định 144Hz Toàn Máy</string>
 			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+			<string>com.taojb.boostiphone6s/HardwareSync</string>
 		</dict>
 
 		<!-- ==================================================================================================== -->
@@ -206,6 +214,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>BỘ LỌC CẢM ỨNG &amp; CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH)</string>
+			<key>groupID</key>
+			<string>GROUP_TOUCH_SCREEN</string>
 			<key>footerText</key>
 			<string>Bộ lọc Spatial Hysteresis triệt tiêu rung giật dưới 2px và bù đắp bán kính tiếp xúc ảo trên màn hình linh kiện (GX, JK, Incell).</string>
 		</dict>
@@ -266,6 +276,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)</string>
+			<key>groupID</key>
+			<string>GROUP_LAZY</string>
 			<key>footerText</key>
 			<string>Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ họa.</string>
 		</dict>
@@ -310,6 +322,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>GIA TỐC GIAO DIỆN &amp; VẬT LÝ COLOROS 17</string>
+			<key>groupID</key>
+			<string>GROUP_UI</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -384,6 +398,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>LÕI ĐIỀU PHỐI ĐỒ HỌA METAL &amp; CALAYER</string>
+			<key>groupID</key>
+			<string>GROUP_GRAPHICS</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -554,6 +570,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>BỘ NHỚ RAM, DISK I/O VIP &amp; MACH REALTIME</string>
+			<key>groupID</key>
+			<string>GROUP_RAM_CPU</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -724,6 +742,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH &amp; NGUỒN ĐIỆN</string>
+			<key>groupID</key>
+			<string>GROUP_THERMAL</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -814,6 +834,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>BẢO MẬT &amp; QUYỀN RIÊNG TƯ</string>
+			<key>groupID</key>
+			<string>GROUP_SECURITY</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -856,6 +878,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>THÔNG TIN PHÁT TRIỂN &amp; HỖ TRỢ</string>
+			<key>groupID</key>
+			<string>GROUP_DEV</string>
 			<key>footerText</key>
 			<string>© 2026 BoostiPhone6s V28.7 PRO - Tối ưu hoàn chỉnh bởi ĐỨC LONG.</string>
 		</dict>
@@ -864,6 +888,10 @@
 			<string>PSTitleValueCell</string>
 			<key>label</key>
 			<string>Tác Giả</string>
+			<key>id</key>
+			<string>AuthorCell</string>
+			<key>key</key>
+			<string>AuthorCell</string>
 			<key>get</key>
 			<string>getAuthorName:</string>
 		</dict>
@@ -872,6 +900,10 @@
 			<string>PSTitleValueCell</string>
 			<key>label</key>
 			<string>Phiên Bản</string>
+			<key>id</key>
+			<string>VersionCell</string>
+			<key>key</key>
+			<string>VersionCell</string>
 			<key>get</key>
 			<string>getVersionString:</string>
 		</dict>
@@ -880,6 +912,8 @@
 			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Tham Gia Nhóm Hỗ Trợ Zalo</string>
+			<key>id</key>
+			<string>SupportLinkCell</string>
 			<key>action</key>
 			<string>openSupportLink:</string>
 		</dict>
