@@ -15,7 +15,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- BƯỚC 1: CÀI ĐẶT CÔNG CỤ HỖ TRỢ ĐÓNG GÓI ---
+      # --- BƯỚC 1: CÀI ĐẶT CÔNG CỤ (TỐI ƯU HOMEBREW TỐC ĐỘ CAO) ---
       - name: Setup Tools & Environment
         run: |
           THEOS_PATH="$HOME/theos"
@@ -23,14 +23,17 @@ jobs:
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           
-          brew install dpkg ldid coreutils python3
+          # Tắt kiểm tra cập nhật brew để tăng tốc 3x
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          brew install dpkg ldid coreutils
 
       # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
       - name: Clone Theos & Install SDK
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
-          git clone --recursive https://github.com/theos/theos.git "$TARGET_DIR"
+          git clone --recursive --depth=1 https://github.com/theos/theos.git "$TARGET_DIR"
           
           mkdir -p /tmp/sdk_repo
           cd /tmp/sdk_repo
@@ -129,12 +132,10 @@ jobs:
                   line_stripped = raw_line.strip()
                   code_line = re.sub(r'//.*$', '', raw_line).strip()
 
-                  # Bắt tiêu đề nhóm Tiếng Việt dạng: // NHÓM X: ...
                   group_title_match = re.search(r'//\s*(=+\s*)?(NHÓM\s+\d+[^=\n\r]*)', raw_line, re.IGNORECASE)
                   if group_title_match:
                       latest_comment_header = group_title_match.group(2).strip()
 
-                  # Bắt khai báo %group
                   group_match = re.match(r'^%group\s+([A-Za-z0-9_]+)', code_line)
                   if group_match:
                       current_group_id = group_match.group(1)
@@ -144,7 +145,6 @@ jobs:
                           current_group_title = f"%group {current_group_id}"
                       continue
 
-                  # Bắt đầu %hook ClassName
                   hook_match = re.match(r'^%hook\s+([A-Za-z0-9_]+)', code_line)
                   if hook_match:
                       in_hook = True
@@ -160,7 +160,6 @@ jobs:
                           current_group_title = "Phần code chung (Ngoài nhóm)"
                       continue
 
-                  # Bắt đầu khai báo phương thức Objective-C (- hoặc +)
                   if in_hook and not in_method_decl and not in_method_body:
                       if re.match(r'^[-+]\s*\(', code_line):
                           in_method_decl = True
@@ -195,7 +194,6 @@ jobs:
                   if in_method_body:
                       method_body_lines.append(raw_line)
                       
-                      # Phát hiện cú pháp %orig(...) dễ làm vỡ Clang
                       if re.search(r'%orig\s*\([^)]+?\)\s*;', code_line):
                           m_type, sel = curr_method_info
                           orig_syntax_warnings.append({
@@ -269,7 +267,7 @@ jobs:
               print("✅ Quét hoàn tất: Không có phương thức nào bị hook trùng lặp! Bắt đầu biên dịch...")
           EOF
 
-      # --- BƯỚC 4: DỌN DẸP, BIÊN DỊCH VÀ BÓC TÁCH LỖI CHÍNH XÁC ---
+      # --- BƯỚC 4: DỌN DẸP, BIÊN DỊCH SONG SONG ĐA NHÂN VÀ BÓC TÁCH LỖI ---
       - name: Build Package
         run: |
           cd $GITHUB_WORKSPACE
@@ -280,12 +278,20 @@ jobs:
           fi
           
           rm -rf packages/ obj/ .theos/
-          if [ -d "layout/DEBIAN" ]; then chmod -R 755 layout/DEBIAN; fi
+          
+          # Phân quyền chuẩn xác theo định dạng gói DEB
+          if [ -d "layout/DEBIAN" ]; then
+            find layout/DEBIAN -type f -exec chmod 644 {} +
+            find layout/DEBIAN -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
+            chmod 755 layout/DEBIAN
+          fi
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
           
           set -o pipefail
-          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee "$BUILD_LOG_FILE" || BUILD_FAILED=1
+          # Biên dịch đa luồng theo số nhân vCPU thực tế
+          NCPU=$(sysctl -n hw.ncpu || echo 2)
+          make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless -j"$NCPU" 2>&1 | tee "$BUILD_LOG_FILE" || BUILD_FAILED=1
 
           if [ "$BUILD_FAILED" = "1" ]; then
             echo ""
