@@ -3,6 +3,21 @@
 
 #import <UIKit/UIKit.h>
 
+#if __has_include("PSListController.h")
+#import "PSListController.h"
+#import "PSSpecifier.h"
+#elif __has_include(<Preferences/PSListController.h>)
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
+#else
+@class PSSpecifier;
+@interface PSListController : UIViewController
+- (nullable NSMutableArray *)specifiers;
+- (void)reloadSpecifiers;
+- (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target;
+@end
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
@@ -17,31 +32,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 #define APEX_SYNC_MAGIC_V285 0x56323835
 
-@class PSSpecifier;
-
-#if __has_include(<Preferences/PSListController.h>)
-#import <Preferences/PSListController.h>
-#import <Preferences/PSSpecifier.h>
-#else
-@interface PSListController : UIViewController {
-    id _specifiers;
-}
-- (id)specifiers;
-- (void)reloadSpecifiers;
-- (id)loadSpecifiersFromPlistName:(NSString *)name target:(id)target bundle:(NSBundle *)bundle;
-@end
-
-@interface PSSpecifier : NSObject
-@property (nonatomic, strong) NSString *name;
-+ (instancetype)preferenceSpecifierNamed:(NSString *)name target:(nullable id)target set:(nullable SEL)set get:(nullable SEL)get detail:(nullable Class)detail cell:(NSInteger)cell edit:(nullable Class)edit;
-+ (instancetype)groupSpecifierWithName:(NSString *)name;
-- (nullable id)propertyForKey:(NSString *)key;
-- (void)setProperty:(id)property forKey:(NSString *)key;
-@end
-#endif
-
 // ====================================================================================================
-// KHAI BÁO CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO
+// CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO (PACKED CHỐNG LỆCH OFFSET GIỮA SPRINGBOARD & PREFS)
 // ====================================================================================================
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -77,7 +69,7 @@ typedef struct __attribute__((packed)) {
 // ROOTLISTCONTROLLER INTERFACE
 // ====================================================================================================
 @interface RootListController : PSListController {
-    NSArray *_allSavedSpecifiers;
+    NSMutableArray *_allSavedSpecifiers;
 }
 
 // --- Điều phối hàng đợi nền & Debounce timer chống Safe Mode ---
@@ -86,7 +78,7 @@ typedef struct __attribute__((packed)) {
 
 // --- Bộ đọc / ghi cấu hình đồng bộ kép (Disk & Memory) ---
 - (nullable id)readPreferenceValue:(PSSpecifier *)specifier;
-- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier;
+- (void)setPreferenceValue:(nullable id)value specifier:(PSSpecifier *)specifier;
 - (NSDictionary *)getMergedPreferences;
 - (void)ensureDefaultSettingsExist;
 - (void)syncSharedMemoryFile:(BOOL)enabled;
