@@ -1801,7 +1801,7 @@ static void Titanium_TriggerNotificationBurst(void) {
 }
 
 // ====================================================================================================
-// NHÓM 3: ĐỘNG CƠ DUAL-GEAR (TƯƠNG TÁC 144HZ CĂNG TRẦN - TĨNH HẲN 100% HẠ 30HZ - KHÔNG ĐEN APP)
+// NHÓM 3: ĐỘNG CƠ DUAL-GEAR (TƯƠNG TÁC 144HZ CĂNG TRẦN - TĨNH HẲN 100% HẠ 30HZ - KHÔNG ĐƠ VIDEO/APP)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
@@ -1896,12 +1896,9 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
     %orig;
 }
 
+// BỎ ÉP isPaused: Trả về nguyên bản để CADisplayLink được nghỉ khi chờ buffer/PiP (CHỐNG ĐƠ APP & ĐƠ VIDEO 100%)
 - (BOOL)isPaused {
-    BOOL paused = %orig;
-    if (IS_ACTIVE && CFG285.enableFPSControl && paused) {
-        return NO;
-    }
-    return paused;
+    return %orig;
 }
 
 %end
@@ -2059,39 +2056,6 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
-%hook NCNotificationDispatcher
-
-- (void)postNotificationWithRequest:(id)request {
-    if (IS_ACTIVE) {
-        Titanium_TriggerNotificationBurst();
-    }
-    %orig;
-}
-
-%end
-
-%hook NCNotificationViewController
-
-- (void)viewWillAppear:(BOOL)animated {
-    if (IS_ACTIVE) {
-        Titanium_TriggerNotificationBurst();
-    }
-    %orig;
-}
-
-%end
-
-%hook SBNotificationBannerDestination
-
-- (void)postNotificationRequest:(id)request {
-    if (IS_ACTIVE) {
-        Titanium_TriggerNotificationBurst();
-    }
-    %orig;
-}
-
-%end
-
 %hook UIApplication
 
 - (void)_applicationDidBecomeActive:(id)arg1 {
@@ -2110,7 +2074,7 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT (CHỐNG JETSAM KILL APP GÂY ĐEN MÀN HÌNH - KHÓA 144HZ THU VỀ 0MS)
+// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT (TRIỆT TIÊU 100% LỖI CO NHỎ CỬA SỔ & ĐƠ APP KHI MỞ)
 // ====================================================================================================
 
 %group Group_Switcher30Apps_Virtualization
@@ -2118,48 +2082,37 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %hook SBHomeGestureInteraction
 
 - (void)_handleGestureBegan:(id)gesture {
+    %orig;
     if (IS_ACTIVE) {
         g_isContinuousSwiping = YES;
         g_activeAnimationCount++;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_LockMainThreadFast();
-        Titanium_EnforceMachFrameConstraintDynamic(144);
     }
-    %orig;
 }
 
 - (void)_handleGestureChanged:(id)gesture {
+    %orig;
     if (IS_ACTIVE) {
         g_isContinuousSwiping = YES;
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig;
 }
 
 - (void)_handleGestureEnded:(id)gesture {
+    %orig;
     if (IS_ACTIVE) {
         g_isContinuousSwiping = NO;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
-
-        static int64_t s_homeEndSeq = 0;
-        int64_t currentSeq = ++s_homeEndSeq;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(750 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            if (s_homeEndSeq == currentSeq) {
-                if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-            }
-        });
+        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
     }
-    %orig;
 }
 
 - (void)_handleGestureCancelled:(id)gesture {
+    %orig;
     if (IS_ACTIVE) {
         g_isContinuousSwiping = NO;
         if (g_activeAnimationCount > 0) g_activeAnimationCount--;
     }
-    %orig;
 }
 
 %end
@@ -2175,13 +2128,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)_begin {
+    %orig;
     if (IS_ACTIVE) {
         g_activeAnimationCount++;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
-        Titanium_EnforceMachFrameConstraintDynamic(144);
     }
-    %orig;
 }
 
 - (void)_didComplete {
@@ -2201,14 +2152,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 }
 
 - (void)_willBegin {
+    %orig;
     if (IS_ACTIVE) {
         g_activeAnimationCount++;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnforceMachFrameConstraintDynamic(144);
     }
-    %orig;
 }
 
 - (void)_didComplete {
@@ -2222,17 +2170,15 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 
 %end
 
+// GIAO DỊCH MỞ APP TỪ MÀN HÌNH CHÍNH (ĐẢM BẢO HOẠT ẢNH BUNG FULL MÀN HÌNH)
 %hook SBHomeToAppWorkspaceTransaction
 
 - (void)_willBegin {
+    %orig;
     if (IS_ACTIVE) {
         g_activeAnimationCount++;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnforceMachFrameConstraintDynamic(144);
     }
-    %orig;
 }
 
 - (void)_didComplete {
@@ -2260,14 +2206,11 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 %hook SBAppSwitcherController
 
 - (void)viewWillAppear:(BOOL)animated {
+    %orig;
     if (IS_ACTIVE) {
         g_activeAnimationCount++;
         g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
-        Titanium_TriggerInstantTouchBurst();
-        Titanium_EnforceMachFrameConstraintDynamic(144);
     }
-    %orig;
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
