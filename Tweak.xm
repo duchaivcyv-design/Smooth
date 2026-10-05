@@ -3903,7 +3903,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (IS_ACTIVE && mass > 0.6f) {
         mass = 0.58f;
     }
-    %orig(mass);
+    %orig;
 }
 
 - (void)setStiffness:(CGFloat)stiffness {
@@ -3911,7 +3911,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (IS_ACTIVE && stiffness < 320.0f) {
         stiffness = 340.0f;
     }
-    %orig(stiffness);
+    %orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
@@ -3919,7 +3919,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (IS_ACTIVE && damping < 26.0f) {
         damping = 28.5f;
     }
-    %orig(damping);
+    %orig;
 }
 
 %end
@@ -3943,7 +3943,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook _UIContextMenuContainerView
 
 - (void)willMoveToWindow:(UIWindow *)newWindow {
-    %orig(newWindow);
+    %orig;
     if (newWindow && IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
@@ -3959,7 +3959,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook UIAlertController
 
 - (void)viewWillAppear:(BOOL)animated {
-    %orig(animated);
+    %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
@@ -3975,77 +3975,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 16: SILICON CPU SCHEDULER & FLUID INTERRUPTIBLE ENGINE (MỚI 100% - CHUẨN VIDEO 1 & 2)
-// (ĐẨY XUNG P-CORE NGAY NHỊP CHẠM ĐẦU TIÊN - VUỐT ĐẢO CHIỀU 0MS - LƯỚT PHOTOS NHANH NHƯ CHỚP)
-// ====================================================================================================
-
-%group Group_Silicon_Scheduler_Touch_Governor
-
-// 1. MỞ KHÓA CỬ CHỈ NGẮT LIÊN HOÀN (CHUẨN VIDEO 2: VỪA BẤM MỞ APP LÀ VUỐT VỀ HOME NGAY ĐƯỢC)
-%hook SBHomeGestureInteraction
-
-- (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
-- (BOOL)_shouldSuppressGestures {
-    if (IS_ACTIVE) return NO;
-    return %orig;
-}
-
-%end
-
-%hook SBFluidSwitcherGestureWorkspaceTransaction
-
-- (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
-%end
-
-// 2. CPU SCHEDULER P-CORE (CHUẨN VIDEO 1: DỒN 100% XUNG NHỊP VÀ ƯU TIÊN I/O ĐỌC Ổ ĐĨA KHI CHẠM)
-%hook _UIEventFetcher
-
-- (void)_receiveHIDEvent:(void *)event {
-    if (IS_ACTIVE) {
-        static uint64_t s_lastPcoreBurst = 0;
-        uint64_t now = mach_absolute_time();
-        // Giới hạn 30ms: Kích hoạt P-Core tức thời nhưng không spam lặp lại
-        if (now - s_lastPcoreBurst > (30ULL * 1000000ULL)) {
-            s_lastPcoreBurst = now;
-            g_lastInteractionMachTime = now;
-            
-            // Đưa luồng cảm ứng lên đỉnh QoS User Interactive của XNU
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            
-            // Ưu tiên đọc I/O đĩa cực nhanh: Load ảnh thư viện Photos & mở App nhanh hơn rõ rệt
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-        }
-    }
-    %orig(event);
-}
-
-%end
-
-// 3. TRIỆT TIÊU ĐỘ TRỄ NHẬN DIỆN HIGHLIGHT KHI NHẤN VÀO CELL HOẶC ẢNH
-%hook _UIInteractiveHighlightEnvironment
-
-- (void)applyHighlightWithAnimation:(BOOL)animated completion:(id)completion {
-    if (IS_ACTIVE) {
-        animated = NO; // Phản hồi highlight tức thì trong 0ms khi chạm ngón tay
-    }
-    %orig(animated, completion);
-}
-
-%end
-
-%end
-
-// ====================================================================================================
 // NHÓM ĐỘC QUYỀN: BỘ NÃO DỰ ĐOÁN TỌA ĐỘ NEURAL & CỬ CHỈ MÉP 0MS
-// Tối ưu hóa dự đoán hướng ngón tay, mở rộng vùng viền mép bám dính 0ms
+// Tối ưu hóa dự đoán hướng ngón tay, mở rộng vùng viền mép bám dính 0ms (Đã lược bỏ hook trùng với Nhóm 4)
 // ====================================================================================================
 
 %group Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285
@@ -4053,7 +3984,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook _UITouchPredictor
 
 - (id)predictedTouchesForTouch:(UITouch *)touch {
-    id predicted = %orig(touch);
+    id predicted = %orig;
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
         g_lastInteractionMachTime = mach_absolute_time();
         if (Titanium_IsSpringBoard()) {
@@ -4069,7 +4000,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (IS_ACTIVE && CFG285.touchResponseBoost) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
-    %orig(touch, event);
+    %orig;
 }
 
 %end
@@ -4085,7 +4016,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             Titanium_BoostRenderWithoutStarvingNetwork();
         }
     }
-    %orig(event);
+    %orig;
 }
 
 %end
@@ -4098,7 +4029,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
     }
-    return %orig(event);
+    return %orig;
 }
 
 - (double)_edgeRegionSize {
@@ -4111,54 +4042,16 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %end
 
-%hook SBFluidSwitcherAnimationSettings
-
-- (double)deckSwipeSpeedFactor {
-    if (IS_ACTIVE) return 1.35;
-    return %orig;
-}
-
-- (double)cardFlyInDuration {
-    if (IS_ACTIVE) return 0.22;
-    return %orig;
-}
-
-%end
-
 %end
 
 // ====================================================================================================
 // NHÓM 16: SILICON CPU SCHEDULER & FLUID INTERRUPTIBLE ENGINE (CHUẨN VIDEO 1 & VIDEO 2)
-// (ĐẨY XUNG P-CORE NGAY NHỊP CHẠM ĐẦU TIÊN - VUỐT ĐẢO CHIỀU 0MS - LƯỚT PHOTOS NHANH NHƯ CHỚP)
+// (ĐẨY XUNG P-CORE NGAY NHỊP CHẠM ĐẦU TIÊN - LOAD ẢNH PHOTOS CỰC NHANH - 0MS HOÀN TOÀN ĐỘC LẬP)
 // ====================================================================================================
 
 %group Group_Silicon_Scheduler_Touch_Governor
 
-// 1. MỞ KHÓA CỬ CHỈ NGẮT LIÊN HOÀN (CHUẨN VIDEO 2: VỪA BẤM MỞ LÀ VUỐT VỀ HOME ĐƯỢC NGAY)
-%hook SBHomeGestureInteraction
-
-- (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
-- (BOOL)_shouldSuppressGestures {
-    if (IS_ACTIVE) return NO; // Tuyệt đối không nuốt cảm ứng của người dùng
-    return %orig;
-}
-
-%end
-
-%hook SBFluidSwitcherGestureWorkspaceTransaction
-
-- (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
-    return %orig;
-}
-
-%end
-
-// 2. CPU SCHEDULER P-CORE (CHUẨN VIDEO 1: DỒN 100% XUNG NHỊP VÀ ƯU TIÊN I/O ĐỌC Ổ ĐĨA KHI CHẠM)
+// 1. CPU SCHEDULER P-CORE: DỒN 100% XUNG NHỊP VÀ ƯU TIÊN I/O ĐỌC Ổ ĐĨA KHI CHẠM
 %hook _UIEventFetcher
 
 - (void)_receiveHIDEvent:(void *)event {
@@ -4173,23 +4066,23 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             // Đưa luồng cảm ứng lên đỉnh QoS User Interactive của XNU
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             
-            // Ưu tiên đọc I/O đĩa cực nhanh: Load ảnh Photos & mở App nhanh hơn rõ rệt
+            // Ưu tiên đọc I/O đĩa cực nhanh: Load ảnh thư viện Photos & mở App nhanh hơn rõ rệt
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
         }
     }
-    %orig(event);
+    %orig;
 }
 
 %end
 
-// 3. TRIỆT TIÊU ĐỘ TRỄ NHẬN DIỆN HIGHLIGHT KHI NHẤN VÀO CELL HOẶC ẢNH
+// 2. TRIỆT TIÊU ĐỘ TRỄ NHẬN DIỆN HIGHLIGHT KHI NHẤN VÀO CELL HOẶC ẢNH
 %hook _UIInteractiveHighlightEnvironment
 
 - (void)applyHighlightWithAnimation:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE) {
         animated = NO; // Phản hồi highlight tức thì trong 0ms khi chạm ngón tay
     }
-    %orig(animated, completion);
+    %orig;
 }
 
 %end
@@ -4261,9 +4154,6 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
     return (now - boottime.tv_sec);
 }
 
-// (LƯU Ý: Khối hàm Titanium_CheckAndPreventBootloopUniversal đã nằm ở phần Core IPC phía trên,
-// tuyệt đối không lặp lại tại đây để tránh lỗi Clang redefinition)
-
 // ====================================================================================================
 // RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK (NẠP ĐẦY ĐỦ 16 NHÓM ĐỘC QUYỀN)
 // ====================================================================================================
@@ -4304,7 +4194,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             // 3. ĐÃ NẠP ĐẦY ĐỦ: NHÓM 14 (GAME OVERDRIVE), NHÓM 15 (SILICON PIPELINE) & NHÓM 16 (CPU SCHEDULER)
             %init(Group_Titanium_Game_Metal_Overdrive);
             %init(Group_Silicon_Hardware_Pipeline_Overdrive);
-            %init(Group_Silicon_Scheduler_Touch_Governor); // <-- KÍCH HOẠT NHÓM 16 TẠI ĐÂY
+            %init(Group_Silicon_Scheduler_Touch_Governor);
 
             if (Titanium_IsClassicHomeButtonDevice()) {
                 %init(Group_HardwareSegregation_ClassicHomeV285);
