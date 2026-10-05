@@ -3103,7 +3103,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     }
 }
 
-- (closeFolderAnimated:(BOOL)animated withCompletion:(id)completion)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
+- (void)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
     %orig;
     if (IS_ACTIVE) {
         g_lastInteractionMachTime = mach_absolute_time();
@@ -3989,7 +3989,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook MTMaterialView
 
-- (didMoveToWindow)didMoveToWindow {
+- (void)didMoveToWindow {
     %orig;
     if (IS_ACTIVE && self.window) {
         self.layer.allowsGroupOpacity = YES;
