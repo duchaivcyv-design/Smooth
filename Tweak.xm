@@ -2406,12 +2406,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBHomeGestureInteraction
 
 - (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
 - (BOOL)_shouldSuppressGestures {
-    if (IS_ACTIVE) return NO;
     return %orig;
 }
 
@@ -2452,12 +2450,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 %hook SBFluidSwitcherGestureWorkspaceTransaction
 
 - (BOOL)canInterruptActiveGesture {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
 - (BOOL)_shouldSuppressGestures {
-    if (IS_ACTIVE) return NO;
     return %orig;
 }
 
@@ -2610,16 +2606,14 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %end
 
-// 3. BẢO ĐẢM HOẠT ẢNH MỞ APP CÓ THỂ NGẮT ĐƯỢC (VỪA BẤM NHẦM LÀ VUỐT VỀ HOME ĐƯỢC NGAY)
+// 3. BẢO ĐẢM HOẠT ẢNH MỞ APP CÓ THỂ NGẮT ĐƯỢC (CHỐNG TREO MỜ MÀN HÌNH)
 %hook SBUIAnimationController
 
 - (BOOL)isInterruptible {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
 - (BOOL)canBeInterrupted {
-    if (IS_ACTIVE) return YES;
     return %orig;
 }
 
