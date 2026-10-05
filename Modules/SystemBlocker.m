@@ -2,6 +2,49 @@
 #import <dlfcn.h>
 #import <sys/stat.h>
 #import <unistd.h>
+#import <string.h>
+
+// ====================================================================================================
+// TRIỂN KHAI 2 HÀM C KIỂM TRA NHANH 0NS CHO %CTOR CỦA TWEAK.XM (KHỚP CHUẨN SYSTEM_BLOCKER.H)
+// ====================================================================================================
+
+BOOL SystemBlocker_IsNetworkProcess(const char *procName) {
+    if (!procName) return NO;
+    if (strstr(procName, "WebKit") || 
+        strstr(procName, "WebContent") ||
+        strstr(procName, "GPUProcess") || 
+        strstr(procName, "Networking") ||
+        strstr(procName, "nsurlsessiond") || 
+        strstr(procName, "mDNSResponder") ||
+        strstr(procName, "cloudd")) {
+        return YES; // Nhận diện tiến trình mạng để cách ly 100%
+    }
+    return NO;
+}
+
+BOOL SystemBlocker_ShouldBypassDaemon(const char *procName) {
+    if (!procName) return YES;
+
+    // 1. Cách ly tiến trình mạng để bảo vệ kết nối không bị nghẽn
+    if (SystemBlocker_IsNetworkProcess(procName)) {
+        return YES;
+    }
+
+    // 2. Chặn tiêm hook vào các daemon hệ thống nhạy cảm (chống treo reboot / safe mode)
+    if (strstr(procName, "jailbreakd") || strstr(procName, "launchd") ||
+        strstr(procName, "containermanagerd") || strstr(procName, "cfprefsd") ||
+        strstr(procName, "watchdogd") || strstr(procName, "mediaserverd") ||
+        strstr(procName, "installd") || strstr(procName, "logd") ||
+        strstr(procName, "analyticsd") || strstr(procName, "symptomsd") ||
+        strstr(procName, "powerd") || strstr(procName, "backboardd") ||
+        strstr(procName, "notifyd") || strstr(procName, "securityd") ||
+        strstr(procName, "runningboardd") || strstr(procName, "thermalmonitord") ||
+        strstr(procName, "mediaremoted") || strstr(procName, "assertiond")) {
+        return YES;
+    }
+
+    return NO;
+}
 
 static inline NSString *SystemBlocker_ResolvePrefix(void) {
     static NSString *cachedRoot = nil;
@@ -24,6 +67,11 @@ static inline NSString *SystemBlocker_ResolvePrefix(void) {
     return cachedRoot;
 }
 
+@interface SystemBlocker ()
+@property (nonatomic, assign, readwrite) BOOL isAnalyticsBlocked;
+@property (nonatomic, assign, readwrite) BOOL isSandboxBypassed;
+@end
+
 @implementation SystemBlocker {
     NSArray<NSString *> *_blockedHosts;
     NSArray<NSString *> *_blockedDaemons;
@@ -43,9 +91,10 @@ static inline NSString *SystemBlocker_ResolvePrefix(void) {
     self = [super init];
     if (self) {
         _initialized = NO;
-        _isAnalyticsBlocked = YES;
-        _isSandboxBypassed = YES;
+        self.isAnalyticsBlocked = YES;
+        self.isSandboxBypassed = YES;
         
+        // Danh sách chặn telemetry rác (chỉ chặn endpoint analytics, không chạm vào CDN media)
         _blockedHosts = @[
             @"app-measurement.com",
             @"crashlytics.com",
@@ -73,7 +122,7 @@ static inline NSString *SystemBlocker_ResolvePrefix(void) {
     if (_initialized) return;
     _initialized = YES;
 
-    // 1. Vượt qua giới hạn kiểm soát sandbox đối với thư mục tạm và cấu hình tweak
+    // 1. Thiết lập quyền truy cập thư mục cấu hình trong phân vùng Rootless
     NSString *root = SystemBlocker_ResolvePrefix();
     NSString *prefDir = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences", root];
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -82,15 +131,24 @@ static inline NSString *SystemBlocker_ResolvePrefix(void) {
         [fm createDirectoryAtPath:prefDir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
     }
 
-    // 2. Tắt logging rác của ASL (Apple System Log) cho tiến trình hiện tại để giảm I/O disk
+    // 2. Tắt logging ngầm của Apple System Log (ASL) để giải phóng I/O và CPU
     setenv("OS_ACTIVITY_MODE", "disable", 1);
     setenv("SQLITE_ENABLE_IOTRACE", "0", 1);
 }
 
 - (BOOL)shouldBlockTelemetryURL:(NSURL *)url {
-    if (!_isAnalyticsBlocked || !url) return NO;
+    if (!self.isAnalyticsBlocked || !url) return NO;
     NSString *host = [[url host] lowercaseString];
     if (!host) return NO;
+
+    // BẢO VỆ MẠNG: Tuyệt đối không chặn các CDN phát video/nhạc hay tải game
+    if ([host containsString:@"googlevideo.com"] || 
+        [host containsString:@"byteoversea.com"] || 
+        [host containsString:@"ibytedtos.com"] || 
+        [host containsString:@"tiktokcdn.com"] || 
+        [host containsString:@"fbcdn.net"]) {
+        return NO;
+    }
 
     for (NSString *blocked in _blockedHosts) {
         if ([host containsString:blocked]) {
