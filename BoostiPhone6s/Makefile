@@ -12,7 +12,7 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-BUNDLE_NAME = BoostiPhone6sPrefs
+BUNDLE_NAME = BoostiPhone6s
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 
