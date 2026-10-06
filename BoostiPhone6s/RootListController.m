@@ -398,7 +398,7 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
     _lblBatteryTemp.text = [NSString stringWithFormat:@"🌡️ Nhiệt Độ Pin / Vỏ: %.1f °C\n   (Trạng Thái: %@)", temp, thermalTag];
     _lblBatteryTemp.textColor = thermalColor;
 
-    _lblThermalStatus.text = [NSString stringWithFormat:@"🛡️️ Giám Sát Phần Cứng: Đang Đo 0s Liên Tục\n   (Không Nóng Máy, Không Tốn Pin)"];
+    _lblThermalStatus.text = [NSString stringWithFormat:@"🛡 Giám Sát Phần Cứng: Đang Đo 0s Liên Tục\n   (Không Nóng Máy, Không Tốn Pin)"];
 }
 
 @end
@@ -527,6 +527,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     PSSpecifier *_specMonitorHzFPS;
     PSSpecifier *_specMonitorThermal;
     PSSpecifier *_specMonitorCPUGPU;
+    NSMutableArray *_rawSpecifiers;
 }
 @end
 
@@ -634,67 +635,77 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     notify_post(NOTIFY_TITANIUM_CHANGED);
 }
 
-- (id)specifiers {
-    if (!self->_allSavedSpecifiers) {
-        NSString *root = Titanium_GetRootHidePrefixPath();
-        NSString *bundlePath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"];
-        NSBundle *bundle = [NSBundle bundleWithPath:bundlePath];
-        if (!bundle) bundle = [NSBundle bundleWithPath:[root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"]];
-        if (!bundle) bundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"];
-        if (!bundle) bundle = [NSBundle bundleForClass:[self class]];
+// ====================================================================================================
+// [ÉP VƯỢT QUA CRASH SETTINGS 100%]: TRIỆT TIÊU ĐỆ QUY VÔ TẬN & NẠP SPECIFIERS AN TOÀN
+// ====================================================================================================
 
-        self->_allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
-        [self ensureDefaultSettingsExist];
+- (id)specifiers {
+    if (!self->_rawSpecifiers) {
+        @try {
+            self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+            [self ensureDefaultSettingsExist];
+        } @catch (NSException *e) {
+            self->_rawSpecifiers = [NSMutableArray array];
+        }
     }
 
-    NSDictionary *prefs = [self getMergedPreferences];
-    BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
-    BOOL showBasic = prefs[@"ShowBasicOptions"] ? [prefs[@"ShowBasicOptions"] boolValue] : YES;
-    BOOL showAdvanced = prefs[@"ShowAdvancedOptions"] ? [prefs[@"ShowAdvancedOptions"] boolValue] : NO;
+    if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
+        return [NSMutableArray array];
+    }
 
-    NSMutableArray *filteredSpecs = [NSMutableArray array];
+    @try {
+        NSDictionary *prefs = [self getMergedPreferences];
+        BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
+        BOOL showBasic = prefs[@"ShowBasicOptions"] ? [prefs[@"ShowBasicOptions"] boolValue] : YES;
+        BOOL showAdvanced = prefs[@"ShowAdvancedOptions"] ? [prefs[@"ShowAdvancedOptions"] boolValue] : NO;
 
-    NSString *currentTier = @"TIER_CORE";
+        NSMutableArray *filteredSpecs = [NSMutableArray array];
+        NSString *currentTier = @"TIER_CORE";
 
-    for (PSSpecifier *spec in self->_allSavedSpecifiers) {
-        if (Titanium_IsGroupCell(spec)) {
-            currentTier = Titanium_GetGroupTier(spec);
-        }
+        for (PSSpecifier *spec in self->_rawSpecifiers) {
+            if (Titanium_IsGroupCell(spec)) {
+                currentTier = Titanium_GetGroupTier(spec);
+            }
 
-        NSString *key = [spec propertyForKey:@"key"] ?: [spec propertyForKey:@"id"];
-        if ([key isEqualToString:@"MonitorHzFPS"]) {
-            self->_specMonitorHzFPS = spec;
-        } else if ([key isEqualToString:@"MonitorThermal"]) {
-            self->_specMonitorThermal = spec;
-        } else if ([key isEqualToString:@"MonitorCPUGPU"]) {
-            self->_specMonitorCPUGPU = spec;
-        }
+            NSString *key = [spec propertyForKey:@"key"] ?: [spec propertyForKey:@"id"];
+            if ([key isEqualToString:@"MonitorHzFPS"]) {
+                self->_specMonitorHzFPS = spec;
+            } else if ([key isEqualToString:@"MonitorThermal"]) {
+                self->_specMonitorThermal = spec;
+            } else if ([key isEqualToString:@"MonitorCPUGPU"]) {
+                self->_specMonitorCPUGPU = spec;
+            }
 
-        if (!masterEnabled) {
-            NSString *gid = [spec propertyForKey:@"groupID"];
-            if ([gid isEqualToString:@"GROUP_MASTER"]) {
-                NSString *k = [spec propertyForKey:@"key"];
-                if (Titanium_IsGroupCell(spec) || [k isEqualToString:@"Enabled"]) {
+            if (!masterEnabled) {
+                NSString *gid = [spec propertyForKey:@"groupID"];
+                if ([gid isEqualToString:@"GROUP_MASTER"]) {
+                    NSString *k = [spec propertyForKey:@"key"];
+                    if (Titanium_IsGroupCell(spec) || [k isEqualToString:@"Enabled"]) {
+                        [filteredSpecs addObject:spec];
+                    }
+                } else if ([gid isEqualToString:@"GROUP_LANGUAGE"] || [gid isEqualToString:@"GROUP_DEV"]) {
                     [filteredSpecs addObject:spec];
                 }
-            } else if ([gid isEqualToString:@"GROUP_LANGUAGE"] || [gid isEqualToString:@"GROUP_DEV"]) {
-                [filteredSpecs addObject:spec];
+                continue;
             }
-            continue;
+
+            if ([currentTier isEqualToString:@"TIER_CORE"]) {
+                [filteredSpecs addObject:spec];
+            } else if ([currentTier isEqualToString:@"TIER_BASIC"]) {
+                if (showBasic) [filteredSpecs addObject:spec];
+            } else if ([currentTier isEqualToString:@"TIER_ADVANCED"]) {
+                if (showAdvanced) [filteredSpecs addObject:spec];
+            }
         }
 
-        if ([currentTier isEqualToString:@"TIER_CORE"]) {
-            [filteredSpecs addObject:spec];
-        } else if ([currentTier isEqualToString:@"TIER_BASIC"]) {
-            if (showBasic) [filteredSpecs addObject:spec];
-        } else if ([currentTier isEqualToString:@"TIER_ADVANCED"]) {
-            if (showAdvanced) [filteredSpecs addObject:spec];
-        }
+        [self updateDynamicTitlesForSpecifiers:filteredSpecs];
+        
+        // [QUAN TRỌNG NHẤT]: KHÔNG GỌI setSpecifiers: Ở ĐÂY ĐỂ TRÁNH TRÀN NGĂN XẾP
+        self->_allSavedSpecifiers = filteredSpecs;
+        return self->_allSavedSpecifiers;
+    } @catch (NSException *e) {
+        return self->_rawSpecifiers;
     }
-
-    [self updateDynamicTitlesForSpecifiers:filteredSpecs];
-    [self setSpecifiers:filteredSpecs];
-    return filteredSpecs;
 }
 
 - (void)viewDidLoad {
@@ -748,30 +759,32 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     NSString *thermalStr = [NSString stringWithFormat:@"%.1f°C (%@)", temp, tempTag];
     NSString *cpuStr = [NSString stringWithFormat:@"%.1f%% (Mach Host 0ns)", cpuLoad];
 
-    if ([self respondsToSelector:@selector(table)]) {
-        UITableView *tbl = [self table];
-        if (tbl) {
-            for (NSIndexPath *ip in [tbl indexPathsForVisibleRows]) {
-                if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
-                    PSSpecifier *s = [self specifierAtIndexPath:ip];
-                    UITableViewCell *c = [tbl cellForRowAtIndexPath:ip];
-                    if (!c) continue;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([self respondsToSelector:@selector(table)]) {
+            UITableView *tbl = [self table];
+            if (tbl) {
+                for (NSIndexPath *ip in [tbl indexPathsForVisibleRows]) {
+                    if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
+                        PSSpecifier *s = [self specifierAtIndexPath:ip];
+                        UITableViewCell *c = [tbl cellForRowAtIndexPath:ip];
+                        if (!c) continue;
 
-                    NSString *k = [s propertyForKey:@"key"] ?: [s propertyForKey:@"id"];
-                    if ([k isEqualToString:@"MonitorHzFPS"]) {
-                        c.detailTextLabel.text = hzFpsStr;
-                        [c setNeedsLayout];
-                    } else if ([k isEqualToString:@"MonitorThermal"]) {
-                        c.detailTextLabel.text = thermalStr;
-                        [c setNeedsLayout];
-                    } else if ([k isEqualToString:@"MonitorCPUGPU"]) {
-                        c.detailTextLabel.text = cpuStr;
-                        [c setNeedsLayout];
+                        NSString *k = [s propertyForKey:@"key"] ?: [s propertyForKey:@"id"];
+                        if ([k isEqualToString:@"MonitorHzFPS"]) {
+                            c.detailTextLabel.text = hzFpsStr;
+                            [c setNeedsLayout];
+                        } else if ([k isEqualToString:@"MonitorThermal"]) {
+                            c.detailTextLabel.text = thermalStr;
+                            [c setNeedsLayout];
+                        } else if ([k isEqualToString:@"MonitorCPUGPU"]) {
+                            c.detailTextLabel.text = cpuStr;
+                            [c setNeedsLayout];
+                        }
                     }
                 }
             }
         }
-    }
+    });
 }
 
 - (void)updateDynamicTitlesForSpecifiers:(NSArray *)targetSpecs {
@@ -804,7 +817,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 }
 
 - (void)updateDynamicTitles {
-    [self updateDynamicTitlesForSpecifiers:self->_allSavedSpecifiers];
+    [self updateDynamicTitlesForSpecifiers:self->_rawSpecifiers];
 }
 
 - (NSDictionary *)getMergedPreferences {
@@ -947,7 +960,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     [self syncSharedMemoryFile:currentEnabled];
 
     if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"] || [key isEqualToString:@"PowerSaveMode"]) {
-        self->_allSavedSpecifiers = nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self setupNavigationItems];
             [self reloadSpecifiers];
@@ -1018,7 +1030,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_TITANIUM_CHANGED);
-            self->_allSavedSpecifiers = nil;
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self setupNavigationItems];
                 [self reloadSpecifiers];
@@ -1195,7 +1206,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
         [self syncSharedMemoryFile:YES];
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
-        self->_allSavedSpecifiers = nil;
+        self->_rawSpecifiers = nil;
         [self setupNavigationItems];
         [self reloadSpecifiers];
     }]];
