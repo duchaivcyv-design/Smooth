@@ -9,24 +9,29 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface PSListController : UIViewController <UITableViewDataSource, UITableViewDelegate>
 
-// Chuẩn của Preferences.framework là NSMutableArray để hỗ trợ thêm/xóa specifier động
-@property (nonatomic, retain, nullable) NSMutableArray<PSSpecifier *> *specifiers;
-@property (nonatomic, retain, nullable) UITableView *table;
-@property (nonatomic, retain, nullable) NSBundle *bundle;
-@property (nonatomic, assign, nullable) id target;
+// Chuẩn của Preferences.framework là NSMutableArray hỗ trợ thêm/xóa specifier động
+@property (nonatomic, strong, nullable) NSMutableArray<PSSpecifier *> *specifiers;
+@property (nonatomic, strong, nullable) UITableView *table;
+@property (nonatomic, strong, nullable) NSBundle *bundle;
+@property (nonatomic, weak, nullable) id target;
 
 // Nạp danh sách tùy chọn từ tệp plist cấu hình của PreferencesLoader
 - (NSMutableArray<PSSpecifier *> *)loadSpecifiersFromPlistName:(NSString *)plistName target:(nullable id)target;
 - (nullable NSMutableArray<PSSpecifier *> *)specifiers;
+- (void)setSpecifiers:(nullable NSArray<PSSpecifier *> *)specifiers;
 
 // Cập nhật và tải lại giao diện danh sách
 - (void)reloadSpecifiers;
 - (void)reloadSpecifier:(PSSpecifier *)specifier;
 - (void)reloadSpecifierAtIndex:(NSInteger)index;
 
-// Truy vấn phần tử cấu hình
+// Truy vấn phần tử cấu hình và chỉ mục
 - (nullable PSSpecifier *)specifierAtIndex:(NSInteger)index;
 - (nullable PSSpecifier *)specifierForID:(NSString *)identifier;
+- (NSInteger)indexOfSpecifier:(PSSpecifier *)specifier;
+- (nullable NSIndexPath *)indexPathForSpecifier:(PSSpecifier *)specifier;
+- (nullable PSSpecifier *)specifierAtIndexPath:(NSIndexPath *)indexPath;
+- (nullable UITableViewCell *)cachedCellForSpecifier:(PSSpecifier *)specifier;
 
 // Thao tác động trên danh sách Specifiers
 - (void)insertSpecifier:(PSSpecifier *)specifier atRow:(NSInteger)row;
