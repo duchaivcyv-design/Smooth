@@ -9,7 +9,7 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = BoostiPhone6sPrefs
 
-BoostiPhone6sPrefs_FILES = RootListController.m
+BoostiPhone6sPrefs_FILES = RootListController.m MockDeviceViewController.m
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
 BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
