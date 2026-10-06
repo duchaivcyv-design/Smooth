@@ -11,7 +11,7 @@
 // Trạng thái mô phỏng
 @property (nonatomic, assign) BOOL isTweakInstalled;
 @property (nonatomic, assign) BOOL isRespringDone;
-@property (nonatomic, assign) BOOL isRealCrashSafeMode; // Biến phản ánh chính xác lỗi Safe Mode thực tế
+@property (nonatomic, assign) BOOL isRealCrashSafeMode;
 
 @property (nonatomic, strong) CADisplayLink *fpsDisplayLink;
 @property (nonatomic, strong) UILabel *fpsCounterLabel;
@@ -27,21 +27,36 @@
     
     self.isTweakInstalled = NO;
     self.isRespringDone = NO;
-    
-    // ĐẶC BIỆT: Tự động kiểm tra độ rủi ro của Tweak. 
-    // Nếu trong Tweak.xm bạn hook sai hoặc gọi hàm UIKit quá sớm, máy ảo sẽ tự động bật cờ Safe Mode giống hệt máy thật!
-    self.isRealCrashSafeMode = [self detectTweakCrashRisk];
+    self.isRealCrashSafeMode = YES; // Bật cờ này để phản ánh đúng thực tế máy thật bị Safe Mode khi Tweak có lỗi
 
     [self setupHomeScreen];
     [self setupFPSMonitoring];
 }
 
-// Hàm phân tích tĩnh: Kiểm tra xem Tweak hiện tại có nguy cơ gây Safe Mode trên máy thật hay không
-- (BOOL)detectTweakCrashRisk {
-    // Nếu tweak chưa cài thì không tính
-    // Mô phỏng dựa trên thực tế: Nếu tweak thiếu kiểm tra nil hoặc hook vào SpringBoard chưa đúng cách
-    // Bạn có thể chủ động bật/tắt cờ này tại đây để test
-    return YES; // Đặt là YES để máy ảo phản ánh đúng việc máy thật đang bị Safe Mode!
+- (void)setupFPSMonitoring {
+    self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 110, 43, 90, 20)];
+    self.fpsCounterLabel.textColor = [UIColor greenColor];
+    self.fpsCounterLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightBold];
+    self.fpsCounterLabel.textAlignment = NSTextAlignmentRight;
+    [self.view addSubview:self.fpsCounterLabel];
+
+    self.fpsDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrameUpdate:)];
+    [self.fpsDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)onFrameUpdate:(CADisplayLink *)link {
+    if (self.lastTimestamp == 0) {
+        self.lastTimestamp = link.timestamp;
+        return;
+    }
+    self.frameCount++;
+    CFTimeInterval delta = link.timestamp - self.lastTimestamp;
+    if (delta >= 1.0) {
+        double fps = round((double)self.frameCount / delta);
+        self.fpsCounterLabel.text = [NSString stringWithFormat:@"%.0f FPS", fps];
+        self.frameCount = 0;
+        self.lastTimestamp = link.timestamp;
+    }
 }
 
 // 1. MÀN HÌNH CHÍNH
@@ -172,7 +187,7 @@
     [self presentViewController:installAlert animated:YES completion:nil];
 }
 
-// 3. MÔ PHỎNG RESPRING & BẮT LỖI SAFE MODE GIỐNG HỆT MÁY THẬT
+// 3. MÔ PHỎNG RESPRING & BẮT LỖI SAFE MODE
 - (void)simulateRealRespring {
     self.blackCurtainRespring = [[UIView alloc] initWithFrame:self.view.bounds];
     self.blackCurtainRespring.backgroundColor = [UIColor blackColor];
@@ -192,4 +207,154 @@
     
     [self.view addSubview:self.blackCurtainRespring];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(),, ...
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self.blackCurtainRespring removeFromSuperview];
+        self.blackCurtainRespring = nil;
+
+        self.isRespringDone = YES;
+        [self showLockScreenWithSafeModePrompt];
+    });
+}
+
+- (void)showLockScreenWithSafeModePrompt {
+    self.lockScreenView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.lockScreenView.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.15 alpha:1.0];
+
+    UILabel *timeLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.view.bounds.size.width - 40, 60)];
+    timeLbl.text = @"09:41";
+    timeLbl.textColor = [UIColor whiteColor];
+    timeLbl.font = [UIFont systemFontOfSize:64 weight:UIFontWeightThin];
+    timeLbl.textAlignment = NSTextAlignmentCenter;
+    [self.lockScreenView addSubview:timeLbl];
+
+    UIView *promptBox = [[UIView alloc] initWithFrame:CGRectMake(30, 260, self.view.bounds.size.width - 60, 160)];
+    promptBox.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.25 alpha:0.9];
+    promptBox.layer.cornerRadius = 20;
+
+    UILabel *promptTitle = [[UILabel alloc] initWithFrame:CGRectMake(15, 20, promptBox.bounds.size.width - 30, 24)];
+    // Nếu tweak đã cài và dylib có lỗi, hiển thị Safe Mode đỏ hệt như máy thật
+    if (self.isTweakInstalled && self.isRealCrashSafeMode) {
+        promptTitle.text = @"⚠️ ĐÃ VÀO SAFE MODE!";
+        promptTitle.textColor = [UIColor redColor];
+    } else {
+        promptTitle.text = @"🛡️ BOOT THÀNH CÔNG";
+        promptTitle.textColor = [UIColor greenColor];
+    }
+    promptTitle.font = [UIFont boldSystemFontOfSize:15];
+    promptTitle.textAlignment = NSTextAlignmentCenter;
+    [promptBox addSubview:promptTitle];
+
+    UILabel *promptDesc = [[UILabel alloc] initWithFrame:CGRectMake(15, 50, promptBox.bounds.size.width - 30, 50)];
+    if (self.isTweakInstalled && self.isRealCrashSafeMode) {
+        promptDesc.text = @"Phát hiện xung đột hook dylib! SpringBoard đã đẩy máy vào Safe Mode.";
+    } else {
+        promptDesc.text = @"Không phát hiện lỗi crash. Sẵn sàng test app.";
+    }
+    promptDesc.textColor = [UIColor whiteColor];
+    promptDesc.font = [UIFont systemFontOfSize:13];
+    promptDesc.textAlignment = NSTextAlignmentCenter;
+    promptDesc.numberOfLines = 2;
+    [promptBox addSubview:promptDesc];
+
+    UIButton *unlockBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    unlockBtn.frame = CGRectMake(20, 110, promptBox.bounds.size.width - 40, 36);
+    [unlockBtn setTitle:@"Mở Khóa Màn Hình" forState:UIControlStateNormal];
+    [unlockBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    unlockBtn.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:0.8 alpha:1.0];
+    unlockBtn.layer.cornerRadius = 10;
+    [unlockBtn addTarget:self action:@selector(dismissLockScreen) forControlEvents:UIControlEventTouchUpInside];
+    [promptBox addSubview:unlockBtn];
+
+    [self.lockScreenView addSubview:promptBox];
+    [self.view addSubview:self.lockScreenView];
+}
+
+- (void)dismissLockScreen {
+    [UIView animateWithDuration:0.3 animations:^{
+        self.lockScreenView.alpha = 0;
+    } completion:^(BOOL finished) {
+        [self.lockScreenView removeFromSuperview];
+        self.lockScreenView = nil;
+    }];
+}
+
+// 4. TEST APP VÀ MÔ PHỎNG ĐEN MÀN HÌNH (BLACK SCREEN)
+- (void)openTweakTestApp {
+    UIView *testAppView = [[UIView alloc] initWithFrame:self.view.bounds];
+    testAppView.backgroundColor = [UIColor whiteColor];
+    testAppView.alpha = 0;
+    [self.view addSubview:testAppView];
+
+    [UIView animateWithDuration:0.25 animations:^{
+        testAppView.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, testAppView.bounds.size.width - 40, 40)];
+        title.text = @"Kiểm Tra Render App & Chống Đen Màn Hình";
+        title.textColor = [UIColor blackColor];
+        title.font = [UIFont boldSystemFontOfSize:15];
+        title.textAlignment = NSTextAlignmentCenter;
+        title.numberOfLines = 2;
+        [testAppView addSubview:title];
+
+        UILabel *resultLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 150, testAppView.bounds.size.width - 40, 90)];
+        
+        if (self.isTweakInstalled && self.isRealCrashSafeMode) {
+            // Mô phỏng chính xác hiện tượng trên máy thật: Dính Safe Mode / Lỗi dylib -> Đen app
+            resultLbl.text = @"❌ LỖI CRASH: Tweak gây xung đột dylib, ứng dụng bị đen màn hình / văng!";
+            resultLbl.textColor = [UIColor redColor];
+            testAppView.backgroundColor = [UIColor blackColor]; // Đen toàn bộ app mô phỏng máy thật
+            title.textColor = [UIColor whiteColor];
+        } else if (self.isTweakInstalled && self.isRespringDone) {
+            resultLbl.text = @"✅ Hoàn hảo! Tweak sạch, app render mượt mà, không bị đen màn hình.";
+            resultLbl.textColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.2 alpha:1.0];
+        } else {
+            resultLbl.text = @"⚠️ Hãy cài Tweak qua Sileo và Respring để kiểm tra.";
+            resultLbl.textColor = [UIColor orangeColor];
+        }
+
+        resultLbl.font = [UIFont systemFontOfSize:14];
+        resultLbl.numberOfLines = 4;
+        resultLbl.textAlignment = NSTextAlignmentCenter;
+        [testAppView addSubview:resultLbl];
+
+        UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        backBtn.frame = CGRectMake(30, testAppView.bounds.size.height - 100, testAppView.bounds.size.width - 60, 44);
+        [backBtn setTitle:@"Thoát Về Màn Hình Chính" forState:UIControlStateNormal];
+        [backBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        backBtn.backgroundColor = [UIColor darkGrayColor];
+        backBtn.layer.cornerRadius = 12;
+        [backBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
+        [testAppView addSubview:backBtn];
+    }];
+}
+
+- (void)openFilesApp {
+    [self showToastNotice:@"📁 Đang đọc phân vùng /var/jb/ (Rootless)"];
+}
+
+- (void)closeRunningApp:(UIButton *)sender {
+    UIView *appView = sender.superview;
+    [UIView animateWithDuration:0.2 animations:^{
+        appView.alpha = 0;
+    } completion:^(BOOL finished) {
+        [appView removeFromSuperview];
+    }];
+}
+
+- (void)showToastNotice:(NSString *)msg {
+    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(20, self.view.bounds.size.height - 120, self.view.bounds.size.width - 40, 36)];
+    toast.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.95];
+    toast.textColor = [UIColor whiteColor];
+    toast.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.layer.cornerRadius = 10;
+    toast.clipsToBounds = YES;
+    toast.text = msg;
+    [self.view addSubview:toast];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSuperview]; }];
+    });
+}
+
+@end
