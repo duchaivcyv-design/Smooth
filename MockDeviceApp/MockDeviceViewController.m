@@ -1,30 +1,27 @@
 #import "MockDeviceViewController.h"
 #import <mach/mach.h>
 #import <WebKit/WebKit.h>
-#import <Photos/Photos.h>
 
-@interface MockDeviceViewController () <WKNavigationDelegate, UITableViewDelegate, UITableViewDataSource, UICollectionViewDelegate, UICollectionViewDataSource, UIGestureRecognizerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface MockDeviceViewController () <WKNavigationDelegate, UITableViewDelegate, UITableViewDataSource, UIGestureRecognizerDelegate>
 
-// Màn hình chính & Container
 @property (nonatomic, strong) UIImageView *wallpaperImageView;
 @property (nonatomic, strong) UIView *springBoardContainer;
 @property (nonatomic, strong) UIView *dynamicIslandView;
 @property (nonatomic, strong) UIView *activeAppWindow;
 @property (nonatomic, strong) UIView *rebootCurtainView;
+@property (nonatomic, strong) UIView *switcherContainerView;
 
-// Các phân vùng file mô phỏng Rootless Jailbreak (/var/jb/)
 @property (nonatomic, strong) NSMutableDictionary *rootlessFileSystem;
 @property (nonatomic, strong) NSString *currentPath;
 
-// Trạng thái hệ thống & Jailbreak
 @property (nonatomic, assign) BOOL isJailbroken;
 @property (nonatomic, assign) BOOL isDynamicIslandExpanded;
 @property (nonatomic, strong) UITextView *exploitConsoleView;
 @property (nonatomic, strong) UITableView *sileoTableView;
 @property (nonatomic, strong) UITableView *fileManagerTableView;
 @property (nonatomic, strong) NSArray *currentDirectoryFiles;
+@property (nonatomic, strong) NSMutableArray *recentOpenedApps;
 
-// Giám sát FPS & Hiệu năng
 @property (nonatomic, strong) CADisplayLink *fpsDisplayLink;
 @property (nonatomic, strong) UILabel *fpsCounterLabel;
 @property (nonatomic, assign) CFTimeInterval lastTimestamp;
@@ -37,11 +34,9 @@
     [super viewDidLoad];
     self.isJailbroken = NO;
     self.currentPath = @"/var/jb";
+    self.recentOpenedApps = [NSMutableArray array];
 
-    // Khởi tạo hệ thống file rootless thực tế
     [self initializeRootlessFileSystem];
-    
-    // Thiết lập giao diện cơ sở iOS 17
     [self setupWallpaperAndBackground];
     [self setupDynamicIsland];
     [self setupSpringBoardGrid];
@@ -50,47 +45,35 @@
     [self setupFPSMonitoring];
 }
 
-#pragma mark - 1. HỆ THỐNG FILE ROOTLESS & BỘ NHỚ (/var/jb)
+#pragma mark - 1. HỆ THỐNG FILE ROOTLESS & BỘ NHỚ
 - (void)initializeRootlessFileSystem {
     self.rootlessFileSystem = [NSMutableDictionary dictionary];
-    
-    // Phân vùng hệ thống gốc và rootless jailbreak
     self.rootlessFileSystem[@"/var/jb"] = @[
         @{@"name": @"Library", @"type": @"dir", @"desc": @"Thư viện dylib & tweak core"},
         @{@"name": @"bin", @"type": @"dir", @"desc": @"Các lệnh thực thi terminal"},
         @{@"name": @"usr", @"type": @"dir", @"desc": @"Share và dynamic frameworks"},
         @{@"name": @"TweakSupport", @"type": @"dir", @"desc": @"Cấu hình cấu trúc MobileSubstrate"}
     ];
-    
     self.rootlessFileSystem[@"/var/jb/Library"] = @[
         @{@"name": @"MobileSubstrate", @"type": @"dir", @"desc": @"Thư mục chứa dylib hook tweak"},
         @{@"name": @"PreferenceBundles", @"type": @"dir", @"desc": @"Giao diện cài đặt tweak trong Settings"},
-        @{@"name": @"Themes", @"type": @"dir", @"desc": @"Các bộ sưu tập giao diện Anemone/SnowBoard"}
+        @{@"name": @"Themes", @"type": @"dir", @"desc": @"Bộ sưu tập giao diện SnowBoard"}
     ];
-    
     self.rootlessFileSystem[@"/var/jb/Library/MobileSubstrate"] = @[
         @{@"name": @"BoostiPhone6sCore.dylib", @"type": @"file", @"desc": @"Dylib chính của dự án tweak"},
         @{@"name": @"SafeMode.dylib", @"type": @"file", @"desc": @"Mô đun bảo vệ chống crash hệ thống"}
     ];
-    
-    self.rootlessFileSystem[@"/System/Library"] = @[
-        @{@"name": @"CoreServices", @"type": @"dir", @"desc": @"SpringBoard và hệ thống lõi iOS 17"},
-        @{@"name": @"Frameworks", @"type": @"dir", @"desc": @"UIKit, Foundation và WebKit frameworks"}
-    ];
-    
     self.currentDirectoryFiles = self.rootlessFileSystem[@"/var/jb"];
 }
 
-#pragma mark - 2. GIAO DIỆN MÀN HÌNH CHÍNH & HÌNH NỀN GỐC iOS 17
+#pragma mark - 2. GIAO DIỆN MÀN HÌNH CHÍNH & HÌNH NỀN
 - (void)setupWallpaperAndBackground {
     self.wallpaperImageView = [[UIImageView alloc] initWithFrame:self.view.bounds];
-    // Hình nền mặc định iOS 17 chính hãng (Tông màu xanh đậm sâu thẳm)
     self.wallpaperImageView.backgroundColor = [UIColor colorWithRed:0.08 green:0.14 blue:0.26 alpha:1.0];
     self.wallpaperImageView.contentMode = UIViewContentModeScaleAspectFill;
     self.wallpaperImageView.userInteractionEnabled = YES;
     [self.view addSubview:self.wallpaperImageView];
 
-    // Status Bar tiêu chuẩn iPhone 14 Pro
     UILabel *statusBar = [[UILabel alloc] initWithFrame:CGRectMake(28, 14, self.view.bounds.size.width - 56, 20)];
     statusBar.text = @"09:41                          5G 🔋 100%";
     statusBar.textColor = [UIColor whiteColor];
@@ -106,24 +89,22 @@
     self.springBoardContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 55, self.view.bounds.size.width, self.view.bounds.size.height - 160)];
     [self.view addSubview:self.springBoardContainer];
 
-    // Danh sách toàn bộ ứng dụng hệ thống và công cụ jailbreak
     NSMutableArray *apps = [NSMutableArray arrayWithArray:@[
-        @{@"name": @"Dopamine", @"color": [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:1.0], @"action": @selector(openDopamineJailbreakApp)},
-        @{@"name": @"Cài Đặt", @"color": [UIColor colorWithRed:0.45 green:0.45 blue:0.5 alpha:1.0], @"action": @selector(openSettingsApp)},
-        @{@"name": @"Safari", @"color": [UIColor colorWithRed:0.1 green:0.6 blue:0.9 alpha:1.0], @"action": @selector(openSafariBrowser)},
-        @{@"name": @"YouTube", @"color": [UIColor colorWithRed:0.95 green:0.15 blue:0.15 alpha:1.0], @"action": @selector(openYouTubeBrowser)},
-        @{@"name": @"Ảnh", @"color": [UIColor colorWithRed:0.95 green:0.5 blue:0.1 alpha:1.0], @"action": @selector(openPhotosApp)},
-        @{@"name": @"Tệp (Files)", @"color": [UIColor colorWithRed:0.25 green:0.65 blue:0.35 alpha:1.0], @"action": @selector(openFilesManagerApp)},
-        @{@"name": @"App Store", @"color": [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:1.0], @"action": @selector(openAppStoreApp)},
-        @{@"name": @"Máy Ảnh", @"color": [UIColor colorWithRed:0.3 green:0.3 blue:0.35 alpha:1.0], @"action": @selector(openCameraApp)},
-        @{@"name": @"Ghi Chú", @"color": [UIColor colorWithRed:0.98 green:0.8 blue:0.15 alpha:1.0], @"action": @selector(openNotesApp)},
-        @{@"name": @"Thời Tiết", @"color": [UIColor colorWithRed:0.2 green:0.5 blue:0.95 alpha:1.0], @"action": @selector(openWeatherApp)}
+        @{@"name": @"Dopamine", @"color": [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openDopamineJailbreakApp)]},
+        @{@"name": @"Cài Đặt", @"color": [UIColor colorWithRed:0.45 green:0.45 blue:0.5 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSettingsApp)]},
+        @{@"name": @"Safari", @"color": [UIColor colorWithRed:0.1 green:0.6 blue:0.9 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSafariBrowser)]},
+        @{@"name": @"YouTube", @"color": [UIColor colorWithRed:0.95 green:0.15 blue:0.15 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openYouTubeBrowser)]},
+        @{@"name": @"Ảnh", @"color": [UIColor colorWithRed:0.95 green:0.5 blue:0.1 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openPhotosApp)]},
+        @{@"name": @"Tệp", @"color": [UIColor colorWithRed:0.25 green:0.65 blue:0.35 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openFilesManagerApp)]},
+        @{@"name": @"App Store", @"color": [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openAppStoreApp)]},
+        @{@"name": @"Máy Ảnh", @"color": [UIColor colorWithRed:0.3 green:0.3 blue:0.35 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openCameraApp)]},
+        @{@"name": @"Ghi Chú", @"color": [UIColor colorWithRed:0.98 green:0.8 blue:0.15 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openNotesApp)]},
+        @{@"name": @"Thời Tiết", @"color": [UIColor colorWithRed:0.2 green:0.5 blue:0.95 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openWeatherApp)]}
     ]];
 
-    // Sau khi Jailbreak thành công, tự động mở khóa Sileo và TrollStore
     if (self.isJailbroken) {
-        [apps insertObject:@{@"name": @"Sileo", @"color": [UIColor colorWithRed:0.12 green:0.52 blue:0.82 alpha:1.0], @"action": @selector(openSileoApp)} atIndex:1];
-        [apps insertObject:@{@"name": @"TrollStore", @"color": [UIColor colorWithRed:0.92 green:0.45 blue:0.08 alpha:1.0], @"action": @selector(openTrollStoreApp)} atIndex:2];
+        [apps insertObject:@{@"name": @"Sileo", @"color": [UIColor colorWithRed:0.12 green:0.52 blue:0.82 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSileoApp)]} atIndex:1];
+        [apps insertObject:@{@"name": @"TrollStore", @"color": [UIColor colorWithRed:0.92 green:0.45 blue:0.08 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openTrollStoreApp)]} atIndex:2];
     }
 
     CGFloat size = 66;
@@ -147,7 +128,7 @@
         btn.layer.shadowOpacity = 0.4;
         btn.layer.shadowOffset = CGSizeMake(0, 4);
         
-        SEL actionSel = NSSelectorFromString(app[@"action"]);
+        SEL actionSel = (SEL)[app[@"action"] pointerValue];
         [btn addTarget:self action:actionSel forControlEvents:UIControlEventTouchUpInside];
 
         UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(-10, size + 4, size + 20, 16)];
@@ -169,10 +150,10 @@
     [self.view addSubview:dock];
 
     NSArray *dockApps = @[
-        @{@"name": @"Phone", @"color": [UIColor colorWithRed:0.1 green:0.85 blue:0.35 alpha:1.0], @"action": @selector(openPhoneApp)},
-        @{@"name": @"Safari", @"color": [UIColor colorWithRed:0.1 green:0.6 blue:0.9 alpha:1.0], @"action": @selector(openSafariBrowser)},
-        @{@"name": @"Messages", @"color": [UIColor colorWithRed:0.15 green:0.65 blue:1.0 alpha:1.0], @"action": @selector(openMessagesApp)},
-        @{@"name": @"Music", @"color": [UIColor colorWithRed:0.98 green:0.2 blue:0.55 alpha:1.0], @"action": @selector(openMusicApp)}
+        @{@"name": @"Phone", @"color": [UIColor colorWithRed:0.1 green:0.85 blue:0.35 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openPhoneApp)]},
+        @{@"name": @"Safari", @"color": [UIColor colorWithRed:0.1 green:0.6 blue:0.9 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSafariBrowser)]},
+        @{@"name": @"Messages", @"color": [UIColor colorWithRed:0.15 green:0.65 blue:1.0 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openMessagesApp)]},
+        @{@"name": @"Music", @"color": [UIColor colorWithRed:0.98 green:0.2 blue:0.55 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openMusicApp)]}
     ];
 
     for (int i = 0; i < dockApps.count; i++) {
@@ -182,13 +163,13 @@
         dBtn.frame = CGRectMake(dx, 10, 68, 68);
         dBtn.backgroundColor = app[@"color"];
         dBtn.layer.cornerRadius = 16;
-        SEL actionSel = NSSelectorFromString(app[@"action"]);
+        SEL actionSel = (SEL)[app[@"action"] pointerValue];
         [dBtn addTarget:self action:actionSel forControlEvents:UIControlEventTouchUpInside];
         [dock addSubview:dBtn];
     }
 }
 
-#pragma mark - 3. DYNAMIC ISLAND IPHONE 14 PRO CHUẨN ĐỘNG
+#pragma mark - 3. DYNAMIC ISLAND IPHONE 14 PRO
 - (void)setupDynamicIsland {
     self.dynamicIslandView = [[UIView alloc] initWithFrame:CGRectMake((self.view.bounds.size.width - 122)/2, 10, 122, 34)];
     self.dynamicIslandView.backgroundColor = [UIColor blackColor];
@@ -221,12 +202,16 @@
     } completion:nil];
 }
 
-#pragma mark - 4. CỬ CHỈ TRUNG TÂM THÔNG BÁO & NHẤN GIỮ ĐỔI HÌNH NỀN
+#pragma mark - 4. CỬ CHỈ TRUNG TÂM THÔNG BÁO & ĐA NHIỆM (APP SWITCHER)
 - (void)setupGesturesAndOverlays {
-    // Vuốt từ trên xuống xem Trung tâm thông báo
     UISwipeGestureRecognizer *downSwipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(openNotificationCenter)];
     downSwipe.direction = UISwipeGestureRecognizerDirectionDown;
     [self.view addGestureRecognizer:downSwipe];
+
+    // Vuốt từ dưới lên để mở Đa nhiệm (App Switcher)
+    UISwipeGestureRecognizer *upSwipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(openAppSwitcher)];
+    upSwipe.direction = UISwipeGestureRecognizerDirectionUp;
+    [self.view addGestureRecognizer:upSwipe];
 }
 
 - (void)openNotificationCenter {
@@ -239,7 +224,6 @@
     title.font = [UIFont boldSystemFontOfSize:18];
     [notifWindow addSubview:title];
 
-    // Nút đổi hình nền trực tiếp tại trung tâm thông báo
     UIButton *changeWallBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     changeWallBtn.frame = CGRectMake(30, 140, self.view.bounds.size.width - 60, 48);
     [changeWallBtn setTitle:@"🖼️ Đổi Hình Nền Thật iOS 17" forState:UIControlStateNormal];
@@ -282,7 +266,55 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 5. APP DOPAMINE JAILBREAK & QUÁ TRÌNH KHAI THÁC KERNEL
+// Giao diện Đa nhiệm (App Switcher) thực tế
+- (void)openAppSwitcher {
+    if (self.switcherContainerView) return;
+    self.switcherContainerView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.switcherContainerView.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.85];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(30, 60, self.view.bounds.size.width - 60, 30)];
+    title.text = @"🔀 Đa Nhiệm iOS 17";
+    title.textColor = [UIColor whiteColor];
+    title.font = [UIFont boldSystemFontOfSize:18];
+    [self.switcherContainerView addSubview:title];
+
+    UIScrollView *cardScroll = [[UIScrollView alloc] initWithFrame:CGRectMake(20, 110, self.view.bounds.size.width - 40, self.view.bounds.size.height - 220)];
+    cardScroll.contentSize = CGSizeMake((self.activeAppWindow ? 300 : 120), cardScroll.bounds.size.height);
+    [self.switcherContainerView addSubview:cardScroll];
+
+    if (self.activeAppWindow) {
+        UIView *card = [[UIView alloc] initWithFrame:CGRectMake(10, 10, 280, cardScroll.bounds.size.height - 40)];
+        card.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.22 alpha:1.0];
+        card.layer.cornerRadius = 20;
+        card.clipsToBounds = YES;
+        
+        UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 20, 240, 30)];
+        lbl.text = @"Ứng dụng đang mở";
+        lbl.textColor = [UIColor whiteColor];
+        lbl.font = [UIFont boldSystemFontOfSize:14];
+        [card addSubview:lbl];
+        
+        [cardScroll addSubview:card];
+    }
+
+    UIButton *closeSwitcher = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeSwitcher.frame = CGRectMake(30, self.view.bounds.size.height - 90, self.view.bounds.size.width - 60, 44);
+    [closeSwitcher setTitle:@"Quay Lại Màn Hình Chính" forState:UIControlStateNormal];
+    [closeSwitcher setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    closeSwitcher.backgroundColor = [UIColor darkGrayColor];
+    closeSwitcher.layer.cornerRadius = 12;
+    [closeSwitcher addTarget:self action:@selector(dismissAppSwitcher) forControlEvents:UIControlEventTouchUpInside];
+    [self.switcherContainerView addSubview:closeSwitcher];
+
+    [self.view addSubview:self.switcherContainerView];
+}
+
+- (void)dismissAppSwitcher {
+    [self.switcherContainerView removeFromSuperview];
+    self.switcherContainerView = nil;
+}
+
+#pragma mark - 5. APP DOPAMINE JAILBREAK
 - (void)openDopamineJailbreakApp {
     UIView *dopamineView = [[UIView alloc] initWithFrame:self.view.bounds];
     dopamineView.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.07 alpha:1.0];
@@ -369,7 +401,7 @@
     });
 }
 
-#pragma mark - 6. KHO SILEO & TRÌNH QUẢN LÝ TỆP ROOTLESS (Files /var/jb)
+#pragma mark - 6. KHO SILEO & TRÌNH QUẢN LÝ TỆP
 - (void)openSileoApp {
     UIView *sileoView = [[UIView alloc] initWithFrame:self.view.bounds];
     sileoView.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:1.0];
@@ -396,7 +428,6 @@
     self.activeAppWindow = sileoView;
 }
 
-// Trình quản lý Tệp (/var/jb system file explorer)
 - (void)openFilesManagerApp {
     UIView *filesView = [[UIView alloc] initWithFrame:self.view.bounds];
     filesView.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.12 alpha:1.0];
@@ -423,7 +454,7 @@
     self.activeAppWindow = filesView;
 }
 
-#pragma mark - TableView DataSource cho Sileo & File Explorer
+#pragma mark - TableView DataSource
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 1; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (tableView == self.sileoTableView) return 3;
@@ -477,7 +508,7 @@
     }
 }
 
-#pragma mark - 7. TRÌNH DUYỆT WEB, YOUTUBE VÀ APP MẶC ĐỊNH
+#pragma mark - 7. TRÌNH DUYỆT WEB VÀ APP MẶC ĐỊNH
 - (void)openSafariBrowser { [self openWebBrowserWithURL:@"https://www.google.com"]; }
 - (void)openYouTubeBrowser { [self openWebBrowserWithURL:@"https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1"]; }
 - (void)openAppStoreApp { [self openWebBrowserWithURL:@"https://www.apple.com"]; }
@@ -523,7 +554,7 @@
     }];
 }
 
-#pragma mark - 8. GIÁM SÁT FPS MẶC ĐỊNH
+#pragma mark - 8. GIÁM SÁT FPS
 - (void)setupFPSMonitoring {
     self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 110, 42, 90, 20)];
     self.fpsCounterLabel.textColor = [UIColor greenColor];
