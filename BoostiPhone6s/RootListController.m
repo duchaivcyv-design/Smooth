@@ -424,6 +424,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     PSSpecifier *_specMonitorThermal;
     PSSpecifier *_specMonitorCPUGPU;
     NSMutableArray *_rawSpecifiers;
+    NSMutableArray *_specifiers; // [ĐÃ KHAI BÁO BIẾN IVAR NÀY ĐỂ PASS CLANG 100%]
 }
 @end
 
@@ -909,8 +910,12 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
         @{@"code": @"en",   @"name": @"🇺🇸 English"}
     ];
 
+    __weak typeof(self) weakSelf = self;
     for (NSDictionary *item in langs) {
         [alert addAction:[UIAlertAction actionWithTitle:item[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
             NSString *code = item[@"code"];
             NSString *prefPath = Titanium_ResolvePrefPath();
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
@@ -923,10 +928,11 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_TITANIUM_CHANGED);
-            _specifiers = nil;
+            
+            strongSelf->_specifiers = nil;
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self setupNavigationItems];
-                [self reloadSpecifiers];
+                [strongSelf setupNavigationItems];
+                [strongSelf reloadSpecifiers];
             });
         }]];
     }
@@ -1101,7 +1107,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
         self->_rawSpecifiers = nil;
-        _specifiers = nil;
+        self->_specifiers = nil;
         [self setupNavigationItems];
         [self reloadSpecifiers];
     }]];
