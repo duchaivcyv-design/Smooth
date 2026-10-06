@@ -1,8 +1,3 @@
-# ====================================================================================================
-# MAKEFILE CON: CÀI ĐẶT PREFERENCES BUNDLE (CHẾ ĐỘ ÉP TOÀN DIỆN CHO ROOTLESS & ROOTHIDE)
-# (ĐÃ LOẠI BỎ LIÊN KẾT TĨNH PREFERENCES FRAMEWORK - SỬ DỤNG RUNTIME DYNAMIC LOOKUP)
-# ====================================================================================================
-
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:14.0
 
@@ -15,20 +10,12 @@ include $(THEOS)/makefiles/common.mk
 BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
+BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
+BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
-# PUBLIC FRAMEWORKS CHUẨN
-BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore
-
-# [ÉP TOÀN DIỆN]: ĐÃ BỎ PRIVATE_FRAMEWORKS = Preferences ĐỂ TRÁNH GÃY LINKER TRÊN SDK 16.5
-# Runtime tự giải quyết symbol qua -Wl,-undefined,dynamic_lookup
-
-# ĐƯỜNG DẪN CÀI ĐẶT CHUẨN ROOTLESS THÍCH ỨNG $(_THEOS_PREFIX)
-BoostiPhone6sPrefs_INSTALL_PATH = $(_THEOS_PREFIX)/Library/PreferenceBundles
-
-# CỜ BIÊN DỊCH TỐI ƯU HÓA -O3, FLTO VÀ DẬP TẮT CẢNH BÁO
+# CỜ BIÊN DỊCH: ĐỒNG BỘ HOÀN TOÀN VỚI MAKEFILE CHA & DẬP TẮT CẢNH BÁO RUNNER
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
-                            -flto=thin \
                             -Wall \
                             -Wno-error \
                             -Wno-deprecated-declarations \
@@ -43,13 +30,11 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I$(THEOS)/include \
                             -I$(THEOS)/vendor/include \
                             -I../Headers \
-                            -IHeaders \
                             -I../ \
                             -I.
 
-# LINKER FLAGS: SỬ DỤNG DYNAMIC LOOKUP ĐỂ NẠP PREFERENCES KHI VÀO SETTINGS
+# LINKER FLAGS: LOẠI BỎ CẢNH BÁO -install_name TRÊN MACH-O BUNDLE
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
-                            -flto=thin \
                             -Wl,-undefined,dynamic_lookup \
                             -Wl,-rpath,/System/Library/PrivateFrameworks \
                             -Wl,-rpath,/Library/Frameworks \
@@ -59,30 +44,15 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 
-# ====================================================================================================
-# ĐỒNG BỘ SYMLINK TỰ ĐỘNG, SAO CHÉP TÀI NGUYÊN & ENTRY PLIST CHO PREFERENCELOADER
-# ====================================================================================================
-
+# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & CẤP QUYỀN CHUẨN ROOTLESS CHO PREFERENCELOADER
 after-stage::
-	@echo ""
-	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink, Tài Nguyên & Quyền Bundle vào Staging ==="
+	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink & Quyền Bundle vào Staging ==="
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceBundles"; \
-	PREFLOADER_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences"; \
 	mkdir -p "$$TARGET_DIR"; \
-	mkdir -p "$$PREFLOADER_DIR"; \
-	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ]; then \
-		if [ -d "Resources" ]; then \
-			cp -r Resources/* "$$TARGET_DIR/BoostiPhone6sPrefs.bundle/" 2>/dev/null || true; \
-			echo "  [OK] Đã ép nạp toàn bộ tệp trong Resources/ vào BoostiPhone6sPrefs.bundle!"; \
-		fi; \
-		(cd "$$TARGET_DIR" && ln -sf "BoostiPhone6sPrefs.bundle" "BoostiPhone6s.bundle"); \
+	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ] && [ ! -e "$$TARGET_DIR/BoostiPhone6s.bundle" ]; then \
+		ln -sf "BoostiPhone6sPrefs.bundle" "$$TARGET_DIR/BoostiPhone6s.bundle"; \
 		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
-		chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
-		chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/* 2>/dev/null || true; \
-		echo "  [OK] Đã gán quyền chuẩn cho Bundle và Tài Nguyên!"; \
 	fi; \
-	if [ -d "$$PREFLOADER_DIR" ]; then \
-		chmod 0644 "$$PREFLOADER_DIR"/*.plist 2>/dev/null || true; \
-		echo "  [OK] Đã bảo toàn và gán quyền 0644 cho PreferenceLoader plist!"; \
-	fi
-	@echo ""
+	chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
+	chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
+	echo "  [OK] Đã gán quyền 0755 cho Bundle!"
