@@ -4588,94 +4588,121 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 }
 
 // ====================================================================================================
-// RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK (CHỐNG SAFEMODE KHI RESPRING)
+// RUNTIME INITIALIZER: BỌC BẢO VỆ CÁCH LY TỪNG TẦNG - TRIỆT TIÊU SAFEMODE SAU 0.5S - 1S
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static dispatch_once_t s_coreInitToken;
     dispatch_once(&s_coreInitToken, ^{
         @autoreleasepool {
-            if (isSpringBoard) {
-                Titanium_LockMainThreadFast();
-            } else {
-                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            }
+            @try {
+                if (isSpringBoard) {
+                    Titanium_LockMainThreadFast();
+                } else {
+                    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+                }
 
-            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-            if (configClass) {
-                CFG285 = [configClass sharedInstance];
-                [CFG285 loadSettings];
-                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                    NSInteger initHz = (NSInteger)CFG285.targetHz;
-                    if (initHz >= 15 && initHz <= 144) {
-                        g_cachedResolvedHz = initHz;
+                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+                if (configClass) {
+                    CFG285 = [configClass sharedInstance];
+                    [CFG285 loadSettings];
+                    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                        NSInteger initHz = (NSInteger)CFG285.targetHz;
+                        if (initHz >= 15 && initHz <= 144) {
+                            g_cachedResolvedHz = initHz;
+                        }
                     }
                 }
+
+                // 1. CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
+                %init(Group_ZeroLatency_Touch_Opt);
+                %init(Group_Metal_ZeroTearing_Pacing);
+                %init(Group_FluidTransitions_Pacing);
+                %init(Group_FastLaunch_SuperEngineV285);
+                %init(Group_Scroll_And_Keyboard_Opt);
+                %init(Group_InstantActionAndMenuTransitions_Boost);
+                %init(Group_Global_Thread_Governor_Unthrottled);
+
+                // 2. CÁC NHÓM GIA TỐC PHẦN CỨNG & DỰ ĐOÁN ĐỒ HỌA
+                %init(Group_Universal_InApp_Animations);
+                %init(Group_Apple_Internal_ProMotion_Apex);
+                %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+                %init(Group_Hardware_ProMotion_Overclock);
+                
+                // 3. TOÀN BỘ CÁC NHÓM ĐỒ HỌA SILICON, ĐIỀU PHỐI CPU & TỐI ƯU BỘ NHỚ RAM
+                %init(Group_Titanium_Game_Metal_Overdrive);
+                %init(Group_Silicon_Hardware_Pipeline_Overdrive);
+                %init(Group_Silicon_Scheduler_Touch_Governor);
+                %init(Group_CoreAnimation_RenderServer_Governor);
+                %init(Group_System_Memory_And_RunLoop_Governor);
+                %init(Group_Thermal_CryoPacing_ZeroDrop);
+                %init(Group_Deep_RAM_Compaction_Engine);
+                %init(Group_WebKit_RAM_Optimizer);
+
+                // 4. PHÂN TÁCH NÚT HOME VẬT LÝ CHO THIẾT BỊ CLASSIC
+                if (Titanium_IsClassicHomeButtonDevice()) {
+                    %init(Group_HardwareSegregation_ClassicHomeV285);
+                }
+
+                // 5. PHÂN LẬP NẠP GIỮA TIẾN TRÌNH SPRINGBOARD VÀ APP THỨ BA
+                if (isSpringBoard) {
+                    %init(Group_LiquidGlass_Opt);
+                    %init(Group_Switcher30Apps_Virtualization);
+                    %init(Group_Display_SpringBoardV285);
+                    %init(Group_V285_FloatingWindow_PiP);
+                    %init(Group_SpringBoard_ProcessManagerV285);
+                    
+                    @try {
+                        Titanium_StartThermalAndChargingWatchdog();
+                    } @catch (NSException *e) {}
+
+                    // ==================================================================================
+                    // [BỌC BẢO VỆ CHỐNG SAFEMODE]: PHÂN TÁCH NHỊP CAN THIỆP PHẦN CỨNG (KHÔNG DỒN LỆNH)
+                    // ==================================================================================
+                    
+                    // Nhịp 1 (Sau 2.0s): Dựng nền tảng Frame Constraint & Kernel Tier an toàn
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        @try {
+                            AppleInternal_EnforceZeroLatencyKernelTier();
+                            Titanium_EnforceMachFrameConstraint();
+                            Titanium_ApplySiliconDeepOptimizations();
+                        } @catch (NSException *e) {}
+                    });
+
+                    // Nhịp 2 (Sau 2.8s): Tiêm Dynamic Refresh & Khóa Hardware CADisplay khi SpringBoard đã ổn định
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        @try {
+                            Titanium_ForceInjectDynamicRefreshSupport();
+                            AppleInternal_LockHardwareCADisplay();
+                        } @catch (NSException *e) {}
+                    });
+
+                    // Nhịp 3 (Sau 3.5s): Điều phối WindowServer hoàn thiện bước cuối cùng
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        @try {
+                            Titanium_TuneWindowServerDisplayDirectly();
+                        } @catch (NSException *e) {}
+                    });
+
+                    NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
+                    [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED 
+                                                            contents:verifiedData 
+                                                          attributes:@{NSFilePosixPermissions: @(0644)}];
+                } else {
+                    %init(Group_UIKit_ThirdParty_IsolatedV285);
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        @try {
+                            Titanium_ForceInjectDynamicRefreshSupport();
+                            AppleInternal_EnforceZeroLatencyKernelTier();
+                            Titanium_ApplySiliconDeepOptimizations();
+                        } @catch (NSException *e) {}
+                    });
+                }
+
+                g_SystemMasterReady = YES;
+            } @catch (NSException *e) {
+                // Thoát hiểm toàn diện nếu có lỗi ngoài ý muốn
             }
-
-            // 1. CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
-            %init(Group_ZeroLatency_Touch_Opt);
-            %init(Group_Metal_ZeroTearing_Pacing);
-            %init(Group_FluidTransitions_Pacing);
-            %init(Group_FastLaunch_SuperEngineV285);
-            %init(Group_Scroll_And_Keyboard_Opt);
-            %init(Group_InstantActionAndMenuTransitions_Boost);
-            %init(Group_Global_Thread_Governor_Unthrottled);
-
-            // 2. CÁC NHÓM GIA TỐC PHẦN CỨNG & DỰ ĐOÁN ĐỒ HỌA
-            %init(Group_Universal_InApp_Animations);
-            %init(Group_Apple_Internal_ProMotion_Apex);
-            %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
-            %init(Group_Hardware_ProMotion_Overclock);
-            
-            // 3. TOÀN BỘ CÁC NHÓM ĐỒ HỌA SILICON, ĐIỀU PHỐI CPU & TỐI ƯU BỘ NHỚ RAM
-            %init(Group_Titanium_Game_Metal_Overdrive);
-            %init(Group_Silicon_Hardware_Pipeline_Overdrive);
-            %init(Group_Silicon_Scheduler_Touch_Governor);
-            %init(Group_CoreAnimation_RenderServer_Governor);
-            %init(Group_System_Memory_And_RunLoop_Governor);
-            %init(Group_Thermal_CryoPacing_ZeroDrop);
-            %init(Group_Deep_RAM_Compaction_Engine);
-            %init(Group_WebKit_RAM_Optimizer);
-
-            // 4. PHÂN TÁCH NÚT HOME VẬT LÝ CHO THIẾT BỊ CLASSIC
-            if (Titanium_IsClassicHomeButtonDevice()) {
-                %init(Group_HardwareSegregation_ClassicHomeV285);
-            }
-
-            // 5. PHÂN LẬP NẠP GIỮA TIẾN TRÌNH SPRINGBOARD VÀ APP THỨ BA
-            if (isSpringBoard) {
-                %init(Group_LiquidGlass_Opt);
-                %init(Group_Switcher30Apps_Virtualization);
-                %init(Group_Display_SpringBoardV285);
-                %init(Group_V285_FloatingWindow_PiP);
-                %init(Group_SpringBoard_ProcessManagerV285);
-                Titanium_StartThermalAndChargingWatchdog();
-
-                // [ÉP TOÀN DIỆN]: ĐỢI SPRINGBOARD HOÀN TẤT DỰNG FRAME ĐẦU TIÊN MỚI ÉP PHẦN CỨNG
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    Titanium_ForceInjectDynamicRefreshSupport();
-                    AppleInternal_LockHardwareCADisplay();
-                    Titanium_TuneWindowServerDisplayDirectly();
-                    AppleInternal_EnforceZeroLatencyKernelTier();
-                    Titanium_EnforceMachFrameConstraint();
-                    Titanium_ApplySiliconDeepOptimizations();
-                });
-
-                NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-                [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED 
-                                                        contents:verifiedData 
-                                                      attributes:@{NSFilePosixPermissions: @(0644)}];
-            } else {
-                %init(Group_UIKit_ThirdParty_IsolatedV285);
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    Titanium_ForceInjectDynamicRefreshSupport();
-                    AppleInternal_EnforceZeroLatencyKernelTier();
-                    Titanium_ApplySiliconDeepOptimizations();
-                });
-            }
-
-            g_SystemMasterReady = YES;
         }
     });
 }
@@ -4692,7 +4719,7 @@ static void SpringBoardBootstrapTrigger(void) {
 
         time_t uptime = Titanium_GetSystemUptimeSeconds();
         BOOL isColdBoot = (uptime < 30);
-        int64_t waitDelay = isColdBoot ? (int64_t)(500 * NSEC_PER_MSEC) : (int64_t)(100 * NSEC_PER_MSEC);
+        int64_t waitDelay = isColdBoot ? (int64_t)(800 * NSEC_PER_MSEC) : (int64_t)(200 * NSEC_PER_MSEC);
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_main_queue(), ^{
             runCoreTweak(YES, bundleID, progName);
