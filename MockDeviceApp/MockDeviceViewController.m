@@ -37,7 +37,6 @@
     self.homeScreenView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.homeScreenView];
 
-    // Status bar giả lập
     UILabel *statusBar = [[UILabel alloc] initWithFrame:CGRectMake(20, 45, self.view.bounds.size.width - 40, 20)];
     statusBar.text = @"09:41                        5G 🔋 100%";
     statusBar.textColor = [UIColor whiteColor];
@@ -51,12 +50,11 @@
     title.textAlignment = NSTextAlignmentCenter;
     [self.homeScreenView addSubview:title];
 
-    // Lưới các App trên SpringBoard
     NSArray *apps = @[
-        @{@"name": @"Sileo", @"color": [UIColor colorWithRed:0.15 green:0.55 blue:0.85 alpha:1.0], @"selector": @selector(openSileoApp)},
-        @{@"name": @"Tweak Test", @"color": [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0], @"selector": @selector(openTweakTestApp)},
-        @{@"name": @"Respring", @"color": [UIColor colorWithRed:0.9 green:0.3 blue:0.2 alpha:1.0], @"selector": @selector(simulateRealRespring)},
-        @{@"name": @"Files", @"color": [UIColor colorWithRed:0.95 green:0.6 blue:0.1 alpha:1.0], @"selector": @selector(openFilesApp)}
+        @{@"name": @"Sileo", @"color": [UIColor colorWithRed:0.15 green:0.55 blue:0.85 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openSileoApp)]},
+        @{@"name": @"Tweak Test", @"color": [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openTweakTestApp)]},
+        @{@"name": @"Respring", @"color": [UIColor colorWithRed:0.9 green:0.3 blue:0.2 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(simulateRealRespring)]},
+        @{@"name": @"Files", @"color": [UIColor colorWithRed:0.95 green:0.6 blue:0.1 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openFilesApp)]}
     ];
 
     CGFloat size = 72;
@@ -79,7 +77,9 @@
         btn.layer.shadowColor = [UIColor blackColor].CGColor;
         btn.layer.shadowOpacity = 0.5;
         btn.layer.shadowOffset = CGSizeMake(0, 4);
-        [btn addTarget:self action:NSSelectorFromString(app[@"selector"]) forControlEvents:UIControlEventTouchUpInside];
+        
+        SEL actionSel = (SEL)[app[@"selector"] pointerValue];
+        [btn addTarget:self action:actionSel forControlEvents:UIControlEventTouchUpInside];
 
         UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(-10, size + 5, size + 20, 16)];
         lbl.text = app[@"name"];
@@ -92,13 +92,12 @@
     }
 }
 
-// 2. GIAO DIỆN SILEO THẬT (HIỂN THỊ ĐÚNG GÓI TWEAK ĐỂ CÀI ĐẶT)
+// 2. GIAO DIỆN SILEO THẬT
 - (void)openSileoApp {
     self.sileoAppView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.sileoAppView.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:1.0];
     [self.view addSubview:self.sileoAppView];
 
-    // Header Sileo
     UILabel *header = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, self.view.bounds.size.width - 40, 40)];
     header.text = @"📦 Sileo Package Manager";
     header.textColor = [UIColor whiteColor];
@@ -111,7 +110,6 @@
     [backBtn addTarget:self action:@selector(closeSileoApp) forControlEvents:UIControlEventTouchUpInside];
     [self.sileoAppView addSubview:backBtn];
 
-    // Bảng danh sách package
     self.sileoTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 120, self.view.bounds.size.width, self.view.bounds.size.height - 120) style:UITableViewStyleInsetGrouped];
     self.sileoTableView.backgroundColor = [UIColor clearColor];
     self.sileoTableView.delegate = self;
@@ -128,7 +126,6 @@
     }];
 }
 
-// UITableView DataSource cho Sileo
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 1; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return 1; }
 
@@ -149,7 +146,6 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     
     if (!self.isTweakInstalled) {
-        // Cài đặt thật trong môi trường giả lập
         UIAlertController *installAlert = [UIAlertController alertControllerWithTitle:@"Cài Đặt Gói Tweak" 
                                                                                message:@"Xác nhận nạp BoostiPhone6sCore.dylib vào phân vùng rootless?" 
                                                                         preferredStyle:UIAlertControllerStyleAlert];
@@ -158,7 +154,6 @@
             [self.sileoTableView reloadData];
             [self showToastNotice:@"📥 Tải và cấu hình .deb thành công! Bắt đầu Respring..."];
             
-            // Tự động kích hoạt Respring sau khi cài
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [self closeSileoApp];
                 [self simulateRealRespring];
@@ -169,9 +164,8 @@
     }
 }
 
-// 3. MÔ PHỎNG RESPRING THỰC SỰ & MÀN HÌNH KHÓA KIỂM TRA SAFE MODE
+// 3. MÔ PHỎNG RESPRING & MÀN HÌNH KHÓA KIỂM TRA SAFE MODE
 - (void)simulateRealRespring {
-    // Tạo màn hình đen Respring xoay vòng
     self.blackCurtainRespring = [[UIView alloc] initWithFrame:self.view.bounds];
     self.blackCurtainRespring.backgroundColor = [UIColor blackColor];
     
@@ -190,7 +184,6 @@
     
     [self.view addSubview:self.blackCurtainRespring];
 
-    // Sau 2 giây respring xong, hiện màn hình khóa yêu cầu xác thực trạng thái
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self.blackCurtainRespring removeFromSuperview];
         self.blackCurtainRespring = nil;
@@ -208,7 +201,6 @@
     timeLbl.textColor = [UIColor whiteColor];
     timeLbl.font = [UIFont systemFontOfSize:64 weight:UIFontWeightThin];
     timeLbl.textAlignment = NSTextAlignmentCenter;
-    [self.lockScreenView.layer setShadowOpacity:0.3];
     [self.lockScreenView addSubview:timeLbl];
 
     UILabel *dateLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 170, self.view.bounds.size.width - 40, 30)];
@@ -218,7 +210,6 @@
     dateLbl.textAlignment = NSTextAlignmentCenter;
     [self.lockScreenView addSubview:dateLbl];
 
-    // Hộp kiểm tra Safe Mode sau khi respring
     UIView *promptBox = [[UIView alloc] initWithFrame:CGRectMake(30, 260, self.view.bounds.size.width - 60, 160)];
     promptBox.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.25 alpha:0.9];
     promptBox.layer.cornerRadius = 20;
@@ -262,7 +253,7 @@
     }];
 }
 
-// 4. TEST APP TRỰC QUAN (KIỂM TRA HIỆN TƯỢNG ĐEN MÀN HÌNH / BLACK SCREEN)
+// 4. TEST APP TRỰC QUAN (CHỐNG ĐEN MÀN HÌNH)
 - (void)openTweakTestApp {
     UIView *testAppView = [[UIView alloc] initWithFrame:self.view.bounds];
     testAppView.backgroundColor = [UIColor whiteColor];
@@ -281,7 +272,6 @@
         [testAppView addSubview:title];
 
         UILabel *resultLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 160, testAppView.bounds.size.width - 40, 60)];
-        // Kiểm tra xem dylib tweak đã được cài chưa để báo trạng thái render
         if (self.isTweakInstalled) {
             resultLbl.text = @"✅ Tweak đã nạp: Giao diện hiển thị mượt mà, không bị đen màn hình, hook hoạt động chuẩn!";
             resultLbl.textColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.2 alpha:1.0];
@@ -318,7 +308,7 @@
     }];
 }
 
-// 5. GIÁM SÁT FPS MẠC ĐỊNH
+// 5. GIÁM SÁT FPS
 - (void)setupFPSMonitoring {
     self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 110, 43, 90, 20)];
     self.fpsCounterLabel.textColor = [UIColor greenColor];
@@ -357,7 +347,7 @@
     [self.view addSubview:toast];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSnapshot]; [toast removeFromSuperview]; }];
+        [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSuperview]; }];
     });
 }
 
