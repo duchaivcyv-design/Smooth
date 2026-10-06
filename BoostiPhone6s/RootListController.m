@@ -430,6 +430,10 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 
 @implementation RootListController
 
+// ====================================================================================================
+// [ÉP CONSTRUCTOR AN TOÀN TUYỆT ĐỐI]: TƯƠNG THÍCH CẢ SETTINGS GỐC VÀ TWEAKSETTINGS KHÔNG LỖI CLANG
+// ====================================================================================================
+
 - (instancetype)init {
     self = [super init];
     if (self) {
@@ -438,7 +442,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     return self;
 }
 
-// [ÉP CONSTRUCTOR CHỐNG VĂNG TWEAKSETTINGS]: TƯƠNG THÍCH HOÀN TOÀN CÁC PHƯƠNG THỨC KHỞI TẠO NẠP VIEW
 - (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil {
     self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
     if (self) {
@@ -448,7 +451,8 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 }
 
 - (id)initForContentSize:(CGSize)size {
-    self = [super initForContentSize:size];
+    // Gọi [super init] để Clang không báo lỗi thiếu selector trên PSListController SDK
+    self = [super init];
     if (self) {
         _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
     }
