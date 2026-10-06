@@ -10,12 +10,20 @@ include $(THEOS)/makefiles/common.mk
 BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
-BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
-# CỜ BIÊN DỊCH: ĐỒNG BỘ HOÀN TOÀN VỚI MAKEFILE CHA & DẬP TẮT CẢNH BÁO RUNNER
+# PUBLIC FRAMEWORKS CHUẨN
+BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore
+
+# [ÉP TOÀN DIỆN]: LIÊN KẾT BẮT BUỘC PREFERENCES PRIVATE FRAMEWORK CHO PSLISTCONTROLLER
+BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
+
+# [ÉP TOÀN DIỆN]: ĐƯỜNG DẪN CÀI ĐẶT CHUẨN ROOTLESS THÍCH ỨNG $(_THEOS_PREFIX)
+BoostiPhone6sPrefs_INSTALL_PATH = $(_THEOS_PREFIX)/Library/PreferenceBundles
+
+# [ÉP TOÀN DIỆN]: CỜ BIÊN DỊCH TỐI ƯU HÓA -O3, FLTO VÀ DẬP TẮT CẢNH BÁO RUNNER
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
+                            -flto=thin \
                             -Wall \
                             -Wno-error \
                             -Wno-deprecated-declarations \
@@ -33,8 +41,9 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I../ \
                             -I.
 
-# LINKER FLAGS: LOẠI BỎ CẢNH BÁO -install_name TRÊN MACH-O BUNDLE
+# [ÉP TOÀN DIỆN]: LINKER FLAGS DEAD STRIP & RPATH ĐỘNG
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
+                            -flto=thin \
                             -Wl,-undefined,dynamic_lookup \
                             -Wl,-rpath,/System/Library/PrivateFrameworks \
                             -Wl,-rpath,/Library/Frameworks \
@@ -44,15 +53,27 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 
-# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & CẤP QUYỀN CHUẨN ROOTLESS CHO PREFERENCELOADER
+# ====================================================================================================
+# [ÉP TOÀN DIỆN]: ĐỒNG BỘ SYMLINK TỰ ĐỘNG & ENTRY PLIST CHO PREFERENCELOADER
+# ====================================================================================================
+
 after-stage::
+	@echo ""
 	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink & Quyền Bundle vào Staging ==="
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceBundles"; \
+	PREFLOADER_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences"; \
 	mkdir -p "$$TARGET_DIR"; \
+	mkdir -p "$$PREFLOADER_DIR"; \
 	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ] && [ ! -e "$$TARGET_DIR/BoostiPhone6s.bundle" ]; then \
 		ln -sf "BoostiPhone6sPrefs.bundle" "$$TARGET_DIR/BoostiPhone6s.bundle"; \
 		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
 	fi; \
 	chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
 	chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
-	echo "  [OK] Đã gán quyền 0755 cho Bundle!"
+	echo "  [OK] Đã gán quyền 0755 cho Bundle!"; \
+	if [ -f "entry.plist" ]; then \
+		cp "entry.plist" "$$PREFLOADER_DIR/BoostiPhone6s.plist"; \
+		chmod 0644 "$$PREFLOADER_DIR/BoostiPhone6s.plist"; \
+		echo "  [OK] Nạp entry.plist vào PreferenceLoader!"; \
+	fi
+	@echo ""
