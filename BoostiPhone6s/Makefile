@@ -77,9 +77,4 @@ after-stage::
 	chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
 	chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
 	echo "  [OK] Đã gán quyền 0755 cho Bundle!"; \
-	if [ -f "entry.plist" ]; then \
-		cp "entry.plist" "$$PREFLOADER_DIR/BoostiPhone6s.plist"; \
-		chmod 0644 "$$PREFLOADER_DIR/BoostiPhone6s.plist"; \
-		echo "  [OK] Nạp entry.plist vào PreferenceLoader!"; \
-	fi
-	@echo ""
+	echo ""
