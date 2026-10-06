@@ -13,9 +13,12 @@
 #import <Preferences/PSSpecifier.h>
 #else
 @interface PSListController : UIViewController
+@property (nonatomic, strong, nullable) PSSpecifier *specifier;
+- (id)initForContentSize:(CGSize)size;
 - (nullable NSMutableArray *)specifiers;
 - (void)reloadSpecifiers;
 - (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target;
+- (nullable PSSpecifier *)specifierForID:(NSString *)identifier;
 @end
 #endif
 
@@ -31,13 +34,12 @@ NS_ASSUME_NONNULL_BEGIN
 #define NOTIFY_FPS_CHANGED "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 
-// Chuẩn hóa đồng nhất 100% với Tweak.xm: 0x41505837
 #ifndef APEX_SYNC_MAGIC_V285
 #define APEX_SYNC_MAGIC_V285 0x41505837
 #endif
 
 // ====================================================================================================
-// CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO (CHỐNG LỖI TÁI ĐỊNH NGHĨA CLANG KHI IMPORT ĐA FILE)
+// CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO
 // ====================================================================================================
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
@@ -79,6 +81,11 @@ typedef struct __attribute__((packed)) {
 @public
     NSMutableArray *_allSavedSpecifiers;
 }
+
+// --- Các hàm khởi tạo đa nền tảng (Preferences.app & TweakSettings.app) ---
+- (instancetype)init;
+- (instancetype)initWithNibName:(nullable NSString *)nibNameOrNil bundle:(nullable NSBundle *)nibBundleOrNil;
+- (id)initForContentSize:(CGSize)size;
 
 // --- Điều phối hàng đợi nền & Debounce timer chống Safe Mode ---
 @property (nonatomic, strong, nullable) dispatch_source_t debounceSyncTimer;
