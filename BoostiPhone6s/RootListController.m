@@ -397,9 +397,9 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         payload.memoryPressureRelief = 1;
         payload.runloopHangGuard = 1;
         payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
-        payload.aggressiveRamCleaner = 0;
+        payload.aggressiveRamCleaner = prefs[@"AggressiveRamClean"] ? ([prefs[@"AggressiveRamClean"] boolValue] ? 1 : 0) : 0;
         
-        payload.lockFixedFpsWhenThermal = 1;
+        payload.lockFixedFpsWhenThermal = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
         payload.antiGhostTouch = prefs[@"AntiGhostTouch"] ? ([prefs[@"AntiGhostTouch"] boolValue] ? 1 : 0) : 1;
         payload.diskIOPriorityBoost = 1;
         payload.rawTouchDirectDelivery = 1;
@@ -649,6 +649,8 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
              @"Enabled": @YES,
+             @"ShowBasicOptions": @YES,
+             @"ShowAdvancedOptions": @NO,
              @"SelectedLanguage": @"auto",
              @"ProMotionEngineBeta7": @YES,
              @"MetalHexBuffering": @YES,
@@ -667,14 +669,34 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
              @"TouchResponseBoost": @YES,
              @"QuantumRenderShield": @NO,
              @"NeuralBufferOpt": @YES,
+             @"BackgroundPacingDaemon": @YES,
+             @"HyperMemoryGuardian": @YES,
+             @"UltraResponsiveness": @YES,
+             @"HyperThreadIO": @YES,
+             @"QuantumCoreSync": @YES,
+             @"ZeroLagNeuralBooster": @YES,
+             @"VsyncAdaptiveBuffer": @YES,
+             @"DynamicThermalEngine": @YES,
+             @"IOSchedulerEngine": @YES,
+             @"RealtimeThreadSched": @YES,
+             @"CPUGPUFreqOptimizer": @YES,
              @"PeriodicRamClean": @NO,
+             @"AggressiveRamClean": @NO,
              @"MachVMPurgeRam": @NO,
              @"AutoCloseBackgroundApp": @NO,
              @"TurboAppLaunch": @YES,
+             @"GameFPSStabilizer": @YES,
+             @"SystemProcessOpt": @YES,
+             @"DeviceSpoofer": @YES,
              @"AntiThermalThrottling": @YES,
+             @"SmartThermalDispatch": @YES,
+             @"HeavyLoadCooling": @YES,
+             @"ChargeThermalProtection": @YES,
              @"PowerSaveMode": @NO,
              @"AntiGhostTouch": @YES,
-             @"ChargerRippleRejection": @YES
+             @"ChargerRippleRejection": @YES,
+             @"BypassVarSandbox": @YES,
+             @"BlockBackgroundTelemetry": @YES
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
@@ -897,7 +919,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// KHỞI TẠO MENU UIMENU NỀN KÍNH THEO ĐÚNG ẢNH CHO HZ & FPS (30 - 60 - 90 - 120 - 144 + MỞ RỘNG + NHẬP TAY)
+// KHỞI TẠO MENU UIMENU CHO HZ & FPS
 // ====================================================================================================
 
 - (UIMenu *)buildHzMenu API_AVAILABLE(ios(14.0)) {
@@ -947,12 +969,12 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         }]];
     }
     UIMenu *moreMenu = [UIMenu menuWithTitle:@"Tùy Chọn Mở Rộng..."
-                                       image:[UIImage systemImageNamed:@"chevron.right"]
+                                       image:[UIImage systemImageNamed:@"slider.horizontal.3"]
                                   identifier:nil
                                      options:0
                                     children:moreList];
 
-    UIAction *customAction = [UIAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 Hz)..."
+    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 Hz)..."
                                                  image:[UIImage systemImageNamed:@"keyboard"]
                                             identifier:nil
                                                handler:^(__kindof UIAction * _Nonnull action) {
@@ -1010,12 +1032,12 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         }]];
     }
     UIMenu *moreMenu = [UIMenu menuWithTitle:@"Tùy Chọn Mở Rộng..."
-                                       image:[UIImage systemImageNamed:@"chevron.right"]
+                                       image:[UIImage systemImageNamed:@"slider.horizontal.3"]
                                   identifier:nil
                                      options:0
                                     children:moreList];
 
-    UIAction *customAction = [UIAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 FPS)..."
+    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 FPS)..."
                                                  image:[UIImage systemImageNamed:@"keyboard"]
                                             identifier:nil
                                                handler:^(__kindof UIAction * _Nonnull action) {
@@ -1097,7 +1119,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     [sheet addAction:[UIAlertAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 Hz)..." style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self showCustomRateInputAlertForHz:YES];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡ 144 Hz (Ép Xung Cực Đại)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ 144 Hz (Ép Xung Cực Đại)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self applyRateValue:144 isDynamic:NO isFPS:NO];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"✨ 120 Hz (ProMotion Max)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
