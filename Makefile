@@ -63,9 +63,13 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# CHỈ KHAI BÁO BUNDLE CÀI ĐẶT PREFERENCES CỦA TWEAK
+# KHAI BÁO SUBPROJECTS: TÙY CHỌN BẬT / TẮT APP TEST ĐỘC LẬP
 SUBPROJECTS += BoostiPhone6s
+# Nếu bạn muốn build kèm ứng dụng test độc lập để cài đặt an toàn không sợ Safe Mode, hãy bỏ dấu # ở dòng dưới:
+# SUBPROJECTS += MockDeviceApp
+
 include $(THEOS_MAKE_PATH)/aggregate.mk
+
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
