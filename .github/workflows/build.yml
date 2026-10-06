@@ -22,37 +22,32 @@ jobs:
           echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
           echo "$THEOS_PATH/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
+          echo "THEOS_NO_AUTO_UPDATE=1" >> $GITHUB_ENV
           
-          # Tắt kiểm tra cập nhật brew để tăng tốc 3x
+          # Tắt kiểm tra cập nhật brew để tăng tốc tối đa
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           brew install dpkg ldid coreutils
 
-      # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK ---
+      # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK CHUẨN XÁC ---
       - name: Clone Theos & Install SDK
         run: |
           TARGET_DIR="${{ env.THEOS }}"
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive --depth=1 https://github.com/theos/theos.git "$TARGET_DIR"
           
-          mkdir -p /tmp/sdk_repo
-          cd /tmp/sdk_repo
-          git init
-          git remote add origin https://github.com/theos/sdks.git
-          git config core.sparseCheckout true
-          echo "iPhoneOS16.5.sdk/" > .git/info/sparse-checkout
-          git fetch --depth=1 origin master
-          git checkout FETCH_HEAD
-          
           mkdir -p "$TARGET_DIR/sdks"
+          git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
+          cd /tmp/sdks
+          git sparse-checkout set iPhoneOS16.5.sdk
           mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
-          cd ~
-          rm -rf /tmp/sdk_repo
+          rm -rf /tmp/sdks
           
           if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
              echo "❌ Error: Không tìm thấy SDK iPhoneOS16.5!"
              exit 1
           fi
+          echo "✅ Cài đặt Theos & SDK iPhoneOS16.5 hoàn tất!"
 
       # --- BƯỚC 3: QUÉT CHUẨN XÁC: PHÂN TÍCH SELECTOR THỰC TẾ & LỖI %ORIG ---
       - name: Deep Scan Duplicates & Syntax Errors
@@ -126,7 +121,6 @@ jobs:
               curr_method_info = None
 
               method_registry = {}
-              orig_syntax_warnings = []
 
               for idx, raw_line in enumerate(lines, 1):
                   line_stripped = raw_line.strip()
@@ -193,16 +187,6 @@ jobs:
 
                   if in_method_body:
                       method_body_lines.append(raw_line)
-                      
-                      if re.search(r'%orig\s*\([^)]+?\)\s*;', code_line):
-                          m_type, sel = curr_method_info
-                          orig_syntax_warnings.append({
-                              "line": idx,
-                              "class": curr_class,
-                              "method": f"{m_type}{sel}",
-                              "content": line_stripped
-                          })
-
                       brace_depth += code_line.count('{') - code_line.count('}')
                       if brace_depth <= 0:
                           in_method_body = False
@@ -216,17 +200,7 @@ jobs:
                               "body": "".join(method_body_lines)
                           })
 
-              # --- 1. CẢNH BÁO CÚ PHÁP %ORIG(...) ---
-              if orig_syntax_warnings:
-                  print("\n" + "="*80)
-                  print(f"⚠️ CẢNH BÁO CÚ PHÁP %ORIG TRUYỀN THAM SỐ: {filepath}")
-                  print("="*80)
-                  for warn in orig_syntax_warnings:
-                      print(f"📍 Dòng {warn['line']} trong [{warn['class']} {warn['method']}]:")
-                      print(f"   Code: {warn['content']}")
-                      print(f"   👉 KHẮC PHỤC: Nên đổi thành '%orig;' để Theos tự chuyển tiếp qua Register.\n")
-
-              # --- 2. KIỂM TRA TRÙNG LẶP PHƯƠNG THỨC THỰC TẾ ---
+              # --- KIỂM TRA TRÙNG LẶP PHƯƠNG THỨC THỰC TẾ ---
               for (class_name, m_type, method_sel), occurrences in method_registry.items():
                   if len(occurrences) > 1:
                       has_critical_error = True
@@ -279,17 +253,19 @@ jobs:
           
           rm -rf packages/ obj/ .theos/
           
-          # Phân quyền chuẩn xác theo định dạng gói DEB
-          if [ -d "layout/DEBIAN" ]; then
-            find layout/DEBIAN -type f -exec chmod 644 {} +
-            find layout/DEBIAN -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
-            chmod 755 layout/DEBIAN
-          fi
+          # [ÉP TOÀN DIỆN]: Phân quyền chuẩn xác cho cả thư mục layout/DEBIAN và DEBIAN gốc
+          for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
+            if [ -d "$DEBIAN_DIR" ]; then
+              find "$DEBIAN_DIR" -type f -exec chmod 644 {} +
+              find "$DEBIAN_DIR" -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
+              chmod 755 "$DEBIAN_DIR"
+            fi
+          done
           
           BUILD_LOG_FILE="/tmp/theos_build.log"
           
           set -o pipefail
-          # Biên dịch đa luồng theo số nhân vCPU thực tế
+          # Tự động lấy số core phần cứng trên macOS runner
           NCPU=$(sysctl -n hw.ncpu || echo 2)
           make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless -j"$NCPU" 2>&1 | tee "$BUILD_LOG_FILE" || BUILD_FAILED=1
 
@@ -310,7 +286,7 @@ jobs:
             exit 1
           fi
           
-          ls -lh packages/*.deb || { echo "❌ Không tìm thấy deb!"; exit 1; }
+          ls -lh packages/*.deb || { echo "❌ Không tìm thấy file deb!"; exit 1; }
 
       # --- BƯỚC 5: TẢI FILE DEB LÊN ARTIFACTS ---
       - name: Upload Deb Artifact
