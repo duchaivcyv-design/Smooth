@@ -4165,41 +4165,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // ====================================================================================================
 // NHÓM 19: CRYO-PACING DUTY-CYCLE & VRAM BANDWIDTH THERMAL DISSIPATION (HẠ NHIỆT 0-DROP FPS)
-// (HẠ NHIỆT KHÔNG BÓP XUNG: HOÀN THÀNH FRAME SỚM ĐỂ CHIP NGHỈ + CẮT BĂNG THÔNG BUS BỘ NHỚ VRAM)
+// (HẠ NHIỆT KHÔNG BÓP XUNG: HOÀN THÀNH FRAME SỚM ĐỂ CHIP NGHỈ + GIẢM TẢI TÍNH TOÁN COREANIMATION)
 // ====================================================================================================
 
 %group Group_Thermal_CryoPacing_ZeroDrop
 
-// 1. TỐI ƯU BĂNG THÔNG GPU METAL: KHÔNG GHI ĐỆM THỪA VÀO VRAM ĐỂ HẠ NHIỆT BUS RAM
-%hook MTLRenderPassDescriptor
-
-- (void)setDepthAttachment:(id)depthAttachment {
-    %orig;
-    if (IS_ACTIVE && depthAttachment) {
-        // Chỉ lưu depth khi thật sự cần, tránh tiêu tốn bus bộ nhớ DRAM
-        if ([depthAttachment respondsToSelector:@selector(setStoreAction:)]) {
-            [depthAttachment setStoreAction:0]; // MTLStoreActionDontCare
-        }
-    }
-}
-
-- (void)setStencilAttachment:(id)stencilAttachment {
-    %orig;
-    if (IS_ACTIVE && stencilAttachment) {
-        if ([stencilAttachment respondsToSelector:@selector(setStoreAction:)]) {
-            [stencilAttachment setStoreAction:0]; // MTLStoreActionDontCare
-        }
-    }
-}
-
-%end
-
-// 2. TỐI ƯU ĐỒ HỌA CALAYER: GIẢM THỜI GIAN GPU TÍNH TOÁN SHADOW & BLUR
+// 1. TỐI ƯU ĐỒ HỌA CALAYER: GIẢM THỜI GIAN GPU TÍNH TOÁN SHADOW & BLUR
 %hook CALayer
 
 - (void)setShadowRadius:(CGFloat)radius {
     if (IS_ACTIVE && radius > 0.0) {
-        // Tạo sẵn shadowPath giả lập hình chữ nhật nếu chưa có để GPU không phải scan alpha từng pixel
+        // Tự tạo shadowPath nếu chưa có để GPU không phải scan alpha từng pixel
         if (!self.shadowPath && self.bounds.size.width > 0 && self.bounds.size.height > 0) {
             CGPathRef path = CGPathCreateWithRect(self.bounds, NULL);
             self.shadowPath = path;
@@ -4210,30 +4186,29 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             radius = 8.0;
         }
     }
-    %orig(radius);
+    %orig; // Đã đổi thành %orig trơn theo chuẩn Theos
 }
 
-// 3. TỰ ĐỘNG BẬT GPU CACHING CHO CÁC VIEW TĨNH ĐỂ GPU NGHỈ NGƠI HOÀN TOÀN
+// 2. TỰ ĐỘNG BẬT GPU CACHING CHO CÁC VIEW PHỨC TẠP TĨNH
 - (void)setShouldRasterize:(BOOL)val {
     if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
-        // Nếu layer có sublayers phức tạp, ép cache thành bitmap để không phải vẽ lại ở từng chu kỳ 144Hz
+        // Nếu layer có nhiều sublayers phức tạp, ép cache thành bitmap để không phải vẽ lại ở mỗi frame 144Hz
         if (self.sublayers.count > 4) {
             val = YES;
             self.rasterizationScale = [UIScreen mainScreen].scale;
         }
     }
-    %orig(val);
+    %orig; // Đã đổi thành %orig trơn theo chuẩn Theos
 }
 
 %end
 
-// 4. TIẾT KIỆM NĂNG LƯỢNG CHO HIỆU ỨNG KÍNH BLUR KHI MÀN HÌNH TĨNH
+// 3. TIẾT KIỆM NĂNG LƯỢNG CHO HIỆU ỨNG KÍNH BLUR KHI MÀN HÌNH TĨNH
 %hook UIVisualEffectView
 
 - (void)didMoveToWindow {
     %orig;
     if (IS_ACTIVE && self.window) {
-        // Tắt tính toán subview không cần thiết bên trong visual effect khi màn hình không cuộn
         self.layer.allowsGroupOpacity = YES;
         self.layer.drawsAsynchronously = YES;
     }
@@ -4241,13 +4216,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 5. TRẢ NHỊP CPU NGHỈ TỨC THÌ SAU KHI COREANIMATION COMMIT XONG
+// 4. TRẢ NHỊP CPU NGHỈ TỨC THÌ SAU KHI COREANIMATION COMMIT XONG (DUTY-CYCLE SLEEP)
 %hook CATransaction
 
 + (void)flush {
     %orig;
     if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
-        // Sau khi đẩy xong lệnh vẽ sang RenderServer, hạ nhẹ QoS luồng nền để P-Core bước vào trạng thái ngủ ngắn
+        // Sau khi RenderServer nhận lệnh vẽ, hạ nhẹ QoS luồng nền để P-Core bước vào trạng thái C-State sleep ngắn
         if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
             pthread_set_qos_class_self_np(QOS_CLASS_DEFAULT, 0);
         }
