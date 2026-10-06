@@ -192,23 +192,35 @@ static inline BOOL Titanium_IsGroupCell(PSSpecifier *spec) {
     return NO;
 }
 
-// BỘ PHÂN LOẠI NHÓM: NHÓM ĐIỀU KHIỂN / NHÓM CƠ BẢN / NHÓM NÂNG CAO
+// [ÉP TOÀN DIỆN]: KHÓA CỨNG HZ & FPS Ở BÊN NGOÀI MẶC ĐỊNH (TIER_CORE), CHỈ CÁC NHÓM SÂU MỚI VÀO ADVANCED
 static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     NSString *gid = [spec propertyForKey:@"groupID"];
     NSString *lbl = [spec propertyForKey:@"label"] ?: spec.name ?: @"";
 
-    if ([gid isEqualToString:@"GROUP_MASTER"] || [gid isEqualToString:@"GROUP_MONITOR"] || [gid isEqualToString:@"GROUP_LANGUAGE"] || [gid isEqualToString:@"GROUP_DEV"] ||
-        [lbl containsString:@"CÔNG TẮC TỔNG"] || [lbl containsString:@"GIÁM SÁT"] || [lbl containsString:@"NGÔN NGỮ"] || [lbl containsString:@"THÔNG TIN"]) {
+    // CÁC MỤC LUÔN NẰM BÊN NGOÀI KHÔNG BAO GIỜ BỊ ẨN
+    if ([gid isEqualToString:@"GROUP_MASTER"] || 
+        [gid isEqualToString:@"GROUP_MONITOR"] || 
+        [gid isEqualToString:@"GROUP_TIER_CONTROL"] || 
+        [gid isEqualToString:@"GROUP_HZ_FPS"] ||           // <-- KHÓA CỨNG HZ & FPS Ở NGOÀI
+        [gid isEqualToString:@"GROUP_LANGUAGE"] || 
+        [gid isEqualToString:@"GROUP_DEV"] ||
+        [lbl containsString:@"CÔNG TẮC TỔNG"] || 
+        [lbl containsString:@"GIÁM SÁT"] || 
+        [lbl containsString:@"ĐIỀU PHỐI HZ"] || 
+        [lbl containsString:@"NGÔN NGỮ"] || 
+        [lbl containsString:@"THÔNG TIN"]) {
         return @"TIER_CORE";
     }
 
-    // NHÓM THƯỜNG / CƠ BẢN (Basic Tier)
-    if ([gid isEqualToString:@"GROUP_HZ_FPS"] || [gid isEqualToString:@"GROUP_TOUCH_SCREEN"] || [gid isEqualToString:@"GROUP_UI"] ||
-        [lbl containsString:@"ĐIỀU PHỐI HZ"] || [lbl containsString:@"BỘ LỌC CẢM ỨNG"] || [lbl containsString:@"GIA TỐC GIAO DIỆN"]) {
+    // NHÓM CƠ BẢN (Cảm ứng & Giao diện cuộn)
+    if ([gid isEqualToString:@"GROUP_TOUCH_SCREEN"] || 
+        [gid isEqualToString:@"GROUP_UI"] ||
+        [lbl containsString:@"BỘ LỌC CẢM ỨNG"] || 
+        [lbl containsString:@"GIA TỐC GIAO DIỆN"]) {
         return @"TIER_BASIC";
     }
 
-    // TẤT CẢ CÁC NHÓM CÒN LẠI LÀ NÂNG CAO (Advanced Tier)
+    // TẤT CẢ CÁC NHÓM CÒN LẠI LÀ NÂNG CAO
     return @"TIER_ADVANCED";
 }
 
@@ -427,9 +439,17 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     [groupMonitor setProperty:@"Đo đạc xung nhịp, nhiệt độ và tần số quét trực tiếp từ nhân XNU mà không gây tốn pin hay nóng máy." forKey:@"footerText"];
     [filteredSpecs addObject:groupMonitor];
 
-    self->_specMonitorHzFPS = [PSSpecifier preferenceSpecifierNamed:@"⚡ Tần Số Quét & FPS: Đang đọc..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
-    self->_specMonitorThermal = [PSSpecifier preferenceSpecifierNamed:@"🌡️ Nhiệt Độ Hệ Thống: Đang đọc..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
-    self->_specMonitorCPUGPU = [PSSpecifier preferenceSpecifierNamed:@"🚀 Tải Xử Lý CPU/GPU: Đang đọc..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+    self->_specMonitorHzFPS = [PSSpecifier preferenceSpecifierNamed:@"⚡ Tần Số Quét & FPS: Đang nạp..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+    [self->_specMonitorHzFPS setProperty:@"MonitorHzFPS" forKey:@"id"];
+    [self->_specMonitorHzFPS setProperty:@"MonitorHzFPS" forKey:@"key"];
+
+    self->_specMonitorThermal = [PSSpecifier preferenceSpecifierNamed:@"🌡️️ Nhiệt Độ Hệ Thống: Đang nạp..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+    [self->_specMonitorThermal setProperty:@"MonitorThermal" forKey:@"id"];
+    [self->_specMonitorThermal setProperty:@"MonitorThermal" forKey:@"key"];
+
+    self->_specMonitorCPUGPU = [PSSpecifier preferenceSpecifierNamed:@"🚀 Tải Xử Lý CPU/GPU: Đang nạp..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+    [self->_specMonitorCPUGPU setProperty:@"MonitorCPUGPU" forKey:@"id"];
+    [self->_specMonitorCPUGPU setProperty:@"MonitorCPUGPU" forKey:@"key"];
 
     [filteredSpecs addObject:self->_specMonitorHzFPS];
     [filteredSpecs addObject:self->_specMonitorThermal];
@@ -437,11 +457,12 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
     // --- BỔ SUNG CÔNG TẮC ĐIỀU HƯỚNG GOM GỌN DANH MỤC ---
     PSSpecifier *groupControl = [PSSpecifier groupSpecifierWithName:@"🎛️ BỘ ĐIỀU HƯỚNG HIỂN THỊ CÔNG TẮC (GOM GỌN TIỆN LỢI)"];
+    [groupControl setProperty:@"GROUP_TIER_CONTROL" forKey:@"groupID"];
     [groupControl setProperty:@"TIER_CORE" forKey:@"tier"];
-    [groupControl setProperty:@"Ẩn bớt các mục để giao diện gọn gàng. Công tắc ẩn vẫn duy trì hoạt động ép xung 100%." forKey:@"footerText"];
+    [groupControl setProperty:@"Tùy chọn ẩn các nhóm tính năng để màn hình gọn gàng. Tần số quét (Hz) & FPS luôn luôn hiển thị ở ngoài." forKey:@"footerText"];
     [filteredSpecs addObject:groupControl];
 
-    PSSpecifier *switchBasic = [PSSpecifier preferenceSpecifierNamed:@"📂 Hiện Nhóm Công Tắc Cơ Bản" target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
+    PSSpecifier *switchBasic = [PSSpecifier preferenceSpecifierNamed:@"📂 Hiện Nhóm Cảm Ứng & Giao Diện" target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
     [switchBasic setProperty:@"ShowBasicOptions" forKey:@"key"];
     [switchBasic setProperty:@YES forKey:@"default"];
     [switchBasic setProperty:@"com.taojb.boostiphone6s" forKey:@"defaults"];
@@ -463,7 +484,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
         if (!masterEnabled) {
             // Khi tắt công tắc tổng: Chỉ giữ lại CÔNG TẮC TỔNG, NGÔN NGỮ và DEV INFO
-            NSString *gid = Titanium_GetGroupID(spec);
+            NSString *gid = [spec propertyForKey:@"groupID"];
             if ([gid isEqualToString:@"GROUP_MASTER"]) {
                 NSString *k = [spec propertyForKey:@"key"];
                 if (Titanium_IsGroupCell(spec) || [k isEqualToString:@"Enabled"]) {
@@ -475,7 +496,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
             continue;
         }
 
-        // Khi Master Bật: Lọc theo 2 Toggle Gom Nhóm
+        // Khi Master Bật: Lọc theo Tier
         if ([currentTier isEqualToString:@"TIER_CORE"]) {
             [filteredSpecs addObject:spec];
         } else if ([currentTier isEqualToString:@"TIER_BASIC"]) {
@@ -511,7 +532,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     [self stopHardwareMonitor];
 
     _monitorTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_monitorTimer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(1.0 * NSEC_PER_SEC), (uint64_t)(0.1 * NSEC_PER_SEC));
+    dispatch_source_set_timer(_monitorTimer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(1.5 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
 
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_monitorTimer, ^{
@@ -527,6 +548,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     }
 }
 
+// [KHẮC PHỤC TRIỆT ĐỂ LỖI ARC DÒNG 466]: CẬP NHẬT TRỰC TIẾP QUA CELL MÀ KHÔNG GỌI SELECTOR SAI KIỂU
 - (void)refreshHardwareHUD {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
@@ -543,15 +565,33 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
     if (self->_specMonitorHzFPS) {
         self->_specMonitorHzFPS.name = hzFpsStr;
-        [self reloadSpecifier:self->_specMonitorHzFPS];
+        [self->_specMonitorHzFPS setProperty:hzFpsStr forKey:@"label"];
     }
     if (self->_specMonitorThermal) {
         self->_specMonitorThermal.name = thermalStr;
-        [self reloadSpecifier:self->_specMonitorThermal];
+        [self->_specMonitorThermal setProperty:thermalStr forKey:@"label"];
     }
     if (self->_specMonitorCPUGPU) {
         self->_specMonitorCPUGPU.name = cpuStr;
-        [self reloadSpecifier:self->_specMonitorCPUGPU];
+        [self->_specMonitorCPUGPU setProperty:cpuStr forKey:@"label"];
+    }
+
+    if ([self respondsToSelector:@selector(table)]) {
+        UITableView *tbl = [self table];
+        if (tbl) {
+            for (NSIndexPath *ip in [tbl indexPathsForVisibleRows]) {
+                if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
+                    PSSpecifier *s = [self specifierAtIndexPath:ip];
+                    if (s == self->_specMonitorHzFPS || s == self->_specMonitorThermal || s == self->_specMonitorCPUGPU) {
+                        UITableViewCell *c = [tbl cellForRowAtIndexPath:ip];
+                        if (c) {
+                            c.textLabel.text = s.name;
+                            [c setNeedsLayout];
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
