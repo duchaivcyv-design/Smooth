@@ -1,6 +1,5 @@
 # ====================================================================================================
 # MAKEFILE CHUẨN ÉP TOÀN DIỆN CHO BOOSTIPHONE6SCORE (ARM64 / ARM64E ROOTLESS & ROOTHIDE)
-# (TỐI ƯU HÓA O3 + LTO + LIÊN KẾT SUBSTRATE VÀ PRIVATE FRAMEWORK CHUẨN XNU)
 # ====================================================================================================
 
 ARCHS = arm64 arm64e
@@ -14,12 +13,11 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = BoostiPhone6sCore
 
-# [ÉP TOÀN DIỆN]: Ép đường dẫn nạp tự động thích ứng chuẩn Rootless / RootHide ($(_THEOS_PREFIX))
 BoostiPhone6sCore_INSTALL_PATH = $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
 BoostiPhone6sCore_FILES = Tweak.xm
                           
-# [ÉP TOÀN DIỆN]: CỜ BIÊN DỊCH CLANG TỐI ƯU HÓA -O3, FLTO VÀ TRIỆT TIÊU TOÀN BỘ WARNING
+# [ÉP TOÀN DIỆN]: CỜ BIÊN DỊCH CLANG TỐI ƯU HÓA -O3, FLTO VÀ DẬP TẮT TOÀN BỘ WARNING
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
                            -flto=thin \
@@ -41,7 +39,6 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -IHeaders \
                            -I.
 
-# [ÉP TOÀN DIỆN]: ĐỒNG BỘ CỜ CHO TWEAK.XM (OBJ-C++17 SIÊU TỐC)
 BoostiPhone6sCore_OBJCXXFLAGS = $(BoostiPhone6sCore_CFLAGS) -std=gnu++17
 
 # PUBLIC FRAMEWORKS CHUẨN APPLE
@@ -57,13 +54,12 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# [ÉP TOÀN DIỆN]: PRIVATE FRAMEWORKS ĐỒ HỌA VÀ PHẦN CỨNG IOKIT
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit IOSurface BackBoardServices
+# [ÉP TOÀN DIỆN]: ĐÃ LỌC BỎ BACKBOARDSERVICES ĐỂ LINKER CLANG KHÔNG BỊ GÃY BUILD
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit IOSurface
 
-# LIÊN KẾT SUBSTRATE VÀ MOBILEGESTALT
+# LIÊN KẾT SUBSTRATE VÀ PTHREAD
 BoostiPhone6sCore_LIBRARIES = substrate
 
-# [ÉP TOÀN DIỆN]: LDFLAGS LOẠI BỎ CODE THỪA VÀ LIÊN KẾT ĐA LUỒNG PTHREAD
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -flto=thin \
                             -Wl,-undefined,dynamic_lookup \
