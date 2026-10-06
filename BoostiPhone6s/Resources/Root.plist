@@ -35,27 +35,25 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- HUD GIÁM SÁT PHẦN CỨNG & TAB BIỂU ĐỒ THỜI GIAN THỰC (0S OVERHEAD)                                    -->
+		<!-- HUD GIÁM SÁT PHẦN CỨNG & BIỂU ĐỒ ĐỘNG DAO ĐỘNG THỜI GIAN THỰC (0S)                                  -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>📊 GIÁM SÁT PHẦN CỨNG THỜI GIAN THỰC (0S)</string>
+			<string>📊 BIỂU ĐỒ DAO ĐỘNG THỜI GIAN THỰC (0S)</string>
 			<key>groupID</key>
 			<string>GROUP_MONITOR</string>
 			<key>footerText</key>
-			<string>Đo đạc xung nhịp, nhiệt độ và tần số quét trực tiếp từ hạt nhân XNU. Nhấn nút bên dưới để mở giao diện biểu đồ đường nhảy thời gian thực.</string>
+			<string>Đường xanh: Tải CPU Kernel XNU | Đường tím: Tần số quét &amp; FPS thực tế. Đo liên tục 0s không nóng máy.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>📈 MỞ TAB BIỂU ĐỒ THỜI GIAN THỰC (0S)</string>
-			<key>action</key>
-			<string>openRealtimeGraphTab</string>
+			<string>PSCustomCell</string>
+			<key>cellClass</key>
+			<string>TitaniumGraphHostCell</string>
 			<key>id</key>
-			<string>btnOpenRealtimeGraphTab</string>
+			<string>LiveOscilloscopeGraphCell</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -99,7 +97,7 @@
 			<key>groupID</key>
 			<string>GROUP_HZ_FPS</string>
 			<key>footerText</key>
-			<string>⚠️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng máy và hao pin nhanh hơn. Hãy sử dụng kèm sò lạnh khi chơi game kéo dài.</string>
+			<string>⚠️️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng máy và hao pin nhanh hơn. Hãy sử dụng kèm sò lạnh khi chơi game kéo dài.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
