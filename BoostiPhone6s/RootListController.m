@@ -18,11 +18,17 @@
 extern char **environ;
 
 // ====================================================================================================
-// KHAI BÁO CATEGORY ĐỂ CLANG NHẬN BIẾT SELECTOR PRIVATE CỦA PREFERENCES
+// KHAI BÁO CATEGORY ĐỂ CLANG THÔNG QUA TẤT CẢ PRIVATE SELECTORS
 // ====================================================================================================
 
-@interface PSListController (SpecifiersPrivate)
+@interface PSListController (TitaniumPrivateSpecifierCategory)
+- (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target bundle:(nullable NSBundle *)bundle;
 - (nullable NSMutableArray *)specifiersFromDictionary:(NSDictionary *)dictionary target:(nullable id)target;
+- (nullable NSIndexPath *)indexPathForSpecifier:(PSSpecifier *)specifier;
+- (nullable PSSpecifier *)specifierAtIndexPath:(NSIndexPath *)indexPath;
+- (nullable UITableViewCell *)cachedCellForSpecifier:(PSSpecifier *)specifier;
+- (nullable UITableView *)table;
+- (NSInteger)indexOfSpecifier:(PSSpecifier *)specifier;
 @end
 
 @interface BoostConfigV285Pro : NSObject
@@ -36,6 +42,10 @@ extern char **environ;
 + (instancetype)defaultWorkspace;
 - (BOOL)openURL:(NSURL *)url;
 @end
+
+// ====================================================================================================
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN & TIỆN ÍCH HỆ THỐNG
+// ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
@@ -134,6 +144,10 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t s
     }
 }
 
+// ====================================================================================================
+// THU THẬP DỮ LIỆU PHẦN CỨNG THỰC TẾ (MACH HOST KERNEL)
+// ====================================================================================================
+
 static inline float Titanium_GetLiveCPULoadPercentage(void) {
     host_cpu_load_info_data_t cpuinfo;
     mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
@@ -170,6 +184,10 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         default: return @"🟢 Ổn Định (~32°C)";
     }
 }
+
+// ====================================================================================================
+// ROOTLISTCONTROLLER IMPLEMENTATION
+// ====================================================================================================
 
 @interface RootListController () {
     dispatch_queue_t _syncQueue;
@@ -209,7 +227,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// NẠP SPECIFIERS TỰ ĐỘNG
+// NẠP ĐÚNG SPECIFIERS GỐC - AN TOÀN TRÊN MỌI MÔI TRƯỜNG
 // ====================================================================================================
 
 - (id)specifiers {
@@ -248,7 +266,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     return self->_specifiers;
 }
 
-// --- CÁC GETTER TĨNH CHO CELL TRONG ROOT.PLIST ---
+// --- Getters cho các hàng hiển thị HUD thời gian thực ---
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
