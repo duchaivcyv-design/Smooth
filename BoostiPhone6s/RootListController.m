@@ -16,6 +16,40 @@
 extern char **environ;
 
 // ====================================================================================================
+// ĐỊNH NGHĨA STRUCT APEX PAYLOAD ĐỒNG BỘ TOÀN HỆ THỐNG
+// ====================================================================================================
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t masterEnabled;
+    int32_t  targetHz;
+    int32_t  targetFPS;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t smartBufferingLevel;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
+    uint32_t keyboardZeroLagV3;
+    uint32_t aggressiveRamCleaner;
+    uint32_t lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch;
+    uint32_t diskIOPriorityBoost;
+    uint32_t rawTouchDirectDelivery;
+    uint32_t powerSaveModeActive;
+    uint64_t updateSeq;
+    uint64_t lastHeartbeat;
+    char     reserved[48];
+} ApexV285ProPayload;
+
+// ====================================================================================================
 // ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
 // ====================================================================================================
 
@@ -48,7 +82,7 @@ extern char **environ;
 #endif
 
 // ====================================================================================================
-// FORWARD DECLARATIONS & PRIVATE SELECTORS FIX FOR CLANG
+// FORWARD DECLARATIONS & PRIVATE SELECTORS
 // ====================================================================================================
 
 @interface PSListController (TitaniumPrivateSelectors)
@@ -151,13 +185,13 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t s
     for (NSString *path in paths) {
         NSString *dir = [path stringByDeletingLastPathComponent];
         if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
         }
-        int fd = open([path UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        int fd = open([path UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd >= 0) {
             write(fd, payloadData, size);
             close(fd);
-            chmod([path UTF8String], 0666);
+            chmod([path UTF8String], 0644);
         }
     }
 }
@@ -278,6 +312,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     return self;
 }
 
+// [ÉP TOÀN DIỆN]: ĐỒNG BỘ PAYLOAD HẠT NHÂN CHUẨN XNU CHO 100% ỨNG DỤNG
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
     
@@ -343,9 +378,9 @@ static inline NSString *PM_TextV285(NSString *key) {
         payload.memoryPressureRelief = 1;
         payload.runloopHangGuard = 1;
         payload.keyboardZeroLagV3 = prefs[@"KeyboardZeroLagV24"] ? ([prefs[@"KeyboardZeroLagV24"] boolValue] ? 1 : 0) : 1;
-        payload.aggressiveRamCleaner = 0;
+        payload.aggressiveRamCleaner = prefs[@"AggressiveRamClean"] ? ([prefs[@"AggressiveRamClean"] boolValue] ? 1 : 0) : 0;
         
-        payload.lockFixedFpsWhenThermal = 1;
+        payload.lockFixedFpsWhenThermal = prefs[@"AntiThermalThrottling"] ? ([prefs[@"AntiThermalThrottling"] boolValue] ? 1 : 0) : 1;
         payload.antiGhostTouch = prefs[@"AntiGhostTouch"] ? ([prefs[@"AntiGhostTouch"] boolValue] ? 1 : 0) : 1;
         payload.diskIOPriorityBoost = 1;
         payload.rawTouchDirectDelivery = 1;
@@ -544,7 +579,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     if (![fm fileExistsAtPath:prefPath]) {
         NSString *dir = [prefPath stringByDeletingLastPathComponent];
         if (![fm fileExistsAtPath:dir]) {
-            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+            [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
         }
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -578,7 +613,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
-        chmod([prefPath UTF8String], 0666);
+        chmod([prefPath UTF8String], 0644);
 
         for (NSString *key in defaults) {
             CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)defaults[key], PREF_DOMAIN);
@@ -618,13 +653,13 @@ static inline NSString *PM_TextV285(NSString *key) {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dir = [prefPath stringByDeletingLastPathComponent];
     if (![fm fileExistsAtPath:dir]) {
-        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0755)} error:nil];
     }
 
     NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
     [prefs setObject:value forKey:key];
     [prefs writeToFile:prefPath atomically:YES];
-    chmod([prefPath UTF8String], 0666);
+    chmod([prefPath UTF8String], 0644);
 
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -672,7 +707,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 
     [prefs writeToFile:prefPath atomically:YES];
-    chmod([prefPath UTF8String], 0666);
+    chmod([prefPath UTF8String], 0644);
 
     if (isFPS) {
         CFPreferencesSetAppValue(CFSTR("TargetFPSRate"), (__bridge CFPropertyListRef)@(rate), PREF_DOMAIN);
@@ -718,7 +753,7 @@ static inline NSString *PM_TextV285(NSString *key) {
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
             prefs[@"SelectedLanguage"] = code;
             [prefs writeToFile:prefPath atomically:YES];
-            chmod([prefPath UTF8String], 0666);
+            chmod([prefPath UTF8String], 0644);
 
             CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
             CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -1148,6 +1183,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     }
 }
 
+// [ÉP TOÀN DIỆN]: RESPRING AN TOÀN 3 TẦNG TRÊN LUỒNG ƯU TIÊN USER-INTERACTIVE
 - (void)executeRespring {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -1180,6 +1216,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     });
 }
 
+// [ÉP TOÀN DIỆN]: KHỞI ĐỘNG LẠI USERSPACE TRÁNH TREO XNU KERNEL
 - (void)executeSReboot {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -1218,6 +1255,7 @@ static inline NSString *PM_TextV285(NSString *key) {
     [self presentViewController:configuredSheet animated:YES completion:nil];
 }
 
+// [ÉP TOÀN DIỆN]: ĐƯA TOÀN BỘ CẤU HÌNH VỀ TRẠNG THÁI MẶC ĐỊNH 144HZ VÀ XOÁ FILE SYNC
 - (void)executeResetConfiguration {
     NSString *confirmTitle = PM_TextV285(@"RESET_CONFIRM_TITLE") ?: @"Xác Nhận Đặt Lại";
     NSString *confirmMsg = PM_TextV285(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu 144Hz của v28.7 Pro.";
