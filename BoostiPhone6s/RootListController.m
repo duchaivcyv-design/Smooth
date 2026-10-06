@@ -18,8 +18,20 @@
 extern char **environ;
 
 // ====================================================================================================
-// KHAI BÁO CATEGORY ĐỂ CLANG THÔNG QUA TẤT CẢ PRIVATE SELECTORS
+// KHAI BÁO BẢO ĐẢM TOÀN DIỆN CHO CLANG VỀ CÁC HẰNG SỐ & PRIVATE SELECTOR
 // ====================================================================================================
+
+#ifndef PRIMARY_SYNC_FILE
+#define PRIMARY_SYNC_FILE @"/tmp/.boost_hz_sync"
+#endif
+
+#ifndef SECONDARY_SYNC_FILE
+#define SECONDARY_SYNC_FILE @"/var/jb/tmp/.boost_hz_sync"
+#endif
+
+#ifndef BOOT_GUARD_FILE
+#define BOOT_GUARD_FILE @"/tmp/.boost_boot_counter"
+#endif
 
 @interface PSListController (TitaniumPrivateSpecifierCategory)
 - (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target bundle:(nullable NSBundle *)bundle;
@@ -145,7 +157,7 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t s
 }
 
 // ====================================================================================================
-// THU THẬP DỮ LIỆU PHẦN CỨNG THỰC TẾ (MACH HOST KERNEL)
+// THU THẬP THÔNG SỐ CPU / GPU / NHIỆT ĐỘ THỜI GIAN THỰC (0S OVERHEAD)
 // ====================================================================================================
 
 static inline float Titanium_GetLiveCPULoadPercentage(void) {
@@ -227,7 +239,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// NẠP ĐÚNG SPECIFIERS GỐC - AN TOÀN TRÊN MỌI MÔI TRƯỜNG
+// NẠP ĐÚNG BẢN GỐC ROOT.PLIST - BẢO ĐẢM HIỆN 100% CÀI ĐẶT
 // ====================================================================================================
 
 - (id)specifiers {
@@ -266,7 +278,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     return self->_specifiers;
 }
 
-// --- Getters cho các hàng hiển thị HUD thời gian thực ---
+// --- GETTERS CHO 4 DÒNG HUD TRONG ROOT.PLIST ---
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
@@ -847,6 +859,10 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         [[UIApplication sharedApplication] openURL:webURL options:@{} completionHandler:nil];
     });
 }
+
+// ====================================================================================================
+// THANH ĐIỀU HƯỚNG VÀ HÀNH ĐỘNG HỆ THỐNG
+// ====================================================================================================
 
 - (void)setupNavigationItems {
     if (@available(iOS 14.0, *)) {
