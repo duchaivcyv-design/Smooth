@@ -472,7 +472,7 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 // ====================================================================================================
-// [ÉP CHẶN ĐỆ QUY 100%]: KHÓA CHẶT _specifiers NGAY TỪ ĐẦU
+// [ÉP NẠP SPECIFIERS AN TOÀN TUYỆT ĐỐI]: CHỐNG ĐEN MÀN HÌNH TWEAKSETTINGS & PREFERENCES
 // ====================================================================================================
 
 - (id)specifiers {
@@ -480,7 +480,28 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         _specifiers = [[NSMutableArray alloc] init];
 
         @try {
+            // 1. Thử nạp bằng API mặc định của PSListController
             self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+
+            // 2. [FALLBACK CỨU CÁNH CHỐNG MÀN HÌNH ĐEN]: Tự tìm Root.plist trực tiếp từ Bundle
+            if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
+                NSBundle *prefBundle = [NSBundle bundleForClass:[self class]];
+                NSString *plistPath = [prefBundle pathForResource:@"Root" ofType:@"plist"];
+                
+                if (!plistPath || ![[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
+                    NSString *root = Titanium_GetRootHidePrefixPath();
+                    plistPath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Root.plist"];
+                    if (![[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
+                        plistPath = @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Root.plist";
+                    }
+                }
+
+                if ([[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
+                    // Tự tạo Specifiers thủ công từ file Plist nếu hệ thống trả về nil
+                    self->_rawSpecifiers = [self specifiersFromDictionary:[NSDictionary dictionaryWithContentsOfFile:plistPath] target:self];
+                }
+            }
+
             [self ensureDefaultSettingsExist];
 
             if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
@@ -530,11 +551,15 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
                     if (showBasic) [filteredSpecs addObject:spec];
                 } else if ([currentTier isEqualToString:@"TIER_ADVANCED"]) {
                     if (showAdvanced) [filteredSpecs addObject:spec];
+                } else {
+                    [filteredSpecs addObject:spec];
                 }
             }
 
+            // Đồng bộ dịch ngôn ngữ & tiêu đề động
             [self applyFullLocalizationToSpecifiers:filteredSpecs];
             [self updateDynamicTitlesForSpecifiers:filteredSpecs];
+            
             [_specifiers addObjectsFromArray:filteredSpecs];
         } @catch (NSException *e) {
             _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self] ?: [NSMutableArray array];
