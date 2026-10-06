@@ -1,15 +1,17 @@
 #import "MockDeviceViewController.h"
 #import <mach/mach.h>
 
-@interface MockDeviceViewController () <UITextFieldDelegate>
-@property (nonatomic, strong) UIView *springBoardView;
-@property (nonatomic, strong) UIView *controlCenterView;
-@property (nonatomic, strong) UIView *notificationCenterView;
+@interface MockDeviceViewController () <UITextFieldDelegate, UITableViewDelegate, UITableViewDataSource>
+@property (nonatomic, strong) UIView *homeScreenView;
+@property (nonatomic, strong) UIView *sileoAppView;
+@property (nonatomic, strong) UIView *lockScreenView;
+@property (nonatomic, strong) UIView *blackCurtainRespring;
+@property (nonatomic, strong) UITableView *sileoTableView;
+@property (nonatomic, strong) UILabel *statusLabel;
 
-// Các thành phần test
-@property (nonatomic, strong) UITextField *keyboardLagTester;
-@property (nonatomic, strong) UIActivityIndicatorView *networkSpinner;
-@property (nonatomic, strong) UILabel *networkStatusLabel;
+// Các thông số kiểm tra
+@property (nonatomic, assign) BOOL isTweakInstalled;
+@property (nonatomic, assign) BOOL isInSafeMode;
 @property (nonatomic, strong) CADisplayLink *fpsDisplayLink;
 @property (nonatomic, strong) UILabel *fpsCounterLabel;
 @property (nonatomic, assign) CFTimeInterval lastTimestamp;
@@ -20,220 +22,312 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.12 alpha:1.0];
+    self.view.backgroundColor = [UIColor colorWithRed:0.06 green:0.06 blue:0.1 alpha:1.0];
     
-    [self setupSpringBoard];
-    [self setupControlCenterAndNotifications];
+    self.isTweakInstalled = NO;
+    self.isInSafeMode = NO;
+
+    [self setupHomeScreen];
     [self setupFPSMonitoring];
 }
 
-// Khai báo phương thức setupFPSMonitoring
-- (void)setupFPSMonitoring {
-    self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 120, 45, 100, 24)];
-    self.fpsCounterLabel.textColor = [UIColor greenColor];
-    self.fpsCounterLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightBold];
-    self.fpsCounterLabel.textAlignment = NSTextAlignmentRight;
-    [self.view addSubview:self.fpsCounterLabel];
+// 1. MÀN HÌNH CHÍNH (SPRINGBOARD GIẢ LẬP)
+- (void)setupHomeScreen {
+    self.homeScreenView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.homeScreenView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:self.homeScreenView];
 
-    self.fpsDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrameUpdate:)];
-    [self.fpsDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-}
+    // Status bar giả lập
+    UILabel *statusBar = [[UILabel alloc] initWithFrame:CGRectMake(20, 45, self.view.bounds.size.width - 40, 20)];
+    statusBar.text = @"09:41                        5G 🔋 100%";
+    statusBar.textColor = [UIColor whiteColor];
+    statusBar.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
+    [self.homeScreenView addSubview:statusBar];
 
-// 1. Màn hình chính SpringBoard tràn viền
-- (void)setupSpringBoard {
-    self.springBoardView = [[UIView alloc] initWithFrame:self.view.bounds];
-    self.springBoardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.springBoardView];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 30)];
+    title.text = @"BoostiPhone6s Rootless Sandbox";
+    title.textColor = [UIColor whiteColor];
+    title.font = [UIFont boldSystemFontOfSize:18];
+    title.textAlignment = NSTextAlignmentCenter;
+    [self.homeScreenView addSubview:title];
 
-    UILabel *headerLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, self.view.bounds.size.width - 40, 30)];
-    headerLbl.text = @"BoostiPhone6s Safe Sandbox";
-    headerLbl.textColor = [UIColor whiteColor];
-    headerLbl.font = [UIFont boldSystemFontOfSize:20];
-    headerLbl.textAlignment = NSTextAlignmentCenter;
-    [self.springBoardView addSubview:headerLbl];
-
-    CGFloat startX = 35;
-    CGFloat startY = 120;
-    CGFloat size = 70;
-    CGFloat spacing = 20;
-
-    // Dùng NSValue để bọc selector an toàn vào mảng Objective-C
+    // Lưới các App trên SpringBoard
     NSArray *apps = @[
-        @{@"title": @"Sileo", @"color": [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSileoInstallerDemo)]},
-        @{@"title": @"App Test", @"color": [UIColor colorWithRed:0.4 green:0.4 blue:0.5 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSandboxTestApp)]},
-        @{@"title": @"Speed Test", @"color": [UIColor colorWithRed:0.9 green:0.5 blue:0.1 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openNetworkTestApp)]},
-        @{@"title": @"Gõ Phím", @"color": [UIColor colorWithRed:0.1 green:0.7 blue:0.3 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openKeyboardLagTesterApp)]}
+        @{@"name": @"Sileo", @"color": [UIColor colorWithRed:0.15 green:0.55 blue:0.85 alpha:1.0], @"selector": @selector(openSileoApp)},
+        @{@"name": @"Tweak Test", @"color": [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0], @"selector": @selector(openTweakTestApp)},
+        @{@"name": @"Respring", @"color": [UIColor colorWithRed:0.9 green:0.3 blue:0.2 alpha:1.0], @"selector": @selector(simulateRealRespring)},
+        @{@"name": @"Files", @"color": [UIColor colorWithRed:0.95 green:0.6 blue:0.1 alpha:1.0], @"selector": @selector(openFilesApp)}
     ];
 
+    CGFloat size = 72;
+    CGFloat startX = 40;
+    CGFloat startY = 140;
+    CGFloat spacingX = 35;
+    CGFloat spacingY = 40;
+
     for (int i = 0; i < apps.count; i++) {
-        NSDictionary *appInfo = apps[i];
-        int row = i / 2;
-        int col = i % 2;
-        CGFloat x = startX + col * (size + spacing + 40);
-        CGFloat y = startY + row * (size + 50);
+        NSDictionary *app = apps[i];
+        int r = i / 2;
+        int c = i % 2;
+        CGFloat x = startX + c * (size + spacingX + 30);
+        CGFloat y = startY + r * (size + spacingY + 20);
 
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         btn.frame = CGRectMake(x, y, size, size);
-        btn.backgroundColor = appInfo[@"color"];
-        btn.layer.cornerRadius = 18.0;
+        btn.backgroundColor = app[@"color"];
+        btn.layer.cornerRadius = 18;
         btn.layer.shadowColor = [UIColor blackColor].CGColor;
-        btn.layer.shadowOpacity = 0.4;
+        btn.layer.shadowOpacity = 0.5;
         btn.layer.shadowOffset = CGSizeMake(0, 4);
-        
-        SEL actionSel = (SEL)[appInfo[@"action"] pointerValue];
-        [btn addTarget:self action:actionSel forControlEvents:UIControlEventTouchUpInside];
+        [btn addTarget:self action:NSSelectorFromString(app[@"selector"]) forControlEvents:UIControlEventTouchUpInside];
 
-        UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(-10, size + 6, size + 20, 18)];
-        lbl.text = appInfo[@"title"];
+        UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(-10, size + 5, size + 20, 16)];
+        lbl.text = app[@"name"];
         lbl.textColor = [UIColor whiteColor];
         lbl.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
         lbl.textAlignment = NSTextAlignmentCenter;
         [btn addSubview:lbl];
 
-        [self.springBoardView addSubview:btn];
+        [self.homeScreenView addSubview:btn];
     }
 }
 
-// 2. Quy trình Sileo Cài Tweak & Kiểm tra Safe Mode
-- (void)openSileoInstallerDemo {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Sileo Package Manager (Demo)" 
-                                                                   message:@"Gói BoostiPhone6s.deb đã sẵn sàng cài đặt an toàn." 
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cài Đặt & Respring" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showToastNotice:@"Đang cài đặt Tweak vào phân vùng Rootless..."];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self triggerRespringVerification];
-        });
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+// 2. GIAO DIỆN SILEO THẬT (HIỂN THỊ ĐÚNG GÓI TWEAK ĐỂ CÀI ĐẶT)
+- (void)openSileoApp {
+    self.sileoAppView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.sileoAppView.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.08 alpha:1.0];
+    [self.view addSubview:self.sileoAppView];
+
+    // Header Sileo
+    UILabel *header = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, self.view.bounds.size.width - 40, 40)];
+    header.text = @"📦 Sileo Package Manager";
+    header.textColor = [UIColor whiteColor];
+    header.font = [UIFont boldSystemFontOfSize:20];
+    [self.sileoAppView addSubview:header];
+
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    backBtn.frame = CGRectMake(self.view.bounds.size.width - 80, 65, 60, 30);
+    [backBtn setTitle:@"Đóng" forState:UIControlStateNormal];
+    [backBtn addTarget:self action:@selector(closeSileoApp) forControlEvents:UIControlEventTouchUpInside];
+    [self.sileoAppView addSubview:backBtn];
+
+    // Bảng danh sách package
+    self.sileoTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 120, self.view.bounds.size.width, self.view.bounds.size.height - 120) style:UITableViewStyleInsetGrouped];
+    self.sileoTableView.backgroundColor = [UIColor clearColor];
+    self.sileoTableView.delegate = self;
+    self.sileoTableView.dataSource = self;
+    [self.sileoAppView addSubview:self.sileoTableView];
 }
 
-- (void)triggerRespringVerification {
-    UIAlertController *respringAlert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Respring?" 
-                                                                           message:@"Kiểm tra trạng thái an toàn 0% lỗi Safe Mode." 
-                                                                    preferredStyle:UIAlertControllerStyleActionSheet];
-    [respringAlert addAction:[UIAlertAction actionWithTitle:@"Thực Thi Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        UIView *blackCurtain = [[UIView alloc] initWithFrame:self.view.bounds];
-        blackCurtain.backgroundColor = [UIColor blackColor];
-        UIActivityIndicatorView *spin = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-        spin.center = blackCurtain.center;
-        [spin startAnimating];
-        [blackCurtain addSubview:spin];
-        [self.view addSubview:blackCurtain];
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [blackCurtain removeFromSuperview];
-            [self showToastNotice:@"✅ Respring thành công! Hoạt động hoàn hảo."];
-        });
-    }]];
-    [respringAlert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:respringAlert animated:YES completion:nil];
+- (void)closeSileoApp {
+    [UIView animateWithDuration:0.25 animations:^{
+        self.sileoAppView.alpha = 0;
+    } completion:^(BOOL finished) {
+        [self.sileoAppView removeFromSuperview];
+        self.sileoAppView = nil;
+    }];
 }
 
-// 3. Test App độc lập & Cảnh báo Sandbox
-- (void)openSandboxTestApp {
-    UIView *appView = [[UIView alloc] initWithFrame:self.view.bounds];
-    appView.backgroundColor = [UIColor whiteColor];
-    appView.alpha = 0.0;
-    [self.view addSubview:appView];
+// UITableView DataSource cho Sileo
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 1; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return 1; }
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell"];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"Cell"];
+    }
+    cell.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.2 alpha:1.0];
+    cell.textLabel.text = @"BoostiPhone6s Core (Rootless Tweak)";
+    cell.textLabel.textColor = [UIColor whiteColor];
+    cell.detailTextLabel.text = self.isTweakInstalled ? @"Đã cài đặt ✅ (Bấm để gỡ)" : @"Phiên bản: 28.7 Pro (Chạm để cài)";
+    cell.detailTextLabel.textColor = self.isTweakInstalled ? [UIColor greenColor] : [UIColor orangeColor];
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    
+    if (!self.isTweakInstalled) {
+        // Cài đặt thật trong môi trường giả lập
+        UIAlertController *installAlert = [UIAlertController alertControllerWithTitle:@"Cài Đặt Gói Tweak" 
+                                                                               message:@"Xác nhận nạp BoostiPhone6sCore.dylib vào phân vùng rootless?" 
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+        [installAlert addAction:[UIAlertAction actionWithTitle:@"Tiến Hành Cài" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            self.isTweakInstalled = YES;
+            [self.sileoTableView reloadData];
+            [self showToastNotice:@"📥 Tải và cấu hình .deb thành công! Bắt đầu Respring..."];
+            
+            // Tự động kích hoạt Respring sau khi cài
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self closeSileoApp];
+                [self simulateRealRespring];
+            });
+        }]];
+        [installAlert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:installAlert animated:YES completion:nil];
+    }
+}
+
+// 3. MÔ PHỎNG RESPRING THỰC SỰ & MÀN HÌNH KHÓA KIỂM TRA SAFE MODE
+- (void)simulateRealRespring {
+    // Tạo màn hình đen Respring xoay vòng
+    self.blackCurtainRespring = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.blackCurtainRespring.backgroundColor = [UIColor blackColor];
+    
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.center = self.blackCurtainRespring.center;
+    spinner.color = [UIColor whiteColor];
+    [spinner startAnimating];
+    [self.blackCurtainRespring addSubview:spinner];
+    
+    UILabel *respringText = [[UILabel alloc] initWithFrame:CGRectMake(20, spinner.center.y + 40, self.view.bounds.size.width - 40, 30)];
+    respringText.text = @"Đang nạp lại SpringBoard...";
+    respringText.textColor = [UIColor lightGrayColor];
+    respringText.textAlignment = NSTextAlignmentCenter;
+    respringText.font = [UIFont systemFontOfSize:14];
+    [self.blackCurtainRespring addSubview:respringText];
+    
+    [self.view addSubview:self.blackCurtainRespring];
+
+    // Sau 2 giây respring xong, hiện màn hình khóa yêu cầu xác thực trạng thái
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self.blackCurtainRespring removeFromSuperview];
+        self.blackCurtainRespring = nil;
+
+        [self showLockScreenWithSafeModePrompt];
+    });
+}
+
+- (void)showLockScreenWithSafeModePrompt {
+    self.lockScreenView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.lockScreenView.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.15 alpha:1.0];
+
+    UILabel *timeLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.view.bounds.size.width - 40, 60)];
+    timeLbl.text = @"09:41";
+    timeLbl.textColor = [UIColor whiteColor];
+    timeLbl.font = [UIFont systemFontOfSize:64 weight:UIFontWeightThin];
+    timeLbl.textAlignment = NSTextAlignmentCenter;
+    [self.lockScreenView.layer setShadowOpacity:0.3];
+    [self.lockScreenView addSubview:timeLbl];
+
+    UILabel *dateLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 170, self.view.bounds.size.width - 40, 30)];
+    dateLbl.text = @"Thứ Tư, 7 Tháng 10";
+    dateLbl.textColor = [UIColor lightGrayColor];
+    dateLbl.font = [UIFont systemFontOfSize:18 weight:UIFontWeightMedium];
+    dateLbl.textAlignment = NSTextAlignmentCenter;
+    [self.lockScreenView addSubview:dateLbl];
+
+    // Hộp kiểm tra Safe Mode sau khi respring
+    UIView *promptBox = [[UIView alloc] initWithFrame:CGRectMake(30, 260, self.view.bounds.size.width - 60, 160)];
+    promptBox.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.25 alpha:0.9];
+    promptBox.layer.cornerRadius = 20;
+
+    UILabel *promptTitle = [[UILabel alloc] initWithFrame:CGRectMake(15, 20, promptBox.bounds.size.width - 30, 24)];
+    promptTitle.text = self.isInSafeMode ? @"⚠️ HỆ THỐNG ĐANG Ở SAFE MODE" : @"🛡️ KIỂM TRA TRẠNG THÁI BOOT";
+    promptTitle.textColor = self.isInSafeMode ? [UIColor redColor] : [UIColor greenColor];
+    promptTitle.font = [UIFont boldSystemFontOfSize:15];
+    promptTitle.textAlignment = NSTextAlignmentCenter;
+    [promptBox addSubview:promptTitle];
+
+    UILabel *promptDesc = [[UILabel alloc] initWithFrame:CGRectMake(15, 50, promptBox.bounds.size.width - 30, 50)];
+    promptDesc.text = self.isInSafeMode ? @"Tweak bị xung đột hook! Phát hiện Safe Mode." : @"Tweak nạp thành công 100%. Không có lỗi crash!";
+    promptDesc.textColor = [UIColor whiteColor];
+    promptDesc.font = [UIFont systemFontOfSize:13];
+    promptDesc.textAlignment = NSTextAlignmentCenter;
+    promptDesc.numberOfLines = 2;
+    [promptBox addSubview:promptDesc];
+
+    UIButton *unlockBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    unlockBtn.frame = CGRectMake(20, 110, promptBox.bounds.size.width - 40, 36);
+    [unlockBtn setTitle:@"Vuốt Lên Mở Khóa" forState:UIControlStateNormal];
+    [unlockBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    unlockBtn.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:0.8 alpha:1.0];
+    unlockBtn.layer.cornerRadius = 10;
+    [unlockBtn addTarget:self action:@selector(dismissLockScreen) forControlEvents:UIControlEventTouchUpInside];
+    [promptBox addSubview:unlockBtn];
+
+    [self.lockScreenView addSubview:promptBox];
+    [self.view addSubview:self.lockScreenView];
+}
+
+- (void)dismissLockScreen {
+    [UIView animateWithDuration:0.3 animations:^{
+        self.lockScreenView.alpha = 0;
+        self.lockScreenView.transform = CGAffineTransformMakeScale(1.1, 1.1);
+    } completion:^(BOOL finished) {
+        [self.lockScreenView removeFromSuperview];
+        self.lockScreenView = nil;
+        [self showToastNotice:@"🔓 Đã mở khóa màn hình chính thành công!"];
+    }];
+}
+
+// 4. TEST APP TRỰC QUAN (KIỂM TRA HIỆN TƯỢNG ĐEN MÀN HÌNH / BLACK SCREEN)
+- (void)openTweakTestApp {
+    UIView *testAppView = [[UIView alloc] initWithFrame:self.view.bounds];
+    testAppView.backgroundColor = [UIColor whiteColor];
+    testAppView.alpha = 0;
+    [self.view addSubview:testAppView];
 
     [UIView animateWithDuration:0.25 animations:^{
-        appView.alpha = 1.0;
+        testAppView.alpha = 1.0;
     } completion:^(BOOL finished) {
-        UILabel *testLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, appView.bounds.size.width - 40, 40)];
-        testLabel.text = @"Sandboxed Application Mode";
-        testLabel.textColor = [UIColor blackColor];
-        testLabel.font = [UIFont boldSystemFontOfSize:18];
-        testLabel.textAlignment = NSTextAlignmentCenter;
-        [appView addSubview:testLabel];
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, testAppView.bounds.size.width - 40, 40)];
+        title.text = @"Kiểm Tra Render App & Chống Đen Màn Hình";
+        title.textColor = [UIColor blackColor];
+        title.font = [UIFont boldSystemFontOfSize:16];
+        title.textAlignment = NSTextAlignmentCenter;
+        title.numberOfLines = 2;
+        [testAppView addSubview:title];
 
-        UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        closeBtn.frame = CGRectMake(20, 40, 80, 35);
-        [closeBtn setTitle:@"Quay Lại" forState:UIControlStateNormal];
-        [closeBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
-        [appView addSubview:closeBtn];
+        UILabel *resultLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 160, testAppView.bounds.size.width - 40, 60)];
+        // Kiểm tra xem dylib tweak đã được cài chưa để báo trạng thái render
+        if (self.isTweakInstalled) {
+            resultLbl.text = @"✅ Tweak đã nạp: Giao diện hiển thị mượt mà, không bị đen màn hình, hook hoạt động chuẩn!";
+            resultLbl.textColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.2 alpha:1.0];
+        } else {
+            resultLbl.text = @"⚠️ Chưa cài Tweak qua Sileo. Hãy cài qua Sileo trước để test render!";
+            resultLbl.textColor = [UIColor orangeColor];
+        }
+        resultLbl.font = [UIFont systemFontOfSize:14];
+        resultLbl.numberOfLines = 3;
+        resultLbl.textAlignment = NSTextAlignmentCenter;
+        [testAppView addSubview:resultLbl];
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self showCenteredErrorAlert:@"Kiểm tra Sandbox: Hoạt động độc lập an toàn!"];
-        });
+        UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        backBtn.frame = CGRectMake(30, testAppView.bounds.size.height - 100, testAppView.bounds.size.width - 60, 44);
+        [backBtn setTitle:@"Thoát Về Màn Hình Chính" forState:UIControlStateNormal];
+        [backBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        backBtn.backgroundColor = [UIColor darkGrayColor];
+        backBtn.layer.cornerRadius = 12;
+        [backBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
+        [testAppView addSubview:backBtn];
     }];
+}
+
+- (void)openFilesApp {
+    [self showToastNotice:@"📁 Đang đọc thư mục /var/jb/Library/MobileSubstrate/... (Chuẩn Rootless)"];
 }
 
 - (void)closeRunningApp:(UIButton *)sender {
     UIView *appView = sender.superview;
     [UIView animateWithDuration:0.2 animations:^{
-        appView.alpha = 0.0;
+        appView.alpha = 0;
     } completion:^(BOOL finished) {
         [appView removeFromSuperview];
     }];
 }
 
-// 4. Test Mạng & Băng Thông
-- (void)openNetworkTestApp {
-    UIView *netView = [[UIView alloc] initWithFrame:self.view.bounds];
-    netView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
-    [self.view addSubview:netView];
+// 5. GIÁM SÁT FPS MẠC ĐỊNH
+- (void)setupFPSMonitoring {
+    self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 110, 43, 90, 20)];
+    self.fpsCounterLabel.textColor = [UIColor greenColor];
+    self.fpsCounterLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightBold];
+    self.fpsCounterLabel.textAlignment = NSTextAlignmentRight;
+    [self.view addSubview:self.fpsCounterLabel];
 
-    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, netView.bounds.size.width - 40, 30)];
-    titleLbl.text = @"Kiểm Tra Băng Thông & Độ Trễ";
-    titleLbl.font = [UIFont boldSystemFontOfSize:16];
-    titleLbl.textAlignment = NSTextAlignmentCenter;
-    [netView addSubview:titleLbl];
-
-    self.networkSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-    self.networkSpinner.center = CGPointMake(netView.bounds.size.width / 2, 180);
-    [self.networkSpinner startAnimating];
-    [netView addSubview:self.networkSpinner];
-
-    self.networkStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 240, netView.bounds.size.width - 40, 40)];
-    // Sửa lỗi cú pháp chuỗi thiếu tiền tố @
-    self.networkStatusLabel.text = @"Đang kết nối luồng test (0KB/s)...";
-    self.networkStatusLabel.textAlignment = NSTextAlignmentCenter;
-    self.networkStatusLabel.font = [UIFont systemFontOfSize:14];
-    [netView addSubview:self.networkStatusLabel];
-
-    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(20, 310, netView.bounds.size.width - 40, 44);
-    [closeBtn setTitle:@"Đóng Trình Test" forState:UIControlStateNormal];
-    [closeBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
-    [netView addSubview:closeBtn];
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self.networkSpinner stopAnimating];
-        self.networkStatusLabel.text = @"Tốc độ: 156.2 Mbps • Ping: 7ms (Ổn định)";
-    });
-}
-
-// 5. Test Bàn Phím 0ms
-- (void)openKeyboardLagTesterApp {
-    UIView *kbView = [[UIView alloc] initWithFrame:self.view.bounds];
-    kbView.backgroundColor = [UIColor whiteColor];
-    [self.view addSubview:kbView];
-
-    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, kbView.bounds.size.width - 40, 30)];
-    titleLbl.text = @"Bàn Phím 0ms - Gõ Nhanh";
-    titleLbl.font = [UIFont boldSystemFontOfSize:16];
-    titleLbl.textAlignment = NSTextAlignmentCenter;
-    [kbView addSubview:titleLbl];
-
-    self.keyboardLagTester = [[UITextField alloc] initWithFrame:CGRectMake(20, 110, kbView.bounds.size.width - 40, 44)];
-    self.keyboardLagTester.borderStyle = UITextBorderStyleRoundedRect;
-    // Sửa lỗi cú pháp chuỗi thiếu tiền tố @
-    self.keyboardLagTester.placeholder = @"Gõ phím liên tục tại đây...";
-    self.keyboardLagTester.delegate = self;
-    [kbView addSubview:self.keyboardLagTester];
-    [self.keyboardLagTester becomeFirstResponder];
-
-    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeBtn.frame = CGRectMake(20, 170, kbView.bounds.size.width - 40, 40);
-    [closeBtn setTitle:@"Đóng" forState:UIControlStateNormal];
-    [closeBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
-    [kbView addSubview:closeBtn];
-}
-
-- (void)setupControlCenterAndNotifications {
-    // Không cần xử lý thêm ở đây vì fps đã được gọi độc lập
+    self.fpsDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrameUpdate:)];
+    [self.fpsDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
 - (void)onFrameUpdate:(CADisplayLink *)link {
@@ -251,25 +345,19 @@
     }
 }
 
-- (void)showCenteredErrorAlert:(NSString *)msg {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠ THÔNG BÁO HỆ THỐNG" message:msg preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
 - (void)showToastNotice:(NSString *)msg {
-    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(30, self.view.bounds.size.height - 100, self.view.bounds.size.width - 60, 36)];
-    toast.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.95];
+    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectMake(20, self.view.bounds.size.height - 120, self.view.bounds.size.width - 40, 36)];
+    toast.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.95];
     toast.textColor = [UIColor whiteColor];
-    toast.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    toast.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
     toast.textAlignment = NSTextAlignmentCenter;
     toast.layer.cornerRadius = 10;
     toast.clipsToBounds = YES;
     toast.text = msg;
     [self.view addSubview:toast];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSuperview]; }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSnapshot]; [toast removeFromSuperview]; }];
     });
 }
 
