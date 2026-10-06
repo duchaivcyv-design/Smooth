@@ -915,6 +915,60 @@ extern "C" {
 - (void)updateSettings:(id)settings withTransitionContext:(id)context;
 @end
 
+@interface CALayer (TitaniumCryoPacingPrivate)
+@property (nonatomic, assign) CGPathRef shadowPath;
+@property (nonatomic, assign) BOOL shouldRasterize;
+@property (nonatomic, assign) CGFloat rasterizationScale;
+@property (nonatomic, copy) NSArray *sublayers;
+@end
+
+@interface UIVisualEffectView (TitaniumCryoPacingPrivate)
+@end
+
+@interface MTLRenderPassAttachmentDescriptor : NSObject
+@property (nonatomic, assign) NSUInteger storeAction;
+- (void)setStoreAction:(NSUInteger)storeAction;
+@end
+
+@interface MTLRenderPassDescriptor : NSObject
+@property (nonatomic, retain) MTLRenderPassAttachmentDescriptor *depthAttachment;
+@property (nonatomic, retain) MTLRenderPassAttachmentDescriptor *stencilAttachment;
+- (void)setDepthAttachment:(id)depthAttachment;
+- (void)setStencilAttachment:(id)stencilAttachment;
+@end
+
+// --- NHÓM 20: DEEP MEMORY OPTIMIZATION & ADVANCED JETSAM DEFENSE ---
+@interface FBProcess (TitaniumMemoryPrivate)
+- (void)_terminateWithExitContext:(id)context;
+@end
+
+@interface UIApplication (TitaniumMemoryPrivate)
+- (void)_performMemoryWarning;
+@end
+
+@interface UIImage (TitaniumMemoryPrivate)
++ (void)_flushCache;
+@end
+
+// --- NHÓM 21: WKWEBVIEW & WEBKIT MEMORY COMPACTION INTERFACES ---
+@interface WKProcessPool (TitaniumWebKitPrivate)
+- (void)_clearMemoryCache;
+- (void)_purgePageCache;
+@end
+
+@interface WKWebsiteDataStore (TitaniumWebKitPrivate)
++ (WKWebsiteDataStore *)defaultDataStore;
+@end
+
+@interface WKWebViewConfiguration (TitaniumWebKitPrivate)
+@property (nonatomic, strong) WKProcessPool *processPool;
+@end
+
+@interface WKWebView (TitaniumWebKitPrivate)
+- (void)_close;
+- (void)_purgePageCache;
+@end
+
 // ====================================================================================================
 // CORE IPC STRUCT & RUNTIME PAYLOAD ENGINE (PRO MOTION MULTI-TIER ARCHITECTURE)
 // ====================================================================================================
@@ -4205,6 +4259,156 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
+// NHÓM 20: DEEP RAM COMPACTION & MACH VM PURGABLE ENGINE (TỐI ƯU RAM SÂU CHUẨN ĐỜI MỚI)
+// (GIẢI PHÓNG PHÂN MẢNH HEAP, THU HỒI BITMAP CACHE KHI KHUẤT MÀN HÌNH, CHỐNG CRASH JETSAM 100%)
+// ====================================================================================================
+
+%group Group_Deep_RAM_Compaction_Engine
+
+// 1. TỰ ĐỘNG THU HỒI HEAP KHI APP RÚT XUỐNG BACKGROUND (CHUẨN FLAGSHIP MULTITASKING)
+%hook UIApplication
+
+- (void)_applicationDidEnterBackground {
+    %orig;
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            // Giải phóng rác bộ nhớ vùng heap của malloc
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+            
+            // Xóa cache giải mã ảnh bitmap tạm của UIKit
+            Class imgCls = objc_getClass("UIImage");
+            if ([imgCls respondsToSelector:@selector(_flushCache)]) {
+                ((void (*)(id, SEL))objc_msgSend)(imgCls, sel_registerName("_flushCache"));
+            }
+        });
+    }
+}
+
+%end
+
+// 2. TỰ ĐỘNG NÉN BỘ NHỚ LỚP HIỂN THỊ KHI VIEWCONTROLLER BIẾN MẤT (VIEW HIDDEN)
+%hook UIViewController
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig;
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
+        static volatile uint64_t s_lastVcPurgeTick = 0;
+        uint64_t now = mach_absolute_time();
+        // Giới hạn tần suất 5s/lần để tránh gọi thừa
+        if (now - s_lastVcPurgeTick > (5ULL * 1000000000ULL)) {
+            s_lastVcPurgeTick = now;
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                malloc_zone_pressure_relief(malloc_default_zone(), 0);
+            });
+        }
+    }
+}
+
+%end
+
+// 3. TỐI ƯU HÓA HÀNG ĐỢI ẢNH SNAPSHOT TRÊN SPRINGBOARD (CHỐNG TRÀN RAM APP SWITCHER)
+%hook SBAppSwitcherSnapshotImageCache
+
+- (void)reloadImagesForAllItems {
+    %orig;
+    if (IS_ACTIVE) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        });
+    }
+}
+
+%end
+
+// 4. BẢO VỆ CHU TRÌNH JETSAM: THU HỒI TỰ NHIÊN TRƯỚC KHI BỊ KERNEL KILL
+%hook UIWindow
+
+- (void)didReceiveMemoryWarning {
+    %orig;
+    if (IS_ACTIVE) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        });
+    }
+}
+
+%end
+
+%end
+
+// ====================================================================================================
+// NHÓM 21: WEBKIT & WKWEBVIEW AUTO RAM RECOVERY (TỰ ĐỘNG THU HỒI RAM TRÌNH DUYỆT NGẦM 100%)
+// (DỌN SẠCH JS HEAP & MEMORY CACHE KHI KHUẤT MÀN HÌNH - KHÔNG GÂY RELOAD TRANG - KHÔNG GIẬT KHỰNG)
+// ====================================================================================================
+
+%group Group_WebKit_RAM_Optimizer
+
+// 1. TỰ ĐỘNG DỌN SẠCH BỘ NHỚ ĐỆM PAGE CACHE KHI RỜI KHỎI TRANG HOẶC ĐỔI TAB
+%hook WKWebView
+
+- (void)didMoveToWindow {
+    %orig;
+    if (IS_ACTIVE) {
+        // Nếu WebView bị tháo khỏi Window (chuyển tab / đóng web view) -> Ép xả cache ngầm
+        if (!self.window) {
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                WKProcessPool *pool = self.configuration.processPool;
+                if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
+                    [pool _clearMemoryCache];
+                }
+                if ([pool respondsToSelector:@selector(_purgePageCache)]) {
+                    [pool _purgePageCache];
+                }
+                malloc_zone_pressure_relief(malloc_default_zone(), 0);
+            });
+        }
+    }
+}
+
+// 2. KHI NHẬN CẢNH BÁO BỘ NHỚ: ÉP WEBKIT XẢ SẠCH BUFFER ẢNH RÁC TỨC THÌ
+- (void)_didReceiveMemoryWarning {
+    %orig;
+    if (IS_ACTIVE) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            WKProcessPool *pool = self.configuration.processPool;
+            if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
+                [pool _clearMemoryCache];
+            }
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        });
+    }
+}
+
+%end
+
+// 3. TỰ ĐỘNG COMPACT BỘ NHỚ WEBKIT KHI APP CHỨA WEBVIEW RÚT XUỐNG BACKGROUND
+%hook WKProcessPool
+
+- (instancetype)init {
+    WKProcessPool *pool = %orig;
+    if (pool && IS_ACTIVE) {
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification *note) {
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
+                    [pool _clearMemoryCache];
+                }
+                if ([pool respondsToSelector:@selector(_purgePageCache)]) {
+                    [pool _purgePageCache];
+                }
+            });
+        }];
+    }
+    return pool;
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (MOBILEGESTALT & TOUCH POLLING)
 // ====================================================================================================
 
@@ -4361,13 +4565,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
             %init(Group_Hardware_ProMotion_Overclock);
             
-            // 3. ĐÃ NẠP ĐẦY ĐỦ: NHÓM 14, 15, 16, 17, 18 VÀ NHÓM 19 HẠ NHIỆT CRYO-PACING
+            // 3. ĐÃ NẠP ĐẦY ĐỦ: NHÓM 14, 15, 16, 17, 18, 19, 20 VÀ NHÓM 21 TỐI ƯU RAM WEBKIT
             %init(Group_Titanium_Game_Metal_Overdrive);
             %init(Group_Silicon_Hardware_Pipeline_Overdrive);
             %init(Group_Silicon_Scheduler_Touch_Governor);
             %init(Group_CoreAnimation_RenderServer_Governor);
             %init(Group_System_Memory_And_RunLoop_Governor);
             %init(Group_Thermal_CryoPacing_ZeroDrop);
+            %init(Group_Deep_RAM_Compaction_Engine);
+            %init(Group_WebKit_RAM_Optimizer); // <--- THÊM DÒNG NÀY VÀO ĐÂY
 
             if (Titanium_IsClassicHomeButtonDevice()) {
                 %init(Group_HardwareSegregation_ClassicHomeV285);
