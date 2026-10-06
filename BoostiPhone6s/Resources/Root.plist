@@ -121,7 +121,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (KHÓA CỨNG MỨC CHỈNH TỪ 15 ĐẾN 144)                                      -->
+		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (POPUP UIMENU THỰC THI 0MS)                                               -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -152,6 +152,8 @@
 		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
+			<key>cellClass</key>
+			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
 			<string>Chọn / Nhập Mức Tần Số Quét (Hz)</string>
 			<key>action</key>
@@ -180,6 +182,8 @@
 		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
+			<key>cellClass</key>
+			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
 			<string>Chọn / Nhập Mức Khung Hình (FPS)</string>
 			<key>action</key>
