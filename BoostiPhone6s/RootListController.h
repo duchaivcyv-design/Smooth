@@ -81,7 +81,7 @@ typedef struct __attribute__((packed)) {
 @interface RootListController : PSListController {
 @public
     NSMutableArray *_allSavedSpecifiers;
-    NSMutableArray *_specifiers; // [ĐÃ KHAI BÁO CÔNG KHAI TẠI ĐÂY ĐỂ CLANG PASS 100%]
+    NSMutableArray *_specifiers; // [KHAI BÁO CÔNG KHAI TẠI ĐÂY ĐỂ CLANG PASS 100%]
 }
 
 // --- Các hàm khởi tạo đa nền tảng (Preferences.app & TweakSettings.app) ---
