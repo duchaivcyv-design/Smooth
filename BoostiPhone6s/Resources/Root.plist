@@ -35,37 +35,41 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- HUD GIÁM SÁT PHẦN CỨNG & BIỂU ĐỒ ĐỘNG DAO ĐỘNG THỜI GIAN THỰC (0S)                                  -->
+		<!-- HUD GIÁM SÁT PHẦN CỨNG THỜI GIAN THỰC (0S OVERHEAD)                                                  -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>📊 BIỂU ĐỒ DAO ĐỘNG THỜI GIAN THỰC (0S)</string>
+			<string>📊 GIÁM SÁT PHẦN CỨNG THỜI GIAN THỰC (0S)</string>
 			<key>groupID</key>
 			<string>GROUP_MONITOR</string>
 			<key>footerText</key>
-			<string>Đường xanh: Tải CPU Kernel XNU | Đường tím: Tần số quét &amp; FPS thực tế. Đo liên tục 0s không nóng máy.</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSCustomCell</string>
-			<key>cellClass</key>
-			<string>TitaniumGraphHostCell</string>
-			<key>id</key>
-			<string>LiveOscilloscopeGraphCell</string>
+			<string>Đo đạc trực tiếp từ hạt nhân XNU &amp; Mach Host: Tải CPU/GPU, FPS thực tế, nhiệt độ SoC và điện năng tiêu thụ.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSTitleValueCell</string>
 			<key>label</key>
-			<string>⚡ Tần Số Quét &amp; FPS</string>
+			<string>⚡ Tần Số Quét &amp; FPS Thực</string>
 			<key>id</key>
 			<string>MonitorHzFPS</string>
 			<key>key</key>
 			<string>MonitorHzFPS</string>
 			<key>get</key>
 			<string>getMonitorHzFPS:</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSTitleValueCell</string>
+			<key>label</key>
+			<string>🚀 Tải Xử Lý CPU &amp; GPU</string>
+			<key>id</key>
+			<string>MonitorCPUGPU</string>
+			<key>key</key>
+			<string>MonitorCPUGPU</string>
+			<key>get</key>
+			<string>getMonitorCPUGPU:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -83,13 +87,13 @@
 			<key>cell</key>
 			<string>PSTitleValueCell</string>
 			<key>label</key>
-			<string>🚀 Tải Xử Lý CPU/GPU</string>
+			<string>🔋 Nguồn Điện &amp; Tải Pin</string>
 			<key>id</key>
-			<string>MonitorCPUGPU</string>
+			<string>MonitorBattery</string>
 			<key>key</key>
-			<string>MonitorCPUGPU</string>
+			<string>MonitorBattery</string>
 			<key>get</key>
-			<string>getMonitorCPUGPU:</string>
+			<string>getMonitorBattery:</string>
 		</dict>
 
 		<!-- ==================================================================================================== -->
@@ -1031,7 +1035,7 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>Tham Gia Nhóm Hỗ Trợ Zalo</string>
+			<string>Tham Gia Nhóm Hỗ TrỢ Zalo</string>
 			<key>id</key>
 			<string>SupportLinkCell</string>
 			<key>action</key>
