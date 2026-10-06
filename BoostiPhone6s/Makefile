@@ -1,3 +1,8 @@
+# ====================================================================================================
+# MAKEFILE CON: CÀI ĐẶT PREFERENCES BUNDLE (CHẾ ĐỘ ÉP TOÀN DIỆN CHO ROOTLESS & ROOTHIDE)
+# (ĐÃ LOẠI BỎ LIÊN KẾT TĨNH PREFERENCES FRAMEWORK - SỬ DỤNG RUNTIME DYNAMIC LOOKUP)
+# ====================================================================================================
+
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:14.0
 
@@ -14,13 +19,13 @@ BoostiPhone6sPrefs_FILES = RootListController.m
 # PUBLIC FRAMEWORKS CHUẨN
 BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore
 
-# [ÉP TOÀN DIỆN]: LIÊN KẾT BẮT BUỘC PREFERENCES PRIVATE FRAMEWORK CHO PSLISTCONTROLLER
-BoostiPhone6sPrefs_PRIVATE_FRAMEWORKS = Preferences
+# [ÉP TOÀN DIỆN]: ĐÃ BỎ PRIVATE_FRAMEWORKS = Preferences ĐỂ TRÁNH GÃY LINKER TRÊN SDK 16.5
+# Runtime tự giải quyết symbol qua -Wl,-undefined,dynamic_lookup
 
-# [ÉP TOÀN DIỆN]: ĐƯỜNG DẪN CÀI ĐẶT CHUẨN ROOTLESS THÍCH ỨNG $(_THEOS_PREFIX)
+# ĐƯỜNG DẪN CÀI ĐẶT CHUẨN ROOTLESS THÍCH ỨNG $(_THEOS_PREFIX)
 BoostiPhone6sPrefs_INSTALL_PATH = $(_THEOS_PREFIX)/Library/PreferenceBundles
 
-# [ÉP TOÀN DIỆN]: CỜ BIÊN DỊCH TỐI ƯU HÓA -O3, FLTO VÀ DẬP TẮT CẢNH BÁO RUNNER
+# CỜ BIÊN DỊCH TỐI ƯU HÓA -O3, FLTO VÀ DẬP TẮT CẢNH BÁO
 BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -O3 \
                             -flto=thin \
@@ -38,10 +43,11 @@ BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
                             -I$(THEOS)/include \
                             -I$(THEOS)/vendor/include \
                             -I../Headers \
+                            -IHeaders \
                             -I../ \
                             -I.
 
-# [ÉP TOÀN DIỆN]: LINKER FLAGS DEAD STRIP & RPATH ĐỘNG
+# LINKER FLAGS: SỬ DỤNG DYNAMIC LOOKUP ĐỂ NẠP PREFERENCES KHI VÀO SETTINGS
 BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
                             -flto=thin \
                             -Wl,-undefined,dynamic_lookup \
@@ -54,7 +60,7 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 include $(THEOS_MAKE_PATH)/bundle.mk
 
 # ====================================================================================================
-# [ÉP TOÀN DIỆN]: ĐỒNG BỘ SYMLINK TỰ ĐỘNG & ENTRY PLIST CHO PREFERENCELOADER
+# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & ENTRY PLIST CHO PREFERENCELOADER
 # ====================================================================================================
 
 after-stage::
