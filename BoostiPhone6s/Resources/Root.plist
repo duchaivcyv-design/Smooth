@@ -126,8 +126,6 @@
 		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
-			<key>cellClass</key>
-			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
 			<string>⚡ Chọn / Nhập Mức Tần Số Quét (Hz)</string>
 			<key>action</key>
@@ -156,8 +154,6 @@
 		<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
-			<key>cellClass</key>
-			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
 			<string>🎯 Chọn / Nhập Mức Khung Hình (FPS)</string>
 			<key>action</key>
