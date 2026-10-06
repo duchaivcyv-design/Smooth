@@ -60,22 +60,26 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 include $(THEOS_MAKE_PATH)/bundle.mk
 
 # ====================================================================================================
-# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & ENTRY PLIST CHO PREFERENCELOADER (CHẾ ĐỘ ÉP BẢO VỆ STAGING)
+# ĐỒNG BỘ SYMLINK TỰ ĐỘNG, SAO CHÉP TÀI NGUYÊN & ENTRY PLIST CHO PREFERENCELOADER
 # ====================================================================================================
 
 after-stage::
 	@echo ""
-	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink & Quyền Bundle vào Staging ==="
+	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink, Tài Nguyên & Quyền Bundle vào Staging ==="
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceBundles"; \
 	PREFLOADER_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences"; \
 	mkdir -p "$$TARGET_DIR"; \
 	mkdir -p "$$PREFLOADER_DIR"; \
 	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ]; then \
+		if [ -d "Resources" ]; then \
+			cp -r Resources/* "$$TARGET_DIR/BoostiPhone6sPrefs.bundle/" 2>/dev/null || true; \
+			echo "  [OK] Đã ép nạp toàn bộ tệp trong Resources/ vào BoostiPhone6sPrefs.bundle!"; \
+		fi; \
 		(cd "$$TARGET_DIR" && ln -sf "BoostiPhone6sPrefs.bundle" "BoostiPhone6s.bundle"); \
 		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
 		chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
-		chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
-		echo "  [OK] Đã gán quyền 0755 cho Bundle!"; \
+		chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/* 2>/dev/null || true; \
+		echo "  [OK] Đã gán quyền chuẩn cho Bundle và Tài Nguyên!"; \
 	fi; \
 	if [ -d "$$PREFLOADER_DIR" ]; then \
 		chmod 0644 "$$PREFLOADER_DIR"/*.plist 2>/dev/null || true; \
