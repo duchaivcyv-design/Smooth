@@ -5,7 +5,7 @@
 	<key>items</key>
 	<array>
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 1: CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO                                                             -->
+		<!-- CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO                                                                     -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -79,149 +79,17 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- ĐIỀU HƯỚNG HIỂN THỊ CÔNG TẮC (GOM GỌN DANH MỤC)                                                     -->
+		<!-- [ÉP Ở NGOÀI CỐ ĐỊNH]: ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ)                                         -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>🎛️ BỘ ĐIỀU HƯỚNG HIỂN THỊ (GOM GỌN TIỆN LỢI)</string>
-			<key>groupID</key>
-			<string>GROUP_TIER_CONTROL</string>
-			<key>footerText</key>
-			<string>Tắt để ẩn bớt các nhóm công tắc cho giao diện gọn gàng. Các công tắc bị ẩn vẫn duy trì hoạt động ép xung 100%.</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>ShowBasicOptions</string>
-			<key>id</key>
-			<string>ShowBasicOptions</string>
-			<key>label</key>
-			<string>📂 Hiện Nhóm Công Tắc Cơ Bản</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>ShowAdvancedOptions</string>
-			<key>id</key>
-			<string>ShowAdvancedOptions</string>
-			<key>label</key>
-			<string>⚙️ Hiện Nhóm Công Tắc Nâng Cao</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-
-		<!-- ==================================================================================================== -->
-		<!-- NHÓM 2: CÀI ĐẶT NGÔN NGỮ                                                                             -->
-		<!-- ==================================================================================================== -->
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>CÀI ĐẶT NGÔN NGỮ</string>
-			<key>groupID</key>
-			<string>GROUP_LANGUAGE</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSButtonCell</string>
-			<key>label</key>
-			<string>Ngôn Ngữ (Language)</string>
-			<key>action</key>
-			<string>showLanguagePickerPopup:</string>
-			<key>key</key>
-			<string>SelectedLanguage</string>
-			<key>id</key>
-			<string>SelectedLanguage</string>
-		</dict>
-
-		<!-- ==================================================================================================== -->
-		<!-- NHÓM 3: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING) [NÂNG CAO]                                 -->
-		<!-- ==================================================================================================== -->
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE &amp; HEX BUFFERING)</string>
-			<key>groupID</key>
-			<string>GROUP_SPECIAL</string>
-			<key>footerText</key>
-			<string>Triple Buffering giữ hàng đợi khung hình phẳng lì. Bàn phím 0ms khử hoàn toàn độ trễ khi soạn thảo văn bản và chat ứng dụng.</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>ProMotionEngineBeta7</string>
-			<key>id</key>
-			<string>ProMotionEngineBeta7</string>
-			<key>label</key>
-			<string>Tự Động Biến Thiên Theo Nhiệt Độ</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>MetalHexBuffering</string>
-			<key>id</key>
-			<string>MetalHexBuffering</string>
-			<key>label</key>
-			<string>Triple &amp; Hex Buffering (3 Buffer Chuẩn)</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>KeyboardZeroLagV24</string>
-			<key>id</key>
-			<string>KeyboardZeroLagV24</string>
-			<key>label</key>
-			<string>Bàn Phím 0ms &amp; Chat AI</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-
-		<!-- ==================================================================================================== -->
-		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (CẢNH BÁO NÓNG MÁY & CHIP KHI ÉP CAO) [CƠ BẢN]                            -->
-		<!-- ==================================================================================================== -->
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>⚠️ ĐIỀU PHỐI HZ &amp; FPS ĐỘNG (CẢNH BÁO NÓNG MÁY &amp; CHIP)</string>
+			<string>⚡ ĐIỀU PHỐI HZ &amp; FPS (KHÓA CỨNG NGOÀI)</string>
 			<key>groupID</key>
 			<string>GROUP_HZ_FPS</string>
 			<key>footerText</key>
-			<string>⚠️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng tấm nền màn hình, tăng nhiệt chip xử lý và hao pin nhanh hơn. Hãy sử dụng kèm tản nhiệt khi chơi game kéo dài.</string>
+			<string>⚠️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng máy và hao pin nhanh hơn. Hãy sử dụng kèm sò lạnh khi chơi game kéo dài.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -245,7 +113,7 @@
 			<key>cellClass</key>
 			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
-			<string>⚠️ Chọn / Nhập Mức Tần Số Quét (Hz)</string>
+			<string>⚡ Chọn / Nhập Mức Tần Số Quét (Hz)</string>
 			<key>action</key>
 			<string>showHzPickerPopup:</string>
 			<key>key</key>
@@ -275,7 +143,7 @@
 			<key>cellClass</key>
 			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
-			<string>⚠️ Chọn / Nhập Mức Khung Hình (FPS)</string>
+			<string>🎯 Chọn / Nhập Mức Khung Hình (FPS)</string>
 			<key>action</key>
 			<string>showFPSPickerPopup:</string>
 			<key>key</key>
@@ -295,13 +163,83 @@
 			<key>id</key>
 			<string>ForceOverclock144Hz</string>
 			<key>label</key>
-			<string>⚠️ Ép Xung 144Hz Toàn Máy (Gây Nóng Màn &amp; Chip)</string>
+			<string>🔥 Ép Xung 144Hz Toàn Máy (Overclock Max)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 5: BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH) [CƠ BẢN]                                -->
+		<!-- ĐIỀU HƯỚNG HIỂN THỊ CÔNG TẮC (GOM GỌN DANH MỤC)                                                     -->
+		<!-- ==================================================================================================== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>🎛️ BỘ ĐIỀU HƯỚNG HIỂN THỊ (GOM GỌN TIỆN LỢI)</string>
+			<key>groupID</key>
+			<string>GROUP_TIER_CONTROL</string>
+			<key>footerText</key>
+			<string>Tắt để ẩn bớt các nhóm tính năng cho giao diện gọn gàng. Các công tắc bị ẩn vẫn duy trì hoạt động ép xung 100%.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ShowBasicOptions</string>
+			<key>id</key>
+			<string>ShowBasicOptions</string>
+			<key>label</key>
+			<string>📂 Hiện Nhóm Cảm Ứng &amp; Giao Diện</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ShowAdvancedOptions</string>
+			<key>id</key>
+			<string>ShowAdvancedOptions</string>
+			<key>label</key>
+			<string>⚙️ Hiện Nhóm Công Tắc Nâng Cao</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+
+		<!-- ==================================================================================================== -->
+		<!-- CÀI ĐẶT NGÔN NGỮ                                                                                    -->
+		<!-- ==================================================================================================== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>CÀI ĐẶT NGÔN NGỮ</string>
+			<key>groupID</key>
+			<string>GROUP_LANGUAGE</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Ngôn Ngữ (Language)</string>
+			<key>action</key>
+			<string>showLanguagePickerPopup:</string>
+			<key>key</key>
+			<string>SelectedLanguage</string>
+			<key>id</key>
+			<string>SelectedLanguage</string>
+		</dict>
+
+		<!-- ==================================================================================================== -->
+		<!-- NHÓM CƠ BẢN: BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH)                                  -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -363,53 +301,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 6: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP) [NÂNG CAO]                                       -->
-		<!-- ==================================================================================================== -->
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)</string>
-			<key>groupID</key>
-			<string>GROUP_LAZY</string>
-			<key>footerText</key>
-			<string>Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ họa.</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<false/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>SyncModuleDelay</string>
-			<key>id</key>
-			<string>SyncModuleDelay</string>
-			<key>label</key>
-			<string>Đồng Bộ Độ Trễ Tiêm Mô-Đun</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.taojb.boostiphone6s</string>
-			<key>key</key>
-			<string>IsolateRenderPipeline</string>
-			<key>id</key>
-			<string>IsolateRenderPipeline</string>
-			<key>label</key>
-			<string>Cách Ly Render Pipeline App Gốc</string>
-			<key>PostNotification</key>
-			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
-		</dict>
-
-		<!-- ==================================================================================================== -->
-		<!-- NHÓM 7: GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17 [CƠ BẢN]                                               -->
+		<!-- NHÓM CƠ BẢN: GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17                                                  -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -485,7 +377,115 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 8: LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER [NÂNG CAO]                                              -->
+		<!-- NHÓM NÂNG CAO: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)                                     -->
+		<!-- ==================================================================================================== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE &amp; HEX BUFFERING)</string>
+			<key>groupID</key>
+			<string>GROUP_SPECIAL</string>
+			<key>footerText</key>
+			<string>Triple Buffering giữ hàng đợi khung hình phẳng lì. Bàn phím 0ms khử hoàn toàn độ trễ khi soạn thảo văn bản và chat ứng dụng.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ProMotionEngineBeta7</string>
+			<key>id</key>
+			<string>ProMotionEngineBeta7</string>
+			<key>label</key>
+			<string>Tự Động Biến Thiên Theo Nhiệt Độ</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>MetalHexBuffering</string>
+			<key>id</key>
+			<string>MetalHexBuffering</string>
+			<key>label</key>
+			<string>Triple &amp; Hex Buffering (3 Buffer Chuẩn)</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>KeyboardZeroLagV24</string>
+			<key>id</key>
+			<string>KeyboardZeroLagV24</string>
+			<key>label</key>
+			<string>Bàn Phím 0ms &amp; Chat AI</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+
+		<!-- ==================================================================================================== -->
+		<!-- NHÓM NÂNG CAO: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)                                           -->
+		<!-- ==================================================================================================== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)</string>
+			<key>groupID</key>
+			<string>GROUP_LAZY</string>
+			<key>footerText</key>
+			<string>Đồng bộ toàn bộ mô-đun vào app sau khi hoàn thành chu trình khởi tạo UIApplication, đảm bảo 100% không bị đen màn hay treo luồng đồ họa.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>SyncModuleDelay</string>
+			<key>id</key>
+			<string>SyncModuleDelay</string>
+			<key>label</key>
+			<string>Đồng Bộ Độ Trễ Tiêm Mô-Đun</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>IsolateRenderPipeline</string>
+			<key>id</key>
+			<string>IsolateRenderPipeline</string>
+			<key>label</key>
+			<string>Cách Ly Render Pipeline App Gốc</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+
+		<!-- ==================================================================================================== -->
+		<!-- NHÓM NÂNG CAO: LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER                                                  -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -657,7 +657,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 9: BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME [NÂNG CAO]                                          -->
+		<!-- NHÓM NÂNG CAO: BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME                                              -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -829,7 +829,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 10: QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN [NÂNG CAO]                                        -->
+		<!-- NHÓM NÂNG CAO: QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN                                             -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -921,7 +921,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 11: BẢO MẬT & QUYỀN RIÊNG TƯ [NÂNG CAO]                                                         -->
+		<!-- NHÓM NÂNG CAO: BẢO MẬT & QUYỀN RIÊNG TƯ                                                              -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -965,7 +965,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 12: THÔNG TIN PHÁT TRIỂN & HỖ TRỢ                                                               -->
+		<!-- THÔNG TIN PHÁT TRIỂN & HỖ TRỢ                                                                        -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
