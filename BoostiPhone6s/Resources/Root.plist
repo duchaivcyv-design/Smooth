@@ -66,8 +66,6 @@
 			<string>MonitorHzFPS</string>
 			<key>key</key>
 			<string>MonitorHzFPS</string>
-			<key>get</key>
-			<string>getMonitorHzFPS:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -78,8 +76,6 @@
 			<string>MonitorThermal</string>
 			<key>key</key>
 			<string>MonitorThermal</string>
-			<key>get</key>
-			<string>getMonitorThermal:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -90,8 +86,6 @@
 			<string>MonitorCPUGPU</string>
 			<key>key</key>
 			<string>MonitorCPUGPU</string>
-			<key>get</key>
-			<string>getMonitorCPUGPU:</string>
 		</dict>
 
 		<!-- ==================================================================================================== -->
