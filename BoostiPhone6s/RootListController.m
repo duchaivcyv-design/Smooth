@@ -141,6 +141,7 @@ static inline NSBundle *Titanium_GetPreferenceBundle(void) {
             NSString *root = Titanium_GetRootHidePrefixPath();
             NSArray *possiblePaths = @[
                 [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"],
+                [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"],
                 @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle",
                 @"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
             ];
@@ -250,7 +251,9 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 @interface RootListController () {
     dispatch_queue_t _syncQueue;
     dispatch_source_t _monitorTimer;
-    NSMutableArray *_specifiers; // Ivar khai báo để Clang pass 100%
+    PSSpecifier *_specMonitorHzFPS;
+    PSSpecifier *_specMonitorThermal;
+    PSSpecifier *_specMonitorCPUGPU;
 }
 @end
 
@@ -290,21 +293,42 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 // ====================================================================================================
 
 - (id)specifiers {
-    if (!_specifiers) {
+    if (!self->_specifiers) {
         NSBundle *prefBundle = Titanium_GetPreferenceBundle();
-        if ([self respondsToSelector:@selector(loadSpecifiersFromPlistName:target:bundle:)]) {
-            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:prefBundle];
+        NSString *plistPath = [prefBundle pathForResource:@"Root" ofType:@"plist"];
+
+        if (!plistPath || ![[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
+            NSString *root = Titanium_GetRootHidePrefixPath();
+            plistPath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Root.plist"];
+            if (![[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
+                plistPath = @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Root.plist";
+            }
         }
-        if (!_specifiers || _specifiers.count == 0) {
-            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+
+        if ([[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
+            NSDictionary *plistDict = [NSDictionary dictionaryWithContentsOfFile:plistPath];
+            if ([self respondsToSelector:@selector(specifiersFromDictionary:target:)]) {
+                self->_specifiers = [self specifiersFromDictionary:plistDict target:self];
+            }
         }
+
+        if (!self->_specifiers || self->_specifiers.count == 0) {
+            if ([self respondsToSelector:@selector(loadSpecifiersFromPlistName:target:bundle:)]) {
+                self->_specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:prefBundle];
+            }
+        }
+
+        if (!self->_specifiers || self->_specifiers.count == 0) {
+            self->_specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+        }
+
         [self ensureDefaultSettingsExist];
-        [self updateDynamicTitlesForSpecifiers:_specifiers];
+        [self updateDynamicTitlesForSpecifiers:self->_specifiers];
     }
-    return _specifiers;
+    return self->_specifiers;
 }
 
-// --- CÁC GETTER TĨNH BAN ĐẦU CHO CELL ĐO PHẦN CỨNG ---
+// --- CÁC GETTER TĨNH CHO CELL TRONG ROOT.PLIST ---
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
@@ -857,10 +881,28 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
+    if (@available(iOS 14.0, *)) {
+        NSIndexPath *indexPath = [self respondsToSelector:@selector(indexPathForSpecifier:)] ? [self indexPathForSpecifier:specifier] : nil;
+        UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
+        UIButton *btn = [cell.contentView viewWithTag:99285];
+        if (btn) {
+            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+            return;
+        }
+    }
     [self showCustomRateInputAlertForHz:YES];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
+    if (@available(iOS 14.0, *)) {
+        NSIndexPath *indexPath = [self respondsToSelector:@selector(indexPathForSpecifier:)] ? [self indexPathForSpecifier:specifier] : nil;
+        UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
+        UIButton *btn = [cell.contentView viewWithTag:99285];
+        if (btn) {
+            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+            return;
+        }
+    }
     [self showCustomRateInputAlertForHz:NO];
 }
 
@@ -875,6 +917,13 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 - (void)openSupportLink:(PSSpecifier *)specifier {
     NSURL *webURL = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
+        Class workspaceClass = objc_getClass("LSApplicationWorkspace");
+        if (workspaceClass && [workspaceClass respondsToSelector:@selector(defaultWorkspace)]) {
+            LSApplicationWorkspace *workspace = [workspaceClass defaultWorkspace];
+            if ([workspace respondsToSelector:@selector(openURL:)]) {
+                if ([workspace openURL:webURL]) return;
+            }
+        }
         [[UIApplication sharedApplication] openURL:webURL options:@{} completionHandler:nil];
     });
 }
