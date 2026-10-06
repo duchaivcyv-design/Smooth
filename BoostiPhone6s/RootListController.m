@@ -18,7 +18,39 @@
 extern char **environ;
 
 // ====================================================================================================
-// FORWARD DECLARATIONS & PRIVATE SELECTORS CHO CLANG
+// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
+// ====================================================================================================
+
+#ifndef APEX_SYNC_MAGIC_V285
+#define APEX_SYNC_MAGIC_V285 0x41505837
+#endif
+
+#ifndef PREF_DOMAIN
+#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
+#endif
+
+#ifndef PRIMARY_SYNC_FILE
+#define PRIMARY_SYNC_FILE    @"/tmp/.boost_hz_sync"
+#endif
+
+#ifndef SECONDARY_SYNC_FILE
+#define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
+#endif
+
+#ifndef BOOT_GUARD_FILE
+#define BOOT_GUARD_FILE      @"/tmp/.titanium_boot_guard"
+#endif
+
+#ifndef NOTIFY_RELOAD
+#define NOTIFY_RELOAD        "com.taojb.boostiphone6s/ReloadPrefs"
+#define NOTIFY_UIKIT_RELOAD  "com.taojb.boostiphone6s/ReloadUIKitPrefs"
+#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
+#define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
+#define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
+#endif
+
+// ====================================================================================================
+// FORWARD DECLARATIONS & PRIVATE SELECTORS FIX FOR CLANG
 // ====================================================================================================
 
 @interface PSListController (TitaniumPrivateSelectors)
@@ -40,7 +72,7 @@ extern char **environ;
 @end
 
 // ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & TIỆN ÍCH HỆ THỐNG
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ / ROOTLESS / ROOTHIDE
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -77,6 +109,23 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *p1 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+}
+
+static inline BOOL HardwareHasNative120Hz(void) {
+    static BOOL isNative120 = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        if (uname(&sysInfo) == 0) {
+            NSString *dev = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
+            if ([dev hasPrefix:@"iPhone14,2"] || [dev hasPrefix:@"iPhone14,3"] ||
+                [dev hasPrefix:@"iPhone15,2"] || [dev hasPrefix:@"iPhone15,3"] ||
+                [dev hasPrefix:@"iPhone16,"]   || [dev hasPrefix:@"iPhone17,"]) {
+                isNative120 = YES;
+            }
+        }
+    });
+    return isNative120;
 }
 
 static inline NSString *Titanium_FindExecutablePath(NSString *name) {
@@ -473,8 +522,8 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     }
 
     [self updateDynamicTitlesForSpecifiers:targetSpecs];
-    _specifiers = targetSpecs;
-    return _specifiers;
+    [self setSpecifiers:targetSpecs];
+    return targetSpecs;
 }
 
 // ====================================================================================================
@@ -600,8 +649,6 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
              @"Enabled": @YES,
-             @"ShowBasicOptions": @YES,
-             @"ShowAdvancedOptions": @NO,
              @"SelectedLanguage": @"auto",
              @"ProMotionEngineBeta7": @YES,
              @"MetalHexBuffering": @YES,
@@ -1050,7 +1097,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     [sheet addAction:[UIAlertAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 Hz)..." style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self showCustomRateInputAlertForHz:YES];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ 144 Hz (Ép Xung Cực Đại)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡ 144 Hz (Ép Xung Cực Đại)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self applyRateValue:144 isDynamic:NO isFPS:NO];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"✨ 120 Hz (ProMotion Max)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -1154,7 +1201,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// THANH ĐIỀU HƯỚNG: NÚT HÀNH ĐỘNG NỀN KÍNH
+// NÂNG CẤP THANH ĐIỀU HƯỚNG: NÚT HÀNH ĐỘNG THÀNH UIMENU POPOVER NỀN KÍNH
 // ====================================================================================================
 
 - (void)setupNavigationItems {
@@ -1250,7 +1297,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️️ Respring Nhanh (An Toàn)";
+    NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡ Respring Nhanh (An Toàn)";
     NSString *srebootText = PM_TextV285(@"SREBOOT") ?: @"🔥 Khởi Động Userspace (SReboot)";
     NSString *resetText = PM_TextV285(@"RESET") ?: @"♻ Đặt Lại Cấu Hình Mặc Định (144Hz)";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
