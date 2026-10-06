@@ -48,8 +48,16 @@ extern char **environ;
 #endif
 
 // ====================================================================================================
-// FORWARD DECLARATIONS
+// FORWARD DECLARATIONS & PRIVATE SELECTORS FIX FOR CLANG
 // ====================================================================================================
+
+@interface PSListController (TitaniumPrivateSelectors)
+- (nullable NSIndexPath *)indexPathForSpecifier:(PSSpecifier *)specifier;
+- (nullable PSSpecifier *)specifierAtIndexPath:(NSIndexPath *)indexPath;
+- (nullable UITableViewCell *)cachedCellForSpecifier:(PSSpecifier *)specifier;
+- (nullable UITableView *)table;
+- (NSInteger)indexOfSpecifier:(PSSpecifier *)specifier;
+@end
 
 @interface BoostConfigV285Pro : NSObject
 + (instancetype)sharedInstance;
@@ -787,197 +795,276 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 // ====================================================================================================
-// POPUP CHỌN TẦN SỐ QUÉT (HZ) - CHUẨN UIMENU POPOVER NỀN KÍNH
+// KHỞI TẠO MENU UIMENU CHO HZ & FPS
 // ====================================================================================================
 
-- (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    if (@available(iOS 14.0, *)) {
-        NSMutableArray *ecoActions = [NSMutableArray array];
-        for (NSNumber *r in @[@15, @20, @24, @30, @35, @40]) {
-            NSString *title = [NSString stringWithFormat:@"%@ Hz", r];
-            [ecoActions addObject:[UIAction actionWithTitle:title
-                                                      image:[UIImage systemImageNamed:@"leaf.fill"]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) {
-                [self applyRateValue:[r integerValue] isDynamic:NO isFPS:NO];
-            }]];
-        }
-        UIMenu *ecoMenu = [UIMenu menuWithTitle:@"1. Tiết Kiệm Pin (15Hz - 40Hz)"
-                                          image:[UIImage systemImageNamed:@"battery.100.bolt"]
+- (UIMenu *)buildHzMenu API_AVAILABLE(ios(14.0)) {
+    UIAction *act144 = [UIAction actionWithTitle:@"144 Hz (Ép Xung Cực Đại)"
+                                           image:[UIImage systemImageNamed:@"bolt.fill"]
+                                      identifier:nil
+                                         handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:144 isDynamic:NO isFPS:NO];
+    }];
+
+    UIAction *act120 = [UIAction actionWithTitle:@"120 Hz (ProMotion Max)"
+                                           image:[UIImage systemImageNamed:@"sparkles"]
+                                      identifier:nil
+                                         handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:120 isDynamic:NO isFPS:NO];
+    }];
+
+    UIAction *act90 = [UIAction actionWithTitle:@"90 Hz (Siêu Mượt)"
+                                          image:[UIImage systemImageNamed:@"speedometer"]
                                      identifier:nil
-                                        options:0
-                                       children:ecoActions];
+                                        handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:90 isDynamic:NO isFPS:NO];
+    }];
 
-        NSMutableArray *balActions = [NSMutableArray array];
-        for (NSNumber *r in @[@45, @50, @55, @60, @65, @70, @75, @80]) {
-            NSString *iconName = ([r integerValue] == 60) ? @"checkmark.seal.fill" : @"speedometer";
-            NSString *title = ([r integerValue] == 60) ? @"60 Hz (Tiêu Chuẩn Chuẩn Mực)" : [NSString stringWithFormat:@"%@ Hz", r];
-            [balActions addObject:[UIAction actionWithTitle:title
-                                                      image:[UIImage systemImageNamed:iconName]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) {
-                [self applyRateValue:[r integerValue] isDynamic:NO isFPS:NO];
-            }]];
-        }
-        UIMenu *balMenu = [UIMenu menuWithTitle:@"2. Cân Bằng & Mượt (45Hz - 80Hz)"
-                                          image:[UIImage systemImageNamed:@"slider.horizontal.3"]
+    UIAction *act60 = [UIAction actionWithTitle:@"60 Hz (Tiêu Chuẩn Chuẩn Mực)"
+                                          image:[UIImage systemImageNamed:@"checkmark.seal.fill"]
                                      identifier:nil
-                                        options:0
-                                       children:balActions];
+                                        handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:NO isFPS:NO];
+    }];
 
-        NSMutableArray *maxActions = [NSMutableArray array];
-        for (NSNumber *r in @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144]) {
-            NSString *iconName = ([r integerValue] >= 144) ? @"bolt.fill" : @"sparkles";
-            NSString *title = ([r integerValue] >= 144) ? @"144 Hz (Ép Xung Cực Đại)" : [NSString stringWithFormat:@"%@ Hz (ProMotion)", r];
-            [maxActions addObject:[UIAction actionWithTitle:title
-                                                      image:[UIImage systemImageNamed:iconName]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) {
-                [self applyRateValue:[r integerValue] isDynamic:NO isFPS:NO];
-            }]];
-        }
-        UIMenu *maxMenu = [UIMenu menuWithTitle:@"3. Hiệu Năng Cao (85Hz - 144Hz)"
-                                          image:[UIImage systemImageNamed:@"flame.fill"]
+    UIAction *act30 = [UIAction actionWithTitle:@"30 Hz (Tiết Kiệm Pin)"
+                                          image:[UIImage systemImageNamed:@"leaf.fill"]
                                      identifier:nil
-                                        options:0
-                                       children:maxActions];
+                                        handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:30 isDynamic:NO isFPS:NO];
+    }];
 
-        UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 Hz)..."
-                                                     image:[UIImage systemImageNamed:@"keyboard"]
-                                                identifier:nil
-                                                   handler:^(__kindof UIAction * _Nonnull action) {
-            [self showCustomRateInputAlertForHz:YES];
-        }];
-
-        UIMenu *hzRootMenu = [UIMenu menuWithTitle:@"CHỌN VÀ KHÓA TẦN SỐ QUÉT (HZ)"
-                                          children:@[ecoMenu, balMenu, maxMenu, customAction]];
-
-        UITableViewCell *cell = [self.table cellForRowAtIndexPath:[self indexPathForSpecifier:specifier]];
-        UIView *targetAnchor = cell ?: self.view;
-
-        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 Hz)..." style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-            [self showCustomRateInputAlertForHz:YES];
+    NSMutableArray *moreList = [NSMutableArray array];
+    for (NSNumber *r in @[@15, @24, @40, @50, @75, @80, @100, @110, @130]) {
+        NSString *title = [NSString stringWithFormat:@"%@ Hz", r];
+        [moreList addObject:[UIAction actionWithTitle:title
+                                                image:[UIImage systemImageNamed:@"circle.grid.2x2"]
+                                           identifier:nil
+                                              handler:^(__kindof UIAction * _Nonnull action) {
+            [self applyRateValue:[r integerValue] isDynamic:NO isFPS:NO];
         }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"🟢 1. Tiết Kiệm Pin (15Hz - 40Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showSubMenuWithOptions:@[@15, @20, @24, @30, @35, @40] title:@"Tiết Kiệm Pin" unit:@"Hz" isFPS:NO];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"🟡 2. Cân Bằng & Mượt (45Hz - 80Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showSubMenuWithOptions:@[@45, @50, @55, @60, @65, @70, @75, @80] title:@"Cân Bằng" unit:@"Hz" isFPS:NO];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"🔴 3. Hiệu Năng Cao (85Hz - 144Hz)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showSubMenuWithOptions:@[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144] title:@"Hiệu Năng Cao" unit:@"Hz" isFPS:NO];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-
-        if (sheet.popoverPresentationController) {
-            sheet.popoverPresentationController.sourceView = targetAnchor;
-            sheet.popoverPresentationController.sourceRect = targetAnchor.bounds;
-        }
-        [self presentViewController:sheet animated:YES completion:nil];
-        return;
     }
+    UIMenu *moreMenu = [UIMenu menuWithTitle:@"Tùy Chọn Mở Rộng..."
+                                       image:[UIImage systemImageNamed:@"slider.horizontal.3"]
+                                  identifier:nil
+                                     options:0
+                                    children:moreList];
 
-    // Fallback cho iOS thấp
-    NSArray *rates = @[@15, @20, @24, @30, @35, @40, @45, @50, @55, @60, @65, @70, @75, @80, @85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
-    [self showSubMenuWithOptions:rates title:@"CHỌN TẦN SỐ QUÉT (HZ)" unit:@"Hz" isFPS:NO];
+    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 Hz)..."
+                                                 image:[UIImage systemImageNamed:@"keyboard"]
+                                            identifier:nil
+                                               handler:^(__kindof UIAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:YES];
+    }];
+
+    return [UIMenu menuWithTitle:@"TẦN SỐ QUÉT (HZ)"
+                        children:@[act144, act120, act90, act60, act30, moreMenu, customAction]];
+}
+
+- (UIMenu *)buildFPSMenu API_AVAILABLE(ios(14.0)) {
+    UIAction *act144 = [UIAction actionWithTitle:@"144 FPS (Ép Xung Cực Đại)"
+                                           image:[UIImage systemImageNamed:@"bolt.fill"]
+                                      identifier:nil
+                                         handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:144 isDynamic:NO isFPS:YES];
+    }];
+
+    UIAction *act120 = [UIAction actionWithTitle:@"120 FPS (Gaming Cực Mượt)"
+                                           image:[UIImage systemImageNamed:@"sparkles"]
+                                      identifier:nil
+                                         handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:120 isDynamic:NO isFPS:YES];
+    }];
+
+    UIAction *act90 = [UIAction actionWithTitle:@"90 FPS (Tối Ưu Game)"
+                                          image:[UIImage systemImageNamed:@"speedometer"]
+                                     identifier:nil
+                                        handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:90 isDynamic:NO isFPS:YES];
+    }];
+
+    UIAction *act60 = [UIAction actionWithTitle:@"60 FPS (Chuẩn Mặc Định)"
+                                          image:[UIImage systemImageNamed:@"checkmark.seal.fill"]
+                                     identifier:nil
+                                        handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:NO isFPS:YES];
+    }];
+
+    UIAction *act30 = [UIAction actionWithTitle:@"30 FPS (Tiết Kiệm Pin)"
+                                          image:[UIImage systemImageNamed:@"leaf.fill"]
+                                     identifier:nil
+                                        handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:30 isDynamic:NO isFPS:YES];
+    }];
+
+    NSMutableArray *moreList = [NSMutableArray array];
+    for (NSNumber *r in @[@15, @24, @40, @50, @75, @80, @100, @110, @130]) {
+        NSString *title = [NSString stringWithFormat:@"%@ FPS", r];
+        [moreList addObject:[UIAction actionWithTitle:title
+                                                image:[UIImage systemImageNamed:@"circle.grid.2x2"]
+                                           identifier:nil
+                                              handler:^(__kindof UIAction * _Nonnull action) {
+            [self applyRateValue:[r integerValue] isDynamic:NO isFPS:YES];
+        }]];
+    }
+    UIMenu *moreMenu = [UIMenu menuWithTitle:@"Tùy Chọn Mở Rộng..."
+                                       image:[UIImage systemImageNamed:@"slider.horizontal.3"]
+                                  identifier:nil
+                                     options:0
+                                    children:moreList];
+
+    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 FPS)..."
+                                                 image:[UIImage systemImageNamed:@"keyboard"]
+                                            identifier:nil
+                                               handler:^(__kindof UIAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:NO];
+    }];
+
+    return [UIMenu menuWithTitle:@"KHUNG HÌNH (FPS)"
+                        children:@[act144, act120, act90, act60, act30, moreMenu, customAction]];
 }
 
 // ====================================================================================================
-// POPUP CHỌN KHUNG HÌNH (FPS) - CHUẨN UIMENU POPOVER NỀN KÍNH
+// GẮN UIMENU POPOVER NATIVE VÀO CELL BẢNG
+// ====================================================================================================
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    if (@available(iOS 14.0, *)) {
+        PSSpecifier *spec = nil;
+        if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
+            spec = [self specifierAtIndexPath:indexPath];
+        }
+        if (spec) {
+            NSString *key = [spec propertyForKey:@"key"];
+            if ([key isEqualToString:@"TargetRefreshRate"]) {
+                [self attachMenu:[self buildHzMenu] toCell:cell];
+            } else if ([key isEqualToString:@"TargetFPSRate"]) {
+                [self attachMenu:[self buildFPSMenu] toCell:cell];
+            }
+        }
+    }
+    return cell;
+}
+
+- (void)attachMenu:(UIMenu *)menu toCell:(UITableViewCell *)cell API_AVAILABLE(ios(14.0)) {
+    if (!cell || !menu) return;
+    UIButton *existingBtn = [cell.contentView viewWithTag:99285];
+    if (!existingBtn) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.tag = 99285;
+        btn.frame = cell.contentView.bounds;
+        btn.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        btn.backgroundColor = [UIColor clearColor];
+        btn.showsMenuAsPrimaryAction = YES;
+        btn.menu = menu;
+        [cell.contentView addSubview:btn];
+    } else {
+        existingBtn.menu = menu;
+        existingBtn.showsMenuAsPrimaryAction = YES;
+    }
+}
+
+// ====================================================================================================
+// POPUP CHỌN TẦN SỐ QUÉT (HZ)
+// ====================================================================================================
+
+- (void)showHzPickerPopup:(PSSpecifier *)specifier {
+    NSIndexPath *indexPath = nil;
+    if ([self respondsToSelector:@selector(indexPathForSpecifier:)]) {
+        indexPath = [self indexPathForSpecifier:specifier];
+    } else {
+        NSInteger idx = [self indexOfSpecifier:specifier];
+        if (idx != NSNotFound) {
+            indexPath = [NSIndexPath indexPathForRow:idx inSection:0];
+        }
+    }
+
+    UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
+    UIView *targetAnchor = cell ?: self.view;
+
+    if (@available(iOS 14.0, *)) {
+        UIButton *btn = [cell.contentView viewWithTag:99285];
+        if (btn) {
+            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+            return;
+        }
+    }
+
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 Hz)..." style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:YES];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ 144 Hz (Ép Xung Cực Đại)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:144 isDynamic:NO isFPS:NO];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"✨ 120 Hz (ProMotion Max)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:120 isDynamic:NO isFPS:NO];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"🎯 60 Hz (Tiêu Chuẩn Chuẩn Mực)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:NO isFPS:NO];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"🔋 30 Hz (Tiết Kiệm Pin)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:30 isDynamic:NO isFPS:NO];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (sheet.popoverPresentationController) {
+        sheet.popoverPresentationController.sourceView = targetAnchor;
+        sheet.popoverPresentationController.sourceRect = targetAnchor.bounds;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+// ====================================================================================================
+// POPUP CHỌN KHUNG HÌNH (FPS)
 // ====================================================================================================
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    if (@available(iOS 14.0, *)) {
-        NSMutableArray *ecoActions = [NSMutableArray array];
-        for (NSNumber *r in @[@15, @20, @24, @30, @35, @40]) {
-            NSString *title = [NSString stringWithFormat:@"%@ FPS", r];
-            [ecoActions addObject:[UIAction actionWithTitle:title
-                                                      image:[UIImage systemImageNamed:@"leaf.fill"]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) {
-                [self applyRateValue:[r integerValue] isDynamic:NO isFPS:YES];
-            }]];
+    NSIndexPath *indexPath = nil;
+    if ([self respondsToSelector:@selector(indexPathForSpecifier:)]) {
+        indexPath = [self indexPathForSpecifier:specifier];
+    } else {
+        NSInteger idx = [self indexOfSpecifier:specifier];
+        if (idx != NSNotFound) {
+            indexPath = [NSIndexPath indexPathForRow:idx inSection:0];
         }
-        UIMenu *ecoMenu = [UIMenu menuWithTitle:@"1. Tiết Kiệm Pin (15 FPS - 40 FPS)"
-                                          image:[UIImage systemImageNamed:@"battery.100.bolt"]
-                                     identifier:nil
-                                        options:0
-                                       children:ecoActions];
-
-        NSMutableArray *balActions = [NSMutableArray array];
-        for (NSNumber *r in @[@45, @50, @55, @60, @65, @70, @75, @80]) {
-            NSString *iconName = ([r integerValue] == 60) ? @"checkmark.seal.fill" : @"speedometer";
-            NSString *title = ([r integerValue] == 60) ? @"60 FPS (Chuẩn Mực Mặc Định)" : [NSString stringWithFormat:@"%@ FPS", r];
-            [balActions addObject:[UIAction actionWithTitle:title
-                                                      image:[UIImage systemImageNamed:iconName]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) {
-                [self applyRateValue:[r integerValue] isDynamic:NO isFPS:YES];
-            }]];
-        }
-        UIMenu *balMenu = [UIMenu menuWithTitle:@"2. Cân Bằng & Mượt (45 FPS - 80 FPS)"
-                                          image:[UIImage systemImageNamed:@"slider.horizontal.3"]
-                                     identifier:nil
-                                        options:0
-                                       children:balActions];
-
-        NSMutableArray *maxActions = [NSMutableArray array];
-        for (NSNumber *r in @[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144]) {
-            NSString *iconName = ([r integerValue] >= 144) ? @"bolt.fill" : @"sparkles";
-            NSString *title = ([r integerValue] >= 144) ? @"144 FPS (Ép Xung Cực Đại)" : [NSString stringWithFormat:@"%@ FPS (Gaming Cực Mượt)", r];
-            [maxActions addObject:[UIAction actionWithTitle:title
-                                                      image:[UIImage systemImageNamed:iconName]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) {
-                [self applyRateValue:[r integerValue] isDynamic:NO isFPS:YES];
-            }]];
-        }
-        UIMenu *maxMenu = [UIMenu menuWithTitle:@"3. Hiệu Năng Cao (85 FPS - 144 FPS)"
-                                          image:[UIImage systemImageNamed:@"flame.fill"]
-                                     identifier:nil
-                                        options:0
-                                       children:maxActions];
-
-        UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 FPS)..."
-                                                     image:[UIImage systemImageNamed:@"keyboard"]
-                                                identifier:nil
-                                                   handler:^(__kindof UIAction * _Nonnull action) {
-            [self showCustomRateInputAlertForHz:NO];
-        }];
-
-        UIMenu *fpsRootMenu = [UIMenu menuWithTitle:@"CHỌN VÀ KHÓA KHUNG HÌNH (FPS)"
-                                           children:@[ecoMenu, balMenu, maxMenu, customAction]];
-
-        UITableViewCell *cell = [self.table cellForRowAtIndexPath:[self indexPathForSpecifier:specifier]];
-        UIView *targetAnchor = cell ?: self.view;
-
-        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 FPS)..." style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-            [self showCustomRateInputAlertForHz:NO];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"🟢 1. Tiết Kiệm Pin (15 FPS - 40 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showSubMenuWithOptions:@[@15, @20, @24, @30, @35, @40] title:@"Tiết Kiệm Pin" unit:@"FPS" isFPS:YES];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"🟡 2. Cân Bằng & Mượt (45 FPS - 80 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showSubMenuWithOptions:@[@45, @50, @55, @60, @65, @70, @75, @80] title:@"Cân Bằng" unit:@"FPS" isFPS:YES];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"🔴 3. Hiệu Năng Cao (85 FPS - 144 FPS)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showSubMenuWithOptions:@[@85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144] title:@"Hiệu Năng Cao" unit:@"FPS" isFPS:YES];
-        }]];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-
-        if (sheet.popoverPresentationController) {
-            sheet.popoverPresentationController.sourceView = targetAnchor;
-            sheet.popoverPresentationController.sourceRect = targetAnchor.bounds;
-        }
-        [self presentViewController:sheet animated:YES completion:nil];
-        return;
     }
 
-    // Fallback cho iOS thấp
-    NSArray *rates = @[@15, @20, @24, @30, @35, @40, @45, @50, @55, @60, @65, @70, @75, @80, @85, @90, @95, @100, @105, @110, @115, @120, @125, @130, @135, @140, @144];
-    [self showSubMenuWithOptions:rates title:@"CHỌN KHUNG HÌNH (FPS)" unit:@"FPS" isFPS:YES];
+    UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
+    UIView *targetAnchor = cell ?: self.view;
+
+    if (@available(iOS 14.0, *)) {
+        UIButton *btn = [cell.contentView viewWithTag:99285];
+        if (btn) {
+            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+            return;
+        }
+    }
+
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 FPS)..." style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:NO];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"⚡️ 144 FPS (Ép Xung Cực Đại)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:144 isDynamic:NO isFPS:YES];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"✨ 120 FPS (Gaming Cực Mượt)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:120 isDynamic:NO isFPS:YES];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"🎯 60 FPS (Chuẩn Mặc Định)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:NO isFPS:YES];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"🔋 30 FPS (Tiết Kiệm Pin)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self applyRateValue:30 isDynamic:NO isFPS:YES];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (sheet.popoverPresentationController) {
+        sheet.popoverPresentationController.sourceView = targetAnchor;
+        sheet.popoverPresentationController.sourceRect = targetAnchor.bounds;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (id)getAuthorName:(PSSpecifier *)specifier {
@@ -1043,13 +1130,11 @@ static inline NSString *PM_TextV285(NSString *key) {
                                                   handler:^(__kindof UIAction * _Nonnull action) {
             [self executeResetConfiguration];
         }];
-        resetAction.attributes = UIMenuElementAttributeDestructive;
+        resetAction.attributes = UIMenuElementAttributesDestructive;
 
         UIMenu *actionsMenu = [UIMenu menuWithTitle:btnTitle children:@[respringAction, srebootAction, resetAction]];
 
-        UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithTitle:btnTitle
-                                                                      image:[UIImage systemImageNamed:@"ellipsis.circle.fill"]
-                                                              primaryAction:nil
+        UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"ellipsis.circle.fill"]
                                                                        menu:actionsMenu];
         actionBtn.tintColor = [UIColor systemBlueColor];
         self.navigationItem.rightBarButtonItem = actionBtn;
