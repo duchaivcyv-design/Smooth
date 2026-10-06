@@ -922,17 +922,14 @@ extern "C" {
 @interface UIVisualEffectView (TitaniumCryoPacingPrivate)
 @end
 
-// --- SỬA LỖI DUPLICATE INTERFACE CHO METAL (DÙNG CATEGORY MỞ RỘNG THAY VÌ CLASS GỐC) ---
+// --- KHẮC PHỤC TRIỆT ĐỂ WARNING ACCESSOR MISMATCH VỚI CLANG ---
 @interface MTLRenderPassAttachmentDescriptor (TitaniumCryoPacing)
 @property (nonatomic, assign) NSUInteger storeAction;
-- (void)setStoreAction:(NSUInteger)storeAction;
 @end
 
 @interface MTLRenderPassDescriptor (TitaniumCryoPacing)
 @property (nonatomic, retain) MTLRenderPassAttachmentDescriptor *depthAttachment;
 @property (nonatomic, retain) MTLRenderPassAttachmentDescriptor *stencilAttachment;
-- (void)setDepthAttachment:(id)depthAttachment;
-- (void)setStencilAttachment:(id)stencilAttachment;
 @end
 
 // --- NHÓM 20: DEEP MEMORY OPTIMIZATION & ADVANCED JETSAM DEFENSE ---
