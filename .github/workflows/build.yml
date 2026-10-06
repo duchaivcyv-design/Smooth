@@ -48,7 +48,7 @@ jobs:
           fi
           echo "✅ Cài đặt Theos & SDK iPhoneOS16.5 hoàn tất!"
 
-      # --- BƯỚC 3: QUÉT PHÂN TÍCH TĨNH: KIỂM SOÁT HOOK TRÙNG LẶP & SAFEMODE ---
+      # --- BƯỚC 3: TẦNG 1 - QUÉT TĨNH CHỐNG TRÙNG LẶP HOOK & SAFEMODE ---
       - name: Deep Scan Safe Mode Risks & Duplicate Hooks
         run: |
           python3 - << 'EOF'
@@ -217,7 +217,7 @@ jobs:
           
           ls -lh packages/*.deb || { echo "❌ Không tìm thấy file deb!"; exit 1; }
 
-      # --- BƯỚC 5: TRÍCH XUẤT FILE THÔ & KIỂM TRA TƯƠNG THÍCH NHỊ PHÂN IOS ---
+      # --- BƯỚC 5: TẦNG 2 - KIỂM ĐỊNH NHỊ PHÂN & TƯƠNG THÍCH SYSTEM FRAMEWORK ---
       - name: Advanced Binary & Raw Package Verification
         run: |
           echo "======================================================================"
@@ -229,8 +229,6 @@ jobs:
           rm -rf "$TEST_DIR" && mkdir -p "$TEST_DIR"
           
           dpkg -x "$DEB_FILE" "$TEST_DIR"
-          echo "📦 Cấu trúc gói deb trích xuất:"
-          find "$TEST_DIR" -type f
           
           DYLIB_PATH=$(find "$TEST_DIR" -name "BoostiPhone6sCore.dylib" | head -n 1)
           if [ -z "$DYLIB_PATH" ] || [ ! -f "$DYLIB_PATH" ]; then
@@ -241,10 +239,6 @@ jobs:
           echo "📊 Kiểm tra kiến trúc Mach-O slice:"
           lipo -info "$DYLIB_PATH"
 
-          echo "🔍 Kiểm tra Load Commands & RPATH liên kết:"
-          otool -l "$DYLIB_PATH" | grep -A 2 -E '(LC_LOAD_DYLIB|LC_RPATH)' | grep -E '(name|path)' || true
-
-          # Xác minh dylib không chứa dependency thiếu dẫn đến Safe Mode lúc respring
           python3 - << 'EOF'
           import subprocess
           import sys
@@ -266,21 +260,19 @@ jobs:
               print("✅ Toàn bộ liên kết hệ thống (System Frameworks) đều chuẩn xác 100%!")
           EOF
 
-      # --- BƯỚC 5.1: XÁC THỰC MÔI TRƯỜNG & TẠO ẢNH DEMO KHUNG ĐIỆN THOẠI IOS THẬT ---
+      # --- BƯỚC 5.1: TẦNG 3 - RENDER "MÁY ẢO MOCKUP" GIAO DIỆN iOS THẬT ---
       - name: Generate Authentic iOS Jailbreak Demo Mockup Frame
         run: |
           echo "======================================================================"
-          echo "🎨 ĐANG TẠO KHUNG ĐIỆN THOẠI MOCKUP HIỆU ỨNG IOS THẬT TUYỆT ĐỐI..."
+          echo "🎨 ĐANG KẾT XUẤT MÁY ẢO MOCKUP GIAO DIỆN IOS THẬT TUYỆT ĐỐI..."
           echo "======================================================================"
 
-          # Khởi tạo môi trường ảo Python (virtual environment) để cài đặt Pillow an toàn 100%
           python3 -m venv /tmp/venv
           /tmp/venv/bin/pip install --upgrade pip
           /tmp/venv/bin/pip install pillow
 
           mkdir -p /tmp/device_demo_output
 
-          # Chạy script bằng python trong môi trường ảo vừa tạo
           /tmp/venv/bin/python3 - << 'EOF'
           from PIL import Image, ImageDraw
           import os
@@ -370,11 +362,11 @@ jobs:
 
           output_file = "/tmp/device_demo_output/BoostiPhone6s_Authentic_iOS_Demo.png"
           canvas.save(output_file, "PNG")
-          print(f"✨ Thành công xuất bản ảnh mockup tại: {output_file}")
+          print(f"✨ Thành công xuất bản ảnh mockup máy ảo tại: {output_file}")
           EOF
 
-      # --- BƯỚC 6: TẢI GÓI DEB VÀ FILE THÔ LÊN ARTIFACTS ---
-      - name: Upload Deb & Raw Artifacts
+      # --- BƯỚC 6: TẢI GÓI DEB VÀ FILE MOCKUP LÊN ARTIFACTS ---
+      - name: Upload Deb & Authentic Mockup Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BoostiPhone6s-Rootless-FullPackage
