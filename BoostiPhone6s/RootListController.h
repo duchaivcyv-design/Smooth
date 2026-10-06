@@ -18,7 +18,6 @@
 - (nullable NSMutableArray *)specifiers;
 - (void)reloadSpecifiers;
 - (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target;
-- (nullable NSMutableArray *)specifiersFromDictionary:(NSDictionary *)dictionary target:(nullable id)target;
 - (nullable PSSpecifier *)specifierForID:(NSString *)identifier;
 @end
 #endif
@@ -26,6 +25,8 @@
 NS_ASSUME_NONNULL_BEGIN
 
 #define PREF_DOMAIN CFSTR("com.taojb.boostiphone6s")
+#define PRIMARY_SYNC_FILE @"/tmp/.boost_hz_sync"
+#define SECONDARY_SYNC_FILE @"/var/jb/tmp/.boost_hz_sync"
 #define SHARED_SYNC_FILE @"/tmp/.boost_hz_sync"
 #define BOOT_GUARD_FILE @"/tmp/.boost_boot_counter"
 
@@ -39,9 +40,6 @@ NS_ASSUME_NONNULL_BEGIN
 #define APEX_SYNC_MAGIC_V285 0x41505837
 #endif
 
-// ====================================================================================================
-// CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO
-// ====================================================================================================
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
@@ -75,56 +73,43 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
-// ====================================================================================================
-// ROOTLISTCONTROLLER INTERFACE (CHẾ ĐỘ ÉP TOÀN DIỆN ĐIỀU KHIỂN SETTINGS)
-// ====================================================================================================
 @interface RootListController : PSListController {
 @public
     NSMutableArray *_allSavedSpecifiers;
-    NSMutableArray *_specifiers; // [KHAI BÁO CÔNG KHAI TẠI ĐÂY ĐỂ CLANG PASS 100%]
+    NSMutableArray *_specifiers;
 }
 
-// --- Các hàm khởi tạo đa nền tảng (Preferences.app & TweakSettings.app) ---
 - (instancetype)init;
 - (instancetype)initWithNibName:(nullable NSString *)nibNameOrNil bundle:(nullable NSBundle *)nibBundleOrNil;
 - (id)initForContentSize:(CGSize)size;
 
-// --- Điều phối hàng đợi nền & Debounce timer chống Safe Mode ---
 @property (nonatomic, strong, nullable) dispatch_source_t debounceSyncTimer;
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
 
-// --- Bộ đọc / ghi cấu hình đồng bộ kép (Disk & Memory) ---
 - (nullable id)readPreferenceValue:(PSSpecifier *)specifier;
 - (void)setPreferenceValue:(nullable id)value specifier:(PSSpecifier *)specifier;
 - (NSDictionary *)getMergedPreferences;
 - (void)ensureDefaultSettingsExist;
 - (void)syncSharedMemoryFile:(BOOL)enabled;
 
-// --- Bộ giám sát phần cứng thời gian thực (HUD Realtime Metrics) ---
+// --- Getters cho cell đo đạc phần cứng ---
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier;
 - (id)getMonitorCPUGPU:(PSSpecifier *)specifier;
 - (id)getMonitorThermal:(PSSpecifier *)specifier;
 - (id)getMonitorBattery:(PSSpecifier *)specifier;
 
-// --- Điều phối menu tần số quét & FPS (15 Hz - 144 Hz) ---
 - (void)showHzPickerPopup:(PSSpecifier *)specifier;
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier;
-- (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS;
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)dynamicMode isFPS:(BOOL)isFPS;
 
-// --- Bản địa hóa đa ngôn ngữ & Cập nhật nhãn động ---
 - (void)showLanguagePickerPopup:(PSSpecifier *)specifier;
 - (void)updateDynamicTitles;
-- (void)applyFullLocalizationToSpecifiers:(NSArray *)specs;
 
-// --- Thông tin phát triển & Liên kết hỗ trợ Zalo ---
 - (id)getAuthorName:(PSSpecifier *)specifier;
 - (id)getVersionString:(PSSpecifier *)specifier;
 - (void)openSupportLink:(PSSpecifier *)specifier;
 
-// --- Điều khiển hệ thống (Respring, SReboot, Reset Default) ---
 - (void)setupNavigationItems;
-- (void)presentActions;
 - (void)executeRespring;
 - (void)executeSReboot;
 - (void)executeResetConfiguration;
