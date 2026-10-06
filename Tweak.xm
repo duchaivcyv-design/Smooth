@@ -306,7 +306,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -1272,6 +1272,10 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 // BOOST CONFIGURATION ENGINE (V28.7 PRO MAX - ĐÃ KHẮC PHỤC 100% CÁC THUỘC TÍNH BỊ THIẾU)
 // ====================================================================================================
 
+// ====================================================================================================
+// BOOST CONFIGURATION ENGINE (V28.7 PRO MAX - ĐÃ KHẮC PHỤC 100% LỖI PROPERTY CLANG)
+// ====================================================================================================
+
 @interface BoostConfigV285Pro : NSObject
 @property (nonatomic, assign) BOOL enabled;
 @property (nonatomic, strong) NSString *selectedLanguage;
@@ -1309,8 +1313,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 @property (nonatomic, assign) BOOL powerSaveMode;
 @property (nonatomic, assign) BOOL antiGhostTouch;
 @property (nonatomic, assign) BOOL chargerRippleRejection;
-
-// --- [CÁC THUỘC TÍNH ĐƯỢC BỔ SUNG KHẮC PHỤC LỖI BIÊN DỊCH CLANG] ---
 @property (nonatomic, assign) BOOL batterySaver60Hz;
 @property (nonatomic, assign) BOOL lock30FpsOnOverheat;
 @property (nonatomic, assign) BOOL dynamicThermalEngine;
@@ -1321,6 +1323,13 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 @property (nonatomic, assign) BOOL pCoreRealtimePriority;
 @property (nonatomic, assign) BOOL flatTintBlur;
 @property (nonatomic, assign) BOOL zeroLagNeural;
+@property (nonatomic, assign) BOOL schedulerGovernor;
+@property (nonatomic, assign) BOOL iopolVipPriority;
+@property (nonatomic, assign) BOOL ultraResponsivenessPro;
+@property (nonatomic, assign) BOOL coolDownHeavyLoad;
+@property (nonatomic, assign) BOOL backgroundPacingDaemon;
+@property (nonatomic, assign) BOOL autoKillBackground;
+@property (nonatomic, assign) BOOL hyperMemoryGuardian;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -1413,7 +1422,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.antiGhostTouch = YES;
         self.chargerRippleRejection = YES;
 
-        // Khởi tạo mặc định cho các thuộc tính mới
+        // [ÉP TOÀN DIỆN]: Khởi tạo mặc định cho nhóm nhiệt độ & đồ họa
         self.batterySaver60Hz = NO;
         self.lock30FpsOnOverheat = YES;
         self.dynamicThermalEngine = YES;
@@ -1424,6 +1433,15 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.pCoreRealtimePriority = YES;
         self.flatTintBlur = NO;
         self.zeroLagNeural = YES;
+
+        // [ÉP TOÀN DIỆN]: Khởi tạo mặc định cho 7 cờ Scheduler, I/O & Memory
+        self.schedulerGovernor = YES;
+        self.iopolVipPriority = YES;
+        self.ultraResponsivenessPro = YES;
+        self.coolDownHeavyLoad = YES;
+        self.backgroundPacingDaemon = YES;
+        self.autoKillBackground = NO;
+        self.hyperMemoryGuardian = YES;
 
         [self loadSettings];
     }
@@ -1555,6 +1573,15 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.pCoreRealtimePriority = GetLiveBool(@"RealtimeThreadSched", YES);
         self.flatTintBlur = GetLiveBool(@"QuantumRenderShield", NO);
         self.zeroLagNeural = GetLiveBool(@"ZeroLagNeuralBooster", YES);
+
+        // [ÉP TOÀN DIỆN]: ĐỒNG BỘ ÁNH XẠ 7 CỜ MỚI
+        self.schedulerGovernor = GetLiveBool(@"IOSchedulerEngine", YES);
+        self.iopolVipPriority = GetLiveBool(@"SystemProcessOpt", YES);
+        self.ultraResponsivenessPro = GetLiveBool(@"UltraResponsiveness", YES);
+        self.coolDownHeavyLoad = GetLiveBool(@"HeavyLoadCooling", YES);
+        self.backgroundPacingDaemon = GetLiveBool(@"BackgroundPacingDaemon", YES);
+        self.autoKillBackground = GetLiveBool(@"AutoCloseBackgroundApp", NO);
+        self.hyperMemoryGuardian = GetLiveBool(@"HyperMemoryGuardian", YES);
 
         // ==============================================================================================
         // [ÉP TOÀN DIỆN]: KHÓA CỨNG MỨC CHỈNH TỪ 15HZ ĐẾN 144HZ VÀO CACHE NGUYÊN THỦY (0NS RENDER LOOP)
