@@ -4588,19 +4588,13 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 }
 
 // ====================================================================================================
-// RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK (CHẾ ĐỘ ÉP TOÀN DIỆN MỌI NHÓM)
+// RUNTIME INITIALIZER: ĐIỀU PHỐI TẦNG NỘI BỘ & KHỞI CHẠY TWEAK (CHỐNG SAFEMODE KHI RESPRING)
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static dispatch_once_t s_coreInitToken;
     dispatch_once(&s_coreInitToken, ^{
         @autoreleasepool {
-            // [ÉP TOÀN DIỆN]: Tiêm trực tiếp Dynamic Refresh Rate vào UIScreen Runtime
-            Titanium_ForceInjectDynamicRefreshSupport();
-
-            // [ÉP TOÀN DIỆN]: Triệt tiêu trễ phần cứng CADisplay về 0.0s
-            AppleInternal_LockHardwareCADisplay();
-
             if (isSpringBoard) {
                 Titanium_LockMainThreadFast();
             } else {
@@ -4628,7 +4622,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_InstantActionAndMenuTransitions_Boost);
             %init(Group_Global_Thread_Governor_Unthrottled);
 
-            // 2. CÁC NHÓM GIA TỐC PHẦN CỨNG, DỰ ĐOÁN ĐỒ HỌA & ÉP PROMOTION THẬT
+            // 2. CÁC NHÓM GIA TỐC PHẦN CỨNG & DỰ ĐOÁN ĐỒ HỌA
             %init(Group_Universal_InApp_Animations);
             %init(Group_Apple_Internal_ProMotion_Apex);
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
@@ -4651,7 +4645,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             // 5. PHÂN LẬP NẠP GIỮA TIẾN TRÌNH SPRINGBOARD VÀ APP THỨ BA
             if (isSpringBoard) {
-                Titanium_TuneWindowServerDisplayDirectly();
                 %init(Group_LiquidGlass_Opt);
                 %init(Group_Switcher30Apps_Virtualization);
                 %init(Group_Display_SpringBoardV285);
@@ -4659,9 +4652,14 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_SpringBoard_ProcessManagerV285);
                 Titanium_StartThermalAndChargingWatchdog();
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                // [ÉP TOÀN DIỆN]: ĐỢI SPRINGBOARD HOÀN TẤT DỰNG FRAME ĐẦU TIÊN MỚI ÉP PHẦN CỨNG
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    Titanium_ForceInjectDynamicRefreshSupport();
+                    AppleInternal_LockHardwareCADisplay();
+                    Titanium_TuneWindowServerDisplayDirectly();
                     AppleInternal_EnforceZeroLatencyKernelTier();
                     Titanium_EnforceMachFrameConstraint();
+                    Titanium_ApplySiliconDeepOptimizations();
                 });
 
                 NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
@@ -4670,20 +4668,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
-                AppleInternal_EnforceZeroLatencyKernelTier();
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    Titanium_ForceInjectDynamicRefreshSupport();
+                    AppleInternal_EnforceZeroLatencyKernelTier();
+                    Titanium_ApplySiliconDeepOptimizations();
+                });
             }
-
-            // 6. ĐĂNG KÝ LẮNG NGHE ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
-            static dispatch_once_t notifyToken;
-            dispatch_once(&notifyToken, ^{
-                CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-                if (darwinCenter) {
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
-                }
-            });
 
             g_SystemMasterReady = YES;
         }
@@ -4691,7 +4681,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 }
 
 // ====================================================================================================
-// CƠ CHẾ NẠP AN TOÀN KÉP (DUAL-TRIGGER DISPATCH): CHỐNG KẸT KHỞI ĐỘNG VÀ BẢO VỆ WATCHDOG 100%
+// CƠ CHẾ NẠP AN TOÀN DUY NHẤT (SINGLE RELIABLE BOOTSTRAP): CHỐNG DEADLOCK VÀ WATCHDOG 100%
 // ====================================================================================================
 
 static void SpringBoardBootstrapTrigger(void) {
@@ -4701,9 +4691,8 @@ static void SpringBoardBootstrapTrigger(void) {
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
         time_t uptime = Titanium_GetSystemUptimeSeconds();
-        BOOL isColdBoot = (uptime < 45);
-
-        int64_t waitDelay = isColdBoot ? (int64_t)(800 * NSEC_PER_MSEC) : (int64_t)(100 * NSEC_PER_MSEC);
+        BOOL isColdBoot = (uptime < 30);
+        int64_t waitDelay = isColdBoot ? (int64_t)(500 * NSEC_PER_MSEC) : (int64_t)(100 * NSEC_PER_MSEC);
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_main_queue(), ^{
             runCoreTweak(YES, bundleID, progName);
@@ -4773,6 +4762,18 @@ static void SpringBoardBootstrapTrigger(void) {
         // [ÉP TOÀN DIỆN]: Bật khiên vô hiệu hóa Watchdog đầu tiên để bảo vệ SpringBoard
         %init(Group_AntiWatchdog_Immunity);
 
+        // 5. ĐĂNG KÝ LẮNG NGHE ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
+        static dispatch_once_t notifyToken;
+        dispatch_once(&notifyToken, ^{
+            CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+            if (darwinCenter) {
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+            }
+        });
+
         if (isSpringBoard) {
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                               object:nil
@@ -4780,10 +4781,6 @@ static void SpringBoardBootstrapTrigger(void) {
                                                           usingBlock:^(NSNotification * _Nonnull note) {
                 SpringBoardBootstrapTrigger();
             }];
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                SpringBoardBootstrapTrigger();
-            });
         } else {
             runCoreTweak(NO, bundleID, progName);
         }
