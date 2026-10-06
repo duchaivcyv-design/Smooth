@@ -527,17 +527,19 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 }
 
 // ====================================================================================================
-// [ÉP NẠP SPECIFIERS AN TOÀN TUYỆT ĐỐI]: GÁN CHUẨN _specifiers - KHÔNG ĐỆ QUY TRÀN NGĂN XẾP
+// [ÉP CHẶN ĐỆ QUY 100%]: KHÓA CHẶT _specifiers NGAY TỪ DÒNG ĐẦU TIÊN
 // ====================================================================================================
 
 - (id)specifiers {
     if (!_specifiers) {
+        // [CỰC KỲ QUAN TRỌNG]: Đánh dấu đã nạp ngay lập tức để chặn đệ quy vô tận
+        _specifiers = [[NSMutableArray alloc] init];
+
         @try {
             self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
             [self ensureDefaultSettingsExist];
 
             if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
-                _specifiers = [NSMutableArray array];
                 return _specifiers;
             }
 
@@ -585,10 +587,9 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
                 }
             }
 
-            [self updateDynamicTitlesForSpecifiers:filteredSpecs];
-            _specifiers = filteredSpecs;
+            [_specifiers addObjectsFromArray:filteredSpecs];
         } @catch (NSException *e) {
-            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self] ?: [NSMutableArray array];
         }
     }
     return _specifiers;
@@ -695,15 +696,17 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     for (PSSpecifier *spec in targetSpecs) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
-            spec.name = isPowerSave ? @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)" :
-                        (hz >= 144) ? @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)" :
-                        [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz];
-            [spec setProperty:spec.name forKey:@"label"];
+            NSString *t = isPowerSave ? @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)" :
+                          (hz >= 144) ? @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)" :
+                          [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz];
+            spec.name = t;
+            [spec setProperty:t forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
-            spec.name = isPowerSave ? @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)" :
-                        (fps >= 144) ? @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)" :
-                        [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps];
-            [spec setProperty:spec.name forKey:@"label"];
+            NSString *t = isPowerSave ? @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)" :
+                          (fps >= 144) ? @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)" :
+                          [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps];
+            spec.name = t;
+            [spec setProperty:t forKey:@"label"];
         }
     }
 }
