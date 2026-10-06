@@ -3614,11 +3614,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return orig;
 }
 
-// 1. ÉP BỎ TIMEOUT DRAWABLE (CHỈ ÉP KHI LAYER ĐÃ GẮN VÀO CỬA SỔ -> KHÔNG BAO GIỜ ĐEN APP)
+// 1. ÉP BỎ TIMEOUT DRAWABLE (DÙNG superlayer ĐỂ TRÁNH LỖI PROPERTY 'window')
 - (BOOL)allowsNextDrawableTimeout {
     if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.window != nil) {
-            return NO; // Đã lên hình: Cấm timeout để giữ vững khung hình không bị drop
+        if (self.superlayer != nil) {
+            return NO; // Đã vào cây render: Cấm timeout để chống drop FPS
         }
     }
     return %orig;
@@ -3626,7 +3626,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.window != nil) {
+        if (self.superlayer != nil) {
             allow = NO;
         }
     }
@@ -3636,7 +3636,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // 2. ÉP TRUYỀN FRAME TỨC THÌ, BỎ QUA GIAO DỊCH SERVER HỆ THỐNG
 - (BOOL)serverPresentsWithTransaction {
     if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.window != nil) {
+        if (self.superlayer != nil) {
             return NO;
         }
     }
@@ -3645,7 +3645,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
     if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.window != nil) {
+        if (self.superlayer != nil) {
             serverPresents = NO;
         }
     }
