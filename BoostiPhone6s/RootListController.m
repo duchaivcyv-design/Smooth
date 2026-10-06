@@ -82,6 +82,10 @@ typedef struct __attribute__((packed)) {
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 #endif
 
+@interface PSTableCell : UITableViewCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier;
+@end
+
 @interface PSListController (TitaniumPrivateSelectors)
 - (nullable NSIndexPath *)indexPathForSpecifier:(PSSpecifier *)specifier;
 - (nullable PSSpecifier *)specifierAtIndexPath:(NSIndexPath *)indexPath;
@@ -173,7 +177,7 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
         self.layer.borderWidth = 1.0;
         self.layer.borderColor = [UIColor colorWithWhite:0.2 alpha:0.6].CGColor;
         for (int i = 0; i < GRAPH_HISTORY_POINTS; i++) {
-            _cpuHistory[i] = 10.0f;
+            _cpuHistory[i] = 12.0f;
             _fpsHistory[i] = 60.0f;
         }
         _currentIndex = 0;
@@ -185,7 +189,9 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
     _cpuHistory[_currentIndex] = cpu;
     _fpsHistory[_currentIndex] = fps;
     _currentIndex = (_currentIndex + 1) % GRAPH_HISTORY_POINTS;
-    [self setNeedsDisplay];
+    if (self.window) {
+        [self setNeedsDisplay];
+    }
 }
 
 - (void)drawRect:(CGRect)rect {
@@ -195,11 +201,12 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
     CGFloat w = rect.size.width;
     CGFloat h = rect.size.height;
     CGFloat plotTop = 45.0;
-    CGFloat plotBottom = h - 20.0;
+    CGFloat plotBottom = h - 18.0;
     CGFloat plotH = plotBottom - plotTop;
+    if (plotH <= 0) return;
 
     // 1. Vẽ lưới tọa độ Grid
-    CGContextSetStrokeColorWithColor(ctx, [UIColor colorWithWhite:0.15 alpha:0.8].CGColor);
+    CGContextSetStrokeColorWithColor(ctx, [UIColor colorWithWhite:0.18 alpha:0.8].CGColor);
     CGContextSetLineWidth(ctx, 0.5);
     for (int i = 1; i <= 3; i++) {
         CGFloat y = plotTop + (plotH * (CGFloat)i / 4.0);
@@ -211,7 +218,7 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
     // 2. Vẽ Tiêu Đề HUD
     if (self.titleText) {
         NSDictionary *titleAttr = @{
-            NSFontAttributeName: [UIFont systemFontOfSize:13 weight:UIFontWeightBold],
+            NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightBold],
             NSForegroundColorAttributeName: [UIColor whiteColor]
         };
         [self.titleText drawAtPoint:CGPointMake(14, 10) withAttributes:titleAttr];
@@ -224,10 +231,11 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
         [self.subtitleText drawAtPoint:CGPointMake(14, 26) withAttributes:subAttr];
     }
 
+    CGFloat stepX = (w - 24.0) / (CGFloat)(GRAPH_HISTORY_POINTS - 1);
+
     // 3. Vẽ đường dao động CPU Load (Màu Cyan)
     CGContextSetLineWidth(ctx, 2.0);
     CGContextSetStrokeColorWithColor(ctx, [UIColor colorWithRed:0.0 green:0.85 blue:1.0 alpha:0.95].CGColor);
-    CGFloat stepX = (w - 24.0) / (CGFloat)(GRAPH_HISTORY_POINTS - 1);
 
     for (int i = 0; i < GRAPH_HISTORY_POINTS; i++) {
         int idx = (_currentIndex + i) % GRAPH_HISTORY_POINTS;
@@ -259,146 +267,33 @@ static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
 @end
 
 // ====================================================================================================
-// VIEW CONTROLLER TAB BIỂU ĐỒ THỜI GIAN THỰC (0S OVERHEAD)
+// [ÉP CUSTOM CELL CHỐNG VĂNG]: HOST VIEW BIỂU ĐỒ TRỰC TIẾP TRONG SETTINGS
 // ====================================================================================================
 
-@interface TitaniumHardwareGraphController : UIViewController {
-    dispatch_source_t _timer;
-    TitaniumRealtimeGraphView *_graphView;
-    UILabel *_lblCPULoad;
-    UILabel *_lblFPSHz;
-    UILabel *_lblBatteryTemp;
-    UILabel *_lblThermalStatus;
-    CADisplayLink *_fpsLink;
-    NSInteger _frameCount;
-    CFTimeInterval _lastFPSTime;
-    float _liveFPS;
-}
+@interface TitaniumGraphHostCell : PSTableCell
+@property (nonatomic, strong) TitaniumRealtimeGraphView *graphView;
 @end
 
-@implementation TitaniumHardwareGraphController
+@implementation TitaniumGraphHostCell
 
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.title = @"BIỂU ĐỒ THỜI GIAN THỰC (0S)";
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
-
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:self.view.bounds];
-    scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:scrollView];
-
-    CGFloat w = self.view.bounds.size.width - 32.0;
-
-    _graphView = [[TitaniumRealtimeGraphView alloc] initWithFrame:CGRectMake(16, 20, w, 220)];
-    _graphView.titleText = @"📈 DAO ĐỘNG XUNG NHỊP & FPS (XANH: CPU | TÍM: FPS)";
-    [scrollView addSubview:_graphView];
-
-    UIView *card = [[UIView alloc] initWithFrame:CGRectMake(16, 255, w, 240)];
-    card.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    card.layer.cornerRadius = 14.0;
-    card.layer.masksToBounds = YES;
-    [scrollView addSubview:card];
-
-    CGFloat rowH = 55.0;
-    _lblCPULoad = [self makeLabelAtY:10 inCard:card];
-    _lblFPSHz = [self makeLabelAtY:10 + rowH inCard:card];
-    _lblBatteryTemp = [self makeLabelAtY:10 + rowH * 2 inCard:card];
-    _lblThermalStatus = [self makeLabelAtY:10 + rowH * 3 inCard:card];
-
-    scrollView.contentSize = CGSizeMake(self.view.bounds.size.width, 520);
-
-    _lastFPSTime = CACurrentMediaTime();
-    _frameCount = 0;
-    _liveFPS = 60.0f;
-    _fpsLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrameTick:)];
-    [_fpsLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-}
-
-- (UILabel *)makeLabelAtY:(CGFloat)y inCard:(UIView *)card {
-    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(16, y, card.bounds.size.width - 32, 45)];
-    lbl.font = [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightSemibold];
-    lbl.numberOfLines = 2;
-    [card addSubview:lbl];
-    return lbl;
-}
-
-- (void)onFrameTick:(CADisplayLink *)link {
-    _frameCount++;
-    CFTimeInterval now = CACurrentMediaTime();
-    CFTimeInterval delta = now - _lastFPSTime;
-    if (delta >= 1.0) {
-        _liveFPS = (float)_frameCount / (float)delta;
-        _frameCount = 0;
-        _lastFPSTime = now;
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
+    if (self) {
+        self.backgroundColor = [UIColor clearColor];
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        
+        CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
+        _graphView = [[TitaniumRealtimeGraphView alloc] initWithFrame:CGRectMake(16, 6, screenW - 32.0, 185)];
+        _graphView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        _graphView.titleText = @"📈 DAO ĐỘNG HIỆU NĂNG THỜI GIAN THỰC (0S)";
+        _graphView.subtitleText = @"CPU: Đang đo... | FPS: Đang nạp...";
+        [self.contentView addSubview:_graphView];
     }
+    return self;
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    [self startTimer];
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    [self stopTimer];
-    if (_fpsLink) {
-        [_fpsLink invalidate];
-        _fpsLink = nil;
-    }
-}
-
-- (void)startTimer {
-    [self stopTimer];
-    _timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_timer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(0.25 * NSEC_PER_SEC), (uint64_t)(0.05 * NSEC_PER_SEC));
-    __weak typeof(self) weakSelf = self;
-    dispatch_source_set_event_handler(_timer, ^{
-        [weakSelf updateMetrics];
-    });
-    dispatch_resume(_timer);
-}
-
-- (void)stopTimer {
-    if (_timer) {
-        dispatch_source_cancel(_timer);
-        _timer = nil;
-    }
-}
-
-- (void)updateMetrics {
-    float cpu = Titanium_GetAccurateCPULoad();
-    float temp = Titanium_GetAccurateBatteryTempCelsius();
-    
-    Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-    NSInteger setHz = configClass ? [[configClass sharedInstance] resolvedTargetHz] : 144;
-    NSInteger setFPS = configClass ? [[configClass sharedInstance] resolvedTargetFPS] : 144;
-
-    [_graphView pushCPULoad:cpu fps:_liveFPS];
-    _graphView.subtitleText = [NSString stringWithFormat:@"CPU: %.1f%%  |  FPS Thực: %.1f  |  Khóa: %ldHz", cpu, _liveFPS, (long)setHz];
-
-    _lblCPULoad.text = [NSString stringWithFormat:@"🚀 Tải CPU Kernel Thực: %.1f%%\n   (Mach Host Load - 0ns Overhead)", cpu];
-    _lblFPSHz.text = [NSString stringWithFormat:@"⚡ Khung Hình Thực: %.1f FPS\n   (Tần Số Quét Đã Khóa: %ld Hz | %ld FPS)", _liveFPS, (long)setHz, (long)setFPS];
-
-    NSString *thermalTag = @"";
-    UIColor *thermalColor = [UIColor systemGreenColor];
-    if (temp < 35.0f) {
-        thermalTag = @"🟢 Mát Mẻ (Tối Ưu Hoàn Hảo)";
-        thermalColor = [UIColor systemGreenColor];
-    } else if (temp < 40.0f) {
-        thermalTag = @"🟡 Ấm Nhẹ (Tải Bình Thường)";
-        thermalColor = [UIColor systemYellowColor];
-    } else if (temp < 42.5f) {
-        thermalTag = @"🟠 Nóng Màn & Chip (Tải Nặng Game)";
-        thermalColor = [UIColor systemOrangeColor];
-    } else {
-        thermalTag = @"⚠️🔴 CẢNH BÁO QUÁ NHIỆT (Tụ Xung)";
-        thermalColor = [UIColor systemRedColor];
-    }
-
-    _lblBatteryTemp.text = [NSString stringWithFormat:@"🌡️ Nhiệt Độ Pin / Vỏ: %.1f °C\n   (Trạng Thái: %@)", temp, thermalTag];
-    _lblBatteryTemp.textColor = thermalColor;
-
-    _lblThermalStatus.text = [NSString stringWithFormat:@"🛡 Giám Sát Phần Cứng: Đang Đo 0s Liên Tục\n   (Không Nóng Máy, Không Tốn Pin)"];
++ (CGFloat)preferredHeightForSpecifier:(PSSpecifier *)specifier {
+    return 198.0;
 }
 
 @end
@@ -501,6 +396,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
         [gid isEqualToString:@"GROUP_DEV"] ||
         [lbl containsString:@"CÔNG TẮC TỔNG"] || 
         [lbl containsString:@"GIÁM SÁT"] || 
+        [lbl containsString:@"BIỂU ĐỒ"] || 
         [lbl containsString:@"ĐIỀU PHỐI HZ"] || 
         [lbl containsString:@"NGÔN NGỮ"] || 
         [lbl containsString:@"THÔNG TIN"]) {
@@ -541,7 +437,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     return self;
 }
 
-// [ÉP CHỐNG VĂNG SETTINGS]: BỔ SUNG CÁC GETTER SELECTOR CHO CÁC CELL MONITOR
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
@@ -560,11 +455,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 - (id)getMonitorCPUGPU:(PSSpecifier *)specifier {
     float cpu = Titanium_GetAccurateCPULoad();
     return [NSString stringWithFormat:@"%.1f%% (Metal Active)", cpu];
-}
-
-- (void)openRealtimeGraphTab {
-    TitaniumHardwareGraphController *vc = [[TitaniumHardwareGraphController alloc] init];
-    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
@@ -636,7 +526,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 }
 
 // ====================================================================================================
-// [ÉP VƯỢT QUA CRASH SETTINGS 100%]: TRIỆT TIÊU ĐỆ QUY VÔ TẬN & NẠP SPECIFIERS AN TOÀN
+// NẠP SPECIFIERS AN TOÀN TUYỆT ĐỐI (ZERO CRASH & ZERO RECURSION)
 // ====================================================================================================
 
 - (id)specifiers {
@@ -699,8 +589,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
         }
 
         [self updateDynamicTitlesForSpecifiers:filteredSpecs];
-        
-        // [QUAN TRỌNG NHẤT]: KHÔNG GỌI setSpecifiers: Ở ĐÂY ĐỂ TRÁNH TRÀN NGĂN XẾP
         self->_allSavedSpecifiers = filteredSpecs;
         return self->_allSavedSpecifiers;
     } @catch (NSException *e) {
@@ -727,7 +615,8 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 - (void)startHardwareMonitor {
     [self stopHardwareMonitor];
     _monitorTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_monitorTimer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(1.2 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
+    // Lặp nhịp 0.35s để biểu đồ dao động mượt mà liên tục
+    dispatch_source_set_timer(_monitorTimer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(0.35 * NSEC_PER_SEC), (uint64_t)(0.05 * NSEC_PER_SEC));
 
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_monitorTimer, ^{
@@ -758,17 +647,25 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     NSString *hzFpsStr = [NSString stringWithFormat:@"%ld Hz | %ld FPS (Realtime 0s)", (long)hz, (long)fps];
     NSString *thermalStr = [NSString stringWithFormat:@"%.1f°C (%@)", temp, tempTag];
     NSString *cpuStr = [NSString stringWithFormat:@"%.1f%% (Mach Host 0ns)", cpuLoad];
+    NSString *graphSub = [NSString stringWithFormat:@"CPU: %.1f%%  |  Pin: %.1f°C  |  Khóa Cứng: %ldHz (%ld FPS)", cpuLoad, temp, (long)hz, (long)fps];
 
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self respondsToSelector:@selector(table)]) {
             UITableView *tbl = [self table];
             if (tbl) {
-                for (NSIndexPath *ip in [tbl indexPathsForVisibleRows]) {
-                    if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
-                        PSSpecifier *s = [self specifierAtIndexPath:ip];
-                        UITableViewCell *c = [tbl cellForRowAtIndexPath:ip];
-                        if (!c) continue;
+                for (UITableViewCell *c in [tbl visibleCells]) {
+                    // [BƠM DỮ LIỆU VÀO CELL BIỂU ĐỒ SÓNG DAO ĐỘNG]
+                    if ([c isKindOfClass:[TitaniumGraphHostCell class]]) {
+                        TitaniumGraphHostCell *gc = (TitaniumGraphHostCell *)c;
+                        [gc.graphView pushCPULoad:cpuLoad fps:(float)fps];
+                        gc.graphView.subtitleText = graphSub;
+                        continue;
+                    }
 
+                    // Cập nhật các cell thông số text
+                    NSIndexPath *ip = [tbl indexPathForCell:c];
+                    if (ip && [self respondsToSelector:@selector(specifierAtIndexPath:)]) {
+                        PSSpecifier *s = [self specifierAtIndexPath:ip];
                         NSString *k = [s propertyForKey:@"key"] ?: [s propertyForKey:@"id"];
                         if ([k isEqualToString:@"MonitorHzFPS"]) {
                             c.detailTextLabel.text = hzFpsStr;
