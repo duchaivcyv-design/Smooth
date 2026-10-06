@@ -88,6 +88,7 @@ typedef struct __attribute__((packed)) {
 - (nullable UITableViewCell *)cachedCellForSpecifier:(PSSpecifier *)specifier;
 - (nullable UITableView *)table;
 - (NSInteger)indexOfSpecifier:(PSSpecifier *)specifier;
+- (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target bundle:(nullable NSBundle *)bundle;
 @end
 
 @interface BoostConfigV285Pro : NSObject
@@ -173,6 +174,24 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     return cachedJbRoot;
 }
 
+static inline NSBundle *Titanium_GetPreferenceBundle(void) {
+    static NSBundle *cachedBundle = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cachedBundle = [NSBundle bundleForClass:NSClassFromString(@"RootListController")];
+        if (!cachedBundle || ![cachedBundle.bundlePath containsString:@"BoostiPhone6sPrefs"]) {
+            NSString *root = Titanium_GetRootHidePrefixPath();
+            NSString *p = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+                cachedBundle = [NSBundle bundleWithPath:p];
+            } else {
+                cachedBundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
+            }
+        }
+    });
+    return cachedBundle;
+}
+
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
     if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
@@ -254,14 +273,14 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 }
 
 // ====================================================================================================
-// NẠP TỪ ĐIỂN TỰ ĐỘNG TỪ FILE LOCALIZATION.PLIST CÓ SẴN TRONG BUNDLE
+// NẠP TỪ ĐIỂN TỰ ĐỘNG TỪ FILE LOCALIZATION.PLIST CÓ SẴN TRONG BUNDLE[span_10](start_span)[span_10](end_span)
 // ====================================================================================================
 
 static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     static NSDictionary *cachedFullPlist = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSBundle *prefBundle = [NSBundle bundleForClass:NSClassFromString(@"RootListController")];
+        NSBundle *prefBundle = Titanium_GetPreferenceBundle();
         NSString *locPath = [prefBundle pathForResource:@"Localization" ofType:@"plist"];
         if (!locPath || ![[NSFileManager defaultManager] fileExistsAtPath:locPath]) {
             NSString *root = Titanium_GetRootHidePrefixPath();
@@ -309,7 +328,7 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 @implementation RootListController
 
 // ====================================================================================================
-// [ÉP CONSTRUCTOR CHỐNG VĂNG CHO CẢ SETTINGS & TWEAKSETTINGS]
+// [ÉP CONSTRUCTOR & BUNDLE AN TOÀN CHỐNG ĐEN MÀN HÌNH][span_11](start_span)[span_11](end_span)
 // ====================================================================================================
 
 - (instancetype)init {
@@ -321,7 +340,8 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 - (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil {
-    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    NSBundle *tweakBundle = Titanium_GetPreferenceBundle();
+    self = [super initWithNibName:nibNameOrNil bundle:tweakBundle ?: nibBundleOrNil];
     if (self) {
         _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
     }
@@ -334,6 +354,11 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
     }
     return self;
+}
+
+// [ÉP BUNDLE POINTER LUÔN TRỎ VỀ BOOSTIPHONE6SPREFS.BUNDLE][span_12](start_span)[span_12](end_span)
+- (NSBundle *)bundle {
+    return Titanium_GetPreferenceBundle() ?: [super bundle];
 }
 
 // --- CÁC GETTER TĨNH BAN ĐẦU CHO PLIST ---
@@ -436,7 +461,7 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 // ====================================================================================================
-// [ÉP ĐỌC TỪ LOCALIZATION.PLIST]: ĐỒNG BỘ ĐA NGÔN NGỮ ĐẦY ĐỦ
+// [ÉP ĐỌC TỪ LOCALIZATION.PLIST]: ĐỒNG BỘ ĐA NGÔN NGỮ ĐẦY ĐỦ[span_13](start_span)[span_13](end_span)
 // ====================================================================================================
 
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
@@ -472,7 +497,7 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 // ====================================================================================================
-// [ÉP NẠP SPECIFIERS AN TOÀN TUYỆT ĐỐI]: CHỐNG ĐEN MÀN HÌNH TWEAKSETTINGS & PREFERENCES
+// [ÉP NẠP SPECIFIERS AN TOÀN TUYỆT ĐỐI]: PHÁ VỠ MÀN HÌNH ĐEN TRONG TWEAKSETTINGS[span_14](start_span)[span_14](end_span)
 // ====================================================================================================
 
 - (id)specifiers {
@@ -480,26 +505,16 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         _specifiers = [[NSMutableArray alloc] init];
 
         @try {
-            // 1. Thử nạp bằng API mặc định của PSListController
-            self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
-
-            // 2. [FALLBACK CỨU CÁNH CHỐNG MÀN HÌNH ĐEN]: Tự tìm Root.plist trực tiếp từ Bundle
+            NSBundle *tweakBundle = Titanium_GetPreferenceBundle();
+            
+            // 1. Thử nạp bằng hàm đầy đủ có chỉ định bundle
+            if ([self respondsToSelector:@selector(loadSpecifiersFromPlistName:target:bundle:)]) {
+                self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:tweakBundle];
+            }
+            
+            // 2. Dự phòng bằng hàm mặc định
             if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
-                NSBundle *prefBundle = [NSBundle bundleForClass:[self class]];
-                NSString *plistPath = [prefBundle pathForResource:@"Root" ofType:@"plist"];
-                
-                if (!plistPath || ![[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
-                    NSString *root = Titanium_GetRootHidePrefixPath();
-                    plistPath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Root.plist"];
-                    if (![[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
-                        plistPath = @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Root.plist";
-                    }
-                }
-
-                if ([[NSFileManager defaultManager] fileExistsAtPath:plistPath]) {
-                    // Tự tạo Specifiers thủ công từ file Plist nếu hệ thống trả về nil
-                    self->_rawSpecifiers = [self specifiersFromDictionary:[NSDictionary dictionaryWithContentsOfFile:plistPath] target:self];
-                }
+                self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
             }
 
             [self ensureDefaultSettingsExist];
@@ -556,7 +571,7 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
                 }
             }
 
-            // Đồng bộ dịch ngôn ngữ & tiêu đề động
+            // Gán ngôn ngữ & nhãn động[span_15](start_span)[span_15](end_span)
             [self applyFullLocalizationToSpecifiers:filteredSpecs];
             [self updateDynamicTitlesForSpecifiers:filteredSpecs];
             
@@ -566,6 +581,16 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         }
     }
     return _specifiers;
+}
+
+// [ÉP KHỞI TẠO TABLE VIEW AN TOÀN TRÁNH ĐEN MÀN HÌNH][span_16](start_span)[span_16](end_span)
+- (void)loadView {
+    [super loadView];
+    if (self.view && !self.table) {
+        UITableView *tbl = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
+        tbl.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:tbl];
+    }
 }
 
 - (void)viewDidLoad {
