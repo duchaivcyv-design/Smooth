@@ -121,17 +121,17 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (POPUP UIMENU THỰC THI 0MS)                                               -->
+		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (CẢNH BÁO NÓNG MÁY & CHIP KHI ÉP CAO)                                    -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>ĐIỀU PHỐI HZ &amp; FPS ĐỘNG (15HZ - 144HZ)</string>
+			<string>⚠️ ĐIỀU PHỐI HZ &amp; FPS ĐỘNG (CẢNH BÁO NÓNG MÁY &amp; CHIP)</string>
 			<key>groupID</key>
 			<string>GROUP_HZ_FPS</string>
 			<key>footerText</key>
-			<string>Hỗ trợ tùy chọn hoặc tự nhập bất kỳ mức nào từ 15 đến 144. Hệ thống sẽ khóa chết mức đã chọn vào hạt nhân IPC, chống tụt xung khi máy ấm.</string>
+			<string>⚠️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng tấm nền màn hình, tăng nhiệt chip xử lý và hao pin nhanh hơn. Hãy sử dụng kèm tản nhiệt khi chơi game kéo dài.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -155,7 +155,7 @@
 			<key>cellClass</key>
 			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
-			<string>Chọn / Nhập Mức Tần Số Quét (Hz)</string>
+			<string>⚠️ Chọn / Nhập Mức Tần Số Quét (Hz)</string>
 			<key>action</key>
 			<string>showHzPickerPopup:</string>
 			<key>key</key>
@@ -185,7 +185,7 @@
 			<key>cellClass</key>
 			<string>TitaniumMenuButtonCell</string>
 			<key>label</key>
-			<string>Chọn / Nhập Mức Khung Hình (FPS)</string>
+			<string>⚠️ Chọn / Nhập Mức Khung Hình (FPS)</string>
 			<key>action</key>
 			<string>showFPSPickerPopup:</string>
 			<key>key</key>
@@ -205,7 +205,7 @@
 			<key>id</key>
 			<string>ForceOverclock144Hz</string>
 			<key>label</key>
-			<string>Ép Xung Cố Định 144Hz Toàn Máy</string>
+			<string>⚠️ Ép Xung 144Hz Toàn Máy (Gây Nóng Màn &amp; Chip)</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
