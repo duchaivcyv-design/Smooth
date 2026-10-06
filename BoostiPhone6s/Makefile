@@ -12,7 +12,7 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-BUNDLE_NAME = BoostiPhone6s
+BUNDLE_NAME = BoostiPhone6sPrefs
 
 BoostiPhone6sPrefs_FILES = RootListController.m
 
@@ -60,7 +60,7 @@ BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
 include $(THEOS_MAKE_PATH)/bundle.mk
 
 # ====================================================================================================
-# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & ENTRY PLIST CHO PREFERENCELOADER (ÉP CHUẨN ROOTLESS)
+# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & ENTRY PLIST CHO PREFERENCELOADER
 # ====================================================================================================
 
 after-stage::
@@ -70,15 +70,16 @@ after-stage::
 	PREFLOADER_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceLoader/Preferences"; \
 	mkdir -p "$$TARGET_DIR"; \
 	mkdir -p "$$PREFLOADER_DIR"; \
-	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ]; then \
-		(cd "$$TARGET_DIR" && ln -sf "BoostiPhone6sPrefs.bundle" "BoostiPhone6s.bundle"); \
+	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ] && [ ! -e "$$TARGET_DIR/BoostiPhone6s.bundle" ]; then \
+		ln -sf "BoostiPhone6sPrefs.bundle" "$$TARGET_DIR/BoostiPhone6s.bundle"; \
 		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
-		chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
-		chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
-		echo "  [OK] Đã gán quyền 0755 cho Bundle!"; \
 	fi; \
-	if [ -d "$$PREFLOADER_DIR" ]; then \
-		chmod 0644 "$$PREFLOADER_DIR"/*.plist 2>/dev/null || true; \
-		echo "  [OK] Đã gán quyền 0644 cho PreferenceLoader plist!"; \
+	chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
+	chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
+	echo "  [OK] Đã gán quyền 0755 cho Bundle!"; \
+	if [ -f "entry.plist" ]; then \
+		cp "entry.plist" "$$PREFLOADER_DIR/BoostiPhone6s.plist"; \
+		chmod 0644 "$$PREFLOADER_DIR/BoostiPhone6s.plist"; \
+		echo "  [OK] Nạp entry.plist vào PreferenceLoader!"; \
 	fi
-	@echo "
+	@echo ""
