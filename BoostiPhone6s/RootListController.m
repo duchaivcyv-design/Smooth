@@ -424,7 +424,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     PSSpecifier *_specMonitorThermal;
     PSSpecifier *_specMonitorCPUGPU;
     NSMutableArray *_rawSpecifiers;
-    NSMutableArray *_specifiers; // [ĐÃ KHAI BÁO BIẾN IVAR NÀY ĐỂ PASS CLANG 100%]
+    NSMutableArray *_specifiers;
 }
 @end
 
@@ -432,6 +432,23 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 
 - (instancetype)init {
     self = [super init];
+    if (self) {
+        _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
+    }
+    return self;
+}
+
+// [ÉP CONSTRUCTOR CHỐNG VĂNG TWEAKSETTINGS]: TƯƠNG THÍCH HOÀN TOÀN CÁC PHƯƠNG THỨC KHỞI TẠO NẠP VIEW
+- (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil {
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
+    }
+    return self;
+}
+
+- (id)initForContentSize:(CGSize)size {
+    self = [super initForContentSize:size];
     if (self) {
         _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
     }
@@ -532,7 +549,6 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
 
 - (id)specifiers {
     if (!_specifiers) {
-        // [CỰC KỲ QUAN TRỌNG]: Đánh dấu đã nạp ngay lập tức để chặn đệ quy vô tận
         _specifiers = [[NSMutableArray alloc] init];
 
         @try {
@@ -587,6 +603,7 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
                 }
             }
 
+            [self updateDynamicTitlesForSpecifiers:filteredSpecs];
             [_specifiers addObjectsFromArray:filteredSpecs];
         } @catch (NSException *e) {
             _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self] ?: [NSMutableArray array];
@@ -1109,10 +1126,14 @@ static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
         [self syncSharedMemoryFile:YES];
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
+        
         self->_rawSpecifiers = nil;
         self->_specifiers = nil;
-        [self setupNavigationItems];
-        [self reloadSpecifiers];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setupNavigationItems];
+            [self reloadSpecifiers];
+        });
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
