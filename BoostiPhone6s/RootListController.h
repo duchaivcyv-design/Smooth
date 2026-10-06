@@ -3,6 +3,8 @@
 
 #import <UIKit/UIKit.h>
 
+@class PSSpecifier;
+
 #if __has_include("PSListController.h")
 #import "PSListController.h"
 #import "PSSpecifier.h"
@@ -10,7 +12,6 @@
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #else
-@class PSSpecifier;
 @interface PSListController : UIViewController
 - (nullable NSMutableArray *)specifiers;
 - (void)reloadSpecifiers;
@@ -36,8 +37,10 @@ NS_ASSUME_NONNULL_BEGIN
 #endif
 
 // ====================================================================================================
-// CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO (PACKED CHỐNG LỆCH OFFSET GIỮA SPRINGBOARD & PREFS)
+// CẤU TRÚC ĐỒNG BỘ BỘ NHỚ CHIA SẺ V28.5 PRO (CHỐNG LỖI TÁI ĐỊNH NGHĨA CLANG KHI IMPORT ĐA FILE)
 // ====================================================================================================
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -67,9 +70,10 @@ typedef struct __attribute__((packed)) {
     uint64_t lastHeartbeat;
     char     reserved[48];
 } ApexV285ProPayload;
+#endif
 
 // ====================================================================================================
-// ROOTLISTCONTROLLER INTERFACE
+// ROOTLISTCONTROLLER INTERFACE (CHẾ ĐỘ ÉP TOÀN DIỆN ĐIỀU KHIỂN SETTINGS)
 // ====================================================================================================
 @interface RootListController : PSListController {
 @public
@@ -106,6 +110,8 @@ typedef struct __attribute__((packed)) {
 // --- Điều khiển hệ thống (Respring, SReboot, Reset Default) ---
 - (void)setupNavigationItems;
 - (void)presentActions;
+- (void)executeRespring;
+- (void)executeSReboot;
 - (void)executeResetConfiguration;
 
 @end
