@@ -1,3 +1,8 @@
+# ====================================================================================================
+# MAKEFILE CHUẨN ÉP TOÀN DIỆN CHO BOOSTIPHONE6SCORE (ARM64 / ARM64E ROOTLESS & ROOTHIDE)
+# (TỐI ƯU HÓA O3 + LTO + LIÊN KẾT SUBSTRATE VÀ PRIVATE FRAMEWORK CHUẨN XNU)
+# ====================================================================================================
+
 ARCHS = arm64 arm64e
 TARGET := iphone:clang:latest:14.0
 
@@ -9,13 +14,15 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = BoostiPhone6sCore
 
-BoostiPhone6sCore_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
+# [ÉP TOÀN DIỆN]: Ép đường dẫn nạp tự động thích ứng chuẩn Rootless / RootHide ($(_THEOS_PREFIX))
+BoostiPhone6sCore_INSTALL_PATH = $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
 BoostiPhone6sCore_FILES = Tweak.xm
                           
-# CỜ BIÊN DỊCH C / OBJC: TỐI ƯU HÓA O3 & GIẢM DUNG LƯỢNG BINARY
+# [ÉP TOÀN DIỆN]: CỜ BIÊN DỊCH CLANG TỐI ƯU HÓA -O3, FLTO VÀ TRIỆT TIÊU TOÀN BỘ WARNING
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
+                           -flto=thin \
                            -fvisibility=hidden \
                            -Wall \
                            -Wno-error \
@@ -34,10 +41,10 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -IHeaders \
                            -I.
 
-# ĐỒNG BỘ CỜ CHO TWEAK.XM.MM: NẠP CHUẨN C++17 VÀ KẾ THỪA CFLAGS
+# [ÉP TOÀN DIỆN]: ĐỒNG BỘ CỜ CHO TWEAK.XM (OBJ-C++17 SIÊU TỐC)
 BoostiPhone6sCore_OBJCXXFLAGS = $(BoostiPhone6sCore_CFLAGS) -std=gnu++17
 
-# PUBLIC FRAMEWORKS CHUẨN CỦA APPLE
+# PUBLIC FRAMEWORKS CHUẨN APPLE
 BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                CoreGraphics \
                                QuartzCore \
@@ -50,14 +57,15 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# CHUYỂN IOKIT SANG ĐÚNG PHÂN VÙNG PRIVATE FRAMEWORK TRÁNH LỖI CLANG
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
+# [ÉP TOÀN DIỆN]: PRIVATE FRAMEWORKS ĐỒ HỌA VÀ PHẦN CỨNG IOKIT
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit IOSurface BackBoardServices
 
-# LIÊN KẾT SUBSTRATE CHO ROOTLESS / ROOTHIDE (ELLEKIT, LIBHOOKER)
+# LIÊN KẾT SUBSTRATE VÀ MOBILEGESTALT
 BoostiPhone6sCore_LIBRARIES = substrate
 
-# BẢO ĐẢM TƯƠNG THÍCH MỌI MÔI TRƯỜNG JAILBREAK ROOTLESS & ROOTHIDE
+# [ÉP TOÀN DIỆN]: LDFLAGS LOẠI BỎ CODE THỪA VÀ LIÊN KẾT ĐA LUỒNG PTHREAD
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
+                            -flto=thin \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
@@ -67,6 +75,10 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
+
+# ====================================================================================================
+# ĐIỀU PHỐI STAGING & PACKAGING: XUẤT FILTER PLIST & KIỂM TRA TOÀN VẸN GÓI .DEB
+# ====================================================================================================
 
 after-stage::
 	@echo ""
