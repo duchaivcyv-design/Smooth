@@ -31,15 +31,15 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 @property (nonatomic, copy, nullable) NSString *identifier;
 @property (nonatomic, copy, nullable) NSString *name;
 @property (nonatomic, assign) PSCellType cellType;
-@property (nonatomic, assign, nullable) id target;
+@property (nonatomic, weak, nullable) id target;
 @property (nonatomic, assign, nullable) SEL getter;
 @property (nonatomic, assign, nullable) SEL setter;
 @property (nonatomic, assign, nullable) SEL action;
-@property (nonatomic, retain, nullable) id defaultValue;
+@property (nonatomic, strong, nullable) id defaultValue;
 @property (nonatomic, copy, nullable) NSString *defaultsDomain;
 @property (nonatomic, copy, nullable) NSString *key;
-@property (nonatomic, retain, nullable) NSArray *validValues;
-@property (nonatomic, retain, nullable) NSArray *titleStrings;
+@property (nonatomic, strong, nullable) NSArray *validValues;
+@property (nonatomic, strong, nullable) NSArray *titleStrings;
 @property (nonatomic, copy, nullable) NSString *detailControllerClass;
 @property (nonatomic, assign) CGFloat sliderMin;
 @property (nonatomic, assign) CGFloat sliderMax;
@@ -51,7 +51,7 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 @property (nonatomic, copy, nullable) NSString *keyboardType;
 
 // Bảng thuộc tính chuẩn của Preferences.framework là NSMutableDictionary
-@property (nonatomic, retain, nullable) NSMutableDictionary *properties;
+@property (nonatomic, strong, nullable) NSMutableDictionary *properties;
 
 + (instancetype)preferenceSpecifierNamed:(nullable NSString *)name
                                   target:(nullable id)target
