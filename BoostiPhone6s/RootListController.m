@@ -343,6 +343,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     PSSpecifier *_specMonitorHzFPS;
     PSSpecifier *_specMonitorThermal;
     PSSpecifier *_specMonitorCPUGPU;
+    NSMutableArray *_specifiers; // [ĐÃ KHAI BÁO BIẾN THỂ HIỆN IVAR NÀY ĐỂ CLANG PASS 100%]
 }
 @end
 
@@ -446,7 +447,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// [ÉP NẠP SPECIFIERS - KHÔNG GỌI SETSPECIFIERS GÂY ĐEN MÀN HÌNH 100%][span_7](start_span)[span_7](end_span)
+// [ÉP NẠP SPECIFIERS AN TOÀN - GÁN TRỰC TIẾP _specifiers CHỐNG ĐEN MÀN HÌNH 100%]
 // ====================================================================================================
 
 - (id)specifiers {
@@ -544,7 +545,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
         [self updateDynamicTitlesForSpecifiers:filteredSpecs];
 
-        // [CỰC KỲ QUAN TRỌNG]: Gán trực tiếp _specifiers, KHÔNG ĐƯỢC GỌI [self setSpecifiers:] Ở ĐÂY
+        // [GÁN TRỰC TIẾP BIẾN THỂ HIỆN IVAR]: KHÔNG GỌI setSpecifiers:
         _specifiers = filteredSpecs;
     }
     return _specifiers;
