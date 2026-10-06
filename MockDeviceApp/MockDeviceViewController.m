@@ -1,5 +1,7 @@
+#import "AppDelegate.h"
+#import "MockDeviceViewController.h"
 #import <UIKit/UIKit.h>
-#import <mach/mach.h>
+#import <mach/mach.h> 
 
 @interface MockDeviceViewController : UIViewController <UITextFieldDelegate>
 @property (nonatomic, strong) UIView *phoneFrameView;
