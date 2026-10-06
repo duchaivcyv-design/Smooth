@@ -16,9 +16,11 @@
 extern char **environ;
 
 // ====================================================================================================
-// ĐỊNH NGHĨA STRUCT APEX PAYLOAD ĐỒNG BỘ TOÀN HỆ THỐNG
+// ĐỊNH NGHĨA STRUCT APEX PAYLOAD ĐỒNG BỘ TOÀN HỆ THỐNG (CÓ GUARD CHỐNG REDEFINITION VỚI HEADER)
 // ====================================================================================================
 
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -48,6 +50,7 @@ typedef struct __attribute__((packed)) {
     uint64_t lastHeartbeat;
     char     reserved[48];
 } ApexV285ProPayload;
+#endif
 
 // ====================================================================================================
 // ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
@@ -409,6 +412,7 @@ static inline NSString *PM_TextV285(NSString *key) {
         @"CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO": @"GROUP_MASTER",
         @"CÀI ĐẶT NGÔN NGỮ": @"GROUP_LANGUAGE",
         @"ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
+        @"⚠️ ĐIỀU PHỐI HZ & FPS ĐỘNG (CẢNH BÁO NÓNG MÁY & CHIP)": @"GROUP_HZ_FPS",
         @"ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ)": @"GROUP_HZ_FPS",
         @"BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH)": @"GROUP_TOUCH_SCREEN",
         @"TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)": @"GROUP_LAZY",
@@ -602,14 +606,34 @@ static inline NSString *PM_TextV285(NSString *key) {
              @"TouchResponseBoost": @YES,
              @"QuantumRenderShield": @NO,
              @"NeuralBufferOpt": @YES,
+             @"BackgroundPacingDaemon": @YES,
+             @"HyperMemoryGuardian": @YES,
+             @"UltraResponsiveness": @YES,
+             @"HyperThreadIO": @YES,
+             @"QuantumCoreSync": @YES,
+             @"ZeroLagNeuralBooster": @YES,
+             @"VsyncAdaptiveBuffer": @YES,
+             @"DynamicThermalEngine": @YES,
+             @"IOSchedulerEngine": @YES,
+             @"RealtimeThreadSched": @YES,
+             @"CPUGPUFreqOptimizer": @YES,
              @"PeriodicRamClean": @NO,
+             @"AggressiveRamClean": @NO,
              @"MachVMPurgeRam": @NO,
              @"AutoCloseBackgroundApp": @NO,
              @"TurboAppLaunch": @YES,
+             @"GameFPSStabilizer": @YES,
+             @"SystemProcessOpt": @YES,
+             @"DeviceSpoofer": @YES,
              @"AntiThermalThrottling": @YES,
+             @"SmartThermalDispatch": @YES,
+             @"HeavyLoadCooling": @YES,
+             @"ChargeThermalProtection": @YES,
              @"PowerSaveMode": @NO,
              @"AntiGhostTouch": @YES,
-             @"ChargerRippleRejection": @YES
+             @"ChargerRippleRejection": @YES,
+             @"BypassVarSandbox": @YES,
+             @"BlockBackgroundTelemetry": @YES
         }];
 
         [defaults writeToFile:prefPath atomically:YES];
