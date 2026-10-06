@@ -18,39 +18,7 @@
 extern char **environ;
 
 // ====================================================================================================
-// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
-// ====================================================================================================
-
-#ifndef APEX_SYNC_MAGIC_V285
-#define APEX_SYNC_MAGIC_V285 0x41505837
-#endif
-
-#ifndef PREF_DOMAIN
-#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
-#endif
-
-#ifndef PRIMARY_SYNC_FILE
-#define PRIMARY_SYNC_FILE    @"/tmp/.boost_hz_sync"
-#endif
-
-#ifndef SECONDARY_SYNC_FILE
-#define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
-#endif
-
-#ifndef BOOT_GUARD_FILE
-#define BOOT_GUARD_FILE      @"/tmp/.titanium_boot_guard"
-#endif
-
-#ifndef NOTIFY_RELOAD
-#define NOTIFY_RELOAD        "com.taojb.boostiphone6s/ReloadPrefs"
-#define NOTIFY_UIKIT_RELOAD  "com.taojb.boostiphone6s/ReloadUIKitPrefs"
-#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
-#define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
-#define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
-#endif
-
-// ====================================================================================================
-// FORWARD DECLARATIONS & PRIVATE SELECTORS FIX FOR CLANG
+// FORWARD DECLARATIONS & PRIVATE SELECTORS CHO CLANG
 // ====================================================================================================
 
 @interface PSListController (TitaniumPrivateSelectors)
@@ -72,7 +40,7 @@ extern char **environ;
 @end
 
 // ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ / ROOTLESS / ROOTHIDE
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & TIỆN ÍCH HỆ THỐNG
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -109,23 +77,6 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *p1 = @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
     if ([[NSFileManager defaultManager] fileExistsAtPath:p1]) return p1;
     return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
-}
-
-static inline BOOL HardwareHasNative120Hz(void) {
-    static BOOL isNative120 = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        struct utsname sysInfo;
-        if (uname(&sysInfo) == 0) {
-            NSString *dev = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-            if ([dev hasPrefix:@"iPhone14,2"] || [dev hasPrefix:@"iPhone14,3"] ||
-                [dev hasPrefix:@"iPhone15,2"] || [dev hasPrefix:@"iPhone15,3"] ||
-                [dev hasPrefix:@"iPhone16,"]   || [dev hasPrefix:@"iPhone17,"]) {
-                isNative120 = YES;
-            }
-        }
-    });
-    return isNative120;
 }
 
 static inline NSString *Titanium_FindExecutablePath(NSString *name) {
@@ -183,8 +134,19 @@ static inline NSString *Titanium_GetGroupID(PSSpecifier *spec) {
     if (gid) return gid;
     NSString *lbl = [spec propertyForKey:@"label"] ?: spec.name ?: @"";
     if ([lbl containsString:@"CÔNG TẮC TỔNG"] || [lbl containsString:@"MASTER"]) return @"GROUP_MASTER";
-    if ([lbl containsString:@"NGÔN NGỮ"] || [lbl containsString:@"LANGUAGE"]) return @"GROUP_LANGUAGE";
-    if ([lbl containsString:@"THÔNG TIN"] || [lbl containsString:@"DEV"] || [lbl containsString:@"HỖ TRỢ"]) return @"GROUP_DEV";
+    if ([lbl containsString:@"GIÁM SÁT PHẦN CỨNG"] || [lbl containsString:@"MONITOR"]) return @"GROUP_MONITOR";
+    if ([lbl containsString:@"ĐIỀU PHỐI HZ"] || [lbl containsString:@"GROUP_HZ_FPS"]) return @"GROUP_HZ_FPS";
+    if ([lbl containsString:@"ĐIỀU HƯỚNG HIỂN THỊ"] || [lbl containsString:@"TIER_CONTROL"]) return @"GROUP_TIER_CONTROL";
+    if ([lbl containsString:@"CÀI ĐẶT NGÔN NGỮ"] || [lbl containsString:@"LANGUAGE"]) return @"GROUP_LANGUAGE";
+    if ([lbl containsString:@"BỘ LỌC CẢM ỨNG"] || [lbl containsString:@"TOUCH_SCREEN"]) return @"GROUP_TOUCH_SCREEN";
+    if ([lbl containsString:@"GIA TỐC GIAO DIỆN"] || [lbl containsString:@"GROUP_UI"]) return @"GROUP_UI";
+    if ([lbl containsString:@"ĐẶC QUYỀN NÂNG CẤP"] || [lbl containsString:@"GROUP_SPECIAL"]) return @"GROUP_SPECIAL";
+    if ([lbl containsString:@"TIÊM TRỄ ỨNG DỤNG"] || [lbl containsString:@"GROUP_LAZY"]) return @"GROUP_LAZY";
+    if ([lbl containsString:@"LÕI ĐIỀU PHỐI ĐỒ HỌA"] || [lbl containsString:@"GROUP_GRAPHICS"]) return @"GROUP_GRAPHICS";
+    if ([lbl containsString:@"BỘ NHỚ RAM"] || [lbl containsString:@"GROUP_RAM_CPU"]) return @"GROUP_RAM_CPU";
+    if ([lbl containsString:@"QUẢN LÝ NHIỆT ĐỘ"] || [lbl containsString:@"GROUP_THERMAL"]) return @"GROUP_THERMAL";
+    if ([lbl containsString:@"BẢO MẬT & QUYỀN RIÊNG TƯ"] || [lbl containsString:@"GROUP_SECURITY"]) return @"GROUP_SECURITY";
+    if ([lbl containsString:@"THÔNG TIN PHÁT TRIỂN"] || [lbl containsString:@"GROUP_DEV"]) return @"GROUP_DEV";
     return @"GROUP_OTHER";
 }
 
@@ -414,13 +376,15 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
     NSDictionary *headerMap = @{
-        @"CÔNG TẮC TỔNG HỆ THỐNG V28.7 PRO": @"GROUP_MASTER",
+        @"CÔNG TẮC TỔNG HỆ THỐNG": @"GROUP_MASTER",
+        @"📊 GIÁM SÁT PHẦN CỨNG THỜI GIAN THỰC (0S)": @"GROUP_MONITOR",
+        @"⚡ ĐIỀU PHỐI HZ & FPS (KHÓA CỨNG NGOÀI)": @"GROUP_HZ_FPS",
+        @"🎛️ BỘ ĐIỀU HƯỚNG HIỂN THỊ (GOM GỌN TIỆN LỢI)": @"GROUP_TIER_CONTROL",
         @"CÀI ĐẶT NGÔN NGỮ": @"GROUP_LANGUAGE",
-        @"ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
-        @"ĐIỀU PHỐI HZ & FPS ĐỘNG (15HZ - 144HZ)": @"GROUP_HZ_FPS",
         @"BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH)": @"GROUP_TOUCH_SCREEN",
-        @"TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)": @"GROUP_LAZY",
         @"GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17": @"GROUP_UI",
+        @"ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)": @"GROUP_SPECIAL",
+        @"TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)": @"GROUP_LAZY",
         @"LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER": @"GROUP_GRAPHICS",
         @"BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME": @"GROUP_RAM_CPU",
         @"QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN": @"GROUP_THERMAL",
@@ -450,7 +414,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// NẠP CÀI ĐẶT TỰ NHIÊN: GÁN THẲNG VÀO _specifiers ĐỂ KHÔNG BỊ ĐEN MÀN HÌNH
+// NẠP CÀI ĐẶT & ĐIỀU HƯỚNG GOM GỌN NHÓM (CƠ BẢN / NÂNG CAO)
 // ====================================================================================================
 
 - (id)specifiers {
@@ -462,35 +426,50 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
     NSDictionary *prefs = [self getMergedPreferences];
     BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
+    BOOL showBasic = prefs[@"ShowBasicOptions"] ? [prefs[@"ShowBasicOptions"] boolValue] : YES;
+    BOOL showAdvanced = prefs[@"ShowAdvancedOptions"] ? [prefs[@"ShowAdvancedOptions"] boolValue] : NO;
 
-    NSMutableArray *targetSpecs = nil;
-    if (!masterEnabled) {
-        NSMutableArray *collapsedSpecs = [NSMutableArray array];
-        NSString *currentGroupID = nil;
+    NSMutableArray *targetSpecs = [NSMutableArray array];
+    NSString *currentGroupID = nil;
 
-        for (PSSpecifier *spec in self->_allSavedSpecifiers) {
-            if (Titanium_IsGroupCell(spec)) {
-                currentGroupID = Titanium_GetGroupID(spec);
-                if ([currentGroupID isEqualToString:@"GROUP_MASTER"] ||
-                    [currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
-                    [currentGroupID isEqualToString:@"GROUP_DEV"]) {
-                    [collapsedSpecs addObject:spec];
-                }
-            } else {
-                if ([currentGroupID isEqualToString:@"GROUP_MASTER"]) {
-                    NSString *key = [spec propertyForKey:@"key"];
-                    if ([key isEqualToString:@"Enabled"]) {
-                        [collapsedSpecs addObject:spec];
-                    }
-                } else if ([currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
-                           [currentGroupID isEqualToString:@"GROUP_DEV"]) {
-                    [collapsedSpecs addObject:spec];
-                }
-            }
+    for (PSSpecifier *spec in self->_allSavedSpecifiers) {
+        if (Titanium_IsGroupCell(spec)) {
+            currentGroupID = Titanium_GetGroupID(spec);
         }
-        targetSpecs = collapsedSpecs;
-    } else {
-        targetSpecs = [self->_allSavedSpecifiers mutableCopy];
+
+        // 1. Khi tắt công tắc tổng -> gom hết, chỉ giữ Master, Ngôn ngữ và Thông tin phát triển
+        if (!masterEnabled) {
+            if ([currentGroupID isEqualToString:@"GROUP_MASTER"] ||
+                [currentGroupID isEqualToString:@"GROUP_LANGUAGE"] ||
+                [currentGroupID isEqualToString:@"GROUP_DEV"]) {
+                if (!Titanium_IsGroupCell(spec)) {
+                    NSString *k = [spec propertyForKey:@"key"];
+                    if ([currentGroupID isEqualToString:@"GROUP_MASTER"] && ![k isEqualToString:@"Enabled"]) {
+                        continue;
+                    }
+                }
+                [targetSpecs addObject:spec];
+            }
+            continue;
+        }
+
+        // 2. Nhóm Cơ Bản (Bộ lọc cảm ứng & Gia tốc UI) -> Gom lại nếu ShowBasicOptions = NO
+        if ([currentGroupID isEqualToString:@"GROUP_TOUCH_SCREEN"] ||
+            [currentGroupID isEqualToString:@"GROUP_UI"]) {
+            if (!showBasic) continue;
+        }
+
+        // 3. Nhóm Nâng Cao (Đặc quyền, Tiêm trễ, Metal, RAM, Nhiệt độ, Bảo mật) -> Gom lại nếu ShowAdvancedOptions = NO
+        if ([currentGroupID isEqualToString:@"GROUP_SPECIAL"] ||
+            [currentGroupID isEqualToString:@"GROUP_LAZY"] ||
+            [currentGroupID isEqualToString:@"GROUP_GRAPHICS"] ||
+            [currentGroupID isEqualToString:@"GROUP_RAM_CPU"] ||
+            [currentGroupID isEqualToString:@"GROUP_THERMAL"] ||
+            [currentGroupID isEqualToString:@"GROUP_SECURITY"]) {
+            if (!showAdvanced) continue;
+        }
+
+        [targetSpecs addObject:spec];
     }
 
     [self updateDynamicTitlesForSpecifiers:targetSpecs];
@@ -621,6 +600,8 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 
         NSMutableDictionary *defaults = [NSMutableDictionary dictionaryWithDictionary:@{
              @"Enabled": @YES,
+             @"ShowBasicOptions": @YES,
+             @"ShowAdvancedOptions": @NO,
              @"SelectedLanguage": @"auto",
              @"ProMotionEngineBeta7": @YES,
              @"MetalHexBuffering": @YES,
@@ -701,9 +682,11 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-    if ([key isEqualToString:@"Enabled"]) {
-        BOOL isMasterOn = [value boolValue];
-        [self syncSharedMemoryFile:isMasterOn];
+    // KHI BẤM CÁC CÔNG TẮC GOM GỌN HOẶC CÔNG TẮC TỔNG -> TỰ ĐỘNG BẬT/ẨN NGAY LẬP TỨC
+    if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"ShowBasicOptions"] || [key isEqualToString:@"ShowAdvancedOptions"]) {
+        if ([key isEqualToString:@"Enabled"]) {
+            [self syncSharedMemoryFile:[value boolValue]];
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
             [self reloadSpecifiers];
         });
@@ -867,7 +850,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// KHỞI TẠO MENU UIMENU CHO HZ & FPS
+// KHỞI TẠO MENU UIMENU NỀN KÍNH THEO ĐÚNG ẢNH CHO HZ & FPS (30 - 60 - 90 - 120 - 144 + MỞ RỘNG + NHẬP TAY)
 // ====================================================================================================
 
 - (UIMenu *)buildHzMenu API_AVAILABLE(ios(14.0)) {
@@ -917,12 +900,12 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         }]];
     }
     UIMenu *moreMenu = [UIMenu menuWithTitle:@"Tùy Chọn Mở Rộng..."
-                                       image:[UIImage systemImageNamed:@"slider.horizontal.3"]
+                                       image:[UIImage systemImageNamed:@"chevron.right"]
                                   identifier:nil
                                      options:0
                                     children:moreList];
 
-    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 Hz)..."
+    UIAction *customAction = [UIAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 Hz)..."
                                                  image:[UIImage systemImageNamed:@"keyboard"]
                                             identifier:nil
                                                handler:^(__kindof UIAction * _Nonnull action) {
@@ -980,12 +963,12 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
         }]];
     }
     UIMenu *moreMenu = [UIMenu menuWithTitle:@"Tùy Chọn Mở Rộng..."
-                                       image:[UIImage systemImageNamed:@"slider.horizontal.3"]
+                                       image:[UIImage systemImageNamed:@"chevron.right"]
                                   identifier:nil
                                      options:0
                                     children:moreList];
 
-    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 FPS)..."
+    UIAction *customAction = [UIAction actionWithTitle:@"⌨️ Tự Nhập Số Chính Xác (15 - 144 FPS)..."
                                                  image:[UIImage systemImageNamed:@"keyboard"]
                                             identifier:nil
                                                handler:^(__kindof UIAction * _Nonnull action) {
@@ -1171,7 +1154,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// NÂNG CẤP THANH ĐIỀU HƯỚNG: NÚT HÀNH ĐỘNG THÀNH UIMENU POPOVER NỀN KÍNH
+// THANH ĐIỀU HƯỚNG: NÚT HÀNH ĐỘNG NỀN KÍNH
 // ====================================================================================================
 
 - (void)setupNavigationItems {
@@ -1267,7 +1250,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     NSString *title = PM_TextV285(@"ACTION_TITLE") ?: @"HÀNH ĐỘNG HỆ THỐNG V28.7 PRO";
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️ Respring Nhanh (An Toàn)";
+    NSString *respringText = PM_TextV285(@"RESPRING") ?: @"⚡️️ Respring Nhanh (An Toàn)";
     NSString *srebootText = PM_TextV285(@"SREBOOT") ?: @"🔥 Khởi Động Userspace (SReboot)";
     NSString *resetText = PM_TextV285(@"RESET") ?: @"♻ Đặt Lại Cấu Hình Mặc Định (144Hz)";
     NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
