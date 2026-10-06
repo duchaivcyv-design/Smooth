@@ -35,6 +35,96 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
+		<!-- HUD GIÁM SÁT PHẦN CỨNG & HIỆU NĂNG THỜI GIAN THỰC (0S OVERHEAD)                                      -->
+		<!-- ==================================================================================================== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>📊 GIÁM SÁT PHẦN CỨNG THỜI GIAN THỰC (0S)</string>
+			<key>groupID</key>
+			<string>GROUP_MONITOR</string>
+			<key>footerText</key>
+			<string>Đo đạc xung nhịp, nhiệt độ và tần số quét trực tiếp từ hạt nhân XNU mà không gây tốn pin hay nóng máy.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSTitleValueCell</string>
+			<key>label</key>
+			<string>⚡ Tần Số Quét &amp; FPS</string>
+			<key>id</key>
+			<string>MonitorHzFPS</string>
+			<key>key</key>
+			<string>MonitorHzFPS</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSTitleValueCell</string>
+			<key>label</key>
+			<string>🌡️ Nhiệt Độ Hệ Thống</string>
+			<key>id</key>
+			<string>MonitorThermal</string>
+			<key>key</key>
+			<string>MonitorThermal</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSTitleValueCell</string>
+			<key>label</key>
+			<string>🚀 Tải Xử Lý CPU/GPU</string>
+			<key>id</key>
+			<string>MonitorCPUGPU</string>
+			<key>key</key>
+			<string>MonitorCPUGPU</string>
+		</dict>
+
+		<!-- ==================================================================================================== -->
+		<!-- ĐIỀU HƯỚNG HIỂN THỊ CÔNG TẮC (GOM GỌN DANH MỤC)                                                     -->
+		<!-- ==================================================================================================== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>🎛️ BỘ ĐIỀU HƯỚNG HIỂN THỊ (GOM GỌN TIỆN LỢI)</string>
+			<key>groupID</key>
+			<string>GROUP_TIER_CONTROL</string>
+			<key>footerText</key>
+			<string>Tắt để ẩn bớt các nhóm công tắc cho giao diện gọn gàng. Các công tắc bị ẩn vẫn duy trì hoạt động ép xung 100%.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ShowBasicOptions</string>
+			<key>id</key>
+			<string>ShowBasicOptions</string>
+			<key>label</key>
+			<string>📂 Hiện Nhóm Công Tắc Cơ Bản</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>ShowAdvancedOptions</string>
+			<key>id</key>
+			<string>ShowAdvancedOptions</string>
+			<key>label</key>
+			<string>⚙️ Hiện Nhóm Công Tắc Nâng Cao</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+
+		<!-- ==================================================================================================== -->
 		<!-- NHÓM 2: CÀI ĐẶT NGÔN NGỮ                                                                             -->
 		<!-- ==================================================================================================== -->
 		<dict>
@@ -59,7 +149,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 3: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING)                                            -->
+		<!-- NHÓM 3: ĐẶC QUYỀN NÂNG CẤP V28.7 (TRIPLE & HEX BUFFERING) [NÂNG CAO]                                 -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -121,7 +211,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (CẢNH BÁO NÓNG MÁY & CHIP KHI ÉP CAO)                                    -->
+		<!-- NHÓM 4: ĐIỀU PHỐI HZ & FPS (CẢNH BÁO NÓNG MÁY & CHIP KHI ÉP CAO) [CƠ BẢN]                            -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -211,7 +301,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 5: BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH)                                        -->
+		<!-- NHÓM 5: BỘ LỌC CẢM ỨNG & CHỐNG LOẠN MÀN LÔ (ANTI-GHOST TOUCH) [CƠ BẢN]                                -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -273,7 +363,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 6: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP)                                                  -->
+		<!-- NHÓM 6: TIÊM TRỄ ỨNG DỤNG BÊN THỨ 3 (CHỐNG ĐEN APP) [NÂNG CAO]                                       -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -319,7 +409,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 7: GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17                                                        -->
+		<!-- NHÓM 7: GIA TỐC GIAO DIỆN & VẬT LÝ COLOROS 17 [CƠ BẢN]                                               -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -395,7 +485,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 8: LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER                                                         -->
+		<!-- NHÓM 8: LÕI ĐIỀU PHỐI ĐỒ HỌA METAL & CALAYER [NÂNG CAO]                                              -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -567,7 +657,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 9: BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME                                                     -->
+		<!-- NHÓM 9: BỘ NHỚ RAM, DISK I/O VIP & MACH REALTIME [NÂNG CAO]                                          -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -739,7 +829,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 10: QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN                                                   -->
+		<!-- NHÓM 10: QUẢN LÝ NHIỆT ĐỘ, SẠC NHANH & NGUỒN ĐIỆN [NÂNG CAO]                                        -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -831,7 +921,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- NHÓM 11: BẢO MẬT & QUYỀN RIÊNG TƯ                                                                    -->
+		<!-- NHÓM 11: BẢO MẬT & QUYỀN RIÊNG TƯ [NÂNG CAO]                                                         -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -923,6 +1013,6 @@
 		</dict>
 	</array>
 	<key>title</key>
-	<string>BoostiPhone6s V28.7 PRO</string>
+	<string>BoostiPhone6s</string>
 </dict>
 </plist>
