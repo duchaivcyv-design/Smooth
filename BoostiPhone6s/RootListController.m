@@ -18,77 +18,11 @@
 extern char **environ;
 
 // ====================================================================================================
-// ĐỊNH NGHĨA STRUCT APEX PAYLOAD ĐỒNG BỘ TOÀN HỆ THỐNG
+// KHAI BÁO CATEGORY ĐỂ CLANG NHẬN BIẾT SELECTOR PRIVATE CỦA PREFERENCES
 // ====================================================================================================
 
-#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
-#define _APEX_V285_PRO_PAYLOAD_DEFINED
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[48];
-} ApexV285ProPayload;
-#endif
-
-#ifndef APEX_SYNC_MAGIC_V285
-#define APEX_SYNC_MAGIC_V285 0x41505837
-#endif
-
-#ifndef PREF_DOMAIN
-#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
-#endif
-
-#ifndef PRIMARY_SYNC_FILE
-#define PRIMARY_SYNC_FILE    @"/tmp/.boost_hz_sync"
-#endif
-
-#ifndef SECONDARY_SYNC_FILE
-#define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
-#endif
-
-#ifndef BOOT_GUARD_FILE
-#define BOOT_GUARD_FILE      @"/tmp/.titanium_boot_guard"
-#endif
-
-#ifndef NOTIFY_RELOAD
-#define NOTIFY_RELOAD        "com.taojb.boostiphone6s/ReloadPrefs"
-#define NOTIFY_UIKIT_RELOAD  "com.taojb.boostiphone6s/ReloadUIKitPrefs"
-#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
-#define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
-#define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
-#endif
-
-@interface PSListController (TitaniumPrivateSelectors)
-- (nullable NSIndexPath *)indexPathForSpecifier:(PSSpecifier *)specifier;
-- (nullable PSSpecifier *)specifierAtIndexPath:(NSIndexPath *)indexPath;
-- (nullable UITableViewCell *)cachedCellForSpecifier:(PSSpecifier *)specifier;
-- (nullable UITableView *)table;
-- (NSInteger)indexOfSpecifier:(PSSpecifier *)specifier;
-- (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target bundle:(nullable NSBundle *)bundle;
+@interface PSListController (SpecifiersPrivate)
+- (nullable NSMutableArray *)specifiersFromDictionary:(NSDictionary *)dictionary target:(nullable id)target;
 @end
 
 @interface BoostConfigV285Pro : NSObject
@@ -102,10 +36,6 @@ typedef struct __attribute__((packed)) {
 + (instancetype)defaultWorkspace;
 - (BOOL)openURL:(NSURL *)url;
 @end
-
-// ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN & TIỆN ÍCH HỆ THỐNG
-// ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
@@ -204,10 +134,6 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t s
     }
 }
 
-// ====================================================================================================
-// THU THẬP THÔNG SỐ CPU / GPU / NHIỆT ĐỘ THỜI GIAN THỰC
-// ====================================================================================================
-
 static inline float Titanium_GetLiveCPULoadPercentage(void) {
     host_cpu_load_info_data_t cpuinfo;
     mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
@@ -245,16 +171,9 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
     }
 }
 
-// ====================================================================================================
-// ROOTLISTCONTROLLER IMPLEMENTATION
-// ====================================================================================================
-
 @interface RootListController () {
     dispatch_queue_t _syncQueue;
     dispatch_source_t _monitorTimer;
-    PSSpecifier *_specMonitorHzFPS;
-    PSSpecifier *_specMonitorThermal;
-    PSSpecifier *_specMonitorCPUGPU;
 }
 @end
 
@@ -290,7 +209,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// [CỐT LÕI KHẮC PHỤC ĐEN MÀN HÌNH]: DÙNG ĐÚNG LOGIC SPECIFIERS GỐC NGUYÊN BẢN
+// NẠP SPECIFIERS TỰ ĐỘNG
 // ====================================================================================================
 
 - (id)specifiers {
@@ -900,13 +819,16 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 - (void)openSupportLink:(PSSpecifier *)specifier {
     NSURL *webURL = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
+        Class workspaceClass = objc_getClass("LSApplicationWorkspace");
+        if (workspaceClass && [workspaceClass respondsToSelector:@selector(defaultWorkspace)]) {
+            LSApplicationWorkspace *workspace = [workspaceClass defaultWorkspace];
+            if ([workspace respondsToSelector:@selector(openURL:)]) {
+                if ([workspace openURL:webURL]) return;
+            }
+        }
         [[UIApplication sharedApplication] openURL:webURL options:@{} completionHandler:nil];
     });
 }
-
-// ====================================================================================================
-// THANH ĐIỀU HƯỚNG VÀ HÀNH ĐỘNG HỆ THỐNG
-// ====================================================================================================
 
 - (void)setupNavigationItems {
     if (@available(iOS 14.0, *)) {
