@@ -273,7 +273,10 @@ jobs:
           echo "🎨 ĐANG TẠO KHUNG ĐIỆN THOẠI MOCKUP HIỆU ỨNG IOS THẬT TUYỆT ĐỐI..."
           echo "======================================================================"
 
-          pip install pillow > /dev/null 2>&1
+          # Ép cài đặt module Pillow chuẩn xác vào đúng trình thông dịch python3
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pillow
+
           mkdir -p /tmp/device_demo_output
 
           python3 - << 'EOF'
