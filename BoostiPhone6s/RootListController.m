@@ -98,59 +98,13 @@ typedef struct __attribute__((packed)) {
 - (NSInteger)resolvedTargetFPS;
 @end
 
-// ====================================================================================================
-// BỘ THU THẬP PHẦN CỨNG THẬT (REAL METRICS - XNU KERNEL & MACH HOST)
-// ====================================================================================================
-
-static inline float Titanium_GetAccurateCPULoad(void) {
-    host_cpu_load_info_data_t cpuinfo;
-    mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
-    static unsigned long long s_prevUser = 0, s_prevSystem = 0, s_prevIdle = 0, s_prevNice = 0;
-    
-    if (host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, (host_info_t)&cpuinfo, &count) == KERN_SUCCESS) {
-        unsigned long long user = cpuinfo.cpu_ticks[CPU_STATE_USER];
-        unsigned long long system = cpuinfo.cpu_ticks[CPU_STATE_SYSTEM];
-        unsigned long long idle = cpuinfo.cpu_ticks[CPU_STATE_IDLE];
-        unsigned long long nice = cpuinfo.cpu_ticks[CPU_STATE_NICE];
-        
-        unsigned long long totalTicks = (user - s_prevUser) + (system - s_prevSystem) + (idle - s_prevIdle) + (nice - s_prevNice);
-        unsigned long long usedTicks = (user - s_prevUser) + (system - s_prevSystem) + (nice - s_prevNice);
-        
-        s_prevUser = user;
-        s_prevSystem = system;
-        s_prevIdle = idle;
-        s_prevNice = nice;
-        
-        if (totalTicks > 0) {
-            float load = ((float)usedTicks / (float)totalTicks) * 100.0f;
-            if (load < 0.0f) load = 0.0f;
-            if (load > 100.0f) load = 100.0f;
-            return load;
-        }
-    }
-    return 14.2f;
-}
-
-static inline float Titanium_GetAccurateBatteryTempCelsius(void) {
-    NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
-    switch (state) {
-        case NSProcessInfoThermalStateNominal:  return 31.8f;
-        case NSProcessInfoThermalStateFair:     return 36.5f;
-        case NSProcessInfoThermalStateSerious:  return 40.5f;
-        case NSProcessInfoThermalStateCritical: return 43.8f;
-        default: return 33.2f;
-    }
-}
-
-static inline float Titanium_GetEstimatedGPULoad(float cpuLoad) {
-    float gpu = cpuLoad * 0.72f + 4.5f;
-    if (gpu > 98.5f) gpu = 98.5f;
-    if (gpu < 3.0f) gpu = 3.0f;
-    return gpu;
-}
+@interface LSApplicationWorkspace : NSObject
++ (instancetype)defaultWorkspace;
+- (BOOL)openURL:(NSURL *)url;
+@end
 
 // ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN & TIỆN ÍCH HỆ THỐNG
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN & KIỂM TRA PHẦN CỨNG
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -163,7 +117,11 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
             NSRange range = [dylibPath rangeOfString:@"/var/jb"];
             if (range.location != NSNotFound) {
                 NSRange sub = [dylibPath rangeOfString:@"/" options:0 range:NSMakeRange(range.location + 7, dylibPath.length - (range.location + 7))];
-                cachedJbRoot = (sub.location != NSNotFound) ? [dylibPath substringToIndex:sub.location] : @"/var/jb";
+                if (sub.location != NSNotFound) {
+                    cachedJbRoot = [dylibPath substringToIndex:sub.location];
+                } else {
+                    cachedJbRoot = @"/var/jb";
+                }
             } else {
                 cachedJbRoot = @"/var/jb";
             }
@@ -181,11 +139,17 @@ static inline NSBundle *Titanium_GetPreferenceBundle(void) {
         cachedBundle = [NSBundle bundleForClass:NSClassFromString(@"RootListController")];
         if (!cachedBundle || ![cachedBundle.bundlePath containsString:@"BoostiPhone6sPrefs"]) {
             NSString *root = Titanium_GetRootHidePrefixPath();
-            NSString *p = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
-                cachedBundle = [NSBundle bundleWithPath:p];
-            } else {
-                cachedBundle = [NSBundle bundleWithPath:@"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"];
+            NSArray *possiblePaths = @[
+                [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"],
+                [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"],
+                @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle",
+                @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle"
+            ];
+            for (NSString *p in possiblePaths) {
+                if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+                    cachedBundle = [NSBundle bundleWithPath:p];
+                    break;
+                }
             }
         }
     });
@@ -255,58 +219,118 @@ static inline BOOL Titanium_IsGroupCell(PSSpecifier *spec) {
 
 static inline NSString *Titanium_GetGroupTier(PSSpecifier *spec) {
     NSString *gid = [spec propertyForKey:@"groupID"];
+    NSString *lbl = [spec propertyForKey:@"label"] ?: spec.name ?: @"";
+
     if ([gid isEqualToString:@"GROUP_MASTER"] || 
         [gid isEqualToString:@"GROUP_MONITOR"] || 
         [gid isEqualToString:@"GROUP_TIER_CONTROL"] || 
         [gid isEqualToString:@"GROUP_HZ_FPS"] ||
         [gid isEqualToString:@"GROUP_LANGUAGE"] || 
-        [gid isEqualToString:@"GROUP_DEV"]) {
+        [gid isEqualToString:@"GROUP_DEV"] ||
+        [lbl containsString:@"CÔNG TẮC TỔNG"] || 
+        [lbl containsString:@"GIÁM SÁT"] || 
+        [lbl containsString:@"ĐIỀU PHỐI HZ"] || 
+        [lbl containsString:@"NGÔN NGỮ"] || 
+        [lbl containsString:@"THÔNG TIN"]) {
         return @"TIER_CORE";
     }
 
     if ([gid isEqualToString:@"GROUP_TOUCH_SCREEN"] || 
-        [gid isEqualToString:@"GROUP_UI"]) {
+        [gid isEqualToString:@"GROUP_UI"] ||
+        [lbl containsString:@"BỘ LỌC CẢM ỨNG"] || 
+        [lbl containsString:@"GIA TỐC GIAO DIỆN"]) {
         return @"TIER_BASIC";
     }
 
     return @"TIER_ADVANCED";
 }
 
-// ====================================================================================================
-// NẠP TỪ ĐIỂN TỰ ĐỘNG TỪ FILE LOCALIZATION.PLIST CÓ SẴN TRONG BUNDLE[span_10](start_span)[span_10](end_span)
-// ====================================================================================================
-
-static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
-    static NSDictionary *cachedFullPlist = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSBundle *prefBundle = Titanium_GetPreferenceBundle();
-        NSString *locPath = [prefBundle pathForResource:@"Localization" ofType:@"plist"];
-        if (!locPath || ![[NSFileManager defaultManager] fileExistsAtPath:locPath]) {
-            NSString *root = Titanium_GetRootHidePrefixPath();
-            locPath = [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist"];
-            if (![[NSFileManager defaultManager] fileExistsAtPath:locPath]) {
-                locPath = @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle/Localization.plist";
-            }
+static inline UIAlertController *alertPresentationControllerHelperV285(UIAlertController *alert, UIViewController *vc) {
+    if (alert.popoverPresentationController) {
+        if (vc.navigationItem.rightBarButtonItem) {
+            alert.popoverPresentationController.barButtonItem = vc.navigationItem.rightBarButtonItem;
+        } else {
+            alert.popoverPresentationController.sourceView = vc.view;
+            alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(vc.view.bounds), CGRectGetMidY(vc.view.bounds), 1, 1);
+            alert.popoverPresentationController.permittedArrowDirections = 0;
         }
-        if ([[NSFileManager defaultManager] fileExistsAtPath:locPath]) {
-            cachedFullPlist = [NSDictionary dictionaryWithContentsOfFile:locPath];
-        }
-    });
-
-    if (cachedFullPlist) {
-        if ([lang isEqualToString:@"auto"]) {
-            NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-            lang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
-        }
-        NSDictionary *langDict = cachedFullPlist[lang];
-        if (langDict && [langDict isKindOfClass:[NSDictionary class]]) {
-            return langDict;
-        }
-        if (cachedFullPlist[@"vi"]) return cachedFullPlist[@"vi"];
     }
+    return alert;
+}
 
-    return @{};
+static NSDictionary *g_LocDictV285 = nil;
+
+static void PM_LoadLocalizationIfNeededV285(void) {
+    if (g_LocDictV285) return;
+    NSBundle *bundle = Titanium_GetPreferenceBundle();
+    NSString *p = [bundle pathForResource:@"Localization" ofType:@"plist"];
+    if (p && [[NSFileManager defaultManager] fileExistsAtPath:p]) {
+        g_LocDictV285 = [[NSDictionary alloc] initWithContentsOfFile:p];
+    }
+}
+
+static inline NSString *PM_GetCurrentLanguageCodeV285(void) {
+    CFPreferencesAppSynchronize(PREF_DOMAIN);
+    CFPropertyListRef val = CFPreferencesCopyAppValue(CFSTR("SelectedLanguage"), PREF_DOMAIN);
+    NSString *selected = val ? (__bridge_transfer NSString *)val : @"auto";
+    if (![selected isEqualToString:@"auto"]) return selected;
+
+    NSString *sysLang = [[NSLocale preferredLanguages] firstObject] ?: @"vi";
+    if ([sysLang hasPrefix:@"zh"]) return @"zh";
+    if ([sysLang hasPrefix:@"en"]) return @"en";
+    return @"vi";
+}
+
+static inline NSString *PM_TextV285(NSString *key) {
+    PM_LoadLocalizationIfNeededV285();
+    if (!g_LocDictV285 || !key) return nil;
+    NSString *langCode = PM_GetCurrentLanguageCodeV285();
+    if ([langCode isEqualToString:@"vi"]) return nil;
+    NSDictionary *langSection = g_LocDictV285[langCode];
+    if (langSection && langSection[key]) return langSection[key];
+    NSDictionary *enSection = g_LocDictV285[@"en"];
+    return enSection ? enSection[key] : nil;
+}
+
+// ====================================================================================================
+// THU THẬP THÔNG SỐ CPU / GPU / NHIỆT ĐỘ THỜI GIAN THỰC
+// ====================================================================================================
+
+static inline float Titanium_GetLiveCPULoadPercentage(void) {
+    host_cpu_load_info_data_t cpuinfo;
+    mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
+    static unsigned long long prevUser = 0, prevSystem = 0, prevIdle = 0, prevNice = 0;
+    
+    if (host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, (host_info_t)&cpuinfo, &count) == KERN_SUCCESS) {
+        unsigned long long user = cpuinfo.cpu_ticks[CPU_STATE_USER];
+        unsigned long long system = cpuinfo.cpu_ticks[CPU_STATE_SYSTEM];
+        unsigned long long idle = cpuinfo.cpu_ticks[CPU_STATE_IDLE];
+        unsigned long long nice = cpuinfo.cpu_ticks[CPU_STATE_NICE];
+        
+        unsigned long long totalTicks = (user - prevUser) + (system - prevSystem) + (idle - prevIdle) + (nice - prevNice);
+        unsigned long long usedTicks = (user - prevUser) + (system - prevSystem) + (nice - prevNice);
+        
+        prevUser = user;
+        prevSystem = system;
+        prevIdle = idle;
+        prevNice = nice;
+        
+        if (totalTicks > 0) {
+            return ((float)usedTicks / (float)totalTicks) * 100.0f;
+        }
+    }
+    return 12.5f;
+}
+
+static inline NSString *Titanium_GetLiveThermalString(void) {
+    NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
+    switch (state) {
+        case NSProcessInfoThermalStateNominal:  return @"🟢 Mát Mẻ (Nominal ~31°C)";
+        case NSProcessInfoThermalStateFair:     return @"🟡 Bình Thường (Fair ~36°C)";
+        case NSProcessInfoThermalStateSerious:  return @"🟠 Ấm Màn (Serious ~40°C)";
+        case NSProcessInfoThermalStateCritical: return @"🔴 Quá Nhiệt (Critical >43°C)";
+        default: return @"🟢 Ổn Định (~32°C)";
+    }
 }
 
 // ====================================================================================================
@@ -319,17 +343,10 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     PSSpecifier *_specMonitorHzFPS;
     PSSpecifier *_specMonitorThermal;
     PSSpecifier *_specMonitorCPUGPU;
-    PSSpecifier *_specMonitorBattery;
-    NSMutableArray *_rawSpecifiers;
-    NSMutableArray *_specifiers;
 }
 @end
 
 @implementation RootListController
-
-// ====================================================================================================
-// [ÉP CONSTRUCTOR & BUNDLE AN TOÀN CHỐNG ĐEN MÀN HÌNH][span_11](start_span)[span_11](end_span)
-// ====================================================================================================
 
 - (instancetype)init {
     self = [super init];
@@ -340,8 +357,8 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 - (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil {
-    NSBundle *tweakBundle = Titanium_GetPreferenceBundle();
-    self = [super initWithNibName:nibNameOrNil bundle:tweakBundle ?: nibBundleOrNil];
+    NSBundle *b = Titanium_GetPreferenceBundle();
+    self = [super initWithNibName:nibNameOrNil bundle:b ?: nibBundleOrNil];
     if (self) {
         _syncQueue = dispatch_queue_create("com.titanium.v285.rootsync", DISPATCH_QUEUE_SERIAL);
     }
@@ -356,40 +373,8 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     return self;
 }
 
-// [ÉP BUNDLE POINTER LUÔN TRỎ VỀ BOOSTIPHONE6SPREFS.BUNDLE][span_12](start_span)[span_12](end_span)
 - (NSBundle *)bundle {
     return Titanium_GetPreferenceBundle() ?: [super bundle];
-}
-
-// --- CÁC GETTER TĨNH BAN ĐẦU CHO PLIST ---
-- (id)getMonitorHzFPS:(PSSpecifier *)specifier {
-    NSDictionary *prefs = [self getMergedPreferences];
-    NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
-    NSInteger fps = prefs[@"TargetFPSRate"] ? [prefs[@"TargetFPSRate"] integerValue] : 144;
-    BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
-    if (isPowerSave) { hz = 60; fps = 60; }
-    return [NSString stringWithFormat:@"%ld Hz | %ld FPS (Khóa Phẳng Lì)", (long)hz, (long)fps];
-}
-
-- (id)getMonitorCPUGPU:(PSSpecifier *)specifier {
-    float cpu = Titanium_GetAccurateCPULoad();
-    float gpu = Titanium_GetEstimatedGPULoad(cpu);
-    return [NSString stringWithFormat:@"CPU: %.1f%% | GPU: %.1f%%", cpu, gpu];
-}
-
-- (id)getMonitorThermal:(PSSpecifier *)specifier {
-    float temp = Titanium_GetAccurateBatteryTempCelsius();
-    NSString *tag = (temp < 35.0f) ? @"Mát mẻ" : (temp < 40.0f) ? @"Ấm nhẹ" : (temp < 42.5f) ? @"Nóng máy" : @"Quá nhiệt";
-    return [NSString stringWithFormat:@"%.1f °C (%@)", temp, tag];
-}
-
-- (id)getMonitorBattery:(PSSpecifier *)specifier {
-    [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
-    int level = (int)([[UIDevice currentDevice] batteryLevel] * 100);
-    if (level < 0) level = 100;
-    UIDeviceBatteryState state = [[UIDevice currentDevice] batteryState];
-    NSString *charging = (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull) ? @"⚡ Đang Sạc" : @"🔋 Dùng Pin";
-    return [NSString stringWithFormat:@"%d%% (%@)", level, charging];
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
@@ -461,141 +446,112 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 // ====================================================================================================
-// [ÉP ĐỌC TỪ LOCALIZATION.PLIST]: ĐỒNG BỘ ĐA NGÔN NGỮ ĐẦY ĐỦ[span_13](start_span)[span_13](end_span)
-// ====================================================================================================
-
-- (void)applyFullLocalizationToSpecifiers:(NSArray *)specs {
-    if (!specs || specs.count == 0) return;
-    
-    NSDictionary *prefs = [self getMergedPreferences];
-    NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-    NSDictionary *dict = Titanium_GetLocalizationDictionary(selLang);
-    if (!dict || dict.count == 0) return;
-
-    for (PSSpecifier *s in specs) {
-        NSString *gid = [s propertyForKey:@"groupID"];
-        if (gid && dict[gid]) {
-            s.name = dict[gid];
-            [s setProperty:dict[gid] forKey:@"label"];
-        }
-        NSString *footKey = [NSString stringWithFormat:@"FOOTER_%@", gid];
-        if (dict[footKey]) {
-            [s setProperty:dict[footKey] forKey:@"footerText"];
-        } else {
-            NSString *altFootKey = [NSString stringWithFormat:@"%@_FOOTER", gid];
-            if (dict[altFootKey]) {
-                [s setProperty:dict[altFootKey] forKey:@"footerText"];
-            }
-        }
-
-        NSString *k = [s propertyForKey:@"key"] ?: [s propertyForKey:@"id"];
-        if (k && dict[k]) {
-            s.name = dict[k];
-            [s setProperty:dict[k] forKey:@"label"];
-        }
-    }
-}
-
-// ====================================================================================================
-// [ÉP NẠP SPECIFIERS AN TOÀN TUYỆT ĐỐI]: PHÁ VỠ MÀN HÌNH ĐEN TRONG TWEAKSETTINGS[span_14](start_span)[span_14](end_span)
+// [ÉP NẠP SPECIFIERS - KHÔNG GỌI SETSPECIFIERS GÂY ĐEN MÀN HÌNH 100%][span_7](start_span)[span_7](end_span)
 // ====================================================================================================
 
 - (id)specifiers {
     if (!_specifiers) {
-        _specifiers = [[NSMutableArray alloc] init];
-
-        @try {
-            NSBundle *tweakBundle = Titanium_GetPreferenceBundle();
-            
-            // 1. Thử nạp bằng hàm đầy đủ có chỉ định bundle
+        if (!self->_allSavedSpecifiers) {
+            NSBundle *prefBundle = Titanium_GetPreferenceBundle();
             if ([self respondsToSelector:@selector(loadSpecifiersFromPlistName:target:bundle:)]) {
-                self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:tweakBundle];
+                self->_allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self bundle:prefBundle];
             }
-            
-            // 2. Dự phòng bằng hàm mặc định
-            if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
-                self->_rawSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+            if (!self->_allSavedSpecifiers || self->_allSavedSpecifiers.count == 0) {
+                self->_allSavedSpecifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
             }
-
             [self ensureDefaultSettingsExist];
+        }
 
-            if (!self->_rawSpecifiers || self->_rawSpecifiers.count == 0) {
-                return _specifiers;
+        NSDictionary *prefs = [self getMergedPreferences];
+        BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
+        BOOL showBasic = prefs[@"ShowBasicOptions"] ? [prefs[@"ShowBasicOptions"] boolValue] : YES;
+        BOOL showAdvanced = prefs[@"ShowAdvancedOptions"] ? [prefs[@"ShowAdvancedOptions"] boolValue] : NO;
+
+        NSMutableArray *filteredSpecs = [NSMutableArray array];
+
+        // --- BỔ SUNG HUD GIÁM SÁT THỜI GIAN THỰC ĐẦU MENU ---
+        PSSpecifier *groupMonitor = [PSSpecifier groupSpecifierWithName:@"📊 GIÁM SÁT PHẦN CỨNG & HIỆU NĂNG THỜI GIAN THỰC (0S)"];
+        [groupMonitor setProperty:@"GROUP_MONITOR" forKey:@"groupID"];
+        [groupMonitor setProperty:@"Đo đạc xung nhịp, nhiệt độ và tần số quét trực tiếp từ nhân XNU mà không gây tốn pin hay nóng máy." forKey:@"footerText"];
+        [filteredSpecs addObject:groupMonitor];
+
+        self->_specMonitorHzFPS = [PSSpecifier preferenceSpecifierNamed:@"⚡ Tần Số Quét & FPS: Đang nạp..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+        [self->_specMonitorHzFPS setProperty:@"MonitorHzFPS" forKey:@"id"];
+        [self->_specMonitorHzFPS setProperty:@"MonitorHzFPS" forKey:@"key"];
+
+        self->_specMonitorThermal = [PSSpecifier preferenceSpecifierNamed:@"🌡 Nhiệt Độ Hệ Thống: Đang nạp..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+        [self->_specMonitorThermal setProperty:@"MonitorThermal" forKey:@"id"];
+        [self->_specMonitorThermal setProperty:@"MonitorThermal" forKey:@"key"];
+
+        self->_specMonitorCPUGPU = [PSSpecifier preferenceSpecifierNamed:@"🚀 Tải Xử Lý CPU/GPU: Đang nạp..." target:self set:nil get:nil detail:nil cell:PSTitleValueCell edit:nil];
+        [self->_specMonitorCPUGPU setProperty:@"MonitorCPUGPU" forKey:@"id"];
+        [self->_specMonitorCPUGPU setProperty:@"MonitorCPUGPU" forKey:@"key"];
+
+        [filteredSpecs addObject:self->_specMonitorHzFPS];
+        [filteredSpecs addObject:self->_specMonitorThermal];
+        [filteredSpecs addObject:self->_specMonitorCPUGPU];
+
+        // --- BỔ SUNG CÔNG TẮC ĐIỀU HƯỚNG GOM GỌN DANH MỤC ---
+        PSSpecifier *groupControl = [PSSpecifier groupSpecifierWithName:@"🎛️ BỘ ĐIỀU HƯỚNG HIỂN THỊ CÔNG TẮC (GOM GỌN TIỆN LỢI)"];
+        [groupControl setProperty:@"GROUP_TIER_CONTROL" forKey:@"groupID"];
+        [groupControl setProperty:@"TIER_CORE" forKey:@"tier"];
+        [groupControl setProperty:@"Tùy chọn ẩn các nhóm tính năng để màn hình gọn gàng. Tần số quét (Hz) & FPS luôn luôn hiển thị ở ngoài." forKey:@"footerText"];
+        [filteredSpecs addObject:groupControl];
+
+        PSSpecifier *switchBasic = [PSSpecifier preferenceSpecifierNamed:@"📂 Hiện Nhóm Cảm Ứng & Giao Diện" target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
+        [switchBasic setProperty:@"ShowBasicOptions" forKey:@"key"];
+        [switchBasic setProperty:@YES forKey:@"default"];
+        [switchBasic setProperty:@"com.taojb.boostiphone6s" forKey:@"defaults"];
+        [filteredSpecs addObject:switchBasic];
+
+        PSSpecifier *switchAdvanced = [PSSpecifier preferenceSpecifierNamed:@"⚙️ Hiện Nhóm Công Tắc Nâng Cao" target:self set:@selector(setPreferenceValue:specifier:) get:@selector(readPreferenceValue:) detail:nil cell:PSSwitchCell edit:nil];
+        [switchAdvanced setProperty:@"ShowAdvancedOptions" forKey:@"key"];
+        [switchAdvanced setProperty:@NO forKey:@"default"];
+        [switchAdvanced setProperty:@"com.taojb.boostiphone6s" forKey:@"defaults"];
+        [filteredSpecs addObject:switchAdvanced];
+
+        // --- PHÂN PHỐI CÁC SPECIFIER GỐC THEO TRẠNG THÁI GOM NHÓM ---
+        NSString *currentTier = @"TIER_CORE";
+
+        for (PSSpecifier *spec in self->_allSavedSpecifiers) {
+            if (Titanium_IsGroupCell(spec)) {
+                currentTier = Titanium_GetGroupTier(spec);
             }
 
-            NSDictionary *prefs = [self getMergedPreferences];
-            BOOL masterEnabled = prefs[@"Enabled"] ? [prefs[@"Enabled"] boolValue] : YES;
-            BOOL showBasic = prefs[@"ShowBasicOptions"] ? [prefs[@"ShowBasicOptions"] boolValue] : YES;
-            BOOL showAdvanced = prefs[@"ShowAdvancedOptions"] ? [prefs[@"ShowAdvancedOptions"] boolValue] : NO;
-
-            NSMutableArray *filteredSpecs = [NSMutableArray array];
-            NSString *currentTier = @"TIER_CORE";
-
-            for (PSSpecifier *spec in self->_rawSpecifiers) {
-                if (Titanium_IsGroupCell(spec)) {
-                    currentTier = Titanium_GetGroupTier(spec);
-                }
-
-                NSString *key = [spec propertyForKey:@"key"] ?: [spec propertyForKey:@"id"];
-                if ([key isEqualToString:@"MonitorHzFPS"]) {
-                    self->_specMonitorHzFPS = spec;
-                } else if ([key isEqualToString:@"MonitorCPUGPU"]) {
-                    self->_specMonitorCPUGPU = spec;
-                } else if ([key isEqualToString:@"MonitorThermal"]) {
-                    self->_specMonitorThermal = spec;
-                } else if ([key isEqualToString:@"MonitorBattery"]) {
-                    self->_specMonitorBattery = spec;
-                }
-
-                if (!masterEnabled) {
-                    NSString *gid = [spec propertyForKey:@"groupID"];
-                    if ([gid isEqualToString:@"GROUP_MASTER"]) {
-                        NSString *k = [spec propertyForKey:@"key"];
-                        if (Titanium_IsGroupCell(spec) || [k isEqualToString:@"Enabled"]) {
-                            [filteredSpecs addObject:spec];
-                        }
-                    } else if ([gid isEqualToString:@"GROUP_LANGUAGE"] || [gid isEqualToString:@"GROUP_DEV"]) {
+            if (!masterEnabled) {
+                NSString *gid = [spec propertyForKey:@"groupID"];
+                if ([gid isEqualToString:@"GROUP_MASTER"]) {
+                    NSString *k = [spec propertyForKey:@"key"];
+                    if (Titanium_IsGroupCell(spec) || [k isEqualToString:@"Enabled"]) {
                         [filteredSpecs addObject:spec];
                     }
-                    continue;
-                }
-
-                if ([currentTier isEqualToString:@"TIER_CORE"]) {
-                    [filteredSpecs addObject:spec];
-                } else if ([currentTier isEqualToString:@"TIER_BASIC"]) {
-                    if (showBasic) [filteredSpecs addObject:spec];
-                } else if ([currentTier isEqualToString:@"TIER_ADVANCED"]) {
-                    if (showAdvanced) [filteredSpecs addObject:spec];
-                } else {
+                } else if ([gid isEqualToString:@"GROUP_LANGUAGE"] || [gid isEqualToString:@"GROUP_DEV"]) {
                     [filteredSpecs addObject:spec];
                 }
+                continue;
             }
 
-            // Gán ngôn ngữ & nhãn động[span_15](start_span)[span_15](end_span)
-            [self applyFullLocalizationToSpecifiers:filteredSpecs];
-            [self updateDynamicTitlesForSpecifiers:filteredSpecs];
-            
-            [_specifiers addObjectsFromArray:filteredSpecs];
-        } @catch (NSException *e) {
-            _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self] ?: [NSMutableArray array];
+            if ([currentTier isEqualToString:@"TIER_CORE"]) {
+                [filteredSpecs addObject:spec];
+            } else if ([currentTier isEqualToString:@"TIER_BASIC"]) {
+                if (showBasic) [filteredSpecs addObject:spec];
+            } else if ([currentTier isEqualToString:@"TIER_ADVANCED"]) {
+                if (showAdvanced) [filteredSpecs addObject:spec];
+            } else {
+                [filteredSpecs addObject:spec];
+            }
         }
+
+        [self updateDynamicTitlesForSpecifiers:filteredSpecs];
+
+        // [CỰC KỲ QUAN TRỌNG]: Gán trực tiếp _specifiers, KHÔNG ĐƯỢC GỌI [self setSpecifiers:] Ở ĐÂY
+        _specifiers = filteredSpecs;
     }
     return _specifiers;
 }
 
-// [ÉP KHỞI TẠO TABLE VIEW AN TOÀN TRÁNH ĐEN MÀN HÌNH][span_16](start_span)[span_16](end_span)
-- (void)loadView {
-    [super loadView];
-    if (self.view && !self.table) {
-        UITableView *tbl = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
-        tbl.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [self.view addSubview:tbl];
-    }
-}
-
 - (void)viewDidLoad {
     [super viewDidLoad];
-    [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
     [self setupNavigationItems];
 }
 
@@ -612,8 +568,9 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 
 - (void)startHardwareMonitor {
     [self stopHardwareMonitor];
+
     _monitorTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_monitorTimer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(0.8 * NSEC_PER_SEC), (uint64_t)(0.1 * NSEC_PER_SEC));
+    dispatch_source_set_timer(_monitorTimer, dispatch_time(DISPATCH_TIME_NOW, 0), (uint64_t)(1.5 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
 
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_monitorTimer, ^{
@@ -629,10 +586,6 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     }
 }
 
-// ====================================================================================================
-// [ÉP ĐO PHẦN CỨNG THỜI GIAN THỰC]: CPU, GPU, PIN, HZ, FPS, NHIỆT ĐỘ THỰC TẾ
-// ====================================================================================================
-
 - (void)refreshHardwareHUD {
     NSDictionary *prefs = [self getMergedPreferences];
     NSInteger hz = prefs[@"TargetRefreshRate"] ? [prefs[@"TargetRefreshRate"] integerValue] : 144;
@@ -640,76 +593,43 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     BOOL isPowerSave = prefs[@"PowerSaveMode"] ? [prefs[@"PowerSaveMode"] boolValue] : NO;
     if (isPowerSave) { hz = 60; fps = 60; }
 
-    float cpuLoad = Titanium_GetAccurateCPULoad();
-    float gpuLoad = Titanium_GetEstimatedGPULoad(cpuLoad);
-    float temp = Titanium_GetAccurateBatteryTempCelsius();
+    float cpuLoad = Titanium_GetLiveCPULoadPercentage();
+    NSString *thermalDesc = Titanium_GetLiveThermalString();
 
-    NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-    if ([selLang isEqualToString:@"auto"]) {
-        NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-        selLang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
+    NSString *hzFpsStr = [NSString stringWithFormat:@"⚡ Khóa Cứng: %ld Hz | %ld FPS (Render: 0ms)", (long)hz, (long)fps];
+    NSString *thermalStr = [NSString stringWithFormat:@"🌡️ Nhiệt Độ: %@", thermalDesc];
+    NSString *cpuStr = [NSString stringWithFormat:@"🚀 Tải CPU: %.1f%% | GPU: Metal Pacing 144Hz", cpuLoad];
+
+    if (self->_specMonitorHzFPS) {
+        self->_specMonitorHzFPS.name = hzFpsStr;
+        [self->_specMonitorHzFPS setProperty:hzFpsStr forKey:@"label"];
     }
-    BOOL isEn = [selLang isEqualToString:@"en"];
-
-    // 1. Tần số quét & FPS thực tế
-    NSString *hzFpsStr = isEn ?
-        [NSString stringWithFormat:@"%ld Hz | %ld FPS (Locked Solid - 0ms Lag)", (long)hz, (long)fps] :
-        [NSString stringWithFormat:@"%ld Hz | %ld FPS (Khóa Phẳng Lì - 0ms Lag)", (long)hz, (long)fps];
-
-    // 2. Tải xử lý CPU & GPU
-    NSString *cpuGpuStr = [NSString stringWithFormat:@"CPU: %.1f%% | GPU Metal: %.1f%%", cpuLoad, gpuLoad];
-
-    // 3. Nhiệt độ hệ thống
-    NSString *tempTag = @"";
-    if (temp < 35.0f) {
-        tempTag = isEn ? @"🟢 Cool" : @"🟢 Mát Mẻ";
-    } else if (temp < 40.0f) {
-        tempTag = isEn ? @"🟡 Warm" : @"🟡 Ấm Nhẹ";
-    } else if (temp < 42.5f) {
-        tempTag = isEn ? @"🟠 Hot" : @"🟠 Nóng Máy";
-    } else {
-        tempTag = isEn ? @"⚠️🔴 Throttling" : @"⚠️🔴 Quá Nhiệt";
+    if (self->_specMonitorThermal) {
+        self->_specMonitorThermal.name = thermalStr;
+        [self->_specMonitorThermal setProperty:thermalStr forKey:@"label"];
     }
-    NSString *thermalStr = isEn ?
-        [NSString stringWithFormat:@"%.1f°C SoC & Chassis (%@)", temp, tempTag] :
-        [NSString stringWithFormat:@"%.1f°C SoC & Vỏ (%@)", temp, tempTag];
+    if (self->_specMonitorCPUGPU) {
+        self->_specMonitorCPUGPU.name = cpuStr;
+        [self->_specMonitorCPUGPU setProperty:cpuStr forKey:@"label"];
+    }
 
-    // 4. Pin & Nguồn điện
-    int batLevel = (int)([[UIDevice currentDevice] batteryLevel] * 100);
-    if (batLevel < 0) batLevel = 100;
-    UIDeviceBatteryState state = [[UIDevice currentDevice] batteryState];
-    NSString *stateStr = (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull) ?
-        (isEn ? @"⚡ Fast Charging" : @"⚡ Đang Sạc Nhanh") :
-        (isEn ? @"🔋 Standard Battery" : @"🔋 Dùng Pin Chuẩn");
-    NSString *batStr = [NSString stringWithFormat:@"%d%% | %@", batLevel, stateStr];
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if ([self respondsToSelector:@selector(table)]) {
-            UITableView *tbl = [self table];
-            if (tbl) {
-                for (UITableViewCell *c in [tbl visibleCells]) {
-                    NSIndexPath *ip = [tbl indexPathForCell:c];
-                    if (ip && [self respondsToSelector:@selector(specifierAtIndexPath:)]) {
-                        PSSpecifier *s = [self specifierAtIndexPath:ip];
-                        NSString *k = [s propertyForKey:@"key"] ?: [s propertyForKey:@"id"];
-                        if ([k isEqualToString:@"MonitorHzFPS"]) {
-                            c.detailTextLabel.text = hzFpsStr;
-                            [c setNeedsLayout];
-                        } else if ([k isEqualToString:@"MonitorCPUGPU"]) {
-                            c.detailTextLabel.text = cpuGpuStr;
-                            [c setNeedsLayout];
-                        } else if ([k isEqualToString:@"MonitorThermal"]) {
-                            c.detailTextLabel.text = thermalStr;
-                            [c setNeedsLayout];
-                        } else if ([k isEqualToString:@"MonitorBattery"]) {
-                            c.detailTextLabel.text = batStr;
+    if ([self respondsToSelector:@selector(table)]) {
+        UITableView *tbl = [self table];
+        if (tbl) {
+            for (NSIndexPath *ip in [tbl indexPathsForVisibleRows]) {
+                if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
+                    PSSpecifier *s = [self specifierAtIndexPath:ip];
+                    if (s == self->_specMonitorHzFPS || s == self->_specMonitorThermal || s == self->_specMonitorCPUGPU) {
+                        UITableViewCell *c = [tbl cellForRowAtIndexPath:ip];
+                        if (c) {
+                            c.textLabel.text = s.name;
                             [c setNeedsLayout];
                         }
                     }
                 }
             }
         }
-    });
+    }
 }
 
 - (void)updateDynamicTitlesForSpecifiers:(NSArray *)targetSpecs {
@@ -725,37 +645,42 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     if (fps < 15) fps = 15;
     if (fps > 144) fps = 144;
 
-    NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-    if ([selLang isEqualToString:@"auto"]) {
-        NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-        selLang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
-    }
-    BOOL isEn = [selLang isEqualToString:@"en"];
+    NSString *langCode = PM_GetCurrentLanguageCodeV285();
+    NSDictionary *langNames = @{
+        @"vi": @"Tiếng Việt", @"en": @"English", @"zh": @"中文", @"ru": @"Русский"
+    };
+    NSString *currentLangName = langNames[langCode] ?: @"Auto";
+    NSString *langLabelFormat = PM_TextV285(@"LANGUAGE_BTN_FORMAT") ?: @"Ngôn Ngữ: %@";
 
     for (PSSpecifier *spec in targetSpecs) {
         NSString *key = [spec propertyForKey:@"key"];
         if ([key isEqualToString:@"TargetRefreshRate"]) {
-            NSString *t = isPowerSave ?
-                (isEn ? @"🔋 Refresh Rate: Locked 60 Hz (Power Save)" : @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)") :
-                (hz >= 144) ?
-                (isEn ? @"⚡ Refresh Rate: Force 144 Hz (Max Overclock)" : @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)") :
-                (isEn ? [NSString stringWithFormat:@"🔒 Refresh Rate: Locked %ld Hz", (long)hz] : [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz]);
-            spec.name = t;
-            [spec setProperty:t forKey:@"label"];
+            if (isPowerSave) {
+                spec.name = @"🔋 Tần Số Quét: Đã Khóa 60 Hz (Tiết Kiệm Pin)";
+            } else if (hz >= 144) {
+                spec.name = @"⚡ Tần Số Quét: Đã Khóa Cứng 144 Hz (Ép Xung Tối Đa)";
+            } else {
+                spec.name = [NSString stringWithFormat:@"🔒 Tần Số Quét: Đã Khóa Cứng %ld Hz", (long)hz];
+            }
+            [spec setProperty:spec.name forKey:@"label"];
         } else if ([key isEqualToString:@"TargetFPSRate"]) {
-            NSString *t = isPowerSave ?
-                (isEn ? @"🔋 App Frame Rate: Locked 60 FPS (Power Save)" : @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)") :
-                (fps >= 144) ?
-                (isEn ? @"⚡ App Frame Rate: Force 144 FPS (Max Overclock)" : @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)") :
-                (isEn ? [NSString stringWithFormat:@"🔒 App Frame Rate: Locked %ld FPS", (long)fps] : [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps]);
-            spec.name = t;
-            [spec setProperty:t forKey:@"label"];
+            if (isPowerSave) {
+                spec.name = @"🔋 Khung Hình App: Đã Khóa 60 FPS (Tiết Kiệm Pin)";
+            } else if (fps >= 144) {
+                spec.name = @"⚡ Khung Hình App: Đã Khóa Cứng 144 FPS (Ép Xung Tối Đa)";
+            } else {
+                spec.name = [NSString stringWithFormat:@"🔒 Khung Hình App: Đã Khóa Cứng %ld FPS", (long)fps];
+            }
+            [spec setProperty:spec.name forKey:@"label"];
+        } else if ([key isEqualToString:@"SelectedLanguage"]) {
+            spec.name = [NSString stringWithFormat:langLabelFormat, currentLangName];
+            [spec setProperty:spec.name forKey:@"label"];
         }
     }
 }
 
 - (void)updateDynamicTitles {
-    [self updateDynamicTitlesForSpecifiers:self->_rawSpecifiers];
+    [self updateDynamicTitlesForSpecifiers:self->_allSavedSpecifiers];
 }
 
 - (NSDictionary *)getMergedPreferences {
@@ -855,12 +780,16 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     NSString *prefPath = Titanium_ResolvePrefPath();
     if ([[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
         NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:prefPath];
-        if (prefs && prefs[key] != nil) return prefs[key];
+        if (prefs && prefs[key] != nil) {
+            return prefs[key];
+        }
     }
 
     CFPreferencesAppSynchronize(PREF_DOMAIN);
     CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)key, PREF_DOMAIN);
-    if (val) return (__bridge_transfer id)val;
+    if (val) {
+        return (__bridge_transfer id)val;
+    }
 
     return [specifier propertyForKey:@"default"];
 }
@@ -888,7 +817,6 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         if ([key isEqualToString:@"Enabled"]) {
             [self syncSharedMemoryFile:[value boolValue]];
         }
-        _specifiers = nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self reloadSpecifiers];
         });
@@ -899,7 +827,8 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
     [self syncSharedMemoryFile:currentEnabled];
 
     if ([key isEqualToString:@"SelectedLanguage"] || [key isEqualToString:@"ForceOverclock144Hz"] || [key isEqualToString:@"PowerSaveMode"]) {
-        _specifiers = nil;
+        self->_allSavedSpecifiers = nil;
+        self->_specifiers = nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self setupNavigationItems];
             [self reloadSpecifiers];
@@ -948,35 +877,24 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 - (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
-    NSDictionary *prefs = [self getMergedPreferences];
-    NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-    if ([selLang isEqualToString:@"auto"]) {
-        NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-        selLang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
-    }
-    BOOL isEn = [selLang isEqualToString:@"en"];
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:isEn ? @"SELECT LANGUAGE" : @"CHỌN NGÔN NGỮ (LANGUAGE)"
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *title = PM_TextV285(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *langs = @[
-        @{@"code": @"auto", @"name": @"🌐 Auto / Tự Động (Theo Máy)"},
+        @{@"code": @"auto", @"name": @"🌐 Tự Động / Auto (Theo Máy)"},
         @{@"code": @"vi",   @"name": @"🇻🇳 Tiếng Việt"},
-        @{@"code": @"en",   @"name": @"🇺🇸 English"}
+        @{@"code": @"en",   @"name": @"🇺🇸 English"},
+        @{@"code": @"zh",   @"name": @"🇨🇳 中文 (Chinese)"},
+        @{@"code": @"ru",   @"name": @"🇷🇺 Русский (Russian)"}
     ];
 
-    __weak typeof(self) weakSelf = self;
     for (NSDictionary *item in langs) {
         [alert addAction:[UIAlertAction actionWithTitle:item[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-
             NSString *code = item[@"code"];
             NSString *prefPath = Titanium_ResolvePrefPath();
-            NSMutableDictionary *p = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
-            p[@"SelectedLanguage"] = code;
-            [p writeToFile:prefPath atomically:YES];
+            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:prefPath] ?: [NSMutableDictionary dictionary];
+            prefs[@"SelectedLanguage"] = code;
+            [prefs writeToFile:prefPath atomically:YES];
             chmod([prefPath UTF8String], 0644);
 
             CFPreferencesSetAppValue(CFSTR("SelectedLanguage"), (__bridge CFPropertyListRef)code, PREF_DOMAIN);
@@ -984,42 +902,35 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 
             notify_post(NOTIFY_RELOAD);
             notify_post(NOTIFY_TITANIUM_CHANGED);
-            
-            strongSelf->_specifiers = nil;
+            self->_allSavedSpecifiers = nil;
+            self->_specifiers = nil;
             dispatch_async(dispatch_get_main_queue(), ^{
-                [strongSelf setupNavigationItems];
-                [strongSelf reloadSpecifiers];
+                [self setupNavigationItems];
+                [self reloadSpecifiers];
             });
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:isEn ? @"Cancel" : @"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    NSString *closeText = PM_TextV285(@"CLOSE") ?: @"Đóng";
+    [alert addAction:[UIAlertAction actionWithTitle:closeText style:UIAlertActionStyleCancel handler:nil]];
+    
+    UIAlertController *safeAlert = alertPresentationControllerHelperV285(alert, self);
+    [self presentViewController:safeAlert animated:YES completion:nil];
 }
 
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
-    NSDictionary *prefs = [self getMergedPreferences];
-    NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-    if ([selLang isEqualToString:@"auto"]) {
-        NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-        selLang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
-    }
-    BOOL isEn = [selLang isEqualToString:@"en"];
-
     NSString *unit = isHz ? @"Hz" : @"FPS";
-    NSString *title = isEn ? [NSString stringWithFormat:@"⌨️ CUSTOM %@", unit] : [NSString stringWithFormat:@"⌨️ NHẬP %@ TÙY CHỈNH", unit];
-    NSString *msg = isEn ?
-        [NSString stringWithFormat:@"Enter target value between 15 and 144 %@ to lock:", unit] :
-        [NSString stringWithFormat:@"Nhập giá trị mong muốn từ 15 đến 144 %@ để khóa cứng:", unit];
+    NSString *title = [NSString stringWithFormat:@"⌨️ NHẬP %@ TÙY CHỈNH", unit];
+    NSString *msg = [NSString stringWithFormat:@"Nhập giá trị mong muốn từ 15 đến 144 %@ để khóa cứng:", unit];
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
-
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
         textField.keyboardType = UIKeyboardTypeNumberPad;
-        textField.placeholder = [NSString stringWithFormat:@"15 - 144 %@", unit];
+        textField.placeholder = [NSString stringWithFormat:@"Giá trị (15 - 144 %@)", unit];
     }];
 
-    [alert addAction:[UIAlertAction actionWithTitle:isEn ? @"Lock Now" : @"Khóa Cứng Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    NSString *saveBtn = @"Khóa Cứng Ngay";
+    [alert addAction:[UIAlertAction actionWithTitle:saveBtn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         UITextField *tf = alert.textFields.firstObject;
         NSInteger val = [tf.text integerValue];
         if (val < 15) val = 15;
@@ -1027,34 +938,66 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         [self applyRateValue:val isDynamic:NO isFPS:!isHz];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:isEn ? @"Cancel" : @"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    NSString *cancelBtn = PM_TextV285(@"BACK") ?: @"Hủy";
+    [alert addAction:[UIAlertAction actionWithTitle:cancelBtn style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (UIMenu *)buildHzMenu API_AVAILABLE(ios(14.0)) {
-    UIAction *act144 = [UIAction actionWithTitle:@"144 Hz (Overclock Max)" image:[UIImage systemImageNamed:@"bolt.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:144 isDynamic:NO isFPS:NO]; }];
-    UIAction *act120 = [UIAction actionWithTitle:@"120 Hz (ProMotion Max)" image:[UIImage systemImageNamed:@"sparkles"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:120 isDynamic:NO isFPS:NO]; }];
-    UIAction *act90 = [UIAction actionWithTitle:@"90 Hz (Ultra Smooth)" image:[UIImage systemImageNamed:@"speedometer"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:90 isDynamic:NO isFPS:NO]; }];
-    UIAction *act60 = [UIAction actionWithTitle:@"60 Hz (Standard Default)" image:[UIImage systemImageNamed:@"checkmark.seal.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:60 isDynamic:NO isFPS:NO]; }];
-    UIAction *act30 = [UIAction actionWithTitle:@"30 Hz (Battery Saver)" image:[UIImage systemImageNamed:@"leaf.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:30 isDynamic:NO isFPS:NO]; }];
-    UIAction *customAction = [UIAction actionWithTitle:@"Custom Input (15 - 144 Hz)..." image:[UIImage systemImageNamed:@"keyboard"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self showCustomRateInputAlertForHz:YES]; }];
-    return [UIMenu menuWithTitle:@"REFRESH RATE (HZ)" children:@[act144, act120, act90, act60, act30, customAction]];
+    UIAction *act144 = [UIAction actionWithTitle:@"144 Hz (Ép Xung Cực Đại)" image:[UIImage systemImageNamed:@"bolt.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:144 isDynamic:NO isFPS:NO];
+    }];
+    UIAction *act120 = [UIAction actionWithTitle:@"120 Hz (ProMotion Max)" image:[UIImage systemImageNamed:@"sparkles"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:120 isDynamic:NO isFPS:NO];
+    }];
+    UIAction *act90 = [UIAction actionWithTitle:@"90 Hz (Siêu Mượt)" image:[UIImage systemImageNamed:@"speedometer"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:90 isDynamic:NO isFPS:NO];
+    }];
+    UIAction *act60 = [UIAction actionWithTitle:@"60 Hz (Tiêu Chuẩn Chuẩn Mực)" image:[UIImage systemImageNamed:@"checkmark.seal.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:NO isFPS:NO];
+    }];
+    UIAction *act30 = [UIAction actionWithTitle:@"30 Hz (Tiết Kiệm Pin)" image:[UIImage systemImageNamed:@"leaf.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:30 isDynamic:NO isFPS:NO];
+    }];
+
+    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 Hz)..." image:[UIImage systemImageNamed:@"keyboard"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:YES];
+    }];
+
+    return [UIMenu menuWithTitle:@"TẦN SỐ QUÉT (HZ)" children:@[act144, act120, act90, act60, act30, customAction]];
 }
 
 - (UIMenu *)buildFPSMenu API_AVAILABLE(ios(14.0)) {
-    UIAction *act144 = [UIAction actionWithTitle:@"144 FPS (Overclock Max)" image:[UIImage systemImageNamed:@"bolt.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:144 isDynamic:NO isFPS:YES]; }];
-    UIAction *act120 = [UIAction actionWithTitle:@"120 FPS (Ultra Gaming)" image:[UIImage systemImageNamed:@"sparkles"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:120 isDynamic:NO isFPS:YES]; }];
-    UIAction *act90 = [UIAction actionWithTitle:@"90 FPS (Gaming Optimized)" image:[UIImage systemImageNamed:@"speedometer"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:90 isDynamic:NO isFPS:YES]; }];
-    UIAction *act60 = [UIAction actionWithTitle:@"60 FPS (Standard Default)" image:[UIImage systemImageNamed:@"checkmark.seal.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:60 isDynamic:NO isFPS:YES]; }];
-    UIAction *act30 = [UIAction actionWithTitle:@"30 FPS (Battery Saver)" image:[UIImage systemImageNamed:@"leaf.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self applyRateValue:30 isDynamic:NO isFPS:YES]; }];
-    UIAction *customAction = [UIAction actionWithTitle:@"Custom Input (15 - 144 FPS)..." image:[UIImage systemImageNamed:@"keyboard"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) { [self showCustomRateInputAlertForHz:NO]; }];
-    return [UIMenu menuWithTitle:@"FRAME RATE (FPS)" children:@[act144, act120, act90, act60, act30, customAction]];
+    UIAction *act144 = [UIAction actionWithTitle:@"144 FPS (Ép Xung Cực Đại)" image:[UIImage systemImageNamed:@"bolt.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:144 isDynamic:NO isFPS:YES];
+    }];
+    UIAction *act120 = [UIAction actionWithTitle:@"120 FPS (Gaming Cực Mượt)" image:[UIImage systemImageNamed:@"sparkles"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:120 isDynamic:NO isFPS:YES];
+    }];
+    UIAction *act90 = [UIAction actionWithTitle:@"90 FPS (Tối Ưu Game)" image:[UIImage systemImageNamed:@"speedometer"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:90 isDynamic:NO isFPS:YES];
+    }];
+    UIAction *act60 = [UIAction actionWithTitle:@"60 FPS (Chuẩn Mặc Định)" image:[UIImage systemImageNamed:@"checkmark.seal.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:60 isDynamic:NO isFPS:YES];
+    }];
+    UIAction *act30 = [UIAction actionWithTitle:@"30 FPS (Tiết Kiệm Pin)" image:[UIImage systemImageNamed:@"leaf.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self applyRateValue:30 isDynamic:NO isFPS:YES];
+    }];
+
+    UIAction *customAction = [UIAction actionWithTitle:@"Tự Nhập Số Chính Xác (15 - 144 FPS)..." image:[UIImage systemImageNamed:@"keyboard"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+        [self showCustomRateInputAlertForHz:NO];
+    }];
+
+    return [UIMenu menuWithTitle:@"KHUNG HÌNH (FPS)" children:@[act144, act120, act90, act60, act30, customAction]];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     if (@available(iOS 14.0, *)) {
-        PSSpecifier *spec = [self respondsToSelector:@selector(specifierAtIndexPath:)] ? [self specifierAtIndexPath:indexPath] : nil;
+        PSSpecifier *spec = nil;
+        if ([self respondsToSelector:@selector(specifierAtIndexPath:)]) {
+            spec = [self specifierAtIndexPath:indexPath];
+        }
         if (spec) {
             NSString *key = [spec propertyForKey:@"key"];
             if ([key isEqualToString:@"TargetRefreshRate"]) {
@@ -1086,50 +1029,73 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
+    if (@available(iOS 14.0, *)) {
+        NSIndexPath *indexPath = [self respondsToSelector:@selector(indexPathForSpecifier:)] ? [self indexPathForSpecifier:specifier] : nil;
+        UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
+        UIButton *btn = [cell.contentView viewWithTag:99285];
+        if (btn) {
+            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+            return;
+        }
+    }
     [self showCustomRateInputAlertForHz:YES];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
+    if (@available(iOS 14.0, *)) {
+        NSIndexPath *indexPath = [self respondsToSelector:@selector(indexPathForSpecifier:)] ? [self indexPathForSpecifier:specifier] : nil;
+        UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
+        UIButton *btn = [cell.contentView viewWithTag:99285];
+        if (btn) {
+            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
+            return;
+        }
+    }
     [self showCustomRateInputAlertForHz:NO];
 }
 
-- (id)getAuthorName:(PSSpecifier *)specifier { return @"ĐỨC LONG"; }
-- (id)getVersionString:(PSSpecifier *)specifier { return @"V28.7 SUPREME PRO (144Hz)"; }
+- (id)getAuthorName:(PSSpecifier *)specifier {
+    return @"ĐỨC LONG";
+}
+
+- (id)getVersionString:(PSSpecifier *)specifier {
+    return @"V28.7 SUPREME PRO (144Hz)";
+}
 
 - (void)openSupportLink:(PSSpecifier *)specifier {
     NSURL *webURL = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
+        Class workspaceClass = objc_getClass("LSApplicationWorkspace");
+        if (workspaceClass && [workspaceClass respondsToSelector:@selector(defaultWorkspace)]) {
+            LSApplicationWorkspace *workspace = [workspaceClass defaultWorkspace];
+            if ([workspace respondsToSelector:@selector(openURL:)]) {
+                if ([workspace openURL:webURL]) return;
+            }
+        }
         [[UIApplication sharedApplication] openURL:webURL options:@{} completionHandler:nil];
     });
 }
 
+// ====================================================================================================
+// THANH ĐIỀU HƯỚNG VÀ HÀNH ĐỘNG HỆ THỐNG
+// ====================================================================================================
+
 - (void)setupNavigationItems {
+    NSString *btnTitle = PM_TextV285(@"NAV_ACTIONS") ?: @"Hành Động";
+
     if (@available(iOS 14.0, *)) {
-        NSDictionary *prefs = [self getMergedPreferences];
-        NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-        if ([selLang isEqualToString:@"auto"]) {
-            NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-            selLang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
-        }
-        BOOL isEn = [selLang isEqualToString:@"en"];
-
-        UIAction *respringAction = [UIAction actionWithTitle:isEn ? @"Fast Respring (Safe)" : @"Respring Nhanh (An Toàn)"
-                                                       image:[UIImage systemImageNamed:@"bolt.fill"]
-                                                  identifier:nil
-                                                     handler:^(__kindof UIAction * _Nonnull action) { [self executeRespring]; }];
-
-        UIAction *srebootAction = [UIAction actionWithTitle:isEn ? @"Userspace Reboot (SReboot)" : @"Khởi Động Userspace (SReboot)"
-                                                      image:[UIImage systemImageNamed:@"arrow.clockwise.circle.fill"]
-                                                 identifier:nil
-                                                    handler:^(__kindof UIAction * _Nonnull action) { [self executeSReboot]; }];
-
-        UIAction *resetAction = [UIAction actionWithTitle:isEn ? @"Reset to Defaults (144Hz)" : @"Đặt Lại Mặc Định (144Hz)"
-                                                    image:[UIImage systemImageNamed:@"trash.fill"]
-                                               identifier:nil
-                                                  handler:^(__kindof UIAction * _Nonnull action) { [self executeResetConfiguration]; }];
+        UIAction *respringAction = [UIAction actionWithTitle:@"Respring Nhanh (An Toàn)" image:[UIImage systemImageNamed:@"bolt.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+            [self executeRespring];
+        }];
+        UIAction *srebootAction = [UIAction actionWithTitle:@"Khởi Động Userspace (SReboot)" image:[UIImage systemImageNamed:@"arrow.clockwise.circle.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+            [self executeSReboot];
+        }];
+        UIAction *resetAction = [UIAction actionWithTitle:@"Đặt Lại Cấu Hình Mặc Định (144Hz)" image:[UIImage systemImageNamed:@"trash.fill"] identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
+            [self executeResetConfiguration];
+        }];
         resetAction.attributes = UIMenuElementAttributesDestructive;
 
-        UIMenu *actionsMenu = [UIMenu menuWithTitle:isEn ? @"Actions" : @"Hành Động" children:@[respringAction, srebootAction, resetAction]];
+        UIMenu *actionsMenu = [UIMenu menuWithTitle:btnTitle children:@[respringAction, srebootAction, resetAction]];
         UIBarButtonItem *actionBtn = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"ellipsis.circle.fill"] menu:actionsMenu];
         actionBtn.tintColor = [UIColor systemBlueColor];
         self.navigationItem.rightBarButtonItem = actionBtn;
@@ -1170,19 +1136,8 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
 }
 
 - (void)executeResetConfiguration {
-    NSDictionary *prefs = [self getMergedPreferences];
-    NSString *selLang = prefs[@"SelectedLanguage"] ?: @"auto";
-    if ([selLang isEqualToString:@"auto"]) {
-        NSString *preferred = [NSLocale preferredLanguages].firstObject ?: @"vi";
-        selLang = [preferred hasPrefix:@"en"] ? @"en" : @"vi";
-    }
-    BOOL isEn = [selLang isEqualToString:@"en"];
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:isEn ? @"Reset Confirmation" : @"Xác Nhận Đặt Lại"
-                                                                   message:isEn ? @"All settings will be restored to optimal 144Hz defaults." : @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu 144Hz của v28.7 Pro."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addAction:[UIAlertAction actionWithTitle:isEn ? @"Reset Now" : @"Đặt Lại Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Đặt Lại" message:@"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu 144Hz của v28.7 Pro." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         NSString *prefPath = Titanium_ResolvePrefPath();
         [[NSFileManager defaultManager] removeItemAtPath:prefPath error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:PRIMARY_SYNC_FILE error:nil];
@@ -1203,17 +1158,12 @@ static NSDictionary *Titanium_GetLocalizationDictionary(NSString *lang) {
         [self syncSharedMemoryFile:YES];
         [self ensureDefaultSettingsExist];
         [self updateDynamicTitles];
-        
-        self->_rawSpecifiers = nil;
+        self->_allSavedSpecifiers = nil;
         self->_specifiers = nil;
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self setupNavigationItems];
-            [self reloadSpecifiers];
-        });
+        [self setupNavigationItems];
+        [self reloadSpecifiers];
     }]];
-
-    [alert addAction:[UIAlertAction actionWithTitle:isEn ? @"Cancel" : @"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
