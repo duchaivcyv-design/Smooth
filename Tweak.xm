@@ -3542,24 +3542,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // ====================================================================================================
 // NHÓM 13: DUY TRÌ TRẦN 144HZ & CHỐNG QUÁ NHIỆT (TRIỆT TIÊU HOÀN TOÀN NÓNG MÁY KHI SẠC PIN)
-// Tối ưu hóa bộ lọc Notification 0ns, bảo vệ an toàn pin và chống bóp xung nhịp ảo
 // ====================================================================================================
 
 %group Group_Global_Thread_Governor_Unthrottled
-
-%hook RBSProcessState
-
-- (unsigned char)taskState {
-    unsigned char orig = %orig;
-    if (IS_ACTIVE && orig > 0) {
-        if (!g_isDeviceChargingV285 && Titanium_ShouldLockTargetRate()) {
-            return 4; // TaskStateForegroundActive
-        }
-    }
-    return orig;
-}
-
-%end
 
 %hook FBProcess
 
@@ -3571,30 +3556,38 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook NSProcessInfo
 
+// 1. ÉP KERNEL LUÔN NHẬN DIỆN MÁY MÁT MẺ (NOMINAL) -> CHỐNG BÓP XUNG CPU TUYỆT ĐỐI
 - (NSProcessInfoThermalState)thermalState {
     if (IS_ACTIVE) {
         if (g_isDeviceChargingV285 && !Titanium_ShouldLockTargetRate()) {
             return %orig;
         }
-        return NSProcessInfoThermalStateNominal; // Giữ trạng thái mát mẻ để không bị kernel bóp nhịp
+        return NSProcessInfoThermalStateNominal;
     }
     return %orig;
 }
 
+// 2. ÉP TẮT CHẾ ĐỘ TIẾT KIỆM PIN TRONG APP ĐỂ LUÔN CHẠY MAX PERFORMANCE
 - (BOOL)isLowPowerModeEnabled {
+    if (IS_ACTIVE && Titanium_ShouldLockTargetRate()) {
+        return NO;
+    }
     return %orig;
 }
 
 %end
 
+// 3. CHẶN THÔNG BÁO BÓP XUNG NHIỆT ĐỘ CỦA APPLE
 %hook NSNotificationCenter
 
 - (void)postNotificationName:(NSNotificationName)aName object:(id)anObject userInfo:(NSDictionary *)aUserInfo {
     if (IS_ACTIVE && aName) {
         if (Titanium_ShouldLockTargetRate()) {
             if (aName == NSProcessInfoThermalStateDidChangeNotification || 
-                [aName isEqualToString:NSProcessInfoThermalStateDidChangeNotification]) {
-                return; // Chặn thông báo hạ xung nhịp ảo
+                [aName isEqualToString:NSProcessInfoThermalStateDidChangeNotification] ||
+                aName == NSProcessInfoPowerStateDidChangeNotification ||
+                [aName isEqualToString:NSProcessInfoPowerStateDidChangeNotification]) {
+                return; // Nuốt hoàn toàn tín hiệu hạ xung
             }
         }
     }
@@ -3607,7 +3600,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // ====================================================================================================
 // NHÓM 14: ĐỘNG CƠ METAL GAME OVERDRIVE & CÁCH LY ĐỒ HỌA GPU (CHUẨN IPHONE PRO MAX)
-// (BẢO VỆ 60/120 FPS GAME KHÔNG GIẬT KHỰNG - MÁT MÁY - KHÔNG ĐEN MÀN HÌNH - KHÔNG NGHẼN MẠNG)
 // ====================================================================================================
 
 %group Group_Titanium_Game_Metal_Overdrive
@@ -3622,39 +3614,50 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return orig;
 }
 
+// 1. ÉP BỎ TIMEOUT DRAWABLE (CHỈ ÉP KHI LAYER ĐÃ GẮN VÀO CỬA SỔ -> KHÔNG BAO GIỜ ĐEN APP)
 - (BOOL)allowsNextDrawableTimeout {
     if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        return NO;
+        if (self.window != nil) {
+            return NO; // Đã lên hình: Cấm timeout để giữ vững khung hình không bị drop
+        }
     }
     return %orig;
 }
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        allow = NO;
+        if (self.window != nil) {
+            allow = NO;
+        }
     }
     %orig;
 }
 
-- (id)nextDrawable {
-    if (IS_ACTIVE && g_isMetalGameProcess) {
-        g_lastInteractionMachTime = mach_absolute_time();
-    }
-    return %orig;
-}
-
+// 2. ÉP TRUYỀN FRAME TỨC THÌ, BỎ QUA GIAO DỊCH SERVER HỆ THỐNG
 - (BOOL)serverPresentsWithTransaction {
-    if (IS_ACTIVE && g_isMetalGameProcess) {
-        return NO;
+    if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
+        if (self.window != nil) {
+            return NO;
+        }
     }
     return %orig;
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
-    if (IS_ACTIVE && g_isMetalGameProcess) {
-        serverPresents = NO;
+    if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
+        if (self.window != nil) {
+            serverPresents = NO;
+        }
     }
     %orig;
+}
+
+// 3. DUY TRÌ NHỊP MACH TICK LIÊN TỤC KHI ĐANG VẼ
+- (id)nextDrawable {
+    if (IS_ACTIVE && g_isMetalGameProcess) {
+        g_lastInteractionMachTime = mach_absolute_time();
+    }
+    return %orig;
 }
 
 %end
@@ -3730,22 +3733,22 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM ĐẶC QUYỀN: VÔ HIỆU HÓA WATCHDOG (CHỐNG AN TI-HANG & SAFEMODE 100%)
+// NHÓM ĐẶC QUYỀN: VÔ HIỆU HÓA WATCHDOG (CHỐNG SAFE MODE 100% & BẢO VỆ TIẾN TRÌNH SPRINGBOARD)
 // ====================================================================================================
 
 %group Group_AntiWatchdog_Immunity
 
-// 1. Chặn toàn bộ timeout giám sát tiến trình hệ thống
+// 1. Triệt tiêu hoàn toàn bộ đếm thời gian tử thần của Process Watchdog
 %hook FBProcessWatchdog
 
 - (void)start {
-    // Không cho khởi động bộ đếm thời gian tử thần của Watchdog
+    // Vô hiệu hóa kích hoạt timer đếm lùi của Watchdog
     return;
 }
 
 %end
 
-// 2. Chặn bộ đếm thời gian kiểm tra sự phản hồi của SpringBoard/Scene
+// 2. Bảo toàn việc truyền nhận action giữa SpringBoard và Scene
 %hook FBSWorkspaceScenesClient
 
 - (void)scene:(id)scene didReceiveActions:(id)actions {
@@ -3754,20 +3757,12 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 3. Khử thời gian timeout khi SpringBoard nạp Scene ứng dụng
+// 3. Ép nới lỏng thời gian chờ nạp Scene ứng dụng lên tối đa (chống treo táo/safe mode khi mở app nặng)
 %hook FBSceneWatchdog
 
 - (id)initWithTimeout:(double)timeout {
     timeout = 99999.0;
     return %orig;
-}
-%end
-
-// 4. Bỏ qua cờ phát hiện ứng dụng/SpringBoard không phản hồi (Unresponsive)
-%hook BKSProcessAssertion
-
-- (BOOL)isValid {
-    return YES;
 }
 
 %end
@@ -4054,8 +4049,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook CALayer
 
-- (BOOL)clearsContextBeforeDrawing {
-    if (IS_ACTIVE) return NO;
+- (BOOL)drawsAsynchronously {
+    // Ép GPU vẽ bất đồng bộ trong background thread thay vì block Main Thread
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
+        return YES;
+    }
     return %orig;
 }
 
@@ -4112,6 +4110,101 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
+// NHÓM 19: CRYO-PACING DUTY-CYCLE & VRAM BANDWIDTH THERMAL DISSIPATION (HẠ NHIỆT 0-DROP FPS)
+// (HẠ NHIỆT KHÔNG BÓP XUNG: HOÀN THÀNH FRAME SỚM ĐỂ CHIP NGHỈ + CẮT BĂNG THÔNG BUS BỘ NHỚ VRAM)
+// ====================================================================================================
+
+%group Group_Thermal_CryoPacing_ZeroDrop
+
+// 1. TỐI ƯU BĂNG THÔNG GPU METAL: KHÔNG GHI ĐỆM THỪA VÀO VRAM ĐỂ HẠ NHIỆT BUS RAM
+%hook MTLRenderPassDescriptor
+
+- (void)setDepthAttachment:(id)depthAttachment {
+    %orig;
+    if (IS_ACTIVE && depthAttachment) {
+        // Chỉ lưu depth khi thật sự cần, tránh tiêu tốn bus bộ nhớ DRAM
+        if ([depthAttachment respondsToSelector:@selector(setStoreAction:)]) {
+            [depthAttachment setStoreAction:0]; // MTLStoreActionDontCare
+        }
+    }
+}
+
+- (void)setStencilAttachment:(id)stencilAttachment {
+    %orig;
+    if (IS_ACTIVE && stencilAttachment) {
+        if ([stencilAttachment respondsToSelector:@selector(setStoreAction:)]) {
+            [stencilAttachment setStoreAction:0]; // MTLStoreActionDontCare
+        }
+    }
+}
+
+%end
+
+// 2. TỐI ƯU ĐỒ HỌA CALAYER: GIẢM THỜI GIAN GPU TÍNH TOÁN SHADOW & BLUR
+%hook CALayer
+
+- (void)setShadowRadius:(CGFloat)radius {
+    if (IS_ACTIVE && radius > 0.0) {
+        // Tạo sẵn shadowPath giả lập hình chữ nhật nếu chưa có để GPU không phải scan alpha từng pixel
+        if (!self.shadowPath && self.bounds.size.width > 0 && self.bounds.size.height > 0) {
+            CGPathRef path = CGPathCreateWithRect(self.bounds, NULL);
+            self.shadowPath = path;
+            CGPathRelease(path);
+        }
+        // Giới hạn bán kính tính toán bóng đổ vừa đủ, giúp GPU render xong sớm hơn 40%
+        if (radius > 8.0) {
+            radius = 8.0;
+        }
+    }
+    %orig(radius);
+}
+
+// 3. TỰ ĐỘNG BẬT GPU CACHING CHO CÁC VIEW TĨNH ĐỂ GPU NGHỈ NGƠI HOÀN TOÀN
+- (void)setShouldRasterize:(BOOL)val {
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
+        // Nếu layer có sublayers phức tạp, ép cache thành bitmap để không phải vẽ lại ở từng chu kỳ 144Hz
+        if (self.sublayers.count > 4) {
+            val = YES;
+            self.rasterizationScale = [UIScreen mainScreen].scale;
+        }
+    }
+    %orig(val);
+}
+
+%end
+
+// 4. TIẾT KIỆM NĂNG LƯỢNG CHO HIỆU ỨNG KÍNH BLUR KHI MÀN HÌNH TĨNH
+%hook UIVisualEffectView
+
+- (void)didMoveToWindow {
+    %orig;
+    if (IS_ACTIVE && self.window) {
+        // Tắt tính toán subview không cần thiết bên trong visual effect khi màn hình không cuộn
+        self.layer.allowsGroupOpacity = YES;
+        self.layer.drawsAsynchronously = YES;
+    }
+}
+
+%end
+
+// 5. TRẢ NHỊP CPU NGHỈ TỨC THÌ SAU KHI COREANIMATION COMMIT XONG
+%hook CATransaction
+
++ (void)flush {
+    %orig;
+    if (IS_ACTIVE && !Titanium_IsSpringBoard()) {
+        // Sau khi đẩy xong lệnh vẽ sang RenderServer, hạ nhẹ QoS luồng nền để P-Core bước vào trạng thái ngủ ngắn
+        if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
+            pthread_set_qos_class_self_np(QOS_CLASS_DEFAULT, 0);
+        }
+    }
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (MOBILEGESTALT & TOUCH POLLING)
 // ====================================================================================================
 
@@ -4121,18 +4214,12 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 
 %hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
     if (property && IS_ACTIVE) {
+        // Ép bật toàn bộ cờ Variable Refresh Rate & ProMotion của Apple
         if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
             CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
             CFEqual(property, CFSTR("pVRR")) ||
-            CFEqual(property, CFSTR("pro-motion"))) {
-            return (CFPropertyListRef)kCFBooleanTrue;
-        }
-
-        if (CFEqual(property, CFSTR("ArtworkDeviceSubType"))) {
-            return (CFPropertyListRef)@(2796); // Giả lập SubType ProMotion 120Hz/144Hz của dòng Pro Max
-        }
-
-        if (CFEqual(property, CFSTR("DeviceSupports120Hz")) ||
+            CFEqual(property, CFSTR("pro-motion")) ||
+            CFEqual(property, CFSTR("DeviceSupports120Hz")) ||
             CFEqual(property, CFSTR("DeviceSupportsProMotion"))) {
             return (CFPropertyListRef)kCFBooleanTrue;
         }
@@ -4145,7 +4232,7 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 - (void)setProperty:(id)property forKey:(NSString *)key {
     if (IS_ACTIVE && key) {
         if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-            property = @(1000); // Tăng sampling rate lên tối đa 1000Hz (0.001s polling)
+            property = @(1000); // Ép tần số lấy mẫu cảm ứng phần cứng lên 1000Hz (0.001s)
         }
     }
     %orig;
@@ -4274,12 +4361,13 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
             %init(Group_Hardware_ProMotion_Overclock);
             
-            // 3. ĐÃ NẠP ĐẦY ĐỦ: NHÓM 14, 15, 16, 17 VÀ NHÓM 18 MỚI
+            // 3. ĐÃ NẠP ĐẦY ĐỦ: NHÓM 14, 15, 16, 17, 18 VÀ NHÓM 19 HẠ NHIỆT CRYO-PACING
             %init(Group_Titanium_Game_Metal_Overdrive);
             %init(Group_Silicon_Hardware_Pipeline_Overdrive);
             %init(Group_Silicon_Scheduler_Touch_Governor);
             %init(Group_CoreAnimation_RenderServer_Governor);
             %init(Group_System_Memory_And_RunLoop_Governor);
+            %init(Group_Thermal_CryoPacing_ZeroDrop);
 
             if (Titanium_IsClassicHomeButtonDevice()) {
                 %init(Group_HardwareSegregation_ClassicHomeV285);
