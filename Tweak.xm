@@ -16,8 +16,8 @@
 #import <mach/clock.h>
 
 // ==================== POSIX, C & SYSTEM ====================
-#include <stdio.h>              // BỔ SUNG: Cho rename(), snprintf() trong hàm ghi IPC atomic
-#include <math.h>               // BỔ SUNG: Cho isfinite(), fmin(), fmax() kiểm tra tọa độ & nhịp Hz
+#include <stdio.h>              // Cho rename(), snprintf() trong hàm ghi IPC atomic
+#include <math.h>               // Cho isfinite(), fmin(), fmax() kiểm tra tọa độ & nhịp Hz
 #include <stdatomic.h>          // Hỗ trợ bộ đếm nguyên tử an toàn đa luồng
 #import <pthread.h>
 #import <pthread/qos.h>         // Khai báo pthread_set_qos_class_self_np()
@@ -32,7 +32,7 @@
 #import <notify.h>
 #import <errno.h>               // Bắt mã lỗi I/O file IPC và sysctl
 #import <time.h>                // Khai báo chuẩn time_t và hàm time()
-#import <os/lock.h>             // BỔ SUNG: Khóa bộ nhớ siêu nhẹ os_unfair_lock cho Apple Silicon
+#import <os/lock.h>             // Khóa bộ nhớ siêu nhẹ os_unfair_lock cho Apple Silicon
 
 // ==================== SYS HEADERS ====================
 #import <sys/types.h>
@@ -306,7 +306,7 @@ extern "C" {
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)arg1;
+- (void)textChanged:(id)1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -372,6 +372,9 @@ extern "C" {
 - (void)setContentsScale:(CGFloat)scale;
 - (void)display;
 - (id)delegate;
+@property (nonatomic, assign) CGPathRef shadowPath;
+@property (nonatomic, assign) CGFloat rasterizationScale;
+@property (nonatomic, copy) NSArray *sublayers;
 @end
 
 @interface CABackdropLayer : CALayer
@@ -526,6 +529,7 @@ extern "C" {
 - (id)bundleIdentifier;
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion;
 - (BOOL)isPendingExit;
+- (void)_terminateWithExitContext:(id)context;
 @end
 
 @interface RBSProcessIdentity : NSObject
@@ -915,22 +919,16 @@ extern "C" {
 - (void)updateSettings:(id)settings withTransitionContext:(id)context;
 @end
 
-@interface CALayer (TitaniumCryoPacingPrivate)
-@property (nonatomic, assign) CGPathRef shadowPath;
-@property (nonatomic, assign) BOOL shouldRasterize;
-@property (nonatomic, assign) CGFloat rasterizationScale;
-@property (nonatomic, copy) NSArray *sublayers;
-@end
-
 @interface UIVisualEffectView (TitaniumCryoPacingPrivate)
 @end
 
-@interface MTLRenderPassAttachmentDescriptor : NSObject
+// --- SỬA LỖI DUPLICATE INTERFACE CHO METAL (DÙNG CATEGORY MỞ RỘNG THAY VÌ CLASS GỐC) ---
+@interface MTLRenderPassAttachmentDescriptor (TitaniumCryoPacing)
 @property (nonatomic, assign) NSUInteger storeAction;
 - (void)setStoreAction:(NSUInteger)storeAction;
 @end
 
-@interface MTLRenderPassDescriptor : NSObject
+@interface MTLRenderPassDescriptor (TitaniumCryoPacing)
 @property (nonatomic, retain) MTLRenderPassAttachmentDescriptor *depthAttachment;
 @property (nonatomic, retain) MTLRenderPassAttachmentDescriptor *stencilAttachment;
 - (void)setDepthAttachment:(id)depthAttachment;
@@ -938,10 +936,6 @@ extern "C" {
 @end
 
 // --- NHÓM 20: DEEP MEMORY OPTIMIZATION & ADVANCED JETSAM DEFENSE ---
-@interface FBProcess (TitaniumMemoryPrivate)
-- (void)_terminateWithExitContext:(id)context;
-@end
-
 @interface UIApplication (TitaniumMemoryPrivate)
 - (void)_performMemoryWarning;
 @end
@@ -1275,7 +1269,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 }
 
 // ====================================================================================================
-// BOOST CONFIGURATION ENGINE (V28.7 PRO MAX - CHẾ ĐỘ ÉP TOÀN DIỆN CẤU HÌNH PROMOTION)
+// BOOST CONFIGURATION ENGINE (V28.7 PRO MAX - ĐÃ KHẮC PHỤC 100% CÁC THUỘC TÍNH BỊ THIẾU)
 // ====================================================================================================
 
 @interface BoostConfigV285Pro : NSObject
@@ -1315,6 +1309,18 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 @property (nonatomic, assign) BOOL powerSaveMode;
 @property (nonatomic, assign) BOOL antiGhostTouch;
 @property (nonatomic, assign) BOOL chargerRippleRejection;
+
+// --- [CÁC THUỘC TÍNH ĐƯỢC BỔ SUNG KHẮC PHỤC LỖI BIÊN DỊCH CLANG] ---
+@property (nonatomic, assign) BOOL batterySaver60Hz;
+@property (nonatomic, assign) BOOL lock30FpsOnOverheat;
+@property (nonatomic, assign) BOOL dynamicThermalEngine;
+@property (nonatomic, assign) BOOL fakeFullBatteryState;
+@property (nonatomic, assign) BOOL gameFPSStabilizer;
+@property (nonatomic, assign) BOOL lockHighIdleFloor;
+@property (nonatomic, assign) BOOL quantumCoreSync;
+@property (nonatomic, assign) BOOL pCoreRealtimePriority;
+@property (nonatomic, assign) BOOL flatTintBlur;
+@property (nonatomic, assign) BOOL zeroLagNeural;
 
 + (instancetype)sharedInstance;
 - (void)loadSettings;
@@ -1367,7 +1373,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             }
         }
     } @catch (NSException *e) {
-        // Tự động bỏ qua an toàn tuyệt đối nếu SDK trên máy không hỗ trợ selector
+        // Bỏ qua an toàn tuyệt đối nếu SDK không hỗ trợ selector
     }
 }
 
@@ -1406,6 +1412,19 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.antiThermalThrottling = YES;
         self.antiGhostTouch = YES;
         self.chargerRippleRejection = YES;
+
+        // Khởi tạo mặc định cho các thuộc tính mới
+        self.batterySaver60Hz = NO;
+        self.lock30FpsOnOverheat = YES;
+        self.dynamicThermalEngine = YES;
+        self.fakeFullBatteryState = YES;
+        self.gameFPSStabilizer = YES;
+        self.lockHighIdleFloor = YES;
+        self.quantumCoreSync = YES;
+        self.pCoreRealtimePriority = YES;
+        self.flatTintBlur = NO;
+        self.zeroLagNeural = YES;
+
         [self loadSettings];
     }
     return self;
@@ -1443,6 +1462,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                         self.antiThermalThrottling = (pRead.thermalShield != 0);
                         self.turboAppLaunch = (pRead.fastAppLaunch != 0);
                         self.powerSaveMode = (pRead.powerSaveModeActive != 0);
+                        self.batterySaver60Hz = self.powerSaveMode;
 
                         g_cachedResolvedHz = self.targetHz;
                         g_cachedResolvedFPS = self.targetFPS;
@@ -1524,6 +1544,18 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.antiGhostTouch = GetLiveBool(@"AntiGhostTouch", YES);
         self.chargerRippleRejection = GetLiveBool(@"ChargerRippleRejection", YES);
 
+        // --- ĐỒNG BỘ ÁNH XẠ CÁC THUỘC TÍNH BỔ SUNG TỪ ROOT.PLIST ---
+        self.batterySaver60Hz = self.powerSaveMode;
+        self.lock30FpsOnOverheat = GetLiveBool(@"SmartThermalDispatch", YES);
+        self.dynamicThermalEngine = GetLiveBool(@"DynamicThermalEngine", YES);
+        self.fakeFullBatteryState = GetLiveBool(@"DeviceSpoofer", YES);
+        self.gameFPSStabilizer = GetLiveBool(@"GameFPSStabilizer", YES);
+        self.lockHighIdleFloor = GetLiveBool(@"CPUGPUFreqOptimizer", YES);
+        self.quantumCoreSync = GetLiveBool(@"QuantumCoreSync", YES);
+        self.pCoreRealtimePriority = GetLiveBool(@"RealtimeThreadSched", YES);
+        self.flatTintBlur = GetLiveBool(@"QuantumRenderShield", NO);
+        self.zeroLagNeural = GetLiveBool(@"ZeroLagNeuralBooster", YES);
+
         // ==============================================================================================
         // [ÉP TOÀN DIỆN]: KHÓA CỨNG MỨC CHỈNH TỪ 15HZ ĐẾN 144HZ VÀO CACHE NGUYÊN THỦY (0NS RENDER LOOP)
         // ==============================================================================================
@@ -1533,7 +1565,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
         if (!self.enabled || !self.enableHzControl) {
             g_cachedResolvedHz = 60;
-        } else if (self.powerSaveMode) {
+        } else if (self.powerSaveMode || self.batterySaver60Hz) {
             g_cachedResolvedHz = 60;
         } else if (self.forceOverclock144Hz || safeHz >= 144) {
             g_cachedResolvedHz = 144;
@@ -1547,7 +1579,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
         if (!self.enabled || !self.enableFPSControl) {
             g_cachedResolvedFPS = 60;
-        } else if (self.powerSaveMode) {
+        } else if (self.powerSaveMode || self.batterySaver60Hz) {
             g_cachedResolvedFPS = 60;
         } else if (self.forceOverclock144Hz || safeFPS >= 144) {
             g_cachedResolvedFPS = 144;
@@ -1578,7 +1610,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.antiGhostTouch = self.antiGhostTouch ? 1 : 0;
             p.diskIOPriorityBoost = 1;
             p.rawTouchDirectDelivery = 1;
-            p.powerSaveModeActive = self.powerSaveMode ? 1 : 0;
+            p.powerSaveModeActive = (self.powerSaveMode || self.batterySaver60Hz) ? 1 : 0;
             p.updateSeq = (uint64_t)mach_absolute_time();
             p.lastHeartbeat = p.updateSeq;
 
