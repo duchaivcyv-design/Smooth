@@ -16,7 +16,6 @@
 
 // Trình soạn thảo code trực tiếp trong App
 @property (nonatomic, strong) UITextView *codeEditorView;
-@property (nonatomic, strong) UILabel *compileStatusLabel;
 
 @property (nonatomic, strong) CADisplayLink *fpsDisplayLink;
 @property (nonatomic, strong) UILabel *fpsCounterLabel;
@@ -192,7 +191,7 @@
     [self presentViewController:installAlert animated:YES completion:nil];
 }
 
-// 3. MỤC FILES & TRÌNH SOẠN THẢO CODE TRỰC TIẾP (GIÚP KIỂM TRA LỖI CODE NGAY TRONG MÁY ẢO)
+// 3. MỤC FILES & TRÌNH SOẠN THẢO CODE TRỰC TIẾP
 - (void)openFilesApp {
     self.filesAppView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.filesAppView.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.12 alpha:1.0];
@@ -210,17 +209,14 @@
     [backBtn addTarget:self action:@selector(closeFilesApp) forControlEvents:UIControlEventTouchUpInside];
     [self.filesAppView addSubview:backBtn];
 
-    // Trình soạn thảo code (TextView)
     self.codeEditorView = [[UITextView alloc] initWithFrame:CGRectMake(20, 110, self.view.bounds.size.width - 40, self.view.bounds.size.height - 240)];
     self.codeEditorView.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.18 alpha:1.0];
     self.codeEditorView.textColor = [UIColor colorWithRed:0.2 green:0.9 blue:0.4 alpha:1.0];
     self.codeEditorView.font = [UIFont fontWithName:@"Courier" size:13];
     self.codeEditorView.layer.cornerRadius = 10;
-    // Mẫu code chuẩn nhất, an toàn tuyệt đối chống Safe Mode
     self.codeEditorView.text = @"#import <UIKit/UIKit.h>\n\n%hook SpringBoard\n- (void)applicationDidFinishLaunching:(id)application {\n    %orig;\n    NSLog(@\"[Safe] Loaded successfully!\");\n}\n%end\n\n%hook UIWindow\n- (void)makeKeyAndVisible {\n    %orig;\n}\n%end";
     [self.filesAppView addSubview:self.codeEditorView];
 
-    // Nút kiểm tra lỗi code (Static Code Analysis)
     UIButton *checkCodeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     checkCodeBtn.frame = CGRectMake(20, self.view.bounds.size.height - 115, self.view.bounds.size.width - 40, 44);
     [checkCodeBtn setTitle:@"Kiểm Tra Lỗi Code (Check SafeMode Risk)" forState:UIControlStateNormal];
@@ -240,23 +236,20 @@
     }];
 }
 
-// Thuật toán kiểm tra dòng code nào trong Tweak.xm có nguy cơ gây lỗi Safe Mode / Đen App
 - (void)analyzeCodeContent {
     NSString *code = self.codeEditorView.text;
-    
-    // Kiểm tra các lỗi kinh điển:
     BOOL hasMissingOrig = [code containsString:@"%hook"] && ![code containsString:@"%orig"];
-    BOOL hasUnsafeUI = [code containsString:@"[UIApplication sharedApplication] keyWindow"] || [code containsString:@"sharedApplication.keyWindow"];
+    BOOL hasUnsafeUI = [code containsString:@"[UIApplication sharedApplication] keyWindow"];
     
     if (hasMissingOrig) {
-        [self showAlertWithTitle:@"❌ Phát Hiện Lỗi Code!" message:@"Dòng hook của bạn thiếu gọi '%orig'. Điều này sẽ làm sập SpringBoard và gây ra Safe Mode ngay lập tức trên máy thật! Hãy bổ sung '%orig'."];
+        [self showAlertWithTitle:@"❌ Phát Hiện Lỗi Code!" message:@"Dòng hook của bạn thiếu gọi '%orig'. Điều này sẽ làm sập SpringBoard và gây ra Safe Mode ngay lập tức!"];
         self.isRealCrashSafeMode = YES;
     } else if (hasUnsafeUI) {
-        [self showAlertWithTitle:@"⚠️ Cảnh Báo Nguy Hiểm!" message:@"Truy cập 'keyWindow' trực tiếp khi khởi động sẽ gây ra hiện tượng Đen Màn Hình (Black Screen) cho ứng dụng."];
+        [self showAlertWithTitle:@"⚠️ Cảnh Báo Nguy Hiểm!" message:@"Truy cập 'keyWindow' trực tiếp sẽ gây ra hiện tượng Đen Màn Hình (Black Screen)."];
         self.isRealCrashSafeMode = YES;
     } else {
-        [self showAlertWithTitle:@"✅ Code Chuẩn Xác & An Toàn!" message:@"Không phát hiện lỗi cú pháp hoặc nguy cơ Safe Mode. Code này hoàn toàn an toàn để đưa vào Tweak.xm."];
-        self.isRealCrashSafeMode = NO; // Sạch lỗi, boot thành công!
+        [self showAlertWithTitle:@"✅ Code Chuẩn Xác & An Toàn!" message:@"Không phát hiện lỗi cú pháp hoặc nguy cơ Safe Mode. Code này hoàn toàn an toàn."];
+        self.isRealCrashSafeMode = NO;
     }
 }
 
@@ -425,7 +418,7 @@
     toast.text = msg;
     [self.view addSubview:toast];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(),,, ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSuperview]; }];
     });
 }
