@@ -143,6 +143,7 @@ static inline NSBundle *Titanium_GetPreferenceBundle(void) {
                 [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"],
                 [root stringByAppendingPathComponent:@"Library/PreferenceBundles/BoostiPhone6s.bundle"],
                 @"/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle",
+                @"/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle",
                 @"/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle"
             ];
             for (NSString *p in possiblePaths) {
@@ -245,7 +246,7 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 // ====================================================================================================
-// ROOTLISTCONTROLLER IMPLEMENTATION (BẢN GỐC CHUẨN XÁC)
+// ROOTLISTCONTROLLER IMPLEMENTATION
 // ====================================================================================================
 
 @interface RootListController () {
@@ -881,28 +882,10 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 }
 
 - (void)showHzPickerPopup:(PSSpecifier *)specifier {
-    if (@available(iOS 14.0, *)) {
-        NSIndexPath *indexPath = [self respondsToSelector:@selector(indexPathForSpecifier:)] ? [self indexPathForSpecifier:specifier] : nil;
-        UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
-        UIButton *btn = [cell.contentView viewWithTag:99285];
-        if (btn) {
-            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
-            return;
-        }
-    }
     [self showCustomRateInputAlertForHz:YES];
 }
 
 - (void)showFPSPickerPopup:(PSSpecifier *)specifier {
-    if (@available(iOS 14.0, *)) {
-        NSIndexPath *indexPath = [self respondsToSelector:@selector(indexPathForSpecifier:)] ? [self indexPathForSpecifier:specifier] : nil;
-        UITableViewCell *cell = (indexPath && [self respondsToSelector:@selector(table)]) ? [[self table] cellForRowAtIndexPath:indexPath] : nil;
-        UIButton *btn = [cell.contentView viewWithTag:99285];
-        if (btn) {
-            [btn sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
-            return;
-        }
-    }
     [self showCustomRateInputAlertForHz:NO];
 }
 
@@ -917,13 +900,6 @@ static inline NSString *Titanium_GetLiveThermalString(void) {
 - (void)openSupportLink:(PSSpecifier *)specifier {
     NSURL *webURL = [NSURL URLWithString:@"https://zalo.me/g/qjd56ltkraiih88ps6ui"];
     dispatch_async(dispatch_get_main_queue(), ^{
-        Class workspaceClass = objc_getClass("LSApplicationWorkspace");
-        if (workspaceClass && [workspaceClass respondsToSelector:@selector(defaultWorkspace)]) {
-            LSApplicationWorkspace *workspace = [workspaceClass defaultWorkspace];
-            if ([workspace respondsToSelector:@selector(openURL:)]) {
-                if ([workspace openURL:webURL]) return;
-            }
-        }
         [[UIApplication sharedApplication] openURL:webURL options:@{} completionHandler:nil];
     });
 }
