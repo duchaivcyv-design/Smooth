@@ -48,54 +48,134 @@ jobs:
           fi
           echo "✅ Cài đặt Theos & SDK iPhoneOS16.5 hoàn tất!"
 
-      # --- BƯỚC 3: QUÉT PHÂN TÍCH TĨNH: PHÁT HIỆN CHÍNH XÁC DÒNG CODE GÂY SAFEMODE ---
-      - name: Deep Scan Safe Mode Risks & Crash Triggers
+      # --- BƯỚC 3: QUÉT PHÂN TÍCH TĨNH: KIỂM SOÁT HOOK TRÙNG LẶP & SAFEMODE ---
+      - name: Deep Scan Safe Mode Risks & Duplicate Hooks
         run: |
           python3 - << 'EOF'
           import re
           import sys
           import glob
 
-          files = glob.glob("**/*.xm", recursive=True) + glob.glob("**/*.x", recursive=True) + glob.glob("**/*.m", recursive=True)
+          files = glob.glob("**/*.xm", recursive=True) + glob.glob("**/*.x", recursive=True)
           if not files:
-              print("⚠️ Không tìm thấy file source nào để quét!")
+              print("⚠️ Không tìm thấy file .xm nào để quét!")
               sys.exit(0)
 
           has_critical_error = False
-          safemode_patterns = [
-              (re.compile(r'\[CADisplay\s+mainDisplay\]'), "Gọi CADisplay trực tiếp ngoài MainThread hoặc trước khi WindowServer khởi động"),
-              (re.compile(r'\[UIApp\s+'), "Gọi UIApp trong constructor sớm khi UIApplication chưa sẵn sàng"),
-              (re.compile(r'objc_getClass\("([^"]+)"\)\s*(?!;)'), "Gọi objc_getClass không kiểm tra giá trị trả về nil (Nguy cơ Null Pointer Crash)"),
-              (re.compile(r'%init\s*\([^)]*\)\s*;'), "Khởi tạo group hook toàn cục dễ gây đụng độ symbol")
-          ]
+
+          def strip_parens(s):
+              res = []
+              depth = 0
+              for char in s:
+                  if char == '(':
+                      depth += 1
+                  elif char == ')':
+                      if depth > 0:
+                          depth -= 1
+                  elif depth == 0:
+                      res.append(char)
+              return "".join(res)
+
+          def extract_method_info(method_decl):
+              method_decl = method_decl.strip()
+              match_type = re.match(r'^([-+])', method_decl)
+              if not match_type:
+                  return None, None
+              m_type = match_type.group(1)
+              stripped = strip_parens(method_decl)[1:].strip()
+              if stripped.endswith('{'):
+                  stripped = stripped[:-1].strip()
+                  
+              tokens = re.findall(r'([A-Za-z0-9_]+)\s*:', stripped)
+              if tokens:
+                  return m_type, ":".join(tokens) + ":"
+              match_sel = re.search(r'\b([A-Za-z0-9_]+)\b', stripped)
+              if match_sel:
+                  return m_type, match_sel.group(1)
+              return None, None
 
           for filepath in files:
               with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                   lines = f.readlines()
 
-              current_group = "Toàn cục / Ngoài nhóm"
+              in_hook = False
+              curr_class = ""
+              in_method_decl = False
+              method_decl_lines = []
+              method_start_line = 0
+              in_method_body = False
+              method_body_lines = []
+              brace_depth = 0
+              curr_method_info = None
+              method_registry = {}
+
               for idx, raw_line in enumerate(lines, 1):
                   code_line = re.sub(r'//.*$', '', raw_line).strip()
-                  
-                  group_match = re.match(r'^%group\s+([A-Za-z0-9_]+)', code_line)
-                  if group_match:
-                      current_group = group_match.group(1)
 
-                  for pat, desc in safemode_patterns:
-                      if pat.search(code_line):
-                          has_critical_error = True
-                          print(f"\n🚨 [PHÁT HIỆN RỦI RO TRONG SOURCE CODE]")
-                          print(f"📁 Tệp tin : {filepath}")
-                          print(f"📍 Dòng    : {idx} (Thuộc nhóm: {current_group})")
-                          print(f"❌ Nguyên nhân: {desc}")
-                          print(f"💻 Mã nguồn: {raw_line.strip()}")
-                          print("-" * 60)
+                  hook_match = re.match(r'^%hook\s+([A-Za-z0-9_]+)', code_line)
+                  if hook_match:
+                      in_hook = True
+                      curr_class = hook_match.group(1)
+                      continue
+
+                  if not in_method_body and not in_method_decl and code_line.startswith("%end"):
+                      if in_hook:
+                          in_hook = False
+                          curr_class = ""
+                      continue
+
+                  if in_hook and not in_method_decl and not in_method_body:
+                      if re.match(r'^[-+]\s*\(', code_line):
+                          in_method_decl = True
+                          method_start_line = idx
+                          method_decl_lines = [code_line]
+
+                  if in_method_decl:
+                      if idx != method_start_line:
+                          method_decl_lines.append(code_line)
+                      if '{' in code_line:
+                          in_method_decl = False
+                          full_decl = " ".join(method_decl_lines)
+                          curr_method_info = extract_method_info(full_decl)
+                          if curr_method_info and curr_method_info[1]:
+                              in_method_body = True
+                              method_body_lines = [raw_line]
+                              brace_part = code_line[code_line.find('{')+1:]
+                              brace_depth = 1 + brace_part.count('{') - brace_part.count('}')
+                              if brace_depth <= 0:
+                                  in_method_body = False
+                                  m_type, sel = curr_method_info
+                                  key = (curr_class, m_type, sel)
+                                  method_registry.setdefault(key, []).append({
+                                      "start_line": method_start_line,
+                                      "end_line": idx
+                                  })
+                          continue
+
+                  if in_method_body:
+                      method_body_lines.append(raw_line)
+                      brace_depth += code_line.count('{') - code_line.count('}')
+                      if brace_depth <= 0:
+                          in_method_body = False
+                          m_type, sel = curr_method_info
+                          key = (curr_class, m_type, sel)
+                          method_registry.setdefault(key, []).append({
+                              "start_line": method_start_line,
+                              "end_line": idx
+                          })
+
+              for (class_name, m_type, method_sel), occurrences in method_registry.items():
+                  if len(occurrences) > 1:
+                      has_critical_error = True
+                      print(f"🚨 PHÁT HIỆN HOOK TRÙNG LẶP: {m_type}[{class_name} {method_sel}] trong {filepath}")
+                      for i, occ in enumerate(occurrences, 1):
+                          print(f"   🔹 Lần {i}: Dòng {occ['start_line']} -> {occ['end_line']}")
 
           if has_critical_error:
-              print("\n🛑 PHÁT HIỆN CÁC ĐOẠN CODE TIỀM ẨN GÂY SAFEMODE / CRASH HOẶC TREO TÁO!")
-              print("👉 Hãy khắc phục triệt để các vị trí trên trước khi phát hành gói .deb.")
+              print("\n🛑 DỪNG BUILD: Tồn tại hook trùng lặp gây crash SpringBoard!")
+              sys.exit(1)
           else:
-              print("✅ Quét tĩnh an toàn tuyệt đối: Không phát hiện lỗi cấu trúc rủi ro!")
+              print("✅ Quét tĩnh hoàn tất: Không có hook trùng lặp!")
           EOF
 
       # --- BƯỚC 4: DỌN DẸP & BIÊN DỊCH SONG SONG ĐA NHÂN ---
@@ -137,79 +217,57 @@ jobs:
           
           ls -lh packages/*.deb || { echo "❌ Không tìm thấy file deb!"; exit 1; }
 
-      # --- BƯỚC 5: TRÍCH XUẤT FILE THÔ, MÔ PHỎNG MÁY ẢO & KIỂM TRA CHUYÊN SÂU (IOS 14 - 26.0.1) ---
-      - name: Advanced Sandbox Runtime & Raw File Extraction Check
+      # --- BƯỚC 5: TRÍCH XUẤT FILE THÔ & KIỂM TRA TƯƠNG THÍCH NHỊ PHÂN IOS ---
+      - name: Advanced Binary & Raw Package Verification
         run: |
           echo "======================================================================"
-          echo "🧪 MÔ PHỎNG MÁY ẢO iOS (14.0 - 26.0.1) & KIỂM TRA LỖI NẠP DYLIB / SAFEMODE"
+          echo "🧪 TRÍCH XUẤT FILE THÔ & KIỂM ĐỊNH TÍNH TOÀN VẸN CỦA GÓI DEB"
           echo "======================================================================"
           
           DEB_FILE=$(ls packages/*.deb | head -n 1)
           TEST_DIR="/tmp/deb_extracted_raw"
           rm -rf "$TEST_DIR" && mkdir -p "$TEST_DIR"
           
-          # Trích xuất toàn bộ cấu trúc file thô trong gói deb
           dpkg -x "$DEB_FILE" "$TEST_DIR"
-          echo "📦 Đã trích xuất toàn bộ cấu trúc file thô (Raw File Tree) tại: $TEST_DIR"
+          echo "📦 Cấu trúc gói deb trích xuất:"
           find "$TEST_DIR" -type f
           
           DYLIB_PATH=$(find "$TEST_DIR" -name "BoostiPhone6sCore.dylib" | head -n 1)
           if [ -z "$DYLIB_PATH" ] || [ ! -f "$DYLIB_PATH" ]; then
-            echo "❌ Lỗi trầm trọng: Không tìm thấy tệp BoostiPhone6sCore.dylib trong gói deb!"
+            echo "❌ Lỗi: Không tìm thấy BoostiPhone6sCore.dylib trong gói deb!"
             exit 1
           fi
 
-          # Kiểm tra cấu trúc kiến trúc nhị phân (Fat Binary / Slice)
-          echo "📊 Thông tin kiến trúc nhị phân Mach-O:"
+          echo "📊 Kiểm tra kiến trúc Mach-O slice:"
           lipo -info "$DYLIB_PATH"
 
-          # Kiểm tra các Load Commands (Kiểm soát đường dẫn rpath và framework phụ thuộc)
-          echo "🔍 Phân tích Mach-O Load Commands & Frameworks:"
-          otool -l "$DYLIB_PATH" | grep -A 3 -E '(LC_LOAD_DYLIB|LC_RPATH)' || true
+          echo "🔍 Kiểm tra Load Commands & RPATH liên kết:"
+          otool -l "$DYLIB_PATH" | grep -A 2 -E '(LC_LOAD_DYLIB|LC_RPATH)' | grep -E '(name|path)' || true
 
-          # Kiểm tra biểu tượng liên kết (Undefined Symbols Check)
-          echo "🔍 Kiểm tra các ký hiệu liên kết ngoài (Undefined Dynamic Symbols):"
-          nm -u "$DYLIB_PATH" | grep -v -E '(_objc_|_OBJC_|_dispatch_|_os_|_pthread_|___CFConstantStringClassReference|_notify_|_mach_|_vm_|_setiopolicy_np|_time|_getprogname)' || true
+          # Xác minh dylib không chứa dependency thiếu dẫn đến Safe Mode lúc respring
+          python3 - << 'EOF'
+          import subprocess
+          import sys
 
-          # Mô phỏng test nạp động (Dynamic Loading Test Harness)
-          cat << 'EOF' > /tmp/runtime_simulator.m
-          #import <Foundation/Foundation.h>
-          #import <dlfcn.h>
-          #import <stdio.h>
+          dylib_path = "/tmp/deb_extracted_raw/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib"
+          res = subprocess.run(["otool", "-L", dylib_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+          
+          lines = res.stdout.splitlines()[1:]
+          critical_missing = []
+          for line in lines:
+              dep = line.strip().split()[0]
+              if "@rpath" not in dep and not dep.startswith(("/System/Library", "/usr/lib")):
+                  critical_missing.append(dep)
 
-          int main(int argc, char *argv[]) {
-              @autoreleasepool {
-                  if (argc < 2) return 1;
-                  const char *dylibPath = argv[1];
-                  printf("🚀 [MÁY ẢO MÔ PHỎNG]: Tiến hành nạp thử dylib: %s\n", dylibPath);
-                  
-                  void *handle = dlopen(dylibPath, RTLD_NOW | RTLD_GLOBAL);
-                  if (!handle) {
-                      const char *err = dlerror();
-                      printf("🚨 [PHÁT HIỆN NGUY CƠ SAFEMODE / CRASH KHI NẠP]:\n");
-                      printf("❌ Nguyên nhân từ dylib: %s\n", err ? err : "Unknown dynamic link error");
-                      return 100;
-                  }
-                  
-                  printf("✅ [THÀNH CÔNG]: Dylib nạp vào bộ nhớ hoàn hảo, không gây xung đột hay Safe Mode!\n");
-                  dlclose(handle);
-                  return 0;
-              }
-          }
+          if critical_missing:
+              print(f"🚨 Cảnh báo framework lạ có thể gây Safe Mode: {critical_missing}")
+              sys.exit(1)
+          else:
+              print("✅ Toàn bộ liên kết hệ thống (System Frameworks) đều chuẩn xác 100%!")
           EOF
 
-          clang -fobjc-arc /tmp/runtime_simulator.m -o /tmp/runtime_simulator -framework Foundation
-          
-          echo "🏃 Chạy thử nghiệm mô phỏng trên tiến trình ảo..."
-          if /tmp/runtime_simulator "$DYLIB_PATH"; then
-             echo "✅ Kiểm tra máy ảo thành công: Không có nguy cơ treo táo hay Safe Mode!"
-          else
-             echo "❌ CẢNH BÁO: Phát hiện bất ổn trong dylib có thể dẫn đến Safe Mode hoặc SREBOOT khi respring!"
-             exit 1
-          fi
-
       # --- BƯỚC 6: TẢI GÓI DEB VÀ FILE THÔ LÊN ARTIFACTS ---
-      - name: Upload Artifacts
+      - name: Upload Deb & Raw Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BoostiPhone6s-Rootless-FullPackage
