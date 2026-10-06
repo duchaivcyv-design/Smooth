@@ -92,7 +92,7 @@ typedef struct __attribute__((packed)) {
 - (void)ensureDefaultSettingsExist;
 - (void)syncSharedMemoryFile:(BOOL)enabled;
 
-// --- Getters cho cell đo đạc phần cứng ---
+// --- Getters cho 4 dòng HUD trong Root.plist ---
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier;
 - (id)getMonitorCPUGPU:(PSSpecifier *)specifier;
 - (id)getMonitorThermal:(PSSpecifier *)specifier;
