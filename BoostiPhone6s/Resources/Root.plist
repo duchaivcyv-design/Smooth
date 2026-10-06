@@ -35,7 +35,7 @@
 		</dict>
 
 		<!-- ==================================================================================================== -->
-		<!-- HUD GIÁM SÁT PHẦN CỨNG & HIỆU NĂNG THỜI GIAN THỰC (0S OVERHEAD)                                      -->
+		<!-- HUD GIÁM SÁT PHẦN CỨNG & TAB BIỂU ĐỒ THỜI GIAN THỰC (0S OVERHEAD)                                    -->
 		<!-- ==================================================================================================== -->
 		<dict>
 			<key>cell</key>
@@ -45,7 +45,17 @@
 			<key>groupID</key>
 			<string>GROUP_MONITOR</string>
 			<key>footerText</key>
-			<string>Đo đạc xung nhịp, nhiệt độ và tần số quét trực tiếp từ hạt nhân XNU mà không gây tốn pin hay nóng máy.</string>
+			<string>Đo đạc xung nhịp, nhiệt độ và tần số quét trực tiếp từ hạt nhân XNU. Nhấn nút bên dưới để mở giao diện biểu đồ đường nhảy thời gian thực.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>📈 MỞ TAB BIỂU ĐỒ THỜI GIAN THỰC (0S)</string>
+			<key>action</key>
+			<string>openRealtimeGraphTab</string>
+			<key>id</key>
+			<string>btnOpenRealtimeGraphTab</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -744,6 +754,22 @@
 			<string>AggressiveRamClean</string>
 			<key>label</key>
 			<string>Dọn RAM Chuyên Sâu (Pressure Relief)</string>
+			<key>PostNotification</key>
+			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.taojb.boostiphone6s</string>
+			<key>key</key>
+			<string>MachVMPurgeRam</string>
+			<key>id</key>
+			<string>MachVMPurgeRam</string>
+			<key>label</key>
+			<string>Giải Phóng Bộ Đệm Mach VM Purgable</string>
 			<key>PostNotification</key>
 			<string>com.taojb.boostiphone6s/ReloadPrefs</string>
 		</dict>
