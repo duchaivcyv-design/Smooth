@@ -64,6 +64,8 @@
 			<string>MonitorHzFPS</string>
 			<key>key</key>
 			<string>MonitorHzFPS</string>
+			<key>get</key>
+			<string>getMonitorHzFPS:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -74,6 +76,8 @@
 			<string>MonitorThermal</string>
 			<key>key</key>
 			<string>MonitorThermal</string>
+			<key>get</key>
+			<string>getMonitorThermal:</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -84,6 +88,8 @@
 			<string>MonitorCPUGPU</string>
 			<key>key</key>
 			<string>MonitorCPUGPU</string>
+			<key>get</key>
+			<string>getMonitorCPUGPU:</string>
 		</dict>
 
 		<!-- ==================================================================================================== -->
@@ -97,7 +103,7 @@
 			<key>groupID</key>
 			<string>GROUP_HZ_FPS</string>
 			<key>footerText</key>
-			<string>⚠️️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng máy và hao pin nhanh hơn. Hãy sử dụng kèm sò lạnh khi chơi game kéo dài.</string>
+			<string>⚠️ CẢNH BÁO: Ép tần số quét và FPS cao (90Hz - 144Hz) sẽ bắt buộc màn hình và chip hoạt động công suất lớn, gây nóng máy và hao pin nhanh hơn. Hãy sử dụng kèm sò lạnh khi chơi game kéo dài.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
