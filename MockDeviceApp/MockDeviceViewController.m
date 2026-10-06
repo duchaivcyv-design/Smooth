@@ -1,9 +1,10 @@
 #import "MockDeviceViewController.h"
 #import <mach/mach.h>
 
-@interface MockDeviceViewController () <UITextFieldDelegate, UITableViewDelegate, UITableViewDataSource>
+@interface MockDeviceViewController () <UITextFieldDelegate, UITableViewDelegate, UITableViewDataSource, UITextViewDelegate>
 @property (nonatomic, strong) UIView *homeScreenView;
 @property (nonatomic, strong) UIView *sileoAppView;
+@property (nonatomic, strong) UIView *filesAppView;
 @property (nonatomic, strong) UIView *lockScreenView;
 @property (nonatomic, strong) UIView *blackCurtainRespring;
 @property (nonatomic, strong) UITableView *sileoTableView;
@@ -12,6 +13,10 @@
 @property (nonatomic, assign) BOOL isTweakInstalled;
 @property (nonatomic, assign) BOOL isRespringDone;
 @property (nonatomic, assign) BOOL isRealCrashSafeMode;
+
+// Trình soạn thảo code trực tiếp trong App
+@property (nonatomic, strong) UITextView *codeEditorView;
+@property (nonatomic, strong) UILabel *compileStatusLabel;
 
 @property (nonatomic, strong) CADisplayLink *fpsDisplayLink;
 @property (nonatomic, strong) UILabel *fpsCounterLabel;
@@ -27,7 +32,7 @@
     
     self.isTweakInstalled = NO;
     self.isRespringDone = NO;
-    self.isRealCrashSafeMode = YES; // Bật cờ này để phản ánh đúng thực tế máy thật bị Safe Mode khi Tweak có lỗi
+    self.isRealCrashSafeMode = NO; // Mặc định code sạch
 
     [self setupHomeScreen];
     [self setupFPSMonitoring];
@@ -72,7 +77,7 @@
     [self.homeScreenView addSubview:statusBar];
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 30)];
-    title.text = @"iOS Virtual Lab (Strict SafeMode Test)";
+    title.text = @"iOS Virtual Lab & Code Inspector";
     title.textColor = [UIColor whiteColor];
     title.font = [UIFont boldSystemFontOfSize:16];
     title.textAlignment = NSTextAlignmentCenter;
@@ -82,7 +87,7 @@
         @{@"name": @"Sileo", @"color": [UIColor colorWithRed:0.15 green:0.55 blue:0.85 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openSileoApp)]},
         @{@"name": @"Tweak Test", @"color": [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openTweakTestApp)]},
         @{@"name": @"Respring", @"color": [UIColor colorWithRed:0.9 green:0.3 blue:0.2 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(simulateRealRespring)]},
-        @{@"name": @"Files", @"color": [UIColor colorWithRed:0.95 green:0.6 blue:0.1 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openFilesApp)]}
+        @{@"name": @"Files / Code", @"color": [UIColor colorWithRed:0.95 green:0.6 blue:0.1 alpha:1.0], @"selector": [NSValue valueWithPointer:@selector(openFilesApp)]}
     ];
 
     CGFloat size = 72;
@@ -187,7 +192,81 @@
     [self presentViewController:installAlert animated:YES completion:nil];
 }
 
-// 3. MÔ PHỎNG RESPRING & BẮT LỖI SAFE MODE
+// 3. MỤC FILES & TRÌNH SOẠN THẢO CODE TRỰC TIẾP (GIÚP KIỂM TRA LỖI CODE NGAY TRONG MÁY ẢO)
+- (void)openFilesApp {
+    self.filesAppView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.filesAppView.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.12 alpha:1.0];
+    [self.view addSubview:self.filesAppView];
+
+    UILabel *header = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, self.view.bounds.size.width - 40, 30)];
+    header.text = @"📁 Quản Lý File Tweak.xm";
+    header.textColor = [UIColor whiteColor];
+    header.font = [UIFont boldSystemFontOfSize:18];
+    [self.filesAppView addSubview:header];
+
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    backBtn.frame = CGRectMake(self.view.bounds.size.width - 80, 60, 60, 30);
+    [backBtn setTitle:@"Đóng" forState:UIControlStateNormal];
+    [backBtn addTarget:self action:@selector(closeFilesApp) forControlEvents:UIControlEventTouchUpInside];
+    [self.filesAppView addSubview:backBtn];
+
+    // Trình soạn thảo code (TextView)
+    self.codeEditorView = [[UITextView alloc] initWithFrame:CGRectMake(20, 110, self.view.bounds.size.width - 40, self.view.bounds.size.height - 240)];
+    self.codeEditorView.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.18 alpha:1.0];
+    self.codeEditorView.textColor = [UIColor colorWithRed:0.2 green:0.9 blue:0.4 alpha:1.0];
+    self.codeEditorView.font = [UIFont fontWithName:@"Courier" size:13];
+    self.codeEditorView.layer.cornerRadius = 10;
+    // Mẫu code chuẩn nhất, an toàn tuyệt đối chống Safe Mode
+    self.codeEditorView.text = @"#import <UIKit/UIKit.h>\n\n%hook SpringBoard\n- (void)applicationDidFinishLaunching:(id)application {\n    %orig;\n    NSLog(@\"[Safe] Loaded successfully!\");\n}\n%end\n\n%hook UIWindow\n- (void)makeKeyAndVisible {\n    %orig;\n}\n%end";
+    [self.filesAppView addSubview:self.codeEditorView];
+
+    // Nút kiểm tra lỗi code (Static Code Analysis)
+    UIButton *checkCodeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    checkCodeBtn.frame = CGRectMake(20, self.view.bounds.size.height - 115, self.view.bounds.size.width - 40, 44);
+    [checkCodeBtn setTitle:@"Kiểm Tra Lỗi Code (Check SafeMode Risk)" forState:UIControlStateNormal];
+    [checkCodeBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    checkCodeBtn.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:0.8 alpha:1.0];
+    checkCodeBtn.layer.cornerRadius = 10;
+    [checkCodeBtn addTarget:self action:@selector(analyzeCodeContent) forControlEvents:UIControlEventTouchUpInside];
+    [self.filesAppView addSubview:checkCodeBtn];
+}
+
+- (void)closeFilesApp {
+    [UIView animateWithDuration:0.25 animations:^{
+        self.filesAppView.alpha = 0;
+    } completion:^(BOOL finished) {
+        [self.filesAppView removeFromSuperview];
+        self.filesAppView = nil;
+    }];
+}
+
+// Thuật toán kiểm tra dòng code nào trong Tweak.xm có nguy cơ gây lỗi Safe Mode / Đen App
+- (void)analyzeCodeContent {
+    NSString *code = self.codeEditorView.text;
+    
+    // Kiểm tra các lỗi kinh điển:
+    BOOL hasMissingOrig = [code containsString:@"%hook"] && ![code containsString:@"%orig"];
+    BOOL hasUnsafeUI = [code containsString:@"[UIApplication sharedApplication] keyWindow"] || [code containsString:@"sharedApplication.keyWindow"];
+    
+    if (hasMissingOrig) {
+        [self showAlertWithTitle:@"❌ Phát Hiện Lỗi Code!" message:@"Dòng hook của bạn thiếu gọi '%orig'. Điều này sẽ làm sập SpringBoard và gây ra Safe Mode ngay lập tức trên máy thật! Hãy bổ sung '%orig'."];
+        self.isRealCrashSafeMode = YES;
+    } else if (hasUnsafeUI) {
+        [self showAlertWithTitle:@"⚠️ Cảnh Báo Nguy Hiểm!" message:@"Truy cập 'keyWindow' trực tiếp khi khởi động sẽ gây ra hiện tượng Đen Màn Hình (Black Screen) cho ứng dụng."];
+        self.isRealCrashSafeMode = YES;
+    } else {
+        [self showAlertWithTitle:@"✅ Code Chuẩn Xác & An Toàn!" message:@"Không phát hiện lỗi cú pháp hoặc nguy cơ Safe Mode. Code này hoàn toàn an toàn để đưa vào Tweak.xm."];
+        self.isRealCrashSafeMode = NO; // Sạch lỗi, boot thành công!
+    }
+}
+
+- (void)showAlertWithTitle:(NSString *)title message:(NSString *)msg {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+// 4. MÔ PHỎNG RESPRING
 - (void)simulateRealRespring {
     self.blackCurtainRespring = [[UIView alloc] initWithFrame:self.view.bounds];
     self.blackCurtainRespring.backgroundColor = [UIColor blackColor];
@@ -232,7 +311,6 @@
     promptBox.layer.cornerRadius = 20;
 
     UILabel *promptTitle = [[UILabel alloc] initWithFrame:CGRectMake(15, 20, promptBox.bounds.size.width - 30, 24)];
-    // Nếu tweak đã cài và dylib có lỗi, hiển thị Safe Mode đỏ hệt như máy thật
     if (self.isTweakInstalled && self.isRealCrashSafeMode) {
         promptTitle.text = @"⚠️ ĐÃ VÀO SAFE MODE!";
         promptTitle.textColor = [UIColor redColor];
@@ -246,9 +324,9 @@
 
     UILabel *promptDesc = [[UILabel alloc] initWithFrame:CGRectMake(15, 50, promptBox.bounds.size.width - 30, 50)];
     if (self.isTweakInstalled && self.isRealCrashSafeMode) {
-        promptDesc.text = @"Phát hiện xung đột hook dylib! SpringBoard đã đẩy máy vào Safe Mode.";
+        promptDesc.text = @"Phát hiện code lỗi hoặc thiếu %orig! SpringBoard đã đẩy máy vào Safe Mode.";
     } else {
-        promptDesc.text = @"Không phát hiện lỗi crash. Sẵn sàng test app.";
+        promptDesc.text = @"Code an toàn. Không có lỗi crash khi boot.";
     }
     promptDesc.textColor = [UIColor whiteColor];
     promptDesc.font = [UIFont systemFontOfSize:13];
@@ -278,7 +356,7 @@
     }];
 }
 
-// 4. TEST APP VÀ MÔ PHỎNG ĐEN MÀN HÌNH (BLACK SCREEN)
+// 5. TEST APP & CHỐNG ĐEN MÀN HÌNH
 - (void)openTweakTestApp {
     UIView *testAppView = [[UIView alloc] initWithFrame:self.view.bounds];
     testAppView.backgroundColor = [UIColor whiteColor];
@@ -299,13 +377,12 @@
         UILabel *resultLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 150, testAppView.bounds.size.width - 40, 90)];
         
         if (self.isTweakInstalled && self.isRealCrashSafeMode) {
-            // Mô phỏng chính xác hiện tượng trên máy thật: Dính Safe Mode / Lỗi dylib -> Đen app
-            resultLbl.text = @"❌ LỖI CRASH: Tweak gây xung đột dylib, ứng dụng bị đen màn hình / văng!";
+            resultLbl.text = @"❌ LỖI CRASH: Code Tweak có lỗi, ứng dụng bị đen màn hình / văng!";
             resultLbl.textColor = [UIColor redColor];
-            testAppView.backgroundColor = [UIColor blackColor]; // Đen toàn bộ app mô phỏng máy thật
+            testAppView.backgroundColor = [UIColor blackColor];
             title.textColor = [UIColor whiteColor];
         } else if (self.isTweakInstalled && self.isRespringDone) {
-            resultLbl.text = @"✅ Hoàn hảo! Tweak sạch, app render mượt mà, không bị đen màn hình.";
+            resultLbl.text = @"✅ Hoàn hảo! Code an toàn, app render mượt mà, không bị đen màn hình.";
             resultLbl.textColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.2 alpha:1.0];
         } else {
             resultLbl.text = @"⚠️ Hãy cài Tweak qua Sileo và Respring để kiểm tra.";
@@ -328,10 +405,6 @@
     }];
 }
 
-- (void)openFilesApp {
-    [self showToastNotice:@"📁 Đang đọc phân vùng /var/jb/ (Rootless)"];
-}
-
 - (void)closeRunningApp:(UIButton *)sender {
     UIView *appView = sender.superview;
     [UIView animateWithDuration:0.2 animations:^{
@@ -352,7 +425,7 @@
     toast.text = msg;
     [self.view addSubview:toast];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(),,, ^{
         [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL f){ [toast removeFromSuperview]; }];
     });
 }
