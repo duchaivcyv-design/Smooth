@@ -1,9 +1,7 @@
-#import "AppDelegate.h"
 #import "MockDeviceViewController.h"
-#import <UIKit/UIKit.h>
-#import <mach/mach.h> 
+#import <mach/mach.h>
 
-@interface MockDeviceViewController : UIViewController <UITextFieldDelegate>
+@interface MockDeviceViewController () <UITextFieldDelegate>
 @property (nonatomic, strong) UIView *phoneFrameView;
 @property (nonatomic, strong) UIImageView *wallpaperView;
 @property (nonatomic, strong) UIView *springBoardView;
@@ -35,7 +33,7 @@
 // 1. Tạo khung viền điện thoại & Notch tai thỏ giống ảnh demo
 - (void)setupPhoneFrame {
     CGFloat w = self.view.bounds.size.width * 0.88;
-    CGFloat h = w * (19.5 / 9.0); // Tỉ lệ màn hình iPhone đời mới
+    CGFloat h = w * (19.5 / 9.0);
     self.phoneFrameView = [[UIView alloc] initWithFrame:CGRectMake((self.view.bounds.size.width - w)/2, (self.view.bounds.size.height - h)/2, w, h)];
     self.phoneFrameView.layer.cornerRadius = 44.0;
     self.phoneFrameView.layer.borderWidth = 5.0;
@@ -43,13 +41,11 @@
     self.phoneFrameView.clipsToBounds = YES;
     [self.view addSubview:self.phoneFrameView];
 
-    // Hình nền demo chống đen màn hình
     self.wallpaperView = [[UIImageView alloc] initWithFrame:self.phoneFrameView.bounds];
     self.wallpaperView.backgroundColor = [UIColor colorWithRed:0.2 green:0.25 blue:0.35 alpha:1.0];
     self.wallpaperView.contentMode = UIViewContentModeScaleAspectFill;
     [self.phoneFrameView addSubview:self.wallpaperView];
 
-    // Cụm Notch giả lập
     UIView *notch = [[UIView alloc] initWithFrame:CGRectMake((w - 120)/2, 0, 120, 28)];
     notch.backgroundColor = [UIColor blackColor];
     notch.layer.cornerRadius = 14;
@@ -61,22 +57,18 @@
     self.springBoardView = [[UIView alloc] initWithFrame:self.phoneFrameView.bounds];
     [self.phoneFrameView addSubview:self.springBoardView];
 
-    // Icon 1: Sileo Demo Cài Tweak
     UIButton *sileoBtn = [self createMockAppIcon:@"Sileo" iconColor:[UIColor colorWithWhite:0.4 alpha:1.0] frame:CGRectMake(24, 70, 60, 60)];
     [sileoBtn addTarget:self action:@selector(openSileoInstallerDemo) forControlEvents:UIControlEventTouchUpInside];
     [self.springBoardView addSubview:sileoBtn];
 
-    // Icon 2: App Sandbox Demo (Test đen màn & vượt sandbox)
     UIButton *sandboxAppBtn = [self createMockAppIcon:@"App Test" iconColor:[UIColor colorWithWhite:0.5 alpha:1.0] frame:CGRectMake(104, 70, 60, 60)];
     [sandboxAppBtn addTarget:self action:@selector(openSandboxTestApp) forControlEvents:UIControlEventTouchUpInside];
     [self.springBoardView addSubview:sandboxAppBtn];
 
-    // Icon 3: App Test Mạng (Network Latency & Throughput)
     UIButton *netAppBtn = [self createMockAppIcon:@"Speed Test" iconColor:[UIColor colorWithWhite:0.35 alpha:1.0] frame:CGRectMake(184, 70, 60, 60)];
     [netAppBtn addTarget:self action:@selector(openNetworkTestApp) forControlEvents:UIControlEventTouchUpInside];
     [self.springBoardView addSubview:netAppBtn];
 
-    // Icon 4: Test Bàn phím gõ nhanh không delay
     UIButton *kbAppBtn = [self createMockAppIcon:@"Gõ Phím" iconColor:[UIColor colorWithWhite:0.45 alpha:1.0] frame:CGRectMake(264, 70, 60, 60)];
     [kbAppBtn addTarget:self action:@selector(openKeyboardLagTesterApp) forControlEvents:UIControlEventTouchUpInside];
     [self.springBoardView addSubview:kbAppBtn];
@@ -100,16 +92,12 @@
     return btn;
 }
 
-// 3. Quy trình Sileo Cài Tweak -> Thoát ra -> Respring -> Báo Safe Mode
 - (void)openSileoInstallerDemo {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Sileo Package Manager (Demo)" 
                                                                    message:@"Gói BoostiPhone6s.deb đã sẵn sàng cài đặt vào hệ thống." 
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cài Đặt & Thoát Ra" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        // Mô phỏng thao tác thoát Sileo trở về màn hình chính
         [self showToastNotice:@"Đã cài đặt xong Tweak. Đang ở màn hình chính!"];
-        
-        // Hiện nút kích hoạt respring kiểm tra Safe Mode
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self triggerRespringVerification];
         });
@@ -123,7 +111,6 @@
                                                                            message:@"Hệ thống sẽ reload lại SpringBoard để kiểm tra xung đột Safe Mode." 
                                                                     preferredStyle:UIAlertControllerStyleActionSheet];
     [respringAlert addAction:[UIAlertAction actionWithTitle:@"Respring Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        // Mô phỏng màn hình respring đen xoay vòng
         UIView *blackCurtain = [[UIView alloc] initWithFrame:self.phoneFrameView.bounds];
         blackCurtain.backgroundColor = [UIColor blackColor];
         UIActivityIndicatorView *spin = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
@@ -132,10 +119,9 @@
         [blackCurtain addSubview:spin];
         [self.phoneFrameView addSubview:blackCurtain];
 
-        // Quét nhị phân giả định: Kiểm tra nếu hook sai selector sẽ vào Safe Mode
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [blackCurtain removeFromSuperview];
-            BOOL isSafeMode = NO; // Trạng thái kiểm tra xung đột nhị phân
+            BOOL isSafeMode = NO;
             if (isSafeMode) {
                 [self showCenteredErrorAlert:@"⚠️ CẢNH BÁO: SPRINGBOARD VÀO SAFE MODE!\nPhát hiện xung đột hook nhị phân dylib."];
             } else {
@@ -147,9 +133,7 @@
     [self presentViewController:respringAlert animated:YES completion:nil];
 }
 
-// 4. Test Mở App: Hiệu ứng mở mượt (0ms/60fps) + Báo lỗi vượt Sandbox
 - (void)openSandboxTestApp {
-    // Hiệu ứng zoom mở app mượt mà để kiểm tra lag
     UIView *appView = [[UIView alloc] initWithFrame:CGRectMake(104, 70, 60, 60)];
     appView.backgroundColor = [UIColor whiteColor];
     appView.layer.cornerRadius = 14;
@@ -159,7 +143,6 @@
         appView.frame = self.phoneFrameView.bounds;
         appView.layer.cornerRadius = 0;
     } completion:^(BOOL finished) {
-        // Khi app mở lên: Kiểm tra chữ hiển thị & bắt lỗi Sandbox
         UILabel *testLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, appView.bounds.size.width - 40, 40)];
         testLabel.text = @"Test Demo Ứng Dụng Độc Lập";
         testLabel.textColor = [UIColor blackColor];
@@ -167,14 +150,12 @@
         testLabel.textAlignment = NSTextAlignmentCenter;
         [appView addSubview:testLabel];
 
-        // Nút đóng app
         UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
         closeBtn.frame = CGRectMake(20, 40, 60, 30);
         [closeBtn setTitle:@"Thoát" forState:UIControlStateNormal];
         [closeBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
         [appView addSubview:closeBtn];
 
-        // Kích hoạt thông báo cảnh báo lỗi Sandbox ở chính giữa màn hình
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self showCenteredErrorAlert:@"Lỗi vượt qua sandbox"];
         });
@@ -191,7 +172,6 @@
     }];
 }
 
-// 5. App Kiểm Tra Băng Thông & Tải Mạng
 - (void)openNetworkTestApp {
     UIView *netView = [[UIView alloc] initWithFrame:self.phoneFrameView.bounds];
     netView.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
@@ -220,14 +200,12 @@
     [closeBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
     [netView addSubview:closeBtn];
 
-    // Mô phỏng kết quả sau 1.5s
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self.networkSpinner stopAnimating];
         self.networkStatusLabel.text = @"Băng thông: 128.4 Mbps • Ping: 9ms (Không nghẽn)";
     });
 }
 
-// 6. Test Bàn Phím: Gõ văn bản tốc độ cao đo độ trễ (0ms Key Response)
 - (void)openKeyboardLagTesterApp {
     UIView *kbView = [[UIView alloc] initWithFrame:self.phoneFrameView.bounds];
     kbView.backgroundColor = [UIColor whiteColor];
@@ -253,9 +231,7 @@
     [kbView addSubview:closeBtn];
 }
 
-// 7. Trung tâm điều khiển (Control Center Icon Xám) & Trung tâm thông báo giả
 - (void)setupControlCenterAndNotifications {
-    // Trung tâm thông báo giả phía trên
     self.notificationCenterView = [[UIView alloc] initWithFrame:CGRectMake(10, 32, self.phoneFrameView.bounds.size.width - 20, 30)];
     self.notificationCenterView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.8];
     self.notificationCenterView.layer.cornerRadius = 8;
@@ -267,7 +243,6 @@
     [self.notificationCenterView addSubview:notifLabel];
     [self.phoneFrameView addSubview:self.notificationCenterView];
 
-    // Nút mở Control Center góc trên bên phải
     UIButton *ccTrigger = [UIButton buttonWithType:UIButtonTypeCustom];
     ccTrigger.frame = CGRectMake(self.phoneFrameView.bounds.size.width - 40, 5, 35, 25);
     [ccTrigger addTarget:self action:@selector(toggleControlCenter) forControlEvents:UIControlEventTouchUpInside];
@@ -287,7 +262,6 @@
         ccTitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
         [self.controlCenterView addSubview:ccTitle];
 
-        // Tạo 4 module icon màu xám đặc trưng
         for (int i = 0; i < 4; i++) {
             UIView *grayModule = [[UIView alloc] initWithFrame:CGRectMake(20 + (i % 2) * 80, 40 + (i / 2) * 80, 70, 70)];
             grayModule.backgroundColor = [UIColor colorWithWhite:0.35 alpha:1.0];
@@ -313,7 +287,6 @@
     }];
 }
 
-// 8. Giám sát FPS/Hz động
 - (void)setupFPSMonitoring {
     self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.phoneFrameView.bounds.size.width - 110, self.phoneFrameView.bounds.size.height - 35, 100, 20)];
     self.fpsCounterLabel.textColor = [UIColor greenColor];
@@ -340,7 +313,6 @@
     }
 }
 
-// 9. Cảnh báo hiển thị chính giữa: "Lỗi vượt qua sandbox"
 - (void)showCenteredErrorAlert:(NSString *)msg {
     UIView *alertBox = [[UIView alloc] initWithFrame:CGRectMake(20, (self.phoneFrameView.bounds.size.height - 130)/2, self.phoneFrameView.bounds.size.width - 40, 130)];
     alertBox.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.95];
