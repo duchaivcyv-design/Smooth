@@ -18,6 +18,7 @@
 - (nullable NSMutableArray *)specifiers;
 - (void)reloadSpecifiers;
 - (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target;
+- (nullable NSMutableArray *)specifiersFromDictionary:(NSDictionary *)dictionary target:(nullable id)target;
 - (nullable PSSpecifier *)specifierForID:(NSString *)identifier;
 @end
 #endif
@@ -97,6 +98,12 @@ typedef struct __attribute__((packed)) {
 - (NSDictionary *)getMergedPreferences;
 - (void)ensureDefaultSettingsExist;
 - (void)syncSharedMemoryFile:(BOOL)enabled;
+
+// --- Bộ giám sát phần cứng thời gian thực (HUD Realtime Metrics) ---
+- (id)getMonitorHzFPS:(PSSpecifier *)specifier;
+- (id)getMonitorCPUGPU:(PSSpecifier *)specifier;
+- (id)getMonitorThermal:(PSSpecifier *)specifier;
+- (id)getMonitorBattery:(PSSpecifier *)specifier;
 
 // --- Điều phối menu tần số quét & FPS (15 Hz - 144 Hz) ---
 - (void)showHzPickerPopup:(PSSpecifier *)specifier;
