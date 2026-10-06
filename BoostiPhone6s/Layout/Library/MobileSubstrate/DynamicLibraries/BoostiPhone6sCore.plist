@@ -12,6 +12,11 @@
 			<string>com.apple.TextInputUI</string>
 			<string>com.apple.InputUI</string>
 		</array>
+		<key>Executables</key>
+		<array>
+			<string>SpringBoard</string>
+			<string>Preferences</string>
+		</array>
 	</dict>
 </dict>
 </plist>
