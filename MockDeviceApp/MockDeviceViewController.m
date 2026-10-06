@@ -20,7 +20,6 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // Đặt màu nền tối sang trọng giống màn hình chính iOS thật
     self.view.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.12 alpha:1.0];
     
     [self setupSpringBoard];
@@ -28,13 +27,24 @@
     [self setupFPSMonitoring];
 }
 
-// 1. Màn hình chính SpringBoard tràn viền, hiển thị trực tiếp các icon test
+// Khai báo phương thức setupFPSMonitoring
+- (void)setupFPSMonitoring {
+    self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 120, 45, 100, 24)];
+    self.fpsCounterLabel.textColor = [UIColor greenColor];
+    self.fpsCounterLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightBold];
+    self.fpsCounterLabel.textAlignment = NSTextAlignmentRight;
+    [self.view addSubview:self.fpsCounterLabel];
+
+    self.fpsDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrameUpdate:)];
+    [self.fpsDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+// 1. Màn hình chính SpringBoard tràn viền
 - (void)setupSpringBoard {
     self.springBoardView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.springBoardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:self.springBoardView];
 
-    // Tiêu đề app
     UILabel *headerLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, self.view.bounds.size.width - 40, 30)];
     headerLbl.text = @"BoostiPhone6s Safe Sandbox";
     headerLbl.textColor = [UIColor whiteColor];
@@ -42,17 +52,17 @@
     headerLbl.textAlignment = NSTextAlignmentCenter;
     [self.springBoardView addSubview:headerLbl];
 
-    // Lưới các nút bấm icon test (Sileo, App Test, Speed Test, Gõ phím)
     CGFloat startX = 35;
     CGFloat startY = 120;
     CGFloat size = 70;
     CGFloat spacing = 20;
 
+    // Dùng NSValue để bọc selector an toàn vào mảng Objective-C
     NSArray *apps = @[
-        @{@"title": @"Sileo", @"color": [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:1.0], @"action": @selector(openSileoInstallerDemo)},
-        @{@"title": @"App Test", @"color": [UIColor colorWithRed:0.4 green:0.4 blue:0.5 alpha:1.0], @"action": @selector(openSandboxTestApp)},
-        @{@"title": @"Speed Test", @"color": [UIColor colorWithRed:0.9 green:0.5 blue:0.1 alpha:1.0], @"action": @selector(openNetworkTestApp)},
-        @{@"title": @"Gõ Phím", @"color": [UIColor colorWithRed:0.1 green:0.7 blue:0.3 alpha:1.0], @"action": @selector(openKeyboardLagTesterApp)}
+        @{@"title": @"Sileo", @"color": [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSileoInstallerDemo)]},
+        @{@"title": @"App Test", @"color": [UIColor colorWithRed:0.4 green:0.4 blue:0.5 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openSandboxTestApp)]},
+        @{@"title": @"Speed Test", @"color": [UIColor colorWithRed:0.9 green:0.5 blue:0.1 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openNetworkTestApp)]},
+        @{@"title": @"Gõ Phím", @"color": [UIColor colorWithRed:0.1 green:0.7 blue:0.3 alpha:1.0], @"action": [NSValue valueWithPointer:@selector(openKeyboardLagTesterApp)]}
     ];
 
     for (int i = 0; i < apps.count; i++) {
@@ -69,7 +79,9 @@
         btn.layer.shadowColor = [UIColor blackColor].CGColor;
         btn.layer.shadowOpacity = 0.4;
         btn.layer.shadowOffset = CGSizeMake(0, 4);
-        [btn addTarget:self action:NSSelectorFromString(appInfo[@"action"]) forControlEvents:UIControlEventTouchUpInside];
+        
+        SEL actionSel = (SEL)[appInfo[@"action"] pointerValue];
+        [btn addTarget:self action:actionSel forControlEvents:UIControlEventTouchUpInside];
 
         UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(-10, size + 6, size + 20, 18)];
         lbl.text = appInfo[@"title"];
@@ -175,7 +187,8 @@
     [netView addSubview:self.networkSpinner];
 
     self.networkStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 240, netView.bounds.size.width - 40, 40)];
-    self.networkStatusLabel.text = "Đang kết nối luồng test (0KB/s)...";
+    // Sửa lỗi cú pháp chuỗi thiếu tiền tố @
+    self.networkStatusLabel.text = @"Đang kết nối luồng test (0KB/s)...";
     self.networkStatusLabel.textAlignment = NSTextAlignmentCenter;
     self.networkStatusLabel.font = [UIFont systemFontOfSize:14];
     [netView addSubview:self.networkStatusLabel];
@@ -206,7 +219,8 @@
 
     self.keyboardLagTester = [[UITextField alloc] initWithFrame:CGRectMake(20, 110, kbView.bounds.size.width - 40, 44)];
     self.keyboardLagTester.borderStyle = UITextBorderStyleRoundedRect;
-    self.keyboardLagTester.placeholder = "Gõ phím liên tục tại đây...";
+    // Sửa lỗi cú pháp chuỗi thiếu tiền tố @
+    self.keyboardLagTester.placeholder = @"Gõ phím liên tục tại đây...";
     self.keyboardLagTester.delegate = self;
     [kbView addSubview:self.keyboardLagTester];
     [self.keyboardLagTester becomeFirstResponder];
@@ -215,19 +229,11 @@
     closeBtn.frame = CGRectMake(20, 170, kbView.bounds.size.width - 40, 40);
     [closeBtn setTitle:@"Đóng" forState:UIControlStateNormal];
     [closeBtn addTarget:self action:@selector(closeRunningApp:) forControlEvents:UIControlEventTouchUpInside];
-    [kbView addSubview:kbView]; // Hoặc đóng view trực tiếp
+    [kbView addSubview:closeBtn];
 }
 
-// 6. Trung tâm điều khiển & Giám sát FPS
 - (void)setupControlCenterAndNotifications {
-    self.fpsCounterLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 120, 45, 100, 24)];
-    self.fpsCounterLabel.textColor = [UIColor greenColor];
-    self.fpsCounterLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightBold];
-    self.fpsCounterLabel.textAlignment = NSTextAlignmentRight;
-    [self.view addSubview:self.fpsCounterLabel];
-
-    self.fpsDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onFrameUpdate:)];
-    [self.fpsDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    // Không cần xử lý thêm ở đây vì fps đã được gọi độc lập
 }
 
 - (void)onFrameUpdate:(CADisplayLink *)link {
@@ -246,7 +252,7 @@
 }
 
 - (void)showCenteredErrorAlert:(NSString *)msg {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠️️ THÔNG BÁO HỆ THỐNG" message:msg preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚠ THÔNG BÁO HỆ THỐNG" message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
