@@ -79,12 +79,75 @@ typedef struct {
 #endif
 
 // ====================================================================================================
-// COMPONENT 1: CÔNG TẮC LIQUID CAPSULE SWITCH (CHUẨN ẢNH 1)
+// COMPONENT: LIQUID GLASS VIEW CONTAINER (HIỆU ỨNG KHÚC XẠ THỦY TINH QUANG HỌC)
+// ====================================================================================================
+@interface LiquidGlassView : UIView
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+@property (nonatomic, strong) CAGradientLayer *specularHighlight;
+@property (nonatomic, strong) CAShapeLayer *refractionRimLayer;
+@end
+
+@implementation LiquidGlassView
+
+- (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius {
+    if (self = [super initWithFrame:frame]) {
+        self.backgroundColor = [UIColor clearColor];
+        self.layer.cornerRadius = radius;
+        self.layer.cornerCurve = kCACornerCurveContinuous;
+        self.clipsToBounds = YES;
+
+        // 1. Lớp làm mờ khúc xạ nền (Backdrop Blur)
+        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+        _blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+        _blurView.frame = self.bounds;
+        _blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _blurView.userInteractionEnabled = NO;
+        _blurView.alpha = 0.88;
+        [self addSubview:_blurView];
+
+        // 2. Lớp vệt sáng Fresnel & Gradient bề mặt lồi (Specular Glare)
+        _specularHighlight = [CAGradientLayer layer];
+        _specularHighlight.frame = self.bounds;
+        _specularHighlight.cornerRadius = radius;
+        _specularHighlight.cornerCurve = kCACornerCurveContinuous;
+        _specularHighlight.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.38].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.08].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.18].CGColor
+        ];
+        _specularHighlight.locations = @[@0.0, @0.28, @0.72, @1.0];
+        _specularHighlight.startPoint = CGPointMake(0.0, 0.0);
+        _specularHighlight.endPoint = CGPointMake(1.0, 1.0);
+        [self.layer addSublayer:_specularHighlight];
+
+        // 3. Viền khúc xạ viền mép ngoài (Caustic Rim Stroke)
+        _refractionRimLayer = [CAShapeLayer layer];
+        _refractionRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:radius].CGPath;
+        _refractionRimLayer.fillColor = [UIColor clearColor].CGColor;
+        _refractionRimLayer.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.45].CGColor;
+        _refractionRimLayer.lineWidth = 1.2;
+        [self.layer addSublayer:_refractionRimLayer];
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    _blurView.frame = self.bounds;
+    _specularHighlight.frame = self.bounds;
+    _refractionRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:self.layer.cornerRadius].CGPath;
+}
+
+@end
+
+// ====================================================================================================
+// COMPONENT 1: CÔNG TẮC LIQUID GLASS CAPSULE SWITCH (CHUẨN ẢNH 5)
 // ====================================================================================================
 @interface LiquidCapsuleSwitch : UIControl
 @property (nonatomic, assign) BOOL on;
 @property (nonatomic, strong) UIView *trackView;
-@property (nonatomic, strong) UIView *thumbView;
+@property (nonatomic, strong) LiquidGlassView *glassThumb;
 @property (nonatomic, copy) void (^valueChangedBlock)(BOOL isOn);
 - (void)setOn:(BOOL)on animated:(BOOL)animated;
 @end
@@ -92,25 +155,26 @@ typedef struct {
 @implementation LiquidCapsuleSwitch
 
 - (instancetype)initWithFrame:(CGRect)frame {
-    if (self = [super initWithFrame:CGRectMake(0, 0, 56, 30)]) {
+    if (self = [super initWithFrame:CGRectMake(0, 0, 62, 32)]) {
         self.backgroundColor = [UIColor clearColor];
 
+        // Rãnh màu nền (Track) - dạng capsule màu pastel
         _trackView = [[UIView alloc] initWithFrame:self.bounds];
-        _trackView.layer.cornerRadius = 15.0;
+        _trackView.layer.cornerRadius = 16.0;
         _trackView.layer.cornerCurve = kCACornerCurveContinuous;
         _trackView.userInteractionEnabled = NO;
+        _trackView.layer.borderWidth = 1.0;
+        _trackView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.18].CGColor;
         [self addSubview:_trackView];
 
-        _thumbView = [[UIView alloc] initWithFrame:CGRectMake(2, 2, 26, 26)];
-        _thumbView.backgroundColor = [UIColor whiteColor];
-        _thumbView.layer.cornerRadius = 13.0;
-        _thumbView.layer.cornerCurve = kCACornerCurveContinuous;
-        _thumbView.userInteractionEnabled = NO;
-        _thumbView.layer.shadowColor = [UIColor blackColor].CGColor;
-        _thumbView.layer.shadowOpacity = 0.25;
-        _thumbView.layer.shadowOffset = CGSizeMake(0, 2);
-        _thumbView.layer.shadowRadius = 3.0;
-        [self addSubview:_thumbView];
+        // Thỏi gạt bằng thủy tinh lồi (Liquid Glass Thumb)
+        _glassThumb = [[LiquidGlassView alloc] initWithFrame:CGRectMake(2, 2, 34, 28) cornerRadius:14.0];
+        _glassThumb.userInteractionEnabled = NO;
+        _glassThumb.layer.shadowColor = [UIColor blackColor].CGColor;
+        _glassThumb.layer.shadowOpacity = 0.35;
+        _glassThumb.layer.shadowOffset = CGSizeMake(0, 3);
+        _glassThumb.layer.shadowRadius = 5.0;
+        [self addSubview:_glassThumb];
 
         [self addTarget:self action:@selector(handleTap) forControlEvents:UIControlEventTouchUpInside];
         [self updateUIAnimated:NO];
@@ -138,18 +202,18 @@ typedef struct {
 }
 
 - (void)updateUIAnimated:(BOOL)animated {
-    UIColor *onColor = [UIColor colorWithRed:0.32 green:0.78 blue:0.42 alpha:1.0];
-    UIColor *offColor = [UIColor colorWithRed:0.25 green:0.26 blue:0.28 alpha:1.0];
+    UIColor *onColor = [UIColor colorWithRed:0.22 green:0.75 blue:0.42 alpha:0.95]; // Xanh pastel ảnh 5
+    UIColor *offColor = [UIColor colorWithRed:0.18 green:0.20 blue:0.24 alpha:0.75];
 
-    CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 28, 2, 26, 26) : CGRectMake(2, 2, 26, 26);
+    CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 36, 2, 34, 28) : CGRectMake(2, 2, 34, 28);
 
     void (^animations)(void) = ^{
         self.trackView.backgroundColor = self->_on ? onColor : offColor;
-        self.thumbView.frame = thumbFrame;
+        self.glassThumb.frame = thumbFrame;
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+        [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.7 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
     } else {
         animations();
     }
@@ -265,7 +329,6 @@ static inline float Titanium_GetLiveGPULoadPercentage(void) {
 }
 
 static inline float Titanium_GetBaseThermalTemp(void) {
-    // Đã sửa: dùng [NSProcessInfo processInfo] thay vì gọi class method
     NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
     float cpuLoad = Titanium_GetLiveCPULoadPercentage();
     float loadOffset = (cpuLoad / 100.0f) * 2.5f;
@@ -303,17 +366,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
-    // UI Capsule Bar (Ảnh 3)
-    UIView *_customBottomBarContainer;
-    UIView *_activeIndicatorPill;
+    // UI Liquid Glass Floating Nav Bar (Ảnh 6)
+    LiquidGlassView *_liquidNavBarContainer;
+    LiquidGlassView *_activeGlassIndicator;
     NSMutableArray<UIButton *> *_tabButtons;
     NSArray<NSDictionary *> *_tabConfigs;
     
-    // Liquid Glass 3.0 Lens (Ảnh 2)
+    // Thấu kính Liquid Glass khi nhấn giữ (Ảnh 2 / Shader Lens)
     UIView *_liquidGlassLensContainer;
-    UIVisualEffectView *_liquidGlassBlurLayer;
-    CAGradientLayer *_liquidGlassSpecularLayer;
-    CAShapeLayer *_liquidGlassRimLayer;
+    LiquidGlassView *_lensGlassEffectView;
     UILabel *_lensTitleLabel;
 }
 @end
@@ -328,7 +389,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"";
-    self.view.backgroundColor = [UIColor colorWithRed:0.01 green:0.02 blue:0.05 alpha:1.0];
+    self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.07 alpha:1.0];
 
     _currentBottomTab = 0;
     _currentHzFpsSubTab = 0;
@@ -360,9 +421,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     [self setupTopHeaderBar];
     [self setupNavigationItems];
-    [self setupCustomCapsuleBottomBar];
+    [self setupLiquidGlassNavBar]; // HIỆU ỨNG NAV BAR KHÚC XẠ ẢNH 6
     [self setupMainTableView];
-    [self setupLiquidGlass30Engine];
+    [self setupLiquidGlassLens];   // THẤU KÍNH LỒI
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self loadInstalledAppsAsync];
@@ -384,47 +445,38 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self stopContinuousHardwareHUD];
 }
 
-#pragma mark - Custom Capsule Floating Tab Bar (Chuẩn Ảnh 3)
+#pragma mark - Nav Bar Liquid Glass (Chuẩn Ảnh 6)
 
-- (void)setupCustomCapsuleBottomBar {
-    CGFloat barHeight = 56.0;
+- (void)setupLiquidGlassNavBar {
+    CGFloat barHeight = 58.0;
     CGFloat barMargin = 16.0;
     CGFloat barY = self.view.bounds.size.height - barHeight - 34;
 
-    _customBottomBarContainer = [[UIView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight)];
-    _customBottomBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
-    _customBottomBarContainer.backgroundColor = [UIColor colorWithRed:0.08 green:0.09 blue:0.12 alpha:0.88];
-    _customBottomBarContainer.layer.cornerRadius = barHeight / 2.0;
-    _customBottomBarContainer.layer.cornerCurve = kCACornerCurveContinuous;
-    _customBottomBarContainer.layer.borderWidth = 1.0;
-    _customBottomBarContainer.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.16].CGColor;
-    _customBottomBarContainer.clipsToBounds = YES;
+    _liquidNavBarContainer = [[LiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight) cornerRadius:barHeight / 2.0];
+    _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
 
-    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
-    blurView.frame = _customBottomBarContainer.bounds;
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    blurView.userInteractionEnabled = NO;
-    [_customBottomBarContainer addSubview:blurView];
+    // Đổ bóng ánh sáng xanh tím neon phía sau theo chuẩn ảnh 6
+    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.45 blue:1.0 alpha:0.45].CGColor;
+    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 10);
+    _liquidNavBarContainer.layer.shadowRadius = 24.0;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.8;
 
     _tabConfigs = @[
-        @{@"title": @"Trang Chủ", @"icon": @"house.fill", @"tab": @0},
-        @{@"title": @"Hz/FPS",    @"icon": @"speedometer",  @"tab": @1},
-        @{@"title": @"Switch",    @"icon": @"bolt.fill",    @"tab": @2},
-        @{@"title": @"App",       @"icon": @"iphone",       @"tab": @3},
-        @{@"title": @"Cài Đặt",   @"icon": @"gearshape",    @"tab": @4}
+        @{@"title": @"Trang Chủ", @"icon": @"house.fill",  @"tab": @0},
+        @{@"title": @"Hz/FPS",    @"icon": @"speedometer", @"tab": @1},
+        @{@"title": @"Switch",    @"icon": @"bolt.fill",   @"tab": @2},
+        @{@"title": @"App",       @"icon": @"iphone",      @"tab": @3},
+        @{@"title": @"Cài Đặt",   @"icon": @"gearshape",   @"tab": @4}
     ];
 
-    CGFloat btnWidth = _customBottomBarContainer.bounds.size.width / _tabConfigs.count;
+    CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
 
-    _activeIndicatorPill = [[UIView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6)];
-    _activeIndicatorPill.backgroundColor = [UIColor colorWithWhite:0.22 alpha:0.75];
-    _activeIndicatorPill.layer.cornerRadius = (barHeight - 6) / 2.0;
-    _activeIndicatorPill.layer.cornerCurve = kCACornerCurveContinuous;
-    _activeIndicatorPill.layer.borderWidth = 1.0;
-    _activeIndicatorPill.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.25].CGColor;
-    _activeIndicatorPill.userInteractionEnabled = NO;
-    [_customBottomBarContainer addSubview:_activeIndicatorPill];
+    // Con trượt bằng thủy tinh lồi sáng bóng (Liquid Glass Indicator)
+    _activeGlassIndicator = [[LiquidGlassView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6) cornerRadius:(barHeight - 6) / 2.0];
+    _activeGlassIndicator.userInteractionEnabled = NO;
+    _activeGlassIndicator.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
+    _activeGlassIndicator.layer.borderWidth = 1.2;
+    [_liquidNavBarContainer addSubview:_activeGlassIndicator];
 
     for (NSInteger i = 0; i < _tabConfigs.count; i++) {
         NSDictionary *conf = _tabConfigs[i];
@@ -436,8 +488,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         UIImage *iconImg = [UIImage systemImageNamed:conf[@"icon"]];
         [btn setImage:iconImg forState:UIControlStateNormal];
         [btn setTitle:conf[@"title"] forState:UIControlStateNormal];
-        btn.tintColor = (i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0];
-        [btn setTitleColor:(i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0] forState:UIControlStateNormal];
+        btn.tintColor = (i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.75 alpha:1.0];
+        [btn setTitleColor:(i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.75 alpha:1.0] forState:UIControlStateNormal];
         btn.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
 
         CGFloat spacing = 3.0;
@@ -452,11 +504,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         longPress.minimumPressDuration = 0.12;
         [btn addGestureRecognizer:longPress];
 
-        [_customBottomBarContainer addSubview:btn];
+        [_liquidNavBarContainer addSubview:btn];
         [_tabButtons addObject:btn];
     }
 
-    [self.view addSubview:_customBottomBarContainer];
+    [self.view addSubview:_liquidNavBarContainer];
 }
 
 - (void)onCustomTabButtonClicked:(UIButton *)sender {
@@ -466,22 +518,22 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
 
-    CGFloat btnWidth = _customBottomBarContainer.bounds.size.width / _tabConfigs.count;
-    CGRect targetFrame = CGRectMake((index * btnWidth) + 3, 3, btnWidth - 6, _customBottomBarContainer.bounds.size.height - 6);
+    CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
+    CGRect targetFrame = CGRectMake((index * btnWidth) + 3, 3, btnWidth - 6, _liquidNavBarContainer.bounds.size.height - 6);
 
     void (^animations)(void) = ^{
-        self->_activeIndicatorPill.frame = targetFrame;
+        self->_activeGlassIndicator.frame = targetFrame;
         for (NSInteger i = 0; i < self->_tabButtons.count; i++) {
             UIButton *b = self->_tabButtons[i];
             BOOL isSel = (i == index);
-            b.tintColor = isSel ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0];
-            [b setTitleColor:isSel ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0] forState:UIControlStateNormal];
+            b.tintColor = isSel ? [UIColor whiteColor] : [UIColor colorWithWhite:0.75 alpha:1.0];
+            [b setTitleColor:isSel ? [UIColor whiteColor] : [UIColor colorWithWhite:0.75 alpha:1.0] forState:UIControlStateNormal];
             b.titleLabel.font = isSel ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
         }
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.75 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+        [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.75 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
     } else {
         animations();
     }
@@ -492,53 +544,22 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.customTableView reloadData];
 }
 
-#pragma mark - Liquid Glass 3.0 Optical Physics Lens (Chuẩn Ảnh 2)
+#pragma mark - Liquid Glass Lens (Thấu Kính Quang Học)
 
-- (void)setupLiquidGlass30Engine {
-    _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 78, 78)];
-    _liquidGlassLensContainer.layer.cornerRadius = 39;
-    _liquidGlassLensContainer.layer.cornerCurve = kCACornerCurveContinuous;
-    _liquidGlassLensContainer.clipsToBounds = NO;
+- (void)setupLiquidGlassLens {
+    _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 82, 82)];
     _liquidGlassLensContainer.hidden = YES;
     _liquidGlassLensContainer.userInteractionEnabled = NO;
 
-    _liquidGlassLensContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.65 blue:1.0 alpha:0.95].CGColor;
-    _liquidGlassLensContainer.layer.shadowOffset = CGSizeMake(0, -4);
-    _liquidGlassLensContainer.layer.shadowRadius = 18;
-    _liquidGlassLensContainer.layer.shadowOpacity = 0.95;
-
-    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
-    _liquidGlassBlurLayer = [[UIVisualEffectView alloc] initWithEffect:blur];
-    _liquidGlassBlurLayer.frame = _liquidGlassLensContainer.bounds;
-    _liquidGlassBlurLayer.layer.cornerRadius = 39;
-    _liquidGlassBlurLayer.layer.cornerCurve = kCACornerCurveContinuous;
-    _liquidGlassBlurLayer.clipsToBounds = YES;
-    [_liquidGlassLensContainer addSubview:_liquidGlassBlurLayer];
-
-    _liquidGlassSpecularLayer = [CAGradientLayer layer];
-    _liquidGlassSpecularLayer.frame = _liquidGlassLensContainer.bounds;
-    _liquidGlassSpecularLayer.cornerRadius = 39;
-    _liquidGlassSpecularLayer.cornerCurve = kCACornerCurveContinuous;
-    _liquidGlassSpecularLayer.colors = @[
-        (id)[UIColor colorWithWhite:1.0 alpha:0.75].CGColor,
-        (id)[UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:0.25].CGColor,
-        (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
-    ];
-    _liquidGlassSpecularLayer.startPoint = CGPointMake(0.1, 0.0);
-    _liquidGlassSpecularLayer.endPoint = CGPointMake(0.9, 1.0);
-    [_liquidGlassLensContainer.layer addSublayer:_liquidGlassSpecularLayer];
-
-    _liquidGlassRimLayer = [CAShapeLayer layer];
-    _liquidGlassRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:_liquidGlassLensContainer.bounds cornerRadius:39].CGPath;
-    _liquidGlassRimLayer.fillColor = [UIColor colorWithRed:0.2 green:0.65 blue:1.0 alpha:0.18].CGColor;
-    _liquidGlassRimLayer.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.85].CGColor;
-    _liquidGlassRimLayer.lineWidth = 2.0;
-    [_liquidGlassLensContainer.layer addSublayer:_liquidGlassRimLayer];
+    _lensGlassEffectView = [[LiquidGlassView alloc] initWithFrame:_liquidGlassLensContainer.bounds cornerRadius:41.0];
+    _lensGlassEffectView.layer.borderColor = [UIColor colorWithRed:0.4 green:0.8 blue:1.0 alpha:0.8].CGColor;
+    _lensGlassEffectView.layer.borderWidth = 1.8;
+    [_liquidGlassLensContainer addSubview:_lensGlassEffectView];
 
     _lensTitleLabel = [[UILabel alloc] initWithFrame:_liquidGlassLensContainer.bounds];
     _lensTitleLabel.textAlignment = NSTextAlignmentCenter;
     _lensTitleLabel.textColor = [UIColor whiteColor];
-    _lensTitleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightHeavy];
+    _lensTitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightHeavy];
     [_liquidGlassLensContainer addSubview:_lensTitleLabel];
 
     [self.view addSubview:_liquidGlassLensContainer];
@@ -549,7 +570,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     CGPoint touchInView = [gesture locationInView:self.view];
 
     if (gesture.state == UIGestureRecognizerStateBegan) {
-        CGPoint centerPoint = CGPointMake(touchInView.x, _customBottomBarContainer.center.y - 14);
+        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 18);
         _liquidGlassLensContainer.center = centerPoint;
         _liquidGlassLensContainer.hidden = NO;
         _liquidGlassLensContainer.alpha = 0.0;
@@ -566,7 +587,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [fb impactOccurred];
 
     } else if (gesture.state == UIGestureRecognizerStateChanged) {
-        CGPoint centerPoint = CGPointMake(touchInView.x, _customBottomBarContainer.center.y - 14);
+        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 18);
         _liquidGlassLensContainer.center = centerPoint;
 
         for (NSInteger i = 0; i < _tabButtons.count; i++) {
@@ -596,7 +617,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)setupTopHeaderBar {
     UILabel *brandLabel = [[UILabel alloc] init];
     brandLabel.text = @" 💧 Liquid Glass 3.0 ";
-    brandLabel.textColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:1.0];
+    brandLabel.textColor = [UIColor colorWithRed:0.35 green:0.85 blue:1.0 alpha:1.0];
     brandLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightHeavy];
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:brandLabel];
 }
@@ -715,13 +736,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.customTableView reloadData];
 }
 
-#pragma mark - TableView Setup & Render
+#pragma mark - TableView Setup & Liquid Glass Cells
 
 - (void)setupMainTableView {
-    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 98) style:UITableViewStyleInsetGrouped];
+    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 100) style:UITableViewStyleInsetGrouped];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
-    self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.06];
     self.customTableView.delegate = self;
     self.customTableView.dataSource = self;
     [self.view addSubview:self.customTableView];
@@ -809,7 +830,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSString *cellID = [NSString stringWithFormat:@"Cell_L3_%ld_%ld_%ld", (long)_currentBottomTab, (long)indexPath.section, (long)indexPath.row];
+    NSString *cellID = [NSString stringWithFormat:@"Cell_LG_%ld_%ld_%ld", (long)_currentBottomTab, (long)indexPath.section, (long)indexPath.row];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellID];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellID];
@@ -819,11 +840,16 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [subview removeFromSuperview];
     }
 
-    cell.backgroundColor = [UIColor colorWithRed:0.06 green:0.09 blue:0.15 alpha:0.7];
+    // Hiệu ứng kính lồi mờ phủ lớp viền phản chiếu ánh sáng
+    cell.backgroundColor = [UIColor colorWithRed:0.07 green:0.10 blue:0.16 alpha:0.65];
     cell.layer.cornerRadius = 14;
     cell.layer.cornerCurve = kCACornerCurveContinuous;
+    cell.layer.borderWidth = 1.0;
+    cell.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
+    cell.clipsToBounds = YES;
+
     cell.textLabel.textColor = [UIColor whiteColor];
-    cell.detailTextLabel.textColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:1.0];
+    cell.detailTextLabel.textColor = [UIColor colorWithRed:0.3 green:0.85 blue:1.0 alpha:1.0];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
@@ -831,7 +857,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     cell.userInteractionEnabled = YES;
 
     if (!_isKernelExploited && _currentBottomTab != 4) {
-        cell.backgroundColor = [UIColor colorWithRed:0.12 green:0.04 blue:0.06 alpha:0.7];
+        cell.backgroundColor = [UIColor colorWithRed:0.14 green:0.04 blue:0.06 alpha:0.65];
         cell.textLabel.text = @"🔒 TÍNH NĂNG ĐANG BỊ KHÓA XÁM";
         cell.textLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
         cell.detailTextLabel.text = @"Chưa Khai Thác";
@@ -1085,7 +1111,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             appToggle.on = [_appTweakStates[appInfo[@"bundleID"]] boolValue];
             __weak typeof(self) weakSelf = self;
             appToggle.valueChangedBlock = ^(BOOL isOn) {
-                // Đã sửa: gán strongSelf để an toàn truy cập ivar
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 if (!strongSelf) return;
                 strongSelf->_appTweakStates[appInfo[@"bundleID"]] = @(isOn);
@@ -1101,13 +1126,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (indexPath.section == 0) {
             if (indexPath.row == 0) {
                 if (_isKernelExploited) {
-                    cell.backgroundColor = [UIColor colorWithRed:0.04 green:0.22 blue:0.12 alpha:0.85];
+                    cell.backgroundColor = [UIColor colorWithRed:0.04 green:0.22 blue:0.12 alpha:0.75];
                     cell.textLabel.text = @"🟢 HỆ THỐNG ĐÃ KHAI THÁC DARWIN (SẴN SÀNG)";
                     cell.textLabel.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.5 alpha:1.0];
                     cell.detailTextLabel.text = @"✓ Đã Lưu Máy";
                     cell.detailTextLabel.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.5 alpha:1.0];
                 } else {
-                    cell.backgroundColor = [UIColor colorWithRed:0.35 green:0.06 blue:0.08 alpha:0.85];
+                    cell.backgroundColor = [UIColor colorWithRed:0.35 green:0.06 blue:0.08 alpha:0.75];
                     cell.textLabel.text = @"🔴 CHƯA KHAI THÁC [CHẠM ĐỂ BẮT ĐẦU 15S]";
                     cell.textLabel.textColor = [UIColor colorWithRed:1.0 green:0.4 blue:0.4 alpha:1.0];
                     cell.detailTextLabel.text = @"✕ Bấm Ngay";
@@ -1121,13 +1146,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 BOOL isSupported = Titanium_IsSupportedIOSVersion();
                 
                 if (isSupported) {
-                    cell.backgroundColor = [UIColor colorWithRed:0.04 green:0.20 blue:0.12 alpha:0.8];
+                    cell.backgroundColor = [UIColor colorWithRed:0.04 green:0.20 blue:0.12 alpha:0.7];
                     cell.textLabel.text = [NSString stringWithFormat:@"🟢 iOS Hỗ Trợ: iOS %@ (Tương Thích)", curIOS];
                     cell.textLabel.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.5 alpha:1.0];
                     cell.detailTextLabel.text = @"Chuẩn 15 - 26";
                     cell.detailTextLabel.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.5 alpha:1.0];
                 } else {
-                    cell.backgroundColor = [UIColor colorWithRed:0.30 green:0.08 blue:0.10 alpha:0.8];
+                    cell.backgroundColor = [UIColor colorWithRed:0.30 green:0.08 blue:0.10 alpha:0.7];
                     cell.textLabel.text = [NSString stringWithFormat:@"🔴 iOS Hỗ Trợ: iOS %@ (Không Hỗ Trợ)", curIOS];
                     cell.textLabel.textColor = [UIColor colorWithRed:1.0 green:0.3 blue:0.3 alpha:1.0];
                     cell.detailTextLabel.text = @"Không Khả Dụng";
