@@ -241,18 +241,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     BOOL _isRateLocked;             // Trạng thái ổ khóa HZ / FPS
 }
 
-@property (nonatomic, strong) UITableView *customTableView;
-@property (nonatomic, strong) UISegmentedControl *bottomSegment;
-@property (nonatomic, strong) UIButton *rateLockButton;
-@property (nonatomic, strong) NSMutableDictionary *settingsDict;
-
 @end
 
 @implementation RootListController
 
-- (instancetype)init {
-    return [self initWithStyle:UITableViewStyleInsetGrouped];
-}
+@synthesize customTableView = _customTableView;
+@synthesize bottomSegment = _bottomSegment;
+@synthesize rateLockButton = _rateLockButton;
+@synthesize settingsDict = _settingsDict;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -957,7 +953,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)executeSafeMode {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        NSString *bin = Titanium_FindExecutablePath(@"killall");
+        NSString *bin = Titanium_FindIdentifier ? Titanium_FindExecutablePath(@"killall") : @"killall";
         char *argv[] = {(char *)[bin UTF8String], (char *)"-SEGV", (char *)"SpringBoard", NULL};
         pid_t pid;
         posix_spawn(&pid, [bin UTF8String], NULL, NULL, argv, environ);
