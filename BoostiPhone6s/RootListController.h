@@ -5,36 +5,6 @@
 
 @class PSSpecifier;
 
-// ====================================================================================================
-// KHAI BÁO DỰ PHÒNG CHO CLANG KHI BUILD ĐỘC LẬP HOẶC DÙNG PREFERENCEBUNDLE
-// ====================================================================================================
-
-#if __has_include("PSListController.h")
-#import "PSListController.h"
-#import "PSSpecifier.h"
-#elif __has_include(<Preferences/PSListController.h>)
-#import <Preferences/PSListController.h>
-#import <Preferences/PSSpecifier.h>
-#else
-@interface PSListController : UIViewController {
-@public
-    id _specifiers;
-}
-@property (nonatomic, strong, nullable) PSSpecifier *specifier;
-- (id)initForContentSize:(CGSize)size;
-- (nullable NSMutableArray *)specifiers;
-- (void)reloadSpecifiers;
-- (void)setSpecifiers:(id)specifiers;
-- (nullable NSMutableArray *)loadSpecifiersFromPlistName:(NSString *)name target:(nullable id)target;
-- (nullable PSSpecifier *)specifierForID:(NSString *)identifier;
-- (nullable UITableView *)table;
-- (nullable NSIndexPath *)indexPathForSpecifier:(PSSpecifier *)specifier;
-- (nullable PSSpecifier *)specifierAtIndexPath:(NSIndexPath *)indexPath;
-- (nullable UITableViewCell *)cachedCellForSpecifier:(PSSpecifier *)specifier;
-- (NSInteger)indexOfSpecifier:(PSSpecifier *)specifier;
-@end
-#endif
-
 NS_ASSUME_NONNULL_BEGIN
 
 // ====================================================================================================
@@ -111,13 +81,13 @@ typedef struct __attribute__((packed)) {
 #endif
 
 // ====================================================================================================
-// GIAO DIỆN LỚP ĐIỀU KHIỂN CHÍNH ROOTLISTCONTROLLER (ĐÃ ÉP TOÀN BỘ PHƯƠNG THỨC & PROTOCOL)
+// GIAO DIỆN LỚP ĐIỀU KHIỂN CHÍNH ROOTLISTCONTROLLER (CHUẨN STANDALONE UIKIT APP)
 // ====================================================================================================
 
-@interface RootListController : PSListController <UITableViewDelegate, UITableViewDataSource> {
+@interface RootListController : UIViewController <UITableViewDelegate, UITableViewDataSource> {
 @public
     NSMutableArray *_allSavedSpecifiers;
-    NSMutableArray *_specifiers; // [ĐÃ KHAI BÁO CÔNG KHAI - TRIỆT TIÊU LỖI CLANG]
+    NSMutableArray *_specifiers;
 }
 
 // --- Thuộc tính điều khiển giao diện Native TableView ---
@@ -174,14 +144,14 @@ typedef struct __attribute__((packed)) {
 - (void)refreshContinuousHardwareCells;
 
 // --- Điều phối tần số quét Hz & FPS ---
-- (void)showHzPickerPopup:(PSSpecifier *)specifier;
-- (void)showFPSPickerPopup:(PSSpecifier *)specifier;
+- (void)showHzPickerPopup:(nullable PSSpecifier *)specifier;
+- (void)showFPSPickerPopup:(nullable PSSpecifier *)specifier;
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz;
 - (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS;
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)dynamicMode isFPS:(BOOL)isFPS;
 
 // --- Đa ngôn ngữ và cập nhật tiêu đề động ---
-- (void)showLanguagePickerPopup:(PSSpecifier *)specifier;
+- (void)showLanguagePickerPopup:(nullable id)specifier;
 - (void)updateDynamicTitles;
 - (void)updateDynamicTitlesForSpecifiers:(NSArray *)targetSpecs;
 - (void)applyFullLocalizationToSpecifiers:(NSArray *)specs;
