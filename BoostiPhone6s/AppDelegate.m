@@ -7,6 +7,7 @@
 #import "RootListController.h"
 #import <notify.h>
 #import <pthread.h>
+#import <QuartzCore/QuartzCore.h>
 
 @interface AppDelegate ()
 @property (nonatomic, strong) UINavigationController *mainNavController;
@@ -27,7 +28,7 @@
     self.rootListVC = [[RootListController alloc] init];
     self.mainNavController = [[UINavigationController alloc] initWithRootViewController:self.rootListVC];
 
-    // [ĐÃ ÉP]: Cấu hình giao diện kính mờ tối ưu cho iOS 14 - 17+
+    // [ĐÃ ÉP]: Cấu hình giao diện kính mờ tối ưu cho iOS 13 - 17+
     if (@available(iOS 13.0, *)) {
         UINavigationBarAppearance *navBarAppearance = [[UINavigationBarAppearance alloc] init];
         [navBarAppearance configureWithDefaultBackground];
@@ -51,19 +52,14 @@
 
     self.window.rootViewController = self.mainNavController;
 
-    // 3. [ĐÃ SỬA]: Hiển thị cửa sổ tự nhiên, loại bỏ layoutIfNeeded cưỡng bức gây treo 10s
+    // 3. Hiển thị cửa sổ
     [self.window makeKeyAndVisible];
 
-    // 4. [ĐÃ SỬA]: Đặt dải tần số quét ProMotion an toàn có mức sàn co giãn đàn hồi
+    // 4. [ĐÃ SỬA CHUẨN]: Gán ProMotion trực tiếp lên CALayer của UIWindow (Đúng API chuẩn iOS 15+)
     if (@available(iOS 15.0, *)) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (self.window.windowScene) {
-                if ([self.window.windowScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    CAFrameRateRange range = CAFrameRateRangeMake(30.0f, 120.0f, 120.0f);
-                    [(id)self.window.windowScene setPreferredFrameRateRange:range];
-                }
-            }
-        });
+        if ([self.window.layer respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+            self.window.layer.preferredFrameRateRange = CAFrameRateRangeMake(30.0f, 120.0f, 120.0f);
+        }
     }
 
     return YES;
@@ -82,9 +78,11 @@
         });
     }
 
-    // Bắn thông báo đồng bộ lại IPC tức thì
-    notify_post(NOTIFY_RELOAD);
-    notify_post(NOTIFY_TITANIUM_CHANGED);
+    // Bắn thông báo đồng bộ lại IPC trên background thread để không giật lag giao diện
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_TITANIUM_CHANGED);
+    });
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
