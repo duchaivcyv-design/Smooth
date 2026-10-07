@@ -296,7 +296,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
-- (void)_scrollViewAnimationEnded:(id)1 finished:(BOOL)2;
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
 - (BOOL)isDragging;
 - (BOOL)isDecelerating;
 - (CGFloat)decelerationRate;
@@ -320,7 +320,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 
 @interface UIEventFetcher : NSObject
 - (void)_receiveHIDEvent:(void *)event;
-- (void)displayLinkDidFire:(id)1;
+- (void)displayLinkDidFire:(id)arg1;
 @end
 
 @interface _UIEventFetcher : NSObject
@@ -356,7 +356,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -855,7 +855,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
-- (void)_reboot:(BOOL)1;
+- (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
 @end
 
