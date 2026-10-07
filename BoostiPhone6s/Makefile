@@ -9,7 +9,7 @@ include $(THEOS)/makefiles/common.mk
 
 APPLICATION_NAME = BoostiPhone6sApp
 
-# [ĐÃ ÉP TOÀN DIỆN]: Nạp các tệp mã nguồn chính của ứng dụng
+# Nạp các tệp mã nguồn chính của ứng dụng
 BoostiPhone6sApp_FILES = main.m \
                          AppDelegate.m \
                          RootListController.m
@@ -17,7 +17,7 @@ BoostiPhone6sApp_FILES = main.m \
 BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox
 BoostiPhone6sApp_INSTALL_PATH = /Applications
 
-# CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & LOẠI BỎ INCLUDE THỪA
+# CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
 BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -O3 \
                           -Wall \
@@ -35,16 +35,16 @@ BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -I../Headers \
                           -I.
 
-# LINKER FLAGS: LIÊN KẾT NHỊ PHÂN TINH GỌN
+# LINKER FLAGS: BỎ CÁC SYMBOL THỪA, LIÊN KẾT NHANH
 BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip \
                           -Wl,-undefined,dynamic_lookup
 
-# [ĐÃ ÉP TOÀN DIỆN]: Ký quyền vượt Sandbox qua entitlements.plist
+# Ký quyền qua entitlements.plist
 BoostiPhone6sApp_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/application.mk
 
-# [ĐÃ ÉP TOÀN DIỆN]: CẤP QUYỀN THỰC THI 0755 VÀ KÝ ENTITLEMENTS TRỰC TIẾP
+# CẤP QUYỀN THỰC THI 0755 VÀ KÝ LDID ĐẢM BẢO KHÔNG BỊ CRASH KHI MỞ
 after-stage::
 	@echo "=== [BoostiPhone6sApp] Cấp quyền nhị phân & hoàn tất Staging ==="
 	@APP_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app"; \
