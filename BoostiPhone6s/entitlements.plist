@@ -6,37 +6,25 @@
     <key>platform-application</key>
     <true/>
 
-    <!-- Hủy bỏ sandbox và vùng chứa container -->
-    <key>com.apple.private.security.no-container</key>
-    <true/>
-    <key>com.apple.private.security.container-required</key>
-    <false/>
-
     <!-- Cho phép nạp dylib ngoài và bỏ qua kiểm tra chữ ký thư viện (iOS 15+) -->
     <key>com.apple.private.skip-library-validation</key>
     <true/>
 
-    <!-- Miễn trừ kiểm duyệt quyền riêng tư TCC cho toàn bộ hệ thống tệp -->
+    <!-- Toàn quyền đọc ghi tệp hệ thống ngoài sandbox thông qua TCC -->
     <key>com.apple.private.tcc.allow</key>
     <array>
         <string>kTCCServiceSystemPolicyAllFiles</string>
     </array>
 
-    <!-- Quyền truy cập vùng dữ liệu ứng dụng dùng chung -->
+    <!-- Quyền truy cập thư mục dữ liệu App dùng chung -->
     <key>com.apple.private.security.storage.AppDataContainers</key>
     <true/>
 
-    <!-- Khởi chạy và điều phối tiến trình qua FrontBoard / SpringBoard -->
-    <key>com.apple.frontboard.launchapplications</key>
-    <true/>
-    <key>com.apple.springboard.launchapplications</key>
-    <true/>
-
-    <!-- Kết nối mạng không giới hạn qua Sandbox Network Client -->
+    <!-- Kết nối mạng không giới hạn -->
     <key>com.apple.security.network.client</key>
     <true/>
 
-    <!-- Cho phép mở Task Port và can thiệp tiến trình khác qua Mach API -->
+    <!-- Cho phép mở Task Port đọc thông số tiến trình & phần cứng -->
     <key>get-task-allow</key>
     <true/>
     <key>task_for_pid-allow</key>
@@ -44,7 +32,7 @@
     <key>com.apple.system-task-ports</key>
     <true/>
 
-    <!-- Mở kết nối UserClient tới các driver IOKit phần cứng -->
+    <!-- Truy cập IOKit cảm biến phần cứng (SoC, Pin, Màn hình) -->
     <key>com.apple.security.iokit-user-client-class</key>
     <array>
         <string>IOPMrootDomain</string>
