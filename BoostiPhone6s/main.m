@@ -29,8 +29,8 @@ int main(int argc, char *argv[]) {
         // [ĐÃ ÉP TOÀN DIỆN]: Đặt tên nhận diện cho luồng chính để tránh bị kernel xếp vào tiến trình rác
         pthread_setname_np("com.taojb.boostiphone6s.ui");
 
-        // [ĐÃ ÉP TOÀN DIỆN]: Ép quyền Disk I/O lên mức cao nhất, đọc ghi cấu hình 0ms
-        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
+        // [ĐÃ ÉP TOÀN DIỆN]: Ép quyền Disk I/O lên mức cao nhất, đọc ghi cấu hình 0ms (Tắt để tránh treo Main Thread)
+        // setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
 
         // [ĐÃ ÉP TOÀN DIỆN]: Cưỡng bức nâng quyền ưu tiên luồng giao diện lên cấp cao nhất ngay từ 0ns
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
