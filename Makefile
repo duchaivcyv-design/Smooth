@@ -63,12 +63,9 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# KHAI BÁO BẬT CẢ TWEAK, PREFERENCES VÀ ỨNG DỤNG SANDBOX AN TOÀN
-SUBPROJECTS += BoostiPhone6s MockDeviceApp
+# [ĐÃ LÀM SẠCH]: CHỈ BIÊN DỊCH THƯ MỤC APP CHÍNH BOOSTIPHONE6S (ĐÃ XÓA MOCKDEVICEAPP THỪA)
+SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
-
-include $(THEOS_MAKE_PATH)/aggregate.mk
-
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
