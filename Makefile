@@ -57,30 +57,25 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-SUBPROJECTS += BoostiPhone6s
+# [ĐÃ SỬA]: Trỏ đúng tên thư mục con của App giao diện
+SUBPROJECTS += BoostiPhone6sApp
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
 after-stage::
 	@echo ""
-	@echo "=== [BoostiPhone6sCore] Đồng bộ Filter Plist & Phân Quyền Staging ==="
+	@echo "=== [BoostiPhone6sCore] Ép nhận toàn hệ thống qua Filter Plist ==="
 	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"; \
 	mkdir -p "$$TARGET_DIR"; \
-	if [ -f "$(BOOST_PLIST_NAME)" ]; then \
-		cp "$(BOOST_PLIST_NAME)" "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	elif [ -f "BoostiPhone6s.plist" ]; then \
-		cp "BoostiPhone6s.plist" "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	else \
-		printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.springboard</string>\n\t\t\t<string>com.apple.Preferences</string>\n\t\t\t<string>com.apple.TextInputUI</string>\n\t\t\t<string>com.apple.InputUI</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t\t<string>Preferences</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
-	fi; \
+	printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>Filter</key>\n\t<dict>\n\t\t<key>Bundles</key>\n\t\t<array>\n\t\t\t<string>com.apple.UIKit</string>\n\t\t\t<string>com.apple.springboard</string>\n\t\t</array>\n\t\t<key>Executables</key>\n\t\t<array>\n\t\t\t<string>SpringBoard</string>\n\t\t</array>\n\t</dict>\n</dict>\n</plist>' > "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	chmod 644 "$$TARGET_DIR/$(BOOST_PLIST_NAME)"; \
 	APP_BUNDLE="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app"; \
 	if [ -d "$$APP_BUNDLE" ]; then \
 		chmod -R 0755 "$$APP_BUNDLE"; \
 		chmod 0755 "$$APP_BUNDLE/BoostiPhone6sApp"; \
 	fi; \
-	echo "[OK] Đã cấu hình Filter Plist và cấp quyền 0755 cho App Bundle!"
+	echo "[OK] Đã cấu hình Filter nạp vào toàn bộ UIKit & SpringBoard!"
 	@echo ""
 
 before-package::
