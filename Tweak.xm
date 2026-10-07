@@ -1763,9 +1763,6 @@ static uint64_t g_burstDurationChargingMachTicks = 0;
 static volatile uint64_t g_lastBannerMachTime = 0;
 static uint64_t g_bannerDurationMachTicks = 0;
 
-// [ĐÃ ÉP TOÀN DIỆN]: CỜ NHẬN DIỆN Ổ KHÓA TẦN SỐ QUÉT TỪ APP CONTROL MASTER
-static volatile BOOL g_isRateLockedV285 = NO;
-
 // ====================================================================================================
 // 1. BỘ KHỞI TẠO MACH TIMEBASE THỐNG NHẤT (CHỐNG CRASH CHIA CHO 0 & CẤP ĐỦ TICKS TRONG 1 LẦN GỌI)
 // ====================================================================================================
