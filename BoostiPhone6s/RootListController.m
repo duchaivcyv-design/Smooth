@@ -245,11 +245,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 @implementation RootListController
 
-@synthesize customTableView = _customTableView;
-@synthesize bottomSegment = _bottomSegment;
-@synthesize rateLockButton = _rateLockButton;
-@synthesize settingsDict = _settingsDict;
-
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"";
