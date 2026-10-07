@@ -21,7 +21,7 @@
 
     // 1. [ĐÃ ÉP TOÀN DIỆN]: Khởi tạo cửa sổ chính phủ toàn bộ kích thước màn hình
     self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    self.window.backgroundColor = [UIColor colorWithRed:0.05 green:0.07 blue:0.11 alpha:1.0];
+    self.window.backgroundColor = [UIColor colorWithRed:0.01 green:0.02 blue:0.05 alpha:1.0];
 
     // 2. Khởi tạo Controller điều khiển chính
     self.rootListVC = [[RootListController alloc] init];
@@ -31,14 +31,14 @@
     if (@available(iOS 13.0, *)) {
         UINavigationBarAppearance *navBarAppearance = [[UINavigationBarAppearance alloc] init];
         [navBarAppearance configureWithDefaultBackground];
-        navBarAppearance.backgroundColor = [UIColor colorWithRed:0.08 green:0.10 blue:0.15 alpha:0.95];
+        navBarAppearance.backgroundColor = [UIColor colorWithRed:0.04 green:0.07 blue:0.14 alpha:0.85];
         navBarAppearance.titleTextAttributes = @{
             NSForegroundColorAttributeName: [UIColor whiteColor],
             NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightBold]
         };
         navBarAppearance.largeTitleTextAttributes = @{
             NSForegroundColorAttributeName: [UIColor whiteColor],
-            NSFontAttributeName: [UIFont systemFontOfSize:30 weight:UIFontWeightHeavy]
+            NSFontAttributeName: [UIFont systemFontOfSize:28 weight:UIFontWeightHeavy]
         };
 
         self.mainNavController.navigationBar.standardAppearance = navBarAppearance;
@@ -46,23 +46,20 @@
         self.mainNavController.navigationBar.scrollEdgeAppearance = navBarAppearance;
     }
 
-    self.mainNavController.navigationBar.tintColor = [UIColor colorWithRed:0.25 green:0.80 blue:0.95 alpha:1.0];
+    self.mainNavController.navigationBar.tintColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:1.0];
     self.mainNavController.navigationBar.barStyle = UIBarStyleBlack;
 
     self.window.rootViewController = self.mainNavController;
 
-    // 3. [ĐÃ ÉP TOÀN DIỆN]: Cưỡng bức hiển thị ngay khung hình đầu tiên (Trị dứt điểm đen app)
+    // 3. [ĐÃ SỬA]: Hiển thị cửa sổ tự nhiên, loại bỏ layoutIfNeeded cưỡng bức gây treo 10s
     [self.window makeKeyAndVisible];
-    [self.window.layer setNeedsDisplay];
-    [self.window setNeedsLayout];
-    [self.window layoutIfNeeded];
 
-    // 4. [ĐÃ ÉP TOÀN DIỆN]: Ép dải tần số quét ProMotion cao nhất cho cửa sổ app
+    // 4. [ĐÃ SỬA]: Đặt dải tần số quét ProMotion an toàn có mức sàn co giãn đàn hồi
     if (@available(iOS 15.0, *)) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.window.windowScene) {
                 if ([self.window.windowScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    CAFrameRateRange range = CAFrameRateRangeMake(144.0f, 144.0f, 144.0f);
+                    CAFrameRateRange range = CAFrameRateRangeMake(30.0f, 120.0f, 120.0f);
                     [(id)self.window.windowScene setPreferredFrameRateRange:range];
                 }
             }
@@ -91,9 +88,7 @@
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
-    if (self.window) {
-        [self.window.layer setNeedsDisplay];
-    }
+    // Để hệ điều hành tự điều phối chu kỳ render tự nhiên
 }
 
 @end
