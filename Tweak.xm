@@ -191,43 +191,6 @@ static volatile BOOL g_isRateLockedV285 = NO;
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 
 // ====================================================================================================
-// CẤU TRÚC STRUCT ĐỒNG BỘ NGUYÊN TỬ 27 TRƯỜNG PAYLOAD (KHỚP 100% VỚI RootListController.m)
-// ====================================================================================================
-
-#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
-#define _APEX_V285_PRO_PAYLOAD_DEFINED
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[48];
-} ApexV285ProPayload;
-#endif
-
-// ====================================================================================================
 // SYSTEM PRIVATE INTERFACES (ĐẦY ĐỦ 100% CHO CẢ 18 NHÓM GIA TỐC HỆ THỐNG)
 // ====================================================================================================
 
@@ -1010,6 +973,12 @@ typedef struct __attribute__((packed)) {
 - (void)_purgePageCache;
 @end
 
+// ====================================================================================================
+// ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐẶT Ở ĐẦU TỆP Tweak.xm)
+// ====================================================================================================
+
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -1039,6 +1008,7 @@ typedef struct __attribute__((packed)) {
     uint64_t lastHeartbeat;
     char     reserved[48];
 } ApexV285ProPayload;
+#endif
 
 static ApexV285ProPayload g_syncPayloadV285 = {
     APEX_SYNC_MAGIC_V285, 1, 144, 144, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, {0}
@@ -2336,7 +2306,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép cứng 3 Buffer chuẩn (Triple Buffering) khi layer đã vào window (trị dứt điểm đen app)
 - (NSUInteger)maximumDrawableCount {
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        if ([self window] != nil) {
+        if (self.superlayer != nil || self.delegate != nil) {
             return 3;
         }
     }
@@ -2346,7 +2316,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép ghi đè số lượng buffer đồ họa lên 3
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        if ([self window] != nil) {
+        if (self.superlayer != nil || self.delegate != nil) {
             %orig(3);
             return;
         }
@@ -2403,7 +2373,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 %end
-
 
 // ====================================================================================================
 // ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
