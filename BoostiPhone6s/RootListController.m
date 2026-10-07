@@ -241,14 +241,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     BOOL _isRateLocked;             // Trạng thái ổ khóa HZ / FPS
 }
 
-@property (nonatomic, strong) UITableView *customTableView;
-@property (nonatomic, strong) UISegmentedControl *bottomSegment;
-@property (nonatomic, strong) UIButton *rateLockButton;
-@property (nonatomic, strong) NSMutableDictionary *settingsDict;
-
 @end
 
 @implementation RootListController
+
+@synthesize customTableView = _customTableView;
+@synthesize bottomSegment = _bottomSegment;
+@synthesize rateLockButton = _rateLockButton;
+@synthesize settingsDict = _settingsDict;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -714,6 +714,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
         [self.customTableView reloadData];
     } else if (_currentBottomTab == 2 && indexPath.section == 1 && indexPath.row == 4) {
+        // Chạm vào mục Ngôn Ngữ để bật bảng chọn
         [self showLanguagePickerPopup:nil];
     }
 }
