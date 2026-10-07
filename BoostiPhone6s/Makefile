@@ -1,5 +1,5 @@
 ARCHS = arm64 arm64e
-TARGET := iphone:clang:latest:14.0
+TARGET := iphone:clang:latest:15.0
 
 DEBUG = 0
 FINALPACKAGE = 1
@@ -30,7 +30,7 @@ BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -Wno-unused-command-line-argument \
                           -Wno-unguarded-availability-new \
                           -Wno-unguarded-availability \
-                          -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
+                          -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                           -IHeaders \
                           -I../Headers \
                           -I.
