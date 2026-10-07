@@ -78,6 +78,89 @@ typedef struct {
 } ApexV285ProPayload;
 #endif
 
+// ====================================================================================================
+// COMPONENT 1: CÔNG TẮC LIQUID CAPSULE SWITCH (CHUẨN ẢNH 1)
+// ====================================================================================================
+@interface LiquidCapsuleSwitch : UIControl
+@property (nonatomic, assign) BOOL on;
+@property (nonatomic, strong) UIView *trackView;
+@property (nonatomic, strong) UIView *thumbView;
+@property (nonatomic, copy) void (^valueChangedBlock)(BOOL isOn);
+- (void)setOn:(BOOL)on animated:(BOOL)animated;
+@end
+
+@implementation LiquidCapsuleSwitch
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (self = [super initWithFrame:CGRectMake(0, 0, 56, 30)]) {
+        self.backgroundColor = [UIColor clearColor];
+
+        _trackView = [[UIView alloc] initWithFrame:self.bounds];
+        _trackView.layer.cornerRadius = 15.0;
+        _trackView.layer.cornerCurve = kCACornerCurveContinuous;
+        _trackView.userInteractionEnabled = NO;
+        [self addSubview:_trackView];
+
+        _thumbView = [[UIView alloc] initWithFrame:CGRectMake(2, 2, 26, 26)];
+        _thumbView.backgroundColor = [UIColor whiteColor];
+        _thumbView.layer.cornerRadius = 13.0;
+        _thumbView.layer.cornerCurve = kCACornerCurveContinuous;
+        _thumbView.userInteractionEnabled = NO;
+        _thumbView.layer.shadowColor = [UIColor blackColor].CGColor;
+        _thumbView.layer.shadowOpacity = 0.25;
+        _thumbView.layer.shadowOffset = CGSizeMake(0, 2);
+        _thumbView.layer.shadowRadius = 3.0;
+        [self addSubview:_thumbView];
+
+        [self addTarget:self action:@selector(handleTap) forControlEvents:UIControlEventTouchUpInside];
+        [self updateUIAnimated:NO];
+    }
+    return self;
+}
+
+- (void)handleTap {
+    [self setOn:!_on animated:YES];
+    [self sendActionsForControlEvents:UIControlEventValueChanged];
+    if (self.valueChangedBlock) {
+        self.valueChangedBlock(_on);
+    }
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [feedback impactOccurred];
+}
+
+- (void)setOn:(BOOL)on {
+    [self setOn:on animated:NO];
+}
+
+- (void)setOn:(BOOL)on animated:(BOOL)animated {
+    _on = on;
+    [self updateUIAnimated:animated];
+}
+
+- (void)updateUIAnimated:(BOOL)animated {
+    UIColor *onColor = [UIColor colorWithRed:0.32 green:0.78 blue:0.42 alpha:1.0]; // Xanh lá sáng ảnh 1
+    UIColor *offColor = [UIColor colorWithRed:0.25 green:0.26 blue:0.28 alpha:1.0];
+
+    CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 28, 2, 26, 26) : CGRectMake(2, 2, 26, 26);
+
+    void (^animations)(void) = ^{
+        self.trackView.backgroundColor = self->_on ? onColor : offColor;
+        self.thumbView.frame = thumbFrame;
+    };
+
+    if (animated) {
+        [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+    } else {
+        animations();
+    }
+}
+
+@end
+
+// ====================================================================================================
+// ROOT LIST CONTROLLER CHÍNH
+// ====================================================================================================
+
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
     static dispatch_once_t onceToken;
@@ -183,7 +266,7 @@ static inline float Titanium_GetLiveGPULoadPercentage(void) {
 }
 
 static inline float Titanium_GetBaseThermalTemp(void) {
-    NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
+    NSProcessInfoThermalState state = [[NSProcessInfo thermalState] thermalState];
     float cpuLoad = Titanium_GetLiveCPULoadPercentage();
     float loadOffset = (cpuLoad / 100.0f) * 2.5f;
 
@@ -202,7 +285,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSInteger _currentHzFpsSubTab;
     NSInteger _currentSwitchSubTab;
     BOOL _isRateLocked;
-    
     BOOL _isKernelExploited;
     
     BOOL _isCpuExpanded;
@@ -221,10 +303,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
+    // UI Capsule Bar (Ảnh 3)
+    UIView *_customBottomBarContainer;
+    UIView *_activeIndicatorPill;
+    NSMutableArray<UIButton *> *_tabButtons;
+    NSArray<NSDictionary *> *_tabConfigs;
+    
+    // Liquid Glass 3.0 Lens (Ảnh 2)
     UIView *_liquidGlassLensContainer;
     UIVisualEffectView *_liquidGlassBlurLayer;
     CAGradientLayer *_liquidGlassSpecularLayer;
     CAShapeLayer *_liquidGlassRimLayer;
+    UILabel *_lensTitleLabel;
 }
 @end
 
@@ -251,6 +341,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _isScreenExpanded = NO;
 
     _scannedAppsList = [NSMutableArray array];
+    _tabButtons = [NSMutableArray array];
 
     [self loadSettingsData];
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
@@ -269,11 +360,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     [self setupTopHeaderBar];
     [self setupNavigationItems];
-    [self setupBottomNavigationBar];
+    [self setupCustomCapsuleBottomBar]; // CHUẨN ẢNH 3
     [self setupMainTableView];
-    [self setupLiquidGlass30Engine];
+    [self setupLiquidGlass30Engine];      // CHUẨN ẢNH 2
 
-    // [CHỐNG ĐƠ 10S WATCHDOG]: Đưa tác vụ nặng ra sau khi giao diện đã xuất hiện hoàn toàn
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self loadInstalledAppsAsync];
         if (self->_isKernelExploited) {
@@ -294,95 +384,216 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self stopContinuousHardwareHUD];
 }
 
-#pragma mark - Liquid Glass 3.0 Optical Physics Engine
+#pragma mark - Custom Capsule Floating Tab Bar (Chuẩn Ảnh 3)
+
+- (void)setupCustomCapsuleBottomBar {
+    CGFloat barHeight = 56.0;
+    CGFloat barMargin = 16.0;
+    CGFloat barY = self.view.bounds.size.height - barHeight - 34; // Cách lề đáy an toàn
+
+    _customBottomBarContainer = [[UIView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight)];
+    _customBottomBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
+    _customBottomBarContainer.backgroundColor = [UIColor colorWithRed:0.08 green:0.09 blue:0.12 alpha:0.88];
+    _customBottomBarContainer.layer.cornerRadius = barHeight / 2.0;
+    _customBottomBarContainer.layer.cornerCurve = kCACornerCurveContinuous;
+    _customBottomBarContainer.layer.borderWidth = 1.0;
+    _customBottomBarContainer.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.16].CGColor;
+    _customBottomBarContainer.clipsToBounds = YES; // Khắc phục dứt điểm lỗi bo góc indicator
+
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+    blurView.frame = _customBottomBarContainer.bounds;
+    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    blurView.userInteractionEnabled = NO;
+    [_customBottomBarContainer addSubview:blurView];
+
+    _tabConfigs = @[
+        @{@"title": @"Trang Chủ", @"icon": @"house.fill", @"tab": @0},
+        @{@"title": @"Hz/FPS",    @"icon": @"speedometer",  @"tab": @1},
+        @{@"title": @"Switch",    @"icon": @"bolt.fill",    @"tab": @2},
+        @{@"title": @"App",       @"icon": @"iphone",       @"tab": @3},
+        @{@"title": @"Cài Đặt",   @"icon": @"gearshape",    @"tab": @4}
+    ];
+
+    CGFloat btnWidth = _customBottomBarContainer.bounds.size.width / _tabConfigs.count;
+
+    // MIẾNG TRƯỢT SÁNG CAPSULE (Chuẩn ảnh 3 - Bo tròn ôm trọn viền ngoài)
+    _activeIndicatorPill = [[UIView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6)];
+    _activeIndicatorPill.backgroundColor = [UIColor colorWithWhite:0.22 alpha:0.75];
+    _activeIndicatorPill.layer.cornerRadius = (barHeight - 6) / 2.0;
+    _activeIndicatorPill.layer.cornerCurve = kCACornerCurveContinuous;
+    _activeIndicatorPill.layer.borderWidth = 1.0;
+    _activeIndicatorPill.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.25].CGColor;
+    _activeIndicatorPill.userInteractionEnabled = NO;
+    [_customBottomBarContainer addSubview:_activeIndicatorPill];
+
+    for (NSInteger i = 0; i < _tabConfigs.count; i++) {
+        NSDictionary *conf = _tabConfigs[i];
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.frame = CGRectMake(i * btnWidth, 0, btnWidth, barHeight);
+        btn.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        btn.tag = i;
+
+        UIImage *iconImg = [UIImage systemImageNamed:conf[@"icon"]];
+        [btn setImage:iconImg forState:UIControlStateNormal];
+        [btn setTitle:conf[@"title"] forState:UIControlStateNormal];
+        btn.tintColor = (i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0];
+        [btn setTitleColor:(i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0] forState:UIControlStateNormal];
+        btn.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+
+        // Căn chỉnh Icon nằm trên, Chữ nằm dưới chuẩn iOS Bar
+        CGFloat spacing = 3.0;
+        CGSize imageSize = btn.imageView.image.size;
+        btn.titleEdgeInsets = UIEdgeInsetsMake(0, -imageSize.width, -(imageSize.height + spacing), 0);
+        CGSize titleSize = [btn.titleLabel.text sizeWithAttributes:@{NSFontAttributeName: btn.titleLabel.font}];
+        btn.imageEdgeInsets = UIEdgeInsetsMake(-(titleSize.height + spacing), 0, 0, -titleSize.width);
+
+        [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
+
+        // Gắn cử chỉ nhấn giữ để trồi Thấu kính Liquid Glass (Chuẩn Ảnh 2)
+        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleTabLongPress:)];
+        longPress.minimumPressDuration = 0.12;
+        [btn addGestureRecognizer:longPress];
+
+        [_customBottomBarContainer addSubview:btn];
+        [_tabButtons addObject:btn];
+    }
+
+    [self.view addSubview:_customBottomBarContainer];
+}
+
+- (void)onCustomTabButtonClicked:(UIButton *)sender {
+    [self selectTabIndex:sender.tag animated:YES];
+}
+
+- (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
+    _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
+
+    CGFloat btnWidth = _customBottomBarContainer.bounds.size.width / _tabConfigs.count;
+    CGRect targetFrame = CGRectMake((index * btnWidth) + 3, 3, btnWidth - 6, _customBottomBarContainer.bounds.size.height - 6);
+
+    void (^animations)(void) = ^{
+        self->_activeIndicatorPill.frame = targetFrame;
+        for (NSInteger i = 0; i < self->_tabButtons.count; i++) {
+            UIButton *b = self->_tabButtons[i];
+            BOOL isSel = (i == index);
+            b.tintColor = isSel ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0];
+            [b setTitleColor:isSel ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0] forState:UIControlStateNormal];
+            b.titleLabel.font = isSel ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+        }
+    };
+
+    if (animated) {
+        [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.75 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+    } else {
+        animations();
+    }
+
+    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [fb impactOccurred];
+
+    [self.customTableView reloadData];
+}
+
+#pragma mark - Liquid Glass 3.0 Optical Physics Lens (Chuẩn Ảnh 2)
 
 - (void)setupLiquidGlass30Engine {
-    _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 84, 84)];
-    _liquidGlassLensContainer.layer.cornerRadius = 42;
-    if (@available(iOS 13.0, *)) {
-        _liquidGlassLensContainer.layer.cornerCurve = kCACornerCurveContinuous;
-    }
+    _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 78, 78)];
+    _liquidGlassLensContainer.layer.cornerRadius = 39;
+    _liquidGlassLensContainer.layer.cornerCurve = kCACornerCurveContinuous;
     _liquidGlassLensContainer.clipsToBounds = NO;
     _liquidGlassLensContainer.hidden = YES;
     _liquidGlassLensContainer.userInteractionEnabled = NO;
 
-    _liquidGlassLensContainer.layer.shadowColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:0.85].CGColor;
-    _liquidGlassLensContainer.layer.shadowOffset = CGSizeMake(0, 6);
-    _liquidGlassLensContainer.layer.shadowRadius = 24;
+    // Ánh sáng phát quang xanh dương khúc xạ (Refraction Glow)
+    _liquidGlassLensContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.65 blue:1.0 alpha:0.95].CGColor;
+    _liquidGlassLensContainer.layer.shadowOffset = CGSizeMake(0, -4);
+    _liquidGlassLensContainer.layer.shadowRadius = 18;
     _liquidGlassLensContainer.layer.shadowOpacity = 0.95;
 
-    if (@available(iOS 13.0, *)) {
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
-        _liquidGlassBlurLayer = [[UIVisualEffectView alloc] initWithEffect:blur];
-        _liquidGlassBlurLayer.frame = _liquidGlassLensContainer.bounds;
-        _liquidGlassBlurLayer.layer.cornerRadius = 42;
-        _liquidGlassBlurLayer.layer.cornerCurve = kCACornerCurveContinuous;
-        _liquidGlassBlurLayer.clipsToBounds = YES;
-        _liquidGlassBlurLayer.userInteractionEnabled = NO;
-        [_liquidGlassLensContainer addSubview:_liquidGlassBlurLayer];
-    }
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
+    _liquidGlassBlurLayer = [[UIVisualEffectView alloc] initWithEffect:blur];
+    _liquidGlassBlurLayer.frame = _liquidGlassLensContainer.bounds;
+    _liquidGlassBlurLayer.layer.cornerRadius = 39;
+    _liquidGlassBlurLayer.layer.cornerCurve = kCACornerCurveContinuous;
+    _liquidGlassBlurLayer.clipsToBounds = YES;
+    [_liquidGlassLensContainer addSubview:_liquidGlassBlurLayer];
 
+    // Viền sáng bóng 3D
     _liquidGlassSpecularLayer = [CAGradientLayer layer];
     _liquidGlassSpecularLayer.frame = _liquidGlassLensContainer.bounds;
-    _liquidGlassSpecularLayer.cornerRadius = 42;
-    if (@available(iOS 13.0, *)) {
-        _liquidGlassSpecularLayer.cornerCurve = kCACornerCurveContinuous;
-    }
+    _liquidGlassSpecularLayer.cornerRadius = 39;
+    _liquidGlassSpecularLayer.cornerCurve = kCACornerCurveContinuous;
     _liquidGlassSpecularLayer.colors = @[
-        (id)[UIColor colorWithWhite:1.0 alpha:0.65].CGColor,
-        (id)[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:0.2].CGColor,
-        (id)[UIColor colorWithWhite:1.0 alpha:0.05].CGColor
+        (id)[UIColor colorWithWhite:1.0 alpha:0.75].CGColor,
+        (id)[UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:0.25].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
     ];
     _liquidGlassSpecularLayer.startPoint = CGPointMake(0.1, 0.0);
     _liquidGlassSpecularLayer.endPoint = CGPointMake(0.9, 1.0);
     [_liquidGlassLensContainer.layer addSublayer:_liquidGlassSpecularLayer];
 
+    // Viền thấu kính đôi lồi ra ngoài thanh bar (Chuẩn Ảnh 2)
     _liquidGlassRimLayer = [CAShapeLayer layer];
-    _liquidGlassRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:_liquidGlassLensContainer.bounds cornerRadius:42].CGPath;
-    _liquidGlassRimLayer.fillColor = [UIColor colorWithRed:0.2 green:0.75 blue:1.0 alpha:0.12].CGColor;
-    _liquidGlassRimLayer.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.75].CGColor;
-    _liquidGlassRimLayer.lineWidth = 1.6;
+    _liquidGlassRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:_liquidGlassLensContainer.bounds cornerRadius:39].CGPath;
+    _liquidGlassRimLayer.fillColor = [UIColor colorWithRed:0.2 green:0.65 blue:1.0 alpha:0.18].CGColor;
+    _liquidGlassRimLayer.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.85].CGColor;
+    _liquidGlassRimLayer.lineWidth = 2.0;
     [_liquidGlassLensContainer.layer addSublayer:_liquidGlassRimLayer];
 
-    [self.view addSubview:_liquidGlassLensContainer];
+    _lensTitleLabel = [[UILabel alloc] initWithFrame:_liquidGlassLensContainer.bounds];
+    _lensTitleLabel.textAlignment = NSTextAlignmentCenter;
+    _lensTitleLabel.textColor = [UIColor whiteColor];
+    _lensTitleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightHeavy];
+    [_liquidGlassLensContainer addSubview:_lensTitleLabel];
 
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleLiquidGlassGesture:)];
-    pan.maximumNumberOfTouches = 1;
-    [self.view addGestureRecognizer:pan];
+    [self.view addSubview:_liquidGlassLensContainer];
 }
 
-- (void)handleLiquidGlassGesture:(UIPanGestureRecognizer *)pan {
-    CGPoint pt = [pan locationInView:self.view];
-    CGPoint vel = [pan velocityInView:self.view];
+- (void)handleTabLongPress:(UILongPressGestureRecognizer *)gesture {
+    UIButton *btn = (UIButton *)gesture.view;
+    CGPoint touchInView = [gesture locationInView:self.view];
 
-    if (pan.state == UIGestureRecognizerStateBegan) {
-        _liquidGlassLensContainer.center = pt;
+    if (gesture.state == UIGestureRecognizerStateBegan) {
+        // Đặt kính lúp nằm trồi lên phía trên thanh tab (Chuẩn Ảnh 2)
+        CGPoint centerPoint = CGPointMake(touchInView.x, _customBottomBarContainer.center.y - 14);
+        _liquidGlassLensContainer.center = centerPoint;
         _liquidGlassLensContainer.hidden = NO;
-        _liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.1, 0.1);
-        [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.65 initialSpringVelocity:1.2 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        _liquidGlassLensContainer.alpha = 0.0;
+        _liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.3, 0.3);
+
+        _lensTitleLabel.text = _tabConfigs[btn.tag][@"title"];
+
+        [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.65 initialSpringVelocity:1.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            self->_liquidGlassLensContainer.alpha = 1.0;
             self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
         } completion:nil];
-    } else if (pan.state == UIGestureRecognizerStateChanged) {
-        _liquidGlassLensContainer.center = pt;
 
-        CGFloat speed = sqrt(vel.x * vel.x + vel.y * vel.y);
-        CGFloat stretchFactor = fmin(fmax(speed / 1200.0, 0.0), 0.35);
-        CGFloat angle = atan2(vel.y, vel.x);
+        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        [fb impactOccurred];
 
-        CGAffineTransform t = CGAffineTransformMakeRotation(angle);
-        t = CGAffineTransformScale(t, 1.0 + stretchFactor, 1.0 - (stretchFactor * 0.5));
-        t = CGAffineTransformRotate(t, -angle);
+    } else if (gesture.state == UIGestureRecognizerStateChanged) {
+        CGPoint centerPoint = CGPointMake(touchInView.x, _customBottomBarContainer.center.y - 14);
+        _liquidGlassLensContainer.center = centerPoint;
 
-        [UIView animateWithDuration:0.08 delay:0 options:UIViewAnimationOptionCurveLinear | UIViewAnimationOptionAllowUserInteraction animations:^{
-            self->_liquidGlassLensContainer.transform = t;
-        } completion:nil];
-    } else if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
-        [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.75 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            self->_liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.01, 0.01);
+        // Tự động nhận diện tab đang trỏ vào khi vuốt ngang
+        for (NSInteger i = 0; i < _tabButtons.count; i++) {
+            UIButton *b = _tabButtons[i];
+            CGPoint p = [gesture locationInView:b];
+            if (CGRectContainsPoint(b.bounds, p)) {
+                _lensTitleLabel.text = _tabConfigs[i][@"title"];
+                if (_currentBottomTab != [_tabConfigs[i][@"tab"] integerValue]) {
+                    [self selectTabIndex:i animated:YES];
+                }
+                break;
+            }
+        }
+    } else if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled) {
+        [UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
             self->_liquidGlassLensContainer.alpha = 0.0;
+            self->_liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.2, 0.2);
         } completion:^(BOOL finished) {
             self->_liquidGlassLensContainer.hidden = YES;
-            self->_liquidGlassLensContainer.alpha = 1.0;
             self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
         }];
     }
@@ -405,11 +616,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     UIBarButtonItem *lockItem = [[UIBarButtonItem alloc] initWithCustomView:self.rateLockButton];
 
     UIButton *applyInstantButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) {
-        [applyInstantButton setImage:[UIImage systemImageNamed:@"bolt.horizontal.fill"] forState:UIControlStateNormal];
-    } else {
-        [applyInstantButton setTitle:@"⚡ Áp Dụng" forState:UIControlStateNormal];
-    }
+    [applyInstantButton setImage:[UIImage systemImageNamed:@"bolt.horizontal.fill"] forState:UIControlStateNormal];
     applyInstantButton.tintColor = [UIColor colorWithRed:0.25 green:0.95 blue:0.6 alpha:1.0];
     [applyInstantButton addTarget:self action:@selector(applySettingsInstantNoRespringAction) forControlEvents:UIControlEventTouchUpInside];
     UIBarButtonItem *applyItem = [[UIBarButtonItem alloc] initWithCustomView:applyInstantButton];
@@ -494,11 +701,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)updateLockIcon {
     NSString *iconName = self->_isRateLocked ? @"lock.fill" : @"lock.open.fill";
     UIColor *color = self->_isRateLocked ? [UIColor systemRedColor] : [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:1.0];
-    if (@available(iOS 13.0, *)) {
-        [self.rateLockButton setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
-    } else {
-        [self.rateLockButton setTitle:(self->_isRateLocked ? @"🔒" : @"🔓") forState:UIControlStateNormal];
-    }
+    [self.rateLockButton setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
     self.rateLockButton.tintColor = color;
 }
 
@@ -520,63 +723,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.customTableView reloadData];
 }
 
-#pragma mark - Bottom Bar Liquid Glass 3.0
-
-- (void)setupBottomNavigationBar {
-    UIView *bottomBarContainer = [[UIView alloc] initWithFrame:CGRectMake(14, self.view.bounds.size.height - 86, self.view.bounds.size.width - 28, 56)];
-    bottomBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
-    bottomBarContainer.backgroundColor = [UIColor colorWithRed:0.04 green:0.07 blue:0.14 alpha:0.75];
-    bottomBarContainer.layer.cornerRadius = 28;
-    if (@available(iOS 13.0, *)) {
-        bottomBarContainer.layer.cornerCurve = kCACornerCurveContinuous;
-    }
-    bottomBarContainer.layer.borderWidth = 1.4;
-    bottomBarContainer.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.22].CGColor;
-    
-    if (@available(iOS 13.0, *)) {
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
-        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
-        blurView.frame = bottomBarContainer.bounds;
-        blurView.layer.cornerRadius = 28;
-        blurView.layer.cornerCurve = kCACornerCurveContinuous;
-        blurView.clipsToBounds = YES;
-        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        [bottomBarContainer addSubview:blurView];
-    }
-    
-    [self.view addSubview:bottomBarContainer];
-
-    self.bottomSegment = [[UISegmentedControl alloc] initWithItems:@[@"🎛️ Hz/FPS", @"⚡ Switch", @"📊 Trang Chủ", @"📱 App", @"⚙️ Cài Đặt"]];
-    self.bottomSegment.frame = CGRectMake(4, 5, bottomBarContainer.bounds.size.width - 8, 46);
-    self.bottomSegment.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.bottomSegment.selectedSegmentIndex = 2;
-    _currentBottomTab = 0;
-
-    NSDictionary *attrNormal = @{NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightMedium], NSForegroundColorAttributeName: [UIColor colorWithWhite:0.6 alpha:1.0]};
-    NSDictionary *attrSelected = @{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]};
-    [self.bottomSegment setTitleTextAttributes:attrNormal forState:UIControlStateNormal];
-    [self.bottomSegment setTitleTextAttributes:attrSelected forState:UIControlStateSelected];
-
-    [self.bottomSegment addTarget:self action:@selector(onBottomTabChanged:) forControlEvents:UIControlEventValueChanged];
-    [bottomBarContainer addSubview:self.bottomSegment];
-}
-
-- (void)onBottomTabChanged:(UISegmentedControl *)sender {
-    NSInteger index = sender.selectedSegmentIndex;
-    if (index == 0) _currentBottomTab = 1;
-    else if (index == 1) _currentBottomTab = 2;
-    else if (index == 2) _currentBottomTab = 0;
-    else if (index == 3) _currentBottomTab = 3;
-    else if (index == 4) _currentBottomTab = 4;
-
-    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-    [fb impactOccurred];
-
-    [self.customTableView reloadData];
-}
+#pragma mark - TableView Setup & Render
 
 - (void)setupMainTableView {
-    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 94) style:UITableViewStyleInsetGrouped];
+    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 98) style:UITableViewStyleInsetGrouped];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
     self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.08];
@@ -584,8 +734,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.customTableView.dataSource = self;
     [self.view addSubview:self.customTableView];
 }
-
-#pragma mark - TableView Data & Render
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     if (_currentBottomTab == 0) return 6;
@@ -680,10 +828,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 
     cell.backgroundColor = [UIColor colorWithRed:0.06 green:0.09 blue:0.15 alpha:0.7];
-    cell.layer.cornerRadius = 12;
-    if (@available(iOS 13.0, *)) {
-        cell.layer.cornerCurve = kCACornerCurveContinuous;
-    }
+    cell.layer.cornerRadius = 14;
+    cell.layer.cornerCurve = kCACornerCurveContinuous;
     cell.textLabel.textColor = [UIColor whiteColor];
     cell.detailTextLabel.textColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:1.0];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -709,9 +855,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.textLabel.text = @"⚡ Kích Hoạt Bộ Đo Phần Cứng Realtime";
             cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
 
-            UISwitch *monitorSwitch = [[UISwitch alloc] init];
+            // CÔNG TẮC CAPSULE (ẢNH 1)
+            LiquidCapsuleSwitch *monitorSwitch = [[LiquidCapsuleSwitch alloc] init];
             monitorSwitch.on = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
-            [monitorSwitch addTarget:self action:@selector(onSystemMonitorToggled:) forControlEvents:UIControlEventValueChanged];
+            __weak typeof(self) weakSelf = self;
+            monitorSwitch.valueChangedBlock = ^(BOOL isOn) {
+                weakSelf.settingsDict[@"EnableSystemMonitoring"] = @(isOn);
+                [weakSelf saveSettingsDataAndSync];
+                [weakSelf.customTableView reloadData];
+            };
             cell.accessoryView = monitorSwitch;
             return cell;
         }
@@ -865,7 +1017,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.selectionStyle = _isRateLocked ? UITableViewCellSelectionStyleNone : UITableViewCellSelectionStyleDefault;
         }
     } 
-    // TAB 2: CÔNG TẮC
+    // TAB 2: CÔNG TẮC (CHUẨN ẢNH 1)
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
             UISegmentedControl *catSeg = [[UISegmentedControl alloc] initWithItems:@[@"CPU", @"GPU", @"Màn Hình", @"Pin", @"Hệ Thống"]];
@@ -877,50 +1029,54 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.textLabel.text = @"";
             cell.detailTextLabel.text = @"";
         } else {
-            UISwitch *toggle = [[UISwitch alloc] init];
-            [toggle addTarget:self action:@selector(onSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-
             NSString *title = @"";
-            BOOL state = NO;
-            NSInteger tag = 0;
+            NSString *prefKey = @"";
 
             if (_currentSwitchSubTab == 0) {
-                if (indexPath.row == 0) { title = @"Ưu Tiên P-Core Realtime"; state = [self.settingsDict[@"pCoreRealtimePriority"] ?: @NO boolValue]; tag = 101; }
-                else if (indexPath.row == 1) { title = @"Điều Phối CPU Scheduler"; state = [self.settingsDict[@"schedulerGovernor"] ?: @NO boolValue]; tag = 102; }
-                else if (indexPath.row == 2) { title = @"Đồng Bộ Xung Quantum"; state = [self.settingsDict[@"quantumCoreSync"] ?: @NO boolValue]; tag = 103; }
-                else if (indexPath.row == 3) { title = @"Khóa Tần Số CPU Sàn"; state = [self.settingsDict[@"lockHighIdleFloor"] ?: @NO boolValue]; tag = 104; }
-                else { title = @"Chống Bóp Xung Nhiệt Độ"; state = [self.settingsDict[@"AntiThermalThrottling"] ?: @NO boolValue]; tag = 105; }
+                if (indexPath.row == 0) { title = @"Ưu Tiên P-Core Realtime"; prefKey = @"pCoreRealtimePriority"; }
+                else if (indexPath.row == 1) { title = @"Điều Phối CPU Scheduler"; prefKey = @"schedulerGovernor"; }
+                else if (indexPath.row == 2) { title = @"Đồng Bộ Xung Quantum"; prefKey = @"quantumCoreSync"; }
+                else if (indexPath.row == 3) { title = @"Khóa Tần Số CPU Sàn"; prefKey = @"lockHighIdleFloor"; }
+                else { title = @"Chống Bóp Xung Nhiệt Độ"; prefKey = @"AntiThermalThrottling"; }
             } else if (_currentSwitchSubTab == 1) {
-                if (indexPath.row == 0) { title = @"Metal Hex/Triple Buffering"; state = [self.settingsDict[@"MetalHexBuffering"] ?: @NO boolValue]; tag = 201; }
-                else if (indexPath.row == 1) { title = @"Cưỡng Chế RenderServer 90"; state = [self.settingsDict[@"IsolateRenderPipeline"] ?: @NO boolValue]; tag = 202; }
-                else if (indexPath.row == 2) { title = @"Bỏ Khóa V-Sync Khung Hình"; state = [self.settingsDict[@"vsyncAdaptiveBuffer"] ?: @NO boolValue]; tag = 203; }
-                else if (indexPath.row == 3) { title = @"Ổn Định Khung Hình Game"; state = [self.settingsDict[@"gameFPSStabilizer"] ?: @NO boolValue]; tag = 204; }
-                else { title = @"Triệt Tiêu Blur Động"; state = [self.settingsDict[@"flatTintBlur"] ?: @NO boolValue]; tag = 205; }
+                if (indexPath.row == 0) { title = @"Metal Hex/Triple Buffering"; prefKey = @"MetalHexBuffering"; }
+                else if (indexPath.row == 1) { title = @"Cưỡng Chế RenderServer 90"; prefKey = @"IsolateRenderPipeline"; }
+                else if (indexPath.row == 2) { title = @"Bỏ Khóa V-Sync Khung Hình"; prefKey = @"vsyncAdaptiveBuffer"; }
+                else if (indexPath.row == 3) { title = @"Ổn Định Khung Hình Game"; prefKey = @"gameFPSStabilizer"; }
+                else { title = @"Triệt Tiêu Blur Động"; prefKey = @"flatTintBlur"; }
             } else if (_currentSwitchSubTab == 2) {
-                if (indexPath.row == 0) { title = @"🔥 Ép Xung 144Hz Toàn Máy"; state = [self.settingsDict[@"ForceOverclock144Hz"] ?: @NO boolValue]; tag = 301; }
-                else if (indexPath.row == 1) { title = @"ProMotion Engine Beta 7"; state = [self.settingsDict[@"ProMotionEngineBeta7"] ?: @NO boolValue]; tag = 302; }
-                else if (indexPath.row == 2) { title = @"Cảm Ứng 0ms Touch Boost"; state = [self.settingsDict[@"TouchResponseBoost"] ?: @NO boolValue]; tag = 303; }
-                else if (indexPath.row == 3) { title = @"Động Cơ Cuộn ColorOS 17"; state = [self.settingsDict[@"ColorOs17SmoothEngine"] ?: @NO boolValue]; tag = 304; }
-                else { title = @"Dự Đoán Tọa Độ Neural"; state = [self.settingsDict[@"zeroLagNeural"] ?: @NO boolValue]; tag = 305; }
+                if (indexPath.row == 0) { title = @"🔥 Ép Xung 144Hz Toàn Máy"; prefKey = @"ForceOverclock144Hz"; }
+                else if (indexPath.row == 1) { title = @"ProMotion Engine Beta 7"; prefKey = @"ProMotionEngineBeta7"; }
+                else if (indexPath.row == 2) { title = @"Cảm Ứng 0ms Touch Boost"; prefKey = @"TouchResponseBoost"; }
+                else if (indexPath.row == 3) { title = @"Động Cơ Cuộn ColorOS 17"; prefKey = @"ColorOs17SmoothEngine"; }
+                else { title = @"Dự Đoán Tọa Độ Neural"; prefKey = @"zeroLagNeural"; }
             } else if (_currentSwitchSubTab == 3) {
-                if (indexPath.row == 0) { title = @"Lọc Loạn Cảm Ứng Sạc"; state = [self.settingsDict[@"AntiGhostTouch"] ?: @NO boolValue]; tag = 401; }
-                else if (indexPath.row == 1) { title = @"Khử Nhiễu Sóng Củ Sạc"; state = [self.settingsDict[@"ChargerRippleRejection"] ?: @NO boolValue]; tag = 402; }
-                else if (indexPath.row == 2) { title = @"Giả Lập Pin Đầy"; state = [self.settingsDict[@"fakeFullBatteryState"] ?: @NO boolValue]; tag = 403; }
-                else if (indexPath.row == 3) { title = @"Khóa 30 FPS Khi Quá Nhiệt"; state = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @NO boolValue]; tag = 404; }
-                else { title = @"Chế Độ Tiết Kiệm Pin 60Hz"; state = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue]; tag = 405; }
+                if (indexPath.row == 0) { title = @"Lọc Loạn Cảm Ứng Sạc"; prefKey = @"AntiGhostTouch"; }
+                else if (indexPath.row == 1) { title = @"Khử Nhiễu Sóng Củ Sạc"; prefKey = @"ChargerRippleRejection"; }
+                else if (indexPath.row == 2) { title = @"Giả Lập Pin Đầy"; prefKey = @"fakeFullBatteryState"; }
+                else if (indexPath.row == 3) { title = @"Khóa 30 FPS Khi Quá Nhiệt"; prefKey = @"lock30FpsOnOverheat"; }
+                else { title = @"Chế Độ Tiết Kiệm Pin 60Hz"; prefKey = @"batterySaver60Hz"; }
             } else {
-                if (indexPath.row == 0) { title = @"Khởi Động App Siêu Tốc"; state = [self.settingsDict[@"TurboAppLaunch"] ?: @NO boolValue]; tag = 501; }
-                else if (indexPath.row == 1) { title = @"Trị Dứt Điểm Đen App"; state = [self.settingsDict[@"FixAppLaunchBlackScreen"] ?: @NO boolValue]; tag = 502; }
-                else if (indexPath.row == 2) { title = @"Giảm Lag Đa Nhiệm"; state = [self.settingsDict[@"ReduceMultiTaskLag"] ?: @NO boolValue]; tag = 503; }
-                else if (indexPath.row == 3) { title = @"Chống Khựng Thoát App"; state = [self.settingsDict[@"FixAppExitStutter"] ?: @NO boolValue]; tag = 504; }
-                else if (indexPath.row == 4) { title = @"Dọn RAM Chuyên Sâu"; state = [self.settingsDict[@"hyperMemoryGuardian"] ?: @NO boolValue]; tag = 505; }
-                else { title = @"Tự Động Đóng App Nền"; state = [self.settingsDict[@"autoKillBackground"] ?: @NO boolValue]; tag = 506; }
+                if (indexPath.row == 0) { title = @"Khởi Động App Siêu Tốc"; prefKey = @"TurboAppLaunch"; }
+                else if (indexPath.row == 1) { title = @"Trị Dứt Điểm Đen App"; prefKey = @"FixAppLaunchBlackScreen"; }
+                else if (indexPath.row == 2) { title = @"Giảm Lag Đa Nhiệm"; prefKey = @"ReduceMultiTaskLag"; }
+                else if (indexPath.row == 3) { title = @"Chống Khựng Thoát App"; prefKey = @"FixAppExitStutter"; }
+                else if (indexPath.row == 4) { title = @"Dọn RAM Chuyên Sâu"; prefKey = @"hyperMemoryGuardian"; }
+                else { title = @"Tự Động Đóng App Nền"; prefKey = @"autoKillBackground"; }
             }
 
-            toggle.tag = tag;
-            toggle.on = state;
+            // SỬ DỤNG CÔNG TẮC CAPSULE (ẢNH 1)
+            LiquidCapsuleSwitch *customSwitch = [[LiquidCapsuleSwitch alloc] init];
+            customSwitch.on = [self.settingsDict[prefKey] ?: @NO boolValue];
+            __weak typeof(self) weakSelf = self;
+            customSwitch.valueChangedBlock = ^(BOOL isOn) {
+                weakSelf.settingsDict[prefKey] = @(isOn);
+                [weakSelf saveSettingsDataAndSync];
+                [weakSelf applyDeepSpringBoardAndUIKitTweaks];
+            };
+
             cell.textLabel.text = title;
-            cell.accessoryView = toggle;
+            cell.accessoryView = customSwitch;
         }
     } 
     // TAB 3: DANH SÁCH ỨNG DỤNG
@@ -931,10 +1087,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.detailTextLabel.text = appInfo[@"bundleID"];
             cell.detailTextLabel.font = [UIFont systemFontOfSize:11];
 
-            UISwitch *appToggle = [[UISwitch alloc] init];
+            LiquidCapsuleSwitch *appToggle = [[LiquidCapsuleSwitch alloc] init];
             appToggle.on = [_appTweakStates[appInfo[@"bundleID"]] boolValue];
-            appToggle.tag = indexPath.row;
-            [appToggle addTarget:self action:@selector(onAppToggleChanged:) forControlEvents:UIControlEventValueChanged];
+            __weak typeof(self) weakSelf = self;
+            appToggle.valueChangedBlock = ^(BOOL isOn) {
+                weakSelf->_appTweakStates[appInfo[@"bundleID"]] = @(isOn);
+                weakSelf.settingsDict[@"AppTweakStates"] = weakSelf->_appTweakStates;
+                [weakSelf saveSettingsDataAndSync];
+                [weakSelf applyDeepSpringBoardAndUIKitTweaks];
+            };
             cell.accessoryView = appToggle;
         }
     } 
@@ -979,7 +1140,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             }
         } else if (indexPath.section == 1) {
             if (!_isKernelExploited) {
-                cell.textLabel.text = @"Thông Tin Phần Cứng";
+                cell.textLabel.text = @"Thông Tin Phần CỨng";
                 cell.detailTextLabel.text = @"[Đang Khóa - Cần Khai Thác]";
                 cell.detailTextLabel.textColor = [UIColor systemRedColor];
             } else {
@@ -1061,25 +1222,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 #pragma mark - Actions & Handlers
 
-- (void)onSystemMonitorToggled:(UISwitch *)sender {
-    self.settingsDict[@"EnableSystemMonitoring"] = @(sender.isOn);
-    [self saveSettingsDataAndSync];
-
-    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
-    [fb impactOccurred];
-
-    [self.customTableView reloadData];
-}
-
-- (void)onAppToggleChanged:(UISwitch *)sender {
-    NSDictionary *appInfo = _scannedAppsList[sender.tag];
-    NSString *bundleID = appInfo[@"bundleID"];
-    _appTweakStates[bundleID] = @(sender.isOn);
-    self.settingsDict[@"AppTweakStates"] = _appTweakStates;
-    [self saveSettingsDataAndSync];
-    [self applyDeepSpringBoardAndUIKitTweaks];
-}
-
 - (void)onHzFpsSubTabChanged:(UISegmentedControl *)sender {
     _currentHzFpsSubTab = sender.selectedSegmentIndex;
     [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationFade];
@@ -1088,39 +1230,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)onSwitchSubTabChanged:(UISegmentedControl *)sender {
     _currentSwitchSubTab = sender.selectedSegmentIndex;
     [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
-}
-
-- (void)onSwitchToggled:(UISwitch *)sender {
-    switch (sender.tag) {
-        case 101: self.settingsDict[@"pCoreRealtimePriority"] = @(sender.isOn); break;
-        case 102: self.settingsDict[@"schedulerGovernor"] = @(sender.isOn); break;
-        case 103: self.settingsDict[@"quantumCoreSync"] = @(sender.isOn); break;
-        case 104: self.settingsDict[@"lockHighIdleFloor"] = @(sender.isOn); break;
-        case 105: self.settingsDict[@"AntiThermalThrottling"] = @(sender.isOn); break;
-        case 201: self.settingsDict[@"MetalHexBuffering"] = @(sender.isOn); break;
-        case 202: self.settingsDict[@"IsolateRenderPipeline"] = @(sender.isOn); break;
-        case 203: self.settingsDict[@"vsyncAdaptiveBuffer"] = @(sender.isOn); break;
-        case 204: self.settingsDict[@"gameFPSStabilizer"] = @(sender.isOn); break;
-        case 205: self.settingsDict[@"flatTintBlur"] = @(sender.isOn); break;
-        case 301: self.settingsDict[@"ForceOverclock144Hz"] = @(sender.isOn); break;
-        case 302: self.settingsDict[@"ProMotionEngineBeta7"] = @(sender.isOn); break;
-        case 303: self.settingsDict[@"TouchResponseBoost"] = @(sender.isOn); break;
-        case 304: self.settingsDict[@"ColorOs17SmoothEngine"] = @(sender.isOn); break;
-        case 305: self.settingsDict[@"zeroLagNeural"] = @(sender.isOn); break;
-        case 401: self.settingsDict[@"AntiGhostTouch"] = @(sender.isOn); break;
-        case 402: self.settingsDict[@"ChargerRippleRejection"] = @(sender.isOn); break;
-        case 403: self.settingsDict[@"fakeFullBatteryState"] = @(sender.isOn); break;
-        case 404: self.settingsDict[@"lock30FpsOnOverheat"] = @(sender.isOn); break;
-        case 405: self.settingsDict[@"batterySaver60Hz"] = @(sender.isOn); break;
-        case 501: self.settingsDict[@"TurboAppLaunch"] = @(sender.isOn); break;
-        case 502: self.settingsDict[@"FixAppLaunchBlackScreen"] = @(sender.isOn); break;
-        case 503: self.settingsDict[@"ReduceMultiTaskLag"] = @(sender.isOn); break;
-        case 504: self.settingsDict[@"FixAppExitStutter"] = @(sender.isOn); break;
-        case 505: self.settingsDict[@"hyperMemoryGuardian"] = @(sender.isOn); break;
-        case 506: self.settingsDict[@"autoKillBackground"] = @(sender.isOn); break;
-    }
-    [self saveSettingsDataAndSync];
-    [self applyDeepSpringBoardAndUIKitTweaks];
 }
 
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
@@ -1161,29 +1270,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self saveSettingsDataAndSync];
 }
 
-- (void)showLanguagePickerPopup:(id)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"🌐 CHỌN NGÔN NGỮ"
-                                                                   message:@"Lựa chọn ngôn ngữ hiển thị giao diện hệ thống:"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt (Mặc Định)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        self.settingsDict[@"AppLanguage"] = @"vi";
-        [self saveSettingsDataAndSync];
-        [self.customTableView reloadData];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        self.settingsDict[@"AppLanguage"] = @"en";
-        [self saveSettingsDataAndSync];
-        [self.customTableView reloadData];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.sourceView = self.view;
-        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
-    }
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
 #pragma mark - HUD & IPC Sync
 
 - (void)startContinuousHardwareHUD {
@@ -1208,7 +1294,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 }
 
-// [ĐÃ ÉP AN TOÀN]: Đẩy I/O ghi file Shmem ra luồng ngầm, Main Thread không bao giờ bị nghẽn
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     if (!_isKernelExploited) return;
 
