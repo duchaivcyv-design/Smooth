@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: XÁC THỰC TIẾN TRÌNH NỀN TẢNG CẤP CAO -->
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: XÁC THỰC TIẾN TRÌNH NỀN TẢNG CẤP CAO CỦA HỆ THỐNG -->
     <key>platform-application</key>
     <true/>
 
@@ -10,19 +10,36 @@
     <key>com.apple.private.security.no-sandbox</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: TRUY CẬP TỰ DO BỘ LƯU TRỮ VÀ DỮ LIỆU APP CHUNG -->
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CẤM TỰ ĐỘNG ÉP VÀO SANDBOX CONTAINER -->
+    <key>com.apple.private.security.container-required</key>
+    <false/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: TRUY CẬP TỰ DO BỘ LƯU TRỮ VÀ DỮ LIỆU APP DÙNG CHUNG -->
     <key>com.apple.private.security.storage.AppDataContainers</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: QUYỀN KHỞI CHẠY & ĐIỀU PHỐI VỚI SPRINGBOARD -->
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: QUYỀN KHỞI CHẠY & ĐIỀU PHỐI TIẾN TRÌNH VỚI SPRINGBOARD -->
     <key>com.apple.springboard.launchapplications</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CẤP QUYỀN GIAO TIẾP VỚI TIẾN TRÌNH HỆ THỐNG VÀ XNU KERNEL -->
+    <key>com.apple.backboardd.launchapplications</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CẤP QUYỀN GIAO TIẾP VỚI XNU KERNEL & ĐƯỜNG DẪN /tmp -->
     <key>com.apple.private.kernel.get-temp-dir</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CHO PHÉP THỰC THI MÃ VÀ ĐO ĐẠC MACH HOST STATISTICS -->
+    <key>com.apple.private.set-user-dir-suffix</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: TRUY CẬP IOKIT ĐỂ ĐO PIN, VÔN VÀ NHIỆT ĐỘ CELL KHÔNG BỊ ẢO -->
+    <key>com.apple.security.iokit-user-client-class</key>
+    <array>
+        <string>IOPMrootDomain</string>
+        <string>AppleARMIODevice</string>
+    </array>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CHO PHÉP THỰC THI MÃ, ĐO MACH HOST KERNEL & POSIX_SPAWN RESPRING -->
     <key>run-unsigned-code</key>
     <true/>
     
@@ -30,6 +47,9 @@
     <true/>
 
     <key>task_for_pid-allow</key>
+    <true/>
+
+    <key>com.apple.private.kernel.task-for-pid-high</key>
     <true/>
 </dict>
 </plist>
