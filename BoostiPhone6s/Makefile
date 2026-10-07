@@ -15,7 +15,7 @@ BoostiPhone6sApp_FILES = main.m \
                          RootListController.m
 
 BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox
-BoostiPhone6sApp_INSTALL_PATH = /Applications
+BoostiPhone6sApp_INSTALL_PATH = $(_THEOS_PREFIX)/Applications
 
 # CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
 BoostiPhone6sApp_CFLAGS = -fobjc-arc \
@@ -35,22 +35,18 @@ BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -I../Headers \
                           -I.
 
-# LINKER FLAGS: BỎ CÁC SYMBOL THỪA, LIÊN KẾT NHANH
-BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip \
-                          -Wl,-undefined,dynamic_lookup
+# LINKER FLAGS
+BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip
 
-# Ký quyền qua entitlements.plist
+# Ký quyền chuẩn qua cơ chế tự động của Theos
 BoostiPhone6sApp_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/application.mk
 
-# CẤP QUYỀN THỰC THI 0755 VÀ KÝ LDID ĐẢM BẢO KHÔNG BỊ CRASH KHI MỞ
+# ĐẢM BẢO QUYỀN THỰC THI CHO BINARY VÀ GÓI APP
 after-stage::
-	@echo "=== [BoostiPhone6sApp] Cấp quyền nhị phân & hoàn tất Staging ==="
+	@echo "=== [BoostiPhone6sApp] Cấp quyền phân phối gói Rootless ==="
 	@APP_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app"; \
 	chmod -R 0755 "$$APP_DIR"; \
-	if [ -f "entitlements.plist" ]; then \
-		ldid -Sentitlements.plist "$$APP_DIR/BoostiPhone6sApp" 2>/dev/null || true; \
-	fi; \
 	chmod 0755 "$$APP_DIR/BoostiPhone6sApp"; \
-	echo "  [OK] Đã phân quyền 0755 và ký ldid cho binary BoostiPhone6sApp!"
+	echo "  [OK] Đã hoàn tất phân quyền 0755!"
