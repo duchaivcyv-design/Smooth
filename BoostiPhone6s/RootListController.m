@@ -35,15 +35,8 @@ extern char **environ;
 
 #ifndef NOTIFY_RELOAD
 #define NOTIFY_RELOAD        "com.taojb.boostiphone6s/ReloadPrefs"
-#define NOTIFY_UIKIT_RELOAD  "com.taojb.boostiphone6s/ReloadUIKitPrefs"
-#define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
-#define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 #endif
-
-// ====================================================================================================
-// CẤU TRÚC BỘ NHỚ SHMEM IPC CHUẨN XÁC VỚI TWEAK.XM
-// ====================================================================================================
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
@@ -79,7 +72,7 @@ typedef struct __attribute__((packed)) {
 #endif
 
 // ====================================================================================================
-// CÔNG CỤ ĐỊNH VỊ VÙNG JAILBREAK & IPC NGUYÊN TỬ (0NS DELAY)
+// TIỆN ÍCH PATH & IPC AN TOÀN
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -133,6 +126,7 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
 }
 
 static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t size) {
+    if (!payloadData || size == 0) return;
     NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
     for (NSString *path in paths) {
         NSString *dir = [path stringByDeletingLastPathComponent];
@@ -149,7 +143,7 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t s
 }
 
 // ====================================================================================================
-// ĐO ĐẠC TẢI HỆ THỐNG THỜI GIAN THỰC NHẸ NHÀNG (ZERO-OVERHEAD)
+// ĐO ĐẠC TẢI HỆ THỐNG AN TOÀN
 // ====================================================================================================
 
 static inline float Titanium_GetLiveCPULoadPercentage(void) {
@@ -175,55 +169,51 @@ static inline float Titanium_GetLiveCPULoadPercentage(void) {
             return ((float)usedTicks / (float)totalTicks) * 100.0f;
         }
     }
-    return 15.0f;
+    return 14.5f;
 }
 
 static inline float Titanium_GetLiveGPULoadPercentage(void) {
     float cpu = Titanium_GetLiveCPULoadPercentage();
-    float gpu = (cpu * 0.70f) + 4.0f;
-    if (gpu > 99.0f) gpu = 98.5f;
+    float gpu = (cpu * 0.70f) + 3.5f;
+    if (gpu > 99.0f) gpu = 98.0f;
     return gpu;
 }
 
 static inline float Titanium_GetBaseThermalTemp(void) {
     NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
     float cpuLoad = Titanium_GetLiveCPULoadPercentage();
-    float loadOffset = (cpuLoad / 100.0f) * 2.2f;
+    float loadOffset = (cpuLoad / 100.0f) * 2.0f;
 
     switch (state) {
         case NSProcessInfoThermalStateNominal:  return 31.5f + loadOffset;
-        case NSProcessInfoThermalStateFair:     return 35.8f + loadOffset;
-        case NSProcessInfoThermalStateSerious:  return 40.2f + loadOffset;
-        case NSProcessInfoThermalStateCritical: return 44.0f + loadOffset;
+        case NSProcessInfoThermalStateFair:     return 35.5f + loadOffset;
+        case NSProcessInfoThermalStateSerious:  return 40.0f + loadOffset;
+        case NSProcessInfoThermalStateCritical: return 43.8f + loadOffset;
         default: return 32.0f + loadOffset;
     }
 }
 
 // ====================================================================================================
-// LỚP ĐIỀU KHIỂN CHÍNH ROOTLISTCONTROLLER
+// CONTROLLER CHÍNH
 // ====================================================================================================
 
 @interface RootListController () {
     dispatch_source_t _hudTimer;
     
-    // ĐIỀU HƯỚNG MỚI: 0: Hz/FPS | 1: Công Tắc | 2: TRANG CHỦ (GIỮA) | 3: Ứng Dụng | 4: Cài Đặt
-    NSInteger _currentBottomTab;    
-    NSInteger _currentHzFpsSubTab;  // 0: Hz | 1: FPS
-    NSInteger _currentSwitchSubTab; // 0: CPU | 1: GPU | 2: Màn Hình | 3: Pin | 4: Hệ Thống
+    NSInteger _currentBottomTab;    // 0: Hz/FPS | 1: Công Tắc | 2: Trang Chủ | 3: Ứng Dụng | 4: Cài Đặt
+    NSInteger _currentHzFpsSubTab;  
+    NSInteger _currentSwitchSubTab; 
     BOOL _isRateLocked;
     
-    // KHAI THÁC & THÔNG TIN THIẾT BỊ
     BOOL _isKernelExploited;
     BOOL _hasShownLaunchExploitAlert;
     
-    // TRẠNG THÁI MỞ RỘNG CÁC MỤC TRANG CHỦ
     BOOL _isCpuExpanded;
     BOOL _isGpuExpanded;
     BOOL _isRamExpanded;
     BOOL _isBatteryExpanded;
     BOOL _isScreenExpanded;
     
-    // THÔNG TIN BỘ NHỚ LƯU
     NSString *_deepUDIDString;
     NSString *_deepSerialString;
     NSString *_deepArchString;
@@ -232,11 +222,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSString *_deepKernelString;
     NSString *_deepCacheString;
     
-    // DANH SÁCH ỨNG DỤNG ĐƯỢC TỐI ƯU
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
-    // NÚT TRANG CHỦ NỔI BẬT Ở GIỮA
     UIButton *_centerHomeButton;
     UIView *_bottomBarContainer;
 }
@@ -253,13 +241,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // Màu nền công nghệ tối sang trọng (Dark Space Navy)
     self.view.backgroundColor = [UIColor colorWithRed:0.05 green:0.07 blue:0.11 alpha:1.0];
-    self.navigationController.navigationBar.barTintColor = [UIColor colorWithRed:0.07 green:0.09 blue:0.14 alpha:1.0];
-    self.navigationController.navigationBar.translucent = NO;
+    if (self.navigationController) {
+        self.navigationController.navigationBar.barTintColor = [UIColor colorWithRed:0.07 green:0.09 blue:0.14 alpha:1.0];
+        self.navigationController.navigationBar.translucent = NO;
+    }
 
-    // MẶC ĐỊNH CHỌN TRANG CHỦ Ở GIỮA
-    _currentBottomTab = 2;
+    _currentBottomTab = 2; // Mặc định mở Trang Chủ ở giữa
     _currentHzFpsSubTab = 0;
     _currentSwitchSubTab = 0;
     _hasShownLaunchExploitAlert = NO;
@@ -272,20 +260,19 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     _scannedAppsList = [NSMutableArray array];
 
-    // Nạp thiết lập từ bộ nhớ đĩa
+    // Nạp thiết lập
     [self loadSettingsData];
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
 
-    // Khởi tạo trạng thái khai thác lưu trữ
     _isKernelExploited = [self.settingsDict[@"IsKernelExploited"] boolValue];
     if (_isKernelExploited) {
         _deepUDIDString = self.settingsDict[@"SavedUDIDString"] ?: @"IOPlatformUUID Verified";
-        _deepSerialString = self.settingsDict[@"SavedSerialString"] ?: @"Apple Silicon Identity Protected";
-        _deepArchString = self.settingsDict[@"SavedArchString"] ?: @"arm64e (Apple Silicon PAC)";
-        _deepCoreCountString = self.settingsDict[@"SavedCoreCountString"] ?: @"Clustered P/E Cores";
-        _deepRamString = self.settingsDict[@"SavedRamString"] ?: @"LPDDR Purgable";
+        _deepSerialString = self.settingsDict[@"SavedSerialString"] ?: @"Apple Silicon Identity Verified";
+        _deepArchString = self.settingsDict[@"SavedArchString"] ?: @"arm64e (Apple PAC)";
+        _deepCoreCountString = self.settingsDict[@"SavedCoreCountString"] ?: @"SoC Clustered P/E Cores";
+        _deepRamString = self.settingsDict[@"SavedRamString"] ?: @"LPDDR Purgable Memory";
         _deepKernelString = self.settingsDict[@"SavedKernelString"] ?: @"Darwin XNU Kernel";
-        _deepCacheString = self.settingsDict[@"SavedCacheString"] ?: @"Silicon L2 Cache";
+        _deepCacheString = self.settingsDict[@"SavedCacheString"] ?: @"Low Latency Cache";
     }
 
     [self setupTopHeaderBar];
@@ -293,12 +280,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self setupMainTableView];
     [self setupCustomBottomNavigationBar];
 
-    // Quét danh sách App ngầm để không nghẽn mở Tweak
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+    // Quét ứng dụng chạy ngầm không gây block giao diện
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         [self loadInstalledAppsAsync];
     });
 
-    [self applyDeepSpringBoardAndUIKitTweaks];
+    // KHÔNG gọi các lệnh can thiệp nặng vào UIWindowScene ở đây nữa
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -308,8 +295,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    
-    // Nếu chưa từng khai thác (cài mới hoặc cài lại), hiện thông báo yêu cầu
     if (!_isKernelExploited && !_hasShownLaunchExploitAlert) {
         _hasShownLaunchExploitAlert = YES;
         [self showMandatoryExploitAlert];
@@ -320,10 +305,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [super viewWillDisappear:animated];
     [self stopContinuousHardwareHUD];
 }
-
-// ====================================================================================================
-// NẠP ỨNG DỤNG BẤT ĐỒNG BỘ - LOẠI BỎ HOÀN TOÀN DELAY KHI VÀO TWEAK
-// ====================================================================================================
 
 - (void)loadInstalledAppsAsync {
     @autoreleasepool {
@@ -346,7 +327,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                         NSString *bundleID = info[@"CFBundleIdentifier"] ?: item;
 
                         if (tempStates[bundleID] == nil) {
-                            tempStates[bundleID] = @YES; // Mặc định tất cả ứng dụng đều bật tối ưu
+                            tempStates[bundleID] = @YES;
                         }
 
                         [tempApps addObject:@{
@@ -370,27 +351,21 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// BẢNG THÔNG BÁO KHAI THÁC & TIẾN TRÌNH THU THẬP THÔNG SỐ MÁY (UDID, SERIAL, CPU)
+// POPUP VÀ TIẾN TRÌNH KHAI THÁC LẦN ĐẦU (10S)
 // ====================================================================================================
 
 - (void)showMandatoryExploitAlert {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚡ YÊU CẦU KÍCH HOẠT HỆ THỐNG"
-                                                                   message:@"Để áp dụng ép xung Hz, FPS và điều phối P-Core toàn máy, ứng dụng cần chạy chu kỳ khai thác và liên kết định danh thiết bị (UDID, SoC).\n\nNếu chưa khai thác, các tính năng sẽ chỉ ở chế độ xem."
+                                                                   message:@"Ứng dụng cần chạy chu kỳ liên kết phần cứng và định danh thiết bị (UDID, SoC) trong 10 giây để mở khóa toàn bộ tính năng.\n\nNếu chưa kích hoạt, các thiết lập sẽ ở chế độ chỉ đọc."
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    UIAlertAction *exploitAction = [UIAlertAction actionWithTitle:@"🚀 Kích Hoạt Ngay (~10 Giây)" 
-                                                            style:UIAlertActionStyleDefault 
-                                                          handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"🚀 Kích Hoạt Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self openExploitConsoleModal];
-    }];
-    [alert addAction:exploitAction];
+    }]];
 
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"✕ Bỏ Qua (Chỉ Xem)" 
-                                                           style:UIAlertActionStyleCancel 
-                                                         handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"✕ Để Sau" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         [self.customTableView reloadData];
-    }];
-    [alert addAction:cancelAction];
+    }]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -403,7 +378,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 55, consoleVC.view.bounds.size.width - 40, 30)];
     titleLabel.text = @"⚡ LIÊN KẾT NHÂN XNU & THU THẬP ĐỊNH DANH";
     titleLabel.textColor = [UIColor colorWithRed:0.2 green:0.95 blue:0.45 alpha:1.0];
-    titleLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:15] ?: [UIFont boldSystemFontOfSize:15];
+    titleLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:14] ?: [UIFont boldSystemFontOfSize:14];
     [consoleVC.view addSubview:titleLabel];
 
     UIProgressView *progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
@@ -431,20 +406,20 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)runExploitStagesWithConsole:(UITextView *)logTextView progress:(UIProgressView *)progressView controller:(UIViewController *)consoleVC {
     NSArray *stages = @[
-        @"[1/6] Kiểm tra kiến trúc Apple Silicon & Định danh phần cứng...",
-        @"[2/6] Quét và ánh xạ UDID / Serial máy vào vùng nhớ an toàn...",
-        @"[3/6] Phá bỏ rào cản Sandbox, mở cổng IPC /tmp & /var/jb/tmp...",
+        @"[1/6] Kiểm tra kiến trúc Apple Silicon & Phân giải định danh máy...",
+        @"[2/6] Trích xuất UDID / Serial vào vùng nhớ bảo mật...",
+        @"[3/6] Phá vỡ Sandbox, cấp quyền truy xuất IPC /tmp & /var/jb/tmp...",
         @"[4/6] Khởi tạo bộ điều phối P-Core Realtime Scheduler...",
-        @"[5/6] Cấu hình Triple Buffering & Bypass V-Sync CADisplayLink...",
-        @"[6/6] Đồng bộ quyền ghi đè tần số quét Hz/FPS toàn hệ thống...",
+        @"[5/6] Thiết lập Triple Buffering & Bypass V-Sync CADisplayLink...",
+        @"[6/6] Đồng bộ quyền ghi đè tần số quét toàn hệ thống...",
         @"✅ THÀNH CÔNG! Đã kích hoạt trọn vẹn toàn bộ tính năng."
     ];
 
     __block NSInteger currentIdx = 0;
-    NSMutableString *logBuffer = [NSMutableString stringWithString:@"[*] Khởi chạy tiến trình khai thác phần cứng...\n"];
+    NSMutableString *logBuffer = [NSMutableString stringWithString:@"[*] Khởi chạy tiến trình liên kết phần cứng...\n"];
     logTextView.text = logBuffer;
 
-    NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:1.5 repeats:YES block:^(NSTimer * _Nonnull t) {
+    NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:1.4 repeats:YES block:^(NSTimer * _Nonnull t) {
         if (currentIdx < stages.count) {
             [logBuffer appendFormat:@"\n%@", stages[currentIdx]];
             logTextView.text = logBuffer;
@@ -453,7 +428,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             float prog = (float)(currentIdx + 1) / (float)stages.count;
             [progressView setProgress:prog animated:YES];
 
-            UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+            UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
             [fb impactOccurred];
 
             currentIdx++;
@@ -463,9 +438,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             UINotificationFeedbackGenerator *notiFb = [[UINotificationFeedbackGenerator alloc] init];
             [notiFb notificationOccurred:UINotificationFeedbackTypeSuccess];
 
-            // Lưu trữ vĩnh viễn dữ liệu vào Plist
             [self persistExploitDataToDisk];
-            [self applyDeepSpringBoardAndUIKitTweaks];
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [consoleVC dismissViewControllerAnimated:YES completion:^{
@@ -478,24 +451,21 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)persistExploitDataToDisk {
-    // 1. Quét UDID (IdentifierForVendor chuẩn hoặc IOPlatformUUID qua sysctl)
     NSString *vendorID = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
     _deepUDIDString = vendorID ?: @"F482A1B8-E923-44CD-981F-AD830219EF82";
 
-    // 2. Serial / Hardware Platform
     char hwModel[64] = {0};
     size_t hwSize = sizeof(hwModel);
     sysctlbyname("hw.model", hwModel, &hwSize, NULL, 0);
     _deepSerialString = [NSString stringWithFormat:@"%s (SoC Platform Verified)", hwModel];
 
-    // 3. Kiến trúc CPU
     char cpuTypeStr[128] = {0};
     size_t size = sizeof(cpuTypeStr);
     sysctlbyname("machdep.cpu.brand_string", cpuTypeStr, &size, NULL, 0);
     NSString *brand = [NSString stringWithUTF8String:cpuTypeStr];
     if (!brand || brand.length == 0) {
         #if defined(__arm64e__)
-        _deepArchString = @"arm64e (Apple Silicon PAC v8.3+)";
+        _deepArchString = @"arm64e (Apple Silicon PAC)";
         #elif defined(__arm64__)
         _deepArchString = @"arm64 (Apple A-Series 64-bit)";
         #else
@@ -505,26 +475,22 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         _deepArchString = brand;
     }
 
-    // 4. Số nhân CPU
     int ncpu = 0;
     size = sizeof(ncpu);
     sysctlbyname("hw.ncpu", &ncpu, &size, NULL, 0);
     _deepCoreCountString = [NSString stringWithFormat:@"%d Nhân SoC (Clustered P/E)", ncpu];
 
-    // 5. Dung lượng RAM
     int64_t memsize = 0;
     size = sizeof(memsize);
     sysctlbyname("hw.memsize", &memsize, &size, NULL, 0);
     double ramGB = (double)memsize / (1024.0 * 1024.0 * 1024.0);
     _deepRamString = [NSString stringWithFormat:@"%.2f GB LPDDR (Mach Purgable)", ramGB];
 
-    // 6. Phiên bản Kernel
     char osrelease[64] = {0};
     size = sizeof(osrelease);
     sysctlbyname("kern.osrelease", osrelease, &size, NULL, 0);
     _deepKernelString = [NSString stringWithFormat:@"Darwin %s (XNU Kernel)", osrelease];
 
-    // 7. L2 Cache
     int64_t l2cache = 0;
     size = sizeof(l2cache);
     sysctlbyname("hw.l2cachesize", &l2cache, &size, NULL, 0);
@@ -545,7 +511,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// NẠP & ĐỒNG BỘ CẤU HÌNH (ĐẢM BẢO TẤT CẢ CÔNG TẮC & HZ/FPS HOẠT ĐỘNG 100%)
+// NẠP & ĐỒNG BỘ CẤU HÌNH (TRÁNH CRASH SAFEMODE / KHÔNG SPAM NOTIFICATION)
 // ====================================================================================================
 
 - (void)loadSettingsData {
@@ -571,12 +537,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self syncSharedMemoryFile:master];
 }
 
+// ĐỒNG BỘ NỀN & TRÁNH DEADLOCK SPRINGBOARD
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     ApexV285ProPayload payload;
     memset(&payload, 0, sizeof(ApexV285ProPayload));
     payload.magic = APEX_SYNC_MAGIC_V285;
-    
-    // Luôn giữ MasterEnabled theo công tắc chính và trạng thái kích hoạt
     payload.masterEnabled = (enabled && _isKernelExploited) ? 1 : 0;
 
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
@@ -609,43 +574,36 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     payload.updateSeq = (uint64_t)mach_absolute_time();
     payload.lastHeartbeat = payload.updateSeq;
 
-    Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
+    // Ghi đĩa trên nền ngầm, tránh đơ app
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
 
-    // Phát toàn bộ các kênh Darwin Notification để Tweak.xm cập nhật ngay lập tức
-    notify_post(NOTIFY_RELOAD);
-    notify_post(NOTIFY_UIKIT_RELOAD);
-    notify_post(NOTIFY_HARDWARE_SYNC);
-    notify_post(NOTIFY_FPS_CHANGED);
-    notify_post(NOTIFY_TITANIUM_CHANGED);
-}
-
-- (void)applyDeepSpringBoardAndUIKitTweaks {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-    if (@available(iOS 15.0, *)) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
-            if (targetHz < 15) targetHz = 15;
-            if (targetHz > 144) targetHz = 144;
-
-            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]]) {
-                    UIWindowScene *ws = (UIWindowScene *)scene;
-                    if ([ws respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake(targetHz, targetHz, targetHz);
-                        [(id)ws setPreferredFrameRateRange:range];
-                    }
-                }
-            }
+        // CHỐNG SAFEMODE: Gom thông báo, không phát 5 thông báo cùng lúc làm sập WindowServer
+        static dispatch_source_t s_debounceNotify = nil;
+        static dispatch_queue_t s_notifyQueue = nil;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            s_notifyQueue = dispatch_queue_create("com.titanium.v285.notifydebouncer", DISPATCH_QUEUE_SERIAL);
         });
-    }
 
-    BOOL master = [self.settingsDict[@"Enabled"] ?: @YES boolValue];
-    [self syncSharedMemoryFile:master];
+        if (s_debounceNotify) {
+            dispatch_source_cancel(s_debounceNotify);
+            s_debounceNotify = nil;
+        }
+
+        s_debounceNotify = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, s_notifyQueue);
+        dispatch_source_set_timer(s_debounceNotify, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(50 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+        dispatch_source_set_event_handler(s_debounceNotify, ^{
+            notify_post(NOTIFY_RELOAD);
+            notify_post(NOTIFY_TITANIUM_CHANGED);
+            s_debounceNotify = nil;
+        });
+        dispatch_resume(s_debounceNotify);
+    });
 }
 
 // ====================================================================================================
-// THIẾT KẾ GIAO DIỆN MỚI: THANH ĐIỀU HƯỚNG DƯỚI VỚI NÚT TRANG CHỦ TO NỔI BẬT Ở GIỮA
+// THANH ĐIỀU HƯỚNG DƯỚI - TRANG CHỦ Ở GIỮA TO NỔI BẬT
 // ====================================================================================================
 
 - (void)setupTopHeaderBar {
@@ -685,7 +643,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
     [feedback impactOccurred];
 
-    [self applyDeepSpringBoardAndUIKitTweaks];
     [self.customTableView reloadData];
 }
 
@@ -732,7 +689,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.view addSubview:self.customTableView];
 }
 
-// THANH ĐIỀU HƯỚNG MỚI VỚI NÚT HOME Ở GIỮA TO NỔI BẬT
 - (void)setupCustomBottomNavigationBar {
     CGFloat barHeight = 60.0;
     CGFloat barY = self.view.bounds.size.height - barHeight - 20.0;
@@ -744,7 +700,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _bottomBarContainer.layer.borderWidth = 1.0;
     _bottomBarContainer.layer.borderColor = [UIColor colorWithRed:0.2 green:0.3 blue:0.45 alpha:0.4].CGColor;
     
-    // Đổ bóng hiện đại
     _bottomBarContainer.layer.shadowColor = [UIColor blackColor].CGColor;
     _bottomBarContainer.layer.shadowOpacity = 0.4f;
     _bottomBarContainer.layer.shadowOffset = CGSizeMake(0, 4);
@@ -753,13 +708,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     CGFloat btnWidth = (_bottomBarContainer.bounds.size.width) / 5.0;
 
-    // Nút 0: Hz/FPS
     [self createBarButtonWithTitle:@"🎛️ Hz/FPS" index:0 frame:CGRectMake(0, 0, btnWidth, barHeight)];
-    
-    // Nút 1: Công Tắc
     [self createBarButtonWithTitle:@"⚡ Switch" index:1 frame:CGRectMake(btnWidth, 0, btnWidth, barHeight)];
 
-    // Nút 2: TRANG CHỦ (CHÍNH GIỮA - NỔI BẬT TO HƠN)
+    // Nút Trang Chủ chính giữa
     _centerHomeButton = [UIButton buttonWithType:UIButtonTypeCustom];
     _centerHomeButton.frame = CGRectMake(btnWidth * 2 - 4, -12, btnWidth + 8, barHeight + 12);
     _centerHomeButton.backgroundColor = [UIColor colorWithRed:0.12 green:0.48 blue:0.95 alpha:1.0];
@@ -775,10 +727,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [_centerHomeButton addTarget:self action:@selector(onNavTabClicked:) forControlEvents:UIControlEventTouchUpInside];
     [_bottomBarContainer addSubview:_centerHomeButton];
 
-    // Nút 3: Ứng Dụng
     [self createBarButtonWithTitle:@"📱 Apps" index:3 frame:CGRectMake(btnWidth * 3, 0, btnWidth, barHeight)];
-
-    // Nút 4: Cài Đặt
     [self createBarButtonWithTitle:@"⚙️ Cài Đặt" index:4 frame:CGRectMake(btnWidth * 4, 0, btnWidth, barHeight)];
 }
 
@@ -796,7 +745,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)onNavTabClicked:(UIButton *)sender {
     _currentBottomTab = sender.tag;
     
-    // Cập nhật hiệu ứng màu nút Home giữa
     if (_currentBottomTab == 2) {
         _centerHomeButton.backgroundColor = [UIColor colorWithRed:0.12 green:0.48 blue:0.95 alpha:1.0];
         _centerHomeButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.8 blue:1.0 alpha:0.8].CGColor;
@@ -812,25 +760,19 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// TABLEVIEW DATA SOURCE & DELEGATE (HIỂN THỊ TIÊU ĐỀ TRỰC QUAN & DỄ HIỂU)
+// TABLEVIEW DATA & DELEGATE
 // ====================================================================================================
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    // 2: TRANG CHỦ
     if (_currentBottomTab == 2) return 5;
-    // 0: HZ / FPS
     if (_currentBottomTab == 0) return 3;
-    // 1: CÔNG TẮC
     if (_currentBottomTab == 1) return 2;
-    // 3: ỨNG DỤNG
     if (_currentBottomTab == 3) return 1;
-    // 4: CÀI ĐẶT
     return 3;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (_currentBottomTab == 2) {
-        // Accordion mở rộng / thu gọn
         if (section == 0) return _isCpuExpanded ? 5 : 1;
         if (section == 1) return _isGpuExpanded ? 5 : 1;
         if (section == 2) return _isRamExpanded ? 4 : 1;
@@ -907,9 +849,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
 
-    // ====================================================================================================
-    // TAB 2: TRANG CHỦ (GIỮA) - DỄ HIỂU, RÕ RÀNG
-    // ====================================================================================================
+    // TAB 2: TRANG CHỦ
     if (_currentBottomTab == 2) {
         float baseTemp = Titanium_GetBaseThermalTemp();
         float cpu = Titanium_GetLiveCPULoadPercentage();
@@ -925,7 +865,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
 
-        // SECTION 0: CPU
         if (indexPath.section == 0) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = _isCpuExpanded ? @"🧠 CPU (Chạm để thu gọn ▼)" : @"🧠 CPU (Chạm để mở rộng ▶)";
@@ -945,9 +884,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Nhân xử lý ưu tiên";
                 cell.detailTextLabel.text = (cpu > 40.0f) ? @"P-Core (Hiệu năng cao)" : @"E-Core (Tiết kiệm điện)";
             }
-        }
-        // SECTION 1: GPU
-        else if (indexPath.section == 1) {
+        } else if (indexPath.section == 1) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = _isGpuExpanded ? @"🎮 GPU (Chạm để thu gọn ▼)" : @"🎮 GPU (Chạm để mở rộng ▶)";
                 cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
@@ -966,9 +903,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Chế độ đệm khung hình";
                 cell.detailTextLabel.text = @"Triple Buffering (Mượt mà)";
             }
-        }
-        // SECTION 2: RAM
-        else if (indexPath.section == 2) {
+        } else if (indexPath.section == 2) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = _isRamExpanded ? @"💾 RAM (Chạm để thu gọn ▼)" : @"💾 RAM (Chạm để mở rộng ▶)";
                 cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
@@ -983,9 +918,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Trạng thái bộ nhớ đệm";
                 cell.detailTextLabel.text = @"Đã xả sạch (Clean Memory)";
             }
-        }
-        // SECTION 3: PIN
-        else if (indexPath.section == 3) {
+        } else if (indexPath.section == 3) {
             [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
             int level = (int)([[UIDevice currentDevice] batteryLevel] * 100);
             if (level < 0) level = 100;
@@ -1009,9 +942,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Dòng xả tức thì";
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%.1f%% Tải", batteryLoad];
             }
-        }
-        // SECTION 4: MÀN HÌNH
-        else {
+        } else {
             NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
             NSInteger fps = [self.settingsDict[@"TargetFPSRate"] ?: @144 integerValue];
 
@@ -1031,15 +962,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             }
         }
     } 
-    // ====================================================================================================
     // TAB 0: HZ / FPS
-    // ====================================================================================================
     else if (_currentBottomTab == 0) {
         if (indexPath.section == 0) {
             cell.textLabel.numberOfLines = 0;
             cell.textLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
             cell.textLabel.textColor = [UIColor colorWithRed:0.8 green:0.85 blue:0.95 alpha:1.0];
-            cell.textLabel.text = @"📌 Giải thích: Thiết lập Hz/FPS giúp ép xung chu kỳ CADisplayLink, giảm độ trễ hiển thị và giúp cảm ứng bám tay tối đa trên toàn hệ thống.";
+            cell.textLabel.text = @"📌 Giải thích: Thiết lập Hz/FPS giúp ép xung chu kỳ CADisplayLink, giảm độ trễ hiển thị và giúp cảm ứng bám tay tối đa.";
         } else if (indexPath.section == 1) {
             UISegmentedControl *subSeg = [[UISegmentedControl alloc] initWithItems:@[@"Tần Số Quét (Hz)", @"Khung Hình (FPS)"]];
             subSeg.frame = CGRectMake(12, 6, cell.contentView.bounds.size.width - 24, 32);
@@ -1086,9 +1015,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             }
         }
     } 
-    // ====================================================================================================
-    // TAB 1: CÔNG TẮC - TÊN DỄ HIỂU
-    // ====================================================================================================
+    // TAB 1: CÔNG TẮC
     else if (_currentBottomTab == 1) {
         if (indexPath.section == 0) {
             UISegmentedControl *catSeg = [[UISegmentedControl alloc] initWithItems:@[@"CPU", @"GPU", @"Màn Hình", @"Pin", @"Hệ Thống"]];
@@ -1128,14 +1055,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             } else if (_currentSwitchSubTab == 3) {
                 if (indexPath.row == 0) { title = @"Lọc Loạn Cảm Ứng Khi Cắm Củ Sạc"; state = [self.settingsDict[@"AntiGhostTouch"] ?: @YES boolValue]; tag = 401; }
                 else if (indexPath.row == 1) { title = @"Khử Nhiễu Sóng Điện Áp Từ Dây Sạc"; state = [self.settingsDict[@"ChargerRippleRejection"] ?: @YES boolValue]; tag = 402; }
-                else if (indexPath.row == 2) { title = @"Giữ Hiệu Năng Đỉnh (Bỏ Qua Chế Độ Tiết Kiệm Pin)"; state = [self.settingsDict[@"fakeFullBatteryState"] ?: @YES boolValue]; tag = 403; }
+                else if (indexPath.row == 2) { title = @"Giữ Hiệu Năng Đỉnh (Bỏ Qua Tiết Kiệm Pin)"; state = [self.settingsDict[@"fakeFullBatteryState"] ?: @YES boolValue]; tag = 403; }
                 else if (indexPath.row == 3) { title = @"Hạ 30 FPS Thông Minh Nếu Quá Nhiệt"; state = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @YES boolValue]; tag = 404; }
                 else { title = @"Chế Độ Khóa Cứng 60Hz Tiết Kiệm Pin"; state = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue]; tag = 405; }
             } else {
                 if (indexPath.row == 0) { title = @"Khởi Động Ứng Dụng Nhanh (Turbo Eager)"; state = [self.settingsDict[@"TurboAppLaunch"] ?: @YES boolValue]; tag = 501; }
                 else if (indexPath.row == 1) { title = @"Chống Chớp Đen Màn Hình Khi Mở App"; state = [self.settingsDict[@"FixAppLaunchBlackScreen"] ?: @YES boolValue]; tag = 502; }
                 else if (indexPath.row == 2) { title = @"Giảm Trễ Hoạt Ảnh Chuyển Đa Nhiệm"; state = [self.settingsDict[@"ReduceMultiTaskLag"] ?: @YES boolValue]; tag = 503; }
-                else if (indexPath.row == 3) { title = @"Chống Khựng Khi Vuốt Thoát Về Màn Hình Chính"; state = [self.settingsDict[@"FixAppExitStutter"] ?: @YES boolValue]; tag = 504; }
+                else if (indexPath.row == 3) { title = @"Chống Khựng Khi Vuốt Thoát Về Home"; state = [self.settingsDict[@"FixAppExitStutter"] ?: @YES boolValue]; tag = 504; }
                 else if (indexPath.row == 4) { title = @"Dọn Dẹp Bộ Nhớ Đệm RAM Ngầm Tự Động"; state = [self.settingsDict[@"hyperMemoryGuardian"] ?: @YES boolValue]; tag = 505; }
                 else { title = @"Tự Động Đóng App Ngầm Tránh Đầy RAM"; state = [self.settingsDict[@"autoKillBackground"] ?: @NO boolValue]; tag = 506; }
             }
@@ -1158,9 +1085,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.accessoryView = toggle;
         }
     } 
-    // ====================================================================================================
     // TAB 3: DANH SÁCH ỨNG DỤNG
-    // ====================================================================================================
     else if (_currentBottomTab == 3) {
         if (_scannedAppsList.count == 0) {
             cell.textLabel.text = @"Đang quét danh sách ứng dụng...";
@@ -1192,10 +1117,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }
 
         cell.accessoryView = appToggle;
-    }
-    // ====================================================================================================
+    } 
     // TAB 4: CÀI ĐẶT
-    // ====================================================================================================
     else {
         if (indexPath.section == 0) {
             if (indexPath.row == 0) {
@@ -1218,7 +1141,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             } else {
                 NSString *curIOS = [[UIDevice currentDevice] systemVersion];
                 cell.backgroundColor = [UIColor colorWithRed:0.06 green:0.18 blue:0.14 alpha:0.9];
-                cell.textLabel.text = [NSString stringWithFormat:@"🟢 Phiên Bản iOS: %@ (Tương Thích Tốt)", curIOS];
+                cell.textLabel.text = [NSString stringWithFormat:@"🟢 Phiên Bản iOS: %@ (Tương Thích)", curIOS];
                 cell.textLabel.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.5 alpha:1.0];
                 cell.detailTextLabel.text = @"Hỗ trợ iOS 15 - 18";
                 cell.detailTextLabel.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.5 alpha:1.0];
@@ -1256,7 +1179,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
-    // CHẠM ĐỂ MỞ RỘNG TRÊN TRANG CHỦ (TAB 2)
     if (_currentBottomTab == 2 && _isKernelExploited) {
         if (indexPath.row == 0) {
             if (indexPath.section == 0) _isCpuExpanded = !_isCpuExpanded;
@@ -1273,7 +1195,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }
     }
 
-    // CHỌN HZ / FPS (TAB 0)
     if (_currentBottomTab == 0 && indexPath.section == 2) {
         if (!_isKernelExploited) {
             [self showUnexploitedWarningAlert];
@@ -1301,11 +1222,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             [self showCustomRateInputAlertForHz:isHz];
         }
 
-        [self applyDeepSpringBoardAndUIKitTweaks];
         [self.customTableView reloadData];
-    } 
-    // BẤM VÀO DÒNG ĐẦU MỤC CÀI ĐẶT ĐỂ KHAI THÁC LẠI
-    else if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
+    } else if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
         [self openExploitConsoleModal];
     }
 }
@@ -1322,8 +1240,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _appTweakStates[bundleID] = @(sender.isOn);
     self.settingsDict[@"AppTweakStates"] = _appTweakStates;
     [self saveSettingsDataAndSync];
-
-    [self applyDeepSpringBoardAndUIKitTweaks];
 }
 
 - (void)showUnexploitedWarningAlert {
@@ -1347,7 +1263,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
 }
 
-// BẬT / TẮT CÔNG TẮC VÀ LƯU NGAY
 - (void)onSwitchToggled:(UISwitch *)sender {
     if (!_isKernelExploited) {
         sender.on = !sender.isOn;
@@ -1385,7 +1300,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
     
     [self saveSettingsDataAndSync];
-    [self applyDeepSpringBoardAndUIKitTweaks];
 }
 
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
@@ -1406,7 +1320,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (val > 144) val = 144;
 
         [self applyRateValue:val isDynamic:NO isFPS:!isHz];
-        [self applyDeepSpringBoardAndUIKitTweaks];
         [self.customTableView reloadData];
     }]];
 
@@ -1415,18 +1328,17 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// ĐO ĐẠC NỀN & CẬP NHẬT GIAO DIỆN KHÔNG GÂY LAG CUỘN
+// HUD CẬP NHẬT CHỈ SỐ KHÔNG GÂY ĐƠ CUỘN
 // ====================================================================================================
 
 - (void)startContinuousHardwareHUD {
     [self stopContinuousHardwareHUD];
     _hudTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), (uint64_t)(1.2 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
+    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), (uint64_t)(1.5 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
 
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        // Chỉ reload khi người dùng đang ở Tab Home và đã kích hoạt
         if (strongSelf && strongSelf->_currentBottomTab == 2 && strongSelf->_isKernelExploited) {
             NSArray *visibleIndexPaths = [strongSelf.customTableView indexPathsForVisibleRows];
             if (visibleIndexPaths.count > 0) {
