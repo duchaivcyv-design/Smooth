@@ -1,3 +1,8 @@
+// ====================================================================================================
+// BOOSTIPHONE6S APP - APPDELEGATE IMPLEMENTATION (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - CHUẨN ĐỒNG BỘ 0MS)
+// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH, TỰ BẬT PROMOTION CAO NHẤT, ĐỒNG BỘ REALTIME)
+// ====================================================================================================
+
 #import "AppDelegate.h"
 #import "RootListController.h"
 #import <notify.h>
@@ -68,5 +73,30 @@
 }
 
 // [ĐÃ ÉP TOÀN DIỆN]: Tự động làm mới khi người dùng mở lại app từ chạy nền
-- (void)applicationWillEnterForeground
+- (void)applicationWillEnterForeground:(UIApplication *)application {
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    if (self.rootListVC) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.rootListVC ensureDefaultSettingsExist];
+            if ([self.rootListVC respondsToSelector:@selector(updateDynamicTitles)]) {
+                [self.rootListVC updateDynamicTitles];
+            }
+            if ([self.rootListVC respondsToSelector:@selector(refreshContinuousHardwareCells)]) {
+                [self.rootListVC refreshContinuousHardwareCells];
+            }
+        });
+    }
+
+    // Bắn thông báo đồng bộ lại IPC tức thì
+    notify_post(NOTIFY_RELOAD);
+    notify_post(NOTIFY_TITANIUM_CHANGED);
+}
+
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    if (self.window) {
+        [self.window.layer setNeedsDisplay];
+    }
+}
+
 @end
