@@ -2922,7 +2922,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // ====================================================================================================
 // NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (CHẾ ĐỘ ÉP TOÀN DIỆN - TURBO EAGER & ZERO DELAY)
 // (KẾT NỐI: Khởi Động App Nhanh Turbo Eager + Chống Đen Màn Mở Ứng Dụng + Ổ Khóa App)
-// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH KHỞI TẠO, 0MS NẠP MAIN SCENE)
+// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH KHỞI TẠO, 0MS NẠP MAIN SCENE, CHỐNG XUNG ĐỘT)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -2937,18 +2937,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép thời gian zoom mở rộng icon về 0.22s cực mượt
+// [ĐÃ ÉP TOÀN DIỆN]: Ép thời gian zoom mở rộng icon về 0.18s cực mượt
 - (double)zoomDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.22;
+        return 0.18;
     }
     return %orig;
 }
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép thời gian hoàn tất hoạt ảnh phóng app về 0.20s
+// [ĐÃ ÉP TOÀN DIỆN]: Ép thời gian hoàn tất hoạt ảnh phóng app về 0.18s
 - (double)launchDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.20;
+        return 0.18;
     }
     return %orig;
 }
@@ -2957,10 +2957,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook SBSplashBoardController
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép bỏ thời gian chờ màn hình splash tĩnh về 0.0s
+// [ĐÃ ÉP TOÀN DIỆN]: Duy trì snapshot ổn định 0.02s chống hổng frame gây đen màn hình khi mở app
 - (double)splashScreenDelay {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.0;
+        return 0.02;
     }
     return %orig;
 }
@@ -2980,17 +2980,33 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook UIApplication
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép nạp Scene và kích hoạt Pipeline tức thì (Trị dứt điểm lỗi đen app)
+// [ĐÃ ÉP TOÀN DIỆN]: Cưỡng bức nạp Scene và ép nạp ngay Viewport khung hình đầu (CHỐNG ĐEN APP & XUNG ĐỘT)
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     %orig;
 
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || CFG285.fixAppLaunchBlackScreen || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.turboAppLaunch || CFG285.fixAppLaunchBlackScreen || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
         g_lastInteractionMachTime = mach_absolute_time();
 
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
         } else {
-            Titanium_BoostRenderWithoutStarvingNetwork();
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+            // Ép nạp ngay lập tức khung hình đầu tiên của cửa sổ chính
+            dispatch_async(dispatch_get_main_queue(), ^{
+                for (UIWindow *win in [self windows]) {
+                    if (win && win.layer) {
+                        [win.layer setNeedsDisplay];
+                        [win setNeedsLayout];
+                        [win layoutIfNeeded];
+                        if (win.rootViewController && win.rootViewController.view) {
+                            [win.rootViewController.view.layer setNeedsDisplay];
+                            [win.rootViewController.view setNeedsLayout];
+                            [win.rootViewController.view layoutIfNeeded];
+                        }
+                    }
+                }
+            });
         }
     }
 }
@@ -2998,7 +3014,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép ưu tiên luồng giao diện khi app từ background quay lại màn hình
 - (void)_applicationWillEnterForeground {
     %orig;
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_lastInteractionMachTime = mach_absolute_time();
 
         if (Titanium_IsSpringBoard()) {
@@ -3666,11 +3682,27 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_lastInteractionMachTime = mach_absolute_time();
         
-        // ĐÃ ÉP: Cưỡng bức bố cục và vẽ ngay lớp ngoài cùng, không chờ Scene
+        // ĐÃ ÉP: Cưỡng bức bố cục và vẽ ngay lớp ngoài cùng cùng rootViewController (Trị đen app 100%)
         if (!Titanium_IsSpringBoard() && self.layer != nil) {
             [self.layer setNeedsDisplay];
             [self setNeedsLayout];
             [self layoutIfNeeded];
+
+            if (self.rootViewController && self.rootViewController.view) {
+                [self.rootViewController.view.layer setNeedsDisplay];
+                [self.rootViewController.view setNeedsLayout];
+                [self.rootViewController.view layoutIfNeeded];
+            }
+
+            // Đệm thêm nhịp RunLoop tiếp theo để chống trượt frame đầu tiên
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (self.layer) {
+                    [self.layer setNeedsDisplay];
+                    if (self.rootViewController && self.rootViewController.view) {
+                        [self.rootViewController.view.layer setNeedsDisplay];
+                    }
+                }
+            });
         }
         
         // ĐÃ ÉP: Khóa cứng dải tần số quét ProMotion cao nhất cho toàn bộ cửa sổ App con (Bảo vệ chống crash)
