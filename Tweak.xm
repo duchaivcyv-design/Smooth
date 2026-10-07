@@ -1007,7 +1007,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @end
 
 // ====================================================================================================
-// ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐẶT Ở ĐẦU TỆP Tweak.xm)
+// ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐÃ SỬA TRIỆT ĐỂ LỖI CLANG)
 // ====================================================================================================
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
@@ -1043,8 +1043,35 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
+// [ĐÃ ÉP]: Khởi tạo chuẩn xác từng trường chống lỗi "excess elements in struct initializer"
 static ApexV285ProPayload g_syncPayloadV285 = {
-    APEX_SYNC_MAGIC_V285, 1, 144, 144, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, {0}
+    .magic = APEX_SYNC_MAGIC_V285,
+    .masterEnabled = 1,
+    .targetHz = 144,
+    .targetFPS = 144,
+    .forceOverclock = 1,
+    .pipSyncEnabled = 1,
+    .thermalShield = 1,
+    .antiStutterExit = 1,
+    .smartBufferingLevel = 3,
+    .zeroLatencyTouch = 1,
+    .shaderOptimization = 1,
+    .dynamicInterpolation = 1,
+    .fastAppLaunch = 1,
+    .lowLatencyAudio = 1,
+    .memoryPressureRelief = 1,
+    .metalPacingEnabled = 1,
+    .runloopHangGuard = 1,
+    .keyboardZeroLagV3 = 1,
+    .aggressiveRamCleaner = 1,
+    .lockFixedFpsWhenThermal = 1,
+    .antiGhostTouch = 1,
+    .diskIOPriorityBoost = 1,
+    .rawTouchDirectDelivery = 1,
+    .powerSaveModeActive = 0,
+    .updateSeq = 0,
+    .lastHeartbeat = 0,
+    .reserved = {0}
 };
 
 static pthread_mutex_t g_syncLockV285 = PTHREAD_MUTEX_INITIALIZER;
