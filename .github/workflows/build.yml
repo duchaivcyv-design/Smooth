@@ -1,4 +1,4 @@
-Name: Build BoostiPhone6s Rootless
+name: Build BoostiPhone6s Rootless Deb
 
 on:
   push:
