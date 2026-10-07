@@ -2339,7 +2339,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
     }
 }
 
-// Bỏ khóa V-Sync an toàn cho game 3D, tránh can thiệp nếu app ở SpringBoard
+// [ĐÃ ÉP TOÀN DIỆN]: Bỏ khóa V-Sync an toàn cho game 3D, tránh can thiệp nếu app ở SpringBoard
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && CFG285.vsyncAdaptiveBuffer && !Titanium_IsSpringBoard()) {
         %orig(NO);
@@ -2348,9 +2348,9 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
     %orig;
 }
 
-// Chỉ áp dụng Triple Buffering khi layer đã có kích thước thực tế (chống nghẽn buffer gây đen app)
+// [ĐÃ ÉP TOÀN DIỆN]: Cưỡng bức Triple Buffering (3) khi layer đã có kích thước thực tế (chống nghẽn buffer gây đen app)
 - (NSUInteger)maximumDrawableCount {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.metalHexBuffering || g_syncPayloadV285.metalPacingEnabled)) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard() && (CFG285.metalHexBuffering || g_syncPayloadV285.metalPacingEnabled)) {
         if (self.superlayer != nil && self.bounds.size.width > 0 && self.bounds.size.height > 0) {
             return 3;
         }
@@ -2359,7 +2359,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 }
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.metalHexBuffering || g_syncPayloadV285.metalPacingEnabled)) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard() && (CFG285.metalHexBuffering || g_syncPayloadV285.metalPacingEnabled)) {
         if (self.superlayer != nil && self.bounds.size.width > 0 && self.bounds.size.height > 0) {
             %orig(3);
             return;
@@ -2372,13 +2372,13 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 %hook CALayer
 
-// Đệm nhịp kích hoạt Low Latency, loại bỏ gọi đè gây drop frame liên tục
+// [ĐÃ ÉP TOÀN DIỆN]: Kích hoạt Zero-Latency Pipeline với bộ đệm nhịp 16ms chống spam nghẽn Main Thread
 - (void)display {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch) && [NSThread isMainThread]) {
         if (!g_isDeviceChargingV285 && Titanium_ShouldLockTargetRate()) {
             static uint64_t s_lastLatencyTrigger = 0;
             uint64_t now = mach_absolute_time();
-            // Đệm 16ms tránh spam liên tục trên từng layer con
+            // Đệm 16ms (chu kỳ 1 frame ở 60Hz) tránh spam đè lên các sublayer con
             if (now - s_lastLatencyTrigger > (16ULL * 1000000ULL)) {
                 s_lastLatencyTrigger = now;
                 if (self.bounds.size.width > 0 && self.bounds.size.height > 0) {
@@ -2394,7 +2394,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 %hook CAContext
 
-// Loại bỏ ép cứng mức 90 - để hệ điều hành và WindowServer tự điều phối an toàn, tránh văng Safe Mode
+// [ĐÃ ÉP TOÀN DIỆN]: Bảo toàn cơ chế commit mặc định của hệ thống để tránh xung đột với WindowServer
 - (void)setCommitPriority:(uint32_t)priority {
     %orig;
 }
@@ -2403,7 +2403,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
     return %orig;
 }
 
-// Duy trì Dynamic Range chuẩn 1.0f chống sai lệch bảng màu
+// [ĐÃ ÉP TOÀN DIỆN]: Duy trì Dynamic Range chuẩn 1.0f chống lệch màu màn hình
 - (void)setDesiredDynamicRange:(float)range {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         %orig(1.0f);
@@ -2428,19 +2428,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
         return 60;
     }
 
-    // [ĐÃ ÉP TOÀN DIỆN]: NẾU BẬT Ổ KHÓA HOẶC ÉP XUNG 144HZ -> BUNG KỊCH TRẦN GIÁ TRỊ ĐÃ KHÓA
-    if (g_isRateLockedV285) {
-        NSInteger lockedVal = g_cachedResolvedHz;
-        if (lockedVal < 15) lockedVal = 144;
-        if (lockedVal > 144) lockedVal = 144;
-        return lockedVal;
-    }
-    
-    // NỐI CÔNG TẮC: Ép Xung Cố Định 144Hz Toàn Máy
-    if ((CFG285 && (CFG285.forceOverclock144Hz || CFG285.proMotionEngineBeta7)) || g_syncPayloadV285.forceOverclock != 0) {
-        return 144;
-    }
-    
+    // [ĐÃ ÉP TOÀN DIỆN]: ĐỌC GIÁ TRỊ THỰC TẾ ĐANG CHỈNH TỪ CACHE HOẶC CẤU HÌNH
     NSInteger userHz = g_cachedResolvedHz;
     if (userHz <= 0 && CFG285) {
         userHz = (NSInteger)CFG285.targetHz;
@@ -2454,6 +2442,26 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     return userHz;
 }
 
+static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
+    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
+    
+    if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
+        return 60;
+    }
+
+    NSInteger userFPS = g_cachedResolvedFPS;
+    if (userFPS <= 0 && CFG285) {
+        userFPS = (NSInteger)CFG285.targetFPS;
+    }
+    if (userFPS <= 0 && g_syncPayloadV285.targetFPS > 0) {
+        userFPS = (NSInteger)g_syncPayloadV285.targetFPS;
+    }
+    
+    if (userFPS < 15) userFPS = 15;
+    if (userFPS > 144) userFPS = 144;
+    return userFPS;
+}
+
 // ====================================================================================================
 // NHÓM 3: ĐỘNG CƠ PHÂN TẦNG NHỊP THÍCH ỨNG 5 NẤC (CHUẨN PROMOTION PRO MAX)
 // (KẾT NỐI: Điều Phối Hz, Điều Phối FPS, Ép Xung 144Hz Toàn Máy, Tiết Kiệm Pin 60Hz, Ổ Khóa App)
@@ -2464,22 +2472,16 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook CADisplayLink
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép FPS đầu ra của CADisplayLink theo nấc thông minh hoặc khóa cứng theo ổ khóa
+// [ĐÃ ÉP TOÀN DIỆN]: Ép FPS đầu ra của CADisplayLink theo đúng con số người dùng chỉnh
 - (NSInteger)preferredFramesPerSecond {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.enableFPSControl || g_syncPayloadV285.targetFPS > 0)) {
         if (Titanium_IsCurrentAppAGame()) {
             return %orig;
         }
-        if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) {
-            return Titanium_GetTargetConfiguredHz(); // Ép khóa cứng theo cấu hình
-        }
         if (Titanium_IsPassiveVideoPlayback()) {
             return 60;
         }
-        if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-            return 60; // Nghỉ tĩnh: hạ 60 FPS tiết kiệm pin khi không bật ổ khóa
-        }
-        return Titanium_GetTargetConfiguredHz(); // Tương tác chạm: bung nóc FPS mục tiêu
+        return Titanium_GetTargetConfiguredFPS(); // Ép chết FPS nhận đúng cấu hình
     }
     return %orig;
 }
@@ -2490,25 +2492,17 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             %orig;
             return;
         }
-        if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) {
-            %orig(Titanium_GetTargetConfiguredHz());
-            return;
-        }
         if (Titanium_IsPassiveVideoPlayback()) {
             %orig(60);
             return;
         }
-        if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-            %orig(60);
-            return;
-        }
-        %orig(Titanium_GetTargetConfiguredHz());
+        %orig(Titanium_GetTargetConfiguredFPS());
         return;
     }
     %orig;
 }
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép dải tần số quét ProMotion FrameRateRange cho iOS 15+
+// [ĐÃ ÉP TOÀN DIỆN]: Ép dải tần số quét ProMotion FrameRateRange cho iOS 15+ nhận đúng giá trị Hz
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.enableHzControl || g_syncPayloadV285.targetHz > 0)) {
         if (Titanium_IsCurrentAppAGame()) {
@@ -2520,16 +2514,11 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
         if (maxTarget < 15.0f) maxTarget = 15.0f;
         if (maxTarget > 144.0f) maxTarget = 144.0f;
 
-        // Nếu bật ổ khóa hoặc ép xung cứng: khóa dải Min=Target, Max=Target, Preferred=Target
-        if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) {
-            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
-        } else if (Titanium_IsPassiveVideoPlayback()) {
+        if (Titanium_IsPassiveVideoPlayback()) {
             range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
-        } else if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-            range = SafeMakeFRR(60.0f, 60.0f, 60.0f);
         } else {
             float minRate = (maxTarget <= 60.0f) ? 15.0f : 60.0f;
-            range = SafeMakeFRR(minRate, maxTarget, maxTarget);
+            range = SafeMakeFRR(minRate, maxTarget, maxTarget); // Ép dải quét nhận đúng con số đang chọn
         }
     }
     %orig(range);
@@ -2564,12 +2553,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 - (NSInteger)preferredFPS {
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return %orig;
-    if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) return Titanium_GetTargetConfiguredHz();
     if (Titanium_IsPassiveVideoPlayback()) return 60;
-    if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-        return 60;
-    }
-    return Titanium_GetTargetConfiguredHz();
+    return Titanium_GetTargetConfiguredFPS();
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
@@ -2577,19 +2562,11 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
         %orig;
         return;
     }
-    if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) {
-        %orig(Titanium_GetTargetConfiguredHz());
-        return;
-    }
     if (Titanium_IsPassiveVideoPlayback()) { 
         %orig(60); 
         return; 
     }
-    if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-        %orig(60);
-        return;
-    }
-    %orig(Titanium_GetTargetConfiguredHz());
+    %orig(Titanium_GetTargetConfiguredFPS());
 }
 
 - (NSInteger)minimumFPS {
@@ -2613,7 +2590,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook UIScreen
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép UIScreen nhận diện tần số quét đỉnh cao nhất
+// [ĐÃ ÉP TOÀN DIỆN]: Ép UIScreen nhận diện đúng tần số quét mục tiêu
 - (NSInteger)maximumFramesPerSecond {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) return Titanium_GetTargetConfiguredHz();
     return %orig;
@@ -2641,7 +2618,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook CAAnimation
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép tốc độ chuyển cảnh animation đạt trần mượt mà
+// [ĐÃ ÉP TOÀN DIỆN]: Ép tốc độ chuyển cảnh animation đạt đúng dải Hz đã chọn
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -2649,12 +2626,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             if (maxTarget < 15.0f) maxTarget = 15.0f;
             if (maxTarget > 144.0f) maxTarget = 144.0f;
 
-            if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) {
-                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
-            } else if (Titanium_IsPassiveVideoPlayback()) {
+            if (Titanium_IsPassiveVideoPlayback()) {
                 range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
-            } else if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-                range = SafeMakeFRR(60.0f, 60.0f, 60.0f);
             } else {
                 float minTarget = (maxTarget <= 60.0f) ? 15.0f : 60.0f;
                 range = SafeMakeFRR(minTarget, maxTarget, maxTarget);
@@ -2668,7 +2641,7 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 %hook CASpringAnimation
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép hoạt ảnh nảy lò xo đạt trần mượt mà
+// [ĐÃ ÉP TOÀN DIỆN]: Ép hoạt ảnh nảy lò xo đạt đúng dải Hz đã chọn
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -2676,12 +2649,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
             if (maxTarget < 15.0f) maxTarget = 15.0f;
             if (maxTarget > 144.0f) maxTarget = 144.0f;
 
-            if (g_isRateLockedV285 || CFG285.proMotionEngineBeta7 || CFG285.forceOverclock144Hz || g_syncPayloadV285.forceOverclock) {
-                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
-            } else if (Titanium_IsPassiveVideoPlayback()) {
+            if (Titanium_IsPassiveVideoPlayback()) {
                 range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
-            } else if (!Titanium_ShouldLockTargetRate() && !g_isUserTouchingScreen && !g_isScrollingActive) {
-                range = SafeMakeFRR(60.0f, 60.0f, 60.0f);
             } else {
                 float minTarget = (maxTarget <= 60.0f) ? 15.0f : 60.0f;
                 range = SafeMakeFRR(minTarget, maxTarget, maxTarget);
@@ -2793,13 +2762,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 2. GIAO DỊCH ĐA NHIỆM: ÉP MỞ KHÓA NGẮT CHUYỂN CẢNH TRONG 0MS
+// 2. GIAO DỊCH ĐA NHIỆM: ÉP MỞ KHÓA NGẮT CHUYỂN CẢNH TRONG 0MS (CHỐNG TREO 8S WATCHDOG)
 %hook SBFluidSwitcherGestureWorkspaceTransaction
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép cho phép ngắt cử chỉ tức thì giữa chừng để vuốt đảo chiều bám dính ngón tay
+// [ĐÃ ÉP TOÀN DIỆN]: Chỉ cho phép ngắt cử chỉ khi đang vuốt lướt ngón tay, không ngắt khi nhấp chọn mở app
 - (BOOL)canInterruptActiveGesture {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.reduceMultiTaskLag || g_isRateLockedV285)) {
-        return YES;
+        if (g_isContinuousSwiping) {
+            return YES;
+        }
     }
     return %orig;
 }
@@ -2922,7 +2893,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook SBAppLaunchSettings
 
-// Triệt tiêu thời gian chờ trước khi kích hoạt hoạt ảnh
+// [ĐÃ ÉP KỊCH TRẦN]: Triệt tiêu sạch toàn bộ thời gian chờ trước khi bung hoạt ảnh
 - (double)delayBeforeAppLaunch {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
         return 0.0;
@@ -2930,18 +2901,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
-// Rút ngắn thời gian phóng to icon mượt mà không gây vỡ tỷ lệ
+// [ĐÃ ÉP KỊCH TRẦN]: Phóng to icon siêu tốc 0.12s không lệch tỷ lệ
 - (double)zoomDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.15;
+        return 0.12;
     }
     return %orig;
 }
 
-// Hoàn tất hiệu ứng chuyển cảnh vào app tức thì
+// [ĐÃ ÉP KỊCH TRẦN]: Hoàn tất chuyển cảnh phóng app trong 0.12s
 - (double)launchDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.15;
+        return 0.12;
     }
     return %orig;
 }
@@ -2950,10 +2921,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook SBSplashBoardController
 
-// Bỏ độ trễ Splash snapshot, chuyển giao quyền vẽ ngay cho Main Scene
+// [ĐÃ ÉP CHỐNG ĐEN APP]: Neo giữ snapshot đúng 0.03s để GPU kịp gắn context, triệt tiêu chớp đen
 - (double)splashScreenDelay {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.0;
+        return 0.03;
     }
     return %orig;
 }
@@ -2973,7 +2944,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook UIApplication
 
-// ÉP XUẤT THẲNG KHUNG HÌNH ĐẦU TIÊN QUA CATRANSACTION - TRIỆT TIÊU ĐEN MÀN VÀ TREO SAFEMODE
+// [ĐÃ ÉP TOÀN DIỆN]: CƯỚP QUYỀN P-CORE VÀ XUẤT THẲNG FRAME ĐẦU TIÊN QUA CATRANSACTION KHÔNG NGHẼN RUNLOOP
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     %orig;
 
@@ -2983,10 +2954,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
         } else {
-            // Nâng quyền xử lý luồng giao diện tức thì
+            // Ép luồng chính của app con lên mức User-Interactive cao nhất
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
-            // Commit trực tiếp khung hình đầu vào RenderServer, tránh gọi layoutIfNeeded đè RunLoop
+            // Bắt buộc render khung hình đầu tiên qua CATransaction mà không block luồng compositor
             dispatch_async(dispatch_get_main_queue(), ^{
                 [CATransaction begin];
                 [CATransaction setDisableActions:YES];
@@ -3001,7 +2972,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                 }
 
                 [CATransaction commit];
-                [CATransaction flush]; // Ép GPU hiển thị ngay khung hình hiện tại
             });
         }
     }
@@ -3670,17 +3640,16 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook UIWindow
 
-// ÉP XUẤT THẲNG KHUNG HÌNH ĐẦU TIÊN QUA CATRANSACTION - TRỊ DỨT ĐIỂM ĐEN APP VÀ SAFEMODE
+// ÉP XUẤT THẲNG KHUNG HÌNH ĐẦU TIÊN QUA CATRANSACTION - TRỊ DỨT ĐIỂM ĐEN APP VÀ SAFEMODE (ĐÃ BỎ FLUSH NGHẼN LUỒNG)
 - (void)makeKeyAndVisible {
     %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_lastInteractionMachTime = mach_absolute_time();
 
         if (!Titanium_IsSpringBoard() && self.layer != nil) {
-            // Nâng quyền xử lý luồng render
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
-            // Ép RenderServer nhận diện và xuất ngay frame đầu tiên mà không đè layout gây lag
+            // Đánh dấu vẽ lại khung hình đầu tiên mượt mà, không dùng flush đè nghẽn Main Queue
             [CATransaction begin];
             [CATransaction setDisableActions:YES];
             
@@ -3690,7 +3659,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             }
 
             [CATransaction commit];
-            [CATransaction flush];
         }
 
         // Cấu hình ProMotion an toàn cho WindowScene (iOS 15+)
@@ -3701,7 +3669,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                     if (targetHz < 15.0f) targetHz = 15.0f;
                     if (targetHz > 144.0f) targetHz = 144.0f;
 
-                    // Thiết lập dải quét an toàn: sàn 60Hz, đỉnh theo cấu hình (chống crash compositor)
                     float minRate = (targetHz <= 60.0f) ? 15.0f : 60.0f;
                     SafeFrameRateRange range = SafeMakeFRR(minRate, targetHz, targetHz);
 
@@ -3958,50 +3925,32 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return orig;
 }
 
-// 1. [ĐÃ ÉP TOÀN DIỆN]: Ép nhả frame khởi động tránh đen app, khóa cứng cấm timeout khi vào game
+// 1. [ĐÃ ÉP TOÀN DIỆN]: Cho phép timeout hợp lệ để nhả frame khởi động, triệt tiêu đen app
 - (BOOL)allowsNextDrawableTimeout {
     if ((g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if ((self.superlayer == nil && self.delegate == nil) || CGRectIsEmpty(self.bounds)) {
-            return YES;
-        }
-        return NO;
+        return YES; // Cho phép timeout để tránh khóa cứng luồng khi vừa mở app
     }
     return %orig;
 }
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
     if ((g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if ((self.superlayer == nil && self.delegate == nil) || CGRectIsEmpty(self.bounds)) {
-            %orig(YES);
-            return;
-        }
-        %orig(NO);
+        %orig(YES);
         return;
     }
     %orig;
 }
 
-// 2. [ĐÃ ÉP TOÀN DIỆN]: Ép bỏ qua giao dịch WindowServer để GPU render độc lập 0ms trễ
+// 2. [ĐÃ ÉP TOÀN DIỆN]: Giữ nguyên giao dịch WindowServer để màn hình xuất khung hình bình thường
 - (BOOL)serverPresentsWithTransaction {
-    if ((g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.superlayer != nil || self.delegate != nil) {
-            return NO;
-        }
-    }
-    return %orig;
+    return %orig; // Bảo toàn đồng bộ WindowServer, không ép NO tránh đen xì màn hình
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
-    if ((g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.superlayer != nil || self.delegate != nil) {
-            %orig(NO);
-            return;
-        }
-    }
     %orig;
 }
 
-// 3. [ĐÃ ÉP TOÀN DIỆN]: Ép duy trì xung nhịp P-Core và Mach Time liên tục ở mỗi chu kỳ vẽ Drawable
+// 3. [ĐÃ ÉP TOÀN DIỆN]: Duy trì xung nhịp P-Core và Mach Time liên tục ở mỗi chu kỳ vẽ Drawable
 - (id)nextDrawable {
     if ((g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
         g_lastSyncTicksV285 = mach_absolute_time();
@@ -4099,28 +4048,29 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 1: VÔ HIỆU HÓA WATCHDOG (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - CHỐNG SAFE MODE 100%)
-// (AN TOÀN TUYỆT ĐỐI: KHÔNG TREO TÁO, KHÔNG TIMEOUT KHI MỞ APP NẶNG, 100% KHÔNG LỖI)
+// NHÓM 1: VÔ HIỆU HÓA WATCHDOG (CHẾ ĐỘ ĐÃ ÉP AN TOÀN - CHỐNG SAFE MODE 100%)
 // ====================================================================================================
 
 %group Group_AntiWatchdog_Immunity
 
-// 1. [ĐÃ ÉP TOÀN DIỆN]: Triệt tiêu hoàn toàn bộ đếm timer tử thần của Process Watchdog
 %hook FBProcessWatchdog
 
+// ĐÃ ÉP: Cho phép khởi tạo cấu trúc nội bộ nhưng vô hiệu hóa kích hoạt ngắt tiến trình
 - (void)start {
-    // ĐÃ ÉP: Cấm kích hoạt bộ đếm thời gian tử thần của Watchdog, triệt tiêu hoàn toàn tín hiệu kill tiến trình
-    return;
+    %orig;
+    // Hủy kích hoạt đếm ngược ngay sau khi khởi tạo để tránh deadlock và tránh crash con trỏ
+    if ([self respondsToSelector:@selector(invalidate)]) {
+        [(id)self invalidate];
+    }
 }
 
 %end
 
-// 2. [ĐÃ ÉP TOÀN DIỆN]: Ép nới lỏng thời gian chờ nạp Scene lên mức vô hạn
 %hook FBSceneWatchdog
 
+// ĐÃ ÉP: Thiết lập mức trần an toàn 180.0s (đủ lâu cho mọi tác vụ nặng, không gây tràn số Mach time)
 - (id)initWithTimeout:(double)timeout {
-    // ĐÃ ÉP: Khóa cứng timeout lên 99999.0s, chống văng Safe Mode khi mở app nặng hoặc render frame đầu
-    return %orig(99999.0);
+    return %orig(180.0);
 }
 
 %end
@@ -4794,8 +4744,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
                 }
 
-                Titanium_ReloadSharedSyncStateV285();
-
+                // ĐÃ ÉP: Nạp cấu hình từ bộ nhớ/plist trước, giải phóng I/O luồng chính
                 Class configClass = NSClassFromString(@"BoostConfigV285Pro");
                 if (configClass) {
                     CFG285 = [configClass sharedInstance];
@@ -4806,7 +4755,18 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                             g_cachedResolvedHz = initHz;
                         }
                     }
+                    if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                        NSInteger initFPS = (NSInteger)CFG285.targetFPS;
+                        if (initFPS >= 15 && initFPS <= 144) {
+                            g_cachedResolvedFPS = initFPS;
+                        }
+                    }
                 }
+
+                // Chạy đồng bộ file Shmem ở background, chống treo luồng chính khi respring
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                    Titanium_ReloadSharedSyncStateV285();
+                });
 
                 // 1. ĐÃ ÉP: CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
                 %init(Group_ZeroLatency_Touch_Opt);
@@ -4930,11 +4890,16 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // [ĐÃ ÉP TOÀN DIỆN]: CHẶN HOOK VÀO CHÍNH APP ĐIỀU KHIỂN (TRIỆT TIÊU ĐỆ QUY VĂNG SAFEMODE)
+        // [ĐÃ ÉP TOÀN DIỆN]: CHẶN HOOK VÀO CHÍNH APP ĐIỀU KHIỂN (TRIỆT TIÊU ĐỆ QUY VĂNG SAFEMODE VÀ ĐƠ 8S)
         NSBundle *mainBundle = [NSBundle mainBundle];
         NSString *bundleID = [mainBundle bundleIdentifier];
         if ([bundleID isEqualToString:@"com.taojb.boostiphone6s"] || 
-            (progName && (strstr(progName, "BoostiPhone6sApp") || strstr(progName, "BoostiPhone6s")))) {
+            [bundleID containsString:@"Smooth"] ||
+            [bundleID containsString:@"Liquid"] ||
+            (progName && (strstr(progName, "BoostiPhone6sApp") || 
+                          strstr(progName, "BoostiPhone6s") ||
+                          strstr(progName, "Smooth") ||
+                          strstr(progName, "Liquid")))) {
             return;
         }
 
@@ -4980,14 +4945,17 @@ static void SpringBoardBootstrapTrigger(void) {
                         g_cachedResolvedHz = prefHz;
                     }
                 }
+                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                    NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
+                    if (prefFPS >= 15 && prefFPS <= 144) {
+                        g_cachedResolvedFPS = prefFPS;
+                    }
+                }
             }
             return;
         }
 
-        // ĐÃ ÉP: Bật khiên vô hiệu hóa Watchdog ĐẦU TIÊN TRƯỚC HẾT để bảo vệ tuyệt đối tiến trình
-        %init(Group_AntiWatchdog_Immunity);
-
-        // Nạp các hook cơ sở an toàn sau khi khiên đã hoạt động
+        // Nạp các hook cơ sở an toàn
         %init;
 
         // 5. ĐÃ ÉP: ĐĂNG KÝ ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME (BẮT ĐẦY ĐỦ 5 KÊNH NOTIFY TỪ APP)
