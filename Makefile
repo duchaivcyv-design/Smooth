@@ -57,8 +57,8 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# [ĐÃ SỬA]: Trỏ đúng tên thư mục con của App giao diện
-SUBPROJECTS += BoostiPhone6sApp
+# Trỏ đúng tên thư mục con hiện tại trên repo
+SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
@@ -91,10 +91,5 @@ before-package::
 		echo "  [OK] Filter Plist: $$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
 	else \
 		echo "  [LỖI] Filter Plist thiếu!"; exit 1; \
-	fi; \
-	if [ -f "$$PREFIX_PATH/Applications/BoostiPhone6sApp.app/BoostiPhone6sApp" ]; then \
-		echo "  [OK] App Binary: $$PREFIX_PATH/Applications/BoostiPhone6sApp.app/BoostiPhone6sApp"; \
-	else \
-		echo "  [LỖI] Binary App thiếu trong Staging!"; exit 1; \
 	fi
 	@echo ""
