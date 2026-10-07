@@ -183,7 +183,7 @@ static inline float Titanium_GetLiveGPULoadPercentage(void) {
 }
 
 static inline float Titanium_GetBaseThermalTemp(void) {
-    NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
+    NSProcessInfoThermalState state = [[NSProcessInfo thermalState]];
     float cpuLoad = Titanium_GetLiveCPULoadPercentage();
     float loadOffset = (cpuLoad / 100.0f) * 2.5f;
 
@@ -221,7 +221,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
-    // Liquid Glass 3.0 Lens
     UIView *_liquidGlassLensContainer;
     UIVisualEffectView *_liquidGlassBlurLayer;
     CAGradientLayer *_liquidGlassSpecularLayer;
@@ -268,17 +267,19 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         _deepCacheString = self.settingsDict[@"SavedCacheString"] ?: @"Low Latency Silicon Cache";
     }
 
-    [self loadInstalledAppsAsync];
-
     [self setupTopHeaderBar];
     [self setupNavigationItems];
     [self setupBottomNavigationBar];
     [self setupMainTableView];
     [self setupLiquidGlass30Engine];
 
-    if (_isKernelExploited) {
-        [self applyDeepSpringBoardAndUIKitTweaks];
-    }
+    // [CHỐNG ĐƠ 10S WATCHDOG]: Đưa tác vụ nặng ra sau khi giao diện đã xuất hiện hoàn toàn
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self loadInstalledAppsAsync];
+        if (self->_isKernelExploited) {
+            [self applyDeepSpringBoardAndUIKitTweaks];
+        }
+    });
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -305,13 +306,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidGlassLensContainer.hidden = YES;
     _liquidGlassLensContainer.userInteractionEnabled = NO;
 
-    // Bóng quang học tán xạ bề mặt (Chromatic Dispersion Shadow)
     _liquidGlassLensContainer.layer.shadowColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:0.85].CGColor;
     _liquidGlassLensContainer.layer.shadowOffset = CGSizeMake(0, 6);
     _liquidGlassLensContainer.layer.shadowRadius = 24;
     _liquidGlassLensContainer.layer.shadowOpacity = 0.95;
 
-    // Lớp Blur Thấu Kính Nội Bộ
     if (@available(iOS 13.0, *)) {
         UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
         _liquidGlassBlurLayer = [[UIVisualEffectView alloc] initWithEffect:blur];
@@ -323,7 +322,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [_liquidGlassLensContainer addSubview:_liquidGlassBlurLayer];
     }
 
-    // Lớp Phản Quang Thủy Tinh (Specular Reflection Gradient)
     _liquidGlassSpecularLayer = [CAGradientLayer layer];
     _liquidGlassSpecularLayer.frame = _liquidGlassLensContainer.bounds;
     _liquidGlassSpecularLayer.cornerRadius = 42;
@@ -339,7 +337,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidGlassSpecularLayer.endPoint = CGPointMake(0.9, 1.0);
     [_liquidGlassLensContainer.layer addSublayer:_liquidGlassSpecularLayer];
 
-    // Vành Viền Kính Phản Chiếu (Liquid Rim Border)
     _liquidGlassRimLayer = [CAShapeLayer layer];
     _liquidGlassRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:_liquidGlassLensContainer.bounds cornerRadius:42].CGPath;
     _liquidGlassRimLayer.fillColor = [UIColor colorWithRed:0.2 green:0.75 blue:1.0 alpha:0.12].CGColor;
@@ -368,7 +365,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     } else if (pan.state == UIGestureRecognizerStateChanged) {
         _liquidGlassLensContainer.center = pt;
 
-        // Biến dạng động theo lực lướt (Fluid Dynamics Elasticity)
         CGFloat speed = sqrt(vel.x * vel.x + vel.y * vel.y);
         CGFloat stretchFactor = fmin(fmax(speed / 1200.0, 0.0), 0.35);
         CGFloat angle = atan2(vel.y, vel.x);
@@ -392,7 +388,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 }
 
-#pragma mark - Navigation & Header (Bổ sung Nút Áp Dụng Ngay Cạnh Ổ Khóa)
+#pragma mark - Navigation & Header
 
 - (void)setupTopHeaderBar {
     UILabel *brandLabel = [[UILabel alloc] init];
@@ -403,13 +399,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)setupNavigationItems {
-    // 1. Nút Ổ Khóa
     self.rateLockButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self updateLockIcon];
     [self.rateLockButton addTarget:self action:@selector(toggleRateLockAction) forControlEvents:UIControlEventTouchUpInside];
     UIBarButtonItem *lockItem = [[UIBarButtonItem alloc] initWithCustomView:self.rateLockButton];
 
-    // 2. Nút Áp Dụng Tức Thì (Không cần Respring) đặt cạnh Ổ Khóa
     UIButton *applyInstantButton = [UIButton buttonWithType:UIButtonTypeSystem];
     if (@available(iOS 13.0, *)) {
         [applyInstantButton setImage:[UIImage systemImageNamed:@"bolt.horizontal.fill"] forState:UIControlStateNormal];
@@ -420,7 +414,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [applyInstantButton addTarget:self action:@selector(applySettingsInstantNoRespringAction) forControlEvents:UIControlEventTouchUpInside];
     UIBarButtonItem *applyItem = [[UIBarButtonItem alloc] initWithCustomView:applyInstantButton];
 
-    // 3. Menu 3 gạch bên phải
     UIAction *actRespring = [UIAction actionWithTitle:@"⚡ Respring Nhanh"
                                                 image:[UIImage systemImageNamed:@"arrow.triangle.2.circlepath"]
                                            identifier:nil
@@ -457,7 +450,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.navigationItem.rightBarButtonItems = @[menuItem, lockItem, applyItem];
 }
 
-// Bấm nút Áp Dụng Tức Thì: Đồng bộ toàn bộ Shmem IPC và thông báo Darwin, không Respring
 - (void)applySettingsInstantNoRespringAction {
     if (!_isKernelExploited) {
         [self showUnexploitedWarningAlert];
@@ -593,7 +585,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.view addSubview:self.customTableView];
 }
 
-#pragma mark - TableView Data & Render (Khóa Toàn Bộ & Làm Xám Khi Chưa Khai Thác)
+#pragma mark - TableView Data & Render
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     if (_currentBottomTab == 0) return 6;
@@ -604,7 +596,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    // CHƯA KHAI THÁC: Khóa toàn bộ các tab chức năng, chỉ hiển thị 1 dòng cảnh báo
     if (!_isKernelExploited && _currentBottomTab != 4) {
         return 1;
     }
@@ -701,7 +692,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     cell.alpha = 1.0;
     cell.userInteractionEnabled = YES;
 
-    // CHƯA KHAI THÁC: Khóa xám và chặn toàn bộ các tab ngoài Cài Đặt
     if (!_isKernelExploited && _currentBottomTab != 4) {
         cell.backgroundColor = [UIColor colorWithRed:0.12 green:0.04 blue:0.06 alpha:0.7];
         cell.textLabel.text = @"🔒 TÍNH NĂNG ĐANG BỊ KHÓA XÁM";
@@ -947,7 +937,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             [appToggle addTarget:self action:@selector(onAppToggleChanged:) forControlEvents:UIControlEventValueChanged];
             cell.accessoryView = appToggle;
         }
-    }
+    } 
     // TAB 4: CÀI ĐẶT
     else {
         if (indexPath.section == 0) {
@@ -1195,6 +1185,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 }
 
+// [ĐÃ ÉP AN TOÀN]: Đẩy I/O ghi file Shmem ra luồng ngầm, Main Thread không bao giờ bị nghẽn
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     if (!_isKernelExploited) return;
 
@@ -1233,13 +1224,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     payload.updateSeq = (uint64_t)mach_absolute_time();
     payload.lastHeartbeat = payload.updateSeq;
 
-    Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
 
-    notify_post(NOTIFY_RELOAD);
-    notify_post(NOTIFY_UIKIT_RELOAD);
-    notify_post(NOTIFY_HARDWARE_SYNC);
-    notify_post(NOTIFY_FPS_CHANGED);
-    notify_post(NOTIFY_TITANIUM_CHANGED);
+        notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_UIKIT_RELOAD);
+        notify_post(NOTIFY_HARDWARE_SYNC);
+        notify_post(NOTIFY_FPS_CHANGED);
+        notify_post(NOTIFY_TITANIUM_CHANGED);
+    });
 }
 
 - (void)applyDeepSpringBoardAndUIKitTweaks {
@@ -1258,10 +1251,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             if (targetHz > 144) targetHz = 144;
 
             for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]]) {
+                if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
                     if ([ws respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake(targetHz, targetHz, targetHz);
+                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, targetHz, targetHz);
                         [(id)ws setPreferredFrameRateRange:range];
                     }
                 }
@@ -1474,7 +1467,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSDictionary *savedStates = self.settingsDict[@"AppTweakStates"];
     _appTweakStates = savedStates ? [savedStates mutableCopy] : [NSMutableDictionary dictionary];
 
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         NSMutableArray<NSDictionary *> *tempApps = [NSMutableArray array];
         NSArray *dirs = @[@"/Applications", @"/var/jb/Applications"];
         NSFileManager *fm = [NSFileManager defaultManager];
@@ -1513,7 +1506,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     });
 }
 
-#pragma mark - System Actions & Factory Reset (Xóa Sạch Dữ Liệu Tweak)
+#pragma mark - System Actions & Factory Reset
 
 - (void)executeRespring {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
