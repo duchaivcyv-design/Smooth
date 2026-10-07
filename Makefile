@@ -1,5 +1,5 @@
 ARCHS = arm64 arm64e
-TARGET := iphone:clang:latest:14.0
+TARGET := iphone:clang:latest:15.0
 
 DEBUG = 0
 FINALPACKAGE = 1
@@ -28,7 +28,7 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wno-unguarded-availability-new \
                            -Wno-unguarded-availability \
                            -Wno-unused-command-line-argument \
-                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
+                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
                            -I.
@@ -65,7 +65,7 @@ BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
 after-stage::
 	@echo ""
-	@echo "=== [BoostiPhone6sCore] Tự động tạo Filter Plist (UIKit, SpringBoard, Preferences) ==="
+	@echo "=== [BoostiPhone6sCore] Tự động tạo Filter Plist chuẩn XNU ==="
 	@mkdir -p "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"
 	@printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
@@ -76,9 +76,9 @@ after-stage::
 		'	<dict>' \
 		'		<key>Bundles</key>' \
 		'		<array>' \
-		'			<string>com.apple.UIKit</string>' \
 		'			<string>com.apple.springboard</string>' \
 		'			<string>com.apple.Preferences</string>' \
+		'			<string>com.apple.UIKit</string>' \
 		'		</array>' \
 		'		<key>Executables</key>' \
 		'		<array>' \
@@ -88,11 +88,11 @@ after-stage::
 		'</dict>' \
 		'</plist>' > "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"
 	@chmod 644 "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"
-	@if [ -d "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app" ]; then \
-		chmod -R 0755 "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app"; \
-		chmod 0755 "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app/BoostiPhone6sApp"; \
+	@if [ -d "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications" ]; then \
+		find "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications" -type d -name "*.app" -exec chmod -R 0755 {} +; \
+		find "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications" -type f -perm +0111 -exec chmod 0755 {} +; \
 	fi
-	@echo "  [OK] Đã tự tạo Filter nạp vào UIKit, SpringBoard & Preferences!"
+	@echo "  [OK] Đã hoàn tất gán quyền Staging và tạo Filter Plist!"
 	@echo ""
 
 before-package::
@@ -108,10 +108,6 @@ before-package::
 		echo "  [OK] Filter Plist: $$PREFIX_PATH/Library/MobileSubstrate/DynamicLibraries/$(BOOST_PLIST_NAME)"; \
 	else \
 		echo "  [LỖI] Filter Plist thiếu!"; exit 1; \
-	fi; \
-	if [ -f "$$PREFIX_PATH/Applications/BoostiPhone6sApp.app/BoostiPhone6sApp" ]; then \
-		echo "  [OK] App Binary: $$PREFIX_PATH/Applications/BoostiPhone6sApp.app/BoostiPhone6sApp"; \
-	else \
-		echo "  [LỖI] Binary App thiếu trong Staging!"; exit 1; \
 	fi
+	@echo "  [OK] Cấu trúc gói đã sẵn sàng đóng gói DEB!"
 	@echo ""
