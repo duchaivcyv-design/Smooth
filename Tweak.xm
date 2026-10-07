@@ -1,7 +1,3 @@
-// ====================================================================================================
-// BOOSTIPHONE6S CORE - TWEAK.XM MASTER HEADER & PRIVATE INTERFACES (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
-// ====================================================================================================
-
 // ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_init.h>      // Khai báo chuẩn mach_task_self(), mach_thread_self()
