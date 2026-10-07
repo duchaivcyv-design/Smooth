@@ -2,54 +2,48 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: XÁC THỰC TIẾN TRÌNH NỀN TẢNG CẤP CAO CỦA HỆ THỐNG -->
+    <!-- [BẮT BUỘC]: Đưa tiến trình lên mức Platform Binary (Vượt AMFI trên cả Rootless & RootHide) -->
     <key>platform-application</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: PHÁ BỎ HOÀN TOÀN RÀO CẢN SANDBOX (ĐỌC/GHI /tmp VÀ /var/jb) -->
-    <key>com.apple.private.security.no-sandbox</key>
+    <!-- [BẮT BUỘC]: Phá bỏ Container Sandbox (Cho phép đọc/ghi tự do /tmp và /var/jb) -->
+    <key>com.apple.private.security.no-container</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CẤM TỰ ĐỘNG ÉP VÀO SANDBOX CONTAINER -->
-    <key>com.apple.private.security.container-required</key>
-    <false/>
+    <!-- Quyền truy cập toàn bộ hệ thống tệp và cấu hình hệ thống (Bypass TCC) -->
+    <key>com.apple.private.tcc.allow</key>
+    <array>
+        <string>kTCCServiceSystemPolicyAllFiles</string>
+    </array>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: TRUY CẬP TỰ DO BỘ LƯU TRỮ VÀ DỮ LIỆU APP DÙNG CHUNG -->
+    <!-- Quyền truy cập thư mục dữ liệu ứng dụng dùng chung -->
     <key>com.apple.private.security.storage.AppDataContainers</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: QUYỀN KHỞI CHẠY & ĐIỀU PHỐI TIẾN TRÌNH VỚI SPRINGBOARD -->
+    <!-- Giao tiếp điều phối và khởi chạy ứng dụng với SpringBoard -->
     <key>com.apple.springboard.launchapplications</key>
     <true/>
-
-    <key>com.apple.backboardd.launchapplications</key>
+    <key>com.apple.frontboard.launchapplications</key>
     <true/>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CẤP QUYỀN GIAO TIẾP VỚI XNU KERNEL & ĐƯỜNG DẪN /tmp -->
-    <key>com.apple.private.kernel.get-temp-dir</key>
+    <!-- Kết nối Mach Service hệ thống không bị chặn bởi Sandbox -->
+    <key>com.apple.security.network.client</key>
     <true/>
 
-    <key>com.apple.private.set-user-dir-suffix</key>
-    <true/>
-
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: TRUY CẬP IOKIT ĐỂ ĐO PIN, VÔN VÀ NHIỆT ĐỘ CELL KHÔNG BỊ ẢO -->
+    <!-- Truy cập IOKit để đọc cảm biến phần cứng (SoC, Pin, Màn hình thực tế) -->
     <key>com.apple.security.iokit-user-client-class</key>
     <array>
         <string>IOPMrootDomain</string>
         <string>AppleARMIODevice</string>
+        <string>AppleSmartBattery</string>
+        <string>AppleSmartBatteryCommands</string>
+        <string>IOPlatformPluginDevice</string>
     </array>
 
-    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CHO PHÉP THỰC THI MÃ, ĐO MACH HOST KERNEL & POSIX_SPAWN RESPRING -->
-    <key>run-unsigned-code</key>
-    <true/>
-    
+    <!-- Quyền Task port phục vụ phân tích tiến trình và spawn lệnh hệ thống -->
     <key>get-task-allow</key>
     <true/>
-
     <key>task_for_pid-allow</key>
-    <true/>
-
-    <key>com.apple.private.kernel.task-for-pid-high</key>
     <true/>
 </dict>
 </plist>
