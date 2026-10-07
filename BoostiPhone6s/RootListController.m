@@ -275,7 +275,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     [self.view addSubview:_liquidGlassBubbleView];
 
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleLiquidGlassPan:];
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleLiquidGlassPan:)];
     [self.view addGestureRecognizer:pan];
 }
 
@@ -557,6 +557,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [self showUnexploitedWarningAlert];
         return;
     }
+    
+- (void)showUnexploitedWarningAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 TÍNH NĂNG BỊ KHÓA"
+                                                                   message:@"Hệ thống chưa được khai thác! Hãy vào tab Cài Đặt và nhấn vào dòng trạng thái đèn đỏ để bắt đầu khai thác thủ công."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
 
     self->_isRateLocked = !self->_isRateLocked;
     self.settingsDict[@"IsRateLocked"] = @(self->_isRateLocked);
