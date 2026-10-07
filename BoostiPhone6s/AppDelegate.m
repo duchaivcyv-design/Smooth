@@ -73,26 +73,4 @@
 }
 
 // [ĐÃ ÉP TOÀN DIỆN]: Tự động làm mới khi người dùng mở lại app từ chạy nền
-- (void)applicationWillEnterForeground:(UIApplication *)application {
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-    if (self.rootListVC) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.rootListVC ensureDefaultSettingsExist];
-            [self.rootListVC updateDynamicTitles];
-            [self.rootListVC refreshContinuousHardwareCells];
-        });
-    }
-
-    // Bắn thông báo đồng bộ lại IPC tức thì
-    notify_post(NOTIFY_RELOAD);
-    notify_post(NOTIFY_TITANIUM_CHANGED);
-}
-
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-    if (self.window) {
-        [self.window.layer setNeedsDisplay];
-    }
-}
-
-@end
+- (void)applicationWillEnterForeground
