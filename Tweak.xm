@@ -4887,37 +4887,42 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // [ĐÃ ÉP TOÀN DIỆN]: CHẶN HOOK VÀO CHÍNH APP ĐIỀU KHIỂN (TRIỆT TIÊU ĐỆ QUY VĂNG SAFEMODE VÀ ĐƠ 8S)
+        // [ĐÃ ÉP TOÀN DIỆN]: CHẶN HOOK VÀO CHÍNH APP ĐIỀU KHIỂN (TRIỆT TIÊU ĐỆ QUY VĂNG SAFEMODE VÀ ĐƠ 10S)
         NSBundle *mainBundle = [NSBundle mainBundle];
         NSString *bundleID = [mainBundle bundleIdentifier];
-        if ([bundleID isEqualToString:@"com.taojb.boostiphone6s"] || 
-            [bundleID containsString:@"Smooth"] ||
-            [bundleID containsString:@"Liquid"] ||
-            (progName && (strstr(progName, "BoostiPhone6sApp") || 
-                          strstr(progName, "BoostiPhone6s") ||
-                          strstr(progName, "Smooth") ||
-                          strstr(progName, "Liquid")))) {
-            return;
+        NSString *executablePath = [mainBundle executablePath];
+        const char *execCStr = executablePath ? [executablePath UTF8String] : "";
+
+        // Kiểm tra không phân biệt chữ hoa thường (strcasestr) trên cả BundleID, progName và executablePath
+        if ((bundleID && ([bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                          [bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                          [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound)) ||
+            (progName && (strcasestr(progName, "boosti") != NULL ||
+                          strcasestr(progName, "smooth") != NULL ||
+                          strcasestr(progName, "liquid") != NULL)) ||
+            (execCStr && (strcasestr(execCStr, "Smooth") != NULL ||
+                          strcasestr(execCStr, "BoostiPhone6s") != NULL))) {
+            return; // Thoát ngay lập tức ở mức 0ms, không chạm vào bất kỳ hook nào
         }
 
         // 1. ĐÃ ÉP: CHẶN TRIỆT ĐỂ CÁC TIẾN TRÌNH MẠNG VÀ WEB (CHỐNG NGHẼN MẠNG 100%)
-        if (strstr(progName, "WebKit") || strstr(progName, "WebContent") ||
-            strstr(progName, "GPUProcess") || strstr(progName, "Networking") ||
-            strstr(progName, "nsurlsessiond") || strstr(progName, "mDNSResponder") ||
-            strstr(progName, "cloudd")) {
+        if (strcasestr(progName, "WebKit") || strcasestr(progName, "WebContent") ||
+            strcasestr(progName, "GPUProcess") || strcasestr(progName, "Networking") ||
+            strcasestr(progName, "nsurlsessiond") || strcasestr(progName, "mDNSResponder") ||
+            strcasestr(progName, "cloudd")) {
             return;
         }
 
         // 2. ĐÃ ÉP: CHẶN TOÀN BỘ DAEMON HỆ THỐNG (CHỐNG TREO RESPRING & CHỐNG SAFE MODE)
-        if (strstr(progName, "jailbreakd") || strstr(progName, "launchd") ||
-            strstr(progName, "containermanagerd") || strstr(progName, "cfprefsd") ||
-            strstr(progName, "watchdogd") || strstr(progName, "mediaserverd") ||
-            strstr(progName, "installd") || strstr(progName, "logd") ||
-            strstr(progName, "analyticsd") || strstr(progName, "symptomsd") ||
-            strstr(progName, "powerd") || strstr(progName, "backboardd") ||
-            strstr(progName, "notifyd") || strstr(progName, "securityd") ||
-            strstr(progName, "runningboardd") || strstr(progName, "thermalmonitord") ||
-            strstr(progName, "mediaremoted") || strstr(progName, "assertiond")) {
+        if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
+            strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
+            strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
+            strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
+            strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
+            strcasestr(progName, "powerd") || strcasestr(progName, "backboardd") ||
+            strcasestr(progName, "notifyd") || strcasestr(progName, "securityd") ||
+            strcasestr(progName, "runningboardd") || strcasestr(progName, "thermalmonitord") ||
+            strcasestr(progName, "mediaremoted") || strcasestr(progName, "assertiond")) {
             return;
         }
 
@@ -4931,7 +4936,7 @@ static void SpringBoardBootstrapTrigger(void) {
         }
 
         // 4. ĐÃ ÉP: TIẾN TRÌNH CÀI ĐẶT PREFERENCES
-        if (strstr(progName, "Preferences") || strstr(progName, "Settings")) {
+        if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
                 CFG285 = [configClass sharedInstance];
@@ -4952,9 +4957,6 @@ static void SpringBoardBootstrapTrigger(void) {
             return;
         }
 
-        // Nạp các hook cơ sở an toàn
-        %init;
-
         // 5. ĐÃ ÉP: ĐĂNG KÝ ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME (BẮT ĐẦY ĐỦ 5 KÊNH NOTIFY TỪ APP)
         static dispatch_once_t notifyToken;
         dispatch_once(&notifyToken, ^{
@@ -4967,6 +4969,9 @@ static void SpringBoardBootstrapTrigger(void) {
                 CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
             }
         });
+
+        // Nạp các hook cơ sở an toàn
+        %init;
 
         // 6. ĐÃ ÉP: PHÂN LẬP HOÀN TOÀN GIỮA SPRINGBOARD VÀ CÁC APP THỨ BA
         if (isSpringBoard) {
