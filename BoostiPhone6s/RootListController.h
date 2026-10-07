@@ -74,7 +74,7 @@ NS_ASSUME_NONNULL_BEGIN
 #endif
 
 // ====================================================================================================
-// CẤU TRÚC STRUCT ĐỒNG BỘ NGUYÊN TỬ QUA RAM & TỆP IPC
+// CẤU TRÚC STRUCT ĐỒNG BỘ NGUYÊN TỬ QUA RAM & TỆP IPC (KHỚP 100% TỪNG BYTE TWEAK.XM)
 // ====================================================================================================
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
@@ -111,23 +111,42 @@ typedef struct __attribute__((packed)) {
 #endif
 
 // ====================================================================================================
-// GIAO DIỆN LỚP ĐIỀU KHIỂN CHÍNH ROOTLISTCONTROLLER (ĐÃ ÉP TOÀN BỘ PHƯƠNG THỨC)
+// GIAO DIỆN LỚP ĐIỀU KHIỂN CHÍNH ROOTLISTCONTROLLER (ĐÃ ÉP TOÀN BỘ PHƯƠNG THỨC & PROTOCOL)
 // ====================================================================================================
 
-@interface RootListController : PSListController {
+@interface RootListController : PSListController <UITableViewDelegate, UITableViewDataSource> {
 @public
     NSMutableArray *_allSavedSpecifiers;
     NSMutableArray *_specifiers; // [ĐÃ KHAI BÁO CÔNG KHAI - TRIỆT TIÊU LỖI CLANG]
 }
 
+// --- Thuộc tính điều khiển giao diện Native TableView ---
+@property (nonatomic, strong) UITableView *customTableView;
+@property (nonatomic, strong) UISegmentedControl *bottomSegment;
+@property (nonatomic, strong) UIButton *rateLockButton;
+@property (nonatomic, strong) NSMutableDictionary *settingsDict;
+
 // --- Quản lý dữ liệu và cấu hình ---
+- (void)loadSettingsData;
+- (void)saveSettingsDataAndSync;
 - (nullable id)readPreferenceValue:(PSSpecifier *)specifier;
 - (void)setPreferenceValue:(nullable id)value specifier:(PSSpecifier *)specifier;
 - (NSDictionary *)getMergedPreferences;
 - (void)ensureDefaultSettingsExist;
 - (void)syncSharedMemoryFile:(BOOL)enabled;
 
-// --- HUD Đo Chỉ Số Phần Cứng Thời Gian Thực (Đầy Đủ 15 Mục HUD) ---
+// --- Bố cục giao diện & Điều khiển ổ khóa ---
+- (void)setupTopHeaderBar;
+- (void)updateLockIcon;
+- (void)toggleRateLockAction;
+- (void)setupBottomNavigationBar;
+- (void)setupMainTableView;
+- (void)onBottomTabChanged:(UISegmentedControl *)sender;
+- (void)onHzFpsSubTabChanged:(UISegmentedControl *)sender;
+- (void)onSwitchSubTabChanged:(UISegmentedControl *)sender;
+- (void)onSwitchToggled:(UISwitch *)sender;
+
+// --- HUD Đo Chỉ Số Phần Cứng Thời Gian Thực (Đầy Đủ Các Mục HUD) ---
 - (id)getMonitorHzFPS:(PSSpecifier *)specifier;
 - (id)getMonitorScreenRefreshRate:(PSSpecifier *)specifier;
 - (id)getMonitorScreenThermal:(PSSpecifier *)specifier;
@@ -144,7 +163,7 @@ typedef struct __attribute__((packed)) {
 - (id)getMonitorBatteryTemp:(PSSpecifier *)specifier;
 - (id)getMonitorBatteryVoltage:(PSSpecifier *)specifier;
 
-// --- 4 Getter tương thích ngược cho file Root.plist cũ ---
+// --- 4 Getter tương thích ngược cho Root.plist cũ ---
 - (id)getMonitorCPUGPU:(PSSpecifier *)specifier;
 - (id)getMonitorThermal:(PSSpecifier *)specifier;
 - (id)getMonitorBattery:(PSSpecifier *)specifier;
@@ -172,11 +191,12 @@ typedef struct __attribute__((packed)) {
 - (id)getVersionString:(PSSpecifier *)specifier;
 - (void)openSupportLink:(PSSpecifier *)specifier;
 
-// --- Hành động hệ thống (Respring, Userspace Reboot, Reset) ---
+// --- Hành động hệ thống (Menu 3 gạch: Respring, Userspace Reboot, SafeMode, Reset) ---
 - (void)setupNavigationItems;
 - (void)presentActions;
 - (void)executeRespring;
 - (void)executeSReboot;
+- (void)executeSafeMode;
 - (void)executeResetConfiguration;
 
 @end
