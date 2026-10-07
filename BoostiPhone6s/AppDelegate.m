@@ -1,8 +1,3 @@
-// ====================================================================================================
-// BOOSTIPHONE6S APP - APPDELEGATE IMPLEMENTATION (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - CHUẨN ĐỒNG BỘ 0MS)
-// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH, TỰ BẬT PROMOTION CAO NHẤT, ĐỒNG BỘ REALTIME)
-// ====================================================================================================
-
 #import "AppDelegate.h"
 #import "RootListController.h"
 #import <notify.h>
@@ -74,3 +69,4 @@
 
 // [ĐÃ ÉP TOÀN DIỆN]: Tự động làm mới khi người dùng mở lại app từ chạy nền
 - (void)applicationWillEnterForeground
+@end
