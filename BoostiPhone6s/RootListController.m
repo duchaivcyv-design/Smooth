@@ -898,7 +898,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 if (indexPath.row < 4) {
                     cell.textLabel.text = [NSString stringWithFormat:@"🔒 Khóa Cứng %ld %@", (long)[standardRates[indexPath.row] integerValue], isHz ? @"Hz" : @"FPS"];
                 } else if (indexPath.row == 4) {
-                    cell.textLabel.text = @"🔒 ⚡ Mở Rộng 144 %@", isHz ? @"Hz" : @"FPS"];
+                    cell.textLabel.text = [NSString stringWithFormat:@"🔒 ⚡ Mở Rộng 144 %@", isHz ? @"Hz" : @"FPS"];
                 } else {
                     cell.textLabel.text = @"🔒 ⌨️ Tự Nhập Số Chính Xác (15 - 144)...";
                 }
