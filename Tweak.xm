@@ -190,6 +190,8 @@ static volatile BOOL g_isRateLockedV285 = NO;
 // [ĐÃ ÉP THÊM]: CẤU TRÚC BỘ NHỚ SHMEM IPC ĐỒNG BỘ CHUẨN XÁC VỚI ROOTLISTCONTROLLER
 // ====================================================================================================
 
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -217,7 +219,9 @@ typedef struct __attribute__((packed)) {
     uint32_t powerSaveModeActive;
     uint64_t updateSeq;
     uint64_t lastHeartbeat;
+    char     reserved[48];
 } ApexV285ProPayload;
+#endif
 
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
@@ -292,7 +296,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
-- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
+- (void)_scrollViewAnimationEnded:(id)1 finished:(BOOL)2;
 - (BOOL)isDragging;
 - (BOOL)isDecelerating;
 - (CGFloat)decelerationRate;
@@ -316,7 +320,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 
 @interface UIEventFetcher : NSObject
 - (void)_receiveHIDEvent:(void *)event;
-- (void)displayLinkDidFire:(id)arg1;
+- (void)displayLinkDidFire:(id)1;
 @end
 
 @interface _UIEventFetcher : NSObject
@@ -352,7 +356,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)arg1;
+- (void)textChanged:(id)1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -851,7 +855,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
-- (void)_reboot:(BOOL)arg1;
+- (void)_reboot:(BOOL)1;
 - (void)_relaunchSpringBoardNow;
 @end
 
@@ -1009,39 +1013,6 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 // ====================================================================================================
 // ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐÃ SỬA TRIỆT ĐỂ LỖI CLANG)
 // ====================================================================================================
-
-#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
-#define _APEX_V285_PRO_PAYLOAD_DEFINED
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[48];
-} ApexV285ProPayload;
-#endif
 
 // [ĐÃ ÉP]: Khởi tạo chuẩn xác từng trường chống lỗi "excess elements in struct initializer"
 static ApexV285ProPayload g_syncPayloadV285 = {
