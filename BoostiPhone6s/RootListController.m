@@ -1210,7 +1210,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf && strongSelf->_currentBottomTab == 0 && strongSelf->_isTweakActivated) {
+        if (strongSelf && strongSelf->_currentBottomTab == 0 && strongSelf->_isKernelExploited) {
             [strongSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationNone];
         }
     });
@@ -1228,6 +1228,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     ApexV285ProPayload payload;
     memset(&payload, 0, sizeof(ApexV285ProPayload));
     payload.magic = APEX_SYNC_MAGIC_V285;
+    
+    // Sử dụng đúng biến _isKernelExploited để kích hoạt IPC chuẩn
     payload.masterEnabled = (enabled && _isKernelExploited) ? 1 : 0;
 
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
