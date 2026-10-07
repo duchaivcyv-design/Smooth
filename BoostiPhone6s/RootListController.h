@@ -39,7 +39,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
-typedef struct __attribute__((packed)) {
+// Đã căn chỉnh tự nhiên 8-byte (loại bỏ packed để triệt tiêu lỗi unaligned memory access trên ARM64)
+typedef struct {
     uint32_t magic;
     uint32_t masterEnabled;
     int32_t  targetHz;
