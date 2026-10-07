@@ -62,7 +62,7 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.window.windowScene) {
                 if ([self.window.windowScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    CAFrameRateRange range = CAFrameRateRangeMake(60.0f, 144.0f, 144.0f);
+                    CAFrameRateRange range = CAFrameRateRangeMake(144.0f, 144.0f, 144.0f);
                     [(id)self.window.windowScene setPreferredFrameRateRange:range];
                 }
             }
@@ -80,7 +80,6 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.rootListVC ensureDefaultSettingsExist];
             [self.rootListVC updateDynamicTitles];
-            [self.rootListVC reloadSpecifiers];
             [self.rootListVC refreshContinuousHardwareCells];
         });
     }
