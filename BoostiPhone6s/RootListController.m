@@ -1,5 +1,5 @@
 // ====================================================================================================
-// BOOSTIPHONE6S APP - ROOTLISTCONTROLLER NATIVE ENGINE (TÁCH BIỆT 4 TAB - CHỐNG ĐÈ CHỮ 100%)
+// BOOSTIPHONE6S APP - ROOTLISTCONTROLLER NATIVE ENGINE (BẢN TÁCH BIỆT TOÀN DIỆN - QUÉT SÂU ARM64)
 // ====================================================================================================
 
 #import "RootListController.h"
@@ -10,6 +10,7 @@
 #import <sys/wait.h>
 #import <sys/stat.h>
 #import <sys/utsname.h>
+#import <sys/sysctl.h>
 #import <fcntl.h>
 #import <unistd.h>
 #import <notify.h>
@@ -23,10 +24,6 @@ extern char **environ;
 
 #ifndef APEX_SYNC_MAGIC_V285
 #define APEX_SYNC_MAGIC_V285 0x41505837
-#endif
-
-#ifndef PREF_DOMAIN
-#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
 #endif
 
 #ifndef PRIMARY_SYNC_FILE
@@ -228,15 +225,22 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// GIAO DIỆN CHÍNH ROOTLISTCONTROLLER (4 TAB TÁCH BIỆT)
+// GIAO DIỆN CHÍNH ROOTLISTCONTROLLER
 // ====================================================================================================
 
 @interface RootListController () {
     dispatch_source_t _hudTimer;
     NSInteger _currentBottomTab;    // 0: Trang Chủ | 1: Tần Số Quét | 2: Công Tắc | 3: Cài Đặt
     NSInteger _currentHzFpsSubTab;  // 0: Điều Chỉnh Hz | 1: Điều Chỉnh FPS
-    NSInteger _currentSwitchSubTab; // 0: Bình Thường | 1: Nâng Cao | 2: Nguy Hiểm
+    NSInteger _currentSwitchSubTab; // 0: CPU | 1: GPU | 2: Màn Hình | 3: Pin | 4: Hệ Thống
     BOOL _isRateLocked;
+    
+    // Lưu thông tin quét sâu
+    BOOL _hasScannedDeepHardware;
+    NSString *_deepArchString;
+    NSString *_deepCoreCountString;
+    NSString *_deepRamString;
+    NSString *_deepKernelString;
 }
 
 @end
@@ -261,6 +265,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _currentBottomTab = 0;
     _currentHzFpsSubTab = 0;
     _currentSwitchSubTab = 0;
+    _hasScannedDeepHardware = NO;
 
     [self loadSettingsData];
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
@@ -402,7 +407,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     bottomBarContainer.layer.borderColor = [UIColor colorWithWhite:0.2 alpha:0.5].CGColor;
     [self.view addSubview:bottomBarContainer];
 
-    self.bottomSegment = [[UISegmentedControl alloc] initWithItems:@[@"📊 Home", @"🎛️ Hz / FPS", @"⚡ Switch", @"⚙️ Setting"]];
+    self.bottomSegment = [[UISegmentedControl alloc] initWithItems:@[@"📊 Home", @"🎛️ Hz / FPS", @"⚡ Công Tắc", @"⚙️ Cài Đặt"]];
     self.bottomSegment.frame = CGRectMake(4, 6, bottomBarContainer.bounds.size.width - 8, 40);
     self.bottomSegment.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.bottomSegment.selectedSegmentIndex = _currentBottomTab;
@@ -429,41 +434,53 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     if (_currentBottomTab == 0) return 1; // Tab Home: Chỉ 1 section HUD phần cứng
     if (_currentBottomTab == 1) return 2; // Tab Hz / FPS: Section chọn Hz/FPS + Section chọn mức
-    if (_currentBottomTab == 2) return 2; // Tab Công Tắc: Phân tầng + Danh sách công tắc
-    return 2;                             // Tab Cài Đặt
+    if (_currentBottomTab == 2) return 2; // Tab Công Tắc: Phân tầng công tắc + Danh sách công tắc
+    return 3;                             // Tab Cài Đặt: Nút Quét Sâu + Thông tin phần cứng + Vùng Jailbreak
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (_currentBottomTab == 0) {
         return 4; // CPU, GPU, Màn Hình, Pin
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return 1; // Segment chuyển đổi Hz / FPS
-        return 6;                   // 30, 60, 90, 120, 144, Tự nhập
+        if (section == 0) return 1;
+        return 6; // 30, 60, 90, 120, 144, Tự nhập
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return 1; // Segment danh mục công tắc
-        if (_currentSwitchSubTab == 0) return 4;
-        if (_currentSwitchSubTab == 1) return 5;
-        return 4;
+        if (section == 0) return 1; // Phân tầng 5 nhóm
+        switch (_currentSwitchSubTab) {
+            case 0: return 3; // CPU: P-Core VIP, Realtime Sched, Chống Throttling
+            case 1: return 3; // GPU: Metal Hex Buffer, Zero Tearing, Bỏ Khóa VSync
+            case 2: return 3; // Màn Hình: Ép Xung 144Hz, Touch 0ms, Động cơ ColorOS 17
+            case 3: return 3; // Pin: Chống Nhiễu Sạc, Low Power Mode Thích Ứng, Giả Lập Pin Đầy
+            case 4: return 4; // Hệ Thống: Turbo Launch, Giảm Lag Đa Nhiệm, Dọn RAM, Đóng App Nền
+            default: return 3;
+        }
     } else {
-        if (section == 0) return 4;
+        if (section == 0) return 1; // Nút Bấm Quét Phần Cứng Sâu
+        if (section == 1) return _hasScannedDeepHardware ? 7 : 4; // Chi tiết sau khi quét
         return 5;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (_currentBottomTab == 0) {
-        return TL_Text(@"HUD_HARDWARE_TITLE") ?: @"📊 GIÁM SÁT PHẦN CỨNG THỰC TẾ (REALTIME)";
+        return @"📊 GIÁM SÁT PHẦN CỨNG THỜI GIAN THỰC (REALTIME)";
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return TL_Text(@"HZ_FPS_DISPATCH_TITLE") ?: @"⚡ CHỌN ĐỐI TƯỢNG ĐIỀU CHỈNH";
-        return (_currentHzFpsSubTab == 0) ? (TL_Text(@"HZ_CONFIG_TITLE") ?: @"🎛️ KHÓA TẦN SỐ QUÉT MÀN HÌNH (HZ)") : (TL_Text(@"FPS_CONFIG_TITLE") ?: @"🎮 KHÓA KHUNG HÌNH ỨNG DỤNG (FPS)");
+        if (section == 0) return @"⚡ CHỌN ĐỐI TƯỢNG ĐIỀU CHỈNH";
+        return (_currentHzFpsSubTab == 0) ? @"🎛️ KHÓA TẦN SỐ QUÉT MÀN HÌNH (HZ)" : @"🎮 KHÓA KHUNG HÌNH ỨNG DỤNG (FPS)";
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return TL_Text(@"SWITCH_CATEGORY_TITLE") ?: @"🎚️ CHỌN PHÂN TẦNG CÔNG TẮC";
-        if (_currentSwitchSubTab == 0) return TL_Text(@"SWITCH_NORMAL_TITLE") ?: @"🟢 NHÓM BÌNH THƯỜNG (AN TOÀN)";
-        if (_currentSwitchSubTab == 1) return TL_Text(@"SWITCH_ADVANCED_TITLE") ?: @"🟡 NHÓM NÂNG CAO (GIA TỐC)";
-        return TL_Text(@"SWITCH_DANGER_TITLE") ?: @"🔴 NHÓM NGUY HIỂM (ÉP CỰC HẠN)";
+        if (section == 0) return @"🎚️ CHỌN NHÓM PHẦN CỨNG CẦN TINH CHỈNH";
+        switch (_currentSwitchSubTab) {
+            case 0: return @"🧠 CÔNG TẮC CPU (SOC CORE & SCHEDULER)";
+            case 1: return @"🎮 CÔNG TẮC GPU (METAL GRAPHICS & SHADER)";
+            case 2: return @"🖥️ CÔNG TẮC MÀN HÌNH & CẢM ỨNG (TOUCH / REFRESH)";
+            case 3: return @"🔋 CÔNG TẮC PIN & QUẢN LÝ NGUỒN (POWER / BMS)";
+            case 4: return @"⚡ CÔNG TẮC HỆ THỐNG & ĐA NHIỆM (SYSTEM / RAM)";
+            default: return @"🟢 NHÓM CÔNG TẮC";
+        }
     } else {
-        if (section == 0) return TL_Text(@"DEVICE_INFO_TITLE") ?: @"📱 THÔNG TIN THIẾT BỊ (HARDWARE)";
-        return TL_Text(@"JAILBREAK_INFO_TITLE") ?: @"🛡️ THÔNG TIN VÙNG JAILBREAK & SANDBOX";
+        if (section == 0) return @"🔍 TRÌNH XÁC THỰC PHẦN CỨNG TẦNG SÂU";
+        if (section == 1) return @"📱 THÔNG TIN THIẾT BỊ (SYSCTL & MACH HOST)";
+        return @"🛡️ THÔNG TIN VÙNG JAILBREAK & SANDBOX";
     }
 }
 
@@ -474,7 +491,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellID];
     }
 
-    // [TRIỆT TIÊU ĐÈ CHỮ]: Dọn sạch subview cũ trong contentView khi cell tái sử dụng
+    // [TRIỆT TIÊU ĐÈ CHỮ]: Dọn sạch subview cũ trong contentView
     for (UIView *subview in cell.contentView.subviews) {
         [subview removeFromSuperview];
     }
@@ -517,11 +534,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }
     }
     // =========================================================================
-    // TAB 1: TẦN SỐ QUÉT & KHUNG HÌNH (ĐÃ ĐƯA RA TAB RIÊNG BIỆT)
+    // TAB 1: TẦN SỐ QUÉT & KHUNG HÌNH (RIÊNG BIỆT)
     // =========================================================================
     else if (_currentBottomTab == 1) {
         if (indexPath.section == 0) {
-            UISegmentedControl *subSeg = [[UISegmentedControl alloc] initWithItems:@[TL_Text(@"HZ_TAB") ?: @"Tần Số Quét (Hz)", TL_Text(@"FPS_TAB") ?: @"Khung Hình (FPS)"]];
+            UISegmentedControl *subSeg = [[UISegmentedControl alloc] initWithItems:@[@"Tần Số Quét (Hz)", @"Khung Hình (FPS)"]];
             subSeg.frame = CGRectMake(12, 6, cell.contentView.bounds.size.width - 24, 32);
             subSeg.autoresizingMask = UIViewAutoresizingFlexibleWidth;
             subSeg.selectedSegmentIndex = _currentHzFpsSubTab;
@@ -536,16 +553,16 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
             if (indexPath.row < 4) {
                 NSInteger r = [standardRates[indexPath.row] integerValue];
-                cell.textLabel.text = [NSString stringWithFormat:@"%@ %ld %@", TL_Text(@"LOCK_RATE_PREFIX") ?: @"Khóa Cứng", (long)r, isHz ? @"Hz" : @"FPS"];
-                cell.detailTextLabel.text = (currentVal == r) ? (TL_Text(@"CURRENTLY_SELECTED") ?: @"✓ Đang Chọn") : @"";
+                cell.textLabel.text = [NSString stringWithFormat:@"Khóa Cứng %ld %@", (long)r, isHz ? @"Hz" : @"FPS"];
+                cell.detailTextLabel.text = (currentVal == r) ? @"✓ Đang Chọn" : @"";
                 cell.detailTextLabel.textColor = (currentVal == r) ? [UIColor systemGreenColor] : [UIColor lightGrayColor];
             } else if (indexPath.row == 4) {
-                cell.textLabel.text = [NSString stringWithFormat:@"⚡ %@ 144 %@", TL_Text(@"EXTENDED_RATE") ?: @"Mở Rộng", isHz ? @"Hz" : @"FPS"];
-                cell.detailTextLabel.text = (currentVal == 144) ? (TL_Text(@"CURRENTLY_SELECTED") ?: @"✓ Đang Chọn") : @"";
+                cell.textLabel.text = [NSString stringWithFormat:@"⚡ Mở Rộng 144 %@", isHz ? @"Hz" : @"FPS"];
+                cell.detailTextLabel.text = (currentVal == 144) ? @"✓ Đang Chọn" : @"";
                 cell.detailTextLabel.textColor = (currentVal == 144) ? [UIColor systemGreenColor] : [UIColor lightGrayColor];
             } else {
-                cell.textLabel.text = [NSString stringWithFormat:@"⌨️ %@", TL_Text(@"CUSTOM_INPUT_RATE") ?: @"Tự Nhập Số (15 - 144)..."];
-                cell.detailTextLabel.text = [NSString stringWithFormat:@"%@: %ld", TL_Text(@"CURRENT") ?: @"Hiện tại", (long)currentVal];
+                cell.textLabel.text = @"⌨️ Tự Nhập Số Chính Xác (15 - 144)...";
+                cell.detailTextLabel.text = [NSString stringWithFormat:@"Hiện tại: %ld", (long)currentVal];
                 cell.detailTextLabel.textColor = [UIColor systemYellowColor];
             }
 
@@ -559,12 +576,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }
     }
     // =========================================================================
-    // TAB 2: CÔNG TẮC
+    // TAB 2: CÔNG TẮC ĐẦY ĐỦ CHO TỪNG BỘ PHẬN
     // =========================================================================
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
-            UISegmentedControl *catSeg = [[UISegmentedControl alloc] initWithItems:@[TL_Text(@"SWITCH_NORMAL") ?: @"Bình Thường", TL_Text(@"SWITCH_ADVANCED") ?: @"Nâng Cao", TL_Text(@"SWITCH_DANGER") ?: @"Nguy Hiểm"]];
-            catSeg.frame = CGRectMake(12, 6, cell.contentView.bounds.size.width - 24, 32);
+            UISegmentedControl *catSeg = [[UISegmentedControl alloc] initWithItems:@[@"CPU", @"GPU", @"Màn Hình", @"Pin", @"Hệ Thống"]];
+            catSeg.frame = CGRectMake(8, 6, cell.contentView.bounds.size.width - 16, 32);
             catSeg.autoresizingMask = UIViewAutoresizingFlexibleWidth;
             catSeg.selectedSegmentIndex = _currentSwitchSubTab;
             [catSeg addTarget:self action:@selector(onSwitchSubTabChanged:) forControlEvents:UIControlEventValueChanged];
@@ -575,90 +592,123 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             UISwitch *toggle = [[UISwitch alloc] init];
             [toggle addTarget:self action:@selector(onSwitchToggled:) forControlEvents:UIControlEventValueChanged];
 
-            if (_currentSwitchSubTab == 0) {
+            if (_currentSwitchSubTab == 0) { // CPU
                 if (indexPath.row == 0) {
-                    cell.textLabel.text = TL_Text(@"TouchResponseBoost") ?: @"Cảm Ứng 0ms (Touch Boost)";
-                    toggle.on = [self.settingsDict[@"TouchResponseBoost"] ?: @YES boolValue];
+                    cell.textLabel.text = @"Ưu Tiên P-Core Realtime";
+                    toggle.on = [self.settingsDict[@"pCoreRealtimePriority"] ?: @YES boolValue];
                     toggle.tag = 101;
                 } else if (indexPath.row == 1) {
-                    cell.textLabel.text = TL_Text(@"ColorOs17SmoothEngine") ?: @"Vật Lý ColorOS 17 Siêu Mượt";
-                    toggle.on = [self.settingsDict[@"ColorOs17SmoothEngine"] ?: @YES boolValue];
+                    cell.textLabel.text = @"Điều Phối CPU Scheduler";
+                    toggle.on = [self.settingsDict[@"schedulerGovernor"] ?: @YES boolValue];
                     toggle.tag = 102;
-                } else if (indexPath.row == 2) {
-                    cell.textLabel.text = TL_Text(@"KeyboardZeroLagV24") ?: @"Bàn Phím Không Trễ (Zero Lag)";
-                    toggle.on = [self.settingsDict[@"KeyboardZeroLagV24"] ?: @YES boolValue];
-                    toggle.tag = 103;
                 } else {
-                    cell.textLabel.text = TL_Text(@"AntiGhostTouch") ?: @"Lọc Loạn Cảm Ứng Sạc (Anti-Ghost)";
-                    toggle.on = [self.settingsDict[@"AntiGhostTouch"] ?: @YES boolValue];
-                    toggle.tag = 104;
+                    cell.textLabel.text = @"Chống Bóp Xung Nhiệt Độ";
+                    toggle.on = [self.settingsDict[@"AntiThermalThrottling"] ?: @YES boolValue];
+                    toggle.tag = 103;
                 }
-            } else if (_currentSwitchSubTab == 1) {
+            } else if (_currentSwitchSubTab == 1) { // GPU
                 if (indexPath.row == 0) {
-                    cell.textLabel.text = TL_Text(@"TurboAppLaunch") ?: @"Khởi Động App Siêu Tốc (Turbo Launch)";
-                    toggle.on = [self.settingsDict[@"TurboAppLaunch"] ?: @YES boolValue];
+                    cell.textLabel.text = @"Metal Hex/Triple Buffering";
+                    toggle.on = [self.settingsDict[@"MetalHexBuffering"] ?: @YES boolValue];
                     toggle.tag = 201;
                 } else if (indexPath.row == 1) {
-                    cell.textLabel.text = TL_Text(@"MetalHexBuffering") ?: @"Metal Hex/Triple Buffering";
-                    toggle.on = [self.settingsDict[@"MetalHexBuffering"] ?: @YES boolValue];
+                    cell.textLabel.text = @"Cưỡng Chế RenderServer 90";
+                    toggle.on = [self.settingsDict[@"IsolateRenderPipeline"] ?: @YES boolValue];
                     toggle.tag = 202;
-                } else if (indexPath.row == 2) {
-                    cell.textLabel.text = TL_Text(@"FixAppLaunchBlackScreen") ?: @"Trị Dứt Điểm Đen Màn Mở App";
-                    toggle.on = [self.settingsDict[@"FixAppLaunchBlackScreen"] ?: @YES boolValue];
-                    toggle.tag = 203;
-                } else if (indexPath.row == 3) {
-                    cell.textLabel.text = TL_Text(@"ReduceMultiTaskLag") ?: @"Giảm Lag Đa Nhiệm (MultiTask Boost)";
-                    toggle.on = [self.settingsDict[@"ReduceMultiTaskLag"] ?: @YES boolValue];
-                    toggle.tag = 204;
                 } else {
-                    cell.textLabel.text = TL_Text(@"FixAppExitStutter") ?: @"Chống Khựng Thoát App (Exit Guard)";
-                    toggle.on = [self.settingsDict[@"FixAppExitStutter"] ?: @YES boolValue];
-                    toggle.tag = 205;
+                    cell.textLabel.text = @"Bỏ Khóa V-Sync Khung Hình";
+                    toggle.on = [self.settingsDict[@"vsyncAdaptiveBuffer"] ?: @YES boolValue];
+                    toggle.tag = 203;
                 }
-            } else {
+            } else if (_currentSwitchSubTab == 2) { // Màn Hình & Cảm Ứng
                 if (indexPath.row == 0) {
-                    cell.textLabel.text = TL_Text(@"ForceOverclock144Hz") ?: @"🔥 Ép Xung 144Hz Toàn Máy";
+                    cell.textLabel.text = @"🔥 Ép Xung 144Hz Toàn Máy";
                     toggle.on = [self.settingsDict[@"ForceOverclock144Hz"] ?: @YES boolValue];
                     toggle.tag = 301;
                 } else if (indexPath.row == 1) {
-                    cell.textLabel.text = TL_Text(@"AntiThermalThrottling") ?: @"🔥 Chống Bóp Xung Nhiệt Độ";
-                    toggle.on = [self.settingsDict[@"AntiThermalThrottling"] ?: @YES boolValue];
+                    cell.textLabel.text = @"Cảm Ứng 0ms (Touch Boost)";
+                    toggle.on = [self.settingsDict[@"TouchResponseBoost"] ?: @YES boolValue];
                     toggle.tag = 302;
-                } else if (indexPath.row == 2) {
-                    cell.textLabel.text = TL_Text(@"IsolateRenderPipeline") ?: @"🔥 Cưỡng Chế RenderServer 90";
-                    toggle.on = [self.settingsDict[@"IsolateRenderPipeline"] ?: @YES boolValue];
-                    toggle.tag = 303;
                 } else {
-                    cell.textLabel.text = TL_Text(@"AggressiveRamClean") ?: @"🔥 Dọn RAM Chuyên Sâu Ngầm";
+                    cell.textLabel.text = @"Động Cơ Cuộn ColorOS 17";
+                    toggle.on = [self.settingsDict[@"ColorOs17SmoothEngine"] ?: @YES boolValue];
+                    toggle.tag = 303;
+                }
+            } else if (_currentSwitchSubTab == 3) { // Pin & Nguồn
+                if (indexPath.row == 0) {
+                    cell.textLabel.text = @"Lọc Loạn Cảm Ứng Sạc (Anti-Ghost)";
+                    toggle.on = [self.settingsDict[@"AntiGhostTouch"] ?: @YES boolValue];
+                    toggle.tag = 401;
+                } else if (indexPath.row == 1) {
+                    cell.textLabel.text = @"Giả Lập Pin Đầy (Chống Tụt Xung)";
+                    toggle.on = [self.settingsDict[@"fakeFullBatteryState"] ?: @YES boolValue];
+                    toggle.tag = 402;
+                } else {
+                    cell.textLabel.text = @"Chế Độ Tiết Kiệm Pin (Khóa 60Hz)";
+                    toggle.on = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
+                    toggle.tag = 403;
+                }
+            } else { // Hệ Thống & Đa Nhiệm
+                if (indexPath.row == 0) {
+                    cell.textLabel.text = @"Khởi Động App Siêu Tốc (Turbo)";
+                    toggle.on = [self.settingsDict[@"TurboAppLaunch"] ?: @YES boolValue];
+                    toggle.tag = 501;
+                } else if (indexPath.row == 1) {
+                    cell.textLabel.text = @"Giảm Lag Đa Nhiệm (MultiTask)";
+                    toggle.on = [self.settingsDict[@"ReduceMultiTaskLag"] ?: @YES boolValue];
+                    toggle.tag = 502;
+                } else if (indexPath.row == 2) {
+                    cell.textLabel.text = @"Chống Đen Màn Mở Ứng Dụng";
+                    toggle.on = [self.settingsDict[@"FixAppLaunchBlackScreen"] ?: @YES boolValue];
+                    toggle.tag = 503;
+                } else {
+                    cell.textLabel.text = @"Dọn RAM Chuyên Sâu (Clean RAM)";
                     toggle.on = [self.settingsDict[@"AggressiveRamClean"] ?: @NO boolValue];
-                    toggle.tag = 304;
+                    toggle.tag = 504;
                 }
             }
             cell.accessoryView = toggle;
         }
     }
     // =========================================================================
-    // TAB 3: CÀI ĐẶT
+    // TAB 3: CÀI ĐẶT & QUÉT SÂU PHẦN CỨNG
     // =========================================================================
     else {
         if (indexPath.section == 0) {
+            cell.backgroundColor = [UIColor colorWithRed:0.15 green:0.22 blue:0.35 alpha:1.0];
+            cell.textLabel.text = @"🔍 Bấm Vào Đây Để Lấy Thông Tin Phần Cứng Sâu";
+            cell.textLabel.textColor = [UIColor colorWithRed:0.35 green:0.90 blue:1.0 alpha:1.0];
+            cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
+            cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        } else if (indexPath.section == 1) {
             struct utsname sysInfo;
             uname(&sysInfo);
             NSString *deviceModel = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
             NSString *osVersion = [[UIDevice currentDevice] systemVersion];
 
             if (indexPath.row == 0) {
-                cell.textLabel.text = TL_Text(@"DEVICE_ID") ?: @"Mã Thiết Bị (Device Identifier)";
+                cell.textLabel.text = @"Mã Thiết Bị (Device Identifier)";
                 cell.detailTextLabel.text = deviceModel;
             } else if (indexPath.row == 1) {
-                cell.textLabel.text = TL_Text(@"IOS_VERSION") ?: @"Phiên Bản iOS Chuẩn";
-                cell.detailTextLabel.text = [NSString stringWithFormat:@"iOS %@", osVersion];
+                cell.textLabel.text = @"Kiến Trúc Nhân (Kernel ISA)";
+                cell.detailTextLabel.text = _hasScannedDeepHardware ? _deepArchString : @"arm64 / arm64e (Apple)";
+                cell.detailTextLabel.textColor = [UIColor systemGreenColor];
             } else if (indexPath.row == 2) {
-                cell.textLabel.text = TL_Text(@"SOC_ARCH") ?: @"Kiến Trúc Nhân SoC";
-                cell.detailTextLabel.text = @"arm64e (Apple Silicon)";
-            } else {
-                cell.textLabel.text = TL_Text(@"DEVICE_NAME") ?: @"Tên Máy Định Danh";
+                cell.textLabel.text = @"Phiên Bản iOS Chuẩn";
+                cell.detailTextLabel.text = [NSString stringWithFormat:@"iOS %@", osVersion];
+            } else if (indexPath.row == 3) {
+                cell.textLabel.text = @"Tên Máy Định Danh";
                 cell.detailTextLabel.text = [[UIDevice currentDevice] name];
+            } else if (indexPath.row == 4) {
+                cell.textLabel.text = @"Số Nhân CPU (P-Core + E-Core)";
+                cell.detailTextLabel.text = _deepCoreCountString ?: @"Đang quét...";
+            } else if (indexPath.row == 5) {
+                cell.textLabel.text = @"Dung Lượng RAM Vật Lý";
+                cell.detailTextLabel.text = _deepRamString ?: @"Đang quét...";
+            } else {
+                cell.textLabel.text = @"Darwin Kernel Release";
+                cell.detailTextLabel.text = _deepKernelString ?: @"Đang quét...";
             }
         } else {
             NSString *jbRoot = Titanium_GetRootHidePrefixPath();
@@ -666,19 +716,19 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             BOOL canWriteIPC = (access("/tmp", W_OK) == 0);
 
             if (indexPath.row == 0) {
-                cell.textLabel.text = TL_Text(@"JB_ENV") ?: @"Môi Trường Jailbreak";
+                cell.textLabel.text = @"Môi Trường Jailbreak";
                 cell.detailTextLabel.text = isRootless ? @"Rootless / RootHide" : @"Rootful Chuẩn";
             } else if (indexPath.row == 1) {
-                cell.textLabel.text = TL_Text(@"JB_ROOT_PATH") ?: @"Vùng Thư Mục Gốc (/var/jb)";
+                cell.textLabel.text = @"Vùng Thư Mục Gốc (/var/jb)";
                 cell.detailTextLabel.text = jbRoot;
             } else if (indexPath.row == 2) {
-                cell.textLabel.text = TL_Text(@"SANDBOX_STATUS") ?: @"Trạng Thái Sandbox";
+                cell.textLabel.text = @"Trạng Thái Sandbox";
                 cell.detailTextLabel.text = @"Đã Phá Bỏ (Unsandboxed)";
             } else if (indexPath.row == 3) {
-                cell.textLabel.text = TL_Text(@"IPC_WRITE_PERM") ?: @"Quyền Ghi Tệp IPC /tmp";
+                cell.textLabel.text = @"Quyền Ghi Tệp IPC /tmp";
                 cell.detailTextLabel.text = canWriteIPC ? @"🟢 Hoạt Động Chuẩn (RW)" : @"🔴 Bị Khóa";
             } else {
-                cell.textLabel.text = TL_Text(@"LANGUAGE_SETTING") ?: @"Ngôn Ngữ Giao Diện";
+                cell.textLabel.text = @"Ngôn Ngữ Giao Diện";
                 cell.detailTextLabel.text = [self.settingsDict[@"SelectedLanguage"] ?: @"auto" uppercaseString];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             }
@@ -693,10 +743,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     if (_currentBottomTab == 1 && indexPath.section == 1) {
         if (_isRateLocked) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:(TL_Text(@"LOCKED_TITLE") ?: @"🔒 ĐÃ KHÓA THÔNG SỐ")
-                                                                           message:(TL_Text(@"LOCKED_MSG") ?: @"Bạn đã kích hoạt ổ khóa bảo vệ. Nhấn vào ổ khóa phía trên góc phải để mở khóa trước khi chỉnh.")
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 ĐÃ KHÓA THÔNG SỐ"
+                                                                           message:@"Bạn đã kích hoạt ổ khóa bảo vệ. Nhấn vào ổ khóa phía trên góc phải để mở khóa trước khi chỉnh."
                                                                     preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:(TL_Text(@"UNDERSTOOD") ?: @"Đã Hiểu") style:UIAlertActionStyleCancel handler:nil]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
             [self presentViewController:alert animated:YES completion:nil];
             return;
         }
@@ -714,9 +764,67 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }
 
         [self.customTableView reloadData];
-    } else if (_currentBottomTab == 3 && indexPath.section == 1 && indexPath.row == 4) {
+    } else if (_currentBottomTab == 3 && indexPath.section == 0) {
+        // [QUÉT SÂU PHẦN CỨNG QUA KERNEL SYSCTL & MACH HOST]
+        [self performDeepHardwareInspection];
+    } else if (_currentBottomTab == 3 && indexPath.section == 2 && indexPath.row == 4) {
         [self showLanguagePickerPopup:nil];
     }
+}
+
+// ====================================================================================================
+// HÀM QUÉT SÂU PHẦN CỨNG (SYSCTL & MACH HOST CHO ARM64)
+// ====================================================================================================
+
+- (void)performDeepHardwareInspection {
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [feedback impactOccurred];
+
+    // 1. Quét kiến trúc CPU chính xác qua sysctl
+    char cpuTypeStr[64] = {0};
+    size_t size = sizeof(cpuTypeStr);
+    sysctlbyname("machdep.cpu.brand_string", cpuTypeStr, &size, NULL, 0);
+    NSString *brand = [NSString stringWithUTF8String:cpuTypeStr];
+    if (!brand || brand.length == 0) {
+        #if defined(__arm64e__)
+        _deepArchString = @"arm64e (Apple Silicon PAC)";
+        #elif defined(__arm64__)
+        _deepArchString = @"arm64 (Apple 64-bit Core)";
+        #else
+        _deepArchString = @"ARM64 Chuẩn";
+        #endif
+    } else {
+        _deepArchString = brand;
+    }
+
+    // 2. Quét số nhân Core vật lý
+    int ncpu = 0;
+    size = sizeof(ncpu);
+    sysctlbyname("hw.ncpu", &ncpu, &size, NULL, 0);
+    _deepCoreCountString = [NSString stringWithFormat:@"%d Nhân (SoC Clustered)", ncpu];
+
+    // 3. Quét RAM vật lý thực tế qua kernel
+    int64_t memsize = 0;
+    size = sizeof(memsize);
+    sysctlbyname("hw.memsize", &memsize, &size, NULL, 0);
+    double ramGB = (double)memsize / (1024.0 * 1024.0 * 1024.0);
+    _deepRamString = [NSString stringWithFormat:@"%.2f GB LPDDR", ramGB];
+
+    // 4. Quét phiên bản Darwin Kernel
+    char osrelease[64] = {0};
+    size = sizeof(osrelease);
+    sysctlbyname("kern.osrelease", osrelease, &size, NULL, 0);
+    _deepKernelString = [NSString stringWithFormat:@"Darwin %s", osrelease];
+
+    _hasScannedDeepHardware = YES;
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"✅ XÁC THỰC PHẦN CỨNG HOÀN TẤT"
+                                                                   message:[NSString stringWithFormat:@"• Kiến trúc: %@\n• Nhân xử lý: %@\n• Dung lượng RAM: %@\n• Phiên bản Kernel: %@", _deepArchString, _deepCoreCountString, _deepRamString, _deepKernelString]
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đã Nhận Diện" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 // ====================================================================================================
@@ -735,26 +843,33 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)onSwitchToggled:(UISwitch *)sender {
     switch (sender.tag) {
-        case 101: self.settingsDict[@"TouchResponseBoost"] = @(sender.isOn); break;
-        case 102: self.settingsDict[@"ColorOs17SmoothEngine"] = @(sender.isOn); break;
-        case 103: self.settingsDict[@"KeyboardZeroLagV24"] = @(sender.isOn); break;
-        case 104: self.settingsDict[@"AntiGhostTouch"] = @(sender.isOn); break;
-        case 201: self.settingsDict[@"TurboAppLaunch"] = @(sender.isOn); break;
-        case 202: self.settingsDict[@"MetalHexBuffering"] = @(sender.isOn); break;
-        case 203: self.settingsDict[@"FixAppLaunchBlackScreen"] = @(sender.isOn); break;
-        case 204: self.settingsDict[@"ReduceMultiTaskLag"] = @(sender.isOn); break;
-        case 205: self.settingsDict[@"FixAppExitStutter"] = @(sender.isOn); break;
+        // CPU
+        case 101: self.settingsDict[@"pCoreRealtimePriority"] = @(sender.isOn); break;
+        case 102: self.settingsDict[@"schedulerGovernor"] = @(sender.isOn); break;
+        case 103: self.settingsDict[@"AntiThermalThrottling"] = @(sender.isOn); break;
+        // GPU
+        case 201: self.settingsDict[@"MetalHexBuffering"] = @(sender.isOn); break;
+        case 202: self.settingsDict[@"IsolateRenderPipeline"] = @(sender.isOn); break;
+        case 203: self.settingsDict[@"vsyncAdaptiveBuffer"] = @(sender.isOn); break;
+        // Màn hình
         case 301: self.settingsDict[@"ForceOverclock144Hz"] = @(sender.isOn); break;
-        case 302: self.settingsDict[@"AntiThermalThrottling"] = @(sender.isOn); break;
-        case 303: self.settingsDict[@"IsolateRenderPipeline"] = @(sender.isOn); break;
-        case 304: self.settingsDict[@"AggressiveRamClean"] = @(sender.isOn); break;
+        case 302: self.settingsDict[@"TouchResponseBoost"] = @(sender.isOn); break;
+        case 303: self.settingsDict[@"ColorOs17SmoothEngine"] = @(sender.isOn); break;
+        // Pin
+        case 401: self.settingsDict[@"AntiGhostTouch"] = @(sender.isOn); break;
+        case 402: self.settingsDict[@"fakeFullBatteryState"] = @(sender.isOn); break;
+        case 403: self.settingsDict[@"batterySaver60Hz"] = @(sender.isOn); break;
+        // Hệ thống
+        case 501: self.settingsDict[@"TurboAppLaunch"] = @(sender.isOn); break;
+        case 502: self.settingsDict[@"ReduceMultiTaskLag"] = @(sender.isOn); break;
+        case 503: self.settingsDict[@"FixAppLaunchBlackScreen"] = @(sender.isOn); break;
+        case 504: self.settingsDict[@"AggressiveRamClean"] = @(sender.isOn); break;
     }
     [self saveSettingsDataAndSync];
 }
 
 - (void)showLanguagePickerPopup:(id)sender {
-    NSString *title = TL_Text(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"CHỌN NGÔN NGỮ (LANGUAGE)" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSArray *langs = @[
         @{@"code": @"auto", @"name": @"🌐 Tự Động / Auto (Theo Máy)"},
@@ -779,7 +894,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:(TL_Text(@"CLOSE") ?: @"Đóng") style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -794,7 +909,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         textField.placeholder = [NSString stringWithFormat:@"Giá trị (15 - 144 %@)", unit];
     }];
 
-    [alert addAction:[UIAlertAction actionWithTitle:(TL_Text(@"LOCK_NOW") ?: @"Khóa Cứng Ngay") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Khóa Cứng Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         UITextField *tf = alert.textFields.firstObject;
         NSInteger val = [tf.text integerValue];
         if (val < 15) val = 15;
@@ -804,7 +919,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [self.customTableView reloadData];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:(TL_Text(@"BACK") ?: @"Hủy") style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -820,7 +935,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        // Chỉ reload khi đang đứng ở Tab 0 (Trang Chủ)
+        // Chỉ reload khi đứng ở Tab 0 (Trang Chủ)
         if (strongSelf && strongSelf->_currentBottomTab == 0) {
             [strongSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationNone];
         }
@@ -870,7 +985,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     payload.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @YES boolValue] ? 1 : 0;
     payload.diskIOPriorityBoost = 1;
     payload.rawTouchDirectDelivery = 1;
-    payload.powerSaveModeActive = (hz <= 60 && fps <= 60) ? 1 : 0;
+    payload.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue] ? 1 : 0;
 
     payload.updateSeq = (uint64_t)mach_absolute_time();
     payload.lastHeartbeat = payload.updateSeq;
@@ -904,26 +1019,21 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (!self.settingsDict[@"EnableFPSControl"]) self.settingsDict[@"EnableFPSControl"] = @YES;
     if (!self.settingsDict[@"TargetFPSRate"]) self.settingsDict[@"TargetFPSRate"] = @144;
     if (!self.settingsDict[@"ForceOverclock144Hz"]) self.settingsDict[@"ForceOverclock144Hz"] = @YES;
-    if (!self.settingsDict[@"ProMotionEngineBeta7"]) self.settingsDict[@"ProMotionEngineBeta7"] = @YES;
+    if (!self.settingsDict[@"pCoreRealtimePriority"]) self.settingsDict[@"pCoreRealtimePriority"] = @YES;
+    if (!self.settingsDict[@"schedulerGovernor"]) self.settingsDict[@"schedulerGovernor"] = @YES;
+    if (!self.settingsDict[@"AntiThermalThrottling"]) self.settingsDict[@"AntiThermalThrottling"] = @YES;
+    if (!self.settingsDict[@"MetalHexBuffering"]) self.settingsDict[@"MetalHexBuffering"] = @YES;
+    if (!self.settingsDict[@"IsolateRenderPipeline"]) self.settingsDict[@"IsolateRenderPipeline"] = @YES;
+    if (!self.settingsDict[@"vsyncAdaptiveBuffer"]) self.settingsDict[@"vsyncAdaptiveBuffer"] = @YES;
     if (!self.settingsDict[@"TouchResponseBoost"]) self.settingsDict[@"TouchResponseBoost"] = @YES;
     if (!self.settingsDict[@"ColorOs17SmoothEngine"]) self.settingsDict[@"ColorOs17SmoothEngine"] = @YES;
-    if (!self.settingsDict[@"KeyboardZeroLagV24"]) self.settingsDict[@"KeyboardZeroLagV24"] = @YES;
-    if (!self.settingsDict[@"MetalHexBuffering"]) self.settingsDict[@"MetalHexBuffering"] = @YES;
-    if (!self.settingsDict[@"ReduceMultiTaskLag"]) self.settingsDict[@"ReduceMultiTaskLag"] = @YES;
-    if (!self.settingsDict[@"FixAppExitStutter"]) self.settingsDict[@"FixAppExitStutter"] = @YES;
-    if (!self.settingsDict[@"FixAppLaunchBlackScreen"]) self.settingsDict[@"FixAppLaunchBlackScreen"] = @YES;
-    if (!self.settingsDict[@"TurboAppLaunch"]) self.settingsDict[@"TurboAppLaunch"] = @YES;
-    if (!self.settingsDict[@"AntiThermalThrottling"]) self.settingsDict[@"AntiThermalThrottling"] = @YES;
     if (!self.settingsDict[@"AntiGhostTouch"]) self.settingsDict[@"AntiGhostTouch"] = @YES;
-    if (!self.settingsDict[@"ChargerRippleRejection"]) self.settingsDict[@"ChargerRippleRejection"] = @YES;
-    if (!self.settingsDict[@"PowerSaveMode"]) self.settingsDict[@"PowerSaveMode"] = @NO;
-    if (!self.settingsDict[@"IsolateRenderPipeline"]) self.settingsDict[@"IsolateRenderPipeline"] = @YES;
+    if (!self.settingsDict[@"fakeFullBatteryState"]) self.settingsDict[@"fakeFullBatteryState"] = @YES;
+    if (!self.settingsDict[@"batterySaver60Hz"]) self.settingsDict[@"batterySaver60Hz"] = @NO;
+    if (!self.settingsDict[@"TurboAppLaunch"]) self.settingsDict[@"TurboAppLaunch"] = @YES;
+    if (!self.settingsDict[@"ReduceMultiTaskLag"]) self.settingsDict[@"ReduceMultiTaskLag"] = @YES;
+    if (!self.settingsDict[@"FixAppLaunchBlackScreen"]) self.settingsDict[@"FixAppLaunchBlackScreen"] = @YES;
     if (!self.settingsDict[@"AggressiveRamClean"]) self.settingsDict[@"AggressiveRamClean"] = @NO;
-    if (!self.settingsDict[@"PeriodicRamClean"]) self.settingsDict[@"PeriodicRamClean"] = @NO;
-    if (!self.settingsDict[@"MachVMPurgeRam"]) self.settingsDict[@"MachVMPurgeRam"] = @NO;
-    if (!self.settingsDict[@"AutoCloseBackgroundApp"]) self.settingsDict[@"AutoCloseBackgroundApp"] = @NO;
-    if (!self.settingsDict[@"QuantumRenderShield"]) self.settingsDict[@"QuantumRenderShield"] = @NO;
-    if (!self.settingsDict[@"NeuralBufferOpt"]) self.settingsDict[@"NeuralBufferOpt"] = @YES;
     if (!self.settingsDict[@"IsRateLocked"]) self.settingsDict[@"IsRateLocked"] = @NO;
 }
 
@@ -958,10 +1068,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)executeResetConfiguration {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:(TL_Text(@"RESET_CONFIRM_TITLE") ?: @"Xác Nhận Đặt Lại")
-                                                                   message:(TL_Text(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cấu hình sẽ được đưa về mặc định tối ưu 144Hz.")
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xác Nhận Đặt Lại"
+                                                                   message:@"Toàn bộ cấu hình sẽ được đưa về mặc định tối ưu 144Hz."
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:(TL_Text(@"RESET_NOW") ?: @"Đặt Lại Ngay") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đặt Lại Ngay" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         NSString *prefPath = Titanium_ResolvePrefPath();
         [[NSFileManager defaultManager] removeItemAtPath:prefPath error:nil];
         [[NSFileManager defaultManager] removeItemAtPath:PRIMARY_SYNC_FILE error:nil];
@@ -972,7 +1082,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:(TL_Text(@"BACK") ?: @"Hủy") style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
