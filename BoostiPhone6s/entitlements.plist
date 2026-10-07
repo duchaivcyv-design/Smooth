@@ -2,35 +2,49 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- [BẮT BUỘC]: Đưa tiến trình lên mức Platform Binary (Vượt AMFI trên cả Rootless & RootHide) -->
+    <!-- Xác thực Platform Binary với Kernel & AMFI -->
     <key>platform-application</key>
     <true/>
 
-    <!-- [BẮT BUỘC]: Phá bỏ Container Sandbox (Cho phép đọc/ghi tự do /tmp và /var/jb) -->
+    <!-- Hủy bỏ sandbox và vùng chứa container -->
     <key>com.apple.private.security.no-container</key>
     <true/>
+    <key>com.apple.private.security.container-required</key>
+    <false/>
 
-    <!-- Quyền truy cập toàn bộ hệ thống tệp và cấu hình hệ thống (Bypass TCC) -->
+    <!-- Cho phép nạp dylib ngoài và bỏ qua kiểm tra chữ ký thư viện (iOS 15+) -->
+    <key>com.apple.private.skip-library-validation</key>
+    <true/>
+
+    <!-- Miễn trừ kiểm duyệt quyền riêng tư TCC cho toàn bộ hệ thống tệp -->
     <key>com.apple.private.tcc.allow</key>
     <array>
         <string>kTCCServiceSystemPolicyAllFiles</string>
     </array>
 
-    <!-- Quyền truy cập thư mục dữ liệu ứng dụng dùng chung -->
+    <!-- Quyền truy cập vùng dữ liệu ứng dụng dùng chung -->
     <key>com.apple.private.security.storage.AppDataContainers</key>
     <true/>
 
-    <!-- Giao tiếp điều phối và khởi chạy ứng dụng với SpringBoard -->
-    <key>com.apple.springboard.launchapplications</key>
-    <true/>
+    <!-- Khởi chạy và điều phối tiến trình qua FrontBoard / SpringBoard -->
     <key>com.apple.frontboard.launchapplications</key>
     <true/>
+    <key>com.apple.springboard.launchapplications</key>
+    <true/>
 
-    <!-- Kết nối Mach Service hệ thống không bị chặn bởi Sandbox -->
+    <!-- Kết nối mạng không giới hạn qua Sandbox Network Client -->
     <key>com.apple.security.network.client</key>
     <true/>
 
-    <!-- Truy cập IOKit để đọc cảm biến phần cứng (SoC, Pin, Màn hình thực tế) -->
+    <!-- Cho phép mở Task Port và can thiệp tiến trình khác qua Mach API -->
+    <key>get-task-allow</key>
+    <true/>
+    <key>task_for_pid-allow</key>
+    <true/>
+    <key>com.apple.system-task-ports</key>
+    <true/>
+
+    <!-- Mở kết nối UserClient tới các driver IOKit phần cứng -->
     <key>com.apple.security.iokit-user-client-class</key>
     <array>
         <string>IOPMrootDomain</string>
@@ -39,11 +53,5 @@
         <string>AppleSmartBatteryCommands</string>
         <string>IOPlatformPluginDevice</string>
     </array>
-
-    <!-- Quyền Task port phục vụ phân tích tiến trình và spawn lệnh hệ thống -->
-    <key>get-task-allow</key>
-    <true/>
-    <key>task_for_pid-allow</key>
-    <true/>
 </dict>
 </plist>
