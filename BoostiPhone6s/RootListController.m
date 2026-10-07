@@ -1,8 +1,3 @@
-// ====================================================================================================
-// BOOSTIPHONE6S APP - ROOTLISTCONTROLLER NATIVE ENGINE
-// TÍCH HỢP QUẢN LÝ APP ĐỘC LẬP - KHAI THÁC 15S - BẢO LƯU TRẠNG THÁI VÀ GỠ BỎ SẠCH SẼ
-// ====================================================================================================
-
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -334,11 +329,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 // ====================================================================================================
 
 - (void)showMandatoryExploitAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"⚡ YÊU CẦU KHAI THÁC KERNEL / DARWIN"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@" YÊU CẦU KHAI THÁC KERNEL / DARWIN"
                                                                    message:@"Ứng dụng cần chiếm quyền điều khiển nhân Darwin tầng sâu (XNU Sysctl, P-Core Scheduler, CADisplayLink Pipeline và Mach VM) trong khoảng 15 giây để kích hoạt khả năng tăng tốc.\n\nNếu không khai thác, toàn bộ công tắc, đo phần cứng và mức chọn Hz/FPS sẽ bị KHÓA CỨNG (Hiện xám)."
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    UIAlertAction *exploitAction = [UIAlertAction actionWithTitle:@"🚀 Khai Thác Ngay (~15 Giây)" 
+    UIAlertAction *exploitAction = [UIAlertAction actionWithTitle:@" Khai Thác Ngay (~15 Giây)" 
                                                             style:UIAlertActionStyleDefault 
                                                           handler:^(UIAlertAction * _Nonnull action) {
         [self openDopamineStyleExploitConsole];
@@ -395,7 +390,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSArray *stages = @[
         @"[Stage 1/6] Khởi tạo Mach Host & Vượt bảo vệ PAC arm64e...",
         @"[Stage 2/6] Can thiệp XNU Scheduler, điều phối P-Core Realtime...",
-        @"[Stage 3/6] Phá vỡ rào cản Sandbox, chiếm quyền I/O VIP liên vùng...",
+        @"[Stage 3/6] Phá vỡ rào cản Sandbox, chiếm quyền I/O liên vùng...",
         @"[Stage 4/6] Khai thác Darwin VM Map, ép xả sạch cache bộ nhớ đệm...",
         @"[Stage 5/6] Ghi đè Pipeline Metal GPU & Đăng ký Triple Buffering 0ms...",
         @"[Stage 6/6] Cấp quyền IPC Shmem liên vùng (/tmp & /var/jb/tmp)...",
@@ -517,7 +512,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)setupTopHeaderBar {
     UILabel *brandLabel = [[UILabel alloc] init];
-    brandLabel.text = @"⚡ ĐỨC LONG PRO [144Hz]";
+    brandLabel.text = @" SmoothIOS Pro ";
     brandLabel.textColor = [UIColor colorWithRed:0.25 green:0.85 blue:0.95 alpha:1.0];
     brandLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightHeavy];
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:brandLabel];
