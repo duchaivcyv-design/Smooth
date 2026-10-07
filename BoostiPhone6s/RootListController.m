@@ -953,7 +953,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)executeSafeMode {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        NSString *bin = Titanium_FindIdentifier ? Titanium_FindExecutablePath(@"killall") : @"killall";
+        NSString *bin = Titanium_FindExecutablePath(@"killall");
         char *argv[] = {(char *)[bin UTF8String], (char *)"-SEGV", (char *)"SpringBoard", NULL};
         pid_t pid;
         posix_spawn(&pid, [bin UTF8String], NULL, NULL, argv, environ);
