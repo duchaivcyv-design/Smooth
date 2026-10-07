@@ -7,23 +7,30 @@
     <key>CFBundleDisplayName</key>
     <string>BoostiPhone6s V28.7 PRO</string>
     <key>CFBundleExecutable</key>
-    <string>BoostiPhone6sPrefs</string>
+    <string>BoostiPhone6sApp</string>
     <key>CFBundleIdentifier</key>
-    <string>com.taojb.boostiphone6s.prefs</string>
+    <string>com.taojb.boostiphone6s</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>BoostiPhone6sPrefs</string>
+    <string>BoostiPhone6sApp</string>
     <key>CFBundlePackageType</key>
-    <string>BNDL</string>
+    <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>1.2.0-2a</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
     <string>1.2.0-2a</string>
-    <key>PrincipalClass</key>
-    <string>RootListController</string>
+    <key>MinimumOSVersion</key>
+    <string>14.0</string>
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>
+        <integer>2</integer>
+    </array>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
     <key>CFBundleIconFile</key>
     <string>icon.png</string>
     <key>CFBundleIconFiles</key>
@@ -32,10 +39,6 @@
         <string>icon@2x.png</string>
         <string>icon@3x.png</string>
     </array>
-    <key>NSPrefPaneIconFile</key>
-    <string>icon.png</string>
-    <key>MinimumOSVersion</key>
-    <string>14.0</string>
     <key>CFBundleSupportedPlatforms</key>
     <array>
         <string>iPhoneOS</string>
