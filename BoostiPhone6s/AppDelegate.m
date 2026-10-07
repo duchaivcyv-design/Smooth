@@ -8,6 +8,7 @@
 #import <notify.h>
 #import <pthread.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/message.h>
 
 @interface AppDelegate ()
 @property (nonatomic, strong) UINavigationController *mainNavController;
@@ -55,10 +56,13 @@
     // 3. Hiển thị cửa sổ
     [self.window makeKeyAndVisible];
 
-    // 4. [ĐÃ SỬA CHUẨN]: Gán ProMotion trực tiếp lên CALayer của UIWindow (Đúng API chuẩn iOS 15+)
+    // 4. [ĐÃ SỬA CHUẨN]: Gọi động selector ProMotion qua runtime tránh lỗi thiếu header ở SDK 14
     if (@available(iOS 15.0, *)) {
-        if ([self.window.layer respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-            self.window.layer.preferredFrameRateRange = CAFrameRateRangeMake(30.0f, 120.0f, 120.0f);
+        SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
+        if ([self.window.layer respondsToSelector:setRangeSel]) {
+            CAFrameRateRange range = CAFrameRateRangeMake(30.0f, 120.0f, 120.0f);
+            void (*setFrameRateRangeFunc)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
+            setFrameRateRangeFunc(self.window.layer, setRangeSel, range);
         }
     }
 
