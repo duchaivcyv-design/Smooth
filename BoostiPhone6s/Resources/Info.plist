@@ -31,6 +31,32 @@
     </array>
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>iPhoneOS</string>
+    </array>
+    
+    <!-- Tắt đa nhiệm Scene để UIKit chạy mượt trực tiếp qua self.window trong AppDelegate -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+    </dict>
+
+    <!-- Hướng màn hình chuẩn định hướng Portrait -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <!-- Khai báo Icon đầy đủ -->
     <key>CFBundleIconFile</key>
     <string>icon.png</string>
     <key>CFBundleIconFiles</key>
@@ -39,9 +65,17 @@
         <string>icon@2x.png</string>
         <string>icon@3x.png</string>
     </array>
-    <key>CFBundleSupportedPlatforms</key>
-    <array>
-        <string>iPhoneOS</string>
-    </array>
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>icon</string>
+            </array>
+            <key>UIPrerenderedIcon</key>
+            <true/>
+        </dict>
+    </dict>
 </dict>
 </plist>
