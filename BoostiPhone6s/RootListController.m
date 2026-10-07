@@ -138,7 +138,7 @@ typedef struct {
 }
 
 - (void)updateUIAnimated:(BOOL)animated {
-    UIColor *onColor = [UIColor colorWithRed:0.32 green:0.78 blue:0.42 alpha:1.0]; // Xanh lá sáng ảnh 1
+    UIColor *onColor = [UIColor colorWithRed:0.32 green:0.78 blue:0.42 alpha:1.0];
     UIColor *offColor = [UIColor colorWithRed:0.25 green:0.26 blue:0.28 alpha:1.0];
 
     CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 28, 2, 26, 26) : CGRectMake(2, 2, 26, 26);
@@ -194,10 +194,9 @@ static inline NSString *Titanium_ResolvePrefPath(void) {
 }
 
 static inline NSString *Titanium_FindExecutablePath(NSString *name) {
-    NSString *root = Titanium_GetRootHidePrefixPath();
     NSArray *searchPrefixes = @[
-        [root stringByAppendingPathComponent:@"usr/bin"],
-        [root stringByAppendingPathComponent:@"bin"],
+        [Titanium_GetRootHidePrefixPath() stringByAppendingPathComponent:@"usr/bin"],
+        [Titanium_GetRootHidePrefixPath() stringByAppendingPathComponent:@"bin"],
         @"/var/jb/usr/bin",
         @"/var/jb/bin",
         @"/usr/bin",
@@ -266,7 +265,8 @@ static inline float Titanium_GetLiveGPULoadPercentage(void) {
 }
 
 static inline float Titanium_GetBaseThermalTemp(void) {
-    NSProcessInfoThermalState state = [[NSProcessInfo thermalState] thermalState];
+    // Đã sửa: dùng [NSProcessInfo processInfo] thay vì gọi class method
+    NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
     float cpuLoad = Titanium_GetLiveCPULoadPercentage();
     float loadOffset = (cpuLoad / 100.0f) * 2.5f;
 
@@ -360,9 +360,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     [self setupTopHeaderBar];
     [self setupNavigationItems];
-    [self setupCustomCapsuleBottomBar]; // CHUẨN ẢNH 3
+    [self setupCustomCapsuleBottomBar];
     [self setupMainTableView];
-    [self setupLiquidGlass30Engine];      // CHUẨN ẢNH 2
+    [self setupLiquidGlass30Engine];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self loadInstalledAppsAsync];
@@ -389,7 +389,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)setupCustomCapsuleBottomBar {
     CGFloat barHeight = 56.0;
     CGFloat barMargin = 16.0;
-    CGFloat barY = self.view.bounds.size.height - barHeight - 34; // Cách lề đáy an toàn
+    CGFloat barY = self.view.bounds.size.height - barHeight - 34;
 
     _customBottomBarContainer = [[UIView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight)];
     _customBottomBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
@@ -398,7 +398,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _customBottomBarContainer.layer.cornerCurve = kCACornerCurveContinuous;
     _customBottomBarContainer.layer.borderWidth = 1.0;
     _customBottomBarContainer.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.16].CGColor;
-    _customBottomBarContainer.clipsToBounds = YES; // Khắc phục dứt điểm lỗi bo góc indicator
+    _customBottomBarContainer.clipsToBounds = YES;
 
     UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
@@ -417,7 +417,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     CGFloat btnWidth = _customBottomBarContainer.bounds.size.width / _tabConfigs.count;
 
-    // MIẾNG TRƯỢT SÁNG CAPSULE (Chuẩn ảnh 3 - Bo tròn ôm trọn viền ngoài)
     _activeIndicatorPill = [[UIView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6)];
     _activeIndicatorPill.backgroundColor = [UIColor colorWithWhite:0.22 alpha:0.75];
     _activeIndicatorPill.layer.cornerRadius = (barHeight - 6) / 2.0;
@@ -441,7 +440,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [btn setTitleColor:(i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.65 alpha:1.0] forState:UIControlStateNormal];
         btn.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
 
-        // Căn chỉnh Icon nằm trên, Chữ nằm dưới chuẩn iOS Bar
         CGFloat spacing = 3.0;
         CGSize imageSize = btn.imageView.image.size;
         btn.titleEdgeInsets = UIEdgeInsetsMake(0, -imageSize.width, -(imageSize.height + spacing), 0);
@@ -450,7 +448,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
         [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
 
-        // Gắn cử chỉ nhấn giữ để trồi Thấu kính Liquid Glass (Chuẩn Ảnh 2)
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleTabLongPress:)];
         longPress.minimumPressDuration = 0.12;
         [btn addGestureRecognizer:longPress];
@@ -505,7 +502,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidGlassLensContainer.hidden = YES;
     _liquidGlassLensContainer.userInteractionEnabled = NO;
 
-    // Ánh sáng phát quang xanh dương khúc xạ (Refraction Glow)
     _liquidGlassLensContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.65 blue:1.0 alpha:0.95].CGColor;
     _liquidGlassLensContainer.layer.shadowOffset = CGSizeMake(0, -4);
     _liquidGlassLensContainer.layer.shadowRadius = 18;
@@ -519,7 +515,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidGlassBlurLayer.clipsToBounds = YES;
     [_liquidGlassLensContainer addSubview:_liquidGlassBlurLayer];
 
-    // Viền sáng bóng 3D
     _liquidGlassSpecularLayer = [CAGradientLayer layer];
     _liquidGlassSpecularLayer.frame = _liquidGlassLensContainer.bounds;
     _liquidGlassSpecularLayer.cornerRadius = 39;
@@ -533,7 +528,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidGlassSpecularLayer.endPoint = CGPointMake(0.9, 1.0);
     [_liquidGlassLensContainer.layer addSublayer:_liquidGlassSpecularLayer];
 
-    // Viền thấu kính đôi lồi ra ngoài thanh bar (Chuẩn Ảnh 2)
     _liquidGlassRimLayer = [CAShapeLayer layer];
     _liquidGlassRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:_liquidGlassLensContainer.bounds cornerRadius:39].CGPath;
     _liquidGlassRimLayer.fillColor = [UIColor colorWithRed:0.2 green:0.65 blue:1.0 alpha:0.18].CGColor;
@@ -555,7 +549,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     CGPoint touchInView = [gesture locationInView:self.view];
 
     if (gesture.state == UIGestureRecognizerStateBegan) {
-        // Đặt kính lúp nằm trồi lên phía trên thanh tab (Chuẩn Ảnh 2)
         CGPoint centerPoint = CGPointMake(touchInView.x, _customBottomBarContainer.center.y - 14);
         _liquidGlassLensContainer.center = centerPoint;
         _liquidGlassLensContainer.hidden = NO;
@@ -576,7 +569,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         CGPoint centerPoint = CGPointMake(touchInView.x, _customBottomBarContainer.center.y - 14);
         _liquidGlassLensContainer.center = centerPoint;
 
-        // Tự động nhận diện tab đang trỏ vào khi vuốt ngang
         for (NSInteger i = 0; i < _tabButtons.count; i++) {
             UIButton *b = _tabButtons[i];
             CGPoint p = [gesture locationInView:b];
@@ -855,14 +847,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.textLabel.text = @"⚡ Kích Hoạt Bộ Đo Phần Cứng Realtime";
             cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
 
-            // CÔNG TẮC CAPSULE (ẢNH 1)
             LiquidCapsuleSwitch *monitorSwitch = [[LiquidCapsuleSwitch alloc] init];
             monitorSwitch.on = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
             __weak typeof(self) weakSelf = self;
             monitorSwitch.valueChangedBlock = ^(BOOL isOn) {
-                weakSelf.settingsDict[@"EnableSystemMonitoring"] = @(isOn);
-                [weakSelf saveSettingsDataAndSync];
-                [weakSelf.customTableView reloadData];
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                strongSelf.settingsDict[@"EnableSystemMonitoring"] = @(isOn);
+                [strongSelf saveSettingsDataAndSync];
+                [strongSelf.customTableView reloadData];
             };
             cell.accessoryView = monitorSwitch;
             return cell;
@@ -1017,7 +1010,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             cell.selectionStyle = _isRateLocked ? UITableViewCellSelectionStyleNone : UITableViewCellSelectionStyleDefault;
         }
     } 
-    // TAB 2: CÔNG TẮC (CHUẨN ẢNH 1)
+    // TAB 2: CÔNG TẮC
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
             UISegmentedControl *catSeg = [[UISegmentedControl alloc] initWithItems:@[@"CPU", @"GPU", @"Màn Hình", @"Pin", @"Hệ Thống"]];
@@ -1065,14 +1058,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 else { title = @"Tự Động Đóng App Nền"; prefKey = @"autoKillBackground"; }
             }
 
-            // SỬ DỤNG CÔNG TẮC CAPSULE (ẢNH 1)
             LiquidCapsuleSwitch *customSwitch = [[LiquidCapsuleSwitch alloc] init];
             customSwitch.on = [self.settingsDict[prefKey] ?: @NO boolValue];
             __weak typeof(self) weakSelf = self;
             customSwitch.valueChangedBlock = ^(BOOL isOn) {
-                weakSelf.settingsDict[prefKey] = @(isOn);
-                [weakSelf saveSettingsDataAndSync];
-                [weakSelf applyDeepSpringBoardAndUIKitTweaks];
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                strongSelf.settingsDict[prefKey] = @(isOn);
+                [strongSelf saveSettingsDataAndSync];
+                [strongSelf applyDeepSpringBoardAndUIKitTweaks];
             };
 
             cell.textLabel.text = title;
@@ -1091,10 +1085,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             appToggle.on = [_appTweakStates[appInfo[@"bundleID"]] boolValue];
             __weak typeof(self) weakSelf = self;
             appToggle.valueChangedBlock = ^(BOOL isOn) {
-                weakSelf->_appTweakStates[appInfo[@"bundleID"]] = @(isOn);
-                weakSelf.settingsDict[@"AppTweakStates"] = weakSelf->_appTweakStates;
-                [weakSelf saveSettingsDataAndSync];
-                [weakSelf applyDeepSpringBoardAndUIKitTweaks];
+                // Đã sửa: gán strongSelf để an toàn truy cập ivar
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                strongSelf->_appTweakStates[appInfo[@"bundleID"]] = @(isOn);
+                strongSelf.settingsDict[@"AppTweakStates"] = strongSelf->_appTweakStates;
+                [strongSelf saveSettingsDataAndSync];
+                [strongSelf applyDeepSpringBoardAndUIKitTweaks];
             };
             cell.accessoryView = appToggle;
         }
