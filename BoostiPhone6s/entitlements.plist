@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: XÁC THỰC TIẾN TRÌNH NỀN TẢNG CẤP CAO -->
+    <key>platform-application</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: PHÁ BỎ HOÀN TOÀN RÀO CẢN SANDBOX (ĐỌC/GHI /tmp VÀ /var/jb) -->
+    <key>com.apple.private.security.no-sandbox</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: TRUY CẬP TỰ DO BỘ LƯU TRỮ VÀ DỮ LIỆU APP CHUNG -->
+    <key>com.apple.private.security.storage.AppDataContainers</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: QUYỀN KHỞI CHẠY & ĐIỀU PHỐI VỚI SPRINGBOARD -->
+    <key>com.apple.springboard.launchapplications</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CẤP QUYỀN GIAO TIẾP VỚI TIẾN TRÌNH HỆ THỐNG VÀ XNU KERNEL -->
+    <key>com.apple.private.kernel.get-temp-dir</key>
+    <true/>
+
+    <!-- [ĐÃ ÉP SẠCH QUYỀN]: CHO PHÉP THỰC THI MÃ VÀ ĐO ĐẠC MACH HOST STATISTICS -->
+    <key>run-unsigned-code</key>
+    <true/>
+    
+    <key>get-task-allow</key>
+    <true/>
+
+    <key>task_for_pid-allow</key>
+    <true/>
+</dict>
+</plist>
