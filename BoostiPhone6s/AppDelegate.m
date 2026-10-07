@@ -79,11 +79,8 @@
     if (self.rootListVC) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.rootListVC ensureDefaultSettingsExist];
-            if ([self.rootListVC respondsToSelector:@selector(updateDynamicTitles)]) {
-                [self.rootListVC updateDynamicTitles];
-            }
-            if ([self.rootListVC respondsToSelector:@selector(refreshContinuousHardwareCells)]) {
-                [self.rootListVC refreshContinuousHardwareCells];
+            if (self.rootListVC.customTableView) {
+                [self.rootListVC.customTableView reloadData];
             }
         });
     }
