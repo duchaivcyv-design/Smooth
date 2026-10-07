@@ -183,7 +183,7 @@ static inline float Titanium_GetLiveGPULoadPercentage(void) {
 }
 
 static inline float Titanium_GetBaseThermalTemp(void) {
-    NSProcessInfoThermalState state = [[NSProcessInfo thermalState]];
+    NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
     float cpuLoad = Titanium_GetLiveCPULoadPercentage();
     float loadOffset = (cpuLoad / 100.0f) * 2.5f;
 
