@@ -3,13 +3,7 @@
 
 #import <UIKit/UIKit.h>
 
-@class PSSpecifier;
-
 NS_ASSUME_NONNULL_BEGIN
-
-// ====================================================================================================
-// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
-// ====================================================================================================
 
 #ifndef PREF_DOMAIN
 #define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
@@ -42,10 +36,6 @@ NS_ASSUME_NONNULL_BEGIN
 #ifndef APEX_SYNC_MAGIC_V285
 #define APEX_SYNC_MAGIC_V285 0x41505837
 #endif
-
-// ====================================================================================================
-// CẤU TRÚC STRUCT ĐỒNG BỘ NGUYÊN TỬ QUA RAM & TỆP IPC (KHỚP 100% TỪNG BYTE TWEAK.XM)
-// ====================================================================================================
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
@@ -80,32 +70,20 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
-// ====================================================================================================
-// GIAO DIỆN LỚP ĐIỀU KHIỂN CHÍNH ROOTLISTCONTROLLER (CHUẨN STANDALONE UIKIT APP)
-// ====================================================================================================
+@interface RootListController : UIViewController <UITableViewDelegate, UITableViewDataSource>
 
-@interface RootListController : UIViewController <UITableViewDelegate, UITableViewDataSource> {
-@public
-    NSMutableArray *_allSavedSpecifiers;
-    NSMutableArray *_specifiers;
-}
-
-// --- Thuộc tính điều khiển giao diện Native TableView ---
 @property (nonatomic, strong) UITableView *customTableView;
 @property (nonatomic, strong) UISegmentedControl *bottomSegment;
 @property (nonatomic, strong) UIButton *rateLockButton;
 @property (nonatomic, strong) NSMutableDictionary *settingsDict;
 
-// --- Quản lý dữ liệu và cấu hình ---
+// --- Dữ liệu & Cấu hình ---
 - (void)loadSettingsData;
 - (void)saveSettingsDataAndSync;
-- (nullable id)readPreferenceValue:(PSSpecifier *)specifier;
-- (void)setPreferenceValue:(nullable id)value specifier:(PSSpecifier *)specifier;
-- (NSDictionary *)getMergedPreferences;
 - (void)ensureDefaultSettingsExist;
 - (void)syncSharedMemoryFile:(BOOL)enabled;
 
-// --- Bố cục giao diện & Điều khiển ổ khóa ---
+// --- Bố cục giao diện ---
 - (void)setupTopHeaderBar;
 - (void)updateLockIcon;
 - (void)toggleRateLockAction;
@@ -116,54 +94,19 @@ typedef struct __attribute__((packed)) {
 - (void)onSwitchSubTabChanged:(UISegmentedControl *)sender;
 - (void)onSwitchToggled:(UISwitch *)sender;
 
-// --- HUD Đo Chỉ Số Phần Cứng Thời Gian Thực (Đầy Đủ Các Mục HUD) ---
-- (id)getMonitorHzFPS:(PSSpecifier *)specifier;
-- (id)getMonitorScreenRefreshRate:(PSSpecifier *)specifier;
-- (id)getMonitorScreenThermal:(PSSpecifier *)specifier;
-- (id)getMonitorScreenOverclocked:(PSSpecifier *)specifier;
-
-- (id)getMonitorCPUTemp:(PSSpecifier *)specifier;
-- (id)getMonitorCPULoad:(PSSpecifier *)specifier;
-- (id)getMonitorCPUClock:(PSSpecifier *)specifier;
-
-- (id)getMonitorGPUTemp:(PSSpecifier *)specifier;
-- (id)getMonitorGPULoad:(PSSpecifier *)specifier;
-- (id)getMonitorGPUClock:(PSSpecifier *)specifier;
-
-- (id)getMonitorBatteryTemp:(PSSpecifier *)specifier;
-- (id)getMonitorBatteryVoltage:(PSSpecifier *)specifier;
-
-// --- 4 Getter tương thích ngược cho Root.plist cũ ---
-- (id)getMonitorCPUGPU:(PSSpecifier *)specifier;
-- (id)getMonitorThermal:(PSSpecifier *)specifier;
-- (id)getMonitorBattery:(PSSpecifier *)specifier;
-
-// --- Vòng lặp cập nhật HUD ngầm ---
+// --- HUD Giám sát phần cứng ---
 - (void)startContinuousHardwareHUD;
 - (void)stopContinuousHardwareHUD;
-- (void)refreshContinuousHardwareCells;
 
-// --- Điều phối tần số quét Hz & FPS ---
-- (void)showHzPickerPopup:(nullable PSSpecifier *)specifier;
-- (void)showFPSPickerPopup:(nullable PSSpecifier *)specifier;
+// --- Điều phối Hz & FPS ---
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz;
-- (void)showSubMenuWithOptions:(NSArray *)rates title:(NSString *)title unit:(NSString *)unit isFPS:(BOOL)isFPS;
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)dynamicMode isFPS:(BOOL)isFPS;
 
-// --- Đa ngôn ngữ và cập nhật tiêu đề động ---
-- (void)showLanguagePickerPopup:(nullable id)specifier;
-- (void)updateDynamicTitles;
-- (void)updateDynamicTitlesForSpecifiers:(NSArray *)targetSpecs;
-- (void)applyFullLocalizationToSpecifiers:(NSArray *)specs;
+// --- Đa ngôn ngữ ---
+- (void)showLanguagePickerPopup:(nullable id)sender;
 
-// --- Thông tin tác giả & Liên kết hỗ trợ ---
-- (id)getAuthorName:(PSSpecifier *)specifier;
-- (id)getVersionString:(PSSpecifier *)specifier;
-- (void)openSupportLink:(PSSpecifier *)specifier;
-
-// --- Hành động hệ thống (Menu 3 gạch: Respring, Userspace Reboot, SafeMode, Reset) ---
+// --- Hành động hệ thống ---
 - (void)setupNavigationItems;
-- (void)presentActions;
 - (void)executeRespring;
 - (void)executeSReboot;
 - (void)executeSafeMode;
