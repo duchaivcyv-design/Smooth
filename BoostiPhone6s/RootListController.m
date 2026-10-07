@@ -184,7 +184,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
-    // Hiệu ứng kính lỏng kéo lướt trang
+    // Hiệu ứng bong bóng kính lỏng Liquid Glass
     UIView *_liquidGlassBubbleView;
 }
 @end
@@ -206,7 +206,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.title = @"";
     self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.07 alpha:1.0];
 
-    _currentBottomTab = 0;
+    _currentBottomTab = 0; // Mặc định mở Trang Chủ ở giữa
     _currentHzFpsSubTab = 0;
     _currentSwitchSubTab = 0;
 
@@ -254,20 +254,24 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self stopContinuousHardwareHUD];
 }
 
-// Hiệu ứng bong bóng kính lỏng (Liquid Glass) khi nhấn giữ kéo qua lại các trang
+// Thiết lập hiệu ứng kính lỏng Liquid Glass bám tay khi vuốt chạm
 - (void)setupLiquidGlassGestureEffect {
-    _liquidGlassBubbleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 70, 70)];
-    _liquidGlassBubbleView.backgroundColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:0.25];
-    _liquidGlassBubbleView.layer.cornerRadius = 35;
+    _liquidGlassBubbleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 72, 72)];
+    _liquidGlassBubbleView.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:0.25];
+    _liquidGlassBubbleView.layer.cornerRadius = 36;
     _liquidGlassBubbleView.layer.borderWidth = 1.5;
-    _liquidGlassBubbleView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
+    _liquidGlassBubbleView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.65].CGColor;
+    _liquidGlassBubbleView.layer.shadowColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:0.8].CGColor;
+    _liquidGlassBubbleView.layer.shadowOffset = CGSizeZero;
+    _liquidGlassBubbleView.layer.shadowRadius = 16;
+    _liquidGlassBubbleView.layer.shadowOpacity = 0.8;
     _liquidGlassBubbleView.hidden = YES;
 
     if (@available(iOS 13.0, *)) {
         UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialLight];
         UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
         blurView.frame = _liquidGlassBubbleView.bounds;
-        blurView.layer.cornerRadius = 35;
+        blurView.layer.cornerRadius = 36;
         blurView.clipsToBounds = YES;
         blurView.userInteractionEnabled = NO;
         [_liquidGlassBubbleView addSubview:blurView];
@@ -285,15 +289,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         _liquidGlassBubbleView.center = pt;
         _liquidGlassBubbleView.hidden = NO;
         _liquidGlassBubbleView.transform = CGAffineTransformMakeScale(0.1, 0.1);
-        [UIView animateWithDuration:0.25 animations:^{
+        [UIView animateWithDuration:0.2 animations:^{
             self->_liquidGlassBubbleView.transform = CGAffineTransformIdentity;
         }];
     } else if (pan.state == UIGestureRecognizerStateChanged) {
-        [UIView animateWithDuration:0.05 delay:0 options:UIViewAnimationOptionCurveLinear animations:^{
-            self->_liquidGlassBubbleView.center = pt;
-        } completion:nil];
+        _liquidGlassBubbleView.center = pt;
     } else if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
-        [UIView animateWithDuration:0.25 animations:^{
+        [UIView animateWithDuration:0.2 animations:^{
             self->_liquidGlassBubbleView.transform = CGAffineTransformMakeScale(0.01, 0.01);
         } completion:^(BOOL finished) {
             self->_liquidGlassBubbleView.hidden = YES;
@@ -376,7 +378,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self syncSharedMemoryFile:master];
 }
 
-// Khai thác thủ công qua Cài Đặt
+- (void)showUnexploitedWarningAlert {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 TÍNH NĂNG BỊ KHÓA"
+                                                                   message:@"Hệ thống chưa được khai thác! Hãy vào tab Cài Đặt và nhấn vào dòng trạng thái đèn đỏ để bắt đầu khai thác thủ công."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+// Khai thác thủ công từ Cài Đặt
 - (void)openDopamineStyleExploitConsole {
     UIViewController *consoleVC = [[UIViewController alloc] init];
     consoleVC.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.06 alpha:1.0];
@@ -557,14 +567,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [self showUnexploitedWarningAlert];
         return;
     }
-    
-- (void)showUnexploitedWarningAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 TÍNH NĂNG BỊ KHÓA"
-                                                                   message:@"Hệ thống chưa được khai thác! Hãy vào tab Cài Đặt và nhấn vào dòng trạng thái đèn đỏ để bắt đầu khai thác thủ công."
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
-}
 
     self->_isRateLocked = !self->_isRateLocked;
     self.settingsDict[@"IsRateLocked"] = @(self->_isRateLocked);
@@ -628,7 +630,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 }
 
-// Bố cục thanh điều hướng iOS 26 chuẩn Liquid Glass, 📊 Trang Chủ đặt ở giữa nổi bật to rõ
+// Bố cục thanh điều hướng Liquid Glass chuẩn iOS 26, 📊 Trang Chủ đặt ở giữa nổi bật to rõ
 - (void)setupBottomNavigationBar {
     UIView *bottomBarContainer = [[UIView alloc] initWithFrame:CGRectMake(12, self.view.bounds.size.height - 88, self.view.bounds.size.width - 24, 58)];
     bottomBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
@@ -652,7 +654,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.bottomSegment = [[UISegmentedControl alloc] initWithItems:@[@"🎛️ Hz/FPS", @"⚡ Switch", @"📊 Trang Chủ", @"📱 App", @"⚙️ Cài Đặt"]];
     self.bottomSegment.frame = CGRectMake(4, 6, bottomBarContainer.bounds.size.width - 8, 46);
     self.bottomSegment.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.bottomSegment.selectedSegmentIndex = 2;
+    self.bottomSegment.selectedSegmentIndex = 2; // Mặc định mở Trang Chủ ở giữa
     _currentBottomTab = 0;
 
     NSDictionary *attrNormal = @{NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightMedium], NSForegroundColorAttributeName: [UIColor colorWithWhite:0.65 alpha:1.0]};
@@ -690,7 +692,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - TableView DataSource & Delegate
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    if (_currentBottomTab == 0) return 5;
+    if (_currentBottomTab == 0) return 6; // Section 0 là Master Switch đo hệ thống + 5 Section CPU/GPU/RAM/Pin/Màn hình
     if (_currentBottomTab == 1) return 3;
     if (_currentBottomTab == 2) return 2;
     if (_currentBottomTab == 3) return 1;
@@ -699,10 +701,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (_currentBottomTab == 0) {
-        if (section == 0) return _isCpuExpanded ? 5 : 1;
-        if (section == 1) return _isGpuExpanded ? 5 : 1;
-        if (section == 2) return _isRamExpanded ? 4 : 1;
-        if (section == 3) return _isBatteryExpanded ? 5 : 1;
+        if (section == 0) return 1; // Công tắc Master đo hệ thống
+        BOOL isMonitorActive = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
+        if (!isMonitorActive) return 1; // Tắt thì chỉ hiện 1 dòng thông báo trạng thái tắt
+
+        if (section == 1) return _isCpuExpanded ? 5 : 1;
+        if (section == 2) return _isGpuExpanded ? 5 : 1;
+        if (section == 3) return _isRamExpanded ? 4 : 1;
+        if (section == 4) return _isBatteryExpanded ? 5 : 1;
         return _isScreenExpanded ? 4 : 1;
     } else if (_currentBottomTab == 1) {
         if (section == 0) return 1;
@@ -729,10 +735,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (_currentBottomTab == 0) {
-        if (section == 0) return @"🧠 BỘ XỬ LÝ TRUNG TÂM (CPU)";
-        if (section == 1) return @"🎮 BỘ XỬ LÝ ĐỒ HỌA (GPU)";
-        if (section == 2) return @"💾 BỘ NHỚ TRUY XUẤT (RAM)";
-        if (section == 3) return @"🔋 NGUỒN ĐIỆN & PIN";
+        if (section == 0) return @"🎛️ ĐIỀU KHIỂN HỆ THỐNG ĐO";
+        if (section == 1) return @"🧠 BỘ XỬ LÝ TRUNG TÂM (CPU)";
+        if (section == 2) return @"🎮 BỘ XỬ LÝ ĐỒ HỌA (GPU)";
+        if (section == 3) return @"💾 BỘ NHỚ TRUY XUẤT (RAM)";
+        if (section == 4) return @"🔋 NGUỒN ĐIỆN & PIN";
         return @"🖥️ MÀN HÌNH HIỂN THỊ";
     } else if (_currentBottomTab == 1) {
         if (section == 0) return @"ℹ️ NGUYÊN LÝ HOẠT ĐỘNG HZ & FPS";
@@ -777,21 +784,33 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     // TAB 0: TRANG CHỦ
     if (_currentBottomTab == 0) {
+        if (indexPath.section == 0) {
+            cell.textLabel.text = @"⚡ Bật / Tắt Bộ Đo Hệ Thống";
+            cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
+
+            UISwitch *monitorSwitch = [[UISwitch alloc] init];
+            monitorSwitch.on = [self.settingsDict[@"EnableSystemMonitoring"] boolValue]; // Mặc định là TẮT
+            [monitorSwitch addTarget:self action:@selector(onSystemMonitorToggled:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = monitorSwitch;
+            return cell;
+        }
+
+        BOOL isMonitorActive = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
+        if (!isMonitorActive) {
+            cell.textLabel.text = @"🔒 Bộ đo đang tắt (Bật công tắc phía trên để xem)";
+            cell.detailTextLabel.text = @"[ĐÃ TẮT]";
+            cell.detailTextLabel.textColor = [UIColor systemOrangeColor];
+            cell.textLabel.textColor = [UIColor lightGrayColor];
+            return cell;
+        }
+
         float baseTemp = Titanium_GetBaseThermalTemp();
         float cpu = Titanium_GetLiveCPULoadPercentage();
         float gpu = Titanium_GetLiveGPULoadPercentage();
 
-        if (!_isKernelExploited) {
-            cell.textLabel.text = @"🔒 Chỉ số phần cứng";
-            cell.detailTextLabel.text = @"[CHƯA KHAI THÁC]";
-            cell.detailTextLabel.textColor = [UIColor systemRedColor];
-            cell.textLabel.textColor = [UIColor darkGrayColor];
-            return cell;
-        }
-
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
 
-        if (indexPath.section == 0) {
+        if (indexPath.section == 1) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = _isCpuExpanded ? @"🧠 CPU (Chạm để thu gọn ▼)" : @"🧠 CPU (Chạm để xem chi tiết ▶)";
                 cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
@@ -810,7 +829,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Trạng thái P-Core";
                 cell.detailTextLabel.text = (cpu > 40.0f) ? @"Hiệu Năng Cao" : @"Tiết Kiệm Điện";
             }
-        } else if (indexPath.section == 1) {
+        } else if (indexPath.section == 2) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = _isGpuExpanded ? @"🎮 GPU (Chạm để thu gọn ▼)" : @"🎮 GPU (Chạm để xem chi tiết ▶)";
                 cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
@@ -828,7 +847,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Pipeline Buffer";
                 cell.detailTextLabel.text = @"Triple Buffering";
             }
-        } else if (indexPath.section == 2) {
+        } else if (indexPath.section == 3) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = _isRamExpanded ? @"💾 RAM (Chạm để thu gọn ▼)" : @"💾 RAM (Chạm để xem chi tiết ▶)";
                 cell.textLabel.font = [UIFont boldSystemFontOfSize:14];
@@ -843,7 +862,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 cell.textLabel.text = @"   |--> Trạng thái Purgable";
                 cell.detailTextLabel.text = @"Mach Clean";
             }
-        } else if (indexPath.section == 3) {
+        } else if (indexPath.section == 4) {
             [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
             int level = (int)([[UIDevice currentDevice] batteryLevel] * 100);
             if (level < 0) level = 100;
@@ -1083,16 +1102,26 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     return cell;
 }
 
+- (void)onSystemMonitorToggled:(UISwitch *)sender {
+    self.settingsDict[@"EnableSystemMonitoring"] = @(sender.isOn);
+    [self saveSettingsDataAndSync];
+
+    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [fb impactOccurred];
+
+    [self.customTableView reloadData];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
     if (_currentBottomTab == 0 && _isKernelExploited) {
-        if (indexPath.row == 0) {
-            if (indexPath.section == 0) _isCpuExpanded = !_isCpuExpanded;
-            else if (indexPath.section == 1) _isGpuExpanded = !_isGpuExpanded;
-            else if (indexPath.section == 2) _isRamExpanded = !_isRamExpanded;
-            else if (indexPath.section == 3) _isBatteryExpanded = !_isBatteryExpanded;
-            else if (indexPath.section == 4) _isScreenExpanded = !_isScreenExpanded;
+        if (indexPath.section > 0 && indexPath.row == 0) {
+            if (indexPath.section == 1) _isCpuExpanded = !_isCpuExpanded;
+            else if (indexPath.section == 2) _isGpuExpanded = !_isGpuExpanded;
+            else if (indexPath.section == 3) _isRamExpanded = !_isRamExpanded;
+            else if (indexPath.section == 4) _isBatteryExpanded = !_isBatteryExpanded;
+            else if (indexPath.section == 5) _isScreenExpanded = !_isScreenExpanded;
 
             UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
             [fb impactOccurred];
@@ -1218,7 +1247,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (strongSelf && strongSelf->_currentBottomTab == 0 && strongSelf->_isKernelExploited) {
+        if (strongSelf && strongSelf->_currentBottomTab == 0 && strongSelf->_isKernelExploited && [strongSelf.settingsDict[@"EnableSystemMonitoring"] boolValue]) {
             [strongSelf.customTableView reloadData];
         }
     });
@@ -1242,28 +1271,28 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
     int32_t fps = [self.settingsDict[@"TargetFPSRate"] ?: @144 intValue];
-    BOOL isOverclock = [self.settingsDict[@"ForceOverclock144Hz"] ?: @YES boolValue];
+    BOOL isOverclock = [self.settingsDict[@"ForceOverclock144Hz"] ?: @NO boolValue];
 
     payload.targetHz = hz;
     payload.targetFPS = fps;
     payload.forceOverclock = (isOverclock || hz >= 144) ? 1 : 0;
     payload.pipSyncEnabled = 1;
-    payload.thermalShield = [self.settingsDict[@"AntiThermalThrottling"] ?: @YES boolValue] ? 1 : 0;
-    payload.antiStutterExit = [self.settingsDict[@"FixAppExitStutter"] ?: @YES boolValue] ? 1 : 0;
+    payload.thermalShield = [self.settingsDict[@"AntiThermalThrottling"] ?: @NO boolValue] ? 1 : 0;
+    payload.antiStutterExit = [self.settingsDict[@"FixAppExitStutter"] ?: @NO boolValue] ? 1 : 0;
     payload.smartBufferingLevel = 3;
-    payload.zeroLatencyTouch = [self.settingsDict[@"TouchResponseBoost"] ?: @YES boolValue] ? 1 : 0;
+    payload.zeroLatencyTouch = [self.settingsDict[@"TouchResponseBoost"] ?: @NO boolValue] ? 1 : 0;
     payload.shaderOptimization = 1;
-    payload.dynamicInterpolation = [self.settingsDict[@"ProMotionEngineBeta7"] ?: @YES boolValue] ? 1 : 0;
-    payload.fastAppLaunch = [self.settingsDict[@"TurboAppLaunch"] ?: @YES boolValue] ? 1 : 0;
+    payload.dynamicInterpolation = [self.settingsDict[@"ProMotionEngineBeta7"] ?: @NO boolValue] ? 1 : 0;
+    payload.fastAppLaunch = [self.settingsDict[@"TurboAppLaunch"] ?: @NO boolValue] ? 1 : 0;
     payload.lowLatencyAudio = 1;
     payload.memoryPressureRelief = 1;
-    payload.metalPacingEnabled = [self.settingsDict[@"MetalHexBuffering"] ?: @YES boolValue] ? 1 : 0;
+    payload.metalPacingEnabled = [self.settingsDict[@"MetalHexBuffering"] ?: @NO boolValue] ? 1 : 0;
     payload.runloopHangGuard = 1;
-    payload.keyboardZeroLagV3 = [self.settingsDict[@"KeyboardZeroLagV24"] ?: @YES boolValue] ? 1 : 0;
+    payload.keyboardZeroLagV3 = [self.settingsDict[@"KeyboardZeroLagV24"] ?: @NO boolValue] ? 1 : 0;
     payload.aggressiveRamCleaner = [self.settingsDict[@"hyperMemoryGuardian"] ?: @NO boolValue] ? 1 : 0;
-    payload.lockFixedFpsWhenThermal = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @YES boolValue] ? 1 : 0;
-    payload.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @YES boolValue] ? 1 : 0;
-    payload.diskIOPriorityBoost = [self.settingsDict[@"pCoreRealtimePriority"] ?: @YES boolValue] ? 1 : 0;
+    payload.lockFixedFpsWhenThermal = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @NO boolValue] ? 1 : 0;
+    payload.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @NO boolValue] ? 1 : 0;
+    payload.diskIOPriorityBoost = [self.settingsDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
     payload.rawTouchDirectDelivery = 1;
     payload.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue] ? 1 : 0;
 
@@ -1292,7 +1321,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)ensureDefaultSettingsExist {
-    if (!self.settingsDict[@"Enabled"]) self.settingsDict[@"Enabled"] = @NO;
+    if (!self.settingsDict[@"Enabled"]) self.settingsDict[@"Enabled"] = @NO; // Mặc định tắt
+    if (!self.settingsDict[@"EnableSystemMonitoring"]) self.settingsDict[@"EnableSystemMonitoring"] = @NO; // Mặc định tắt đo hệ thống
     if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
     if (!self.settingsDict[@"TargetFPSRate"]) self.settingsDict[@"TargetFPSRate"] = @144;
     if (!self.settingsDict[@"ForceOverclock144Hz"]) self.settingsDict[@"ForceOverclock144Hz"] = @NO;
