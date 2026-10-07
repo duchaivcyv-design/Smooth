@@ -4940,3 +4940,45 @@ static void SpringBoardBootstrapTrigger(void) {
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
                 CFG285 = [configClass sharedInstance];
+                [CFG285 loadSettings];
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                    NSInteger prefHz = (NSInteger)CFG285.targetHz;
+                    if (prefHz >= 15 && prefHz <= 144) {
+                        g_cachedResolvedHz = prefHz;
+                    }
+                }
+                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                    NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
+                    if (prefFPS >= 15 && prefFPS <= 144) {
+                        g_cachedResolvedFPS = prefFPS;
+                    }
+                }
+            }
+            return;
+        }
+
+        // 5. ĐÃ ÉP: ĐĂNG KÝ ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
+        static dispatch_once_t notifyToken;
+        dispatch_once(&notifyToken, ^{
+            CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+            if (darwinCenter) {
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+            }
+        });
+
+        // 6. ĐÃ SỬA CHUẨN: KHỞI TẠO HOOKS CHO TOÀN BỘ TIẾN TRÌNH (TRÁNH LỖI SIGSEGV SAFEMODE)
+        %init;
+
+        if (isSpringBoard) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                SpringBoardBootstrapTrigger();
+            });
+        } else {
+            runCoreTweak(NO, bundleID, progName);
+        }
+    }
+}
