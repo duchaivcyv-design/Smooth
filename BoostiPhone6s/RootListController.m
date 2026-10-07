@@ -47,7 +47,7 @@ extern char **environ;
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
-typedef struct __attribute__((packed)) {
+typedef struct {
     uint32_t magic;
     uint32_t masterEnabled;
     int32_t  targetHz;
@@ -1161,6 +1161,29 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self saveSettingsDataAndSync];
 }
 
+- (void)showLanguagePickerPopup:(id)sender {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"🌐 CHỌN NGÔN NGỮ"
+                                                                   message:@"Lựa chọn ngôn ngữ hiển thị giao diện hệ thống:"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt (Mặc Định)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"AppLanguage"] = @"vi";
+        [self saveSettingsDataAndSync];
+        [self.customTableView reloadData];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"AppLanguage"] = @"en";
+        [self saveSettingsDataAndSync];
+        [self.customTableView reloadData];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.sourceView = self.view;
+        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
 #pragma mark - HUD & IPC Sync
 
 - (void)startContinuousHardwareHUD {
@@ -1250,12 +1273,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 144) targetHz = 144;
 
+            SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
             for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
                 if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
-                    if ([ws respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, targetHz, targetHz);
-                        [(id)ws setPreferredFrameRateRange:range];
+                    if ([ws respondsToSelector:setRangeSel]) {
+                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, (float)targetHz, (float)targetHz);
+                        void (*setRangeFunc)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
+                        setRangeFunc(ws, setRangeSel, range);
                     }
                 }
             }
