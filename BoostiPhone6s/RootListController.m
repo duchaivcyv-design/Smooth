@@ -470,7 +470,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     } else if (_currentBottomTab == 1) {
         if (section == 0) return TL_Text(@"SWITCH_CATEGORY_TITLE") ?: @"🎚️ CHỌN PHÂN TẦNG CÔNG TẮC";
         if (_currentSwitchSubTab == 0) return TL_Text(@"SWITCH_NORMAL_TITLE") ?: @"🟢 NHÓM CÔNG TẮC BÌNH THƯỜNG (AN TOÀN)";
-        if (_currentSwitchSubTab == 1) return TL_Text(@"SWITCH_ADVANCED_TITLE") ?: @"🟡 NHÓM CÔNG TẮC NÂng CAO (GIA TỐC)";
+        if (_currentSwitchSubTab == 1) return TL_Text(@"SWITCH_ADVANCED_TITLE") ?: @"🟡 NHÓM CÔNG TẮC NÂNG CAO (GIA TỐC)";
         return TL_Text(@"SWITCH_DANGER_TITLE") ?: @"🔴 NHÓM CÔNG TẮC NGUY HIỂM (ÉP CỰC HẠN)";
     } else {
         if (section == 0) return TL_Text(@"DEVICE_INFO_TITLE") ?: @"📱 THÔNG TIN THIẾT BỊ CHUẨN (HARDWARE)";
@@ -714,7 +714,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
         [self.customTableView reloadData];
     } else if (_currentBottomTab == 2 && indexPath.section == 1 && indexPath.row == 4) {
-        // Chạm vào mục Ngôn Ngữ để bật bảng chọn
         [self showLanguagePickerPopup:nil];
     }
 }
@@ -752,7 +751,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self saveSettingsDataAndSync];
 }
 
-- (void)showLanguagePickerPopup:(PSSpecifier *)specifier {
+- (void)showLanguagePickerPopup:(id)specifier {
     NSString *title = TL_Text(@"POPUP_LANG_TITLE") ?: @"CHỌN NGÔN NGỮ (LANGUAGE)";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -819,8 +818,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
-        if (weakSelf && weakSelf->_currentBottomTab == 0) {
-            [weakSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationNone];
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf && strongSelf->_currentBottomTab == 0) {
+            [strongSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationNone];
         }
     });
     dispatch_resume(_hudTimer);
