@@ -7,52 +7,55 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-BUNDLE_NAME = BoostiPhone6sPrefs
+APPLICATION_NAME = BoostiPhone6sApp
 
-BoostiPhone6sPrefs_FILES = RootListController.m
-BoostiPhone6sPrefs_FRAMEWORKS = UIKit CoreGraphics Foundation
-BoostiPhone6sPrefs_INSTALL_PATH = /Library/PreferenceBundles
+# [ĐÃ ÉP TOÀN DIỆN]: Nạp toàn bộ mã nguồn vòng đời và giao diện App
+BoostiPhone6sApp_FILES = main.m \
+                         AppDelegate.m \
+                         RootListController.m
 
-# CỜ BIÊN DỊCH: ĐỒNG BỘ HOÀN TOÀN VỚI MAKEFILE CHA & DẬP TẮT CẢNH BÁO RUNNER
-BoostiPhone6sPrefs_CFLAGS = -fobjc-arc \
-                            -O3 \
-                            -Wall \
-                            -Wno-error \
-                            -Wno-deprecated-declarations \
-                            -Wno-unused-variable \
-                            -Wno-unused-function \
-                            -Wno-implicit-function-declaration \
-                            -Wno-deprecated-non-prototype \
-                            -Wno-unused-command-line-argument \
-                            -Wno-unguarded-availability-new \
-                            -Wno-unguarded-availability \
-                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
-                            -I$(THEOS)/include \
-                            -I$(THEOS)/vendor/include \
-                            -I../Headers \
-                            -I../ \
-                            -I.
+BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore
+BoostiPhone6sApp_INSTALL_PATH = /Applications
 
-# LINKER FLAGS: LOẠI BỎ CẢNH BÁO -install_name TRÊN MACH-O BUNDLE
-BoostiPhone6sPrefs_LDFLAGS = -Wl,-dead_strip \
-                            -Wl,-undefined,dynamic_lookup \
-                            -Wl,-rpath,/System/Library/PrivateFrameworks \
-                            -Wl,-rpath,/Library/Frameworks \
-                            -Wl,-rpath,/var/jb/Library/Frameworks \
-                            -Wl,-rpath,/usr/lib \
-                            -Wl,-rpath,/var/jb/usr/lib
+# CỜ BIÊN DỊCH: ĐỒNG BỘ HOÀN TOÀN & DẬP TẮT CẢNH BÁO RUNNER
+BoostiPhone6sApp_CFLAGS = -fobjc-arc \
+                          -O3 \
+                          -Wall \
+                          -Wno-error \
+                          -Wno-deprecated-declarations \
+                          -Wno-unused-variable \
+                          -Wno-unused-function \
+                          -Wno-implicit-function-declaration \
+                          -Wno-deprecated-non-prototype \
+                          -Wno-unused-command-line-argument \
+                          -Wno-unguarded-availability-new \
+                          -Wno-unguarded-availability \
+                          -D__IPHONE_OS_VERSION_MIN_REQUIRED=140000 \
+                          -I$(THEOS)/include \
+                          -I$(THEOS)/vendor/include \
+                          -I../Headers \
+                          -I../ \
+                          -I.
 
-include $(THEOS_MAKE_PATH)/bundle.mk
+# LINKER FLAGS: LIÊN KẾT NHỊ PHÂN VÀ ĐỊNH VỊ FRAMEWORK HỆ THỐNG
+BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip \
+                          -Wl,-undefined,dynamic_lookup \
+                          -Wl,-rpath,/System/Library/PrivateFrameworks \
+                          -Wl,-rpath,/Library/Frameworks \
+                          -Wl,-rpath,/var/jb/Library/Frameworks \
+                          -Wl,-rpath,/usr/lib \
+                          -Wl,-rpath,/var/jb/usr/lib
 
-# ĐỒNG BỘ SYMLINK TỰ ĐỘNG & CẤP QUYỀN CHUẨN ROOTLESS CHO PREFERENCELOADER
+# [ĐÃ ÉP TOÀN DIỆN]: Ký quyền vượt Sandbox qua entitlements.plist
+BoostiPhone6sApp_CODESIGN_FLAGS = -Sentitlements.plist
+
+include $(THEOS_MAKE_PATH)/application.mk
+
+# [ĐÃ ÉP TOÀN DIỆN]: ĐỒNG BỘ PHÂN QUYỀN 0755 VÀ CHUẨN BỊ MÔI TRƯỜNG CHO UICACHE
 after-stage::
-	@echo "=== [BoostiPhone6sPrefs] Đồng bộ Symlink & Quyền Bundle vào Staging ==="
-	@TARGET_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/PreferenceBundles"; \
-	mkdir -p "$$TARGET_DIR"; \
-	if [ -d "$$TARGET_DIR/BoostiPhone6sPrefs.bundle" ] && [ ! -e "$$TARGET_DIR/BoostiPhone6s.bundle" ]; then \
-		ln -sf "BoostiPhone6sPrefs.bundle" "$$TARGET_DIR/BoostiPhone6s.bundle"; \
-		echo "  [OK] Đã tạo symlink BoostiPhone6s.bundle -> BoostiPhone6sPrefs.bundle"; \
-	fi; \
-	chmod -R 0755 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"; \
-	chmod 0644 "$$TARGET_DIR/BoostiPhone6sPrefs.bundle"/*.plist 2>/dev/null || true; \
-	echo "  [OK] Đã gán quyền 0755 cho Bundle!"
+	@echo "=== [BoostiPhone6sApp] Cấp quyền nhị phân & cấu hình ứng dụng vào Staging ==="
+	@APP_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app"; \
+	mkdir -p "$$APP_DIR"; \
+	chmod -R 0755 "$$APP_DIR"; \
+	chmod 0644 "$$APP_DIR"/*.plist 2>/dev/null || true; \
+	echo "  [OK] Đã hoàn tất đóng gói App độc lập vào $$APP_DIR!"
