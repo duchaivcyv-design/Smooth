@@ -4768,6 +4768,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     Titanium_ReloadSharedSyncStateV285();
                 });
 
+                // 0. BẢO VỆ WATCHDOG TRƯỚC HẾT (ĐÃ KHẮC PHỤC LỖI CLANG)
+                %init(Group_AntiWatchdog_Immunity);
+
                 // 1. ĐÃ ÉP: CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
                 %init(Group_ZeroLatency_Touch_Opt);
                 %init(Group_Metal_ZeroTearing_Pacing);
