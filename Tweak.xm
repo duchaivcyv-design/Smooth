@@ -1,3 +1,7 @@
+// ====================================================================================================
+// BOOSTIPHONE6S CORE - TWEAK.XM MASTER HEADER & PRIVATE INTERFACES (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
+// ====================================================================================================
+
 // ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_init.h>      // Khai báo chuẩn mach_task_self(), mach_thread_self()
@@ -162,8 +166,17 @@ extern "C" {
 #endif
 
 // ====================================================================================================
-// MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC NGUYÊN TỬ
+// MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC NGUYÊN TỬ (ĐÃ BỔ SUNG SECONDARY_SYNC_FILE)
 // ====================================================================================================
+
+#ifndef SECONDARY_SYNC_FILE
+#define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
+#endif
+
+#ifndef G_IS_RATE_LOCKED_DEFINED
+#define G_IS_RATE_LOCKED_DEFINED
+static volatile BOOL g_isRateLockedV285 = NO;
+#endif
 
 #define APEX_SYNC_MAGIC_V285 0x41505837
 #define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
@@ -176,6 +189,43 @@ extern "C" {
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 #define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
+
+// ====================================================================================================
+// CẤU TRÚC STRUCT ĐỒNG BỘ NGUYÊN TỬ 27 TRƯỜNG PAYLOAD (KHỚP 100% VỚI RootListController.m)
+// ====================================================================================================
+
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint32_t masterEnabled;
+    int32_t  targetHz;
+    int32_t  targetFPS;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t smartBufferingLevel;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
+    uint32_t keyboardZeroLagV3;
+    uint32_t aggressiveRamCleaner;
+    uint32_t lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch;
+    uint32_t diskIOPriorityBoost;
+    uint32_t rawTouchDirectDelivery;
+    uint32_t powerSaveModeActive;
+    uint64_t updateSeq;
+    uint64_t lastHeartbeat;
+    char     reserved[48];
+} ApexV285ProPayload;
+#endif
 
 // ====================================================================================================
 // SYSTEM PRIVATE INTERFACES (ĐẦY ĐỦ 100% CHO CẢ 18 NHÓM GIA TỐC HỆ THỐNG)
@@ -959,11 +1009,6 @@ extern "C" {
 - (void)_close;
 - (void)_purgePageCache;
 @end
-
-// ====================================================================================================
-// CORE IPC STRUCT & RUNTIME PAYLOAD ENGINE (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - PRO MOTION MULTI-TIER ARCHITECTURE)
-// (AN TOÀN TUYỆT ĐỐI: ĐỒNG BỘ 100% VỚI APP, KHÔNG ĐEN MÀN HÌNH, KHÔNG TREO I/O SANDBOX)
-// ====================================================================================================
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -2291,7 +2336,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép cứng 3 Buffer chuẩn (Triple Buffering) khi layer đã vào window (trị dứt điểm đen app)
 - (NSUInteger)maximumDrawableCount {
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        if (self.window != nil) {
+        if ([self window] != nil) {
             return 3;
         }
     }
@@ -2301,7 +2346,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép ghi đè số lượng buffer đồ họa lên 3
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     if (IS_ACTIVE && CFG285.metalHexBuffering) {
-        if (self.window != nil) {
+        if ([self window] != nil) {
             %orig(3);
             return;
         }
@@ -2358,6 +2403,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 %end
+
 
 // ====================================================================================================
 // ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
