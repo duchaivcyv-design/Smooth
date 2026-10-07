@@ -1,13 +1,3 @@
-// ====================================================================================================
-// BOOSTIPHONE6S APP - ROOTLISTCONTROLLER NATIVE ENGINE (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - FULL DYNAMIC LOCALIZATION)
-// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH, KHÔNG CRASH SETTINGS, KHÔNG NGHẼN MẠNG, ĐA NGÔN NGỮ 100%)
-// ====================================================================================================
-
-// ====================================================================================================
-// BOOSTIPHONE6S APP - ROOTLISTCONTROLLER NATIVE ENGINE (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - FULL DYNAMIC LOCALIZATION)
-// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH, KHÔNG CRASH SETTINGS, KHÔNG NGHẼN MẠNG, ĐA NGÔN NGỮ 100%)
-// ====================================================================================================
-
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
