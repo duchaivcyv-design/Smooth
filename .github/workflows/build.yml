@@ -1,4 +1,4 @@
-name: Build BoostiPhone6s Rootless Deb
+Name: Build BoostiPhone6s Rootless Deb
 
 on:
   push:
@@ -28,8 +28,8 @@ jobs:
           
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
-          # Chỉ cài dpkg và coreutils, không cài ldid từ brew tránh ghi đè ldid của Theos
-          brew install dpkg coreutils
+          # Cài đặt dpkg, coreutils và ldid cho môi trường macOS runner
+          brew install dpkg coreutils ldid
 
       # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK CHUẨN XÁC ---
       - name: Clone Theos & Install SDK
@@ -37,6 +37,13 @@ jobs:
           TARGET_DIR="${{ env.THEOS }}"
           if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
           git clone --recursive --depth=1 https://github.com/theos/theos.git "$TARGET_DIR"
+          
+          # Đảm bảo binary ldid luôn sẵn sàng trong thư mục bin của Theos
+          mkdir -p "$TARGET_DIR/bin"
+          BREW_LDID=$(which ldid || true)
+          if [ -n "$BREW_LDID" ]; then
+            ln -sf "$BREW_LDID" "$TARGET_DIR/bin/ldid"
+          fi
           
           # Tải SDK 16.5
           mkdir -p "$TARGET_DIR/sdks"
