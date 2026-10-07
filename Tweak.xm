@@ -4887,25 +4887,14 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // [ĐÃ ÉP TOÀN DIỆN]: CHẶN HOOK VÀO CHÍNH APP ĐIỀU KHIỂN (TRIỆT TIÊU ĐỆ QUY VĂNG SAFEMODE VÀ ĐƠ 10S)
-        NSBundle *mainBundle = [NSBundle mainBundle];
-        NSString *bundleID = [mainBundle bundleIdentifier];
-        NSString *executablePath = [mainBundle executablePath];
-        const char *execCStr = executablePath ? [executablePath UTF8String] : "";
-
-        // Kiểm tra không phân biệt chữ hoa thường (strcasestr) trên cả BundleID, progName và executablePath
-        if ((bundleID && ([bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                          [bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                          [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound)) ||
-            (progName && (strcasestr(progName, "boosti") != NULL ||
-                          strcasestr(progName, "smooth") != NULL ||
-                          strcasestr(progName, "liquid") != NULL)) ||
-            (execCStr && (strcasestr(execCStr, "Smooth") != NULL ||
-                          strcasestr(execCStr, "BoostiPhone6s") != NULL))) {
-            return; // Thoát ngay lập tức ở mức 0ms, không chạm vào bất kỳ hook nào
+        // [SỬA TRIỆT ĐỂ ĐƠ APP]: DÙNG C-STRING KIỂM TRA NGAY LẬP TỨC (0ms, KHÔNG GỌI NSBUNDLE TRÁNH DEADLOCK)
+        if (strcasestr(progName, "smooth") != NULL ||
+            strcasestr(progName, "boosti") != NULL ||
+            strcasestr(progName, "liquid") != NULL) {
+            return; // Thoát ngay lập tức, không nạp bất kỳ thứ gì vào app Smooth iOS
         }
 
-        // 1. ĐÃ ÉP: CHẶN TRIỆT ĐỂ CÁC TIẾN TRÌNH MẠNG VÀ WEB (CHỐNG NGHẼN MẠNG 100%)
+        // 1. ĐÃ ÉP: CHẶN TRIỆT ĐỂ CÁC TIẾN TRÌNH MẠNG VÀ WEB
         if (strcasestr(progName, "WebKit") || strcasestr(progName, "WebContent") ||
             strcasestr(progName, "GPUProcess") || strcasestr(progName, "Networking") ||
             strcasestr(progName, "nsurlsessiond") || strcasestr(progName, "mDNSResponder") ||
@@ -4913,7 +4902,7 @@ static void SpringBoardBootstrapTrigger(void) {
             return;
         }
 
-        // 2. ĐÃ ÉP: CHẶN TOÀN BỘ DAEMON HỆ THỐNG (CHỐNG TREO RESPRING & CHỐNG SAFE MODE)
+        // 2. ĐÃ ÉP: CHẶN TOÀN BỘ DAEMON HỆ THỐNG
         if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
             strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
             strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
@@ -4923,6 +4912,17 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "notifyd") || strcasestr(progName, "securityd") ||
             strcasestr(progName, "runningboardd") || strcasestr(progName, "thermalmonitord") ||
             strcasestr(progName, "mediaremoted") || strcasestr(progName, "assertiond")) {
+            return;
+        }
+
+        // Sau khi đã lọc sạch các daemon và chính app, mới an toàn lấy NSBundle
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        NSString *bundleID = [mainBundle bundleIdentifier];
+
+        // Lọc phụ theo BundleID (phòng trường hợp binary name khác bundle identifier)
+        if (bundleID && ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                         [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                         [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound)) {
             return;
         }
 
@@ -4957,7 +4957,7 @@ static void SpringBoardBootstrapTrigger(void) {
             return;
         }
 
-        // 5. ĐÃ ÉP: ĐĂNG KÝ ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME (BẮT ĐẦY ĐỦ 5 KÊNH NOTIFY TỪ APP)
+        // 5. ĐÃ ÉP: ĐĂNG KÝ ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
         static dispatch_once_t notifyToken;
         dispatch_once(&notifyToken, ^{
             CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
@@ -4970,9 +4970,6 @@ static void SpringBoardBootstrapTrigger(void) {
             }
         });
 
-        // Nạp các hook cơ sở an toàn
-        %init;
-
         // 6. ĐÃ ÉP: PHÂN LẬP HOÀN TOÀN GIỮA SPRINGBOARD VÀ CÁC APP THỨ BA
         if (isSpringBoard) {
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
@@ -4982,6 +4979,7 @@ static void SpringBoardBootstrapTrigger(void) {
                 SpringBoardBootstrapTrigger();
             }];
         } else {
+            %init;
             runCoreTweak(NO, bundleID, progName);
         }
     }
