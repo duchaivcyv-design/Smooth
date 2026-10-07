@@ -18,7 +18,7 @@
 extern char **environ;
 
 // ====================================================================================================
-// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC
+// ĐỊNH NGHĨA MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC (CHẾ ĐỘ ĐÃ ÉP)
 // ====================================================================================================
 
 #ifndef APEX_SYNC_MAGIC_V285
@@ -72,7 +72,7 @@ extern char **environ;
 @end
 
 // ====================================================================================================
-// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ / ROOTLESS / ROOTHIDE
+// BỘ PHÂN GIẢI ĐƯỜNG DẪN ĐỘNG & KIỂM TRA PHẦN CỨNG 120HZ / ROOTLESS / ROOTHIDE (ĐÃ ÉP)
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -148,6 +148,7 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
     return name;
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Ghi đồng bộ tệp IPC atomic ra cả hai phân vùng Rootless & Rootful
 static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t size) {
     NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
     for (NSString *path in paths) {
@@ -277,7 +278,7 @@ static inline NSString *PM_TextV285(NSString *key) {
 }
 
 // ====================================================================================================
-// THU THẬP THÔNG SỐ ĐO PHẦN CỨNG THỜI GIAN THỰC (MACH HOST KERNEL)
+// THU THẬP THÔNG SỐ ĐO PHẦN CỨNG THỜI GIAN THỰC (MACH HOST KERNEL - ĐÃ ÉP)
 // ====================================================================================================
 
 static inline float Titanium_GetLiveCPULoadPercentage(void) {
@@ -384,6 +385,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     return self;
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Đồng bộ hoá tệp IPC nguyên tử tức thì và phát thông báo đa kênh 0ms
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     NSDictionary *prefs = [self getMergedPreferences];
     
@@ -468,6 +470,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
         [[configClass sharedInstance] loadSettings];
     }
 
+    // [ĐÃ ÉP]: Bắn thông báo liên hoàn kích hoạt Tweak.xm tức thì
     notify_post(NOTIFY_RELOAD);
     notify_post(NOTIFY_UIKIT_RELOAD);
     notify_post(NOTIFY_HARDWARE_SYNC);
@@ -515,7 +518,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
 }
 
 // ====================================================================================================
-// NẠP CÀI ĐẶT & ĐIỀU HƯỚNG GOM GỌN NHÓM (CƠ BẢN / NÂNG CAO)
+// NẠP CÀI ĐẶT & ĐIỀU HƯỚNG GOM GỌN NHÓM (CƠ BẢN / NÂNG CAO - ĐÃ ÉP)
 // ====================================================================================================
 
 - (id)specifiers {
@@ -579,7 +582,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
 }
 
 // ====================================================================================================
-// HUD ĐO PHẦN CỨNG THỜI GIAN THỰC (TÁCH BẠCH RÕ RÀNG THEO CÂY SƠ ĐỒ)
+// HUD ĐO PHẦN CỨNG THỜI GIAN THỰC (TÁCH BẠCH RÕ RÀNG THEO CÂY SƠ ĐỒ - ĐÃ ÉP)
 // ====================================================================================================
 
 // --- 1. MÀN HÌNH ---
@@ -653,14 +656,12 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     UIDeviceBatteryState state = [[UIDevice currentDevice] batteryState];
     NSString *charging = (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull) ? @"⚡ Sạc" : @"🔋 Pin";
 
-    // Tính vôn chuẩn pin Li-ion theo phần trăm dung lượng
     float volts = 3.65f + ((float)level / 100.0f) * 0.65f;
     if (volts > 4.35f) volts = 4.35f;
 
     return [NSString stringWithFormat:@"%d%% | %.2fV (%@)", level, volts, charging];
 }
 
-// --- 4 Getter tương thích ngược cho file Root.plist cũ ---
 - (id)getMonitorCPUGPU:(PSSpecifier *)specifier {
     float cpu = Titanium_GetLiveCPULoadPercentage();
     float gpu = Titanium_GetLiveGPULoadPercentage();
@@ -676,7 +677,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
 }
 
 // ====================================================================================================
-// VÒNG LẶP ĐO ĐẠC LIÊN TỤC 0.8S - KHÔNG ĐỨNG IM
+// VÒNG LẶP ĐO ĐẠC LIÊN TỤC 0.8S - KHÔNG ĐỨNG IM (ĐÃ ÉP KHÔNG NGHẼN UI)
 // ====================================================================================================
 
 - (void)startContinuousHardwareHUD {
@@ -716,7 +717,6 @@ static inline NSString *Titanium_GetScreenTempString(void) {
 
         NSString *newVal = nil;
 
-        // Cập nhật các cell tương ứng
         if ([k isEqualToString:@"MonitorHzFPS"]) {
             newVal = [self getMonitorHzFPS:s];
         } else if ([k isEqualToString:@"MonitorCPUGPU"]) {
@@ -843,6 +843,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     return [NSDictionary dictionary];
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Cưỡng bức tạo đầy đủ cấu hình mặc định tối ưu kịch trần 144Hz
 - (void)ensureDefaultSettingsExist {
     NSString *prefPath = Titanium_ResolvePrefPath();
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -936,13 +937,11 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value, PREF_DOMAIN);
     CFPreferencesAppSynchronize(PREF_DOMAIN);
 
-    // KHI BẤM CÁC CÔNG TẮC GOM GỌN HOẶC CÔNG TẮC TỔNG -> TỰ ĐỘNG BẬT/ẨN VÀ THÔNG BÁO NẠP LẠI
     if ([key isEqualToString:@"Enabled"] || [key isEqualToString:@"ShowBasicOptions"] || [key isEqualToString:@"ShowAdvancedOptions"]) {
         if ([key isEqualToString:@"Enabled"]) {
             [self syncSharedMemoryFile:[value boolValue]];
         }
 
-        // Báo nạp lại tất cả sơ đồ đo
         UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
         [feedback impactOccurred];
 
@@ -965,6 +964,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     }
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Áp dụng mức tần số quét và FPS tức thì, cập nhật thông báo đa kênh
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)dynamicMode isFPS:(BOOL)isFPS {
     if (rate < 15) rate = 15;
     if (rate > 144) rate = 144;
@@ -1111,7 +1111,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
 }
 
 // ====================================================================================================
-// KHỞI TẠO MENU UIMENU CHO HZ & FPS
+// KHỞI TẠO MENU UIMENU CHO HZ & FPS (ĐÃ ÉP)
 // ====================================================================================================
 
 - (UIMenu *)buildHzMenu API_AVAILABLE(ios(14.0)) {
@@ -1464,6 +1464,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     }
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Thực thi Respring an toàn bằng tiến trình tách lập ngầm
 - (void)executeRespring {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -1496,6 +1497,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     });
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Khởi động Userspace sạch qua launchctl reboot userspace
 - (void)executeSReboot {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         CFPreferencesAppSynchronize(PREF_DOMAIN);
@@ -1534,6 +1536,7 @@ static inline NSString *Titanium_GetScreenTempString(void) {
     [self presentViewController:configuredSheet animated:YES completion:nil];
 }
 
+// [ĐÃ ÉP TOÀN DIỆN]: Đặt lại cấu hình sạch hoàn toàn về 144Hz mặc định của engine
 - (void)executeResetConfiguration {
     NSString *confirmTitle = PM_TextV285(@"RESET_CONFIRM_TITLE") ?: @"Xác Nhận Đặt Lại";
     NSString *confirmMsg = PM_TextV285(@"RESET_CONFIRM_MSG") ?: @"Toàn bộ cài đặt sẽ được đưa về giá trị mặc định tối ưu 144Hz của v28.7 Pro.";
