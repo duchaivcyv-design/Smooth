@@ -1020,7 +1020,6 @@ static BOOL g_isDeviceChargingV285 = NO;
 static volatile BOOL g_isUserTouchingV285 = NO;
 static volatile CFTimeInterval g_lastTouchMediaTimeV285 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfoThermalStateNominal;
-static volatile BOOL g_isRateLockedV285 = NO;
 
 static BOOL g_SystemMasterReady = NO;
 
@@ -3881,7 +3880,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 14: ĐỘNG CƠ METAL GAME OVERDRIVE & CÁCH LY ĐỒ HỌA GPU (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
+// NHÓM 14: ĐỘNG CƠ METAL GAME OVERDRIVE & CÁCH LY ĐỒ HỌA GPU (ĐÃ SỬA LỖI WINDOW CHO CLANG)
 // (KẾT NỐI: Chống Đen Màn Mở Ứng Dụng + Ổn Định Khung Hình Chơi Game + Khóa Xung Sàn)
 // (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN APP, KHÔNG ĐEN HÌNH NỀN, KHÔNG NGHẼN MẠNG)
 // ====================================================================================================
@@ -3892,7 +3891,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (id)init {
     id orig = %orig;
-    if (orig && IS_ACTIVE && !Titanium_IsSpringBoard()) {
+    if (orig && g_syncPayloadV285.masterEnabled && !Titanium_IsSpringBoard()) {
         g_isMetalGameProcess = YES;
     }
     return orig;
@@ -3900,20 +3899,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // 1. [ĐÃ ÉP TOÀN DIỆN]: Ép nhả frame khởi động tránh đen app, khóa cứng cấm timeout khi vào game
 - (BOOL)allowsNextDrawableTimeout {
-    if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        // ĐÃ ÉP: Nếu layer chưa có cửa sổ hoặc kích thước rỗng, ép nhả frame đầu lập tức
-        if (!self.window || CGRectIsEmpty(self.bounds)) {
+    if (g_syncPayloadV285.masterEnabled && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
+        if ((self.superlayer == nil && self.delegate == nil) || CGRectIsEmpty(self.bounds)) {
             return YES;
         }
-        // ĐÃ ÉP: Khóa cứng cấm timeout vĩnh viễn, GPU giữ FPS kịch trần
         return NO;
     }
     return %orig;
 }
 
 - (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (!self.window || CGRectIsEmpty(self.bounds)) {
+    if (g_syncPayloadV285.masterEnabled && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
+        if ((self.superlayer == nil && self.delegate == nil) || CGRectIsEmpty(self.bounds)) {
             %orig(YES);
             return;
         }
@@ -3925,8 +3922,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // 2. [ĐÃ ÉP TOÀN DIỆN]: Ép bỏ qua giao dịch WindowServer để GPU render độc lập 0ms trễ
 - (BOOL)serverPresentsWithTransaction {
-    if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.superlayer != nil && self.window != nil) {
+    if (g_syncPayloadV285.masterEnabled && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
+        if (self.superlayer != nil || self.delegate != nil) {
             return NO;
         }
     }
@@ -3934,8 +3931,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
-    if (IS_ACTIVE && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
-        if (self.superlayer != nil && self.window != nil) {
+    if (g_syncPayloadV285.masterEnabled && g_isMetalGameProcess && !Titanium_IsSpringBoard()) {
+        if (self.superlayer != nil || self.delegate != nil) {
             %orig(NO);
             return;
         }
@@ -3945,8 +3942,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // 3. [ĐÃ ÉP TOÀN DIỆN]: Ép duy trì xung nhịp P-Core và Mach Time liên tục ở mỗi chu kỳ vẽ Drawable
 - (id)nextDrawable {
-    if (IS_ACTIVE && g_isMetalGameProcess) {
-        g_lastInteractionMachTime = mach_absolute_time();
+    if (g_syncPayloadV285.masterEnabled && g_isMetalGameProcess) {
+        g_lastSyncTicksV285 = mach_absolute_time();
         if (!Titanium_IsSpringBoard()) {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
