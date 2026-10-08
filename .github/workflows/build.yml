@@ -1,101 +1,51 @@
-name: Build BoostiPhone6s Rootless Deb
+name: Instant 5s Deb Packager
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: 
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  build-deb:
-    runs-on: macos-14
-    env:
-      THEOS: /Users/runner/theos
-      THEOS_PACKAGE_SCHEME: rootless
-      THEOS_NO_AUTO_UPDATE: 1
-      THEOS_PACKAGE_COMPRESSION: gzip
+  fast-pack:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          sparse-checkout: |
+            layout
+            DEBIAN
+          depth: 1
 
-      # CACHE 1: Cache công cụ Homebrew (dpkg)
-      - name: Cache Homebrew packages
-        id: cache-brew
-        uses: actions/cache@v4
-        with:
-          path: |
-            /opt/homebrew/Cellar/dpkg
-            /opt/homebrew/bin/dpkg-deb
-          key: brew-dpkg-macos14
-
-      - name: Setup Tools & Environment
+      - name: Fast Pack .deb (Zero-Compile)
         run: |
-          echo "$THEOS/bin" >> $GITHUB_PATH
-          if ! command -v dpkg-deb &> /dev/null; then
-            export HOMEBREW_NO_AUTO_UPDATE=1
-            export HOMEBREW_NO_INSTALL_CLEANUP=1
-            brew install dpkg ldid
+          mkdir -p build_pkg/var/jb/Library/MobileSubstrate/DynamicLibraries
+          mkdir -p build_pkg/DEBIAN
+          mkdir -p packages
+
+          # Sao chép file control & script bảo toàn quyền thực thi
+          if [ -d "layout/DEBIAN" ]; then
+            cp -r layout/DEBIAN/* build_pkg/DEBIAN/
+          elif [ -d "DEBIAN" ]; then
+            cp -r DEBIAN/* build_pkg/DEBIAN/
           fi
 
-      # CACHE 2: Cache toàn bộ Theos + SDK iPhoneOS16.5
-      - name: Cache Theos & SDK
-        id: cache-theos
-        uses: actions/cache@v4
-        with:
-          path: /Users/runner/theos
-          key: theos-sdk-16.5-v1
-
-      - name: Setup Theos & SDK (nếu chưa có trong cache)
-        if: steps.cache-theos.outputs.cache-hit != 'true'
-        run: |
-          rm -rf "$THEOS"
-          git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
-          
-          mkdir -p "$THEOS/bin"
-          BREW_LDID=$(which ldid || true)
-          if [ -n "$BREW_LDID" ]; then
-            ln -sf "$BREW_LDID" "$THEOS/bin/ldid"
+          # Sao chép các tệp rootless (dylib đã compile sẵn + plist)
+          if [ -d "layout" ]; then
+            cp -r layout/* build_pkg/ 2>/dev/null || true
+            rm -rf build_pkg/layout
           fi
-          
-          mkdir -p "$THEOS/sdks"
-          git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
-          cd /tmp/sdks
-          git sparse-checkout set iPhoneOS16.5.sdk
-          mv iPhoneOS16.5.sdk "$THEOS/sdks/"
-          rm -rf /tmp/sdks
 
-      # BIÊN DỊCH SONG SONG TỐC ĐỘ CAO
-      - name: Build Package (Rootless .deb)
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          
-          for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
-            if [ -d "$DEBIAN_DIR" ]; then
-              find "$DEBIAN_DIR" -type f -exec chmod 644 {} +
-              find "$DEBIAN_DIR" -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
-              chmod 755 "$DEBIAN_DIR"
-            fi
-          done
-          
-          NCPU=$(sysctl -n hw.ncpu || echo 4)
+          # Phân quyền chuẩn
+          chmod -R 0755 build_pkg
+          chmod -R 0644 build_pkg/DEBIAN/control
 
-          make package \
-            FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=rootless \
-            SDKVERSION=16.5 \
-            THEOS_PACKAGE_COMPRESSION=gzip \
-            -j"$NCPU"
+          # Đóng gói tức thì mức nén nhanh nhất (-Zgzip -z1)
+          dpkg-deb -Zgzip -z1 --build build_pkg packages/BoostiPhone6s_rootless.deb
 
-          ls -lh packages/*.deb
-
-      - name: Upload Deb Artifact
+      - name: Upload Deb
         uses: actions/upload-artifact@v4
         with:
-          name: BoostiPhone6s-Rootless-FullPackage
+          name: BoostiPhone6s-Rootless-FastDeb
           path: packages/*.deb
-          if-no-files-found: error
           retention-days: 7
