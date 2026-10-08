@@ -5067,140 +5067,7 @@ static inline void Init_CAWindowServer_Hooks(void) {
 }
 
 // ====================================================================================================
-// RUNTIME INITIALIZER: ĐÃ ĐỒNG BỘ HOÀN TOÀN
-// ====================================================================================================
-
-static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
-    static dispatch_once_t s_coreInitToken;
-    dispatch_once(&s_coreInitToken, ^{
-        @autoreleasepool {
-            @try {
-                if (isSpringBoard) {
-                    Titanium_LockMainThreadFast();
-                } else {
-                    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-                }
-
-                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-                if (configClass) {
-                    CFG285 = [configClass sharedInstance];
-                    [CFG285 loadSettings];
-                    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                        NSInteger initHz = (NSInteger)CFG285.targetHz;
-                        if (initHz >= 15 && initHz <= 144) {
-                            g_cachedResolvedHz = initHz;
-                        }
-                    }
-                    if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                        NSInteger initFPS = (NSInteger)CFG285.targetFPS;
-                        if (initFPS >= 15 && initFPS <= 144) {
-                            g_cachedResolvedFPS = initFPS;
-                        }
-                    }
-                }
-
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                    Titanium_ReloadSharedSyncStateV285();
-                });
-
-                // 0. BẢO VỆ WATCHDOG
-                %init(Group_AntiWatchdog_Immunity);
-
-                // 1. CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
-                %init(Group_ZeroLatency_Touch_Opt);
-                %init(Group_Metal_ZeroTearing_Pacing);
-                %init(Group_FluidTransitions_Pacing);
-                %init(Group_FastLaunch_SuperEngineV285);
-                %init(Group_Scroll_And_Keyboard_Opt);
-                %init(Group_InstantActionAndMenuTransitions_Boost);
-                %init(Group_Global_Thread_Governor_Unthrottled);
-
-                // 2. GIA TỐC PHẦN CỨNG & DỰ ĐOÁN ĐỒ HỌA
-                %init(Group_Universal_InApp_Animations);
-                %init(Group_Apple_Internal_ProMotion_Apex);
-                %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
-                %init(Group_Hardware_ProMotion_Overclock);
-                
-                // 3. ĐỒ HỌA SILICON, ĐIỀU PHỐI CPU & RAM
-                %init(Group_Titanium_Game_Metal_Overdrive);
-                %init(Group_Silicon_Hardware_Pipeline_Overdrive);
-                %init(Group_Silicon_Scheduler_Touch_Governor);
-                %init(Group_CoreAnimation_RenderServer_Governor);
-                %init(Group_System_Memory_And_RunLoop_Governor);
-                %init(Group_Thermal_CryoPacing_ZeroDrop);
-                %init(Group_Deep_RAM_Compaction_Engine);
-                %init(Group_WebKit_RAM_Optimizer);
-
-                // 4. PHÂN TÁCH NÚT HOME VẬT LÝ CHO THIẾT BỊ CLASSIC
-                if (Titanium_IsClassicHomeButtonDevice()) {
-                    %init(Group_HardwareSegregation_ClassicHomeV285);
-                }
-
-                // 5. PHÂN LẬP NẠP SPRINGBOARD VÀ APP THỨ BA
-                if (isSpringBoard) {
-                    %init(Group_LiquidGlass_Opt);
-                    %init(Group_Switcher30Apps_Virtualization);
-                    %init(Group_Display_SpringBoardV285);
-                    %init(Group_V285_FloatingWindow_PiP);
-                    %init(Group_SpringBoard_ProcessManagerV285);
-
-                    // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ (GỌI QUA HÀM TRỢ LỰC)
-                    Init_CAWindowServer_Hooks();
-                    
-                    @try {
-                        Titanium_StartThermalAndChargingWatchdog();
-                    } @catch (NSException *e) {}
-
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            AppleInternal_EnforceZeroLatencyKernelTier();
-                            Titanium_ApplySiliconDeepOptimizations();
-                        } @catch (NSException *e) {}
-                    });
-
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            AppleInternal_LockHardwareCADisplay();
-                        } @catch (NSException *e) {}
-                    });
-
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            Titanium_TuneWindowServerDisplayDirectly();
-                        } @catch (NSException *e) {}
-                    });
-
-                    NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-                    [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED 
-                                                            contents:verifiedData 
-                                                          attributes:@{NSFilePosixPermissions: @(0644)}];
-                } else {
-                    %init(Group_UIKit_ThirdParty_IsolatedV285);
-
-                    // BẢO VỆ BUFFER TRÁNH ĐEN MÀN HÌNH
-                    %init(Group_Force_Render_Recovery_Overdrive);
-
-                    // GIA TỐC CẤP WINDOW / SCENE DUY NHẤT (ĐÃ DỌN SẠCH TRÙNG LẶP)
-                    %init(Group_Window_Level_Overdrive);
-
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            AppleInternal_EnforceZeroLatencyKernelTier();
-                            Titanium_ApplySiliconDeepOptimizations();
-                        } @catch (NSException *e) {}
-                    });
-                }
-
-                g_SystemMasterReady = YES;
-            } @catch (NSException *e) {}
-        }
-    });
-}
-
-// ====================================================================================================
-// BOOTSTRAP TRIGGER & CONSTRUCTOR
+// BOOTSTRAP TRIGGER & CONSTRUCTOR (ĐÃ BỔ SUNG CHẶN ĐẦY ĐỦ TIẾN TRÌNH MẠNG)
 // ====================================================================================================
 
 static void SpringBoardBootstrapTrigger(void) {
@@ -5224,50 +5091,77 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // Chặn lặp nạp vào chính app cấu hình
+        // 1. Chặn lặp nạp vào chính app cấu hình & các tweak liên quan
         if (strcasestr(progName, "smooth") != NULL ||
             strcasestr(progName, "boosti") != NULL ||
             strcasestr(progName, "liquid") != NULL) {
             return;
         }
 
-        // 1. Chặn các tiến trình mạng và web riêng biệt
-        if (strcasestr(progName, "WebKit") || strcasestr(progName, "WebContent") ||
-            strcasestr(progName, "GPUProcess") || strcasestr(progName, "Networking") ||
-            strcasestr(progName, "nsurlsessiond") || strcasestr(progName, "mDNSResponder") ||
-            strcasestr(progName, "cloudd")) {
+        // ==============================================================================================
+        // 2. [CHẶN TOÀN BỘ TIẾN TRÌNH MẠNG]: SOCKET, TLS, DNS, CELLULAR, VPN & NETWORK DAEMONS
+        // ==============================================================================================
+        if (strcasestr(progName, "networkd") != NULL ||           // Daemon lõi điều phối socket và luồng mạng iOS
+            strcasestr(progName, "trustd") != NULL ||             // Daemon thẩm định chứng chỉ SSL/TLS
+            strcasestr(progName, "configd") != NULL ||            // Cấu hình IP, DHCP và bảng định tuyến
+            strcasestr(progName, "wifid") != NULL ||              // Daemon điều khiển Wi-Fi
+            strcasestr(progName, "CommCenter") != NULL ||         // Daemon sóng di động 4G/5G/LTE
+            strcasestr(progName, "mDNSResponder") != NULL ||      // Phân giải tên miền DNS & Bonjour
+            strcasestr(progName, "nsurlsessiond") != NULL ||      // Tải tệp nền của hệ thống
+            strcasestr(progName, "nsurlstoraged") != NULL ||      // Lưu trữ cache web & cookie
+            strcasestr(progName, "WebKit") != NULL ||             // Nhân render WebKit
+            strcasestr(progName, "WebContent") != NULL ||         // Tiến trình nạp nội dung web
+            strcasestr(progName, "GPUProcess") != NULL ||         // Xử lý đồ họa WebKit
+            strcasestr(progName, "Networking") != NULL ||         // Tiến trình mạng độc lập của WebKit
+            strcasestr(progName, "neagent") != NULL ||            // NetworkExtension (VPN, DNS cá nhân, AdGuard)
+            strcasestr(progName, "nesessionmanager") != NULL ||   // Quản lý phiên kết nối VPN
+            strcasestr(progName, "apsd") != NULL ||               // Apple Push Notification daemon
+            strcasestr(progName, "cloudd") != NULL ||             // Đồng bộ iCloud nền
+            strcasestr(progName, "geod") != NULL ||               // Dữ liệu bản đồ & định vị mạng
+            strcasestr(progName, "akd") != NULL ||                // AuthKit xác thực tài khoản Apple
+            strcasestr(progName, "identityservicesd") != NULL ||  // iMessage & FaceTime network daemon
+            strcasestr(progName, "imagent") != NULL ||            // Quản lý kết nối tin nhắn iMessage
+            strcasestr(progName, "bluetoothd") != NULL) {         // Giao tiếp mạng Bluetooth
             return;
         }
 
-        // 2. Chặn các daemon nền (ĐÃ BỎ BACKBOARDD ĐỂ TIẾN TRÌNH NHẬN HOOK)
+        // ==============================================================================================
+        // 3. CHẶN CÁC TIẾN TRÌNH HỆ THỐNG NỀN (GIỮ LẠI BACKBOARDD)
+        // ==============================================================================================
         if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
             strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
             strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
             strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
             strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
-            strcasestr(progName, "powerd") ||
-            strcasestr(progName, "notifyd") || strcasestr(progName, "securityd") ||
-            strcasestr(progName, "runningboardd") || strcasestr(progName, "thermalmonitord") ||
-            strcasestr(progName, "mediaremoted") || strcasestr(progName, "assertiond")) {
+            strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
+            strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
+            strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
+            strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
+            strcasestr(progName, "passd")) {
             return;
         }
 
         // ==============================================================================================
-        // [XỬ LÝ ĐỘC LẬP]: TIẾN TRÌNH BACKBOARDD (ĐIỀU PHỐI CẢM ỨNG HID & MÁY CHỦ HIỂN THỊ GỐC)
+        // 4. [XỬ LÝ ĐỘC LẬP]: TIẾN TRÌNH BACKBOARDD (CẢM ỨNG HID & MÁY CHỦ HIỂN THỊ GỐC)
         // ==============================================================================================
         if (strcasestr(progName, "backboardd") != NULL) {
             %init(Group_Backboardd_TouchDriver_Overdrive);
             Init_CAWindowServer_Hooks();
-            return; // Khởi tạo xong tiến trình xuất hình và cảm ứng gốc, thoát an toàn
+            return;
         }
 
         NSBundle *mainBundle = [NSBundle mainBundle];
         NSString *bundleID = [mainBundle bundleIdentifier];
 
-        if (bundleID && ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                         [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                         [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound)) {
-            return;
+        // Lọc phụ theo Bundle Identifier (chặn plugin mở rộng, VPN app extensions & Widgets)
+        if (bundleID) {
+            if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+                return;
+            }
         }
 
         BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
