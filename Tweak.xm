@@ -5005,6 +5005,17 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 }
 
 // ====================================================================================================
+// HÀM KHỞI TẠO DUY NHẤT: KHẮC PHỤC TRIỆT ĐỂ LỖI RE-%INIT TRÊN LOGOS / THEOS
+// ====================================================================================================
+
+static inline void Init_CAWindowServer_Hooks(void) {
+    static dispatch_once_t s_wsInitOnce;
+    dispatch_once(&s_wsInitOnce, ^{
+        %init(Group_CAWindowServer_Absolute_Dominance);
+    });
+}
+
+// ====================================================================================================
 // RUNTIME INITIALIZER: ĐÃ ĐỒNG BỘ HOÀN TOÀN
 // ====================================================================================================
 
@@ -5082,8 +5093,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_V285_FloatingWindow_PiP);
                     %init(Group_SpringBoard_ProcessManagerV285);
 
-                    // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ
-                    %init(Group_CAWindowServer_Absolute_Dominance);
+                    // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ (GỌI QUA HÀM TRỢ LỰC)
+                    Init_CAWindowServer_Hooks();
                     
                     @try {
                         Titanium_StartThermalAndChargingWatchdog();
@@ -5195,7 +5206,7 @@ static void SpringBoardBootstrapTrigger(void) {
         // ==============================================================================================
         if (strcasestr(progName, "backboardd") != NULL) {
             %init(Group_Backboardd_TouchDriver_Overdrive);
-            %init(Group_CAWindowServer_Absolute_Dominance);
+            Init_CAWindowServer_Hooks();
             return; // Khởi tạo xong tiến trình xuất hình và cảm ứng gốc, thoát an toàn
         }
 
