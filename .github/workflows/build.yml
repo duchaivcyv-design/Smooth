@@ -1,51 +1,49 @@
-name: Instant 5s Deb Packager
+name: Build BoostiPhone6s Rootless Deb
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  fast-pack:
+  build-deb:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sbingner/theos:latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-            layout
-            DEBIAN
+          submodules: recursive
           depth: 1
 
-      - name: Fast Pack .deb (Zero-Compile)
+      - name: Build Package
         run: |
-          mkdir -p build_pkg/var/jb/Library/MobileSubstrate/DynamicLibraries
-          mkdir -p build_pkg/DEBIAN
-          mkdir -p packages
+          # Tự động tìm và thiết lập quyền cho file control / script
+          find . -name "control" -exec chmod 644 {} +
+          for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
+            if [ -d "$DEBIAN_DIR" ]; then
+              find "$DEBIAN_DIR" -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
+              chmod 755 "$DEBIAN_DIR"
+            fi
+          done
 
-          # Sao chép file control & script bảo toàn quyền thực thi
-          if [ -d "layout/DEBIAN" ]; then
-            cp -r layout/DEBIAN/* build_pkg/DEBIAN/
-          elif [ -d "DEBIAN" ]; then
-            cp -r DEBIAN/* build_pkg/DEBIAN/
-          fi
+          # Biên dịch trực tiếp đa nhân, nén gzip cấp 1 nhanh nhất
+          make package \
+            FINALPACKAGE=1 \
+            THEOS_PACKAGE_SCHEME=rootless \
+            THEOS_PACKAGE_COMPRESSION=gzip \
+            -j$(nproc)
 
-          # Sao chép các tệp rootless (dylib đã compile sẵn + plist)
-          if [ -d "layout" ]; then
-            cp -r layout/* build_pkg/ 2>/dev/null || true
-            rm -rf build_pkg/layout
-          fi
+          ls -lh packages/*.deb
 
-          # Phân quyền chuẩn
-          chmod -R 0755 build_pkg
-          chmod -R 0644 build_pkg/DEBIAN/control
-
-          # Đóng gói tức thì mức nén nhanh nhất (-Zgzip -z1)
-          dpkg-deb -Zgzip -z1 --build build_pkg packages/BoostiPhone6s_rootless.deb
-
-      - name: Upload Deb
+      - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BoostiPhone6s-Rootless-FastDeb
+          name: BoostiPhone6s-Rootless-Deb
           path: packages/*.deb
+          if-no-files-found: error
           retention-days: 7
