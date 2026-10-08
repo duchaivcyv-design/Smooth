@@ -107,9 +107,7 @@ typedef struct {
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.clipsToBounds = YES;
 
-        // -------------------------------------------------------------
         // LỚP 1: BACKDROP REFRACTION & CHROMATIC DISPERSION (TÁN SẮC)
-        // -------------------------------------------------------------
         UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
         _backdropBlurLayer = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
         _backdropBlurLayer.frame = self.bounds;
@@ -118,16 +116,13 @@ typedef struct {
         _backdropBlurLayer.alpha = 0.85;
         [self addSubview:_backdropBlurLayer];
 
-        // Lớp viền khúc xạ lệch màu quang sai RGB quang học (Chromatic Rim)
         _chromaticDispersionLayer = [CAShapeLayer layer];
         _chromaticDispersionLayer.fillColor = [UIColor clearColor].CGColor;
         _chromaticDispersionLayer.strokeColor = [UIColor colorWithRed:0.25 green:0.80 blue:1.0 alpha:0.18].CGColor;
         _chromaticDispersionLayer.lineWidth = 2.5;
         [self.layer addSublayer:_chromaticDispersionLayer];
 
-        // -------------------------------------------------------------
         // LỚP 2: LENS BODY & INTERNAL CAUSTICS (LÒNG KÍNH & TỤ QUANG)
-        // -------------------------------------------------------------
         _depthVolumeGradient = [CAGradientLayer layer];
         _depthVolumeGradient.cornerRadius = radius;
         _depthVolumeGradient.cornerCurve = kCACornerCurveContinuous;
@@ -152,9 +147,7 @@ typedef struct {
         _internalCausticGradient.endPoint = CGPointMake(0.5, 0.45);
         [self.layer addSublayer:_internalCausticGradient];
 
-        // -------------------------------------------------------------
         // LỚP 3: FRESNEL BEVEL & SPECULAR GLARE (VIỀN VÁT 3D & PHẢN CHIẾU)
-        // -------------------------------------------------------------
         _specularGlareHighlight = [CAGradientLayer layer];
         _specularGlareHighlight.cornerRadius = radius;
         _specularGlareHighlight.cornerCurve = kCACornerCurveContinuous;
@@ -216,7 +209,6 @@ typedef struct {
     if (self = [super initWithFrame:CGRectMake(0, 0, 64, 34)]) {
         self.backgroundColor = [UIColor clearColor];
 
-        // Kênh lòng rãnh dẫn động (Track Channel)
         _trackChannelView = [[UIView alloc] initWithFrame:self.bounds];
         _trackChannelView.layer.cornerRadius = 17.0;
         _trackChannelView.layer.cornerCurve = kCACornerCurveContinuous;
@@ -232,7 +224,6 @@ typedef struct {
         _trackSubsurfaceGradient.endPoint = CGPointMake(1.0, 1.0);
         [_trackChannelView.layer addSublayer:_trackSubsurfaceGradient];
 
-        // Con trượt thỏi thủy tinh 3 lớp khúc xạ (Liquid Glass Thumb)
         _glassDropletThumb = [[LiquidGlassView alloc] initWithFrame:CGRectMake(2, 2, 36, 30) cornerRadius:15.0];
         _glassDropletThumb.userInteractionEnabled = NO;
         _glassDropletThumb.layer.shadowColor = [UIColor blackColor].CGColor;
@@ -293,7 +284,7 @@ typedef struct {
 @end
 
 // ====================================================================================================
-// ROOT LIST CONTROLLER CHÍNH - TÍCH HỢP LIQUID GLASS 3.0 TOÀN DIỆN
+// ROOT LIST CONTROLLER CHÍNH
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -437,13 +428,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
-    // UI Liquid Glass Floating Nav Bar (Chuẩn Apple WWDC Concept)
+    // UI Liquid Glass Floating Nav Bar
     LiquidGlassView *_liquidNavBarContainer;
     LiquidGlassView *_activeGlassIndicator;
     NSMutableArray<UIButton *> *_tabButtons;
     NSArray<NSDictionary *> *_tabConfigs;
     
-    // Thấu kính Liquid Glass 3 lớp khi nhấn giữ
+    // Thấu kính Liquid Glass 3 lớp
     UIView *_liquidGlassLensContainer;
     LiquidGlassView *_lensGlassEffectView;
     UILabel *_lensTitleLabel;
@@ -516,6 +507,47 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self stopContinuousHardwareHUD];
 }
 
+#pragma mark - Bridge Methods Triệt Tiêu Warning Clang
+
+- (void)setupBottomNavigationBar {
+    [self setupLiquidGlassNavBar];
+}
+
+- (void)onBottomTabChanged:(UISegmentedControl *)sender {
+    if (sender) {
+        [self selectTabIndex:sender.selectedSegmentIndex animated:YES];
+    }
+}
+
+- (void)onSwitchToggled:(UISwitch *)sender {
+    if (sender) {
+        [self.customTableView reloadData];
+    }
+}
+
+- (void)showLanguagePickerPopup:(id)sender {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"🌐 CHỌN NGÔN NGỮ"
+                                                                   message:@"Lựa chọn ngôn ngữ hiển thị hệ thống:"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt (Mặc Định)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"AppLanguage"] = @"vi";
+        [self saveSettingsDataAndSync];
+        [self.customTableView reloadData];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"AppLanguage"] = @"en";
+        [self saveSettingsDataAndSync];
+        [self.customTableView reloadData];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.sourceView = self.view;
+        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
 #pragma mark - Nav Bar Liquid Glass (Chuẩn Apple WWDC Concept)
 
 - (void)setupLiquidGlassNavBar {
@@ -526,7 +558,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidNavBarContainer = [[LiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight) cornerRadius:barHeight / 2.0];
     _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
 
-    // Đổ bóng phát quang neon xanh tím quang sai sâu
     _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.20 green:0.45 blue:1.0 alpha:0.50].CGColor;
     _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 10);
     _liquidNavBarContainer.layer.shadowRadius = 24.0;
@@ -542,7 +573,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
 
-    // Con trượt Liquid Glass Indicator 3 lớp quang học
     _activeGlassIndicator = [[LiquidGlassView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6) cornerRadius:(barHeight - 6) / 2.0];
     _activeGlassIndicator.userInteractionEnabled = NO;
     [_liquidNavBarContainer addSubview:_activeGlassIndicator];
@@ -907,7 +937,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [subview removeFromSuperview];
     }
 
-    // Hiệu ứng khối kính nổi khúc xạ ánh sáng 3 lớp chuẩn
     cell.backgroundColor = [UIColor colorWithRed:0.07 green:0.10 blue:0.17 alpha:0.68];
     cell.layer.cornerRadius = 14;
     cell.layer.cornerCurve = kCACornerCurveContinuous;
