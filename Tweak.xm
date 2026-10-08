@@ -1962,36 +1962,13 @@ static inline BOOL Titanium_IsCurrentAppAGame(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Phân tầng nhịp theo công tắc cấu hình hoặc bung toàn lực 144Hz
 static inline NSInteger Titanium_CalculateAdaptiveProMaxTier(void) {
-    // 1. TẦNG GAME: Giữ nguyên nhịp render gốc của game
-    if (Titanium_IsCurrentAppAGame()) {
-        return TitaniumTier_BypassGame;
-    }
+    if (Titanium_IsCurrentAppAGame()) return TitaniumTier_BypassGame;
+    if (Titanium_IsPassiveVideoPlayback()) return TitaniumTier_VideoSync;
 
-    // 2. [ĐÃ ÉP]: NẾU BẬT Ổ KHÓA HOẶC ÉP XUNG 144HZ -> BUNG KỊCH TRẦN GIÁ TRỊ ĐÃ KHÓA
-    if (g_isRateLockedV285) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
-    }
-
-    // 3. TẦNG VIDEO: Đang phát video YouTube / TikTok / PiP -> Giữ 60fps chuẩn
-    if (Titanium_IsPassiveVideoPlayback()) {
-        return TitaniumTier_VideoSync;
-    }
-
-    // 4. TẦNG PEAK: Đang vuốt lướt nhanh, mở app hoặc gõ phím -> Phóng thẳng lên trần cấu hình (144Hz)
-    if (Titanium_ShouldLockTargetRate()) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
-    }
-
-    // 5. TẦNG STANDARD: Đang chạm giữ trên màn hình hoặc cuộn chậm
-    if (g_isUserTouchingScreen || g_isScrollingActive) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
-    }
-
-    // 6. TẦNG IDLE: Màn hình đứng yên hoàn toàn -> Khóa sàn 60Hz tiết kiệm pin
-    return TitaniumTier_DeepIdle;
+    // Không chuyển sang Idle sau khi nhấc tay; giữ cadence mục tiêu để animation tiếp tục chạy.
+    NSInteger target = Titanium_GetTargetConfiguredHz();
+    if (target < 60) target = 60;
+    return target;
 }
 
 // ====================================================================================================
@@ -2340,7 +2317,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 - (void)didMoveToWindow {
     %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-        g_isMetalGameProcess = YES;
+        // Không đánh dấu CAMetalLayer là game; WebKit/app UI cũng dùng Metal.
     }
 }
 
@@ -2427,41 +2404,33 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
-    
-    if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
-        return 60;
-    }
+    if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) return 60;
 
     NSInteger userHz = g_cachedResolvedHz;
-    if (userHz <= 0 && CFG285) {
-        userHz = (NSInteger)CFG285.targetHz;
-    }
-    if (userHz <= 0 && g_syncPayloadV285.targetHz > 0) {
-        userHz = (NSInteger)g_syncPayloadV285.targetHz;
-    }
-    
+    if (userHz <= 0 && CFG285) userHz = (NSInteger)CFG285.targetHz;
+    if (userHz <= 0 && g_syncPayloadV285.targetHz > 0) userHz = (NSInteger)g_syncPayloadV285.targetHz;
+
     if (userHz < 15) userHz = 15;
     if (userHz > 144) userHz = 144;
+
+    NSInteger hardwareCeiling = HardwareHasNative120Hz() ? 120 : 60;
+    if (userHz > hardwareCeiling) userHz = hardwareCeiling;
     return userHz;
 }
 
 static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
-    
-    if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
-        return 60;
-    }
+    if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) return 60;
 
     NSInteger userFPS = g_cachedResolvedFPS;
-    if (userFPS <= 0 && CFG285) {
-        userFPS = (NSInteger)CFG285.targetFPS;
-    }
-    if (userFPS <= 0 && g_syncPayloadV285.targetFPS > 0) {
-        userFPS = (NSInteger)g_syncPayloadV285.targetFPS;
-    }
-    
+    if (userFPS <= 0 && CFG285) userFPS = (NSInteger)CFG285.targetFPS;
+    if (userFPS <= 0 && g_syncPayloadV285.targetFPS > 0) userFPS = (NSInteger)g_syncPayloadV285.targetFPS;
+
     if (userFPS < 15) userFPS = 15;
     if (userFPS > 144) userFPS = 144;
+
+    NSInteger hardwareCeiling = HardwareHasNative120Hz() ? 120 : 60;
+    if (userFPS > hardwareCeiling) userFPS = hardwareCeiling;
     return userFPS;
 }
 
@@ -2649,7 +2618,7 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
             if (maxTarget < 60.0f) maxTarget = 60.0f;
             if (maxTarget > 144.0f) maxTarget = 144.0f;
 
-            range = SafeMakeFRR(1.0f, maxTarget, maxTarget);
+            range = SafeMakeFRR(60.0f, maxTarget, maxTarget);
         }
     }
     %orig(range);
@@ -2889,23 +2858,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBAppLaunchSettings
 
 - (double)delayBeforeAppLaunch {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.0;
-    }
     return %orig;
 }
 
 - (double)zoomDuration {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.20;
-    }
     return %orig;
 }
 
 - (double)launchDuration {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.20;
-    }
     return %orig;
 }
 
@@ -2914,9 +2874,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.0;
-    }
     return %orig;
 }
 
@@ -3133,7 +3090,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                    state == UIGestureRecognizerStateFailed) {
             g_isUserTouchingScreen = NO;
             g_isScrollingActive = NO;
-            g_lastInteractionMachTime = mach_absolute_time();
+            Titanium_TriggerInstantTouchBurst();
         }
     }
 }
@@ -3185,7 +3142,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_isUserTouchingScreen = NO;
         g_isScrollingActive = NO;
-        g_lastInteractionMachTime = mach_absolute_time();
+        Titanium_TriggerInstantTouchBurst();
     }
 }
 
@@ -3194,7 +3151,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_isUserTouchingScreen = NO;
         g_isScrollingActive = NO;
-        g_lastInteractionMachTime = mach_absolute_time();
+        Titanium_TriggerInstantTouchBurst();
     }
 }
 
@@ -3950,7 +3907,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (id)init {
     id orig = %orig;
     if (orig && (g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !Titanium_IsSpringBoard()) {
-        g_isMetalGameProcess = YES;
+        // Không đánh dấu CAMetalLayer là game; WebKit/app UI cũng dùng Metal.
     }
     return orig;
 }
@@ -4572,23 +4529,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép xả sạch cache trang và bộ nhớ đệm WebKit ngay khi đóng hoặc đổi tab
 - (void)didMoveToWindow {
     %orig;
-    // Không purge ProcessPool/PageCache khi WebView rời window. Việc này có thể cắt trạng thái
-    // tải trang đang dùng lại và gây trang xám hoặc crash ở ứng dụng có embedded browser.
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.window) {
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        });
-    }
 }
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép WebKit giải phóng sạch buffer ảnh rác khi bộ nhớ chạm ngưỡng cảnh báo
 - (void)_didReceiveMemoryWarning {
     %orig;
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        });
-    }
 }
 
 %end
@@ -4597,18 +4542,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Lắng nghe sự kiện App vào background để ép WebKit xả cache tự động
 - (instancetype)init {
-    WKProcessPool *pool = %orig;
-    if (pool && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification *note) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                // Giữ nguyên ProcessPool/PageCache khi background để phiên web có thể khôi phục ổn định.
-            });
-        }];
-    }
-    return pool;
+    return %orig;
 }
 
 %end
@@ -4674,31 +4608,10 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
     %orig;
     if (!Titanium_IsSpringBoard()) {
         g_processLaunchTimestampTicks = mach_absolute_time();
-        
-        // Dùng target đã cấu hình ngay từ frame đầu để tránh chuyển scene 60Hz -> target gây khựng/đen.
-        if (@available(iOS 15.0, *)) {
-            if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
-                if (targetHz > 144.0f) targetHz = 144.0f;
-                [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
-            }
-        }
-
-        // Giữ lại một nhịp nhẹ để đánh dấu first frame đã sẵn sàng, không đổi refresh giữa chừng.
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        g_isAppFirstFramePresented = NO;
+        dispatch_async(dispatch_get_main_queue(), ^{
             g_isAppFirstFramePresented = YES;
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-            if (@available(iOS 15.0, *)) {
-                float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
-                if (targetHz > 144.0f) targetHz = 144.0f;
-
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
-                }
-            }
         });
     }
 }
@@ -4824,9 +4737,7 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 %hook CALayer
 
 - (BOOL)drawsAsynchronously {
-    if (!Titanium_IsSpringBoard()) {
-        return NO;
-    }
+    // Giữ render path native cho app/WebKit; không ép synchronous toàn cục.
     return %orig;
 }
 
@@ -4862,28 +4773,7 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 - (void)_readySceneForDisplay {
     %orig;
     if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
-        if (@available(iOS 15.0, *)) {
-            if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
-                if (targetHz > 144.0f) targetHz = 144.0f;
-                [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
-            }
-        }
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-            if (@available(iOS 15.0, *)) {
-                float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
-                if (targetHz > 144.0f) targetHz = 144.0f;
-
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
-                }
-            }
-        });
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
 }
 
