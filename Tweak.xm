@@ -4603,7 +4603,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
-// (KẾT NỐI: Ép Xung ProMotion Cố Định + Tăng Tần Số Lấy Mẫu Cảm Ứng 1000Hz + Ổ Khóa App)
+// (KẾT NỐI: Ép Xung ProMotion Cố Định + Bảo Toàn Cảm Ứng Gốc + Ổ Khóa App)
 // (AN TOÀN TUYỆT ĐỐI: BẢO VỆ BỘ NHỚ CFRETAIN TRÁNH CRASH MEMORY CORRUPTION)
 // ====================================================================================================
 
@@ -4613,7 +4613,7 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép toàn bộ cờ Variable Refresh Rate & ProMotion của Apple qua MobileGestalt
 %hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
-    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
+    if (property && HardwareHasNative120Hz() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
         if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
             CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
             CFEqual(property, CFSTR("pVRR")) ||
@@ -4625,21 +4625,6 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
     }
     return %orig(property);
 }
-
-%hook IOHIDEventSystemClient
-
-// [ĐÃ ÉP TOÀN DIỆN]: Ép tần số lấy mẫu cảm ứng phần cứng lên 1000Hz (0.001s polling interval)
-- (void)setProperty:(id)property forKey:(NSString *)key {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch) && key) {
-        if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-            %orig(@(1000), key);
-            return;
-        }
-    }
-    %orig;
-}
-
-%end
 
 %end
 
@@ -4712,44 +4697,6 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
     if (Titanium_IsSpringBoard()) {
         Titanium_LockMainThreadFast();
     }
-}
-
-%end
-
-%end
-
-// ====================================================================================================
-// NHÓM 1: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION (MOBILEGESTALT & IOHID 1000HZ)
-// ====================================================================================================
-
-%group Group_Hardware_ProMotion_Overclock
-
-extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
-
-%hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
-    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
-        if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
-            CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
-            CFEqual(property, CFSTR("pVRR")) ||
-            CFEqual(property, CFSTR("pro-motion")) ||
-            CFEqual(property, CFSTR("DeviceSupports120Hz")) ||
-            CFEqual(property, CFSTR("DeviceSupportsProMotion"))) {
-            return CFRetain(kCFBooleanTrue);
-        }
-    }
-    return %orig(property);
-}
-
-%hook IOHIDEventSystemClient
-
-- (void)setProperty:(id)property forKey:(NSString *)key {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch) && key) {
-        if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-            %orig(@(1000), key);
-            return;
-        }
-    }
-    %orig;
 }
 
 %end
