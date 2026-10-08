@@ -4477,7 +4477,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // ====================================================================================================
 // KHAI BÁO NGUYÊN MẪU HÀM C ĐỂ TRÁNH LỖI "UNDECLARED IDENTIFIER" VÀ THIẾU TYPE
 // ====================================================================================================
-
+/*
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -4586,7 +4586,7 @@ extern "C" {
 %end
 
 %end
-
+*/
 // ====================================================================================================
 // NHÓM 4: ĐIỀU PHỐI HIỂN THỊ CẤP WINDOW / SCENE CHO APP THỨ BA (ĐÃ TRIỆT TIÊU DELAY 500MS & GHÌM 60HZ)
 // ====================================================================================================
@@ -4811,13 +4811,16 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 // ==============================================================================
                 %init(Group_AntiWatchdog_Immunity);
                 %init(Group_ZeroLatency_Touch_Opt);
-                %init(Group_FluidTransitions_Pacing);           // Ép 144Hz cho DisplayLink & Animation
+                %init(Group_FluidTransitions_Pacing);           // Ép DisplayLink & Animation
                 %init(Group_Scroll_And_Keyboard_Opt);           // Gia tốc cuộn & phím
                 %init(Group_InstantActionAndMenuTransitions_Boost);
                 %init(Group_Global_Thread_Governor_Unthrottled);
                 %init(Group_Universal_InApp_Animations);
                 %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
-                %init(Group_Hardware_ProMotion_Overclock);      // Spoof ProMotion 144Hz toàn máy
+                
+                // [ĐÃ NGẮT THỦ PHẠM 1]: Không spoof ProMotion lên màn 60Hz để tránh kẹt tín hiệu quét ảo
+                // %init(Group_Hardware_ProMotion_Overclock);
+                
                 %init(Group_WebKit_RAM_Optimizer);
 
                 // ==============================================================================
@@ -4826,7 +4829,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 if (isSpringBoard) {
                     // CÁC NHÓM CAN THIỆP PHẦN CỨNG & PIPELINE SÂU: CHỈ CHẠY TRÊN SPRINGBOARD
                     %init(Group_Metal_ZeroTearing_Pacing);
-                    %init(Group_FastLaunch_SuperEngineV285);
+                    
+                    // [ĐÃ NGẮT THỦ PHẠM 2]: Tắt rút ngắn thời gian phóng to icon (tránh kẹt mở app ở 50%)
+                    // %init(Group_FastLaunch_SuperEngineV285);
+                    
                     %init(Group_Apple_Internal_ProMotion_Apex);
                     %init(Group_Titanium_Game_Metal_Overdrive);
                     %init(Group_Silicon_Hardware_Pipeline_Overdrive);
@@ -4841,8 +4847,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_V285_FloatingWindow_PiP);
                     %init(Group_SpringBoard_ProcessManagerV285);
 
-                    // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ
-                    Init_CAWindowServer_Hooks();
+                    // [ĐÃ NGẮT THỦ PHẠM 3]: Tắt ép máy chủ CAWindowServer Display (triệt tiêu lỗi đơ màn hình và kẹt thanh âm lượng)
+                    // Init_CAWindowServer_Hooks();
 
                     if (Titanium_IsClassicHomeButtonDevice()) {
                         %init(Group_HardwareSegregation_ClassicHomeV285);
@@ -4862,13 +4868,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         @try {
                             Titanium_ForceInjectDynamicRefreshSupport();
-                            AppleInternal_LockHardwareCADisplay();
+                            // [ĐÃ NGẮT]: Không ép latency 0.0 lên CADisplay tránh làm kẹt thanh âm lượng
+                            // AppleInternal_LockHardwareCADisplay();
                         } @catch (NSException *e) {}
                     });
 
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         @try {
-                            Titanium_TuneWindowServerDisplayDirectly();
+                            // [ĐÃ NGẮT]: Không tune WindowServerDisplay bằng giá trị đè
+                            // Titanium_TuneWindowServerDisplayDirectly();
                         } @catch (NSException *e) {}
                     });
 
