@@ -1947,6 +1947,9 @@ static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
 // 5. THUẬT TOÁN PHÂN TẦNG TOÀN HỆ THỐNG: MẶC ĐỊNH 144HZ, TĨNH 60HZ, DẢI 15 - 144HZ
 // ====================================================================================================
 
+// Forward declaration: used by the adaptive tier code before its definition.
+static inline NSInteger Titanium_GetTargetConfiguredHz(void);
+
 typedef NS_ENUM(NSInteger, TitaniumDisplayTier) {
     TitaniumTier_BypassGame = 0,    // Tầng 0: Game Metal -> Bypass giữ nguyên FPS gốc của game
     TitaniumTier_DeepIdle   = 60,   // Tầng 1: Màn hình tĩnh hoàn toàn -> Khóa sàn 60Hz cho cả máy
