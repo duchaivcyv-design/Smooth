@@ -4909,6 +4909,32 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 
 %end
 
+// NHÓM BACKBOARDD
+%group Group_Backboardd_TouchDriver_Overdrive
+
+%hook BKTouchDeliveryPolicyServer
+
+// Ép đường truyền cảm ứng bypass qua mọi hàng đợi kiểm tra độ trễ
+- (id)init {
+    id orig = %orig;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    return orig;
+}
+
+%end
+
+%hook BKHIDEventProcessor
+
+// Ép xử lý sự kiện HID cảm ứng thời gian thực (Realtime Processing)
+- (void)processEvent:(id)event sender:(id)sender dispatcher:(id)dispatcher {
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    %orig;
+}
+
+%end
+
+%end
+
 // ====================================================================================================
 // GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
 // ====================================================================================================
@@ -5136,12 +5162,14 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
+        // Chặn lặp nạp vào chính app cấu hình
         if (strcasestr(progName, "smooth") != NULL ||
             strcasestr(progName, "boosti") != NULL ||
             strcasestr(progName, "liquid") != NULL) {
             return;
         }
 
+        // 1. Chặn các tiến trình mạng và web riêng biệt
         if (strcasestr(progName, "WebKit") || strcasestr(progName, "WebContent") ||
             strcasestr(progName, "GPUProcess") || strcasestr(progName, "Networking") ||
             strcasestr(progName, "nsurlsessiond") || strcasestr(progName, "mDNSResponder") ||
@@ -5149,16 +5177,26 @@ static void SpringBoardBootstrapTrigger(void) {
             return;
         }
 
+        // 2. Chặn các daemon nền (ĐÃ BỎ BACKBOARDD ĐỂ TIẾN TRÌNH NHẬN HOOK)
         if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
             strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
             strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
             strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
             strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
-            strcasestr(progName, "powerd") || strcasestr(progName, "backboardd") ||
+            strcasestr(progName, "powerd") ||
             strcasestr(progName, "notifyd") || strcasestr(progName, "securityd") ||
             strcasestr(progName, "runningboardd") || strcasestr(progName, "thermalmonitord") ||
             strcasestr(progName, "mediaremoted") || strcasestr(progName, "assertiond")) {
             return;
+        }
+
+        // ==============================================================================================
+        // [XỬ LÝ ĐỘC LẬP]: TIẾN TRÌNH BACKBOARDD (ĐIỀU PHỐI CẢM ỨNG HID & MÁY CHỦ HIỂN THỊ GỐC)
+        // ==============================================================================================
+        if (strcasestr(progName, "backboardd") != NULL) {
+            %init(Group_Backboardd_TouchDriver_Overdrive);
+            %init(Group_CAWindowServer_Absolute_Dominance);
+            return; // Khởi tạo xong tiến trình xuất hình và cảm ứng gốc, thoát an toàn
         }
 
         NSBundle *mainBundle = [NSBundle mainBundle];
