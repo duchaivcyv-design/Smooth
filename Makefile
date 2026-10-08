@@ -45,14 +45,15 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                WebKit \
                                CoreVideo \
                                Accelerate \
-                               CoreServices
+                               CoreServices \
+                               IOKit
 
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit BackBoardServices
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = BackBoardServices
 
-BoostiPhone6sCore_LIBRARIES = substrate
+BoostiPhone6sCore_LIBRARIES = substrate mobilegestalt
 
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
-                            -Wl,-undefined,dynamic_lookup \
+                            -undefined dynamic_lookup \
                             -lpthread
 
 # Ký Entitlements đặc quyền cao cho SpringBoard & backboardd
