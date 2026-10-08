@@ -4618,6 +4618,81 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 %end
 
 // ====================================================================================================
+// NHÓM ĐỘC QUYỀN APPLE RUNTIME: ÉP VƯỢT MỨC KHỞI ĐỘNG ĐẦU TIÊN (ZERO BLACK SCREEN OVERDRIVE)
+// (CHUẨN RUNTIME PRIVATE: HOÀN TOÀN MỚI, KHÔNG TRÙNG HOOK CŨ, ÉP LOADING XONG TỰ BUNG 144HZ)
+// ====================================================================================================
+
+%group Group_Apple_Native_ColdBoot_Overdrive
+
+static volatile BOOL g_isAppFirstFramePresented = NO;
+static volatile uint64_t g_processLaunchTimestampTicks = 0;
+
+%hook UIWindowScene
+
+// Khởi tạo scene cửa sổ lần đầu: Ép dựng khung hình không để GPU bị đói texture
+- (void)_readySceneForDisplay {
+    %orig;
+    if (!Titanium_IsSpringBoard()) {
+        g_processLaunchTimestampTicks = mach_absolute_time();
+        
+        // Cấp nhịp quét 60Hz ban đầu trong 0.5s để splash/loading screen nạp xong xuôi
+        if (@available(iOS 15.0, *)) {
+            if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, 60.0f, 60.0f)];
+            }
+        }
+
+        // Sau 0.5s: Ép vượt trần kịch kim lên 144Hz cho toàn bộ scene
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            g_isAppFirstFramePresented = YES;
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+            if (@available(iOS 15.0, *)) {
+                float targetHz = (float)Titanium_GetTargetConfiguredHz();
+                if (targetHz < 60.0f) targetHz = 60.0f;
+                if (targetHz > 144.0f) targetHz = 144.0f;
+
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
+                }
+            }
+        });
+    }
+}
+
+%end
+
+%hook UIScene
+
+// Bắt đúng sự kiện scene chuyển từ Inactive sang Active lần đầu tiên
+- (void)_activationCompleted {
+    %orig;
+    if (!Titanium_IsSpringBoard()) {
+        if (!g_isAppFirstFramePresented) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                g_isAppFirstFramePresented = YES;
+            });
+        }
+    }
+}
+
+%end
+
+%hook FBApplicationProcess
+
+// Can thiệp mức Bootstrap tiến trình Springboard: Cấp quyền nạp 0ms không giữ watchdog
+- (void)_finishInit {
+    %orig;
+    if (Titanium_IsSpringBoard()) {
+        Titanium_LockMainThreadFast();
+    }
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
 // (ĐÃ ÉP ĐỒNG BỘ 0MS VỚI Ổ KHÓA CỦA APP CONTROL MASTER - CHỐNG CRASH XNU)
 // ====================================================================================================
@@ -4810,6 +4885,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                             contents:verifiedData 
                                                           attributes:@{NSFilePosixPermissions: @(0644)}];
                 } else {
+                    // [ĐÃ NẠP]: Kích hoạt nhóm vượt rào khởi động Cold Boot, thông luồng loading cho app thứ ba
+                    %init(Group_Apple_Native_ColdBoot_Overdrive);
                     %init(Group_UIKit_ThirdParty_IsolatedV285);
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         @try {
