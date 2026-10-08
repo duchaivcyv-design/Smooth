@@ -79,126 +79,158 @@ typedef struct {
 #endif
 
 // ====================================================================================================
-// 1. LIQUID GLASS VIEW CONTAINER - CẤU TẠO 3 LỚP QUANG HỌC VẬT LÝ APPLE CHUẨN XÁC
+// 1. ADVANCED APPLE LIQUID GLASS OPTICAL ENGINE (KIẾN TRÚC TWEAK LIQUIDASS CHUẨN)
 // ====================================================================================================
-@interface LiquidGlassView : UIView
-// Lớp 1: Khúc xạ nền & Tán sắc sắc sai (Backdrop Refraction)
-@property (nonatomic, strong) UIVisualEffectView *backdropBlurLayer;
-@property (nonatomic, strong) CAShapeLayer *chromaticDispersionLayer;
 
-// Lớp 2: Lòng kính hội tụ & Tụ quang sâu (Lens Body & Internal Caustics)
-@property (nonatomic, strong) CAGradientLayer *internalCausticGradient;
-@property (nonatomic, strong) CAGradientLayer *depthVolumeGradient;
-
-// Lớp 3: Viền vát phản chiếu Fresnel 3D & Vệt bóng gương (Fresnel Rim & Specular Glare)
-@property (nonatomic, strong) CAShapeLayer *fresnelBevelStrokeLayer;
-@property (nonatomic, strong) CAGradientLayer *specularGlareHighlight;
-
+@interface AppleLiquidGlassView : UIView
+@property (nonatomic, strong) CALayer *refractionBackdropLayer;
+@property (nonatomic, strong) CAGradientLayer *chromaticFringeLayer;
+@property (nonatomic, strong) CAGradientLayer *causticCoreLayer;
+@property (nonatomic, strong) CAGradientLayer *specularSurfaceLayer;
+@property (nonatomic, strong) CAShapeLayer *diamondBevelRim;
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius;
-- (void)updateOpticalLayers;
+- (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel;
 @end
 
-@implementation LiquidGlassView
+@implementation AppleLiquidGlassView
 
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius {
     if (self = [super initWithFrame:frame]) {
         self.backgroundColor = [UIColor clearColor];
         self.layer.cornerRadius = radius;
-        self.layer.cornerCurve = kCACornerCurveContinuous;
+        if (@available(iOS 13.0, *)) {
+            self.layer.cornerCurve = kCACornerCurveContinuous;
+        }
         self.clipsToBounds = YES;
 
-        // LỚP 1: BACKDROP REFRACTION & CHROMATIC DISPERSION (TÁN SẮC)
-        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
-        _backdropBlurLayer = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-        _backdropBlurLayer.frame = self.bounds;
-        _backdropBlurLayer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        _backdropBlurLayer.userInteractionEnabled = NO;
-        _backdropBlurLayer.alpha = 0.85;
-        [self addSubview:_backdropBlurLayer];
+        // --- LỚP 1: BACKDROP KHÚC XẠ BẺ CONG ÁNH SÁNG NỀN (QUANG HỌC THẬT) ---
+        Class backdropClass = NSClassFromString(@"CABackdropLayer");
+        if (backdropClass) {
+            _refractionBackdropLayer = [[backdropClass alloc] init];
+            _refractionBackdropLayer.frame = self.bounds;
+            [_refractionBackdropLayer setValue:@YES forKey:@"allowsGroupBlending"];
+            [_refractionBackdropLayer setValue:@18.0 forKey:@"bleedAmount"];
 
-        _chromaticDispersionLayer = [CAShapeLayer layer];
-        _chromaticDispersionLayer.fillColor = [UIColor clearColor].CGColor;
-        _chromaticDispersionLayer.strokeColor = [UIColor colorWithRed:0.25 green:0.80 blue:1.0 alpha:0.18].CGColor;
-        _chromaticDispersionLayer.lineWidth = 2.5;
-        [self.layer addSublayer:_chromaticDispersionLayer];
+            // Nạp bộ lọc làm mờ sâu và lọc ánh sáng
+            Class filterClass = NSClassFromString(@"CAFilter");
+            if (filterClass) {
+                id gaussianFilter = [filterClass performSelector:NSSelectorFromString(@"filterWithType:") withObject:@"gaussianBlur"];
+                if (gaussianFilter) {
+                    [gaussianFilter setValue:@(16.0) forKey:@"inputRadius"];
+                    _refractionBackdropLayer.filters = @[gaussianFilter];
+                }
+            }
+            [self.layer addSublayer:_refractionBackdropLayer];
+        } else {
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+            blurView.frame = self.bounds;
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            blurView.userInteractionEnabled = NO;
+            [self addSubview:blurView];
+        }
 
-        // LỚP 2: LENS BODY & INTERNAL CAUSTICS (LÒNG KÍNH & TỤ QUANG)
-        _depthVolumeGradient = [CAGradientLayer layer];
-        _depthVolumeGradient.cornerRadius = radius;
-        _depthVolumeGradient.cornerCurve = kCACornerCurveContinuous;
-        _depthVolumeGradient.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.15].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.02].CGColor,
-            (id)[UIColor colorWithRed:0.12 green:0.25 blue:0.45 alpha:0.10].CGColor
-        ];
-        _depthVolumeGradient.locations = @[@0.0, @0.55, @1.0];
-        _depthVolumeGradient.startPoint = CGPointMake(0.1, 0.0);
-        _depthVolumeGradient.endPoint = CGPointMake(0.9, 1.0);
-        [self.layer addSublayer:_depthVolumeGradient];
-
-        _internalCausticGradient = [CAGradientLayer layer];
-        _internalCausticGradient.cornerRadius = radius;
-        _internalCausticGradient.cornerCurve = kCACornerCurveContinuous;
-        _internalCausticGradient.colors = @[
-            (id)[UIColor colorWithRed:0.45 green:0.85 blue:1.0 alpha:0.22].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
-        ];
-        _internalCausticGradient.startPoint = CGPointMake(0.5, 0.0);
-        _internalCausticGradient.endPoint = CGPointMake(0.5, 0.45);
-        [self.layer addSublayer:_internalCausticGradient];
-
-        // LỚP 3: FRESNEL BEVEL & SPECULAR GLARE (VIỀN VÁT 3D & PHẢN CHIẾU)
-        _specularGlareHighlight = [CAGradientLayer layer];
-        _specularGlareHighlight.cornerRadius = radius;
-        _specularGlareHighlight.cornerCurve = kCACornerCurveContinuous;
-        _specularGlareHighlight.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.75].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.18].CGColor,
+        // --- LỚP 2: TÁN SẮC QUANG SAI ĐA SẮC RÌA MÉP (CHROMATIC DISPERSION) ---
+        _chromaticFringeLayer = [CAGradientLayer layer];
+        _chromaticFringeLayer.frame = self.bounds;
+        _chromaticFringeLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _chromaticFringeLayer.cornerCurve = kCACornerCurveContinuous;
+        }
+        _chromaticFringeLayer.colors = @[
+            (id)[UIColor colorWithRed:0.25 green:0.80 blue:1.0 alpha:0.32].CGColor,
+            (id)[UIColor colorWithRed:0.75 green:0.30 blue:1.0 alpha:0.18].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.28].CGColor
+            (id)[UIColor colorWithRed:0.20 green:0.95 blue:0.7 alpha:0.25].CGColor
         ];
-        _specularGlareHighlight.locations = @[@0.0, @0.15, @0.70, @1.0];
-        _specularGlareHighlight.startPoint = CGPointMake(0.0, 0.0);
-        _specularGlareHighlight.endPoint = CGPointMake(1.0, 1.0);
-        [self.layer addSublayer:_specularGlareHighlight];
+        _chromaticFringeLayer.locations = @[@0.0, @0.12, @0.82, @1.0];
+        _chromaticFringeLayer.startPoint = CGPointMake(0.0, 0.0);
+        _chromaticFringeLayer.endPoint = CGPointMake(1.0, 1.0);
+        [self.layer addSublayer:_chromaticFringeLayer];
 
-        _fresnelBevelStrokeLayer = [CAShapeLayer layer];
-        _fresnelBevelStrokeLayer.fillColor = [UIColor clearColor].CGColor;
-        _fresnelBevelStrokeLayer.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.82].CGColor;
-        _fresnelBevelStrokeLayer.lineWidth = 1.4;
-        [self.layer addSublayer:_fresnelBevelStrokeLayer];
+        // --- LỚP 3: LÒNG THỦY TINH ĐẶC & TỤ QUANG NỘI TẠI (CAUSTIC CORE) ---
+        _causticCoreLayer = [CAGradientLayer layer];
+        _causticCoreLayer.frame = self.bounds;
+        _causticCoreLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _causticCoreLayer.cornerCurve = kCACornerCurveContinuous;
+        }
+        _causticCoreLayer.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.28].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.04].CGColor,
+            (id)[UIColor colorWithRed:0.10 green:0.25 blue:0.55 alpha:0.20].CGColor
+        ];
+        _causticCoreLayer.locations = @[@0.0, @0.45, @1.0];
+        _causticCoreLayer.startPoint = CGPointMake(0.1, 0.0);
+        _causticCoreLayer.endPoint = CGPointMake(0.9, 1.0);
+        [self.layer addSublayer:_causticCoreLayer];
+
+        // --- LỚP 4: BỀ MẶT PHẢN XẠ FRESNEL 3D & VỆT BÓNG QUANG HỌC ---
+        _specularSurfaceLayer = [CAGradientLayer layer];
+        _specularSurfaceLayer.frame = self.bounds;
+        _specularSurfaceLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _specularSurfaceLayer.cornerCurve = kCACornerCurveContinuous;
+        }
+        _specularSurfaceLayer.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.92].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.22].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.35].CGColor
+        ];
+        _specularSurfaceLayer.locations = @[@0.0, @0.08, @0.75, @1.0];
+        _specularSurfaceLayer.startPoint = CGPointMake(0.05, 0.0);
+        _specularSurfaceLayer.endPoint = CGPointMake(0.95, 1.0);
+        [self.layer addSublayer:_specularSurfaceLayer];
+
+        // --- LỚP 5: VIỀN VÁT SIÊU MỎNG KIM CƯƠNG 0.8PT ---
+        _diamondBevelRim = [CAShapeLayer layer];
+        _diamondBevelRim.path = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:radius].CGPath;
+        _diamondBevelRim.fillColor = [UIColor clearColor].CGColor;
+        _diamondBevelRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.85].CGColor;
+        _diamondBevelRim.lineWidth = 1.0;
+        [self.layer addSublayer:_diamondBevelRim];
     }
     return self;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    [self updateOpticalLayers];
-}
-
-- (void)updateOpticalLayers {
     CGRect b = self.bounds;
     CGFloat r = self.layer.cornerRadius;
     UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:b cornerRadius:r];
 
-    _backdropBlurLayer.frame = b;
-    _chromaticDispersionLayer.path = path.CGPath;
-    _depthVolumeGradient.frame = b;
-    _internalCausticGradient.frame = b;
-    _specularGlareHighlight.frame = b;
-    _fresnelBevelStrokeLayer.path = path.CGPath;
+    if (_refractionBackdropLayer) _refractionBackdropLayer.frame = b;
+    _chromaticFringeLayer.frame = b;
+    _causticCoreLayer.frame = b;
+    _specularSurfaceLayer.frame = b;
+    _diamondBevelRim.path = path.CGPath;
+}
+
+- (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel {
+    CGFloat stretch = fmin(fmax(fabs(vel) / 800.0, 0.05), 0.22);
+    CGAffineTransform transform = (vel >= 0) ? CGAffineTransformMakeScale(1.0 + stretch, 1.0 - (stretch * 0.5)) : CGAffineTransformMakeScale(1.0 - (stretch * 0.4), 1.0 + stretch);
+
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.transform = transform;
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:1.2 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            self.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }];
 }
 
 @end
 
 // ====================================================================================================
-// 2. LIQUID GLASS CAPSULE SWITCH (CÔNG TẮC CON NHỘNG KHÚC XẠ 3 LỚP)
+// 2. LIQUID GLASS DROPLET SWITCH (CÔNG TẮC GIỌT NƯỚC THỦY TINH TRƯỢT 100% TRONG SUỐT)
 // ====================================================================================================
+
 @interface LiquidCapsuleSwitch : UIControl
 @property (nonatomic, assign) BOOL on;
-@property (nonatomic, strong) UIView *trackChannelView;
-@property (nonatomic, strong) CAGradientLayer *trackSubsurfaceGradient;
-@property (nonatomic, strong) LiquidGlassView *glassDropletThumb;
+@property (nonatomic, strong) UIView *channelTrackView;
+@property (nonatomic, strong) CAGradientLayer *trackFluidsGradient;
+@property (nonatomic, strong) AppleLiquidGlassView *liquidDropletThumb;
 @property (nonatomic, copy) void (^valueChangedBlock)(BOOL isOn);
 - (void)setOn:(BOOL)on animated:(BOOL)animated;
 @end
@@ -206,31 +238,35 @@ typedef struct {
 @implementation LiquidCapsuleSwitch
 
 - (instancetype)initWithFrame:(CGRect)frame {
-    if (self = [super initWithFrame:CGRectMake(0, 0, 64, 34)]) {
+    if (self = [super initWithFrame:CGRectMake(0, 0, 68, 36)]) {
         self.backgroundColor = [UIColor clearColor];
 
-        _trackChannelView = [[UIView alloc] initWithFrame:self.bounds];
-        _trackChannelView.layer.cornerRadius = 17.0;
-        _trackChannelView.layer.cornerCurve = kCACornerCurveContinuous;
-        _trackChannelView.userInteractionEnabled = NO;
-        _trackChannelView.layer.borderWidth = 1.0;
-        _trackChannelView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.18].CGColor;
-        _trackChannelView.clipsToBounds = YES;
-        [self addSubview:_trackChannelView];
+        // Lòng rãnh lõm phát quang (Track Well)
+        _channelTrackView = [[UIView alloc] initWithFrame:self.bounds];
+        _channelTrackView.layer.cornerRadius = 18.0;
+        if (@available(iOS 13.0, *)) {
+            _channelTrackView.layer.cornerCurve = kCACornerCurveContinuous;
+        }
+        _channelTrackView.userInteractionEnabled = NO;
+        _channelTrackView.layer.borderWidth = 1.0;
+        _channelTrackView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.15].CGColor;
+        _channelTrackView.clipsToBounds = YES;
+        [self addSubview:_channelTrackView];
 
-        _trackSubsurfaceGradient = [CAGradientLayer layer];
-        _trackSubsurfaceGradient.frame = _trackChannelView.bounds;
-        _trackSubsurfaceGradient.startPoint = CGPointMake(0.0, 0.0);
-        _trackSubsurfaceGradient.endPoint = CGPointMake(1.0, 1.0);
-        [_trackChannelView.layer addSublayer:_trackSubsurfaceGradient];
+        _trackFluidsGradient = [CAGradientLayer layer];
+        _trackFluidsGradient.frame = _channelTrackView.bounds;
+        _trackFluidsGradient.startPoint = CGPointMake(0.0, 0.0);
+        _trackFluidsGradient.endPoint = CGPointMake(1.0, 1.0);
+        [_channelTrackView.layer addSublayer:_trackFluidsGradient];
 
-        _glassDropletThumb = [[LiquidGlassView alloc] initWithFrame:CGRectMake(2, 2, 36, 30) cornerRadius:15.0];
-        _glassDropletThumb.userInteractionEnabled = NO;
-        _glassDropletThumb.layer.shadowColor = [UIColor blackColor].CGColor;
-        _glassDropletThumb.layer.shadowOpacity = 0.45;
-        _glassDropletThumb.layer.shadowOffset = CGSizeMake(0, 3);
-        _glassDropletThumb.layer.shadowRadius = 6.0;
-        [self addSubview:_glassDropletThumb];
+        // Giọt nước thủy tinh trong suốt (Liquid Glass Droplet) trượt nổi
+        _liquidDropletThumb = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(3, 3, 38, 30) cornerRadius:15.0];
+        _liquidDropletThumb.userInteractionEnabled = NO;
+        _liquidDropletThumb.layer.shadowColor = [UIColor blackColor].CGColor;
+        _liquidDropletThumb.layer.shadowOpacity = 0.55;
+        _liquidDropletThumb.layer.shadowOffset = CGSizeMake(0, 4);
+        _liquidDropletThumb.layer.shadowRadius = 8.0;
+        [self addSubview:_liquidDropletThumb];
 
         [self addTarget:self action:@selector(handleTap) forControlEvents:UIControlEventTouchUpInside];
         [self updateUIAnimated:NO];
@@ -258,24 +294,26 @@ typedef struct {
 }
 
 - (void)updateUIAnimated:(BOOL)animated {
+    // Sắc thái màu khúc xạ qua giọt nước (Chuẩn ảnh Apple Video)
     NSArray *onColors = @[
-        (id)[UIColor colorWithRed:0.20 green:0.82 blue:0.45 alpha:0.95].CGColor,
-        (id)[UIColor colorWithRed:0.10 green:0.65 blue:0.35 alpha:0.95].CGColor
+        (id)[UIColor colorWithRed:0.18 green:0.85 blue:0.45 alpha:0.95].CGColor,
+        (id)[UIColor colorWithRed:0.08 green:0.65 blue:0.32 alpha:0.95].CGColor
     ];
     NSArray *offColors = @[
-        (id)[UIColor colorWithRed:0.18 green:0.20 blue:0.25 alpha:0.80].CGColor,
-        (id)[UIColor colorWithRed:0.12 green:0.14 blue:0.18 alpha:0.80].CGColor
+        (id)[UIColor colorWithRed:0.15 green:0.17 blue:0.22 alpha:0.85].CGColor,
+        (id)[UIColor colorWithRed:0.09 green:0.11 blue:0.15 alpha:0.85].CGColor
     ];
 
-    CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 38, 2, 36, 30) : CGRectMake(2, 2, 36, 30);
+    CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 41, 3, 38, 30) : CGRectMake(3, 3, 38, 30);
 
     void (^animations)(void) = ^{
-        self.trackSubsurfaceGradient.colors = self->_on ? onColors : offColors;
-        self.glassDropletThumb.frame = thumbFrame;
+        self.trackFluidsGradient.colors = self->_on ? onColors : offColors;
+        self.liquidDropletThumb.frame = thumbFrame;
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.76 initialSpringVelocity:0.75 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+        [self.liquidDropletThumb applyFluidJiggleAnimationWithVelocity:_on ? 500.0 : -500.0];
+        [UIView animateWithDuration:0.36 delay:0 usingSpringWithDamping:0.72 initialSpringVelocity:0.85 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
     } else {
         animations();
     }
@@ -284,7 +322,7 @@ typedef struct {
 @end
 
 // ====================================================================================================
-// ROOT LIST CONTROLLER CHÍNH
+// ROOT LIST CONTROLLER CHÍNH - TÍCH HỢP LIQUID GLASS 3.0 TOÀN DIỆN
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
@@ -428,15 +466,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
     
-    // UI Liquid Glass Floating Nav Bar
-    LiquidGlassView *_liquidNavBarContainer;
-    LiquidGlassView *_activeGlassIndicator;
+    // UI Liquid Glass Floating Nav Bar (Hút sáng quang sai 3D)
+    AppleLiquidGlassView *_liquidNavBarContainer;
+    AppleLiquidGlassView *_activeGlassIndicator;
     NSMutableArray<UIButton *> *_tabButtons;
     NSArray<NSDictionary *> *_tabConfigs;
     
-    // Thấu kính Liquid Glass 3 lớp
+    // Thấu kính Liquid Glass 3 lớp phóng đại khi giữ
     UIView *_liquidGlassLensContainer;
-    LiquidGlassView *_lensGlassEffectView;
+    AppleLiquidGlassView *_lensGlassEffectView;
     UILabel *_lensTitleLabel;
 }
 @end
@@ -451,7 +489,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"";
-    self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.07 alpha:1.0];
+    self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.03 blue:0.06 alpha:1.0];
 
     _currentBottomTab = 0;
     _currentHzFpsSubTab = 0;
@@ -551,17 +589,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - Nav Bar Liquid Glass (Chuẩn Apple WWDC Concept)
 
 - (void)setupLiquidGlassNavBar {
-    CGFloat barHeight = 58.0;
+    CGFloat barHeight = 60.0;
     CGFloat barMargin = 16.0;
     CGFloat barY = self.view.bounds.size.height - barHeight - 34;
 
-    _liquidNavBarContainer = [[LiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight) cornerRadius:barHeight / 2.0];
+    _liquidNavBarContainer = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight) cornerRadius:barHeight / 2.0];
     _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
 
-    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.20 green:0.45 blue:1.0 alpha:0.50].CGColor;
+    // Đổ bóng phát quang quang sai (Caustic Glow)
+    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.55 blue:1.0 alpha:0.55].CGColor;
     _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 10);
-    _liquidNavBarContainer.layer.shadowRadius = 24.0;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.85;
+    _liquidNavBarContainer.layer.shadowRadius = 26.0;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.90;
 
     _tabConfigs = @[
         @{@"title": @"Trang Chủ", @"icon": @"house.fill",  @"tab": @0},
@@ -573,7 +612,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
 
-    _activeGlassIndicator = [[LiquidGlassView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6) cornerRadius:(barHeight - 6) / 2.0];
+    // Con trượt Liquid Glass Indicator 3 lớp quang học có vệt bóng lồi ôm sát mép
+    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6) cornerRadius:(barHeight - 6) / 2.0];
     _activeGlassIndicator.userInteractionEnabled = NO;
     [_liquidNavBarContainer addSubview:_activeGlassIndicator];
 
@@ -615,10 +655,16 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
+    NSInteger oldTab = _currentBottomTab;
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
     CGRect targetFrame = CGRectMake((index * btnWidth) + 3, 3, btnWidth - 6, _liquidNavBarContainer.bounds.size.height - 6);
+
+    CGFloat velocity = (index - oldTab) * 450.0;
+    if (animated) {
+        [_activeGlassIndicator applyFluidJiggleAnimationWithVelocity:velocity];
+    }
 
     void (^animations)(void) = ^{
         self->_activeGlassIndicator.frame = targetFrame;
@@ -632,7 +678,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.75 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+        [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.74 initialSpringVelocity:0.85 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
     } else {
         animations();
     }
@@ -643,14 +689,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.customTableView reloadData];
 }
 
-#pragma mark - Liquid Glass Lens (Thấu Kính Quang Học Lồi 3 Lớp)
+#pragma mark - Liquid Glass Lens (Thấu Kính Khúc Xạ Phóng Đại)
 
 - (void)setupLiquidGlassLens {
-    _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 84, 84)];
+    _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 86, 86)];
     _liquidGlassLensContainer.hidden = YES;
     _liquidGlassLensContainer.userInteractionEnabled = NO;
 
-    _lensGlassEffectView = [[LiquidGlassView alloc] initWithFrame:_liquidGlassLensContainer.bounds cornerRadius:42.0];
+    _lensGlassEffectView = [[AppleLiquidGlassView alloc] initWithFrame:_liquidGlassLensContainer.bounds cornerRadius:43.0];
     [_liquidGlassLensContainer addSubview:_lensGlassEffectView];
 
     _lensTitleLabel = [[UILabel alloc] initWithFrame:_liquidGlassLensContainer.bounds];
@@ -667,7 +713,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     CGPoint touchInView = [gesture locationInView:self.view];
 
     if (gesture.state == UIGestureRecognizerStateBegan) {
-        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 18);
+        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 20);
         _liquidGlassLensContainer.center = centerPoint;
         _liquidGlassLensContainer.hidden = NO;
         _liquidGlassLensContainer.alpha = 0.0;
@@ -684,7 +730,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [fb impactOccurred];
 
     } else if (gesture.state == UIGestureRecognizerStateChanged) {
-        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 18);
+        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 20);
         _liquidGlassLensContainer.center = centerPoint;
 
         for (NSInteger i = 0; i < _tabButtons.count; i++) {
@@ -836,7 +882,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - TableView Setup & Liquid Glass Layered Cells
 
 - (void)setupMainTableView {
-    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 100) style:UITableViewStyleInsetGrouped];
+    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 104) style:UITableViewStyleInsetGrouped];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
     self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.06];
@@ -937,11 +983,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [subview removeFromSuperview];
     }
 
-    cell.backgroundColor = [UIColor colorWithRed:0.07 green:0.10 blue:0.17 alpha:0.68];
-    cell.layer.cornerRadius = 14;
-    cell.layer.cornerCurve = kCACornerCurveContinuous;
-    cell.layer.borderWidth = 1.2;
-    cell.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.14].CGColor;
+    cell.backgroundColor = [UIColor colorWithRed:0.06 green:0.09 blue:0.15 alpha:0.65];
+    cell.layer.cornerRadius = 15;
+    if (@available(iOS 13.0, *)) {
+        cell.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+    cell.layer.borderWidth = 1.0;
+    cell.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
     cell.clipsToBounds = YES;
 
     cell.textLabel.textColor = [UIColor whiteColor];
