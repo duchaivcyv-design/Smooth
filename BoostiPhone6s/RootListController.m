@@ -88,6 +88,9 @@ typedef struct {
 @property (nonatomic, strong) CAGradientLayer *causticCoreLayer;
 @property (nonatomic, strong) CAGradientLayer *specularSurfaceLayer;
 @property (nonatomic, strong) CAShapeLayer *diamondBevelRim;
+@property (nonatomic, strong) CAGradientLayer *edgeLightLayer;
+@property (nonatomic, strong) CAGradientLayer *lowerReflectionLayer;
+@property (nonatomic, strong) UIVisualEffectView *glassBlurView;
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius;
 - (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel;
 @end
@@ -95,82 +98,117 @@ typedef struct {
 @implementation AppleLiquidGlassView
 
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius {
-    if ((self = [super initWithFrame:frame])) {
-        self.backgroundColor = UIColor.clearColor;
-        self.opaque = NO;
+    if (self = [super initWithFrame:frame]) {
+        self.backgroundColor = [UIColor clearColor];
         self.layer.cornerRadius = radius;
-        if (@available(iOS 13.0, *)) self.layer.cornerCurve = kCACornerCurveContinuous;
+        if (@available(iOS 13.0, *)) {
+            self.layer.cornerCurve = kCACornerCurveContinuous;
+        }
         self.clipsToBounds = YES;
 
-        // LỚP 1 — nền kính mờ rất nhẹ; dùng API UIKit công khai để ổn định trên iOS.
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
-        UIVisualEffectView *glassBackdrop = [[UIVisualEffectView alloc] initWithEffect:blur];
-        glassBackdrop.frame = self.bounds;
-        glassBackdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        glassBackdrop.userInteractionEnabled = NO;
-        glassBackdrop.layer.cornerRadius = radius;
-        if (@available(iOS 13.0, *)) glassBackdrop.layer.cornerCurve = kCACornerCurveContinuous;
-        glassBackdrop.clipsToBounds = YES;
-        [self addSubview:glassBackdrop];
+        // --- LỚP 1: BACKDROP BLUR THẬT QUA API UIKit CÔNG KHAI ---
+        // Không dùng CABackdropLayer/CAFilter private API hoặc KVC dễ crash.
+        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+        _glassBlurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+        _glassBlurView.frame = self.bounds;
+        _glassBlurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _glassBlurView.userInteractionEnabled = NO;
+        _glassBlurView.clipsToBounds = YES;
+        _glassBlurView.layer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) _glassBlurView.layer.cornerCurve = kCACornerCurveContinuous;
+        [self addSubview:_glassBlurView];
 
-        // LỚP 2 — sắc độ khúc xạ rất trong, không phủ màu đục lên nền.
-        _causticCoreLayer = [CAGradientLayer layer];
-        _causticCoreLayer.frame = self.bounds;
-        _causticCoreLayer.cornerRadius = radius;
-        _causticCoreLayer.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.20].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.035].CGColor,
-            (id)[UIColor colorWithRed:0.30 green:0.42 blue:0.62 alpha:0.10].CGColor
-        ];
-        _causticCoreLayer.locations = @[@0.0, @0.48, @1.0];
-        _causticCoreLayer.startPoint = CGPointMake(0.0, 0.0);
-        _causticCoreLayer.endPoint = CGPointMake(1.0, 1.0);
-        [self.layer addSublayer:_causticCoreLayer];
-
-        // LỚP 3 — phản xạ Fresnel: vệt sáng mảnh phía trên và ánh sáng dịu ở mép dưới.
-        _specularSurfaceLayer = [CAGradientLayer layer];
-        _specularSurfaceLayer.frame = self.bounds;
-        _specularSurfaceLayer.cornerRadius = radius;
-        _specularSurfaceLayer.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.62].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.16].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.22].CGColor
-        ];
-        _specularSurfaceLayer.locations = @[@0.0, @0.035, @0.72, @1.0];
-        _specularSurfaceLayer.startPoint = CGPointMake(0.0, 0.0);
-        _specularSurfaceLayer.endPoint = CGPointMake(1.0, 1.0);
-        [self.layer addSublayer:_specularSurfaceLayer];
-
+        // --- LỚP 2: TÁN SẮC QUANG SAI ĐA SẮC RÌA MÉP (CHROMATIC DISPERSION) ---
         _chromaticFringeLayer = [CAGradientLayer layer];
         _chromaticFringeLayer.frame = self.bounds;
         _chromaticFringeLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _chromaticFringeLayer.cornerCurve = kCACornerCurveContinuous;
+        }
         _chromaticFringeLayer.colors = @[
-            (id)[UIColor colorWithRed:0.58 green:0.82 blue:1.0 alpha:0.10].CGColor,
+            (id)[UIColor colorWithRed:0.25 green:0.80 blue:1.0 alpha:0.16].CGColor,
+            (id)[UIColor colorWithRed:0.75 green:0.30 blue:1.0 alpha:0.10].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithRed:0.86 green:0.65 blue:1.0 alpha:0.07].CGColor
+            (id)[UIColor colorWithRed:0.20 green:0.95 blue:0.7 alpha:0.12].CGColor
         ];
-        _chromaticFringeLayer.locations = @[@0.0, @0.52, @1.0];
+        _chromaticFringeLayer.locations = @[@0.0, @0.12, @0.82, @1.0];
         _chromaticFringeLayer.startPoint = CGPointMake(0.0, 0.0);
         _chromaticFringeLayer.endPoint = CGPointMake(1.0, 1.0);
         [self.layer addSublayer:_chromaticFringeLayer];
 
+        // --- LỚP 3: LÒNG THỦY TINH ĐẶC & TỤ QUANG NỘI TẠI (CAUSTIC CORE) ---
+        _causticCoreLayer = [CAGradientLayer layer];
+        _causticCoreLayer.frame = self.bounds;
+        _causticCoreLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _causticCoreLayer.cornerCurve = kCACornerCurveContinuous;
+        }
+        _causticCoreLayer.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.14].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.04].CGColor,
+            (id)[UIColor colorWithRed:0.10 green:0.25 blue:0.55 alpha:0.10].CGColor
+        ];
+        _causticCoreLayer.locations = @[@0.0, @0.45, @1.0];
+        _causticCoreLayer.startPoint = CGPointMake(0.1, 0.0);
+        _causticCoreLayer.endPoint = CGPointMake(0.9, 1.0);
+        [self.layer addSublayer:_causticCoreLayer];
+
+        // --- LỚP 4: BỀ MẶT PHẢN XẠ FRESNEL 3D & VỆT BÓNG QUANG HỌC ---
+        _specularSurfaceLayer = [CAGradientLayer layer];
+        _specularSurfaceLayer.frame = self.bounds;
+        _specularSurfaceLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _specularSurfaceLayer.cornerCurve = kCACornerCurveContinuous;
+        }
+        _specularSurfaceLayer.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.62].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.22].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.20].CGColor
+        ];
+        _specularSurfaceLayer.locations = @[@0.0, @0.08, @0.75, @1.0];
+        _specularSurfaceLayer.startPoint = CGPointMake(0.05, 0.0);
+        _specularSurfaceLayer.endPoint = CGPointMake(0.95, 1.0);
+        [self.layer addSublayer:_specularSurfaceLayer];
+
+        // --- LỚP 5: VIỀN VÁT SIÊU MỎNG KIM CƯƠNG 0.8PT ---
         _diamondBevelRim = [CAShapeLayer layer];
         _diamondBevelRim.path = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:radius].CGPath;
-        _diamondBevelRim.fillColor = UIColor.clearColor.CGColor;
-        _diamondBevelRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.42].CGColor;
-        _diamondBevelRim.lineWidth = 0.7;
+        _diamondBevelRim.fillColor = [UIColor clearColor].CGColor;
+        _diamondBevelRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.85].CGColor;
+        _diamondBevelRim.lineWidth = 1.0;
         [self.layer addSublayer:_diamondBevelRim];
 
-        // Vệt phản sáng mỏng ở cạnh trong giúp viên kính có chiều sâu mà không bị nhựa.
-        CAShapeLayer *innerRim = [CAShapeLayer layer];
-        CGRect innerRect = CGRectInset(self.bounds, 1.2, 1.2);
-        innerRim.path = [UIBezierPath bezierPathWithRoundedRect:innerRect cornerRadius:MAX(0.0, radius - 1.2)].CGPath;
-        innerRim.fillColor = UIColor.clearColor.CGColor;
-        innerRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.10].CGColor;
-        innerRim.lineWidth = 0.6;
-        innerRim.name = @"LiquidGlassInnerRim";
-        [self.layer addSublayer:innerRim];
+        // --- LỚP 6: VIỀN FRESNEL MỎNG, SÁNG KHÔNG ĐỀU ---
+        _edgeLightLayer = [CAGradientLayer layer];
+        _edgeLightLayer.frame = self.bounds;
+        _edgeLightLayer.cornerRadius = radius;
+        _edgeLightLayer.startPoint = CGPointMake(0.0, 0.0);
+        _edgeLightLayer.endPoint = CGPointMake(1.0, 1.0);
+        _edgeLightLayer.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.58].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.04].CGColor,
+            (id)[UIColor colorWithRed:0.52 green:0.78 blue:1.0 alpha:0.16].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.30].CGColor
+        ];
+        _edgeLightLayer.locations = @[@0.0, @0.28, @0.72, @1.0];
+        _edgeLightLayer.mask = _diamondBevelRim;
+        [self.layer addSublayer:_edgeLightLayer];
+
+        // --- LỚP 7: PHẢN CHIẾU ĐÁY KÍNH, RẤT NHẸ ---
+        _lowerReflectionLayer = [CAGradientLayer layer];
+        _lowerReflectionLayer.frame = self.bounds;
+        _lowerReflectionLayer.cornerRadius = radius;
+        _lowerReflectionLayer.startPoint = CGPointMake(0.0, 0.0);
+        _lowerReflectionLayer.endPoint = CGPointMake(0.0, 1.0);
+        _lowerReflectionLayer.colors = @[
+            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
+            (id)[UIColor colorWithRed:0.72 green:0.84 blue:1.0 alpha:0.12].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.24].CGColor
+        ];
+        _lowerReflectionLayer.locations = @[@0.0, @0.55, @0.88, @1.0];
+        [self.layer addSublayer:_lowerReflectionLayer];
     }
     return self;
 }
@@ -179,32 +217,28 @@ typedef struct {
     [super layoutSubviews];
     CGRect b = self.bounds;
     CGFloat r = self.layer.cornerRadius;
-    for (UIView *view in self.subviews) {
-        view.frame = b;
-        view.layer.cornerRadius = r;
-    }
-    _causticCoreLayer.frame = b;
+    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:b cornerRadius:r];
+
+    if (_refractionBackdropLayer) _refractionBackdropLayer.frame = b;
+    _glassBlurView.frame = b;
     _chromaticFringeLayer.frame = b;
+    _causticCoreLayer.frame = b;
     _specularSurfaceLayer.frame = b;
-    _diamondBevelRim.path = [UIBezierPath bezierPathWithRoundedRect:b cornerRadius:r].CGPath;
-    for (CALayer *layer in self.layer.sublayers) {
-        if ([layer.name isEqualToString:@"LiquidGlassInnerRim"]) {
-            CGRect inner = CGRectInset(b, 1.2, 1.2);
-            layer.frame = b;
-            ((CAShapeLayer *)layer).path = [UIBezierPath bezierPathWithRoundedRect:inner cornerRadius:MAX(0.0, r - 1.2)].CGPath;
-        }
-    }
+    _diamondBevelRim.path = path.CGPath;
+    _edgeLightLayer.frame = b;
+    _edgeLightLayer.cornerRadius = r;
+    _lowerReflectionLayer.frame = b;
+    _lowerReflectionLayer.cornerRadius = r;
 }
 
 - (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel {
-    CGFloat stretch = MIN(MAX(fabs(vel) / 3000.0, 0.015), 0.055);
-    CGAffineTransform transform = vel >= 0
-        ? CGAffineTransformMakeScale(1.0 + stretch, 1.0 - stretch * 0.35)
-        : CGAffineTransformMakeScale(1.0 - stretch * 0.25, 1.0 + stretch);
-    [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    CGFloat stretch = fmin(fmax(fabs(vel) / 800.0, 0.05), 0.22);
+    CGAffineTransform transform = (vel >= 0) ? CGAffineTransformMakeScale(1.0 + stretch, 1.0 - (stretch * 0.5)) : CGAffineTransformMakeScale(1.0 - (stretch * 0.4), 1.0 + stretch);
+
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.transform = transform;
     } completion:^(BOOL finished) {
-        [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.72 initialSpringVelocity:0.65 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:1.2 options:UIViewAnimationOptionCurveEaseOut animations:^{
             self.transform = CGAffineTransformIdentity;
         } completion:nil];
     }];
@@ -286,12 +320,12 @@ typedef struct {
 - (void)updateUIAnimated:(BOOL)animated {
     // Sắc thái màu khúc xạ qua giọt nước (Chuẩn ảnh Apple Video)
     NSArray *onColors = @[
-        (id)[UIColor colorWithRed:0.18 green:0.85 blue:0.45 alpha:0.82].CGColor,
-        (id)[UIColor colorWithRed:0.08 green:0.65 blue:0.32 alpha:0.76].CGColor
+        (id)[UIColor colorWithRed:0.18 green:0.85 blue:0.45 alpha:0.95].CGColor,
+        (id)[UIColor colorWithRed:0.08 green:0.65 blue:0.32 alpha:0.95].CGColor
     ];
     NSArray *offColors = @[
-        (id)[UIColor colorWithRed:0.15 green:0.17 blue:0.22 alpha:0.58].CGColor,
-        (id)[UIColor colorWithRed:0.09 green:0.11 blue:0.15 alpha:0.52].CGColor
+        (id)[UIColor colorWithRed:0.15 green:0.17 blue:0.22 alpha:0.85].CGColor,
+        (id)[UIColor colorWithRed:0.09 green:0.11 blue:0.15 alpha:0.85].CGColor
     ];
 
     CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 41, 3, 38, 30) : CGRectMake(3, 3, 38, 30);
@@ -621,11 +655,17 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [btn setTitleColor:(i == 0) ? [UIColor whiteColor] : [UIColor colorWithWhite:0.75 alpha:1.0] forState:UIControlStateNormal];
         btn.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
 
+        // Bố trí icon + nhãn ổn định, tránh đè chữ ở máy màn hình nhỏ.
+        btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+        btn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+        btn.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        btn.titleLabel.textAlignment = NSTextAlignmentCenter;
+        btn.titleLabel.adjustsFontSizeToFitWidth = YES;
+        btn.titleLabel.minimumScaleFactor = 0.78;
+        btn.titleLabel.lineBreakMode = NSLineBreakByClipping;
         CGFloat spacing = 3.0;
-        CGSize imageSize = btn.imageView.image.size;
-        btn.titleEdgeInsets = UIEdgeInsetsMake(0, -imageSize.width, -(imageSize.height + spacing), 0);
-        CGSize titleSize = [btn.titleLabel.text sizeWithAttributes:@{NSFontAttributeName: btn.titleLabel.font}];
-        btn.imageEdgeInsets = UIEdgeInsetsMake(-(titleSize.height + spacing), 0, 0, -titleSize.width);
+        btn.titleEdgeInsets = UIEdgeInsetsMake(0, -btn.imageView.bounds.size.width, -(btn.imageView.bounds.size.height + spacing), 0);
+        btn.imageEdgeInsets = UIEdgeInsetsMake(-(btn.titleLabel.intrinsicContentSize.height + spacing), 0, 0, -btn.titleLabel.intrinsicContentSize.width);
 
         [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
 
@@ -876,6 +916,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
     self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.06];
+    self.customTableView.contentInset = UIEdgeInsetsMake(0, 0, 92, 0);
+    self.customTableView.scrollIndicatorInsets = UIEdgeInsetsMake(0, 0, 92, 0);
     self.customTableView.delegate = self;
     self.customTableView.dataSource = self;
     [self.view addSubview:self.customTableView];
