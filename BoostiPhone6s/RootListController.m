@@ -79,12 +79,13 @@ typedef struct {
 #endif
 
 // ====================================================================================================
-// COMPONENT: LIQUID GLASS VIEW CONTAINER (HIỆU ỨNG KHÚC XẠ THỦY TINH QUANG HỌC)
+// 1. LIQUID GLASS VIEW CONTAINER (HIỆU ỨNG KHÚC XẠ THỦY TINH QUANG HỌC)
 // ====================================================================================================
 @interface LiquidGlassView : UIView
 @property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) CAGradientLayer *specularHighlight;
 @property (nonatomic, strong) CAShapeLayer *refractionRimLayer;
+- (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius;
 @end
 
 @implementation LiquidGlassView
@@ -96,7 +97,7 @@ typedef struct {
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.clipsToBounds = YES;
 
-        // 1. Lớp làm mờ khúc xạ nền (Backdrop Blur)
+        // Lớp làm mờ khúc xạ nền (Backdrop Blur)
         UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
         _blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
         _blurView.frame = self.bounds;
@@ -105,7 +106,7 @@ typedef struct {
         _blurView.alpha = 0.88;
         [self addSubview:_blurView];
 
-        // 2. Lớp vệt sáng Fresnel & Gradient bề mặt lồi (Specular Glare)
+        // Lớp vệt sáng Fresnel & Gradient bề mặt lồi (Specular Glare)
         _specularHighlight = [CAGradientLayer layer];
         _specularHighlight.frame = self.bounds;
         _specularHighlight.cornerRadius = radius;
@@ -121,7 +122,7 @@ typedef struct {
         _specularHighlight.endPoint = CGPointMake(1.0, 1.0);
         [self.layer addSublayer:_specularHighlight];
 
-        // 3. Viền khúc xạ viền mép ngoài (Caustic Rim Stroke)
+        // Viền khúc xạ mép ngoài (Caustic Rim Stroke)
         _refractionRimLayer = [CAShapeLayer layer];
         _refractionRimLayer.path = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:radius].CGPath;
         _refractionRimLayer.fillColor = [UIColor clearColor].CGColor;
@@ -142,7 +143,7 @@ typedef struct {
 @end
 
 // ====================================================================================================
-// COMPONENT 1: CÔNG TẮC LIQUID GLASS CAPSULE SWITCH (CHUẨN ẢNH 5)
+// 2. LIQUID GLASS CAPSULE SWITCH (CÔNG TẮC CON NHỘNG THỦY TINH TRƯỢT)
 // ====================================================================================================
 @interface LiquidCapsuleSwitch : UIControl
 @property (nonatomic, assign) BOOL on;
@@ -202,7 +203,7 @@ typedef struct {
 }
 
 - (void)updateUIAnimated:(BOOL)animated {
-    UIColor *onColor = [UIColor colorWithRed:0.22 green:0.75 blue:0.42 alpha:0.95]; // Xanh pastel ảnh 5
+    UIColor *onColor = [UIColor colorWithRed:0.22 green:0.75 blue:0.42 alpha:0.95];
     UIColor *offColor = [UIColor colorWithRed:0.18 green:0.20 blue:0.24 alpha:0.75];
 
     CGRect thumbFrame = _on ? CGRectMake(self.bounds.size.width - 36, 2, 34, 28) : CGRectMake(2, 2, 34, 28);
@@ -372,7 +373,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<UIButton *> *_tabButtons;
     NSArray<NSDictionary *> *_tabConfigs;
     
-    // Thấu kính Liquid Glass khi nhấn giữ (Ảnh 2 / Shader Lens)
+    // Thấu kính Liquid Glass khi nhấn giữ (Ảnh 2)
     UIView *_liquidGlassLensContainer;
     LiquidGlassView *_lensGlassEffectView;
     UILabel *_lensTitleLabel;
