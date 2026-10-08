@@ -2876,14 +2876,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (CHỐNG ĐEN APP, ÉP XUẤT THẲNG KHUNG HÌNH ĐẦU, BẢO VỆ SAFEMODE)
+// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC - ÉP VƯỢT KHUNG HÌNH ĐẦU TIÊN (ZERO BLACK SCREEN)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
 
 %hook SBAppLaunchSettings
 
-// [ĐÃ ÉP KỊCH TRẦN]: Triệt tiêu sạch toàn bộ thời gian chờ trước khi bung hoạt ảnh
 - (double)delayBeforeAppLaunch {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
         return 0.0;
@@ -2891,18 +2890,16 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
-// [ĐÃ ÉP KỊCH TRẦN]: Phóng to icon siêu tốc 0.12s không lệch tỷ lệ
 - (double)zoomDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.12;
+        return 0.10;
     }
     return %orig;
 }
 
-// [ĐÃ ÉP KỊCH TRẦN]: Hoàn tất chuyển cảnh phóng app trong 0.12s
 - (double)launchDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.12;
+        return 0.10;
     }
     return %orig;
 }
@@ -2911,10 +2908,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook SBSplashBoardController
 
-// [ĐÃ ÉP CHỐNG ĐEN APP]: Neo giữ snapshot đúng 0.03s để GPU kịp gắn context, triệt tiêu chớp đen
 - (double)splashScreenDelay {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.03;
+        return 0.0;
     }
     return %orig;
 }
@@ -2934,7 +2930,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook UIApplication
 
-// [ĐÃ ÉP TOÀN DIỆN]: CƯỚP QUYỀN P-CORE VÀ XUẤT THẲNG FRAME ĐẦU TIÊN QUA CATRANSACTION KHÔNG NGHẼN RUNLOOP
+// Loại bỏ hoàn toàn vòng lặp setNeedsDisplay cưỡng bức; giữ luồng User-Interactive thông suốt
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     %orig;
 
@@ -2944,25 +2940,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
         } else {
-            // Ép luồng chính của app con lên mức User-Interactive cao nhất
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-            // Bắt buộc render khung hình đầu tiên qua CATransaction mà không block luồng compositor
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [CATransaction begin];
-                [CATransaction setDisableActions:YES];
-
-                for (UIWindow *win in [self windows]) {
-                    if (win && !win.hidden && win.layer) {
-                        [win.layer setNeedsDisplay];
-                        if (win.rootViewController && win.rootViewController.view) {
-                            [win.rootViewController.view.layer setNeedsDisplay];
-                        }
-                    }
-                }
-
-                [CATransaction commit];
-            });
         }
     }
 }
@@ -4272,15 +4250,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 17: COREANIMATION RENDER SERVER GOVERNOR (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - ĐÃ CẮT BỎ HOOK RỖNG)
-// (KẾT NỐI: Ultra Responsiveness Pro + Cách Ly Render Pipeline App Gốc)
+// NHÓM 17: COREANIMATION RENDER SERVER GOVERNOR (ĐÃ ÉP ĐỒNG BỘ GPU - TRIỆT TIÊU ĐEN APP)
 // ====================================================================================================
 
 %group Group_CoreAnimation_RenderServer_Governor
 
 %hook NSRunLoop
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép duy trì QoS cao nhất cho RunLoop luồng chính khi kích hoạt Ultra Responsiveness
 - (void)runMode:(NSRunLoopMode)mode beforeDate:(NSDate *)limitDate {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread] && (CFG285.ultraResponsivenessPro || g_isRateLockedV285)) {
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -4292,10 +4268,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook CALayer
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép GPU vẽ bất đồng bộ trong background thread khi bật Cách Ly Render Pipeline
+// Cưỡng bức trả về NO cho app con để GPU vẽ đồng bộ trực tiếp, chống rỗng buffer đen màn hình
 - (BOOL)drawsAsynchronously {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && CFG285.isolateRenderPipeline && !Titanium_IsSpringBoard()) {
-        return YES;
+    if (!Titanium_IsSpringBoard()) {
+        return NO;
     }
     return %orig;
 }
@@ -4304,7 +4280,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook FBScene
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép khóa nhịp SpringBoard ngay khi cập nhật Scene chuyển cảnh
 - (void)updateSettings:(id)settings withTransitionContext:(id)context {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_lastInteractionMachTime = mach_absolute_time();
