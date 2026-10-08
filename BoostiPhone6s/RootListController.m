@@ -146,7 +146,6 @@ typedef struct {
         _chromaticFringeLayer.locations = @[@0.0, @0.48, @1.0];
         _chromaticFringeLayer.startPoint = CGPointMake(0.0, 0.0);
         _chromaticFringeLayer.endPoint = CGPointMake(1.0, 1.0);
-        _chromaticFringeLayer.userInteractionEnabled = NO;
         [self.layer addSublayer:_chromaticFringeLayer];
 
         _causticCoreLayer = [CAGradientLayer layer];
@@ -159,7 +158,6 @@ typedef struct {
         _causticCoreLayer.locations = @[@0.0, @0.42];
         _causticCoreLayer.startPoint = CGPointMake(0.15, 0.0);
         _causticCoreLayer.endPoint = CGPointMake(0.85, 1.0);
-        _causticCoreLayer.userInteractionEnabled = NO;
         [self.layer addSublayer:_causticCoreLayer];
 
         _specularSurfaceLayer = [CAGradientLayer layer];
@@ -173,7 +171,6 @@ typedef struct {
         _specularSurfaceLayer.locations = @[@0.0, @0.12, @0.50];
         _specularSurfaceLayer.startPoint = CGPointMake(0.1, 0.0);
         _specularSurfaceLayer.endPoint = CGPointMake(0.9, 0.75);
-        _specularSurfaceLayer.userInteractionEnabled = NO;
         [self.layer addSublayer:_specularSurfaceLayer];
 
         _diamondBevelRim = [CAShapeLayer layer];
@@ -181,7 +178,6 @@ typedef struct {
         _diamondBevelRim.fillColor = UIColor.clearColor.CGColor;
         _diamondBevelRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.22].CGColor;
         _diamondBevelRim.lineWidth = 0.65;
-        _diamondBevelRim.userInteractionEnabled = NO;
         [self.layer addSublayer:_diamondBevelRim];
     }
     return self;
