@@ -4761,14 +4761,14 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 // ====================================================================================================
 // HÀM KHỞI TẠO DUY NHẤT: KHẮC PHỤC TRIỆT ĐỂ LỖI RE-%INIT TRÊN LOGOS / THEOS
 // ====================================================================================================
-
+/*
 static inline void Init_CAWindowServer_Hooks(void) {
     static dispatch_once_t s_wsInitOnce;
     dispatch_once(&s_wsInitOnce, ^{
         %init(Group_CAWindowServer_Absolute_Dominance);
     });
 }
-
+*/
 // ====================================================================================================
 // RUNTIME INITIALIZER: PHÂN LẬP RÕ RÀNG - TRIỆT TIÊU 100% ĐEN APP CON
 // ====================================================================================================
