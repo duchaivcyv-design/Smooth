@@ -2057,7 +2057,8 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 // THIẾT LẬP CHU KỲ REALTIME TOÀN HỆ THỐNG (CHẠY TRÊN CẢ SPRINGBOARD VÀ TẤT CẢ ỨNG DỤNG THỨ BA)
 // ====================================================================================================
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép ràng buộc thời gian thực Mach Thread Constraint chuẩn xác cho từng Hz
+// [ĐÃ SỬA TRIỆT ĐỂ]: Loại bỏ THREAD_TIME_CONSTRAINT_POLICY gây nghẽn Scheduler Kernel XNU.
+// Chuyển sang QOS_CLASS_USER_INTERACTIVE chuẩn POSIX để giữ luồng luôn chạy ở mức ưu tiên tối đa mà không bị bóp xung.
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (!Titanium_IsSpringBoard()) {
         Titanium_ReloadSharedSyncStateV285();
@@ -2066,61 +2067,12 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (CFG285 && !CFG285.enabled) return;
     if (g_syncPayloadV285.masterEnabled == 0) return;
 
-    if (g_isDeviceChargingV285) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        return;
-    }
-
-    static __thread int s_appliedHz = 0;
-    if (s_appliedHz == targetHz && targetHz > 0) return;
-
-    static mach_timebase_info_data_t s_timebase;
-    static dispatch_once_t s_onceToken;
-    dispatch_once(&s_onceToken, ^{
-        mach_timebase_info(&s_timebase);
-        if (s_timebase.numer == 0) s_timebase.numer = 1;
-        if (s_timebase.denom == 0) s_timebase.denom = 1;
-    });
-
-    if (targetHz < 15) targetHz = 60;
-    if (targetHz > 144) targetHz = 144;
-
-    uint64_t period_ns = 1000000000ULL / (uint64_t)targetHz;
-    uint64_t computation_ns = (period_ns * 40ULL) / 100ULL;
-    uint64_t constraint_ns  = (period_ns * 88ULL) / 100ULL;
-
-    thread_time_constraint_policy_data_t policy;
-    policy.period      = (uint32_t)((period_ns * s_timebase.denom) / s_timebase.numer);
-    policy.computation = (uint32_t)((computation_ns * s_timebase.denom) / s_timebase.numer);
-    policy.constraint  = (uint32_t)((constraint_ns * s_timebase.denom) / s_timebase.numer);
-    policy.preemptible = 1;
-
-    mach_port_t threadPort = mach_thread_self();
-    kern_return_t kr = thread_policy_set(threadPort,
-                                         THREAD_TIME_CONSTRAINT_POLICY,
-                                         (thread_policy_t)&policy,
-                                         THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-
-    // [ĐÃ ÉP]: Giải phóng descriptor Mach Port ngay lập tức, chống cạn kiệt tài nguyên hạt nhân
-    mach_port_deallocate(mach_task_self(), threadPort);
-
-    if (kr == KERN_SUCCESS) {
-        s_appliedHz = targetHz;
-    } else {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    }
+    // Gán trực tiếp quyền ưu tiên giao diện thời gian thực, không áp đặt hạn mức thời gian chết
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 }
 
 static inline void Titanium_EnforceMachFrameConstraint(void) {
-    int targetHz = 144;
-    if (CFG285 && [CFG285 respondsToSelector:@selector(targetHz)]) {
-        targetHz = (int)CFG285.targetHz;
-    } else if (g_cachedResolvedHz > 0) {
-        targetHz = (int)g_cachedResolvedHz;
-    } else if (g_syncPayloadV285.targetHz > 0) {
-        targetHz = (int)g_syncPayloadV285.targetHz;
-    }
-    Titanium_EnforceMachFrameConstraintDynamic(targetHz >= 15 ? targetHz : 144);
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 }
 
 // ====================================================================================================
@@ -2420,16 +2372,25 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
+// ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG (ĐỒNG BỘ CHU KỲ PHẦN CỨNG)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
     
+    // 1. Chế độ tiết kiệm pin: Khóa cứng sàn và trần 60Hz
     if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
         return 60;
     }
 
+    // 2. BẢO VỆ PHẦN CỨNG: Nếu thiết bị không có màn 120Hz vật lý (màn 60Hz chuẩn),
+    // BẮT BUỘC trả về 60Hz để đồng bộ chính xác với nhịp VBLANK 16.6ms của màn hình.
+    // Tuyệt đối không ép 120/144 lên tấm nền 60Hz để tránh gây nghẽn hàng đợi (0 FPS freeze).
+    if (!HardwareHasNative120Hz()) {
+        return 60;
+    }
+
+    // 3. Đối với thiết bị có ProMotion thật (13 Pro trở lên / iPad Pro):
     NSInteger userHz = g_cachedResolvedHz;
     if (userHz <= 0 && CFG285) {
         userHz = (NSInteger)CFG285.targetHz;
@@ -2437,31 +2398,16 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (userHz <= 0 && g_syncPayloadV285.targetHz > 0) {
         userHz = (NSInteger)g_syncPayloadV285.targetHz;
     }
-    
-    // Khóa sàn tối thiểu luôn ở mức 60Hz khi bật tweak, trần 144Hz
+
+    // Khóa trần ở 120Hz theo đúng giới hạn phần cứng ProMotion của Apple
     if (userHz < 60) userHz = 60;
-    if (userHz > 144) userHz = 144;
+    if (userHz > 120) userHz = 120;
     return userHz;
 }
 
+// Đồng bộ trực tiếp 1:1 với Refresh Rate để loại bỏ hiện tượng lệch nhịp giữa khung vẽ và quét màn hình
 static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
-    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
-    
-    if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
-        return 60;
-    }
-
-    NSInteger userFPS = g_cachedResolvedFPS;
-    if (userFPS <= 0 && CFG285) {
-        userFPS = (NSInteger)CFG285.targetFPS;
-    }
-    if (userFPS <= 0 && g_syncPayloadV285.targetFPS > 0) {
-        userFPS = (NSInteger)g_syncPayloadV285.targetFPS;
-    }
-    
-    if (userFPS < 60) userFPS = 60;
-    if (userFPS > 144) userFPS = 144;
-    return userFPS;
+    return Titanium_GetTargetConfiguredHz();
 }
 
 // ====================================================================================================
@@ -4536,20 +4482,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 extern "C" {
 #endif
     CFPropertyListRef MGCopyAnswer(CFStringRef property);
-    Boolean IOHIDEventSystemClientSetProperty(void *client, CFStringRef key, CFTypeRef property);
 #ifdef __cplusplus
 }
 #endif
 
 // ====================================================================================================
-// NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
-// (KẾT NỐI: Ép Xung ProMotion Cố Định + Tăng Tần Số Lấy Mẫu Cảm Ứng 1000Hz + Ổ Khóa App)
-// (AN TOÀN TUYỆT ĐỐI: BẢO VỆ BỘ NHỚ CFRETAIN TRÁNH CRASH MEMORY CORRUPTION)
+// NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN PROMOTION (ĐÃ GỠ BỎ HOOK IOHID TRÁNH BÓP CẢM ỨNG VỀ 1HZ)
 // ====================================================================================================
 
 %group Group_Hardware_ProMotion_Overclock
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép toàn bộ cờ Variable Refresh Rate & ProMotion của Apple qua MobileGestalt
+// Ép toàn bộ cờ Variable Refresh Rate & ProMotion của Apple qua MobileGestalt
 %hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
     if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && 
         (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
@@ -4565,115 +4508,78 @@ extern "C" {
     return %orig(property);
 }
 
-// [ĐÃ SỬA DÙNG CON TRỎ VOID*]: Tránh xung đột type trên SDK iOS, ép polling 1000Hz an toàn
-%hookf(Boolean, IOHIDEventSystemClientSetProperty, void *client, CFStringRef key, CFTypeRef property) {
-    if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && 
-        (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-        if (CFEqual(key, CFSTR("ReportInterval")) || CFEqual(key, CFSTR("HIDReportInterval"))) {
-            int interval = 1000;
-            CFNumberRef num = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &interval);
-            Boolean res = %orig(client, key, num);
-            if (num) CFRelease(num);
-            return res;
-        }
-    }
-    return %orig(client, key, property);
-}
+// [ĐÃ LOẠI BỎ HOÀN TOÀN HOOK IOHIDEventSystemClientSetProperty ĐỂ TRẢ CẢM ỨNG VỀ TẦN SỐ TỐI ĐA GỐC CỦA MÁY]
 
 %end
 
 // ====================================================================================================
-// NHÓM 2: ÉP CỨNG CAWINDOWSERVER TẦNG GỐC PHẦN CỨNG (DÀNH CHO TIẾN TRÌNH SPRINGBOARD)
+// NHÓM 2: ÉP CỨNG CAWINDOWSERVER TẦNG GỐC PHẦN CỨNG (CHUẨN HÓA FLOAT - TRIỆT TIÊU 100% LỖI 0 HZ)
 // ====================================================================================================
 
 %group Group_CAWindowServer_Absolute_Dominance
 
 %hook CAWindowServerDisplay
 
-// 1. Ép thời gian tồn tại tối thiểu của 1 khung hình (1/144s ≈ 0.00694s)
-- (double)minimumFrameDuration {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
-    return (1.0 / targetHz);
-}
-
-- (void)setMinimumFrameDuration:(double)duration {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
-    %orig(1.0 / targetHz);
-}
-
-// 2. KHÓA CHẶT MỨC SÀN PHẦN CỨNG: CẤM TỤT TẦN SỐ QUÉT VỀ 60HZ / 30HZ KHI BUÔNG TAY
-- (double)minimumRefreshRate {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
+// 1. SÀN TẦN SỐ QUÉT PHẦN CỨNG: BẮT BUỘC KIỂU FLOAT CHỐNG RỖNG THANH GHI S0
+- (float)minimumRefreshRate {
+    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+    if (targetHz < 60.0f) targetHz = 60.0f;
     return targetHz;
 }
 
-- (void)setMinimumRefreshRate:(double)rate {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
+- (void)setMinimumRefreshRate:(float)rate {
+    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+    if (targetHz < 60.0f) targetHz = 60.0f;
     %orig(targetHz);
 }
 
-// 3. Ép trần tần số quét tối đa của phần cứng
-- (double)maximumRefreshRate {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
+// 2. TRẦN TẦN SỐ QUÉT PHẦN CỨNG: BẮT BUỘC KIỂU FLOAT
+- (float)maximumRefreshRate {
+    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+    if (targetHz < 60.0f) targetHz = 60.0f;
     return targetHz;
 }
 
-- (void)setMaximumRefreshRate:(double)rate {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
+- (void)setMaximumRefreshRate:(float)rate {
+    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+    if (targetHz < 60.0f) targetHz = 60.0f;
     %orig(targetHz);
 }
 
-// 4. Khóa cứng tần số quét lý tưởng (Ideal Rate) không cho dao động
-- (double)idealRefreshRate {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
+// 3. TẦN SỐ QUÉT LÝ TƯỞNG (IDEAL RATE): BẮT BUỘC KIỂU FLOAT
+- (float)idealRefreshRate {
+    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+    if (targetHz < 60.0f) targetHz = 60.0f;
     return targetHz;
 }
 
-- (void)setIdealRefreshRate:(double)rate {
-    double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
-    if (targetHz > 144.0) targetHz = 144.0;
+- (void)setIdealRefreshRate:(float)rate {
+    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+    if (targetHz < 60.0f) targetHz = 60.0f;
     %orig(targetHz);
-}
-
-// 5. Kích hoạt cờ hỗ trợ tần số quét biến thiên thực sự (VRR)
-- (BOOL)supportsVariableRefreshRate {
-    return YES;
 }
 
 %end
 
 %hook CADisplay
 
-- (BOOL)supportsVariableRefreshRate {
+- (BOOL)supportsDynamicRefresh {
+    return YES;
+}
+
+- (BOOL)hasDynamicDisplayMode {
     return YES;
 }
 
 - (NSInteger)preferredFPS {
     NSInteger targetHz = (NSInteger)Titanium_GetTargetConfiguredHz();
     if (targetHz < 60) targetHz = 60;
-    if (targetHz > 144) targetHz = 144;
     return targetHz;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
     NSInteger targetHz = (NSInteger)Titanium_GetTargetConfiguredHz();
     if (targetHz < 60) targetHz = 60;
-    if (targetHz > 144) targetHz = 144;
     %orig(targetHz);
 }
 
