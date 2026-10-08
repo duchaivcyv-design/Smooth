@@ -3,7 +3,7 @@ name: Build BoostiPhone6s Rootless Deb
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: 
 
 permissions:
   contents: write
@@ -11,62 +11,67 @@ permissions:
 jobs:
   build-deb:
     runs-on: macos-14
-    env:
-      THEOS: /Users/runner/theos
-      THEOS_PACKAGE_SCHEME: rootless
-      THEOS_NO_AUTO_UPDATE: 1
-      THEOS_PACKAGE_COMPRESSION: gzip
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          depth: 1
 
-      # Cache công cụ dpkg
-      - name: Cache Homebrew dpkg
-        id: cache-brew
-        uses: actions/cache@v4
-        with:
-          path: |
-            /opt/homebrew/Cellar/dpkg
-            /opt/homebrew/bin/dpkg-deb
-          key: brew-dpkg-macos14
-
-      - name: Setup Tools
+      # --- BƯỚC 1: CÀI ĐẶT CÔNG CỤ CẦN THIẾT ---
+      - name: Setup Tools & Environment
         run: |
-          echo "$THEOS/bin" >> $GITHUB_PATH
-          if ! command -v dpkg-deb &> /dev/null; then
-            export HOMEBREW_NO_AUTO_UPDATE=1
-            export HOMEBREW_NO_INSTALL_CLEANUP=1
-            brew install dpkg
-          fi
-
-      # Cache Theos & SDK 16.5
-      - name: Cache Theos & SDK
-        id: cache-theos
-        uses: actions/cache@v4
-        with:
-          path: /Users/runner/theos
-          key: theos-sdk-16.5-v2
-
-      - name: Setup Theos & SDK
-        if: steps.cache-theos.outputs.cache-hit != 'true'
-        run: |
-          rm -rf "$THEOS"
-          git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
+          THEOS_PATH="$HOME/theos"
+          echo "THEOS=$THEOS_PATH" >> $GITHUB_ENV
+          echo "$THEOS_PATH/bin" >> $GITHUB_PATH
+          echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
+          echo "THEOS_NO_AUTO_UPDATE=1" >> $GITHUB_ENV
           
-          mkdir -p "$THEOS/sdks"
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          # Cài đặt dpkg, coreutils và ldid cho môi trường macOS runner
+          brew install dpkg coreutils ldid
+
+      # --- BƯỚC 2: CLONE THEOS & TẢI IPHONEOS 16.5 SDK CHUẨN XÁC ---
+      - name: Clone Theos & Install SDK
+        run: |
+          TARGET_DIR="${{ env.THEOS }}"
+          if [ -d "$TARGET_DIR" ]; then rm -rf "$TARGET_DIR"; fi
+          git clone --recursive --depth=1 https://github.com/theos/theos.git "$TARGET_DIR"
+          
+          # Đảm bảo binary ldid luôn sẵn sàng trong thư mục bin của Theos
+          mkdir -p "$TARGET_DIR/bin"
+          BREW_LDID=$(which ldid || true)
+          if [ -n "$BREW_LDID" ]; then
+            ln -sf "$BREW_LDID" "$TARGET_DIR/bin/ldid"
+          fi
+          
+          # Tải SDK 16.5
+          mkdir -p "$TARGET_DIR/sdks"
           git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
           cd /tmp/sdks
           git sparse-checkout set iPhoneOS16.5.sdk
-          mv iPhoneOS16.5.sdk "$THEOS/sdks/"
+          mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
           rm -rf /tmp/sdks
+          
+          if [ ! -d "$TARGET_DIR/sdks/iPhoneOS16.5.sdk" ]; then
+             echo "❌ Error: Không tìm thấy SDK iPhoneOS16.5!"
+             exit 1
+          fi
+          echo "✅ Cài đặt Theos & SDK iPhoneOS16.5 hoàn tất!"
 
-      # Biên dịch trực tiếp đa nhân
-      - name: Build Package
+      # --- BƯỚC 3: DỌN DẸP & BIÊN DỊCH SONG SONG ĐA NHÂN ---
+      - name: Build Package (Rootless .deb)
         run: |
-          # Phân quyền DEBIAN layout nếu có
+          cd "$GITHUB_WORKSPACE"
+          
+          if [ ! -f Makefile ]; then
+            echo "❌ Error: Không tìm thấy Makefile tại thư mục gốc!"
+            exit 1
+          fi
+          
+          rm -rf packages/ obj/ .theos/
+          
+          # Chuẩn hoá phân quyền DEBIAN layout
           for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
             if [ -d "$DEBIAN_DIR" ]; then
               find "$DEBIAN_DIR" -type f -exec chmod 644 {} +
@@ -74,22 +79,37 @@ jobs:
               chmod 755 "$DEBIAN_DIR"
             fi
           done
+          
+          BUILD_LOG_FILE="/tmp/theos_build.log"
+          set -o pipefail
+          NCPU=$(sysctl -n hw.ncpu || echo 2)
 
-          NCPU=$(sysctl -n hw.ncpu || echo 4)
-
-          make package \
+          # Ép THEOS sử dụng SDK 16.5 đã tải
+          make clean package \
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=rootless \
             SDKVERSION=16.5 \
-            THEOS_PACKAGE_COMPRESSION=gzip \
-            -j"$NCPU"
+            -j"$NCPU" 2>&1 | tee "$BUILD_LOG_FILE" || BUILD_FAILED=1
 
-          ls -lh packages/*.deb
+          if [ "$BUILD_FAILED" = "1" ]; then
+            echo ""
+            echo "======================================================================"
+            echo "🚨 BIÊN DỊCH THẤT BẠI! BÁO CÁO CHI TIẾT TỪ TRÌNH BIÊN DỊCH CLANG:"
+            echo "======================================================================"
+            grep -E '(error:|fatal error:)' "$BUILD_LOG_FILE" || true
+            echo ""
+            tail -n 60 "$BUILD_LOG_FILE"
+            echo "======================================================================"
+            exit 1
+          fi
+          
+          ls -lh packages/*.deb || { echo "❌ Không tìm thấy file deb!"; exit 1; }
 
+      # --- BƯỚC 4: TẢI GÓI DEB LÊN ARTIFACTS ---
       - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BoostiPhone6s-Rootless-Deb
+          name: BoostiPhone6s-Rootless-FullPackage
           path: packages/*.deb
           if-no-files-found: error
           retention-days: 7
