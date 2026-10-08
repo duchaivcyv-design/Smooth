@@ -4831,7 +4831,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_Metal_ZeroTearing_Pacing);
                     
                     // [ĐÃ NGẮT THỦ PHẠM 2]: Tắt rút ngắn thời gian phóng to icon (tránh kẹt mở app ở 50%)
-                    // %init(Group_FastLaunch_SuperEngineV285);
+                     %init(Group_FastLaunch_SuperEngineV285);
                     
                     %init(Group_Apple_Internal_ProMotion_Apex);
                     %init(Group_Titanium_Game_Metal_Overdrive);
