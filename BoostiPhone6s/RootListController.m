@@ -567,6 +567,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     UIView *_liquidGlassLensContainer;
     AppleLiquidGlassView *_lensGlassEffectView;
     UILabel *_lensTitleLabel;
+    BOOL _isDraggingGlassTab;
+    CGRect _glassDragStartFrame;
 }
 @end
 
@@ -680,6 +682,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - Nav Bar Liquid Glass (Chuẩn Apple WWDC Concept)
 
 - (void)setupLiquidGlassNavBar {
+    // Idempotent: this method is called from viewDidLoad and legacy setup paths.
+    // Rebuilding it created a second nav bar/indicator underneath the visible one.
+    if (_liquidNavBarContainer && _liquidNavBarContainer.superview == self.view) return;
     CGFloat barHeight = 60.0;
     CGFloat barMargin = 16.0;
     CGFloat barY = self.view.bounds.size.height - barHeight - 34;
@@ -687,11 +692,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _liquidNavBarContainer = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight) cornerRadius:barHeight / 2.0];
     _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
 
-    // Đổ bóng phát quang quang sai (Caustic Glow)
-    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.55 blue:1.0 alpha:0.55].CGColor;
-    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 4);
-    _liquidNavBarContainer.layer.shadowRadius = 18.0;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.20;
+    // Neutral, restrained shadow: avoid the plastic/neon halo.
+    _liquidNavBarContainer.layer.shadowColor = UIColor.blackColor.CGColor;
+    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 2);
+    _liquidNavBarContainer.layer.shadowRadius = 8.0;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.12;
 
     _tabConfigs = @[
         @{@"title": @"Trang Chủ", @"icon": @"house.fill",  @"tab": @0},
@@ -753,7 +758,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     CGRect targetFrame = CGRectMake((index * btnWidth) + 3, 3, btnWidth - 6, _liquidNavBarContainer.bounds.size.height - 6);
 
     CGFloat velocity = (index - oldTab) * 450.0;
-    if (animated) {
+    if (animated && !_isDraggingGlassTab) {
         [_activeGlassIndicator applyFluidJiggleAnimationWithVelocity:velocity];
     }
 
@@ -769,7 +774,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.74 initialSpringVelocity:0.85 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
+        [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.88 initialSpringVelocity:0.35 options:UIViewAnimationOptionCurveEaseOut animations:animations completion:nil];
     } else {
         animations();
     }
@@ -800,49 +805,48 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)handleTabLongPress:(UILongPressGestureRecognizer *)gesture {
-    UIButton *btn = (UIButton *)gesture.view;
-    CGPoint touchInView = [gesture locationInView:self.view];
+    // Drag the ONE existing glass indicator. Do not create a second floating
+    // 86x86 circular lens; that overlay was the duplicate bubble seen on hold.
+    if (!_liquidNavBarContainer || !_activeGlassIndicator || _tabConfigs.count == 0) return;
+    UIButton *button = (UIButton *)gesture.view;
+    CGPoint point = [gesture locationInView:_liquidNavBarContainer];
+    CGFloat barWidth = CGRectGetWidth(_liquidNavBarContainer.bounds);
+    CGFloat barHeight = CGRectGetHeight(_liquidNavBarContainer.bounds);
+    CGFloat itemWidth = barWidth / (CGFloat)_tabConfigs.count;
+    if (itemWidth <= 0.0) return;
 
     if (gesture.state == UIGestureRecognizerStateBegan) {
-        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 20);
-        _liquidGlassLensContainer.center = centerPoint;
-        _liquidGlassLensContainer.hidden = NO;
-        _liquidGlassLensContainer.alpha = 0.0;
-        _liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.3, 0.3);
+        _isDraggingGlassTab = YES;
+        _glassDragStartFrame = _activeGlassIndicator.frame;
+        _lensTitleLabel.text = _tabConfigs[button.tag][@"title"];
+        UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feedback impactOccurred];
+    }
 
-        _lensTitleLabel.text = _tabConfigs[btn.tag][@"title"];
-
-        [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.65 initialSpringVelocity:1.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            self->_liquidGlassLensContainer.alpha = 1.0;
-            self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
-        } completion:nil];
-
-        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
-        [fb impactOccurred];
-
-    } else if (gesture.state == UIGestureRecognizerStateChanged) {
-        CGPoint centerPoint = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 20);
-        _liquidGlassLensContainer.center = centerPoint;
-
-        for (NSInteger i = 0; i < _tabButtons.count; i++) {
-            UIButton *b = _tabButtons[i];
-            CGPoint p = [gesture locationInView:b];
-            if (CGRectContainsPoint(b.bounds, p)) {
-                _lensTitleLabel.text = _tabConfigs[i][@"title"];
-                if (_currentBottomTab != [_tabConfigs[i][@"tab"] integerValue]) {
-                    [self selectTabIndex:i animated:YES];
-                }
-                break;
-            }
-        }
-    } else if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled) {
-        [UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
-            self->_liquidGlassLensContainer.alpha = 0.0;
-            self->_liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.2, 0.2);
-        } completion:^(BOOL finished) {
-            self->_liquidGlassLensContainer.hidden = YES;
-            self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
+    if (gesture.state == UIGestureRecognizerStateBegan || gesture.state == UIGestureRecognizerStateChanged) {
+        CGFloat centerX = MIN(MAX(point.x, itemWidth * 0.5), barWidth - itemWidth * 0.5);
+        NSInteger index = (NSInteger)floor(centerX / itemWidth);
+        index = MAX(0, MIN(index, (NSInteger)_tabConfigs.count - 1));
+        CGRect target = CGRectMake(index * itemWidth + 3.0, 3.0,
+                                   MAX(1.0, itemWidth - 6.0), MAX(1.0, barHeight - 6.0));
+        // Follow the finger without springing each frame; springing on every
+        // Changed event causes lag, wobble and visible misalignment.
+        [UIView performWithoutAnimation:^{
+            self->_activeGlassIndicator.frame = target;
         }];
+        if (_currentBottomTab != [_tabConfigs[index][@"tab"] integerValue]) {
+            [self selectTabIndex:index animated:NO];
+        }
+    }
+
+    if (gesture.state == UIGestureRecognizerStateEnded ||
+        gesture.state == UIGestureRecognizerStateCancelled ||
+        gesture.state == UIGestureRecognizerStateFailed) {
+        _isDraggingGlassTab = NO;
+        CGFloat centerX = MIN(MAX(point.x, itemWidth * 0.5), barWidth - itemWidth * 0.5);
+        NSInteger index = (NSInteger)floor(centerX / itemWidth);
+        index = MAX(0, MIN(index, (NSInteger)_tabConfigs.count - 1));
+        [self selectTabIndex:index animated:YES];
     }
 }
 
