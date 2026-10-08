@@ -4550,45 +4550,50 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
+=================================
+// KHAI BÁO C-STRUCT & CON TRỎ HÀM LIÊN QUAN ĐẾN PHẦN CỨNG
+// ====================================================================================================
+
+typedef struct __IOHIDEventSystemClient *IOHIDEventSystemClientRef;
+
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
 // (KẾT NỐI: Ép Xung ProMotion Cố Định + Tăng Tần Số Lấy Mẫu Cảm Ứng 1000Hz + Ổ Khóa App)
 // (AN TOÀN TUYỆT ĐỐI: BẢO VỆ BỘ NHỚ CFRETAIN TRÁNH CRASH MEMORY CORRUPTION)
 // ====================================================================================================
 
-extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
-
 %group Group_Hardware_ProMotion_Overclock
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép toàn bộ cờ Variable Refresh Rate & ProMotion của Apple qua MobileGestalt
 %hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
-    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
+    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && 
+        (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
         if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
             CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
             CFEqual(property, CFSTR("pVRR")) ||
             CFEqual(property, CFSTR("pro-motion")) ||
             CFEqual(property, CFSTR("DeviceSupports120Hz")) ||
             CFEqual(property, CFSTR("DeviceSupportsProMotion"))) {
-            return CFRetain(kCFBooleanTrue); // CFRetain bắt buộc để tuân thủ quy tắc Copy Rule chống Crash
+            return CFRetain(kCFBooleanTrue);
         }
     }
     return %orig(property);
 }
 
-%hook IOHIDEventSystemClient
-
-// [ĐÃ ÉP TOÀN DIỆN]: Ép tần số lấy mẫu cảm ứng phần cứng lên 1000Hz (0.001s polling interval)
-- (void)setProperty:(id)property forKey:(NSString *)key {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch) && key) {
-        if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-            %orig(@(1000), key);
-            return;
+// [ĐÃ SỬA CHUẨN XNU/IOKIT]: Hook hàm C thuần để ép polling cảm ứng 1000Hz, dẹp bỏ lỗi Linker
+%hookf(Boolean, IOHIDEventSystemClientSetProperty, IOHIDEventSystemClientRef client, CFStringRef key, CFTypeRef property) {
+    if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && 
+        (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        if (CFEqual(key, CFSTR("ReportInterval")) || CFEqual(key, CFSTR("HIDReportInterval"))) {
+            int interval = 1000;
+            CFNumberRef num = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &interval);
+            Boolean res = %orig(client, key, num);
+            if (num) CFRelease(num);
+            return res;
         }
     }
-    %orig;
+    return %orig(client, key, property);
 }
-
-%end
 
 %end
 
@@ -4796,12 +4801,14 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 
 %end
 
-// NHÓM BACKBOARDD
+// ====================================================================================================
+// NHÓM BACKBOARDD: ĐIỀU PHỐI EVENT CẢM ỨNG
+// ====================================================================================================
+
 %group Group_Backboardd_TouchDriver_Overdrive
 
 %hook BKTouchDeliveryPolicyServer
 
-// Ép đường truyền cảm ứng bypass qua mọi hàng đợi kiểm tra độ trễ
 - (id)init {
     id orig = %orig;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -4812,7 +4819,6 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 
 %hook BKHIDEventProcessor
 
-// Ép xử lý sự kiện HID cảm ứng thời gian thực (Realtime Processing)
 - (void)processEvent:(id)event sender:(id)sender dispatcher:(id)dispatcher {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     %orig;
