@@ -4668,6 +4668,90 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 %end
 
 // ====================================================================================================
+// NHÓM ĐẶC QUYỀN: CƯỠNG CHẾ NẠP KHUNG HÌNH & THÔNG LUỒNG APPLE RENDERSERVER (FORCE RECOVERY OVERDRIVE)
+// (TỰ ĐỘNG BẺ GÃY RÀO CẢN ĐEN APP, BẮT BUỘC RENDER TRỰC TIẾP LÊN MÀN HÌNH KHÔNG CHỜ BUFFER)
+// ====================================================================================================
+
+%group Group_Force_Render_Recovery_Overdrive
+
+%hook CALayer
+
+// 1. CƯỠNG CHẾ BẺ KHÓA: Đè lên Nhóm 17, bắt buộc tắt vẽ bất đồng bộ trên app con để GPU không bị rỗng pixel
+- (BOOL)drawsAsynchronously {
+    if (!Titanium_IsSpringBoard()) {
+        return NO; // Cưỡng bức vẽ đồng bộ trực tiếp, chống đen kịt nội dung
+    }
+    return %orig;
+}
+
+// 2. CƯỠNG CHẾ ĐỒNG BỘ: Chặn đứng mọi lệnh setNeedsDisplay phá buffer trong 0.8 giây đầu tiên
+- (void)setNeedsDisplay {
+    static uint64_t s_appLaunchTick = 0;
+    if (s_appLaunchTick == 0) {
+        s_appLaunchTick = mach_absolute_time();
+    }
+    // Nếu trong 0.8s đầu mà bị gọi setNeedsDisplay loạn xạ thì bỏ qua để app kịp nạp dữ liệu gốc
+    if (!Titanium_IsSpringBoard()) {
+        uint64_t now = mach_absolute_time();
+        if ((now - s_appLaunchTick) < (800ULL * 1000000ULL)) {
+            return;
+        }
+    }
+    %orig;
+}
+
+%end
+
+%hook CAMetalLayer
+
+// 3. CƯỠNG CHẾ XUẤT HÌNH: Ép Metal luôn cho phép timeout và xuất khung hình không bị kẹt luồng
+- (BOOL)allowsNextDrawableTimeout {
+    if (!Titanium_IsSpringBoard()) {
+        return YES;
+    }
+    return %orig;
+}
+
+%end
+
+%hook UIWindow
+
+// 4. CƯỠNG CHẾ GẮN CONTEXT: Ép UIWindow cấp phát ngay context hợp lệ cho GPU ngay khi hiển thị
+- (void)makeKeyAndVisible {
+    %orig;
+    if (!Titanium_IsSpringBoard()) {
+        // Cưỡng chế nhả nhịp cho các luồng mạng và nạp ảnh trong 0.5s đầu
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (@available(iOS 15.0, *)) {
+                UIWindowScene *scene = self.windowScene;
+                if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float targetHz = (float)Titanium_GetTargetConfiguredHz();
+                    if (targetHz < 60.0f) targetHz = 60.0f;
+                    if (targetHz > 144.0f) targetHz = 144.0f;
+                    [(id)scene setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
+                }
+            }
+        });
+    }
+}
+
+%end
+
+%hook UIScene
+
+// 5. CƯỠNG CHẾ THÔNG LUỒNG LOADING: Đón đầu sự kiện kích hoạt của hệ điều hành Apple
+- (void)_didBecomeActive {
+    %orig;
+    if (!Titanium_IsSpringBoard()) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
 // (ĐÃ ÉP ĐỒNG BỘ 0MS VỚI Ổ KHÓA CỦA APP CONTROL MASTER - CHỐNG CRASH XNU)
 // ====================================================================================================
@@ -4860,9 +4944,13 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                             contents:verifiedData 
                                                           attributes:@{NSFilePosixPermissions: @(0644)}];
                 } else {
-                    // [ĐÃ NẠP]: Kích hoạt nhóm vượt rào khởi động Cold Boot, thông luồng loading cho app thứ ba
+                    // [ĐÃ NẠP]: Nhóm vượt rào khởi động Cold Boot
                     %init(Group_Apple_Native_ColdBoot_Overdrive);
                     %init(Group_UIKit_ThirdParty_IsolatedV285);
+
+                    // [CƯỠNG CHẾ BẺ KHÓA]: Nạp sau cùng để ghi đè hoàn toàn các hook gây rỗng buffer/đen màn hình
+                    %init(Group_Force_Render_Recovery_Overdrive);
+
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         @try {
                             Titanium_ForceInjectDynamicRefreshSupport();
