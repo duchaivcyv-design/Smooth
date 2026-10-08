@@ -47,13 +47,13 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit BackBoardServices
+# ĐÃ LOẠI BỎ BackBoardServices (Tránh lỗi thiếu stub SDK trên GitHub Actions)
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
 BoostiPhone6sCore_LIBRARIES = substrate
 
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
-                            -undefined dynamic_lookup \
-                            -Wl,-no_fixup_chains \
+                            -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
 # Ký Entitlements đặc quyền cao cho SpringBoard & backboardd
