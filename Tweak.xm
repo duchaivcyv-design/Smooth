@@ -2419,7 +2419,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 // ====================================================================================================
 // ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
 // ====================================================================================================
-/*
+
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
     
@@ -2679,7 +2679,7 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
 %end
 
 %end
-*/
+
 // ====================================================================================================
 // TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
 // ====================================================================================================
@@ -4958,7 +4958,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 // 1. CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
                 %init(Group_ZeroLatency_Touch_Opt);
                 %init(Group_Metal_ZeroTearing_Pacing);
-               // %init(Group_FluidTransitions_Pacing);
+                %init(Group_FluidTransitions_Pacing);
                 %init(Group_FastLaunch_SuperEngineV285);
                 %init(Group_Scroll_And_Keyboard_Opt);
                 %init(Group_InstantActionAndMenuTransitions_Boost);
