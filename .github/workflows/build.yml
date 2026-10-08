@@ -10,9 +10,12 @@ permissions:
 
 jobs:
   build-deb:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sbingner/theos:latest
+    runs-on: macos-14
+    env:
+      THEOS: /Users/runner/theos
+      THEOS_PACKAGE_SCHEME: rootless
+      THEOS_NO_AUTO_UPDATE: 1
+      THEOS_PACKAGE_COMPRESSION: gzip
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -20,23 +23,66 @@ jobs:
           submodules: recursive
           depth: 1
 
+      # Cache công cụ dpkg
+      - name: Cache Homebrew dpkg
+        id: cache-brew
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/Cellar/dpkg
+            /opt/homebrew/bin/dpkg-deb
+          key: brew-dpkg-macos14
+
+      - name: Setup Tools
+        run: |
+          echo "$THEOS/bin" >> $GITHUB_PATH
+          if ! command -v dpkg-deb &> /dev/null; then
+            export HOMEBREW_NO_AUTO_UPDATE=1
+            export HOMEBREW_NO_INSTALL_CLEANUP=1
+            brew install dpkg
+          fi
+
+      # Cache Theos & SDK 16.5
+      - name: Cache Theos & SDK
+        id: cache-theos
+        uses: actions/cache@v4
+        with:
+          path: /Users/runner/theos
+          key: theos-sdk-16.5-v2
+
+      - name: Setup Theos & SDK
+        if: steps.cache-theos.outputs.cache-hit != 'true'
+        run: |
+          rm -rf "$THEOS"
+          git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
+          
+          mkdir -p "$THEOS/sdks"
+          git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
+          cd /tmp/sdks
+          git sparse-checkout set iPhoneOS16.5.sdk
+          mv iPhoneOS16.5.sdk "$THEOS/sdks/"
+          rm -rf /tmp/sdks
+
+      # Biên dịch trực tiếp đa nhân
       - name: Build Package
         run: |
-          # Tự động tìm và thiết lập quyền cho file control / script
-          find . -name "control" -exec chmod 644 {} +
+          # Phân quyền DEBIAN layout nếu có
           for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
             if [ -d "$DEBIAN_DIR" ]; then
+              find "$DEBIAN_DIR" -type f -exec chmod 644 {} +
               find "$DEBIAN_DIR" -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
               chmod 755 "$DEBIAN_DIR"
             fi
           done
 
-          # Biên dịch trực tiếp đa nhân, nén gzip cấp 1 nhanh nhất
+          NCPU=$(sysctl -n hw.ncpu || echo 4)
+
           make package \
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=rootless \
+            SDKVERSION=16.5 \
             THEOS_PACKAGE_COMPRESSION=gzip \
-            -j$(nproc)
+            -j"$NCPU"
 
           ls -lh packages/*.deb
 
