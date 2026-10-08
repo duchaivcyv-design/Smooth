@@ -95,89 +95,100 @@ typedef struct {
 @implementation AppleLiquidGlassView
 
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius {
-    if ((self = [super initWithFrame:frame])) {
-        self.backgroundColor = UIColor.clearColor;
+    if (self = [super initWithFrame:frame]) {
+        self.backgroundColor = [UIColor clearColor];
         self.layer.cornerRadius = radius;
-        if (@available(iOS 13.0, *)) self.layer.cornerCurve = kCACornerCurveContinuous;
+        if (@available(iOS 13.0, *)) {
+            self.layer.cornerCurve = kCACornerCurveContinuous;
+        }
         self.clipsToBounds = YES;
 
-        // Prefer Apple's native glass effect when available, without linking private APIs.
-        BOOL installedNativeGlass = NO;
-        if (@available(iOS 26.0, *)) {
-            Class glassClass = NSClassFromString(@"UIGlassEffect");
-            if (glassClass) {
-                id effect = [[glassClass alloc] init];
-                if ([effect isKindOfClass:[UIVisualEffect class]]) {
-                    UIVisualEffectView *glassView = [[UIVisualEffectView alloc] initWithEffect:(UIVisualEffect *)effect];
-                    glassView.frame = self.bounds;
-                    glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-                    glassView.userInteractionEnabled = NO;
-                    glassView.clipsToBounds = YES;
-                    glassView.layer.cornerRadius = radius;
-                    if (@available(iOS 13.0, *)) glassView.layer.cornerCurve = kCACornerCurveContinuous;
-                    [self addSubview:glassView];
-                    installedNativeGlass = YES;
+        // --- LỚP 1: BACKDROP KHÚC XẠ BẺ CONG ÁNH SÁNG NỀN (QUANG HỌC THẬT) ---
+        Class backdropClass = NSClassFromString(@"CABackdropLayer");
+        if (backdropClass) {
+            _refractionBackdropLayer = [[backdropClass alloc] init];
+            _refractionBackdropLayer.frame = self.bounds;
+            [_refractionBackdropLayer setValue:@YES forKey:@"allowsGroupBlending"];
+            [_refractionBackdropLayer setValue:@18.0 forKey:@"bleedAmount"];
+
+            // Nạp bộ lọc làm mờ sâu và lọc ánh sáng
+            Class filterClass = NSClassFromString(@"CAFilter");
+            if (filterClass) {
+                id gaussianFilter = [filterClass performSelector:NSSelectorFromString(@"filterWithType:") withObject:@"gaussianBlur"];
+                if (gaussianFilter) {
+                    [gaussianFilter setValue:@(16.0) forKey:@"inputRadius"];
+                    _refractionBackdropLayer.filters = @[gaussianFilter];
                 }
             }
-        }
-        if (!installedNativeGlass) {
-            UIBlurEffectStyle style = UIBlurEffectStyleSystemUltraThinMaterial;
-            if (@available(iOS 13.0, *)) {
-                UIVisualEffectView *glassView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:style]];
-                glassView.frame = self.bounds;
-                glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-                glassView.userInteractionEnabled = NO;
-                glassView.clipsToBounds = YES;
-                glassView.layer.cornerRadius = radius;
-                glassView.layer.cornerCurve = kCACornerCurveContinuous;
-                [self addSubview:glassView];
-            }
+            [self.layer addSublayer:_refractionBackdropLayer];
+        } else {
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+            blurView.frame = self.bounds;
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            blurView.userInteractionEnabled = NO;
+            [self addSubview:blurView];
         }
 
-        // Restrained neutral edge/reflection; avoid saturated gradients and neon outlines.
+        // --- LỚP 2: TÁN SẮC QUANG SAI ĐA SẮC RÌA MÉP (CHROMATIC DISPERSION) ---
         _chromaticFringeLayer = [CAGradientLayer layer];
         _chromaticFringeLayer.frame = self.bounds;
         _chromaticFringeLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _chromaticFringeLayer.cornerCurve = kCACornerCurveContinuous;
+        }
         _chromaticFringeLayer.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.045].CGColor,
+            (id)[UIColor colorWithRed:0.25 green:0.80 blue:1.0 alpha:0.32].CGColor,
+            (id)[UIColor colorWithRed:0.75 green:0.30 blue:1.0 alpha:0.18].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.018].CGColor
+            (id)[UIColor colorWithRed:0.20 green:0.95 blue:0.7 alpha:0.25].CGColor
         ];
-        _chromaticFringeLayer.locations = @[@0.0, @0.48, @1.0];
+        _chromaticFringeLayer.locations = @[@0.0, @0.12, @0.82, @1.0];
         _chromaticFringeLayer.startPoint = CGPointMake(0.0, 0.0);
         _chromaticFringeLayer.endPoint = CGPointMake(1.0, 1.0);
         [self.layer addSublayer:_chromaticFringeLayer];
 
+        // --- LỚP 3: LÒNG THỦY TINH ĐẶC & TỤ QUANG NỘI TẠI (CAUSTIC CORE) ---
         _causticCoreLayer = [CAGradientLayer layer];
         _causticCoreLayer.frame = self.bounds;
         _causticCoreLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _causticCoreLayer.cornerCurve = kCACornerCurveContinuous;
+        }
         _causticCoreLayer.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.055].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
+            (id)[UIColor colorWithWhite:1.0 alpha:0.28].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.04].CGColor,
+            (id)[UIColor colorWithRed:0.10 green:0.25 blue:0.55 alpha:0.20].CGColor
         ];
-        _causticCoreLayer.locations = @[@0.0, @0.42];
-        _causticCoreLayer.startPoint = CGPointMake(0.15, 0.0);
-        _causticCoreLayer.endPoint = CGPointMake(0.85, 1.0);
+        _causticCoreLayer.locations = @[@0.0, @0.45, @1.0];
+        _causticCoreLayer.startPoint = CGPointMake(0.1, 0.0);
+        _causticCoreLayer.endPoint = CGPointMake(0.9, 1.0);
         [self.layer addSublayer:_causticCoreLayer];
 
+        // --- LỚP 4: BỀ MẶT PHẢN XẠ FRESNEL 3D & VỆT BÓNG QUANG HỌC ---
         _specularSurfaceLayer = [CAGradientLayer layer];
         _specularSurfaceLayer.frame = self.bounds;
         _specularSurfaceLayer.cornerRadius = radius;
+        if (@available(iOS 13.0, *)) {
+            _specularSurfaceLayer.cornerCurve = kCACornerCurveContinuous;
+        }
         _specularSurfaceLayer.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.14].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.025].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
+            (id)[UIColor colorWithWhite:1.0 alpha:0.92].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.22].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:0.35].CGColor
         ];
-        _specularSurfaceLayer.locations = @[@0.0, @0.12, @0.50];
-        _specularSurfaceLayer.startPoint = CGPointMake(0.1, 0.0);
-        _specularSurfaceLayer.endPoint = CGPointMake(0.9, 0.75);
+        _specularSurfaceLayer.locations = @[@0.0, @0.08, @0.75, @1.0];
+        _specularSurfaceLayer.startPoint = CGPointMake(0.05, 0.0);
+        _specularSurfaceLayer.endPoint = CGPointMake(0.95, 1.0);
         [self.layer addSublayer:_specularSurfaceLayer];
 
+        // --- LỚP 5: VIỀN VÁT SIÊU MỎNG KIM CƯƠNG 0.8PT ---
         _diamondBevelRim = [CAShapeLayer layer];
         _diamondBevelRim.path = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:radius].CGPath;
-        _diamondBevelRim.fillColor = UIColor.clearColor.CGColor;
-        _diamondBevelRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.22].CGColor;
-        _diamondBevelRim.lineWidth = 0.65;
+        _diamondBevelRim.fillColor = [UIColor clearColor].CGColor;
+        _diamondBevelRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.85].CGColor;
+        _diamondBevelRim.lineWidth = 1.0;
         [self.layer addSublayer:_diamondBevelRim];
     }
     return self;
@@ -197,13 +208,13 @@ typedef struct {
 }
 
 - (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel {
-    // Subtle press response: keep the capsule's geometry stable instead of stretching it into a circle.
-    CGFloat stretch = fmin(fmax(fabs(vel) / 8000.0, 0.006), 0.018);
-    CGAffineTransform transform = CGAffineTransformMakeScale(1.0 + stretch, 1.0 - stretch * 0.35);
-    [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut animations:^{
+    CGFloat stretch = fmin(fmax(fabs(vel) / 800.0, 0.05), 0.22);
+    CGAffineTransform transform = (vel >= 0) ? CGAffineTransformMakeScale(1.0 + stretch, 1.0 - (stretch * 0.5)) : CGAffineTransformMakeScale(1.0 - (stretch * 0.4), 1.0 + stretch);
+
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.transform = transform;
     } completion:^(BOOL finished) {
-        [UIView animateWithDuration:0.24 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.45 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut animations:^{
+        [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:1.2 options:UIViewAnimationOptionCurveEaseOut animations:^{
             self.transform = CGAffineTransformIdentity;
         } completion:nil];
     }];
@@ -587,9 +598,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     // Đổ bóng phát quang quang sai (Caustic Glow)
     _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.25 green:0.55 blue:1.0 alpha:0.55].CGColor;
-    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 4);
-    _liquidNavBarContainer.layer.shadowRadius = 14.0;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.18;
+    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 10);
+    _liquidNavBarContainer.layer.shadowRadius = 26.0;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.90;
 
     _tabConfigs = @[
         @{@"title": @"Trang Chủ", @"icon": @"house.fill",  @"tab": @0},
@@ -1835,6 +1846,396 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy Bỏ" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+@end
+
+
+// ============================================================================
+// APP-ONLY LIQUID GLASS MODULE MERGED INTO THIS SINGLE ROOTLISTCONTROLLER.M
+// Independent app view; does not install SpringBoard hooks or capture other apps.
+// Shader source is embedded and compiled at runtime, so no separate .metal file is required.
+// ============================================================================
+#import <MetalKit/MetalKit.h>
+#import <CoreImage/CoreImage.h>
+#import <simd/simd.h>
+
+// LGMergedLiquidGlassView.h
+// Standalone, app-only Liquid Glass-style rendering view.
+// Requires UIKit + MetalKit and LGLiquidGlass.metal in the app target.
+
+
+
+/// A Metal-backed glass surface for an application's own views.
+/// Supply a snapshot of the content behind the glass and its rect in that snapshot.
+/// This view does not install SpringBoard hooks or capture other processes.
+@interface LGMergedLiquidGlassView : MTKView
+
+/// Full snapshot of the host content *without this glass view in it*.
+@property (nonatomic, strong, nullable) UIImage *backdropImage;
+
+/// Optional pre-blurred version of backdropImage. If nil, a subtle Gaussian blur is generated.
+@property (nonatomic, strong, nullable) UIImage *blurredBackdropImage;
+
+/// The glass view's rectangle in backdropImage points. CGRectZero means use the full image.
+@property (nonatomic) CGRect backdropRect;
+
+/// Surface settings. Values are intentionally restrained to avoid a plastic/neon appearance.
+@property (nonatomic) CGFloat glassCornerRadius;      // points; default 24
+@property (nonatomic) CGFloat refractionStrength;     // drawable pixels; default 3.2
+@property (nonatomic) CGFloat blurBlend;             // 0...1; default 0.12
+@property (nonatomic) CGFloat specularIntensity;      // 0...1; default 0.65
+@property (nonatomic) CGFloat glassThickness;         // subtle optical edge depth; default 0.75
+
+/// Call after changing any material properties or updating the supplied snapshot.
+- (void)refreshGlass;
+
+/// Optional press/release feedback. This does not install gesture recognizers,
+/// so it won't steal touches from buttons placed above or inside the glass.
+- (void)setInteractionActive:(BOOL)active animated:(BOOL)animated;
+
+@end
+
+
+static NSString * const kLGMergedGlassMetalSource =
+    @"// LGLiquidGlass.metal\n"
+    @"// App-only rounded optical glass shader: subtle refraction, body blur,\n"
+    @"// restrained Fresnel-like edge lift, and broad soft specular reflection.\n"
+    @"#include <metal_stdlib>\n"
+    @"using namespace metal;\n"
+    @"\n"
+    @"struct LGGlassUniforms {\n"
+    @"    float2 viewSize;\n"
+    @"    float2 backdropSize;\n"
+    @"    float4 backdropRect;\n"
+    @"    float cornerRadius;\n"
+    @"    float bezelWidth;\n"
+    @"    float refractionScale;\n"
+    @"    float blurBlend;\n"
+    @"    float specularIntensity;\n"
+    @"    float glassThickness;\n"
+    @"    float padding0;\n"
+    @"    float padding1;\n"
+    @"};\n"
+    @"\n"
+    @"struct LGVertexOut {\n"
+    @"    float4 position [[position]];\n"
+    @"    float2 uv;\n"
+    @"};\n"
+    @"\n"
+    @"vertex LGVertexOut lg_glass_vertex(uint vertexID [[vertex_id]]) {\n"
+    @"    // Fullscreen triangle avoids internal diagonal seams.\n"
+    @"    const float2 positions[3] = {\n"
+    @"        float2(-1.0, -1.0),\n"
+    @"        float2( 3.0, -1.0),\n"
+    @"        float2(-1.0,  3.0)\n"
+    @"    };\n"
+    @"    float2 p = positions[vertexID];\n"
+    @"    LGVertexOut out;\n"
+    @"    out.position = float4(p, 0.0, 1.0);\n"
+    @"    out.uv = float2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);\n"
+    @"    return out;\n"
+    @"}\n"
+    @"\n"
+    @"float lg_roundRectSDF(float2 p, float2 size, float radius) {\n"
+    @"    float2 halfSize = size * 0.5;\n"
+    @"    float r = clamp(radius, 0.0, min(halfSize.x, halfSize.y));\n"
+    @"    float2 q = abs(p) - (halfSize - float2(r));\n"
+    @"    return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;\n"
+    @"}\n"
+    @"\n"
+    @"fragment float4 lg_glass_fragment(\n"
+    @"    LGVertexOut in [[stage_in]],\n"
+    @"    constant LGGlassUniforms &u [[buffer(0)]],\n"
+    @"    texture2d<float> backdrop [[texture(0)]],\n"
+    @"    texture2d<float> blurredBackdrop [[texture(1)]]) {\n"
+    @"\n"
+    @"    constexpr sampler linearClamp(coord::normalized, address::clamp_to_edge, filter::linear);\n"
+    @"    float2 size = max(u.viewSize, float2(1.0));\n"
+    @"    float2 localPx = in.uv * size;\n"
+    @"    float2 centered = localPx - size * 0.5;\n"
+    @"    float distanceToEdge = lg_roundRectSDF(centered, size, u.cornerRadius);\n"
+    @"    float aa = max(fwidth(distanceToEdge), 0.75);\n"
+    @"    float coverage = 1.0 - smoothstep(-aa, aa, distanceToEdge);\n"
+    @"    if (coverage <= 0.001) discard_fragment();\n"
+    @"\n"
+    @"    // Map the glass card's local UV into its rect in the host-view snapshot.\n"
+    @"    float2 rectOrigin = u.backdropRect.xy;\n"
+    @"    float2 rectSize = max(u.backdropRect.zw, float2(1.0));\n"
+    @"    float2 baseUV = (rectOrigin + in.uv * rectSize) / max(u.backdropSize, float2(1.0));\n"
+    @"\n"
+    @"    float2 gradient = float2(dfdx(distanceToEdge), dfdy(distanceToEdge));\n"
+    @"    float gradientLength = max(length(gradient), 0.0001);\n"
+    @"    float2 normal2D = gradient / gradientLength;\n"
+    @"    float edgeBand = 1.0 - smoothstep(0.0, max(u.bezelWidth * 2.4, 1.0), -distanceToEdge);\n"
+    @"\n"
+    @"    // Refraction is restrained and concentrated close to the curved edge.\n"
+    @"    float2 normalOffset = normal2D * (u.refractionScale * edgeBand) / max(u.backdropSize, float2(1.0));\n"
+    @"    float dispersion = (0.12 + 0.14 * u.glassThickness) / max(u.backdropSize.x, 1.0);\n"
+    @"    float2 uvR = clamp(baseUV + normalOffset + float2(dispersion, 0.0), float2(0.0), float2(1.0));\n"
+    @"    float2 uvG = clamp(baseUV + normalOffset, float2(0.0), float2(1.0));\n"
+    @"    float2 uvB = clamp(baseUV + normalOffset - float2(dispersion, 0.0), float2(0.0), float2(1.0));\n"
+    @"\n"
+    @"    float4 sharpR = backdrop.sample(linearClamp, uvR);\n"
+    @"    float4 sharpG = backdrop.sample(linearClamp, uvG);\n"
+    @"    float4 sharpB = backdrop.sample(linearClamp, uvB);\n"
+    @"    float3 refracted = float3(sharpR.r, sharpG.g, sharpB.b);\n"
+    @"    float3 soft = blurredBackdrop.sample(linearClamp, clamp(baseUV, float2(0.0), float2(1.0))).rgb;\n"
+    @"    float bodyBlur = clamp(u.blurBlend + edgeBand * 0.045, 0.0, 0.35);\n"
+    @"    float3 color = mix(refracted, soft, bodyBlur);\n"
+    @"\n"
+    @"    // Near-neutral body tint; avoid the strong cyan/purple overlay common in plastic-looking mocks.\n"
+    @"    color = mix(color, color * float3(1.008, 1.010, 1.012), 0.20);\n"
+    @"\n"
+    @"    // Directional edge response: top edge strongest, lower edge deliberately weaker.\n"
+    @"    float topFacing = max(0.0, -normal2D.y);\n"
+    @"    float bottomFacing = max(0.0, normal2D.y);\n"
+    @"    float sideFacing = abs(normal2D.x);\n"
+    @"    float fresnelLike = edgeBand * (0.060 * topFacing + 0.026 * sideFacing + 0.012 * bottomFacing);\n"
+    @"    color += float3(1.0, 0.995, 0.985) * fresnelLike * (0.55 + 0.45 * u.glassThickness);\n"
+    @"\n"
+    @"    // Broad soft reflection across the upper surface, not a hard white neon outline.\n"
+    @"    float x = localPx.x;\n"
+    @"    float y = localPx.y;\n"
+    @"    float lineY = size.y * 0.105 - (x - size.x * 0.42) * 0.025;\n"
+    @"    float sigma = max(2.5, size.y * 0.105);\n"
+    @"    float lineDistance = (y - lineY) / sigma;\n"
+    @"    float horizontalFade = smoothstep(0.02, 0.20, in.uv.x) * (1.0 - smoothstep(0.70, 0.99, in.uv.x));\n"
+    @"    float specular = exp(-lineDistance * lineDistance) * horizontalFade * (0.035 * u.specularIntensity);\n"
+    @"    color += float3(1.0, 0.995, 0.985) * specular;\n"
+    @"\n"
+    @"    // Very restrained inner lower reflection adds depth without creating a solid milky fill.\n"
+    @"    float lower = smoothstep(0.64, 1.0, in.uv.y) * (1.0 - smoothstep(0.94, 1.0, in.uv.y));\n"
+    @"    color += float3(1.0, 1.0, 1.0) * lower * (0.010 * u.specularIntensity);\n"
+    @"\n"
+    @"    return float4(clamp(color, 0.0, 1.0), coverage);\n"
+    @"}\n";
+
+// LGMergedLiquidGlassView.m
+// App-only renderer. This is an independent implementation, not a verbatim copy
+// of the upstream Liquid (Gl)ass source.
+
+#import <CoreImage/CoreImage.h>
+#import <simd/simd.h>
+
+#if __has_feature(objc_arc)
+#else
+#error LGMergedLiquidGlassView requires ARC.
+#endif
+
+typedef struct {
+    vector_float2 viewSize;
+    vector_float2 backdropSize;
+    vector_float4 backdropRect;
+    float cornerRadius;
+    float bezelWidth;
+    float refractionScale;
+    float blurBlend;
+    float specularIntensity;
+    float glassThickness;
+    float padding0;
+    float padding1;
+} LGGlassUniforms;
+
+@interface LGMergedLiquidGlassView () <MTKViewDelegate>
+@property (nonatomic, strong) id<MTLCommandQueue> lgCommandQueue;
+@property (nonatomic, strong) id<MTLRenderPipelineState> lgPipeline;
+@property (nonatomic, strong) id<MTLTexture> lgBackdropTexture;
+@property (nonatomic, strong) id<MTLTexture> lgBlurredTexture;
+@property (nonatomic, strong) MTKTextureLoader *lgTextureLoader;
+@property (nonatomic, strong) CIContext *lgCIContext;
+@property (nonatomic) BOOL lgPipelineReady;
+@end
+
+@implementation LGMergedLiquidGlassView
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    if (!device) return nil;
+    self = [super initWithFrame:frame device:device];
+    if (!self) return nil;
+    [self lg_commonInit];
+    return self;
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super initWithCoder:coder];
+    if (!self) return nil;
+    self.device = MTLCreateSystemDefaultDevice();
+    if (!self.device) return nil;
+    [self lg_commonInit];
+    return self;
+}
+
+- (void)lg_commonInit {
+    _glassCornerRadius = 24.0;
+    _refractionStrength = 3.2;
+    _blurBlend = 0.12;
+    _specularIntensity = 0.65;
+    _glassThickness = 0.75;
+    _backdropRect = CGRectZero;
+
+    self.backgroundColor = UIColor.clearColor;
+    self.opaque = NO;
+    self.layer.opaque = NO;
+    self.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+    self.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    self.framebufferOnly = YES;
+    self.paused = YES;
+    self.enableSetNeedsDisplay = YES;
+    self.delegate = self;
+    self.preferredFramesPerSecond = 60;
+
+    _lgTextureLoader = [[MTKTextureLoader alloc] initWithDevice:self.device];
+    _lgCIContext = [CIContext contextWithOptions:@{ kCIContextUseSoftwareRenderer : @NO }];
+    _lgCommandQueue = [self.device newCommandQueue];
+    [self lg_createPipeline];
+}
+
+- (void)lg_createPipeline {
+    NSError *libraryError = nil;
+    id<MTLLibrary> library = [self.device newLibraryWithSource:kLGMergedGlassMetalSource options:nil error:&libraryError];
+    if (libraryError) NSLog(@"[LGMergedLiquidGlass] Runtime Metal compile failed: %@", libraryError);
+    id<MTLFunction> vertex = [library newFunctionWithName:@"lg_glass_vertex"];
+    id<MTLFunction> fragment = [library newFunctionWithName:@"lg_glass_fragment"];
+    if (!library || !vertex || !fragment) {
+        NSLog(@"[LGLiquidGlass] Missing default Metal library/functions. Inline Metal shader compilation failed; check the compiler log.");
+        self.lgPipelineReady = NO;
+        return;
+    }
+
+    MTLRenderPipelineDescriptor *descriptor = [MTLRenderPipelineDescriptor new];
+    descriptor.label = @"App Liquid Glass Pipeline";
+    descriptor.vertexFunction = vertex;
+    descriptor.fragmentFunction = fragment;
+    descriptor.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+    MTLRenderPipelineColorAttachmentDescriptor *attachment = descriptor.colorAttachments[0];
+    attachment.blendingEnabled = YES;
+    attachment.rgbBlendOperation = MTLBlendOperationAdd;
+    attachment.alphaBlendOperation = MTLBlendOperationAdd;
+    attachment.sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    attachment.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    attachment.sourceAlphaBlendFactor = MTLBlendFactorOne;
+    attachment.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+
+    NSError *error = nil;
+    _lgPipeline = [self.device newRenderPipelineStateWithDescriptor:descriptor error:&error];
+    _lgPipelineReady = (_lgPipeline != nil);
+    if (error) NSLog(@"[LGLiquidGlass] Pipeline creation failed: %@", error);
+}
+
+- (void)setBackdropImage:(UIImage *)backdropImage {
+    _backdropImage = backdropImage;
+    self.lgBackdropTexture = [self lg_textureFromImage:backdropImage];
+
+    // Always regenerate the default blur for the new snapshot. A caller that wants
+    // a custom blur can set blurredBackdropImage after setting backdropImage.
+    if (backdropImage) {
+        UIImage *generated = [self lg_blurredImageFromImage:backdropImage];
+        _blurredBackdropImage = generated;
+        self.lgBlurredTexture = [self lg_textureFromImage:generated];
+    } else {
+        _blurredBackdropImage = nil;
+        self.lgBlurredTexture = nil;
+    }
+    [self refreshGlass];
+}
+
+- (void)setBlurredBackdropImage:(UIImage *)blurredBackdropImage {
+    _blurredBackdropImage = blurredBackdropImage;
+    self.lgBlurredTexture = [self lg_textureFromImage:blurredBackdropImage];
+    [self refreshGlass];
+}
+
+- (id<MTLTexture>)lg_textureFromImage:(UIImage *)image {
+    if (!image.CGImage) return nil;
+    NSDictionary *options = @{
+        MTKTextureLoaderOptionSRGB : @NO,
+        MTKTextureLoaderOptionOrigin : MTKTextureLoaderOriginTopLeft
+    };
+    NSError *error = nil;
+    id<MTLTexture> texture = [self.lgTextureLoader newTextureWithCGImage:image.CGImage options:options error:&error];
+    if (error) NSLog(@"[LGLiquidGlass] Texture upload failed: %@", error);
+    return texture;
+}
+
+- (UIImage *)lg_blurredImageFromImage:(UIImage *)image {
+    if (!image.CGImage) return image;
+    CIImage *source = [CIImage imageWithCGImage:image.CGImage];
+    CIFilter *filter = [CIFilter filterWithName:@"CIGaussianBlur"];
+    [filter setValue:source forKey:kCIInputImageKey];
+    [filter setValue:@(MAX(7.0, 10.0 * image.scale)) forKey:kCIInputRadiusKey];
+    CIImage *output = [filter.outputImage imageByCroppingToRect:source.extent];
+    CGImageRef blurredCG = [self.lgCIContext createCGImage:output fromRect:source.extent];
+    if (!blurredCG) return image;
+    UIImage *result = [UIImage imageWithCGImage:blurredCG scale:image.scale orientation:UIImageOrientationUp];
+    CGImageRelease(blurredCG);
+    return result;
+}
+
+- (void)setBackdropRect:(CGRect)backdropRect { _backdropRect = backdropRect; [self refreshGlass]; }
+- (void)setGlassCornerRadius:(CGFloat)value { _glassCornerRadius = MAX(0.0, value); [self refreshGlass]; }
+- (void)setRefractionStrength:(CGFloat)value { _refractionStrength = MIN(10.0, MAX(0.0, value)); [self refreshGlass]; }
+- (void)setBlurBlend:(CGFloat)value { _blurBlend = MIN(1.0, MAX(0.0, value)); [self refreshGlass]; }
+- (void)setSpecularIntensity:(CGFloat)value { _specularIntensity = MIN(1.0, MAX(0.0, value)); [self refreshGlass]; }
+- (void)setGlassThickness:(CGFloat)value { _glassThickness = MIN(2.0, MAX(0.0, value)); [self refreshGlass]; }
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [self refreshGlass];
+}
+
+- (void)refreshGlass {
+    if (self.lgPipelineReady) [self setNeedsDisplay];
+}
+
+- (void)setInteractionActive:(BOOL)active animated:(BOOL)animated {
+    CGAffineTransform target = active ? CGAffineTransformMakeScale(0.985, 0.985) : CGAffineTransformIdentity;
+    if (!animated) {
+        self.transform = target;
+        return;
+    }
+    NSTimeInterval duration = active ? 0.16 : 0.34;
+    CGFloat damping = active ? 0.86 : 0.72;
+    [UIView animateWithDuration:duration delay:0.0 usingSpringWithDamping:damping initialSpringVelocity:active ? 0.15 : 0.25 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = target;
+    } completion:nil];
+}
+
+#pragma mark - MTKViewDelegate
+
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size { [self refreshGlass]; }
+
+- (void)drawInMTKView:(MTKView *)view {
+    if (!self.lgPipelineReady || !self.lgBackdropTexture || !self.currentRenderPassDescriptor || !self.currentDrawable) return;
+    id<MTLCommandBuffer> commandBuffer = [self.lgCommandQueue commandBuffer];
+    id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:self.currentRenderPassDescriptor];
+    encoder.label = @"App Liquid Glass Draw";
+    [encoder setRenderPipelineState:self.lgPipeline];
+
+    CGSize drawSize = view.drawableSize;
+    CGFloat scale = view.contentScaleFactor > 0 ? view.contentScaleFactor : UIScreen.mainScreen.scale;
+    CGRect rect = CGRectIsEmpty(self.backdropRect) ? CGRectMake(0, 0, self.backdropImage.size.width, self.backdropImage.size.height) : self.backdropRect;
+    CGFloat imageScale = self.backdropImage.scale > 0 ? self.backdropImage.scale : scale;
+
+    LGGlassUniforms uniforms = {0};
+    uniforms.viewSize = (vector_float2){ (float)drawSize.width, (float)drawSize.height };
+    uniforms.backdropSize = (vector_float2){ (float)self.lgBackdropTexture.width, (float)self.lgBackdropTexture.height };
+    uniforms.backdropRect = (vector_float4){ (float)(rect.origin.x * imageScale), (float)(rect.origin.y * imageScale), (float)(rect.size.width * imageScale), (float)(rect.size.height * imageScale) };
+    uniforms.cornerRadius = (float)(self.glassCornerRadius * scale);
+    uniforms.bezelWidth = (float)(MAX(1.0, 1.35 * scale));
+    uniforms.refractionScale = (float)self.refractionStrength;
+    uniforms.blurBlend = (float)self.blurBlend;
+    uniforms.specularIntensity = (float)self.specularIntensity;
+    uniforms.glassThickness = (float)self.glassThickness;
+
+    [encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+    [encoder setFragmentTexture:self.lgBackdropTexture atIndex:0];
+    [encoder setFragmentTexture:self.lgBlurredTexture ?: self.lgBackdropTexture atIndex:1];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder endEncoding];
+    [commandBuffer presentDrawable:self.currentDrawable];
+    [commandBuffer commit];
 }
 
 @end
