@@ -5121,6 +5121,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
                 %init(Group_Hardware_ProMotion_Overclock);
                 
+                // [ĐÃ THÊM]: Cấp nhịp quét khởi tạo Scene ban đầu chống đen app
+                %init(Group_Apple_Native_ColdBoot_Overdrive);
+                
                 // 3. ĐỒ HỌA SILICON, ĐIỀU PHỐI CPU & RAM
                 %init(Group_Titanium_Game_Metal_Overdrive);
                 %init(Group_Silicon_Hardware_Pipeline_Overdrive);
@@ -5200,7 +5203,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 }
 
 // ====================================================================================================
-// BOOTSTRAP TRIGGER & CONSTRUCTOR
+// BOOTSTRAP TRIGGER & CONSTRUCTOR (ĐÃ BỔ SUNG CHẶN TOÀN BỘ TIẾN TRÌNH MẠNG TRIỆT TIÊU NGHẼN MẠNG)
 // ====================================================================================================
 
 static void SpringBoardBootstrapTrigger(void) {
@@ -5224,36 +5227,55 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // Chặn lặp nạp vào chính app cấu hình
+        // 1. Chặn nạp vào chính app cấu hình và các tweak liên quan
         if (strcasestr(progName, "smooth") != NULL ||
             strcasestr(progName, "boosti") != NULL ||
             strcasestr(progName, "liquid") != NULL) {
             return;
         }
 
-        // 1. Chặn các tiến trình mạng và web riêng biệt
-        if (strcasestr(progName, "WebKit") || strcasestr(progName, "WebContent") ||
-            strcasestr(progName, "GPUProcess") || strcasestr(progName, "Networking") ||
-            strcasestr(progName, "nsurlsessiond") || strcasestr(progName, "mDNSResponder") ||
-            strcasestr(progName, "cloudd")) {
+        if (strcasestr(progName, "networkd") != NULL ||           // Daemon lõi điều phối socket và luồng mạng iOS
+            strcasestr(progName, "trustd") != NULL ||             // Daemon thẩm định chứng chỉ SSL/TLS
+            strcasestr(progName, "configd") != NULL ||            // Cấu hình IP, DHCP và bảng định tuyến
+            strcasestr(progName, "wifid") != NULL ||              // Daemon điều khiển chip Wi-Fi
+            strcasestr(progName, "CommCenter") != NULL ||         // Daemon sóng di động 4G/5G/LTE
+            strcasestr(progName, "mDNSResponder") != NULL ||      // Phân giải tên miền DNS & Bonjour
+            strcasestr(progName, "nsurlsessiond") != NULL ||      // Tiến trình tải file nền iOS
+            strcasestr(progName, "nsurlstoraged") != NULL ||      // Lưu trữ cache web & cookie
+            strcasestr(progName, "WebKit") != NULL ||             // Nhân render WebKit
+            strcasestr(progName, "WebContent") != NULL ||         // Tiến trình nạp nội dung web
+            strcasestr(progName, "GPUProcess") != NULL ||         // Xử lý đồ họa WebKit
+            strcasestr(progName, "Networking") != NULL ||         // Tiến trình mạng riêng của WebKit
+            strcasestr(progName, "neagent") != NULL ||            // NetworkExtension (VPN, DNS 1.1.1.1, AdGuard)
+            strcasestr(progName, "nesessionmanager") != NULL ||   // Quản lý phiên kết nối VPN
+            strcasestr(progName, "apsd") != NULL ||               // Apple Push Notification daemon
+            strcasestr(progName, "cloudd") != NULL ||             // Đồng bộ iCloud nền
+            strcasestr(progName, "geod") != NULL ||               // Định vị & dữ liệu bản đồ mạng
+            strcasestr(progName, "akd") != NULL ||                // AuthKit xác thực tài khoản Apple
+            strcasestr(progName, "identityservicesd") != NULL ||  // iMessage & FaceTime network daemon
+            strcasestr(progName, "imagent") != NULL ||            // Quản lý kết nối tin nhắn iMessage
+            strcasestr(progName, "bluetoothd") != NULL) {         // Giao tiếp mạng Bluetooth
             return;
         }
 
-        // 2. Chặn các daemon nền (ĐÃ BỎ BACKBOARDD ĐỂ TIẾN TRÌNH NHẬN HOOK)
+        // ==============================================================================================
+        // 3. CHẶN TOÀN BỘ DAEMON HỆ THỐNG NỀN (GIỮ LẠI BACKBOARDD VÌ CẦN HOOK PHẦN CỨNG)
+        // ==============================================================================================
         if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
             strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
             strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
             strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
             strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
-            strcasestr(progName, "powerd") ||
-            strcasestr(progName, "notifyd") || strcasestr(progName, "securityd") ||
-            strcasestr(progName, "runningboardd") || strcasestr(progName, "thermalmonitord") ||
-            strcasestr(progName, "mediaremoted") || strcasestr(progName, "assertiond")) {
+            strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
+            strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
+            strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
+            strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
+            strcasestr(progName, "passd")) {
             return;
         }
 
         // ==============================================================================================
-        // [XỬ LÝ ĐỘC LẬP]: TIẾN TRÌNH BACKBOARDD (ĐIỀU PHỐI CẢM ỨNG HID & MÁY CHỦ HIỂN THỊ GỐC)
+        // 4. [XỬ LÝ ĐỘC LẬP]: TIẾN TRÌNH BACKBOARDD (ĐIỀU PHỐI CẢM ỨNG HID & MÁY CHỦ HIỂN THỊ GỐC)
         // ==============================================================================================
         if (strcasestr(progName, "backboardd") != NULL) {
             %init(Group_Backboardd_TouchDriver_Overdrive);
@@ -5264,10 +5286,15 @@ static void SpringBoardBootstrapTrigger(void) {
         NSBundle *mainBundle = [NSBundle mainBundle];
         NSString *bundleID = [mainBundle bundleIdentifier];
 
-        if (bundleID && ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                         [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                         [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound)) {
-            return;
+        // Lọc phụ theo Bundle Identifier (chặn tiện ích mở rộng của bên thứ ba, Widget & VPN plugins)
+        if (bundleID) {
+            if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+                return;
+            }
         }
 
         BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
