@@ -4550,11 +4550,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-=================================
-// KHAI BÁO C-STRUCT & CON TRỎ HÀM LIÊN QUAN ĐẾN PHẦN CỨNG
+// ====================================================================================================
+// KHAI BÁO NGUYÊN MẪU HÀM C ĐỂ TRÁNH LỖI "UNDECLARED IDENTIFIER" VÀ THIẾU TYPE
 // ====================================================================================================
 
-typedef struct __IOHIDEventSystemClient *IOHIDEventSystemClientRef;
+#ifdef __cplusplus
+extern "C" {
+#endif
+    CFPropertyListRef MGCopyAnswer(CFStringRef property);
+    Boolean IOHIDEventSystemClientSetProperty(void *client, CFStringRef key, CFTypeRef property);
+#ifdef __cplusplus
+}
+#endif
 
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
@@ -4580,8 +4587,8 @@ typedef struct __IOHIDEventSystemClient *IOHIDEventSystemClientRef;
     return %orig(property);
 }
 
-// [ĐÃ SỬA CHUẨN XNU/IOKIT]: Hook hàm C thuần để ép polling cảm ứng 1000Hz, dẹp bỏ lỗi Linker
-%hookf(Boolean, IOHIDEventSystemClientSetProperty, IOHIDEventSystemClientRef client, CFStringRef key, CFTypeRef property) {
+// [ĐÃ SỬA DÙNG CON TRỎ VOID*]: Tránh xung đột type trên SDK iOS, ép polling 1000Hz an toàn
+%hookf(Boolean, IOHIDEventSystemClientSetProperty, void *client, CFStringRef key, CFTypeRef property) {
     if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && 
         (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
         if (CFEqual(key, CFSTR("ReportInterval")) || CFEqual(key, CFSTR("HIDReportInterval"))) {
@@ -4594,6 +4601,8 @@ typedef struct __IOHIDEventSystemClient *IOHIDEventSystemClientRef;
     }
     return %orig(client, key, property);
 }
+
+%end
 
 %end
 
