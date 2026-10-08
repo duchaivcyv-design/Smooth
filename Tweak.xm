@@ -1789,6 +1789,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 
 static volatile BOOL g_isContinuousSwiping = NO;
 static volatile BOOL g_isUserTouchingScreen = NO;
+static volatile BOOL g_isVolumeHoldingV285 = NO;
 static volatile BOOL g_isVideoPlayingActive = NO;       // Trạng thái phát Video & PiP
 static volatile BOOL g_isNotificationBannerActive = NO;
 static volatile BOOL g_isScrollingActive = NO;
@@ -1841,7 +1842,7 @@ static inline BOOL Titanium_IsNotificationBannerActive(void) {
 
 // Kiểm tra video thụ động (không thao tác chạm, không cuộn màn hình)
 static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
-    return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive && g_activeAnimationCount == 0);
+    return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isVolumeHoldingV285 && !g_isScrollingActive && g_activeAnimationCount == 0);
 }
 
 // ====================================================================================================
@@ -1849,10 +1850,10 @@ static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
 // ====================================================================================================
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    // [ĐÃ ÉP TOÀN DIỆN]: NẾU BẬT Ổ KHÓA HOẶC ÉP XUNG 144HZ -> LUÔN KHÓA CỨNG Ở TRẦN TƯƠNG TÁC CAO NHẤT
+    // Giữ target rate CHỈ khi còn trạng thái tương tác; thả ra thì bỏ khóa ngay.
     if (g_isRateLockedV285) return YES;
-    if (CFG285 && (CFG285.forceOverclock144Hz || CFG285.proMotionEngineBeta7)) return YES;
-    if (g_syncPayloadV285.forceOverclock != 0 || g_syncPayloadV285.dynamicInterpolation != 0) return YES;
+    if (g_isVolumeHoldingV285) return YES;
+    if (g_isUserTouchingScreen) return YES;
 
     // 1. Đang có cử chỉ vuốt liên tục hoặc cuộn quán tính
     if (g_isContinuousSwiping || g_isScrollingActive) return YES;
@@ -1963,7 +1964,7 @@ static inline NSInteger Titanium_CalculateAdaptiveProMaxTier(void) {
     }
 
     // 2. [ĐÃ ÉP]: NẾU BẬT Ổ KHÓA HOẶC ÉP XUNG 144HZ -> BUNG KỊCH TRẦN GIÁ TRỊ ĐÃ KHÓA
-    if (g_isRateLockedV285 || (CFG285 && (CFG285.forceOverclock144Hz || CFG285.proMotionEngineBeta7)) || g_syncPayloadV285.forceOverclock != 0) {
+    if (g_isRateLockedV285) {
         NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
         return target > 0 ? target : TitaniumTier_ApexPeak;
     }
@@ -3133,9 +3134,44 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_isUserTouchingScreen = YES;
+        Titanium_TriggerInstantTouchBurst();
+    }
+    %orig(touches, event);
+}
+
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_isUserTouchingScreen = YES;
+        g_lastInteractionMachTime = mach_absolute_time();
+    }
+    %orig(touches, event);
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_isUserTouchingScreen = NO;
+        g_isScrollingActive = NO;
+        g_lastInteractionMachTime = 0;
+    }
+}
+
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_isUserTouchingScreen = NO;
+        g_isScrollingActive = NO;
+        g_lastInteractionMachTime = 0;
+    }
+}
+
 - (void)_scrollViewWillBeginDragging {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_isScrollingActive = YES;
+        g_isUserTouchingScreen = YES;
         Titanium_TriggerInstantTouchBurst();
     }
     %orig;
@@ -3143,16 +3179,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_notifyDidScroll {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_isScrollingActive = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
+        if (g_isUserTouchingScreen) {
+            g_isScrollingActive = YES;
+            g_lastInteractionMachTime = mach_absolute_time();
+        }
     }
     %orig;
 }
 
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_isScrollingActive = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
+        if (g_isUserTouchingScreen) {
+            g_isScrollingActive = YES;
+            g_lastInteractionMachTime = mach_absolute_time();
+        }
     }
     %orig;
 }
@@ -3228,6 +3268,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)increaseVolume {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = YES;
         g_lastInteractionMachTime = mach_absolute_time();
     }
 }
@@ -3235,6 +3276,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)decreaseVolume {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = YES;
         g_lastInteractionMachTime = mach_absolute_time();
     }
 }
@@ -3242,7 +3284,16 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)changeVolumeByDelta:(float)delta {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = YES;
         g_lastInteractionMachTime = mach_absolute_time();
+    }
+}
+
+- (void)cancelVolumeEvent {
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = NO;
+        g_lastInteractionMachTime = 0;
     }
 }
 
