@@ -47,13 +47,16 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
+BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit BackBoardServices
 
 BoostiPhone6sCore_LIBRARIES = substrate
 
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
+
+# Ký Entitlements đặc quyền cao cho SpringBoard & backboardd
+BoostiPhone6sCore_CODESIGN_FLAGS = -SBoostiPhone6sCore.entitlements
 
 include $(THEOS_MAKE_PATH)/library.mk
 
@@ -62,6 +65,24 @@ SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
+
+before-all::
+	@echo ""
+	@echo "=== [BoostiPhone6sCore] Tự động khởi tạo file Entitlements đặc quyền ==="
+	@printf '%s\n' \
+		'<?xml version="1.0" encoding="UTF-8"?>' \
+		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+		'<plist version="1.0">' \
+		'<dict>' \
+		'	<key>com.apple.private.hid.client.event-filter</key>' \
+		'	<true/>' \
+		'	<key>com.apple.private.iokit.system-nvram-allow</key>' \
+		'	<true/>' \
+		'	<key>com.apple.backboardd.launchapplications</key>' \
+		'	<true/>' \
+		'</dict>' \
+		'</plist>' > BoostiPhone6sCore.entitlements
+	@echo "  [OK] Đã tạo BoostiPhone6sCore.entitlements!"
 
 after-stage::
 	@echo ""
@@ -77,12 +98,14 @@ after-stage::
 		'		<key>Bundles</key>' \
 		'		<array>' \
 		'			<string>com.apple.springboard</string>' \
+		'			<string>com.apple.backboardd</string>' \
 		'			<string>com.apple.Preferences</string>' \
 		'			<string>com.apple.UIKit</string>' \
 		'		</array>' \
 		'		<key>Executables</key>' \
 		'		<array>' \
 		'			<string>SpringBoard</string>' \
+		'			<string>backboardd</string>' \
 		'		</array>' \
 		'	</dict>' \
 		'</dict>' \
