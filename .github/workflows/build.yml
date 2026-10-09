@@ -21,40 +21,65 @@ jobs:
 
       # ============================================================
       # CACHE THEOS + SDK + HOMEBREW PACKAGES
-      # Lần đầu: ~3-5 phút | Lần sau: ~5-10s (cache hit)
       # ============================================================
-      - name: Cache Theos + SDK + Homebrew
+      - name: Cache Theos + SDK
         id: cache-theos
         uses: actions/cache@v4
         with:
           path: |
             ~/theos
             ~/Library/Caches/Homebrew/downloads
-            /opt/homebrew/Cellar/dpkg
-            /opt/homebrew/Cellar/ldid
-          key: theos-sdk-165-${{ runner.os }}-v2
+          key: theos-sdk-165-${{ runner.os }}-v3
 
       # ============================================================
-      # CÀI CÔNG CỤ NHANH — BỎ coreutils (không cần thiết)
-      # Nếu cache hit → ~2s. Nếu cache miss → ~60s
+      # CÀI CÔNG CỤ — LUÔN CHẠY, KHÔNG PHỤ THUỘC CACHE
       # ============================================================
-      - name: Setup Tools (Fast)
+      - name: Setup Tools (Always Run)
         run: |
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           export HOMEBREW_NO_ANALYTICS=1
-          #ài Chỉ c dpkg + ldid (bỏ coreutils thừa)
-          if ! command -v dpkg-deb &> /dev/null; then brew install dpkg; fi
-          if ! command -v ldid &> /dev/null; then brew install ldid; fi
 
-          # Xuất biến môi trường cho các bước sau
+          # Cài dpkg + ldid nếu chưa có
+          if ! command -v dpkg-deb &> /dev/null; then
+            echo "📦 Installing dpkg..."
+            brew install dpkg
+          fi
+          if ! command -v ldid &> /dev/null; then
+            echo "🔐 Installing ldid..."
+            brew install ldid
+          fi
+
+          # Xác định đường dẫn ldid thật
+          LDID_PATH=$(which ldid)
+          echo "🔍 ldid found at: $LDID_PATH"
+
+          if [ -z "$LDID_PATH" ]; then
+            echo "❌ ldid install failed!"
+            exit 1
+          fi
+
+          # Đảm bảo $THEOS/bin tồn tại
+          mkdir -p "$HOME/theos/bin"
+
+          # Link ldid vào $THEOS/bin — LUÔN CHẠY (cache hit hay miss đều ok)
+          ln -sf "$LDID_PATH" "$HOME/theos/bin/ldid"
+          chmod +x "$HOME/theos/bin/ldid"
+
+          # Verify
+          "$HOME/theos/bin/ldid" -h 2>&1 | head -1 || echo "⚠️ ldid check"
+
+          # Xuất biến môi trường
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
           echo "$HOME/theos/bin" >> $GITHUB_PATH
+          # Thêm luôn homebrew bin cho chắc
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> $GITHUB_PATH
           echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
           echo "THEOS_NO_AUTO_UPDATE=1" >> $GITHUB_ENV
 
       # ============================================================
-      # CHỈ CLONE THEOS NẾU CACHE MISS
+      # CLONE THEOS + SDK — CHỈ KHI CACHE MISS
       # ============================================================
       - name: Clone Theos + SDK (Cache Miss Only)
         if: steps.cache-theos.outputs.cache-hit != 'true'
@@ -63,14 +88,7 @@ jobs:
           rm -rf "$TARGET_DIR"
           git clone --recursive --depth=1 https://github.com/theos/theos.git "$TARGET_DIR"
 
-          # Link ldid
-          mkdir -p "$TARGET_DIR/bin"
-          BREW_LDID=$(which ldid || true)
-          if [ -n "$BREW_LDID" ]; then
-            ln -sf "$BREW_LDID" "$TARGET_DIR/bin/ldid"
-          fi
-
-          # Tải SDK 16.5 (sparse checkout — chỉ lấy 1 SDK)
+          # Tải SDK 16.5 (sparse)
           mkdir -p "$TARGET_DIR/sdks"
           git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
           cd /tmp/sdks
@@ -78,10 +96,31 @@ jobs:
           mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
           rm -rf /tmp/sdks
 
-          echo "✅ Theos + SDK cài lần đầu xong (cache sẽ dùng cho lần sau)"
+          echo "✅ Theos + SDK 16.5 cài lần đầu xong"
 
       # ============================================================
-      # BUILD — CHỈ `make package` (BỎ `make clean` vì đã rm -rf)
+      # VERIFY LDID TRƯỚC KHI BUILD — ĐẢM BẢO KHÔNG FAIL Ở SIGNING
+      # ============================================================
+      - name: Verify ldid Available
+        run: |
+          echo "=== Verify ldid ==="
+          which ldid || echo "ldid not in PATH"
+          ls -la "$HOME/theos/bin/ldid" || echo "no ldid in theos/bin"
+          file "$HOME/theos/bin/ldid" 2>/dev/null || true
+
+          if [ ! -e "$HOME/theos/bin/ldid" ]; then
+            echo "❌ LỖI: ldid không tồn tại trong $HOME/theos/bin/"
+            # Fallback: cài lại trực tiếp
+            brew install ldid || true
+            mkdir -p "$HOME/theos/bin"
+            ln -sf "$(which ldid)" "$HOME/theos/bin/ldid"
+          fi
+
+          "$HOME/theos/bin/ldid" -h 2>&1 | head -3
+          echo "✅ ldid OK"
+
+      # ============================================================
+      # BUILD — CHỈ `make package`
       # ============================================================
       - name: Build Package (Rootless)
         run: |
@@ -91,10 +130,9 @@ jobs:
             echo "❌ Không tìm thấy Makefile!"; exit 1
           fi
 
-          # Dọn dẹp 1 lần duy nhất, không dùng make clean
           rm -rf packages obj .theos
 
-          # Chuẩn hoá quyền DEBIAN
+          # Fix quyền DEBIAN
           for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
             if [ -d "$DEBIAN_DIR" ]; then
               find "$DEBIAN_DIR" -type f -exec chmod 644 {} +
@@ -103,13 +141,17 @@ jobs:
             fi
           done
 
+          # Ensure ldid is symlinked once more before build
+          mkdir -p "$HOME/theos/bin"
+          if [ ! -e "$HOME/theos/bin/ldid" ]; then
+            ln -sf "$(which ldid)" "$HOME/theos/bin/ldid"
+          fi
+
           BUILD_LOG="/tmp/theos_build.log"
           set -o pipefail
-          # macOS runner: 3-4 cores thực dụng
           NCPU=$(sysctl -n hw.ncpu | head -1)
           if [ -z "$NCPU" ] || [ "$NCPU" -lt 2 ]; then NCPU=4; fi
 
-          # CHỈ make package (không make clean) — nhanh hơn ~30%
           make package \
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=rootless \
@@ -121,7 +163,7 @@ jobs:
             echo "======================================================================"
             echo "🚨 BIÊN DỊCH THẤT BẠI!"
             echo "======================================================================"
-            grep -E '(error:|fatal error:)' "$BUILD_LOG" || true
+            grep -E '(error:|fatal error:|command not found)' "$BUILD_LOG" || true
             echo ""
             tail -n 60 "$BUILD_LOG"
             exit 1
@@ -130,7 +172,7 @@ jobs:
           ls -lh packages/*.deb
 
       # ============================================================
-      # UPLOAD — bỏ retention 7 ngày (mặc định đủ)
+      # UPLOAD ARTIFACT
       # ============================================================
       - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
@@ -138,4 +180,4 @@ jobs:
           name: BoostiPhone6s-Rootless-FullPackage
           path: packages/*.deb
           if-no-files-found: error
-          compression-level: 0    # Deb đã nén, không nén lại
+          compression-level: 0
