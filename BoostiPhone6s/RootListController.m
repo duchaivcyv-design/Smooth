@@ -58,7 +58,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     LGGlassMaterialTypeChrome    = 3,
     LGGlassMaterialTypeProminent = 4,
     LGGlassMaterialTypeOverlay   = 5,
-    LGGlassMaterialTypeCrystal   = 6   // MỚI: siêu trong suốt như pha lê
+    LGGlassMaterialTypeCrystal   = 6
 };
 
 @interface LGGlassMaterialFactory : NSObject
@@ -91,7 +91,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     return UIBlurEffectStyleSystemUltraThinMaterialDark;
 }
 + (CGFloat)tintAlphaForType:(LGGlassMaterialType)type {
-    // [ĐÃ FIX] GIẢM MẠNH — hầu như không có tint, để blur tự nhiên
     switch (type) {
         case LGGlassMaterialTypeUltraThin: return 0.002;
         case LGGlassMaterialTypeThin:      return 0.004;
@@ -145,9 +144,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 2: CRYSTAL GLASS VIEW — Khối thủy tinh trong suốt thật
-// 5 lớp: Backdrop (blur) + TopSpecular + BottomReflection + DiagonalSheen + Rim
-// KHÔNG có lớp tint đục — chỉ có blur + ánh sáng
+// MODULE 2: CRYSTAL GLASS VIEW
 // ====================================================================================================
 @interface AppleLiquidGlassView : UIView
 @property (nonatomic, strong) UIVisualEffectView *blurView;
@@ -158,7 +155,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @property (nonatomic, strong) CAGradientLayer *leftEdgeHighlight;
 @property (nonatomic, strong) CAShapeLayer *innerRim;
 @property (nonatomic, strong) CAShapeLayer *outerRim;
-@property (nonatomic, strong) CAGradientLayer *chromaticEdge;   // MỚI: viền cầu vồng khúc xạ
+@property (nonatomic, strong) CAGradientLayer *chromaticEdge;
 @property (nonatomic, assign) CGFloat cornerRadiusValue;
 @property (nonatomic, assign) LGGlassMaterialType materialType;
 @property (nonatomic, assign) BOOL interactiveHighlightEnabled;
@@ -191,9 +188,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         BOOL isDark = YES;
         if (@available(iOS 13.0, *)) isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
-        // ============================================================
-        // LỚP 1: BACKDROP BLUR THẬT
-        // ============================================================
         UIBlurEffect *blur = [UIBlurEffect effectWithStyle:[LGGlassMaterialFactory blurStyleForType:type isDark:isDark]];
         _blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
         _blurView.frame = self.bounds;
@@ -204,9 +198,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _blurView.clipsToBounds = YES;
         [self addSubview:_blurView];
 
-        // ============================================================
-        // LỚP 2: TINT SIÊU MỎNG (gần như không đục)
-        // ============================================================
         CGFloat tint = [LGGlassMaterialFactory tintAlphaForType:type];
         _tintView = [[UIView alloc] initWithFrame:self.bounds];
         _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:tint];
@@ -220,9 +211,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         CGFloat spec = [LGGlassMaterialFactory specularAlphaForType:type];
         CGFloat specRatio = [LGGlassMaterialFactory specularHeightRatioForType:type];
 
-        // ============================================================
-        // LỚP 3: TOP SPECULAR HIGHLIGHT — dải sáng chính
-        // ============================================================
         _topSpecular = [CAGradientLayer layer];
         _topSpecular.frame = CGRectMake(0, 0, self.bounds.size.width, MAX(2.0, self.bounds.size.height * specRatio));
         _topSpecular.cornerRadius = radius;
@@ -238,9 +226,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _topSpecular.endPoint = CGPointMake(0, 1);
         [self.layer addSublayer:_topSpecular];
 
-        // ============================================================
-        // LỚP 4: BOTTOM REFLECTION
-        // ============================================================
         _bottomReflection = [CAGradientLayer layer];
         _bottomReflection.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _bottomReflection.cornerCurve = kCACornerCurveContinuous;
@@ -255,9 +240,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _bottomReflection.opacity = 0.85f;
         [self.layer addSublayer:_bottomReflection];
 
-        // ============================================================
-        // LỚP 5: DIAGONAL SHEEN — vệt sáng chéo
-        // ============================================================
         _diagonalSheen = [CAGradientLayer layer];
         _diagonalSheen.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _diagonalSheen.cornerCurve = kCACornerCurveContinuous;
@@ -273,9 +255,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _diagonalSheen.opacity = 0.65f;
         [self.layer addSublayer:_diagonalSheen];
 
-        // ============================================================
-        // LỚP 6: LEFT EDGE HIGHLIGHT — dải sáng dọc mép trái
-        // ============================================================
         _leftEdgeHighlight = [CAGradientLayer layer];
         _leftEdgeHighlight.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _leftEdgeHighlight.cornerCurve = kCACornerCurveContinuous;
@@ -289,9 +268,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _leftEdgeHighlight.opacity = 0.55f;
         [self.layer addSublayer:_leftEdgeHighlight];
 
-        // ============================================================
-        // LỚP 7: CHROMATIC EDGE — viền cầu vồng mô phỏng khúc xạ
-        // ============================================================
         _chromaticEdge = [CAGradientLayer layer];
         _chromaticEdge.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _chromaticEdge.cornerCurve = kCACornerCurveContinuous;
@@ -307,9 +283,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _chromaticEdge.opacity = 0.45f;
         [self.layer addSublayer:_chromaticEdge];
 
-        // ============================================================
-        // LỚP 8: INNER RIM — viền trong sáng
-        // ============================================================
         CGFloat rimA = [LGGlassMaterialFactory rimAlphaForType:type];
         CGFloat rimW = [LGGlassMaterialFactory rimWidthForType:type];
         _innerRim = [CAShapeLayer layer];
@@ -318,16 +291,12 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _innerRim.lineWidth = rimW;
         [self.layer addSublayer:_innerRim];
 
-        // ============================================================
-        // LỚP 9: OUTER RIM — viền ngoài tối mảnh
-        // ============================================================
         _outerRim = [CAShapeLayer layer];
         _outerRim.fillColor = [UIColor clearColor].CGColor;
         _outerRim.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.15].CGColor;
         _outerRim.lineWidth = 0.4;
         [self.layer addSublayer:_outerRim];
 
-        // Shadow
         self.layer.shadowColor = [UIColor blackColor].CGColor;
         self.layer.shadowOpacity = [LGGlassMaterialFactory shadowOpacityForType:type];
         self.layer.shadowOffset = CGSizeMake(0, [LGGlassMaterialFactory shadowOffsetYForType:type]);
@@ -446,7 +415,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 3: LIQUID CAPSULE SWITCH — Có intrinsicContentSize
+// MODULE 3: LIQUID CAPSULE SWITCH
 // ====================================================================================================
 @interface LiquidCapsuleSwitch : UIControl
 @property (nonatomic, assign) BOOL on;
@@ -462,7 +431,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 @implementation LiquidCapsuleSwitch
 
-// [ĐÃ FIX] Kích thước cứng — không collapse
 - (CGSize)intrinsicContentSize {
     return CGSizeMake(62.0, 34.0);
 }
@@ -501,8 +469,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         [_trackView.layer addSublayer:_trackOuterRim];
 
         CGFloat inset = 3.0;
-        CGFloat d = 34.0 - (inset * 2);  // 28
-        // [ĐÃ FIX] Dùng Crystal — trong suốt thật
+        CGFloat d = 34.0 - (inset * 2);
         _thumbGlass = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(inset, inset, d, d)
                                                      cornerRadius:d / 2.0
                                                      materialType:LGGlassMaterialTypeCrystal];
@@ -530,7 +497,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    // [ĐÃ FIX] Ép kích thước
     if (self.bounds.size.width < 60.0 || self.bounds.size.height < 32.0) {
         CGRect f = self.frame;
         f.size = CGSizeMake(62, 34);
@@ -603,7 +569,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 4: LG CUSTOM SEGMENT — Có intrinsicContentSize, không cắt
+// MODULE 4: LG CUSTOM SEGMENT
 // ====================================================================================================
 @interface LGCustomSegment : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *background;
@@ -617,7 +583,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 @implementation LGCustomSegment
 
-// [ĐÃ FIX] Kích thước tối thiểu — không collapse
 - (CGSize)intrinsicContentSize {
     CGFloat minWidth = MAX(260.0, self.items.count * 75.0);
     return CGSizeMake(minWidth, 36.0);
@@ -666,7 +631,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    // [ĐÃ FIX] Ép kích thước tối thiểu
     CGFloat minW = MAX(260.0, _items.count * 75.0);
     if (self.bounds.size.width < minW) {
         CGRect f = self.frame;
@@ -730,7 +694,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 5: LG GLASS TABLE VIEW CELL — Crystal trong suốt
+// MODULE 5: LG GLASS TABLE VIEW CELL
 // ====================================================================================================
 @interface LGGlassTableViewCell : UITableViewCell
 @property (nonatomic, strong) AppleLiquidGlassView *glassBackground;
@@ -823,7 +787,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 6: LG GLASS NAV BUTTON — Tab bar dưới
+// MODULE 6: LG GLASS NAV BUTTON
 // ====================================================================================================
 @interface LGGlassNavButton : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *glassPill;
@@ -916,7 +880,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 7: EXPANDING NAV BAR BUTTON — Nút góc phải bung/thu
+// MODULE 7: EXPANDING NAV BAR BUTTON
 // ====================================================================================================
 @class LGExpandingNavBarButton;
 
@@ -950,21 +914,21 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @interface LGExpandingActionView : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *glassBackground;
 @property (nonatomic, strong) UIImageView *iconView;
-Highlight@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *titleLabel;
 - (instancetype)initWithAction:(LGExpandingMenuAction *)action;
 @end
 
 @implementation LGExpandingActionView
-- (instancetype)initWithAction:(LGExpandingMenuEnabledAction *)action {
+- (instancetype)initWithAction:(LGExpandingMenuAction *)action {
     if (self = [super initWithFrame:CGRectMake(0, 0, 220, 48)]) {
-        = self.backgroundColor = [UIColor clearColor];
+        self.backgroundColor = [UIColor clearColor];
 
         _glassBackground = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
- NO                                                          cornerRadius:24.0
+                                                          cornerRadius:24.0
                                                           materialType:LGGlassMaterialTypeCrystal];
-        _glassBackground.user;
-InteractionEnabled = NO;
-        _glassBackground.interactive        _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _glassBackground.userInteractionEnabled = NO;
+        _glassBackground.interactiveHighlightEnabled = NO;
+        _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [self addSubview:_glassBackground];
 
         _iconView = [[UIImageView alloc] init];
@@ -1061,21 +1025,21 @@ InteractionEnabled = NO;
     return self;
 }
 
-- (void)setActions:(NSArray<LGExpandingMenuAction *>ground *)actions {
+- (void)setActions:(NSArray<LGExpandingMenuAction *> *)actions {
     _actions = actions;
 }
 
 - (void)handleTap {
-    if (_expanded) [selfActive collapseMenu];
+    if (_expanded) [self collapseMenu];
     else [self expandMenu];
 }
 
 - (UIWindow *)hostWindow {
-    UIWindow *w) = self.window;
+    UIWindow *w = self.window;
     if (w) return w;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedSc {
-enes) {
-        if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UIScene           ActivationStateFore for (UIWindow *win in ((UIWindowScene *)scene).windows) {
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
+            for (UIWindow *win in ((UIWindowScene *)scene).windows) {
                 if (win.isKeyWindow) return win;
             }
         }
