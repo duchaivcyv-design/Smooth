@@ -75,19 +75,19 @@ typedef struct {
     uint64_t updateSeq;
     uint64_t lastHeartbeat;
     char     reserved[48];
-} ApexV285ProPayload;
+} ApexV285ProGlassPayload;
 #endif
 
 // ====================================================================================================
-// MODULE 1: GLASS MATERIAL FACTORY - Bộ Sinh Material Glass Chuẩn Apple
-// ====================================================================================================
+// MODULE 1: GLASS MATERIAL FACTORY
+// =================================================================================================Material===
 
 typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
-    LGGlassMaterialTypeUltraThin = 0,   // Cho thumb switch, lens nhỏ
-    LGGlassMaterialTypeThin = 1,        // Cho card, nav bar
-    LGGlassMaterialTypeRegular = 2,     // Cho sheet, dialog lớn
-    LGGlassMaterialTypeChrome = 3,      // Cho toolbar, tab bar
-    LGGlassMaterialTypeProminent = 4    // Cho nút action nổi bật
+    LGGlassMaterialTypeTypeUltraThin = 0,
+    LGGlassMaterialTypeThin = 1Regular,
+    LG = 2,
+    LGGlassMaterialTypeChrome = 3,
+    LGGlassMaterialTypeProminent = 4
 };
 
 @interface LGGlassMaterialFactory : NSObject
@@ -199,9 +199,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 2: APPLE LIQUID GLASS VIEW - Khối Thủy Tinh Chuẩn iOS 26
-// Cấu trúc: Blur + Tint + TopSpecular + BottomReflection + DiagonalSheen + DualRim + InnerGlow
-// + TouchTracking + Highlighted state + Jiggle Animation
+// MODULE 2: APPLE LIQUID GLASS VIEW
 // ====================================================================================================
 
 @interface AppleLiquidGlassView : UIView
@@ -284,10 +282,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 
 - (void)lg_buildGlassLayers {
-    // ============================================================
-    // LỚP 1: BLUR THẬT — UIVisualEffectView với system material chuẩn Apple
-    // Đây là lớp DUY NHẤT tạo backdrop blur đúng như iOS 26
-    // ============================================================
     UIBlurEffectStyle style = [LGGlassMaterialFactory blurStyleForType:_materialType isDark:_isDarkMode];
     UIBlurEffect *blur = [UIBlurEffect effectWithStyle:style];
     _glassBlurView = [[UIVisualEffectView alloc] initWithEffect:blur];
@@ -301,9 +295,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _glassBlurView.clipsToBounds = YES;
     [self addSubview:_glassBlurView];
 
-    // ============================================================
-    // LỚP 2: TINT — độ đục thay đổi theo material type
-    // ============================================================
     CGFloat tintAlpha = [LGGlassMaterialFactory tintAlphaForType:_materialType];
     _glassTintView = [[UIView alloc] initWithFrame:self.bounds];
     _glassTintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:tintAlpha];
@@ -316,10 +307,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _glassTintView.clipsToBounds = YES;
     [self addSubview:_glassTintView];
 
-    // ============================================================
-    // LỚP 3: TOP SPECULAR HIGHLIGHT — dải sáng phản chiếu từ trên
-    // Apple: dải mỏng ~20-25% chiều cao ở đỉnh
-    // ============================================================
     CGFloat specularAlpha = [LGGlassMaterialFactory specularAlphaForType:_materialType];
 
     _topSpecularHighlight = [CAGradientLayer layer];
@@ -339,10 +326,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _topSpecularHighlight.opacity = 0.90f;
     [self.layer addSublayer:_topSpecularHighlight];
 
-    // ============================================================
-    // LỚP 4: BOTTOM REFLECTION — ánh sáng phản chiếu từ dưới lên
-    // Apple: một dải sáng mờ nhẹ ở 70-100% chiều cao
-    // ============================================================
     _bottomReflection = [CAGradientLayer layer];
     _bottomReflection.frame = CGRectMake(0, self.bounds.size.height * 0.65, self.bounds.size.width, self.bounds.size.height * 0.35);
     _bottomReflection.cornerRadius = _cornerRadiusValue;
@@ -360,10 +343,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _bottomReflection.opacity = 0.70f;
     [self.layer addSublayer:_bottomReflection];
 
-    // ============================================================
-    // LỚP 5: DIAGONAL SHEEN — vệt sáng chéo mô phỏng nguồn sáng góc
-    // Apple: vệt mỏng chéo từ góc trên-trái xuống dưới-phải
-    // ============================================================
     _diagonalSheen = [CAGradientLayer layer];
     _diagonalSheen.frame = self.bounds;
     _diagonalSheen.cornerRadius = _cornerRadiusValue;
@@ -382,9 +361,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _diagonalSheen.opacity = 0.55f;
     [self.layer addSublayer:_diagonalSheen];
 
-    // ============================================================
-    // LỚP 6: INNER GLOW — lớp sáng viền trong cùng, tạo cảm giác kính nổi
-    // ============================================================
     _innerGlowLayer = [CALayer layer];
     _innerGlowLayer.frame = self.bounds;
     _innerGlowLayer.cornerRadius = _cornerRadiusValue;
@@ -397,9 +373,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _innerGlowLayer.opacity = 0.9f;
     [self.layer addSublayer:_innerGlowLayer];
 
-    // ============================================================
-    // LỚP 7: INNER RIM STROKE — viền trong siêu mảnh
-    // ============================================================
     CGFloat rimAlpha = [LGGlassMaterialFactory rimAlphaForType:_materialType];
     CGFloat rimWidth = [LGGlassMaterialFactory rimWidthForType:_materialType];
 
@@ -411,9 +384,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _innerRimStroke.lineWidth = rimWidth;
     [self.layer addSublayer:_innerRimStroke];
 
-    // ============================================================
-    // LỚP 8: OUTER RIM STROKE — viền ngoài siêu mảnh, tối 22%
-    // ============================================================
     _outerRimStroke = [CAShapeLayer layer];
     UIBezierPath *outerPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_cornerRadiusValue];
     _outerRimStroke.path = outerPath.CGPath;
@@ -606,9 +576,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 3: LIQUID CAPSULE SWITCH - Công Tắc Thủy Tinh Chuẩn iOS 26
-// Cấu trúc: Track (gradient + inner shadow) + Thumb (glass + specular + rim)
-// + Press animation + Slide animation + Haptic
+// MODULE 3: LIQUID CAPSULE SWITCH
 // ====================================================================================================
 
 @interface LiquidCapsuleSwitch : UIControl
@@ -635,7 +603,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     if (self = [super initWithFrame:CGRectMake(0, 0, 62, 34)]) {
         self.backgroundColor = [UIColor clearColor];
 
-        // ==== TRACK ====
         _channelTrackView = [[UIView alloc] initWithFrame:self.bounds];
         _channelTrackView.layer.cornerRadius = 17.0;
         if (@available(iOS 13.0, *)) {
@@ -651,7 +618,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _trackGradient.endPoint = CGPointMake(0.0, 1.0);
         [_channelTrackView.layer addSublayer:_trackGradient];
 
-        // Inner shadow của track (làm track trông lõm)
         _trackInnerShadow = [CAShapeLayer layer];
         _trackInnerShadow.path = [UIBezierPath bezierPathWithRoundedRect:CGRectInset(_channelTrackView.bounds, 0.5, 0.5) cornerRadius:16.5].CGPath;
         _trackInnerShadow.fillColor = [UIColor clearColor].CGColor;
@@ -666,7 +632,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _trackInnerRim.lineWidth = 0.6;
         [_channelTrackView.layer addSublayer:_trackInnerRim];
 
-        // ==== THUMB (trắng mờ giống Apple) ====
         CGFloat thumbInset = 3.0;
         CGFloat thumbHeight = self.bounds.size.height - (thumbInset * 2);
         CGFloat thumbWidth = thumbHeight;
@@ -684,7 +649,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _glassThumb.layer.shadowRadius = 3.5;
         [self addSubview:_glassThumb];
 
-        // Specular trên đỉnh thumb
         _thumbSpecular = [CAGradientLayer layer];
         _thumbSpecular.frame = _glassThumb.bounds;
         _thumbSpecular.cornerRadius = thumbHeight / 2.0;
@@ -701,7 +665,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _thumbSpecular.endPoint = CGPointMake(0.0, 1.0);
         [_glassThumb.layer addSublayer:_thumbSpecular];
 
-        // Bottom glow nhẹ cho thumb
         _thumbBottomGlow = [CAGradientLayer layer];
         _thumbBottomGlow.frame = CGRectMake(0, _glassThumb.bounds.size.height * 0.60, _glassThumb.bounds.size.width, _glassThumb.bounds.size.height * 0.40);
         _thumbBottomGlow.cornerRadius = thumbHeight / 2.0;
@@ -717,7 +680,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _thumbBottomGlow.endPoint = CGPointMake(0.0, 1.0);
         [_glassThumb.layer addSublayer:_thumbBottomGlow];
 
-        // Rim cho thumb
         _thumbRim = [CAShapeLayer layer];
         _thumbRim.path = [UIBezierPath bezierPathWithRoundedRect:_glassThumb.bounds cornerRadius:thumbHeight / 2.0].CGPath;
         _thumbRim.fillColor = [UIColor clearColor].CGColor;
@@ -834,7 +796,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 4: LIQUID GLASS CARD CELL - Table Cell Với Hiệu Ứng Glass Đầy Đủ
+// MODULE 4: LIQUID GLASS CARD CELL
 // ====================================================================================================
 
 @interface LGGlassTableViewCell : UITableViewCell
@@ -929,7 +891,9 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 5: LIQUID GLASS NAV BAR BUTTON - Nút Tab Bar Với Glass Đầy Đủ
+// MODULE 5: LIQUID GLASS NAV BAR BUTTON
+// [ĐÃ FIX]: Xóa property `selected` trùng UIControl
+// [ĐÃ FIX]: Đổi tên setSelected:animated: → updateTabSelected:animated:
 // ====================================================================================================
 
 @interface LGGlassNavButton : UIControl
@@ -937,10 +901,10 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @property (nonatomic, strong) AppleLiquidGlassView *glassPill;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, assign) BOOL selected;
+// [ĐÃ FIX] Không khai báo `selected` — dùng của UIControl
 
 - (instancetype)initWithIconName:(NSString *)iconName title:(NSString *)title;
-- (void)setSelected:(BOOL)selected animated:(BOOL)animated;
+- (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated;
 
 @end
 
@@ -1010,8 +974,9 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     } completion:nil];
 }
 
-- selected (void)setSelected:(BOOL)selected animated:(BOOL)animated {
-    self.selected = selected;
+// [ĐÃ FIX] Đổi tên method + xóa chữ `selected` bị chèn + `_selected` → `[super setSelected:selected]`
+- (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated {
+    [super setSelected:selected];
     UIColor *targetColor = selected ? [UIColor whiteColor] : [UIColor colorWithWhite:0.78 alpha:1.0];
     UIFont *targetFont = selected ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
     CGFloat targetAlpha = selected ? 1.0 : 0.0;
@@ -1143,7 +1108,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// ROOT LIST CONTROLLER - TÍCH HỢP LIQUID GLASS 4.0 FULL ANIMATIONS
+// ROOT LIST CONTROLLER
 // ====================================================================================================
 
 @interface RootListController () {
@@ -1337,7 +1302,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 
     if (_tabButtons.count > 0) {
-        [_tabButtons[0] setSelected:YES animated:NO];
+        // [ĐÃ FIX] setSelected:animated: → updateTabSelected:animated:
+        [_tabButtons[0] updateTabSelected:YES animated:NO];
     }
 
     [self.view addSubview:_liquidNavBarContainer];
@@ -1365,7 +1331,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         self->_activeGlassIndicator.frame = targetFrame;
         for (NSInteger i = 0; i < self->_tabButtons.count; i++) {
             LGGlassNavButton *b = self->_tabButtons[i];
-            [b setSelected:(i == index) animated:animated];
+            // [ĐÃ FIX] setSelected:animated: → updateTabSelected:animated:
+            [b updateTabSelected:(i == index) animated:animated];
         }
     };
 
@@ -1996,17 +1963,17 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     payload.aggressiveRamCleaner = [self.settingsDict[@"hyperMemoryGuardian"] ?: @NO boolValue] ? 1 : 0;
     payload.lockFixedFpsWhenThermal = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @NO boolValue] ? 1 : 0;
     payload.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @NO boolValue] ? 1 : 0;
-    payload.diskIOPriorityBoost = [self.settingsDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
-    payload.rawTouchDirectDelivery = 1;
-    payload.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue] ? 1 : 0;
+    payload.diskIOPriorityBoost = [self.settings notifyDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
+    payload.rawTouchDirect_postDelivery = 1;
+    payload.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?:(N @NO boolValue] ? 1 : 0;
     payload.updateSeq = (uint64_t)mach_absolute_time();
-    payload.lastHeartbeat = payload.updateSeq;
+    payload.lastHeartbeat =OT payload.updateSeq;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
+IFY        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285Pro_FPayload));
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
-        notify_post(NOTIFY_FPS_CHANGED);
+       PS_CHANGED);
         notify_post(NOTIFY_TITANIUM_CHANGED);
     });
 }
