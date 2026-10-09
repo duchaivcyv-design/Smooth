@@ -80,13 +80,13 @@ typedef struct {
 
 // ====================================================================================================
 // MODULE 1: GLASS MATERIAL FACTORY
-// =================================================================================================Material===
+// ====================================================================================================
 
 typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
-    LGGlassMaterialTypeTypeUltraThin = 0,
-    LGGlassMaterialTypeThin = 1Regular,
-    LG = 2,
-    LGGlassMaterialTypeChrome = 3,
+    LGGlassMaterialTypeUltraThin = 0,
+    LGGlassMaterialTypeThin      = 1,
+    LGGlassMaterialTypeRegular   = 2,
+    LGGlassMaterialTypeChrome    = 3,
     LGGlassMaterialTypeProminent = 4
 };
 
@@ -892,8 +892,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 // ====================================================================================================
 // MODULE 5: LIQUID GLASS NAV BAR BUTTON
-// [ĐÃ FIX]: Xóa property `selected` trùng UIControl
-// [ĐÃ FIX]: Đổi tên setSelected:animated: → updateTabSelected:animated:
 // ====================================================================================================
 
 @interface LGGlassNavButton : UIControl
@@ -901,7 +899,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @property (nonatomic, strong) AppleLiquidGlassView *glassPill;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
-// [ĐÃ FIX] Không khai báo `selected` — dùng của UIControl
 
 - (instancetype)initWithIconName:(NSString *)iconName title:(NSString *)title;
 - (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated;
@@ -974,7 +971,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     } completion:nil];
 }
 
-// [ĐÃ FIX] Đổi tên method + xóa chữ `selected` bị chèn + `_selected` → `[super setSelected:selected]`
 - (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated {
     [super setSelected:selected];
     UIColor *targetColor = selected ? [UIColor whiteColor] : [UIColor colorWithWhite:0.78 alpha:1.0];
@@ -1302,7 +1298,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 
     if (_tabButtons.count > 0) {
-        // [ĐÃ FIX] setSelected:animated: → updateTabSelected:animated:
         [_tabButtons[0] updateTabSelected:YES animated:NO];
     }
 
@@ -1331,7 +1326,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         self->_activeGlassIndicator.frame = targetFrame;
         for (NSInteger i = 0; i < self->_tabButtons.count; i++) {
             LGGlassNavButton *b = self->_tabButtons[i];
-            // [ĐÃ FIX] setSelected:animated: → updateTabSelected:animated:
             [b updateTabSelected:(i == index) animated:animated];
         }
     };
@@ -1937,8 +1931,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     if (!_isKernelExploited) return;
-    ApexV285ProPayload payload;
-    memset(&payload, 0, sizeof(ApexV285ProPayload));
+    ApexV285ProGlassPayload payload;
+    memset(&payload, 0, sizeof(ApexV285ProGlassPayload));
     payload.magic = APEX_SYNC_MAGIC_V285;
     payload.masterEnabled = (enabled && _isKernelExploited) ? 1 : 0;
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
@@ -1963,17 +1957,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     payload.aggressiveRamCleaner = [self.settingsDict[@"hyperMemoryGuardian"] ?: @NO boolValue] ? 1 : 0;
     payload.lockFixedFpsWhenThermal = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @NO boolValue] ? 1 : 0;
     payload.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @NO boolValue] ? 1 : 0;
-    payload.diskIOPriorityBoost = [self.settings notifyDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
-    payload.rawTouchDirect_postDelivery = 1;
-    payload.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?:(N @NO boolValue] ? 1 : 0;
+    payload.diskIOPriorityBoost = [self.settingsDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
+    payload.rawTouchDirectDelivery = 1;
+    payload.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue] ? 1 : 0;
     payload.updateSeq = (uint64_t)mach_absolute_time();
-    payload.lastHeartbeat =OT payload.updateSeq;
+    payload.lastHeartbeat = payload.updateSeq;
+
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-IFY        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285Pro_FPayload));
+        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProGlassPayload));
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
-       PS_CHANGED);
+        notify_post(NOTIFY_FPS_CHANGED);
         notify_post(NOTIFY_TITANIUM_CHANGED);
     });
 }
