@@ -1,3 +1,24 @@
+// ====================================================================================================
+// NHẬT KÝ SỬA LỖI (CHỈ SỬA ĐÚNG CHỖ, GIỮ NGUYÊN TOÀN BỘ PHẦN CÒN LẠI) - các chỗ sửa đều có nhãn [ĐÃ SỬA]
+//  1. Đứng khung hình mức 0 khi không chạm: sàn dải tần 1Hz -> 60Hz (CADisplayLink / CAAnimation / CASpringAnimation),
+//     CADisplay.minimumFPS 15 -> 60 trên máy 60Hz, không còn "nhả khóa ngay về 0" khi nhả tay / nhả nút âm lượng,
+//     cờ Failed của pan gesture không còn xóa trạng thái chạm, kéo dài cửa sổ giữ nhịp sau khi nhả tay.
+//  2. Đen app lúc mở: hook CALayer setNeedsDisplay từng NUỐT lệnh vẽ (800ms nhưng tính nhầm đơn vị => ~33 GIÂY trên A11).
+//  3. Văng app trình duyệt / WebKit: không còn dùng WKWebView ở luồng nền và không còn capture self/pool vĩnh viễn.
+//  5. Xám mãi / như nghẽn mạng: cùng nguyên nhân (2) + QoS luồng chính bị hạ sau mỗi CATransaction flush
+//     + rasterize bị ép bật dù app tắt + getter maximumDrawableCount trả sai + NSRunLoop runMode sai kiểu trả về.
+//  ĐỢT 2 (truy tìm tiếp lỗi 1 và 2 + công tắc tổng):
+//  6. Màn hình KHÔNG có ProMotion (vd iPhone 8 Plus) chỉ quét tối đa 60Hz. Bản cũ vẫn "khai man" với hệ điều hành rằng máy hỗ trợ
+//     VRR/ProMotion/dynamic refresh/144Hz (MobileGestalt, CADisplay, CAWindowServerDisplay, UIScreen). Hệ thống chuyển sang chính sách
+//     hạ nhịp kiểu ProMotion mà tấm nền không có => hoạt ảnh đứng hẳn sau khi nhả tay cho tới khi chạm lại, app đen lúc mở.
+//     Nay mặc định KHÔNG khai man trên máy không có ProMotion và không yêu cầu quá 60Hz. Muốn trả về hành vi cũ: định nghĩa
+//     TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL = 1.
+//  7. Công tắc tổng / loại trừ app: nạp payload ngay (không còn trễ), app bị tắt trong tab App không còn nạp bất kỳ hook nào,
+//     backboardd cũng đọc công tắc (trước đây luôn bị ép 144Hz), sửa lỗi đơn vị làm chặn nạp lại cấu hình tới ~10 giây.
+//  8. Tắt mặc định: miễn nhiễm watchdog FrontBoard (có thể hủy assertion lúc mở app) và biến môi trường MTL_* (gây hình đen app Metal).
+//  9. Thêm bộ giữ nhịp (CADisplayLink giữ nhịp) cho SpringBoard: giữ đường ống hiển thị chạy trong suốt cửa sổ hoạt ảnh.
+// ====================================================================================================
+
 // ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_init.h>      // Khai báo chuẩn mach_task_self(), mach_thread_self()
@@ -185,6 +206,12 @@ static volatile BOOL g_isRateLockedV285 = NO;
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 #define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
+
+// [ĐÃ BỔ SUNG - CÔNG TẮC TỔNG]: SpringBoard phát thông báo này SAU KHI đã ghi xong tệp IPC để app/backboardd nạp lại đúng lúc,
+// và danh sách bundle ID bị tắt trong tab App được ghi ra tệp riêng (app trong sandbox không đọc được tệp plist cấu hình).
+#define NOTIFY_PAYLOAD_WRITTEN "com.taojb.boostiphone6s/PayloadWritten"
+#define APPS_SYNC_FILE_PRIMARY   @"/tmp/.boost_hz_apps"
+#define APPS_SYNC_FILE_SECONDARY @"/var/jb/tmp/.boost_hz_apps"
 
 // ====================================================================================================
 // [ĐÃ ÉP THÊM]: CẤU TRÚC BỘ NHỚ SHMEM IPC ĐỒNG BỘ CHUẨN XÁC VỚI ROOTLISTCONTROLLER
@@ -1115,6 +1142,39 @@ static inline BOOL HardwareHasNative120Hz(void) {
     return isNative120;
 }
 
+// ====================================================================================================
+// [ĐÃ BỔ SUNG - TRUNG THỰC VỚI PHẦN CỨNG MÀN HÌNH]
+// Máy không có ProMotion (iPhone 8 Plus, 6s...) có tấm nền 60Hz cố định. Khai man VRR/ProMotion/144Hz không tạo thêm khung hình nào
+// nhưng làm hệ thống đàm phán nhịp quét sai (hoạt ảnh đứng hẳn sau khi nhả tay, app đen lúc mở).
+// Mặc định chỉ khai man trên phần cứng THẬT SỰ có ProMotion. Đặt TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL = 1 để trả về hành vi cũ.
+// ====================================================================================================
+#ifndef TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL
+#define TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL 0
+#endif
+
+// Miễn nhiễm watchdog FrontBoard (FBProcessWatchdog start rồi invalidate ngay) có thể hủy assertion giữ app chạy lúc mở. Mặc định TẮT.
+#ifndef TITANIUM_ENABLE_WATCHDOG_IMMUNITY
+#define TITANIUM_ENABLE_WATCHDOG_IMMUNITY 0
+#endif
+
+// Đặt biến môi trường MTL_* giữa chừng trong mọi app (tắt theo dõi residency, ép encode song song...) gây hình đen/vỡ ở app Metal. Mặc định TẮT.
+#ifndef TITANIUM_ENABLE_METAL_ENV_TWEAKS
+#define TITANIUM_ENABLE_METAL_ENV_TWEAKS 0
+#endif
+
+// Bộ giữ nhịp CADisplayLink cho SpringBoard (xem TitaniumRateKeeper). Mặc định BẬT.
+#ifndef TITANIUM_ENABLE_RATE_KEEPER
+#define TITANIUM_ENABLE_RATE_KEEPER 1
+#endif
+
+static inline BOOL Titanium_DisplaySpoofAllowed(void) {
+#if TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL
+    return YES;
+#else
+    return HardwareHasNative120Hz();
+#endif
+}
+
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
     static BOOL sIsClassic = NO;
     static dispatch_once_t onceToken;
@@ -1251,12 +1311,18 @@ static inline void Titanium_PurgeProcessMemoryAggressively(void) {
 }
 
 static void Titanium_ApplySiliconDeepOptimizations(void) {
+    // [ĐÃ SỬA]: các biến MTL_* đặt giữa chừng trong mọi app có thể làm app Metal đen hình/vỡ hình; mặc định TẮT (xem macro ở trên).
+#if TITANIUM_ENABLE_METAL_ENV_TWEAKS
     setenv("MTL_FORCE_SERIAL_DISPATCH", "0", 1);
     setenv("MTL_DISABLE_TEXTURE_RESIDENCY_TRACKING", "1", 1);
     setenv("MTL_SHADER_VALIDATION", "0", 1);
     setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);
+#endif
     setenv("CA_DEBUG_TRANSACTIONS", "0", 1);
-    setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
+    // [ĐÃ SỬA]: ép tần số tối đa của CoreAnimation chỉ có nghĩa trên phần cứng ProMotion thật
+    if (Titanium_DisplaySpoofAllowed()) {
+        setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
+    }
 
     Titanium_DisableKernelThreadThrottling();
 }
@@ -1295,8 +1361,14 @@ static void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Đọc atomic trạng thái đồng bộ IPC tức thì 0ns
 static inline void Titanium_ReloadSharedSyncStateV285(void) {
+    // [ĐÃ SỬA - CÔNG TẮC TỔNG]: app đã bị tắt trong tab App thì không bao giờ nạp lại payload (tránh bật lại ngoài ý muốn)
+    if (g_isCurrentAppBlacklisted) {
+        return;
+    }
     uint64_t now = mach_absolute_time();
-    if (g_lastSyncTicksV285 != 0 && (now - g_lastSyncTicksV285) < (250ULL * 1000000ULL)) {
+    // [ĐÃ SỬA]: 250ms phải đổi sang Mach ticks. Bản cũ so ticks với nano-giây => thực tế ~10 giây không nạp lại,
+    // nên đổi công tắc/Hz trong app cấu hình không có tác dụng trong khoảng đó.
+    if (g_lastSyncTicksV285 != 0 && (now - g_lastSyncTicksV285) < Titanium_NanosToMachTicks(250ULL * 1000000ULL)) {
         return;
     }
 
@@ -1321,6 +1393,45 @@ static inline void Titanium_ReloadSharedSyncStateV285(void) {
         }
     }
     pthread_mutex_unlock(&g_syncLockV285);
+}
+
+// [ĐÃ BỔ SUNG - CÔNG TẮC TỔNG / LOẠI TRỪ APP]: SpringBoard đọc được plist cấu hình nên ghi danh sách bundle ID bị TẮT ra tệp văn bản
+// (mỗi dòng một ID). App thứ ba trong sandbox đọc tệp này để biết mình có bị loại trừ hay không.
+static void Titanium_WriteDisabledAppsFile(NSString *joinedIDs) {
+    NSData *data = [(joinedIDs ? joinedIDs : @"") dataUsingEncoding:NSUTF8StringEncoding];
+    NSArray *targetPaths = @[APPS_SYNC_FILE_PRIMARY, APPS_SYNC_FILE_SECONDARY];
+    for (NSString *targetPath in targetPaths) {
+        NSString *dir = [targetPath stringByDeletingLastPathComponent];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+        }
+        NSString *tempPath = [targetPath stringByAppendingString:@".tmp"];
+        int fd = open([tempPath UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd >= 0) {
+            if (data.length > 0) {
+                write(fd, data.bytes, data.length);
+            }
+            close(fd);
+            chmod([tempPath UTF8String], 0666);
+            rename([tempPath UTF8String], [targetPath UTF8String]);
+        }
+    }
+}
+
+static BOOL Titanium_IsBundleDisabledViaIPC(NSString *bundleID) {
+    if (bundleID.length == 0) return NO;
+    NSArray *paths = @[APPS_SYNC_FILE_PRIMARY, APPS_SYNC_FILE_SECONDARY];
+    for (NSString *path in paths) {
+        if (access([path UTF8String], R_OK) != 0) continue;
+        NSString *content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
+        if (!content) continue;
+        NSArray *lines = [content componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+        for (NSString *line in lines) {
+            if ([line isEqualToString:bundleID]) return YES;
+        }
+        return NO; // đã đọc được một tệp hợp lệ: kết luận theo tệp đó
+    }
+    return NO;
 }
 
 static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
@@ -1432,6 +1543,8 @@ static volatile NSInteger g_cachedResolvedFPS = 144;
 
 // [ĐÃ ÉP TOÀN DIỆN]: ĐIỀU PHỐI WINDOWSERVER TỨC THÌ (KHÓA DẢI 15 - 144HZ, CHỐNG CO VIEWPORT & CHỐNG ĐEN APP)
 static void Titanium_TuneWindowServerDisplayDirectly(void) {
+    // [ĐÃ SỬA]: không can thiệp thông số máy chủ hiển thị trên tấm nền 60Hz không có ProMotion
+    if (!Titanium_DisplaySpoofAllowed()) return;
     @try {
         Class wsClass = NSClassFromString(@"CAWindowServer");
         if (!wsClass) return;
@@ -1551,6 +1664,36 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         }
 
         // ==============================================================================================
+        // [ĐÃ SỬA - CÔNG TẮC TỔNG / LOẠI TRỪ APP]: xác định app hiện tại có bị tắt trong tab App hay không.
+        // Bản cũ: biến g_isCurrentAppBlacklisted không bao giờ được gán, và dù self.enabled = NO thì payload mặc định masterEnabled = 1
+        // vẫn khiến mọi hook chạy; app trong sandbox còn không đọc được plist nên không bao giờ biết mình bị loại trừ.
+        // Nay: ưu tiên plist (nếu đọc được), sau đó tới tệp IPC danh sách app bị tắt do SpringBoard ghi.
+        // ==============================================================================================
+        BOOL appExcluded = NO;
+        {
+            NSString *exBundleID = [[NSBundle mainBundle] bundleIdentifier];
+            if (exBundleID && !Titanium_IsSpringBoard()) {
+                id exStates = diskDict ? diskDict[@"AppTweakStates"] : nil;
+                if ([exStates isKindOfClass:[NSDictionary class]] && ((NSDictionary *)exStates)[exBundleID] != nil) {
+                    appExcluded = ![((NSDictionary *)exStates)[exBundleID] boolValue];
+                } else {
+                    appExcluded = Titanium_IsBundleDisabledViaIPC(exBundleID);
+                }
+            }
+        }
+        void (^ApplyExclusion)(void) = ^{
+            if (appExcluded) {
+                g_isCurrentAppBlacklisted = YES;
+                self.enabled = NO;
+                pthread_mutex_lock(&g_syncLockV285);
+                g_syncPayloadV285.masterEnabled = 0;
+                pthread_mutex_unlock(&g_syncLockV285);
+            } else {
+                g_isCurrentAppBlacklisted = NO;
+            }
+        };
+
+        // ==============================================================================================
         // CƠ CHẾ DỰ PHÒNG CHO APP THỨ 3 (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - VƯỢT SANDBOX 100% QUA RAM)
         // (AN TOÀN TUYỆT ĐỐI: KHÔNG TREO I/O, KHÔNG ĐEN MÀN HÌNH, KHÔNG NGHẼN MẠNG)
         // ==============================================================================================
@@ -1576,7 +1719,15 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
                                 g_cachedResolvedHz = self.targetHz;
                                 g_cachedResolvedFPS = self.targetFPS;
+
+                                // [ĐÃ SỬA - CÔNG TẮC TỔNG]: nạp NGUYÊN payload vào g_syncPayloadV285 ngay (không chờ lượt nạp nền)
+                                // để điều kiện "IS_ACTIVE hoặc masterEnabled" phản ánh đúng công tắc tổng ngay lập tức.
+                                pthread_mutex_lock(&g_syncLockV285);
+                                g_syncPayloadV285 = pRead;
+                                pthread_mutex_unlock(&g_syncLockV285);
+
                                 close(fd);
+                                ApplyExclusion();
                                 return;
                             }
                         }
@@ -1614,6 +1765,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
             g_cachedResolvedHz = 144;
             g_cachedResolvedFPS = 144;
+            ApplyExclusion();
             return;
         }
 
@@ -1712,13 +1864,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         g_isRateLockedV285 = GetLiveBool(@"IsRateLocked", NO);
 
         // [ĐÃ ÉP TOÀN DIỆN]: ĐỌC DANH SÁCH LOẠI TRỪ ỨNG DỤNG APPTWEAKSTATES
-        NSString *currentBundleID = [[NSBundle mainBundle] bundleIdentifier];
-        if (currentBundleID && diskDict[@"AppTweakStates"]) {
-            NSDictionary *appStates = diskDict[@"AppTweakStates"];
-            if (appStates[currentBundleID] != nil && ![appStates[currentBundleID] boolValue]) {
-                self.enabled = NO;
-            }
-        }
+        // [ĐÃ SỬA - CÔNG TẮC TỔNG]: áp dụng kết quả loại trừ đã tính ở trên (đặt g_isCurrentAppBlacklisted + tắt payload của tiến trình này)
+        ApplyExclusion();
 
         // ==============================================================================================
         // [ĐÃ ÉP TOÀN DIỆN]: KHÓA CỨNG MỨC CHỈNH TỪ 15HZ ĐẾN 144HZ VÀO CACHE NGUYÊN THỦY (0NS RENDER LOOP)
@@ -1778,9 +1925,30 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.updateSeq = (uint64_t)mach_absolute_time();
             p.lastHeartbeat = p.updateSeq;
 
+            // [ĐÃ SỬA - CÔNG TẮC TỔNG]: cập nhật payload của CHÍNH SpringBoard ngay lập tức. Bản cũ chỉ ghi tệp rồi chờ lượt nạp lại
+            // (mà lượt nạp lại đọc tệp CŨ trước khi tệp mới được ghi) nên tắt công tắc tổng mà các hook vẫn chạy nhờ masterEnabled mặc định = 1.
+            pthread_mutex_lock(&g_syncLockV285);
+            g_syncPayloadV285 = p;
+            pthread_mutex_unlock(&g_syncLockV285);
+
+            // Danh sách bundle ID bị tắt trong tab App (ghi ra tệp để app trong sandbox đọc được)
+            NSMutableArray<NSString *> *disabledIDs = [NSMutableArray array];
+            id statesObj = diskDict[@"AppTweakStates"];
+            if ([statesObj isKindOfClass:[NSDictionary class]]) {
+                [(NSDictionary *)statesObj enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+                    if ([key isKindOfClass:[NSString class]] && ![obj boolValue]) {
+                        [disabledIDs addObject:(NSString *)key];
+                    }
+                }];
+            }
+            NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
+
             ApexV285ProPayload capturedPayload = p;
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 Titanium_WriteSyncPayloadV285(&capturedPayload);
+                Titanium_WriteDisabledAppsFile(disabledJoined);
+                // Báo cho app và backboardd nạp lại SAU KHI tệp đã ghi xong
+                CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
             });
         }
     }
@@ -1928,12 +2096,25 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 // 3. ĐIỀU PHỐI XUNG NHỊP CẢM ỨNG (CƯỚP QUYỀN P-CORE TOÀN HỆ THỐNG - KHÔNG NGHẼN SOCKET)
 // ====================================================================================================
 
+#if TITANIUM_ENABLE_RATE_KEEPER
+// [ĐÃ BỔ SUNG]: bộ giữ nhịp cho SpringBoard (phần cài đặt nằm sau Titanium_GetTargetConfiguredFPS)
+@interface TitaniumRateKeeper : NSObject
++ (void)start;
++ (void)kick;
+@end
+#endif
+
 // [ĐÃ ÉP TOÀN DIỆN]: Ép quyền ưu tiên cao nhất cho luồng chính và I/O ổ đĩa
 static inline void Titanium_LockMainThreadFast(void) {
     if (![NSThread isMainThread]) return;
 
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
+#if TITANIUM_ENABLE_RATE_KEEPER
+    if (Titanium_IsSpringBoard()) {
+        [TitaniumRateKeeper kick];
+    }
+#endif
 }
 
 static inline void Titanium_TriggerInstantTouchBurst(void) {
@@ -2046,6 +2227,8 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép triệt tiêu độ trễ hiển thị phần cứng của CADisplay về 0.0s
 static void AppleInternal_LockHardwareCADisplay(void) {
+    // [ĐÃ SỬA]: không đổi độ trễ hiển thị của CADisplay trên tấm nền 60Hz không có ProMotion
+    if (!Titanium_DisplaySpoofAllowed()) return;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         Class caDisplayClass = objc_getClass("CADisplay");
@@ -2471,6 +2654,9 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     
     if (userHz < 15) userHz = 15;
     if (userHz > 144) userHz = 144;
+    // [ĐÃ SỬA - TRUNG THỰC VỚI PHẦN CỨNG]: tấm nền không có ProMotion chỉ quét tối đa 60Hz. Yêu cầu 144Hz không tạo thêm khung hình nào
+    // mà làm hệ thống đàm phán nhịp sai (hoạt ảnh đứng hẳn khi không chạm, app đen lúc mở).
+    if (!Titanium_DisplaySpoofAllowed() && userHz > 60) userHz = 60;
     return userHz;
 }
 
@@ -2491,8 +2677,78 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     
     if (userFPS < 15) userFPS = 15;
     if (userFPS > 144) userFPS = 144;
+    // [ĐÃ SỬA - TRUNG THỰC VỚI PHẦN CỨNG]: xem ghi chú ở Titanium_GetTargetConfiguredHz (khóa 30 FPS vẫn hoạt động bình thường)
+    if (!Titanium_DisplaySpoofAllowed() && userFPS > 60) userFPS = 60;
     return userFPS;
 }
+
+#if TITANIUM_ENABLE_RATE_KEEPER
+// ====================================================================================================
+// [ĐÃ BỔ SUNG]: BỘ GIỮ NHỊP CHO SPRINGBOARD (KEEP-ALIVE DISPLAYLINK)
+// Trong video: hoạt ảnh chạy một đoạn rồi ĐỨNG HẲN 1-3 giây ngay khi nhả tay và chỉ chạy tiếp khi có chạm / bấm nút âm lượng.
+// Bộ này chạy một CADisplayLink trống (sàn 60Hz) CHỈ trong cửa sổ giữ nhịp (Titanium_ShouldLockTargetRate), để đường ống hiển thị
+// và vòng lặp chính của SpringBoard luôn được đánh thức mỗi khung hình tới khi hoạt ảnh xong, rồi tự tạm dừng khi rảnh.
+// ====================================================================================================
+
+static CADisplayLink *s_keeperLink = nil;
+static NSInteger s_keeperIdleFrames = 0;
+static dispatch_source_t s_keeperPoller = nil;
+
+@implementation TitaniumRateKeeper
+
++ (void)start {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [TitaniumRateKeeper start]; });
+        return;
+    }
+    if (!Titanium_IsSpringBoard() || s_keeperPoller) return;
+
+    // Thăm dò nhẹ 20 lần/giây: bắt mọi chỗ đặt mốc tương tác mà không gọi trực tiếp bộ giữ nhịp
+    s_keeperPoller = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(s_keeperPoller, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(50 * NSEC_PER_MSEC)), (uint64_t)(50 * NSEC_PER_MSEC), (uint64_t)(20 * NSEC_PER_MSEC));
+    dispatch_source_set_event_handler(s_keeperPoller, ^{
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldLockTargetRate()) {
+            [TitaniumRateKeeper kick];
+        }
+    });
+    dispatch_resume(s_keeperPoller);
+}
+
++ (void)kick {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [TitaniumRateKeeper kick]; });
+        return;
+    }
+    if (!Titanium_IsSpringBoard()) return;
+    if (!(IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return;
+
+    if (!s_keeperLink) {
+        s_keeperLink = [CADisplayLink displayLinkWithTarget:[TitaniumRateKeeper class] selector:@selector(tick:)];
+        if (@available(iOS 15.0, *)) {
+            float targetHz = (float)Titanium_GetTargetConfiguredHz();
+            if (targetHz < 60.0f) targetHz = 60.0f;
+            if (targetHz > 144.0f) targetHz = 144.0f;
+            s_keeperLink.preferredFrameRateRange = SafeMakeFRR(TITANIUM_FRAME_RATE_FLOOR, targetHz, targetHz);
+        }
+        [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    }
+    s_keeperIdleFrames = 0;
+    s_keeperLink.paused = NO;
+}
+
++ (void)tick:(CADisplayLink *)link {
+    if (Titanium_ShouldLockTargetRate()) {
+        s_keeperIdleFrames = 0;
+    } else {
+        s_keeperIdleFrames++;
+        if (s_keeperIdleFrames > 20) {
+            link.paused = YES;
+        }
+    }
+}
+
+@end
+#endif
 
 // ====================================================================================================
 // NHÓM 3: ĐỘNG CƠ PHÂN TẦNG NHỊP THÍCH ỨNG (XẢ QUÁN TÍNH TỰ DO - KHÔNG GHÌM MÀN HÌNH)
@@ -2561,13 +2817,15 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
 
 %hook CADisplay
 
+// [ĐÃ SỬA]: các cờ khả năng màn hình bên dưới (virtual modes / dynamic refresh) CHỈ được khai man trên phần cứng ProMotion thật.
+// Khai man trên tấm nền 60Hz khiến hệ thống hạ nhịp theo kiểu ProMotion (đứng khung hình mức 0 khi không chạm).
 - (BOOL)allowsVirtualModes {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_DisplaySpoofAllowed()) return YES;
     return %orig;
 }
 
 - (void)setAllowsVirtualModes:(BOOL)allows {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_DisplaySpoofAllowed()) {
         %orig(YES);
         return;
     }
@@ -2602,12 +2860,12 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
 }
 
 - (BOOL)supportsDynamicRefresh {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_DisplaySpoofAllowed()) return YES;
     return %orig;
 }
 
 - (BOOL)hasDynamicDisplayMode {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_DisplaySpoofAllowed()) return YES;
     return %orig;
 }
 
@@ -2730,6 +2988,8 @@ static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
 }
 
 static void Titanium_ForceInjectDynamicRefreshSupport(void) {
+    // [ĐÃ SỬA]: không tiêm "hỗ trợ dynamic refresh" vào UIScreen trên tấm nền 60Hz không có ProMotion
+    if (!Titanium_DisplaySpoofAllowed()) return;
     Class screenCls = objc_getClass("UIScreen");
     if (!screenCls) return;
 
@@ -5051,6 +5311,16 @@ static void Titanium_StartThermalAndChargingWatchdog(void) {
     });
 }
 
+// [ĐÃ BỔ SUNG - CÔNG TẮC TỔNG]: tiến trình không có đối tượng cấu hình (backboardd) lấy Hz/FPS trực tiếp từ payload IPC
+static void Titanium_AdoptPayloadRatesWithoutConfig(void) {
+    if (g_syncPayloadV285.targetHz >= 15 && g_syncPayloadV285.targetHz <= 144) {
+        g_cachedResolvedHz = g_syncPayloadV285.targetHz;
+    }
+    if (g_syncPayloadV285.targetFPS >= 15 && g_syncPayloadV285.targetFPS <= 144) {
+        g_cachedResolvedFPS = g_syncPayloadV285.targetFPS;
+    }
+}
+
 static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     static dispatch_source_t s_debounceTimer = nil;
     static dispatch_queue_t s_prefQueue = nil;
@@ -5067,7 +5337,13 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
     s_debounceTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, s_prefQueue);
     dispatch_source_set_timer(s_debounceTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
     dispatch_source_set_event_handler(s_debounceTimer, ^{
+        // [ĐÃ SỬA - CÔNG TẮC TỔNG]: thông báo đổi cấu hình phải nạp lại NGAY, không bị chặn bởi mốc nạp lần trước
+        // (nextDrawable của app Metal cũng đặt mốc này mỗi khung hình nên trước đây game không bao giờ nạp lại được)
+        g_lastSyncTicksV285 = 0;
         Titanium_ReloadSharedSyncStateV285();
+        if (!CFG285) {
+            Titanium_AdoptPayloadRatesWithoutConfig();
+        }
         if (CFG285 && [CFG285 respondsToSelector:@selector(loadSettings)]) {
             [CFG285 loadSettings];
             if ([CFG285 respondsToSelector:@selector(targetHz)]) {
@@ -5101,6 +5377,9 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 // ====================================================================================================
 
 static inline void Init_CAWindowServer_Hooks(void) {
+    // [ĐÃ SỬA]: KHÔNG hook máy chủ hiển thị (CAWindowServerDisplay / CADisplay trong backboardd) trên tấm nền 60Hz không có ProMotion.
+    // Bản cũ luôn báo cho máy chủ hiển thị gốc rằng màn hình hỗ trợ VRR và chạy 144Hz (kể cả khi người dùng tắt công tắc tổng).
+    if (!Titanium_DisplaySpoofAllowed()) return;
     static dispatch_once_t s_wsInitOnce;
     dispatch_once(&s_wsInitOnce, ^{
         %init(Group_CAWindowServer_Absolute_Dominance);
@@ -5140,12 +5419,23 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     }
                 }
 
+                // [ĐÃ SỬA - CÔNG TẮC TỔNG / LOẠI TRỪ APP]: app bị tắt trong tab App, hoặc công tắc tổng đang TẮT khi app khởi chạy,
+                // thì KHÔNG nạp bất kỳ nhóm hook nào vào tiến trình này (tắt thật sự, không chỉ "gác" điều kiện).
+                // Lưu ý: app đã mở lúc công tắc tổng tắt cần mở lại sau khi bật công tắc mới có hook.
+                if (!isSpringBoard && (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
+                    g_SystemMasterReady = YES;
+                    return;
+                }
+
                 dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                     Titanium_ReloadSharedSyncStateV285();
                 });
 
                 // 0. BẢO VỆ WATCHDOG
-                %init(Group_AntiWatchdog_Immunity);
+                // [ĐÃ SỬA]: mặc định TẮT (TITANIUM_ENABLE_WATCHDOG_IMMUNITY = 0), xem ghi chú ở phần định nghĩa macro
+                if (TITANIUM_ENABLE_WATCHDOG_IMMUNITY) {
+                    %init(Group_AntiWatchdog_Immunity);
+                }
 
                 // 1. CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
                 %init(Group_ZeroLatency_Touch_Opt);
@@ -5160,7 +5450,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_Universal_InApp_Animations);
                 %init(Group_Apple_Internal_ProMotion_Apex);
                 %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
-                %init(Group_Hardware_ProMotion_Overclock);
+                // [ĐÃ SỬA]: nhóm khai man ProMotion qua MobileGestalt chỉ nạp trên phần cứng ProMotion thật
+                if (Titanium_DisplaySpoofAllowed()) {
+                    %init(Group_Hardware_ProMotion_Overclock);
+                }
                 
                 // [ĐÃ THÊM]: Cấp nhịp quét khởi tạo Scene ban đầu chống đen app
                 %init(Group_Apple_Native_ColdBoot_Overdrive);
@@ -5191,6 +5484,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ (GỌI QUA HÀM TRỢ LỰC)
                     Init_CAWindowServer_Hooks();
                     
+#if TITANIUM_ENABLE_RATE_KEEPER
+                    [TitaniumRateKeeper start];
+#endif
+
                     @try {
                         Titanium_StartThermalAndChargingWatchdog();
                     } @catch (NSException *e) {}
@@ -5246,6 +5543,25 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 // ====================================================================================================
 // BOOTSTRAP TRIGGER & CONSTRUCTOR (ĐÃ BỔ SUNG CHẶN TOÀN BỘ TIẾN TRÌNH MẠNG TRIỆT TIÊU NGHẼN MẠNG)
 // ====================================================================================================
+
+// [ĐÃ SỬA - CÔNG TẮC TỔNG]: tách phần đăng ký observer thành hàm dùng chung để backboardd cũng nhận được thay đổi công tắc
+// (trước đây nhánh backboardd thoát sớm nên không bao giờ nạp cấu hình/IPC và luôn bị ép 144Hz).
+static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
+    static dispatch_once_t s_obsOnce;
+    dispatch_once(&s_obsOnce, ^{
+        CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+        if (!darwinCenter) return;
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+        if (!isSpringBoardProcess) {
+            // Chỉ app / backboardd nghe thông báo "đã ghi xong payload"; SpringBoard chính là bên phát nên không nghe (tránh vòng lặp)
+            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        }
+    });
+}
 
 static void SpringBoardBootstrapTrigger(void) {
     static dispatch_once_t s_triggerOnce;
@@ -5319,6 +5635,10 @@ static void SpringBoardBootstrapTrigger(void) {
         // 4. [XỬ LÝ ĐỘC LẬP]: TIẾN TRÌNH BACKBOARDD (ĐIỀU PHỐI CẢM ỨNG HID & MÁY CHỦ HIỂN THỊ GỐC)
         // ==============================================================================================
         if (strcasestr(progName, "backboardd") != NULL) {
+            // [ĐÃ SỬA - CÔNG TẮC TỔNG]: backboardd cũng đọc payload IPC và lắng nghe thay đổi công tắc
+            Titanium_RegisterPrefsObservers(NO);
+            Titanium_ReloadSharedSyncStateV285();
+            Titanium_AdoptPayloadRatesWithoutConfig();
             %init(Group_Backboardd_TouchDriver_Overdrive);
             Init_CAWindowServer_Hooks();
             return; // Khởi tạo xong tiến trình xuất hình và cảm ứng gốc, thoát an toàn
@@ -5367,17 +5687,8 @@ static void SpringBoardBootstrapTrigger(void) {
             return;
         }
 
-        static dispatch_once_t notifyToken;
-        dispatch_once(&notifyToken, ^{
-            CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-            if (darwinCenter) {
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-                CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
-            }
-        });
+        // [ĐÃ SỬA]: dùng hàm đăng ký dùng chung (đã gồm thông báo "đã ghi xong payload" cho app)
+        Titanium_RegisterPrefsObservers(isSpringBoard);
 
         %init;
 
