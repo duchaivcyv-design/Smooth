@@ -32,6 +32,11 @@ extern char **environ;
 #define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 
+// ====================================================================================================
+// TYPEDEF DUY NHẤT — có guard chống redefine
+// ====================================================================================================
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct {
     uint32_t magic, masterEnabled;
     int32_t targetHz, targetFPS;
@@ -43,9 +48,10 @@ typedef struct {
     uint64_t updateSeq, lastHeartbeat;
     char reserved[48];
 } ApexV285ProPayload;
+#endif
 
 // ====================================================================================================
-// SECTION 1: GLASS MATERIAL FACTORY
+// MODULE 1: GLASS MATERIAL FACTORY
 // ====================================================================================================
 typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     LGGlassMaterialTypeUltraThin = 0,
@@ -53,7 +59,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     LGGlassMaterialTypeRegular   = 2,
     LGGlassMaterialTypeChrome    = 3,
     LGGlassMaterialTypeProminent = 4,
-    LGGlassMaterialTypeOverlay   = 5  // cho menu bung
+    LGGlassMaterialTypeOverlay   = 5
 };
 
 @interface LGGlassMaterialFactory : NSObject
@@ -199,7 +205,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 2: GLASS LAYER STACK — 3 TẦNG
+// MODULE 2: GLASS LAYER STACK — 3 TẦNG
 // ====================================================================================================
 @interface LGGlassLayerStack : NSObject
 @property (nonatomic, strong) UIVisualEffectView *backdropTier;
@@ -396,7 +402,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 3: APPLE LIQUID GLASS VIEW
+// MODULE 3: APPLE LIQUID GLASS VIEW
 // ====================================================================================================
 @interface AppleLiquidGlassView : UIView
 @property (nonatomic, strong) LGGlassLayerStack *glassStack;
@@ -502,7 +508,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 4: LIQUID CAPSULE SWITCH — BO TRÒN HOÀN HẢO
+// MODULE 4: LIQUID CAPSULE SWITCH
 // ====================================================================================================
 @interface LiquidCapsuleSwitch : UIControl
 @property (nonatomic, assign) BOOL on;
@@ -635,20 +641,8 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 5: LG EXPANDING NAV BAR BUTTON — Nút góc phải bung ra/thu vào
-// Yêu cầu: Nhấn vào → bung ra hiệu ứng con
-//          Nhấn màn hình → thu vào
+// MODULE 5: LG EXPANDING ACTION VIEW — items con của nút bung
 // ====================================================================================================
-
-@class LGExpandingNavBarButton;
-
-@protocol LGExpandingNavBarButtonDelegate <NSObject>
-@optional
-- (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index;
-- (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button;
-- (void)expandingButtonDidCollapse:(LGExpandingNavBarButton *)button;
-@end
-
 @interface LGExpandingMenuAction : NSObject
 @property (nonatomic, strong) NSString *title;
 @property (nonatomic, strong) NSString *systemImageName;
@@ -668,12 +662,11 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 @end
 
-// Đối tượng action view — mỗi mục con là 1 glass pill nhỏ
+// ==== Action View — UIControl ====
 @interface LGExpandingActionView : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *glassBackground;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, assign) CGPoint targetOffset;
 - (instancetype)initWithAction:(LGExpandingMenuAction *)action;
 @end
 
@@ -726,8 +719,20 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 @end
 
-// Nút gốc + overlay
-@interface LGExpandingNavBarButton : UIView
+// ====================================================================================================
+// MODULE 6: LG EXPANDING NAV BAR BUTTON — UIControl (KHÔNG PHẢI UIView)
+// ====================================================================================================
+@class LGExpandingNavBarButton;
+
+@protocol LGExpandingNavBarButtonDelegate <NSObject>
+@optional
+- (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index;
+- (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button;
+- (void)expandingButtonDidCollapse:(LGExpandingNavBarButton *)button;
+@end
+
+// [ĐÃ FIX] Chuyển từ UIView → UIControl để có setHighlighted:
+@interface LGExpandingNavBarButton : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *buttonGlass;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) NSArray<LGExpandingMenuAction *> *actions;
@@ -810,7 +815,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     UIWindow *host = [self hostWindow];
     if (!host) { _expanded = NO; return; }
 
-    // Dim overlay
     if (!_dimOverlay) {
         _dimOverlay = [[UIView alloc] initWithFrame:host.bounds];
         _dimOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.15];
@@ -823,7 +827,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     [host bringSubviewToFront:_dimOverlay];
     [UIView animateWithDuration:0.22 animations:^{ self->_dimOverlay.alpha = 1.0; }];
 
-    // Actions container
     if (!_actionsContainer) {
         _actionsContainer = [[UIView alloc] initWithFrame:CGRectZero];
         _actionsContainer.backgroundColor = [UIColor clearColor];
@@ -845,9 +848,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         view.frame = CGRectMake(0, i * 54.0, 210, 46);
         view.alpha = 0.0;
         view.transform = CGAffineTransformMakeScale(0.6, 0.6);
-        [view addTarget:self action:@selector(actionViewTouchDown:) forControlEvents:UIControlEventTouchDown];
         [view addTarget:self action:@selector(actionViewTap:) forControlEvents:UIControlEventTouchUpInside];
-        [view addTarget:self action:@selector(actionViewCancel) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel | UIControlEventTouchDragExit];
         [_actionsContainer addSubview:view];
         [_actionViews addObject:view];
     }
@@ -855,23 +856,15 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     [host addSubview:_actionsContainer];
     [host bringSubviewToFront:_actionsContainer];
 
-    // Animate stagger
     for (NSInteger i = 0; i < _actionViews.count; i++) {
         LGExpandingActionView *v = _actionViews[i];
         NSTimeInterval delay = i * 0.035;
-        [UIView animateWithDuration:0.34
-                              delay:delay
-             usingSpringWithDamping:0.66
-              initialSpringVelocity:0.8
-                            options:UIViewAnimationOptionCurveEaseOut
-                         animations:^{
+        [UIView animateWithDuration:0.34 delay:delay usingSpringWithDamping:0.66 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
             v.alpha = 1.0;
             v.transform = CGAffineTransformIdentity;
         } completion:nil];
-        v.targetOffset = CGPointMake(0, i * 54.0);
     }
 
-    // Icon xoay
     [UIView animateWithDuration:0.30 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.iconView.transform = CGAffineTransformMakeRotation(M_PI_4);
     } completion:nil];
@@ -916,13 +909,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 - (void)toggle { if (_expanded) [self collapseMenu]; else [self expandMenu]; }
 
-- (void)actionViewTouchDown:(LGExpandingActionView *)v {
-    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-    [fb impactOccurred];
-}
-
-- (void)actionViewCancel { /* no-op */ }
-
 - (void)actionViewTap:(LGExpandingActionView *)v {
     NSInteger idx = v.tag;
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
@@ -932,15 +918,10 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         [_delegate expandingButton:self didSelectActionAtIndex:idx];
     }
 }
-
-- (void)setHighlighted:(BOOL)highlighted {
-    [super setHighlighted:highlighted];
-    [_buttonGlass setGlassHighlighted:highlighted animated:YES];
-}
 @end
 
 // ====================================================================================================
-// SECTION 6: LG GLASS TABLE VIEW CELL
+// MODULE 7: LG GLASS TABLE VIEW CELL
 // ====================================================================================================
 @interface LGGlassTableViewCell : UITableViewCell
 @property (nonatomic, strong) AppleLiquidGlassView *glassBackground;
@@ -995,8 +976,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 - (void)configureWithTitle:(NSString *)title detail:(NSString *)detail accessory:(UIView *)accessory accent:(UIColor *)accent {
     _titleL.text = title;
     _detailL.text = detail;
-    if (accent) _titleL.textColor = accent;
-    else _titleL.textColor = [UIColor whiteColor];
+    _titleL.textColor = accent ?: [UIColor whiteColor];
 
     if (_accessoryContainer) { [_accessoryContainer removeFromSuperview]; _accessoryContainer = nil; }
     if (accessory) {
@@ -1025,7 +1005,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 7: LG GLASS NAV BUTTON (tab bar dưới)
+// MODULE 8: LG GLASS NAV BUTTON
 // ====================================================================================================
 @interface LGGlassNavButton : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *glassPill;
@@ -1113,7 +1093,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 8: LG CUSTOM SEGMENTED CONTROL — không cắt chữ
+// MODULE 9: LG CUSTOM SEGMENTED CONTROL
 // ====================================================================================================
 @interface LGCustomSegment : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *background;
@@ -1183,7 +1163,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 - (void)handleTap {
     CGPoint p = [self.gestureRecognizers.firstObject locationInView:self];
-    if (!p.x && !p.y) p = [self convertPoint:self.center fromView:self.superview];
+    if (!p.x && !p.y) p = self.center;
     NSInteger idx = (NSInteger)floor(p.x / (self.bounds.size.width / MAX(1, _items.count)));
     if (idx < 0) idx = 0;
     if (idx >= (NSInteger)_items.count) idx = _items.count - 1;
@@ -1219,7 +1199,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// SECTION 9: HELPER FUNCTIONS
+// MODULE 10: HELPER FUNCTIONS
 // ====================================================================================================
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cached = nil;
@@ -1309,9 +1289,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // ====================================================================================================
-// SECTION 10: ROOT LIST CONTROLLER INTERFACE
+// MODULE 11: ROOT LIST CONTROLLER
 // ====================================================================================================
-
 @interface RootListController () <LGExpandingNavBarButtonDelegate> {
     dispatch_source_t _hudTimer;
     NSInteger _currentBottomTab;
@@ -1335,16 +1314,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSMutableArray<NSDictionary *> *_scannedAppsList;
     NSMutableDictionary<NSString *, NSNumber *> *_appTweakStates;
 
-    AppleLiquidGlassView *_liquidNav;
-
-BarContainer;
+    AppleLiquidGlassView *_liquidNavBarContainer;
     AppleLiquidGlassView *_activeGlassIndicator;
     NSMutableArray<LGGlassNavButton *> *_tabButtons;
-    NSArray<   NSDictionary *> *_tabConfigs;
+    NSArray<NSDictionary *> *_tabConfigs;
 
     UIView *_liquidGlassLensContainer;
     AppleLiquidGlassView *_lensGlassEffectView;
- //    UILabel *_lensTitleLabel Nút bung/thu góc phải
+    UILabel *_lensTitleLabel;
+
     LGExpandingNavBarButton *_expandingMenuButton;
     LGExpandingNavBarButton *_expandingBoltButton;
     LGExpandingNavBarButton *_expandingLockButton;
@@ -1364,7 +1342,6 @@ BarContainer;
     [super viewDidLoad];
     self.title = @"";
 
-    // Background gradient
     CAGradientLayer *bg = [CAGradientLayer layer];
     bg.frame = self.view.bounds;
     bg.colors = @[
@@ -1456,10 +1433,9 @@ BarContainer;
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-#pragma mark - Expanding Navigation Items (3 nút góc phải, bung/thu)
+#pragma mark - Expanding Navigation Items
 
 - (void)setupExpandingNavigationItems {
-    // ==== Nút Bolt (tác vụ nhanh) ====
     _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill"
                                                                    tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
     _expandingBoltButton.delegate = self;
@@ -1470,7 +1446,6 @@ BarContainer;
         [LGExpandingMenuAction actionWithTitle:@"💧 Liquid Glass Redraw" image:@"sparkles" tintColor:[UIColor colorWithRed:0.5 green:0.8 blue:1.0 alpha:1.0] destructive:NO],
     ]];
 
-    // ==== Nút Lock ====
     _expandingLockButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"lock.open.fill"
                                                                     tintColor:[UIColor whiteColor]];
     _expandingLockButton.delegate = self;
@@ -1480,7 +1455,6 @@ BarContainer;
         [LGExpandingMenuAction actionWithTitle:@"💾 Lưu Ngay" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
     ]];
 
-    // ==== Nút Menu 3 gạch (hành động hệ thống) ====
     _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal"
                                                                     tintColor:[UIColor whiteColor]];
     _expandingMenuButton.delegate = self;
@@ -1496,11 +1470,8 @@ BarContainer;
     UIBarButtonItem *boltItem = [[UIBarButtonItem alloc] initWithCustomView:_expandingBoltButton];
 
     self.navigationItem.rightBarButtonItems = @[menuItem, lockItem, boltItem];
-
     [self updateLockIcon];
 }
-
-#pragma mark - LGExpandingNavBarButtonDelegate
 
 - (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index {
     if (button == _expandingMenuButton) {
@@ -1513,7 +1484,7 @@ BarContainer;
     } else if (button == _expandingBoltButton) {
         switch (index) {
             case 0: [self applySettingsInstantNoRespringAction]; break;
-            case 1: {
+            case 1:
                 self.settingsDict[@"TargetRefreshRate"] = @144;
                 self.settingsDict[@"TargetFPSRate"] = @144;
                 self.settingsDict[@"ForceOverclock144Hz"] = @YES;
@@ -1521,8 +1492,7 @@ BarContainer;
                 [self applyDeepSpringBoardAndUIKitTweaks];
                 [self.customTableView reloadData];
                 break;
-            }
-            case 2: {
+            case 2:
                 self.settingsDict[@"TargetRefreshRate"] = @60;
                 self.settingsDict[@"TargetFPSRate"] = @60;
                 self.settingsDict[@"ForceOverclock144Hz"] = @NO;
@@ -1530,9 +1500,7 @@ BarContainer;
                 [self applyDeepSpringBoardAndUIKitTweaks];
                 [self.customTableView reloadData];
                 break;
-            }
             case 3: {
-                // Redraw glass
                 [self.view setNeedsLayout];
                 [self.view layoutIfNeeded];
                 UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
@@ -1542,7 +1510,7 @@ BarContainer;
         }
     } else if (button == _expandingLockButton) {
         switch (index) {
-            case 0: {
+            case 0:
                 if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
                 _isRateLocked = NO;
                 self.settingsDict[@"IsRateLocked"] = @NO;
@@ -1550,8 +1518,7 @@ BarContainer;
                 [self updateLockIcon];
                 [self.customTableView reloadData];
                 break;
-            }
-            case 1: {
+            case 1:
                 if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
                 _isRateLocked = YES;
                 self.settingsDict[@"IsRateLocked"] = @YES;
@@ -1559,16 +1526,12 @@ BarContainer;
                 [self updateLockIcon];
                 [self.customTableView reloadData];
                 break;
-            }
-            case 2:
-                [self saveSettingsDataAndSync];
-                break;
+            case 2: [self saveSettingsDataAndSync]; break;
         }
     }
 }
 
 - (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button {
-    // Đóng các menu khác khi 1 menu mở
     if (button != _expandingMenuButton) [_expandingMenuButton collapseMenu];
     if (button != _expandingBoltButton) [_expandingBoltButton collapseMenu];
     if (button != _expandingLockButton) [_expandingLockButton collapseMenu];
@@ -1627,9 +1590,7 @@ BarContainer;
         [_tabButtons addObject:btn];
     }
 
-    if (_tabButtons.count > 0) {
-        [_tabButtons[0] updateTabSelected:YES animated:NO];
-    }
+    if (_tabButtons.count > 0) [_tabButtons[0] updateTabSelected:YES animated:NO];
 
     [self.view addSubview:_liquidNavBarContainer];
 }
@@ -1660,9 +1621,7 @@ BarContainer;
 
     if (animated) {
         [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.74 initialSpringVelocity:0.85 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
-    } else {
-        animations();
-    }
+    } else animations();
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [fb impactOccurred];
@@ -1923,10 +1882,8 @@ BarContainer;
             accessory = s;
         } else {
             BOOL mA = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
-            if (!mA) {
-                title = @"🔒 Bộ đo đang tắt";
-                detail = @"[TẮT]";
-            } else {
+            if (!mA) { title = @"🔒 Bộ đo đang tắt"; detail = @"[TẮT]"; }
+            else {
                 float baseTemp = Titanium_GetBaseThermalTemp();
                 float cpu = Titanium_GetLiveCPULoadPercentage();
                 float gpu = Titanium_GetLiveGPULoadPercentage();
@@ -2221,16 +2178,16 @@ BarContainer;
     dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), (uint64_t)(0.8 * NSEC_PER_SEC), (uint64_t)(0.1 * NSEC_PER_SEC));
     __weak typeof(self) wS = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
-       F __strong typeof(wS) sS = wS;
-        if (sS && sS->_currentBottomTab == 0 && sS->_isKernelExploited &&PS [sS.settingsDict[@"EnableSystemMonitoring"] boolValue]) {
+        __strong typeof(wS) sS = wS;
+        if (sS && sS->_currentBottomTab == 0 && sS->_isKernelExploited && [sS.settingsDict[@"EnableSystemMonitoring"] boolValue]) {
             [sS.customTableView reloadData];
         }
     });
-    dispatch_resume(_hudRateTimer);
+    dispatch_resume(_hudTimer);
 }
 
 - (void)stopContinuousHardwareHUD {
-    if (_hudTimer) { dispatch_source_cancel(_hudTimer); _hud"]Timer = nil; }
+    if (_hudTimer) { dispatch_source_cancel(_hudTimer); _hudTimer = nil; }
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
@@ -2240,7 +2197,7 @@ BarContainer;
     p.magic = APEX_SYNC_MAGIC_V285;
     p.masterEnabled = (enabled && _isKernelExploited) ? 1 : 0;
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
-    int32_t fps = [self.settingsDict[@"Target ?: @144 intValue];
+    int32_t fps = [self.settingsDict[@"TargetFPSRate"] ?: @144 intValue];
     BOOL oc = [self.settingsDict[@"ForceOverclock144Hz"] ?: @NO boolValue];
     p.targetHz = hz;
     p.targetFPS = fps;
@@ -2287,25 +2244,25 @@ BarContainer;
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 144) targetHz = 144;
             SEL sel = NSSelectorFromString(@"setPreferredFrameRateRange:");
-            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes)ASS {
+            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
                 if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
                     if ([ws respondsToSelector:sel]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, (float)targetHz, (float)targetHz K);
-                        void (*setRange)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRangeERN))objc_msgSend;
+                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, (float)targetHz, (float)targetHz);
+                        void (*setRange)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
                         setRange(ws, sel, range);
                     }
                 }
             }
         });
     }
-EL    BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
-    [self syncSharedMemoryFile: EXPLmaster];
+    BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
+    [self syncSharedMemoryFile:master];
 }
 
 #pragma mark - Exploit Console
 
-- (void)showUnexplOoitedWarningAlert {
+- (void)showUnexploitedWarningAlert {
     UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🔒 TÍNH NĂNG ĐANG BỊ KHÓA" message:@"Vào tab Cài Đặt, nhấn vào dòng đèn đỏ để bắt đầu." preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
@@ -2317,7 +2274,7 @@ EL    BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
     vc.modalPresentationStyle = UIModalPresentationFullScreen;
 
     UILabel *tl = [[UILabel alloc] initWithFrame:CGRectMake(20, 55, vc.view.bounds.size.width - 40, 30)];
-    tl.text = @"⚡ LIQUID GLIT";
+    tl.text = @"⚡ LIQUID GLASS KERNEL EXPLOIT";
     tl.textColor = [UIColor colorWithRed:0.4 green:1.0 blue:0.6 alpha:1.0];
     tl.font = [UIFont fontWithName:@"Menlo-Bold" size:15] ?: [UIFont boldSystemFontOfSize:15];
     [vc.view addSubview:tl];
