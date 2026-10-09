@@ -2,37 +2,158 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Xác thực Platform Binary với Kernel & AMFI -->
+
+    <!-- ============================================================ -->
+    <!-- PLATFORM BINARY & AMFI                                       -->
+    <!-- ============================================================ -->
     <key>platform-application</key>
     <true/>
 
-    <!-- Cho phép nạp dylib ngoài và bỏ qua kiểm tra chữ ký thư viện (iOS 15+) -->
     <key>com.apple.private.skip-library-validation</key>
     <true/>
 
-    <!-- Toàn quyền đọc ghi tệp hệ thống ngoài sandbox thông qua TCC -->
-    <key>com.apple.private.tcc.allow</key>
-    <array>
-        <string>kTCCServiceSystemPolicyAllFiles</string>
-    </array>
+    <key>com.apple.private.amfi.can-load-cdhash</key>
+    <true/>
 
-    <!-- Quyền truy cập thư mục dữ liệu App dùng chung -->
+    <key>com.apple.private.amfi.can-check-trust-cache</key>
+    <true/>
+
+    <key>com.apple.private.amfi.can-load-cdhash-manifest</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- SANDBOX BYPASS — QUAN TRỌNG NHẤT                             -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.security.no-sandbox</key>
+    <true/>
+
+    <key>com.apple.private.security.no-container</key>
+    <true/>
+
+    <key>com.apple.private.security.container-required</key>
+    <false/>
+
+    <key>com.apple.private.security.stub</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- STORAGE ACCESS — QUYỀN ĐỌC GHI NGOÀI SANDBOX                  -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.security.storage.AppBundles</key>
+    <true/>
+
     <key>com.apple.private.security.storage.AppDataContainers</key>
     <true/>
 
-    <!-- Kết nối mạng không giới hạn -->
-    <key>com.apple.security.network.client</key>
+    <key>com.apple.private.security.storage.MobileDocuments</key>
     <true/>
 
-    <!-- Cho phép mở Task Port đọc thông số tiến trình & phần cứng -->
+    <key>com.apple.private.security.storage.Preferences</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.SystemPreferences</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Log</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Media</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Caches</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Tmp</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Health</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Calendar</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Contacts</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Maps</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.Siri</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.MobileAsset</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.CloudAssets</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.HomeKit</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- TCC — QUYỀN TRUY CẬP FILESYSTEM TOÀN CỤC                     -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.tcc.allow</key>
+    <array>
+        <string>kTCCServiceSystemPolicyAllFiles</string>
+        <string>kTCCServiceAddressBook</string>
+        <string>kTCCServiceCalendar</string>
+        <string>kTCCServicePhotos</string>
+        <string>kTCCServiceCamera</string>
+        <string>kTCCServiceMicrophone</string>
+        <string>kTCCServiceLocation</string>
+        <string>kTCCServiceUserTracking</string>
+    </array>
+
+    <key>com.apple.private.tcc.manager</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- TASK PORTS & KERNEL ACCESS                                   -->
+    <!-- ============================================================ -->
     <key>get-task-allow</key>
     <true/>
+
     <key>task_for_pid-allow</key>
     <true/>
+
     <key>com.apple.system-task-ports</key>
     <true/>
 
-    <!-- Truy cập IOKit cảm biến phần cứng (SoC, Pin, Màn hình) -->
+    <key>com.apple.private.coreservices.can-maptask</key>
+    <true/>
+
+    <key>com.apple.private.coreservices.can-get-task-allow</key>
+    <true/>
+
+    <key>com.apple.private.kernel.get-kauth</key>
+    <true/>
+
+    <key>com.apple.private.allow-read-sysctl</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- MACH PORTS & SERVICES                                        -->
+    <!-- ============================================================ -->
+    <key>com.apple.security.exception.mach-lookup.global-name</key>
+    <array>
+        <string>com.apple.system.logger</string>
+        <string>com.apple.system.notification_center</string>
+        <string>com.apple.springboard.services</string>
+        <string>com.apple.backboardd</string>
+        <string>com.apple.backboardd.services</string>
+        <string>com.apple.ios.clock</string>
+    </array>
+
+    <key>com.apple.security.exception.iokit-user-client-class</key>
+    <array>
+        <string>AppleSPUHIDDevice</string>
+        <string>AppleSPUHIDDriver</string>
+    </array>
+
+    <!-- ============================================================ -->
+    <!-- IOKIT — CẢM BIẾN PHẦN CỨNG                                   -->
+    <!-- ============================================================ -->
     <key>com.apple.security.iokit-user-client-class</key>
     <array>
         <string>IOPMrootDomain</string>
@@ -40,6 +161,141 @@
         <string>AppleSmartBattery</string>
         <string>AppleSmartBatteryCommands</string>
         <string>IOPlatformPluginDevice</string>
+        <string>AppleARMPMU</string>
+        <string>AppleARMPE</string>
+        <string>AppleSMC</string>
+        <string>IOHIDSystem</string>
+        <string>IOHIDEventSystem</string>
+        <string>IOHIDEventService</string>
     </array>
+
+    <!-- ============================================================ -->
+    <!-- HID & TOUCH                                                  -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.hid.client.event-dispatch</key>
+    <true/>
+
+    <key>com.apple.private.hid.client.event-filter</key>
+    <true/>
+
+    <key>com.apple.private.backboardd.allow-restricted-services</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- CODE SIGNING & JIT                                           -->
+    <!-- ============================================================ -->
+    <key>dynamic-codesigning</key>
+    <true/>
+
+    <key>com.apple.private.cs.debugger</key>
+    <true/>
+
+    <key>com.apple.private.cs.allow-jit</key>
+    <true/>
+
+    <key>com.apple.private.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <key>com.apple.private.cs.disable-cs-allow-jit</key>
+    <true/>
+
+    <key>com.apple.private.cs.restrict</key>
+    <false/>
+
+    <!-- ============================================================ -->
+    <!-- MEMORY & GESTALT                                             -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.memorystatus</key>
+    <true/>
+
+    <key>com.apple.private.mobilegestalt</key>
+    <true/>
+
+    <key>com.apple.private.MobileGestalt.AllowedProtectedKeys</key>
+    <array>
+        <string>SupportsVariableRefreshRate</string>
+        <string>supports-variable-refresh-rate</string>
+        <string>pVRR</string>
+        <string>pro-motion</string>
+        <string>DeviceSupports120Hz</string>
+        <string>DeviceSupportsProMotion</string>
+        <string>ProductType</string>
+        <string>UniqueDeviceID</string>
+        <string>BoardId</string>
+        <string>HWModel</string>
+    </array>
+
+    <!-- ============================================================ -->
+    <!-- NETWORK                                                      -->
+    <!-- ============================================================ -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- RUNNINGBOARD / LAUNCHD                                       -->
+    <!-- ============================================================ -->
+    <key>com.apple.runningboard.assertions.frontboard</key>
+    <true/>
+
+    <key>com.apple.runningboard.terminateprocess</key>
+    <true/>
+
+    <key>com.apple.runningboard.process-state</key>
+    <true/>
+
+    <key>com.apple.private.launchservices.allowopenwithanyhandler</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- SPRINGBOARD ACCESS                                           -->
+    <!-- ============================================================ -->
+    <key>com.apple.springboard.launchapplications</key>
+    <true/>
+
+    <key>com.apple.springboard.homescreenunhidden</key>
+    <true/>
+
+    <key>com.apple.springboard.debugapplications</key>
+    <true/>
+
+    <key>com.apple.springboard.watchdog-ok</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- GRAPHICS / METAL                                             -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.Metal.device</key>
+    <true/>
+
+    <key>com.apple.private.metal.compile-sdk</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- PROCESS SPAWN (posix_spawn trong code)                      -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.security.disk-device-access</key>
+    <true/>
+
+    <key>com.apple.private.persona</key>
+    <true/>
+
+    <key>com.apple.private.vfs.authorized-access</key>
+    <true/>
+
+    <key>com.apple.private.apfs.revert-to-snapshot</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- PREFS                                                        -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.cfprefs.any-user</key>
+    <true/>
+
+    <key>com.appDeple.private.cfprefs.any-host</key>
+    <true/>
+
 </dict>
 </plist>
