@@ -3047,7 +3047,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép kích xung luồng đồ họa tức thì khi bàn phím mở ra
 - (void)showKeyboard {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
+if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
         Titanium_TriggerInstantTouchBurst();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
