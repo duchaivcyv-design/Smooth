@@ -1010,8 +1010,8 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     } completion:nil];
 }
 
-- (void)setSelected:(BOOL)selected animated:(BOOL)animated {
-    _selected = selected;
+- selected (void)setSelected:(BOOL)selected animated:(BOOL)animated {
+    self.selected = selected;
     UIColor *targetColor = selected ? [UIColor whiteColor] : [UIColor colorWithWhite:0.78 alpha:1.0];
     UIFont *targetFont = selected ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
     CGFloat targetAlpha = selected ? 1.0 : 0.0;
