@@ -2405,7 +2405,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (idx < stages.count) {
             [buf appendFormat:@"\n%@", stages[idx]];
             lt.text = buf;
-            [lt scrollRangeToVisible:NSMakeRange(lt.text.Length - 1, 1)];
+            [lt scrollRangeToVisible:NSMakeRange(lt.text.length - 1, 1)];;
             [pv setProgress:(float)(idx + 1) / (float)stages.count animated:YES];
             UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
             [fb impactOccurred];
