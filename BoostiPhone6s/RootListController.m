@@ -1931,8 +1931,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     if (!_isKernelExploited) return;
-    ApexV285ProGlassPayload payload;
-    memset(&payload, 0, sizeof(ApexV285ProGlassPayload));
+    
+    // Đổi tên struct sang ApexV285ProPayload
+    ApexV285ProPayload payload;
+    memset(&payload, 0, sizeof(ApexV285ProPayload));
+    
     payload.magic = APEX_SYNC_MAGIC_V285;
     payload.masterEnabled = (enabled && _isKernelExploited) ? 1 : 0;
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
@@ -1964,7 +1967,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     payload.lastHeartbeat = payload.updateSeq;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProGlassPayload));
+        // sizeof cũng đổi sang ApexV285ProPayload
+        Titanium_WriteSyncPayloadUniversal(&payload, sizeof(ApexV285ProPayload));
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
