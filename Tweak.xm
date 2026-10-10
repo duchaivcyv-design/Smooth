@@ -5667,14 +5667,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_Switcher30Apps_Virtualization);
                     %init(Group_Display_SpringBoardV285);
                     %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
-#endif
                     %init(Group_V285_FloatingWindow_PiP);
                     %init(Group_SpringBoard_ProcessManagerV285);
 
                     // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ (GỌI QUA HÀM TRỢ LỰC)
                     Init_CAWindowServer_Hooks();
                     
-#if TITANIUM_ENABLE_RATE_KEEPER
                     [TitaniumRateKeeper start];
 #endif
 
