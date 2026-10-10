@@ -5572,7 +5572,7 @@ static inline void Init_CAWindowServer_Hooks(void) {
 }
 
 // ====================================================================================================
-// RUNTIME INITIALIZER: ĐÃ ĐỒNG BỘ HOÀN TOÀN
+// RUNTIME INITIALIZER: ĐÃ ĐỒNG BỘ HOÀN TOÀN — ĐÃ SỬA LỖI BIÊN DỊCH
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
@@ -5604,9 +5604,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     }
                 }
 
-                // [ĐÃ SỬA - CÔNG TẮC TỔNG / LOẠI TRỪ APP]: app bị tắt trong tab App, hoặc công tắc tổng đang TẮT khi app khởi chạy,
-                // thì KHÔNG nạp bất kỳ nhóm hook nào vào tiến trình này (tắt thật sự, không chỉ "gác" điều kiện).
-                // Lưu ý: app đã mở lúc công tắc tổng tắt cần mở lại sau khi bật công tắc mới có hook.
+                // [ĐÃ SỬA - CÔNG TẮC TỔNG / LOẠI TRỪ APP]
                 if (!isSpringBoard && (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
                     g_SystemMasterReady = YES;
                     return;
@@ -5617,7 +5615,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 });
 
                 // 0. BẢO VỆ WATCHDOG
-                // [ĐÃ SỬA]: mặc định TẮT (TITANIUM_ENABLE_WATCHDOG_IMMUNITY = 0), xem ghi chú ở phần định nghĩa macro
                 if (TITANIUM_ENABLE_WATCHDOG_IMMUNITY) {
                     %init(Group_AntiWatchdog_Immunity);
                 }
@@ -5635,12 +5632,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_Universal_InApp_Animations);
                 %init(Group_Apple_Internal_ProMotion_Apex);
                 %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
-                // [ĐÃ SỬA]: nhóm khai man ProMotion qua MobileGestalt chỉ nạp trên phần cứng ProMotion thật
                 if (Titanium_DisplaySpoofAllowed()) {
                     %init(Group_Hardware_ProMotion_Overclock);
                 }
-                
-                // [ĐÃ THÊM]: Cấp nhịp quét khởi tạo Scene ban đầu chống đen app
                 %init(Group_Apple_Native_ColdBoot_Overdrive);
                 
                 // 3. ĐỒ HỌA SILICON, ĐIỀU PHỐI CPU & RAM
@@ -5651,7 +5645,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_System_Memory_And_RunLoop_Governor);
                 %init(Group_Thermal_CryoPacing_ZeroDrop);
                 %init(Group_Deep_RAM_Compaction_Engine);
-                // [ĐÃ SỬA]: app có mạng thường nhúng WKWebView (đăng nhập/nội dung web); nhóm này chỉ nạp vào app thứ ba khi bật macro
                 if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                     %init(Group_WebKit_RAM_Optimizer);
                 }
@@ -5670,11 +5663,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_V285_FloatingWindow_PiP);
                     %init(Group_SpringBoard_ProcessManagerV285);
 
-                    // ÉP CỨNG TẦNG GỐC MÁY CHỦ HIỂN THỊ (GỌI QUA HÀM TRỢ LỰC)
                     Init_CAWindowServer_Hooks();
                     
                     [TitaniumRateKeeper start];
-#endif
 
                     @try {
                         Titanium_StartThermalAndChargingWatchdog();
@@ -5706,11 +5697,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                           attributes:@{NSFilePosixPermissions: @(0644)}];
                 } else {
                     %init(Group_UIKit_ThirdParty_IsolatedV285);
-
-                    // BẢO VỆ BUFFER TRÁNH ĐEN MÀN HÌNH
                     %init(Group_Force_Render_Recovery_Overdrive);
-
-                    // GIA TỐC CẤP WINDOW / SCENE DUY NHẤT (ĐÃ DỌN SẠCH TRÙNG LẶP)
                     %init(Group_Window_Level_Overdrive);
 
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -5727,7 +5714,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
     });
 }
-
 // ====================================================================================================
 // BOOTSTRAP TRIGGER & CONSTRUCTOR (ĐÃ BỔ SUNG CHẶN TOÀN BỘ TIẾN TRÌNH MẠNG TRIỆT TIÊU NGHẼN MẠNG)
 // ====================================================================================================
