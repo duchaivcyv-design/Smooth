@@ -5573,7 +5573,7 @@ static inline void Init_CAWindowServer_Hooks(void) {
 
 // ====================================================================================================
 // RUNTIME INITIALIZER: ĐÃ ĐỒ_tNG BỘ HOÀN TOÀN — ĐÃ SỬA LỖI BIÊN DỊCH
- s// ====================================================================================================
+// ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
    _coreInitToken;
