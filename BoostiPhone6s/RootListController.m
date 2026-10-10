@@ -1262,9 +1262,13 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
     [self collapseMenu];
-    if ([_delegate respondsToSelector:@selector(expandingButton:didSelectActionAtIndex:)]) {
-        [_delegate expandingButton:self didSelectActionAtIndex:idx];
-    }
+    __weak typeof(self) wSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(wSelf) sSelf = wSelf;
+        if (sSelf && [sSelf.delegate respondsToSelector:@selector(expandingButton:didSelectActionAtIndex:)]) {
+            [sSelf.delegate expandingButton:sSelf didSelectActionAtIndex:idx];
+        }
+    });
 }
 @end
 
@@ -2302,6 +2306,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [LGExpandingMenuAction actionWithTitle:@"🔓 Mở Khóa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"🔒 Khóa" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"💾 Lưu" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"⚡ Áp Dụng" image:@"arrow.clockwise" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0] destructive:NO],
     ]];
 
     _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal" tintColor:[UIColor whiteColor]];
@@ -2340,13 +2345,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         switch (index) {
             case 0: {
                 // ÁP DỤNG NGAY — hiện loading xe 5s rồi apply
-                if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
-                [self showLoadingCarOverlayDuration:5.0 completion:^{
-                    [self applyDeepSpringBoardAndUIKitTweaks];
-                    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-                    [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-                    [self.customTableView reloadData];
-                }];
+                [self runApplyWithLoading];
                 break;
             }
             case 1:
@@ -2395,8 +2394,21 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 [self.customTableView reloadData];
                 break;
             case 2: [self saveSettingsDataAndSync]; break;
+            case 3: [self runApplyWithLoading]; break;
         }
     }
+}
+
+// Loading xe CHỈ hiện ở nút Áp Dụng
+- (void)runApplyWithLoading {
+    if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
+    if (_loadingOverlay) return; // đang chạy rồi
+    [self showLoadingCarOverlayDuration:5.0 completion:^{
+        [self applyDeepSpringBoardAndUIKitTweaks];
+        UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+        [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
+        [self smoothReloadTable];
+    }];
 }
 
 - (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button {
@@ -2485,14 +2497,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.44 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
+        [UIView animateWithDuration:0.62 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0.35 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
     } else animations();
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [fb impactOccurred];
 
     if (animated) {
-        [UIView transitionWithView:self.customTableView duration:0.34 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+        [UIView transitionWithView:self.customTableView duration:0.52 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
             [self.customTableView reloadData];
         } completion:nil];
     } else {
@@ -2816,7 +2828,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 if (!sS) return;
                 if (sS->_currentHzFpsSubTab == index) return;
                 sS->_currentHzFpsSubTab = index;
-                [sS.customTableView reloadData];
+                [sS smoothReloadTable];
             };
             accessory = seg;
             title = @"   Chế độ:";
@@ -3120,7 +3132,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         // Chỉ cập nhật giá trị — KHÔNG loading xe ở đây (loading nằm ở nút Áp Dụng)
         [self applyRateValue:targetRate isDynamic:NO isFPS:!isHz];
         [self applyDeepSpringBoardAndUIKitTweaks];
-        [self.customTableView reloadData];
+        UIImpactFeedbackGenerator *rateFb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [rateFb impactOccurred];
+        [self smoothReloadTable];
     } else if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
         NSInteger cc = Titanium_GetCrashCount();
         if (cc >= 3) [self showServerDownAlert];
@@ -3213,25 +3227,32 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (val > 144) val = 144;
         [self applyRateValue:val isDynamic:NO isFPS:!isHz];
         [self applyDeepSpringBoardAndUIKitTweaks];
-        [self.customTableView reloadData];
+        [self smoothReloadTable];
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
-// Fix sync: cập nhật cache ngay, đồng bộ notify
+// Hz và FPS luôn đồng bộ: chỉnh một giá trị thì giá trị còn lại đi theo
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
-    if (isFPS) {
-        self.settingsDict[@"TargetFPSRate"] = @(rate);
-        self.settingsDict[@"EnableFPSControl"] = @YES;
-        self->_lastAppliedFPS = rate;
-    } else {
-        self.settingsDict[@"TargetRefreshRate"] = @(rate);
-        self.settingsDict[@"EnableHzControl"] = @YES;
-        self.settingsDict[@"ForceOverclock144Hz"] = @(rate >= 144);
-        self->_lastAppliedHz = rate;
-    }
+    if (rate < 15) rate = 15;
+    if (rate > 144) rate = 144;
+    self.settingsDict[@"TargetRefreshRate"] = @(rate);
+    self.settingsDict[@"TargetFPSRate"] = @(rate);
+    self.settingsDict[@"EnableHzControl"] = @YES;
+    self.settingsDict[@"EnableFPSControl"] = @YES;
+    self.settingsDict[@"ForceOverclock144Hz"] = @(rate >= 144);
+    self->_lastAppliedHz = rate;
+    self->_lastAppliedFPS = rate;
     [self saveSettingsDataAndSync];
+}
+
+// Đổi giá trị Hz/FPS: chuyển mềm bằng cross-dissolve thay vì reload cứng
+- (void)smoothReloadTable {
+    if (!self.customTableView) return;
+    [UIView transitionWithView:self.customTableView duration:0.38 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
+        [self.customTableView reloadData];
+    } completion:nil];
 }
 
 #pragma mark - HUD
