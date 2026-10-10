@@ -1024,9 +1024,9 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 static ApexV285ProPayload g_syncPayloadV285 = {
     .magic = APEX_SYNC_MAGIC_V285,
     .masterEnabled = 1,
-    .targetHz = 144,
-    .targetFPS = 144,
-    .forceOverclock = 1,
+    .targetHz = 120,
+    .targetFPS = 120,
+    .forceOverclock = 0, // [ĐÃ SỬA ĐỢT 5]: mặc định KHÔNG ép quá xung; chỉ bật khi người dùng chọn >=144 trong app. Mặc định 120Hz cân bằng mượt + ít nóng (máy 60Hz tự khóa 60).
     .pipSyncEnabled = 1,
     .thermalShield = 1,
     .antiStutterExit = 1,
@@ -1145,6 +1145,11 @@ static inline BOOL HardwareHasNative120Hz(void) {
 // Lõi (Hz/FPS toàn hệ thống, công tắc tổng, loại trừ app, sửa lỗi đã nêu) KHÔNG bị ảnh hưởng. Đặt 0 để trả về hành vi nặng cũ.
 #ifndef TITANIUM_LITE_MODE
 #define TITANIUM_LITE_MODE 1
+#endif
+
+// [V10] Bật boost layout SpringBoard/đa nhiệm/popup (có cache QoS, không overhead). Đặt 0 để tắt.
+#ifndef TITANIUM_V10_PERFORMANCE
+#define TITANIUM_V10_PERFORMANCE 1
 #endif
 
 // Bộ giữ nhịp CADisplayLink cho SpringBoard (xem TitaniumRateKeeper). Mặc định TẮT: cờ "đang cuộn" có thể bị kẹt khiến bộ này chạy mãi (nóng máy).
@@ -1539,8 +1544,11 @@ static BoostConfigV285Pro *CFG285 = nil;
 #define IS_ACTIVE (CFG285 && CFG285.enabled)
 
 // Biến cache nguyên thủy: Trả về tức thì 0ns cho CADisplayLink & CoreAnimation
-static volatile NSInteger g_cachedResolvedHz = 144;
-static volatile NSInteger g_cachedResolvedFPS = 144;
+static volatile NSInteger g_cachedResolvedHz = 120; // [ĐÃ SỬA ĐỢT 5]: mặc định cân bằng 120 (máy 60Hz tự khóa 60)
+static volatile NSInteger g_cachedResolvedFPS = 120;
+// [ĐÃ THÊM ĐỢT 5 - CHỐNG NÓNG MÁY]: cờ nhiệt được cập nhật bởi hook thermalState; khi Serious/Critical
+// toàn hệ thống tự hạ trần về 60Hz để GPU/CPU nghỉ, hết nóng thì tự về mức người dùng chọn.
+static volatile BOOL g_thermalSeriousV285 = NO;
 
 // [ĐÃ ÉP TOÀN DIỆN]: ĐIỀU PHỐI WINDOWSERVER TỨC THÌ (KHÓA DẢI 15 - 144HZ, CHỐNG CO VIEWPORT & CHỐNG ĐEN APP)
 static void Titanium_TuneWindowServerDisplayDirectly(void) {
@@ -1601,11 +1609,11 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     self = [super init];
     if (self) {
         self.enabled = YES;
-        self.targetHz = 144;
-        self.targetFPS = 144;
+        self.targetHz = 120; // [ĐÃ SỬA ĐỢT 5]: mặc định 120 cân bằng mượt + ít nóng (máy 60Hz tự khóa 60)
+        self.targetFPS = 120;
         self.enableHzControl = YES;
         self.enableFPSControl = YES;
-        self.forceOverclock144Hz = YES;
+        self.forceOverclock144Hz = NO; // [ĐÃ SỬA ĐỢT 5]: chỉ ép quá xung khi người dùng chủ động chọn >=144
         self.proMotionEngineBeta7 = YES;
         self.touchResponseBoost = YES;
         self.colorOs17SmoothEngine = YES;
@@ -1739,11 +1747,11 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
             // ĐÃ ÉP: Cưỡng bức kích hoạt kịch trần toàn bộ cấu hình trực tiếp từ RAM khi bị Sandbox chặn
             self.enabled = YES;
-            self.targetHz = 144;
-            self.targetFPS = 144;
+            self.targetHz = 120; // [ĐÃ SỬA ĐỢT 5]: mặc định 120 cân bằng
+            self.targetFPS = 120;
             self.enableHzControl = YES;
             self.enableFPSControl = YES;
-            self.forceOverclock144Hz = YES;
+            self.forceOverclock144Hz = NO;
             self.proMotionEngineBeta7 = YES;
             self.touchResponseBoost = YES;
             self.colorOs17SmoothEngine = YES;
@@ -1764,8 +1772,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             self.powerSaveMode = NO;
             self.batterySaver60Hz = NO;
 
-            g_cachedResolvedHz = 144;
-            g_cachedResolvedFPS = 144;
+            g_cachedResolvedHz = 120; // [ĐÃ SỬA ĐỢT 5]
+            g_cachedResolvedFPS = 120;
             ApplyExclusion();
             return;
         }
@@ -2585,7 +2593,17 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 - (void)didMoveToWindow {
     %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-        g_isMetalGameProcess = YES;
+        // [ĐÃ SỬA V10 - APP MẠNG BỊ COI NHẦM LÀ GAME]: trước đây MỌI CAMetalLayer (kể cả video thumbnail nhỏ
+        // trong Facebook/TikTok/Instagram/YouTube) đều đặt g_isMetalGameProcess=YES vĩnh viễn => app mạng bị
+        // coi là game => tweak bypass FPS/Hz => cảm giác nghẽn, không mượt. Nay chỉ coi là game nếu layer
+        // chiếm >=75% màn hình (game thật sự). App mạng video nhỏ được áp dụng Hz/FPS bình thường.
+        CGSize scrSize = [UIScreen mainScreen].bounds.size;
+        CGFloat scrArea = scrSize.width * scrSize.height;
+        CGRect layerBounds = self.bounds;
+        CGFloat layerArea = layerBounds.size.width * layerBounds.size.height;
+        if (scrArea > 0.0 && layerArea / scrArea >= 0.75) {
+            g_isMetalGameProcess = YES;
+        }
     }
 }
 
@@ -2686,7 +2704,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
         return 60;
     }
-
     NSInteger userHz = g_cachedResolvedHz;
     if (userHz <= 0 && CFG285) {
         userHz = (NSInteger)CFG285.targetHz;
@@ -2700,6 +2717,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     // [ĐÃ SỬA - TRUNG THỰC VỚI PHẦN CỨNG]: tấm nền không có ProMotion chỉ quét tối đa 60Hz. Yêu cầu 144Hz không tạo thêm khung hình nào
     // mà làm hệ thống đàm phán nhịp sai (hoạt ảnh đứng hẳn khi không chạm, app đen lúc mở).
     if (!Titanium_DisplaySpoofAllowed() && userHz > 60) userHz = 60;
+    // [ĐÃ SỬA ĐỢT 5 - CHỐNG NÓNG]: máy nóng Serious/Critical tự hạ VỀ TỐI ĐA 60Hz tạm thời (giữ nguyên nếu người dùng đã chọn thấp hơn 60), hết nóng tự về mức đã chọn.
+    if (g_thermalSeriousV285 && userHz > 60) userHz = 60;
     return userHz;
 }
 
@@ -2709,7 +2728,6 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
         return 60;
     }
-
     NSInteger userFPS = g_cachedResolvedFPS;
     if (userFPS <= 0 && CFG285) {
         userFPS = (NSInteger)CFG285.targetFPS;
@@ -2722,6 +2740,8 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     if (userFPS > 144) userFPS = 144;
     // [ĐÃ SỬA - TRUNG THỰC VỚI PHẦN CỨNG]: xem ghi chú ở Titanium_GetTargetConfiguredHz (khóa 30 FPS vẫn hoạt động bình thường)
     if (!Titanium_DisplaySpoofAllowed() && userFPS > 60) userFPS = 60;
+    // [ĐÃ SỬA ĐỢT 5 - CHỐNG NÓNG]: máy nóng tự hạ FPS về tối đa 60 tạm thời.
+    if (g_thermalSeriousV285 && userFPS > 60) userFPS = 60;
     return userFPS;
 }
 
@@ -2782,9 +2802,9 @@ static dispatch_source_t s_keeperPoller = nil;
         s_keeperLink = [CADisplayLink displayLinkWithTarget:[TitaniumRateKeeper class] selector:@selector(tick:)];
         if (@available(iOS 15.0, *)) {
             float targetHz = (float)Titanium_GetTargetConfiguredHz();
-            if (targetHz < 60.0f) targetHz = 60.0f;
+            if (targetHz < 15.0f) targetHz = 15.0f;
             if (targetHz > 144.0f) targetHz = 144.0f;
-            s_keeperLink.preferredFrameRateRange = SafeMakeFRR(TITANIUM_FRAME_RATE_FLOOR, targetHz, targetHz);
+            s_keeperLink.preferredFrameRateRange = SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz);
         }
         [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
     }
@@ -2908,9 +2928,15 @@ static dispatch_source_t s_keeperPoller = nil;
 
 - (NSInteger)minimumFPS {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.enableFPSControl || g_syncPayloadV285.targetFPS > 0)) {
-        // [ĐÃ SỬA]: màn hình 60Hz (không có ProMotion) không thể chạy dưới 60Hz; báo "15" mời hệ thống hạ nhịp về ~0.
-        // Máy ProMotion thật vẫn giữ 15 như cũ.
-        return HardwareHasNative120Hz() ? 15 : (NSInteger)TITANIUM_FRAME_RATE_FLOOR;
+        // [ĐÃ SỬA ĐỢT 5 - CHỈNH 15-144 CÓ TÁC DỤNG]: trước đây máy không ProMotion luôn trả sàn 60,
+        // nên khi người dùng chọn 15/30/45/50 thì minimum > preferred => hệ thống bỏ qua => chỉnh không tác dụng.
+        // Nay sàn bằng TITANIUM_FRAME_RATE_FLOOR (60) nhưng NẾU trần người dùng chọn thấp hơn 60 thì sàn = trần
+        // (không dưới 15) => dải tần hợp lệ, chỉnh thấp có hiệu lực thật toàn hệ thống.
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        NSInteger floor = (NSInteger)TITANIUM_FRAME_RATE_FLOOR;
+        if (cap < floor) floor = cap;
+        if (floor < 15) floor = 15;
+        return floor;
     }
     return %orig;
 }
@@ -4070,10 +4096,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                 UIWindowScene *scene = self.windowScene;
                 if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                    if (targetHz < 60.0f) targetHz = 60.0f;
+                    if (targetHz < 15.0f) targetHz = 15.0f;
                     if (targetHz > 144.0f) targetHz = 144.0f;
 
-                    SafeFrameRateRange range = SafeMakeFRR(60.0f, targetHz, targetHz);
+                    SafeFrameRateRange range = SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz);
                     [scene setPreferredFrameRateRange:range];
                 }
             }
@@ -4167,10 +4193,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         if (@available(iOS 15.0, *)) {
             if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                 float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
+                if (targetHz < 15.0f) targetHz = 15.0f;
                 if (targetHz > 144.0f) targetHz = 144.0f;
 
-                self.preferredFrameRateRange = SafeMakeFRR(60.0f, targetHz, targetHz);
+                self.preferredFrameRateRange = SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz);
             }
         }
     }
@@ -4274,8 +4300,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 // 1. [ĐÃ ÉP TOÀN DIỆN]: Ép trạng thái nhiệt độ mát mẻ (Nominal) chống tụt xung khi máy ấm
 - (NSProcessInfoThermalState)thermalState {
-    // [ĐÃ SỬA - CHẾ ĐỘ NHẸ]: không nói dối trạng thái nhiệt với app (nói "mát" khiến app không giảm tải => máy nóng nhanh, hệ thống bóp xung mạnh => lag)
-    if (TITANIUM_LITE_MODE) return %orig;
+    // [ĐÃ SỬA ĐỢT 5]: LUÔN cập nhật cờ nhiệt (kể cả lite mode) để hạ nhịp tự động khi nóng; không nói dối với app.
+    NSProcessInfoThermalState real = %orig;
+    g_thermalSeriousV285 = (real >= NSProcessInfoThermalStateSerious);
+    if (TITANIUM_LITE_MODE) return real;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         // [ĐÃ SỬA]: khi máy THẬT SỰ nóng (Serious/Critical) phải báo đúng để app tự giảm tải. Bản cũ nói dối "Nominal" ngay cả lúc đó,
         // app không bao giờ giảm tải => máy nóng nhanh, hệ điều hành phải bóp xung mạnh hơn => giật lag.
@@ -4329,9 +4357,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (id)init {
     id orig = %orig;
-    if (orig && (g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !Titanium_IsSpringBoard()) {
-        g_isMetalGameProcess = YES;
-    }
+    // [ĐÃ SỬA V10 - APP MẠNG BỊ COI NHẦM LÀ GAME]: không đặt g_isMetalGameProcess=YES ở init (layer mới init chưa có kích thước,
+    // mọi app có video/CAMetalLayer nhỏ đều bị coi là game => tweak bypass => cảm giác nghẽn, không mượt).
+    // Để didMoveToWindow quyết định dựa trên kích thước thực tế (>=75% màn hình mới coi là game).
     return orig;
 }
 
@@ -4729,7 +4757,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (BOOL)runMode:(NSRunLoopMode)mode beforeDate:(NSDate *)limitDate {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread] && (CFG285.ultraResponsivenessPro || g_isRateLockedV285)) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        // [ĐÃ SỬA V10 - NGUYÊN NHÂN CHÍNH GÂY LAG]: trước đây gọi pthread_set_qos_class_self_np MỖI VÒNG runloop
+        // (hàng ngàn lần/giây) => syscall liên tục => lag, giật, nóng, cảm giác nghẽn mạng. Nay cache theo luồng:
+        // chỉ gọi duy nhất 1 lần cho đến khi tiến trình thoát. Không lặp lại.
+        static __thread int s_v10PinnedQos = -1;
+        if (s_v10PinnedQos != (int)QOS_CLASS_USER_INTERACTIVE) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            s_v10PinnedQos = (int)QOS_CLASS_USER_INTERACTIVE;
+        }
     }
     // [ĐÃ SỬA]: chữ ký gốc là "- (BOOL)runMode:beforeDate:". Bản cũ khai báo void và bỏ mất giá trị trả về, các vòng lặp runloop
     // (luồng mạng/NSURLConnection tự chạy "while ([runLoop runMode:...])") có thể thoát sớm hoặc quay vô hạn => như nghẽn mạng / xám mãi.
@@ -5052,7 +5087,12 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép toàn bộ cờ Variable Refresh Rate & ProMotion của Apple qua MobileGestalt
 %hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
-    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
+    // [ĐÃ SỬA ĐỢT 5 - NGUYÊN NHÂN CHÍNH GÂY GIẬT/ĐỨNG KHUNG HÌNH TRÊN MÁY 60Hz]:
+    // Trước đây只要 forceOverclock mặc định = 1 (hoặc bật Hz control) là MGCopyAnswer LUÔN báo
+    // SupportsVariableRefreshRate / ProMotion = true NGAY CẢ trên tấm nền 60Hz. Hệ thống chuyển sang
+    // chính sách hạ nhịp kiểu ProMotion mà tấm nền không có => hoạt ảnh đứng hẳn sau khi nhả tay, giật từng khung.
+    // Nay chỉ khai man khi phần cứng thật sự có ProMotion (hoặc người dùng chủ động bật spoof macro).
+    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_DisplaySpoofAllowed() && (CFG285.proMotionEngineBeta7 || CFG285.enableHzControl || g_isRateLockedV285 || g_syncPayloadV285.forceOverclock)) {
         if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
             CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
             CFEqual(property, CFSTR("pVRR")) ||
@@ -5114,11 +5154,11 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 
             if (@available(iOS 15.0, *)) {
                 float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
+                if (targetHz < 15.0f) targetHz = 15.0f;
                 if (targetHz > 144.0f) targetHz = 144.0f;
 
                 if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
+                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz)];
                 }
             }
         });
@@ -5167,42 +5207,42 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 
 - (double)minimumFrameDuration {
     double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
+    if (targetHz < 15.0) targetHz = 15.0;
     if (targetHz > 144.0) targetHz = 144.0;
     return (1.0 / targetHz);
 }
 
 - (void)setMinimumFrameDuration:(double)duration {
     double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
+    if (targetHz < 15.0) targetHz = 15.0;
     if (targetHz > 144.0) targetHz = 144.0;
     %orig(1.0 / targetHz);
 }
 
 - (double)maximumRefreshRate {
     double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
+    if (targetHz < 15.0) targetHz = 15.0;
     if (targetHz > 144.0) targetHz = 144.0;
     return targetHz;
 }
 
 - (void)setMaximumRefreshRate:(double)rate {
     double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
+    if (targetHz < 15.0) targetHz = 15.0;
     if (targetHz > 144.0) targetHz = 144.0;
     %orig(targetHz);
 }
 
 - (double)idealRefreshRate {
     double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
+    if (targetHz < 15.0) targetHz = 15.0;
     if (targetHz > 144.0) targetHz = 144.0;
     return targetHz;
 }
 
 - (void)setIdealRefreshRate:(double)rate {
     double targetHz = (double)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60.0) targetHz = 60.0;
+    if (targetHz < 15.0) targetHz = 15.0;
     if (targetHz > 144.0) targetHz = 144.0;
     %orig(targetHz);
 }
@@ -5221,14 +5261,14 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 
 - (NSInteger)preferredFPS {
     NSInteger targetHz = (NSInteger)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60) targetHz = 60;
+    if (targetHz < 15) targetHz = 15;
     if (targetHz > 144) targetHz = 144;
     return targetHz;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
     NSInteger targetHz = (NSInteger)Titanium_GetTargetConfiguredHz();
-    if (targetHz < 60) targetHz = 60;
+    if (targetHz < 15) targetHz = 15;
     if (targetHz > 144) targetHz = 144;
     %orig(targetHz);
 }
@@ -5298,11 +5338,11 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 
             if (@available(iOS 15.0, *)) {
                 float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                if (targetHz < 60.0f) targetHz = 60.0f;
+                if (targetHz < 15.0f) targetHz = 15.0f;
                 if (targetHz > 144.0f) targetHz = 144.0f;
 
                 if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
+                    [(id)self setPreferredFrameRateRange:SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz)];
                 }
             }
         });
@@ -5321,9 +5361,9 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
                 UIWindowScene *scene = self.windowScene;
                 if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float targetHz = (float)Titanium_GetTargetConfiguredHz();
-                    if (targetHz < 60.0f) targetHz = 60.0f;
+                    if (targetHz < 15.0f) targetHz = 15.0f;
                     if (targetHz > 144.0f) targetHz = 144.0f;
-                    [(id)scene setPreferredFrameRateRange:SafeMakeFRR(60.0f, targetHz, targetHz)];
+                    [(id)scene setPreferredFrameRateRange:SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz)];
                 }
             }
         });
@@ -5572,6 +5612,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_LiquidGlass_Opt);
                     %init(Group_Switcher30Apps_Virtualization);
                     %init(Group_Display_SpringBoardV285);
+#if TITANIUM_V10_PERFORMANCE
+                    %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
+#endif
                     %init(Group_V285_FloatingWindow_PiP);
                     %init(Group_SpringBoard_ProcessManagerV285);
 
@@ -5672,6 +5715,60 @@ static void SpringBoardBootstrapTrigger(void) {
         });
     });
 }
+
+// ====================================================================================================
+// NHÓM V10: BOOST LAYOUT SPRINGBOARD & ĐA NHIỆM & MÀN HÌNH CHÍNH (CACHE QoS - KHÔNG OVERHEAD, KHÔNG GIẬT)
+// Chỉ gọi pthread_set_qos khi layout xảy ra ĐÚNG lúc đang tương tác (vuốt/cuộn/chuyển cảnh), và cache
+// theo luồng nên syscall chỉ chạy 1 lần. Khử khựng 1 nhịp khi vuốt ra về home, vào đa nhiệm, mở thư mục.
+// ====================================================================================================
+%group Group_TitaniumV10_SpringBoard_Layout_Boost
+
+static inline void Titanium_V10_PinMainThreadHigh(void) {
+    if (![NSThread isMainThread]) return;
+    static __thread int s_v10LayoutQos = -1;
+    if (s_v10LayoutQos != (int)QOS_CLASS_USER_INTERACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        s_v10LayoutQos = (int)QOS_CLASS_USER_INTERACTIVE;
+    }
+}
+
+%hook SBIconListView
+- (void)layoutSubviews {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%hook SBFolderView
+- (void)layoutSubviews {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%hook SBFluidSwitcherViewController
+- (void)viewWillLayoutSubviews {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%hook SBMainDisplaySceneLayoutViewController
+- (void)viewWillLayoutSubviews {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%end
 
 %ctor {
     @autoreleasepool {
