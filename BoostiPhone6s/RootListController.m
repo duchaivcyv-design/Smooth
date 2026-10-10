@@ -550,6 +550,24 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
+// [FIX LẦN 5] Category TrackingTouchExt — ĐÃ DI CHUYỂN LÊN TRƯỚC @interface LGCustomSegment
+// để compiler thấy property self.trackingTouch khi đọc @implementation LGCustomSegment.
+// ====================================================================================================
+@interface UIControl (TrackingTouchExt)
+@property (nonatomic, strong) UITouch *trackingTouch;
+@end
+
+static const void *kTrackingTouchKey = &kTrackingTouchKey;
+@implementation UIControl (TrackingTouchExt)
+- (UITouch *)trackingTouch {
+    return objc_getAssociatedObject(self, kTrackingTouchKey);
+}
+- (void)setTrackingTouch:(UITouch *)trackingTouch {
+    objc_setAssociatedObject(self, kTrackingTouchKey, trackingTouch, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+@end
+
+// ====================================================================================================
 // MODULE 4: LG CUSTOM SEGMENT — [FIX LẦN 4] sửa lỗi bấm không đổi segment
 // ====================================================================================================
 @interface LGCustomSegment : UIControl
@@ -698,21 +716,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 - (void)cancelTrackingWithEvent:(UIEvent *)event {
     self.trackingTouch = nil;
     [super cancelTrackingWithEvent:event];
-}
-@end
-
-// Category thêm property trackingTouch cho UIControl (chỉ dùng nội bộ)
-@interface UIControl (TrackingTouchExt)
-@property (nonatomic, strong) UITouch *trackingTouch;
-@end
-
-static const void *kTrackingTouchKey = &kTrackingTouchKey;
-@implementation UIControl (TrackingTouchExt)
-- (UITouch *)trackingTouch {
-    return objc_getAssociatedObject(self, kTrackingTouchKey);
-}
-- (void)setTrackingTouch:(UITouch *)trackingTouch {
-    objc_setAssociatedObject(self, kTrackingTouchKey, trackingTouch, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 @end
 
