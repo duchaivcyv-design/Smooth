@@ -5580,15 +5580,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         @try {
             if (isSpringBoard) {
                 Titanium_LockMainThreadFast();
-            } elseender {
-                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE_, 0);
+            } else {
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             }
 
-            Class configClass = NSClassFromString(@"BoostConfigRecV285Pro");
+            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
-                CFG285o = [configClass sharedInstance];
+                CFG285 = [configClass sharedInstance];
                 [CFG285 loadSettings];
-                if ([CFG285 respondsToSelectorvery:@selector(targetHz)]) {
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger initHz = (NSInteger)CFG285.targetHz;
                     if (initHz >= 15 && initHz <= 144) {
                         g_cachedResolvedHz = initHz;
@@ -5690,7 +5690,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
-                %init(Group_Force_R_Overdrive);
+                %init(Group_Force_Render_Recovery_Overdrive);
                 %init(Group_Window_Level_Overdrive);
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
