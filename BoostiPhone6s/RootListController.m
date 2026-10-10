@@ -220,6 +220,11 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @property (nonatomic, assign) LGGlassMaterialType materialType;
 @property (nonatomic, assign) BOOL interactiveHighlightEnabled;
 @property (nonatomic, assign) BOOL isPressed;
+// [V10 iOS27] Hiệu ứng nhấn nảy, kéo méo kính lỏng
+@property (nonatomic, assign) CGPoint lastTouchLocation;
+@property (nonatomic, assign) CGFloat pressIntensity;
+@property (nonatomic, assign) BOOL isBeingPressed;
+@property (nonatomic, assign) BOOL isBeingDragged;
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius;
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius materialType:(LGGlassMaterialType)type;
 - (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel;
@@ -472,6 +477,122 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         } completion:nil];
     }];
 }
+
+#pragma mark - [V10 iOS27] Touch Handling: nhấn nảy, kéo méo kính lỏng thật
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (!_interactiveHighlightEnabled) { [super touchesBegan:touches withEvent:event]; return; }
+    [super touchesBegan:touches withEvent:event];
+    UITouch *t = [touches anyObject];
+    CGPoint p = [t locationInView:self];
+    _lastTouchLocation = p;
+    _isBeingPressed = YES;
+    _isBeingDragged = NO;
+    _pressIntensity = 0.0;
+
+    CGFloat distFromCenter = hypot(p.x - self.bounds.size.width/2, p.y - self.bounds.size.height/2);
+    CGFloat maxDist = hypot(self.bounds.size.width/2, self.bounds.size.height/2);
+    CGFloat intensity = 1.0 - fminf(1.0, distFromCenter / maxDist * 0.8);
+    _pressIntensity = intensity;
+
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:0.16];
+    [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+    CGFloat pressTint = 0.06 + intensity * 0.05;
+    _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:pressTint];
+    _topSpecular.opacity = 0.78 + intensity * 0.20;
+    _innerRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.40 + intensity * 0.18].CGColor;
+    _chromaticEdge.opacity = 0.72;
+    [CATransaction commit];
+
+    CGFloat scaleX = 0.972 + (1.0 - intensity) * 0.012;
+    CGFloat scaleY = 0.958 + (1.0 - intensity) * 0.022;
+    CGFloat tiltX = (p.x - self.bounds.size.width/2) / self.bounds.size.width * 1.6;
+    CGFloat tiltY = (p.y - self.bounds.size.height/2) / self.bounds.size.height * 1.1;
+    [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = CGAffineTransformTranslate(CGAffineTransformMakeScale(scaleX, scaleY), tiltX, tiltY);
+    } completion:nil];
+
+    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [fb impactOccurred];
+}
+
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (!_interactiveHighlightEnabled) { [super touchesMoved:touches withEvent:event]; return; }
+    [super touchesMoved:touches withEvent:event];
+    UITouch *t = [touches anyObject];
+    CGPoint p = [t locationInView:self];
+    CGPoint prev = _lastTouchLocation;
+    CGFloat dx = p.x - prev.x;
+    CGFloat dy = p.y - prev.y;
+
+    if (fabs(dx) > 1.0 || fabs(dy) > 1.0) {
+        _isBeingDragged = YES;
+        CGFloat ndx = (p.x - self.bounds.size.width/2) / self.bounds.size.width;
+        CGFloat ndy = (p.y - self.bounds.size.height/2) / self.bounds.size.height;
+        CGFloat distFromCenter = hypot(p.x - self.bounds.size.width/2, p.y - self.bounds.size.height/2);
+        CGFloat maxDist = hypot(self.bounds.size.width/2, self.bounds.size.height/2);
+        CGFloat distRatio = fminf(1.0, distFromCenter / maxDist);
+
+        CGFloat stretchX = 1.0 + fabs(ndx) * 0.07;
+        CGFloat stretchY = 1.0 - fabs(ndx) * 0.035;
+        CGFloat moveX = ndx * 5.0;
+        CGFloat moveY = ndy * 2.5;
+
+        CATransform3D t3d = CATransform3DIdentity;
+        t3d.m34 = 1.0 / -420.0;
+        t3d = CATransform3DRotate(t3d, -ndy * 0.09, 1, 0, 0);
+        t3d = CATransform3DRotate(t3d, ndx * 0.09, 0, 1, 0);
+
+        [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            self.layer.transform = t3d;
+            self.transform = CGAffineTransformTranslate(CGAffineTransformMakeScale(stretchX, stretchY), moveX, moveY);
+        } completion:nil];
+
+        _diagonalSheen.opacity = 0.42 + distRatio * 0.28;
+    }
+    _lastTouchLocation = p;
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (!_interactiveHighlightEnabled) { [super touchesEnded:touches withEvent:event]; return; }
+    [super touchesEnded:touches withEvent:event];
+    [self endGlassTouch:YES];
+}
+
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if (!_interactiveHighlightEnabled) { [super touchesCancelled:touches withEvent:event]; return; }
+    [super touchesCancelled:touches withEvent:event];
+    [self endGlassTouch:NO];
+}
+
+- (void)endGlassTouch:(BOOL)releasedInside {
+    _isBeingPressed = NO;
+    _isBeingDragged = NO;
+    _pressIntensity = 0.0;
+
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:0.40];
+    [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
+    CGFloat baseTint = [LGGlassMaterialFactory tintAlphaForType:_materialType];
+    _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:baseTint];
+    _topSpecular.opacity = 0.92;
+    _innerRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory rimAlphaForType:_materialType] * 0.55].CGColor;
+    _chromaticEdge.opacity = 0.50;
+    _diagonalSheen.opacity = 0.55;
+    [CATransaction commit];
+
+    [UIView animateWithDuration:0.68 delay:0 usingSpringWithDamping:0.50 initialSpringVelocity:releasedInside ? 1.4 : 0.5 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.layer.transform = CATransform3DIdentity;
+        self.transform = CGAffineTransformIdentity;
+    } completion:nil];
+
+    if (releasedInside) {
+        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [fb impactOccurred];
+    }
+}
+
 @end
 
 // ====================================================================================================
@@ -486,6 +607,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @property (nonatomic, strong) AppleLiquidGlassView *thumbGlass;
 @property (nonatomic, strong) CAShapeLayer *thumbInnerRim;
 @property (nonatomic, copy) void (^valueChangedBlock)(BOOL isOn);
+@property (nonatomic, assign) BOOL isAnimating;
 - (void)setOn:(BOOL)on animated:(BOOL)animated;
 @end
 
@@ -583,6 +705,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     } completion:nil];
 }
 - (void)handleTap {
+    if (_isAnimating) return;
     [self setOn:!_on animated:YES];
     [self sendActionsForControlEvents:UIControlEventValueChanged];
     if (self.valueChangedBlock) self.valueChangedBlock(_on);
@@ -592,21 +715,26 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 - (void)setOn:(BOOL)on { [self setOn:on animated:NO]; }
 - (void)setOn:(BOOL)on animated:(BOOL)animated { _on = on; [self updateUIAnimated:animated]; }
 
-- (void)animateThumbFloatToFrame:(CGRect)targetFrame {
+- (void)animateThumbFloatToFrame:(CGRect)targetFrame goingOn:(BOOL)goingOn {
+    _isAnimating = YES;
     CGPoint startCenter = _thumbGlass.center;
     CGPoint endCenter = CGPointMake(CGRectGetMidX(targetFrame), CGRectGetMidY(targetFrame));
-    CGFloat liftUp = 7.0;
-    CGFloat dipDown = 5.0;
+    // [V10 iOS27] BẬT (sang phải): đi xuống dưới một chút rồi bật lên về vị trí mới
+    //              TẮT (sang trái): đi lên trên một chút rồi đẩy xuống về vị trí cũ
+    CGFloat midY = goingOn ? (startCenter.y + 6.5) : (startCenter.y - 5.5);
+    CGFloat nearEndY = goingOn ? (endCenter.y + 2.5) : (endCenter.y - 1.5);
+    CGFloat midScale = goingOn ? 1.08 : 0.94;
+    CGFloat nearEndScale = goingOn ? 0.96 : 1.03;
 
     CAKeyframeAnimation *posAnim = [CAKeyframeAnimation animationWithKeyPath:@"position"];
     posAnim.values = @[
         [NSValue valueWithCGPoint:startCenter],
-        [NSValue valueWithCGPoint:CGPointMake((startCenter.x + endCenter.x) / 2.0, startCenter.y - liftUp)],
-        [NSValue valueWithCGPoint:CGPointMake(endCenter.x, endCenter.y + dipDown)],
+        [NSValue valueWithCGPoint:CGPointMake((startCenter.x + endCenter.x) / 2.0, midY)],
+        [NSValue valueWithCGPoint:CGPointMake(endCenter.x, nearEndY)],
         [NSValue valueWithCGPoint:endCenter]
     ];
-    posAnim.keyTimes = @[@0.0, @0.40, @0.72, @1.0];
-    posAnim.duration = 0.55;
+    posAnim.keyTimes = @[@0.0, @0.38, @0.70, @1.0];
+    posAnim.duration = 0.62;
     posAnim.timingFunctions = @[
         [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut],
         [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn],
@@ -616,9 +744,9 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     posAnim.removedOnCompletion = NO;
 
     CAKeyframeAnimation *scaleAnim = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-    scaleAnim.values = @[@1.0, @1.10, @0.95, @1.0];
-    scaleAnim.keyTimes = @[@0.0, @0.40, @0.72, @1.0];
-    scaleAnim.duration = 0.55;
+    scaleAnim.values = @[@1.0, [NSNumber numberWithFloat:midScale], [NSNumber numberWithFloat:nearEndScale], @1.0];
+    scaleAnim.keyTimes = @[@0.0, @0.38, @0.70, @1.0];
+    scaleAnim.duration = 0.62;
     scaleAnim.fillMode = kCAFillModeForwards;
     scaleAnim.removedOnCompletion = NO;
 
@@ -628,11 +756,12 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _thumbGlass.frame = targetFrame;
     _thumbGlass.layer.position = endCenter;
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.56 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.64 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self->_thumbGlass.layer removeAnimationForKey:@"floatUp"];
         [self->_thumbGlass.layer removeAnimationForKey:@"floatScale"];
         self->_thumbGlass.frame = targetFrame;
         self->_thumbGlass.layer.position = endCenter;
+        self->_isAnimating = NO;
     });
 }
 
@@ -650,7 +779,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     CGRect f = _on ? CGRectMake(W - d - inset, inset, d, d) : CGRectMake(inset, inset, d, d);
 
     if (animated) {
-        [self animateThumbFloatToFrame:f];
+        [self animateThumbFloatToFrame:f goingOn:_on];
         [CATransaction begin];
         [CATransaction setAnimationDuration:0.45];
         [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]];
@@ -2725,8 +2854,12 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
 #pragma mark - Expanding nav
 
 - (void)setupExpandingNavigationItems {
+    // [V10] Sửa lỗi 3-4 nút góc phải dính nhau / nhấn không được:
+    // Không dùng UIStackView (FillEqually kéo rộng vùng chạm đè lên nhau). Dùng container view
+    // với frame cố định chính xác 40x40 mỗi nút, spacing 12, mỗi nút độc lập, vùng chạm không đè.
     _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
     _expandingBoltButton.delegate = self;
+    _expandingBoltButton.tag = 103;
     [_expandingBoltButton setActions:@[
         [LGExpandingMenuAction actionWithTitle:@"Áp Dụng Ngay" image:@"arrow.clockwise" tintColor:[UIColor whiteColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"Ép Xung 144Hz" image:@"bolt.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
@@ -2736,6 +2869,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
 
     _expandingLockButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"lock.open.fill" tintColor:[UIColor whiteColor]];
     _expandingLockButton.delegate = self;
+    _expandingLockButton.tag = 102;
     [_expandingLockButton setActions:@[
         [LGExpandingMenuAction actionWithTitle:@"Mở Khóa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"Khóa" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
@@ -2745,6 +2879,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
 
     _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal" tintColor:[UIColor whiteColor]];
     _expandingMenuButton.delegate = self;
+    _expandingMenuButton.tag = 101;
     [_expandingMenuButton setActions:@[
         [LGExpandingMenuAction actionWithTitle:@"Respring" image:@"arrow.triangle.2.circlepath" tintColor:[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1.0] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
@@ -2752,19 +2887,30 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
         [LGExpandingMenuAction actionWithTitle:@"Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
     ]];
 
-    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[_expandingMenuButton, _expandingLockButton, _expandingBoltButton]];
-    stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.spacing = 16.0;
-    stack.alignment = UIStackViewAlignmentCenter;
-    stack.distribution = UIStackViewDistributionFillEqually;
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [stack.widthAnchor constraintEqualToConstant:40 * 3 + 16 * 2],
-        [stack.heightAnchor constraintEqualToConstant:40]
-    ]];
+    CGFloat btnSize = 40.0;
+    CGFloat spacing = 12.0;
+    CGFloat totalW = btnSize * 3 + spacing * 2;
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
+    container.backgroundColor = [UIColor clearColor];
+    container.userInteractionEnabled = YES;
 
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:stack];
+    _expandingMenuButton.frame = CGRectMake(0, 0, btnSize, btnSize);
+    _expandingLockButton.frame = CGRectMake(btnSize + spacing, 0, btnSize, btnSize);
+    _expandingBoltButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
+    [container addSubview:_expandingMenuButton];
+    [container addSubview:_expandingLockButton];
+    [container addSubview:_expandingBoltButton];
+
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
     [self updateLockIcon];
+}
+
+// [V10] Khi một nút mở rộng, tự động thu hẹp 2 nút còn lại -> không còn tình trạng menu đè nhau,
+// nhấn nút khác không phản ứng (dimOverlay che). Mỗi nút bây giờ độc lập hoàn toàn.
+- (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button {
+    if (button != _expandingMenuButton && [_expandingMenuButton respondsToSelector:@selector(collapseMenu)]) [_expandingMenuButton collapseMenu];
+    if (button != _expandingLockButton && [_expandingLockButton respondsToSelector:@selector(collapseMenu)]) [_expandingLockButton collapseMenu];
+    if (button != _expandingBoltButton && [_expandingBoltButton respondsToSelector:@selector(collapseMenu)]) [_expandingBoltButton collapseMenu];
 }
 
 - (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index {
@@ -2841,12 +2987,6 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
         [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
         [self smoothReloadTable];
     }];
-}
-
-- (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button {
-    if (button != _expandingMenuButton) [_expandingMenuButton collapseMenu];
-    if (button != _expandingBoltButton) [_expandingBoltButton collapseMenu];
-    if (button != _expandingLockButton) [_expandingLockButton collapseMenu];
 }
 
 #pragma mark - Liquid Nav Bar
