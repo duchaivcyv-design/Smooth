@@ -1153,7 +1153,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)setActions:(NSArray<LGExpandingMenuAction *> *)actions { _actions = actions; }
 - (void)handleTap { if (_expanded) [self collapseMenu]; else [self expandMenu]; }
 
-// FIX 3 nút: hostWindow chắc chắn trả window
 - (UIWindow *)hostWindow {
     if (self.window) return self.window;
 
@@ -1199,7 +1198,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     for (LGExpandingActionView *v in _actionViews) [v removeFromSuperview];
     [_actionViews removeAllObjects];
 
-    // FIX: dùng bounds thay vì frame
     CGRect selfInWindow = [self convertRect:self.bounds toView:host];
     CGFloat startX = CGRectGetMaxX(selfInWindow) - 220;
     CGFloat startY = CGRectGetMaxY(selfInWindow) + 8;
@@ -1286,8 +1284,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 // ====================================================================================================
 // MODULE 8: LOADING VIEWS
 // ====================================================================================================
-
-// -------- Loading người chạy --------
 @interface LGLoadingManView : UIView
 @property (nonatomic, strong) UIView *manContainer;
 @property (nonatomic, strong) UIView *head;
@@ -1383,7 +1379,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)dealloc { [self stopAnimating]; }
 @end
 
-// -------- Loading xe --------
 @interface LGLoadingCarView : UIView
 @property (nonatomic, strong) UIView *container;
 @property (nonatomic, strong) UIView *carBody;
@@ -1488,7 +1483,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)dealloc { [self stopAnimating]; }
 @end
 
-// -------- Apple Server Connect --------
 typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
     LGAppleServerPhaseIdle       = 0,
     LGAppleServerPhaseConnecting = 1,
@@ -1684,7 +1678,6 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 - (void)handleLoginTapped {
     if (_phase != LGAppleServerPhaseIdle) return;
 
-    // Nếu server đang sập (persist) → không cho khai thác
     NSTimeInterval downUntil = [[NSUserDefaults standardUserDefaults] doubleForKey:TI_SERVER_DOWN_KEY];
     BOOL isAdmin = [[NSUserDefaults standardUserDefaults] boolForKey:TI_ADMIN_SERVER_KEY];
     if (!isAdmin && downUntil > [[NSDate date] timeIntervalSince1970]) {
@@ -2007,7 +2000,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSInteger _currentLatencyMs;
     BOOL _serverDown;
 
-    // NEW — Admin server
     BOOL _isAdminServer;
     NSString *_adminServerUser;
 }
@@ -2026,7 +2018,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [super viewDidLoad];
     self.title = @"";
 
-    // Không auto reset nữa — lưu vĩnh viễn
     [self detectTweakDeletionIfNeeded];
 
     CAGradientLayer *bg = [CAGradientLayer layer];
@@ -2061,7 +2052,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self loadSettingsData];
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
 
-    // NEW — Load admin state
     _isAdminServer = [[NSUserDefaults standardUserDefaults] boolForKey:TI_ADMIN_SERVER_KEY];
     _adminServerUser = [[NSUserDefaults standardUserDefaults] stringForKey:TI_ADMIN_USER_KEY];
 
@@ -2096,9 +2086,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (self->_isKernelExploited) [self applyDeepSpringBoardAndUIKitTweaks];
     });
 
-    // FIX — bỏ popup khai thác nếu đã exploit hoặc admin
     if (_isAdminServer) {
-        // admin server — không popup gì cả
+        // admin server — không popup
     } else if ([self isServerCurrentlyDown]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self showPersistentServerDownAlert];
@@ -2115,7 +2104,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 
-    // Admin server — bỏ qua mọi check sập
     if (_isAdminServer) {
         if (_isKernelExploited) [self startContinuousHardwareHUD];
         return;
@@ -2148,10 +2136,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [_expandingLockButton collapseMenu];
 }
 
-// FIX 5 — không auto reset, lưu vĩnh viễn
 - (void)detectTweakDeletionIfNeeded {
-    // Không auto reset nữa — exploit state persist vĩnh viễn qua plist.
-    // Chỉ user nhấn "Xóa Sạch" mới reset.
+    // Lưu vĩnh viễn — không auto reset
     return;
 }
 
@@ -2267,7 +2253,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _serverStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
     [container addSubview:_serverStatusLabel];
 
-    // NEW — Nút đăng nhập server riêng
     UIButton *loginBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [loginBtn setTitle:@"🔑" forState:UIControlStateNormal];
     loginBtn.titleLabel.font = [UIFont systemFontOfSize:16];
@@ -2281,7 +2266,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self updateServerStatusIndicator];
 }
 
-// NEW — Đăng nhập admin server
 - (void)showAdminServerLogin {
     UIAlertController *a = [UIAlertController
         alertControllerWithTitle:@"🔑 Đăng Nhập Server Riêng"
@@ -2361,7 +2345,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [[NSRunLoop mainRunLoop] addTimer:_serverBlinkTimer forMode:NSRunLoopCommonModes];
 }
 
-// FIX — 0.1% quá tải, 0.01% sập, admin luôn xanh
 - (void)tickLatency {
     if (_isAdminServer) {
         _currentLatencyMs = 15 + arc4random_uniform(30);
@@ -2861,7 +2844,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     } else {
         if (section == 0) return 2;
         if (section == 1) return _isKernelExploited ? 8 : 1;
-        if (section == 2) return 3;
+        if (section == 2) return 4;
         return 4;
     }
 }
@@ -3205,17 +3188,17 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             else if (indexPath.row == 3) { title = @"📲 iOS"; detail = [NSString stringWithFormat:@"%@", ov]; }
             else if (indexPath.row == 4) { title = @"✏️ Tên"; detail = [[UIDevice currentDevice] name]; }
             else if (indexPath.row == 5) { title = @"🧠 CPU"; detail = _deepCoreCountString; }
-            else if ( accentindexPath.row == 6) { title = @"💾 RAM"; detail = _deepRamString; }
-            else { title = @"🐧 Darwin"; detail = = _deepKernelString; }
-        } else if (indexPath.section == 2) [ {
+            else if (indexPath.row == 6) { title = @"💾 RAM"; detail = _deepRamString; }
+            else { title = @"🐧 Darwin"; detail = _deepKernelString; }
+        } else if (indexPath.section == 2) {
             if (indexPath.row == 0) {
                 title = @"🌐 Độ Trễ Server";
-               UIColor if (_isAdminServer) {
-                    detail = [NSString stringWithFormat:@"%ld ms (Admin)", (long)_currentLatency colorMs];
-                   WithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
+                if (_isAdminServer) {
+                    detail = [NSString stringWithFormat:@"%ld ms (Admin)", (long)_currentLatencyMs];
+                    accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
                 } else if (_serverDown || [self isServerCurrentlyDown]) {
-                    accent = [UIColor systemRedColor];
                     detail = @"_____ms";
+                    accent = [UIColor systemRedColor];
                 } else {
                     detail = [NSString stringWithFormat:@"%ld ms", (long)_currentLatencyMs];
                     if (_currentLatencyMs >= 500) accent = [UIColor systemRedColor];
@@ -3223,12 +3206,22 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                     else accent = [UIColor systemGreenColor];
                 }
             } else if (indexPath.row == 1) {
-                title = @"📊 Trạng Thái";
+                title = @"📊 Trạng Thái Server";
                 if (_isAdminServer) detail = @"👑 Admin Server";
                 else if (_serverDown || [self isServerCurrentlyDown]) detail = @"❌ Sập";
                 else if (_currentLatencyMs >= 500) detail = @"⚠️ Quá tải";
                 else if (_currentLatencyMs >= 150) detail = @"🟡 Kém";
                 else detail = @"✅ Ổn định";
+            } else if (indexPath.row == 2) {
+                title = @"🔑 Đăng Nhập Server Riêng";
+                if (_isAdminServer) {
+                    detail = [NSString stringWithFormat:@"✓ %@", _adminServerUser ?: @"Admin"];
+                    accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
+                } else {
+                    detail = @"Admin";
+                    accent = [UIColor colorWithRed:1.0 green:0.85 blue:0.35 alpha:1.0];
+                }
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else {
                 title = @"🎨 Sáng/Tối Tự Động";
                 LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
@@ -3324,6 +3317,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         NSInteger cc = Titanium_GetCrashCount();
         if (cc >= 3) [self showServerDownAlert];
         else [self openDopamineStyleExploitConsole];
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2) {
+        [self showAdminServerLogin];
     }
 }
 
@@ -3472,12 +3467,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     p.targetFPS = fps;
     p.forceOverclock = (oc || hz >= 144) ? 1 : 0;
     p.pipSyncEnabled = 1;
-    p.thermalShield = [self.settingsDict[@"AntiThermalHzThrottling"] ?: @NO boolValue] ? 1 : 0;
-    p.antiStutterExit = [self"].settingsDict[@"FixAppExitStutter"] ?: @NO boolValue] ? 1 : 0;
-    p.s ?martBufferingLevel = 3;
-    p.zeroLatencyTouch = [self.settingsDict[@"TouchResponseBoost:"] ?: @NO boolValue] ? 1 : 0;
-    p.shaderOptimization = 1 @;
-    p.dynamicInterpolation = [self.settingsDict[@"ProMotionEngineBeta7"] ?: @NO boolValue] ? 1NO : 0;
+    p.thermalShield = [self.settingsDict[@"AntiThermalThrottling"] ?: @NO boolValue] ? 1 : 0;
+    p.antiStutterExit = [self.settingsDict[@"FixAppExitStutter"] ?: @NO boolValue] ? 1 : 0;
+    p.smartBufferingLevel = 3;
+    p.zeroLatencyTouch = [self.settingsDict[@"TouchResponseBoost"] ?: @NO boolValue] ? 1 : 0;
+    p.shaderOptimization = 1;
+    p.dynamicInterpolation = [self.settingsDict[@"ProMotionEngineBeta7"] ?: @NO boolValue] ? 1 : 0;
     p.fastAppLaunch = [self.settingsDict[@"TurboAppLaunch"] ?: @NO boolValue] ? 1 : 0;
     p.lowLatencyAudio = 1;
     p.memoryPressureRelief = 1;
@@ -3489,7 +3484,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     p.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @NO boolValue] ? 1 : 0;
     p.diskIOPriorityBoost = [self.settingsDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
     p.rawTouchDirectDelivery = 1;
-    p.powerSaveModeActive = [self.settingsDict[@"batterySaver60 boolValue] ? 1 : 0;
+    p.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue] ? 1 : 0;
     p.updateSeq = (uint64_t)mach_absolute_time();
     p.lastHeartbeat = p.updateSeq;
 
