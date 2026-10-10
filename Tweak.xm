@@ -5571,10 +5571,6 @@ static inline void Init_CAWindowServer_Hooks(void) {
     });
 }
 
-// ====================================================================================================
-// RUNTIME INITIALIZER: KHÔNG DÙNG BLOCK LITERAL — %init() CHẠY TRỰC TIẾP TRONG HÀM
-// ====================================================================================================
-
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
@@ -5584,15 +5580,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         @try {
             if (isSpringBoard) {
                 Titanium_LockMainThreadFast();
-            } else {
-                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            } elseender {
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE_, 0);
             }
 
-            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+            Class configClass = NSClassFromString(@"BoostConfigRecV285Pro");
             if (configClass) {
-                CFG285 = [configClass sharedInstance];
+                CFG285o = [configClass sharedInstance];
                 [CFG285 loadSettings];
-                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                if ([CFG285 respondsToSelectorvery:@selector(targetHz)]) {
                     NSInteger initHz = (NSInteger)CFG285.targetHz;
                     if (initHz >= 15 && initHz <= 144) {
                         g_cachedResolvedHz = initHz;
@@ -5615,12 +5611,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Titanium_ReloadSharedSyncStateV285();
             });
 
-            // 0. BẢO VỆ WATCHDOG
             if (TITANIUM_ENABLE_WATCHDOG_IMMUNITY) {
                 %init(Group_AntiWatchdog_Immunity);
             }
 
-            // 1. CÁC NHÓM CẢM ỨNG & HIỆU ỨNG HỆ THỐNG
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_Metal_ZeroTearing_Pacing);
             %init(Group_FluidTransitions_Pacing);
@@ -5629,7 +5623,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_InstantActionAndMenuTransitions_Boost);
             %init(Group_Global_Thread_Governor_Unthrottled);
 
-            // 2. GIA TỐC PHẦN CỨNG & DỰ ĐOÁN ĐỒ HỌA
             %init(Group_Universal_InApp_Animations);
             %init(Group_Apple_Internal_ProMotion_Apex);
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
@@ -5638,7 +5631,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             }
             %init(Group_Apple_Native_ColdBoot_Overdrive);
 
-            // 3. ĐỒ HỌA SILICON, ĐIỀU PHỐI CPU & RAM
             %init(Group_Titanium_Game_Metal_Overdrive);
             %init(Group_Silicon_Hardware_Pipeline_Overdrive);
             %init(Group_Silicon_Scheduler_Touch_Governor);
@@ -5650,12 +5642,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_WebKit_RAM_Optimizer);
             }
 
-            // 4. PHÂN TÁCH NÚT HOME VẬT LÝ CHO THIẾT BỊ CLASSIC
             if (Titanium_IsClassicHomeButtonDevice()) {
                 %init(Group_HardwareSegregation_ClassicHomeV285);
             }
 
-            // 5. PHÂN LẬP NẠP SPRINGBOARD VÀ APP THỨ BA
             if (isSpringBoard) {
                 %init(Group_LiquidGlass_Opt);
                 %init(Group_Switcher30Apps_Virtualization);
@@ -5674,21 +5664,21 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     Titanium_StartThermalAndChargingWatchdog();
                 } @catch (NSException *e) {}
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_ApplySiliconDeepOptimizations();
                     } @catch (NSException *e) {}
                 });
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_ForceInjectDynamicRefreshSupport();
                         AppleInternal_LockHardwareCADisplay();
                     } @catch (NSException *e) {}
                 });
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_TuneWindowServerDisplayDirectly();
                     } @catch (NSException *e) {}
@@ -5700,41 +5690,40 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
-                %init(Group_Force_Render_Recovery_Overdrive);
+                %init(Group_Force_R_Overdrive);
                 %init(Group_Window_Level_Overdrive);
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSECWARE_PER_SEC)), dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_ForceInjectDynamicRefreshSupport();
-                        AppleInternal_S_EnforceZeroLatencyKernelTier();
+                        AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_ApplySiliconDeepOptimizations();
-                    } @catch (NSYException *e) {}
+                    } @catch (NSException *e) {}
                 });
             }
 
-            g_SystemMasterReadyNC = YES;
+            g_SystemMasterReady = YES;
         } @catch (NSException *e) {}
     }
 }
 
-//), ====================================================================================================
-// BOOTSTRAP TRIGGER NULL & CONSTRUCTOR
-// ====================================================================================================
-
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
-    static dispatch_once_t s_obsOnce;
-    dispatch_once(&s_obsOnce, ^{
-        CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-        if (!darwinCenter) return;
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARD, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
-        if (!isSpringBoardProcess) {
-            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        }
-    });
+    static BOOL s_obsDone = NO;
+    if (s_obsDone) return;
+    s_obsDone = YES;
+
+    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+    if (!darwinCenter) return;
+
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+
+    if (!isSpringBoardProcess) {
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    }
 }
 
 static void SpringBoardBootstrapTrigger(void) {
