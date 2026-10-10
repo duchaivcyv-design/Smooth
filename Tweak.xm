@@ -5423,6 +5423,60 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 %end
 
 // ====================================================================================================
+// NHÓM V10: BOOST LAYOUT SPRINGBOARD & ĐA NHIỆM & MÀN HÌNH CHÍNH (CACHE QoS - KHÔNG OVERHEAD, KHÔNG GIẬT)
+// Chỉ gọi pthread_set_qos khi layout xảy ra ĐÚNG lúc đang tương tác (vuốt/cuộn/chuyển cảnh), và cache
+// theo luồng nên syscall chỉ chạy 1 lần. Khử khựng 1 nhịp khi vuốt ra về home, vào đa nhiệm, mở thư mục.
+// ====================================================================================================
+%group Group_TitaniumV10_SpringBoard_Layout_Boost
+
+static inline void Titanium_V10_PinMainThreadHigh(void) {
+    if (![NSThread isMainThread]) return;
+    static __thread int s_v10LayoutQos = -1;
+    if (s_v10LayoutQos != (int)QOS_CLASS_USER_INTERACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        s_v10LayoutQos = (int)QOS_CLASS_USER_INTERACTIVE;
+    }
+}
+
+%hook SBIconListView
+- (void)layoutSubviews {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%hook SBFolderView
+- (void)layoutSubviews {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%hook SBFluidSwitcherViewController
+- (void)viewWillLayoutSubviews {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%hook SBMainDisplaySceneLayoutViewController
+- (void)viewWillLayoutSubviews {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_V10_PinMainThreadHigh();
+    }
+    %orig;
+}
+%end
+
+%end
+
+// ====================================================================================================
 // GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
 // ====================================================================================================
 
@@ -5715,60 +5769,6 @@ static void SpringBoardBootstrapTrigger(void) {
         });
     });
 }
-
-// ====================================================================================================
-// NHÓM V10: BOOST LAYOUT SPRINGBOARD & ĐA NHIỆM & MÀN HÌNH CHÍNH (CACHE QoS - KHÔNG OVERHEAD, KHÔNG GIẬT)
-// Chỉ gọi pthread_set_qos khi layout xảy ra ĐÚNG lúc đang tương tác (vuốt/cuộn/chuyển cảnh), và cache
-// theo luồng nên syscall chỉ chạy 1 lần. Khử khựng 1 nhịp khi vuốt ra về home, vào đa nhiệm, mở thư mục.
-// ====================================================================================================
-%group Group_TitaniumV10_SpringBoard_Layout_Boost
-
-static inline void Titanium_V10_PinMainThreadHigh(void) {
-    if (![NSThread isMainThread]) return;
-    static __thread int s_v10LayoutQos = -1;
-    if (s_v10LayoutQos != (int)QOS_CLASS_USER_INTERACTIVE) {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        s_v10LayoutQos = (int)QOS_CLASS_USER_INTERACTIVE;
-    }
-}
-
-%hook SBIconListView
-- (void)layoutSubviews {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
-        Titanium_V10_PinMainThreadHigh();
-    }
-    %orig;
-}
-%end
-
-%hook SBFolderView
-- (void)layoutSubviews {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
-        Titanium_V10_PinMainThreadHigh();
-    }
-    %orig;
-}
-%end
-
-%hook SBFluidSwitcherViewController
-- (void)viewWillLayoutSubviews {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        Titanium_V10_PinMainThreadHigh();
-    }
-    %orig;
-}
-%end
-
-%hook SBMainDisplaySceneLayoutViewController
-- (void)viewWillLayoutSubviews {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        Titanium_V10_PinMainThreadHigh();
-    }
-    %orig;
-}
-%end
-
-%end
 
 %ctor {
     @autoreleasepool {
