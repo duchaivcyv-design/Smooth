@@ -33,6 +33,9 @@ extern char **environ;
 #define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
 
+#define TI_CRASH_COUNT_KEY  @"ti_network_crash_count_v7"
+#define TI_AUTO_THEME_KEY   @"ti_auto_theme_v7"
+
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct {
@@ -48,8 +51,14 @@ typedef struct {
 } ApexV285ProPayload;
 #endif
 
+// Helper crash + đếm crash
+static void Titanium_ForceCrashApp(void) { __builtin_trap(); }
+static NSInteger Titanium_GetCrashCount(void) { return [[NSUserDefaults standardUserDefaults] integerForKey:TI_CRASH_COUNT_KEY]; }
+static void Titanium_SetCrashCount(NSInteger n) { [[NSUserDefaults standardUserDefaults] setInteger:n forKey:TI_CRASH_COUNT_KEY]; [[NSUserDefaults standardUserDefaults] synchronize]; }
+static void Titanium_ResetCrashCount(void) { Titanium_SetCrashCount(0); }
+
 // ====================================================================================================
-// MODULE 1: GLASS MATERIAL FACTORY
+// MODULE 1: GLASS MATERIAL FACTORY — thông số đậm chất glass thật
 // ====================================================================================================
 typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     LGGlassMaterialTypeUltraThin = 0,
@@ -79,62 +88,62 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 + (UIBlurEffectStyle)blurStyleForType:(LGGlassMaterialType)type isDark:(BOOL)isDark {
     switch (type) {
         case LGGlassMaterialTypeUltraThin: return isDark ? UIBlurEffectStyleSystemUltraThinMaterialDark : UIBlurEffectStyleSystemUltraThinMaterialLight;
-        case LGGlassMaterialTypeThin:      return isDark ? UIBlurEffectStyleSystemUltraThinMaterialDark : UIBlurEffectStyleSystemUltraThinMaterialLight;
-        case LGGlassMaterialTypeRegular:   return isDark ? UIBlurEffectStyleSystemThinMaterialDark : UIBlurEffectStyleSystemThinMaterialLight;
-        case LGGlassMaterialTypeChrome:    return isDark ? UIBlurEffectStyleSystemThinMaterialDark : UIBlurEffectStyleSystemThinMaterialLight;
-        case LGGlassMaterialTypeProminent: return isDark ? UIBlurEffectStyleSystemThinMaterialDark : UIBlurEffectStyleSystemThinMaterialLight;
+        case LGGlassMaterialTypeThin:      return isDark ? UIBlurEffectStyleSystemThinMaterialDark : UIBlurEffectStyleSystemThinMaterialLight;
+        case LGGlassMaterialTypeRegular:   return isDark ? UIBlurEffectStyleSystemMaterialDark : UIBlurEffectStyleSystemMaterialLight;
+        case LGGlassMaterialTypeChrome:    return isDark ? UIBlurEffectStyleSystemChromeMaterialDark : UIBlurEffectStyleSystemChromeMaterialLight;
+        case LGGlassMaterialTypeProminent: return isDark ? UIBlurEffectStyleSystemMaterialDark : UIBlurEffectStyleSystemMaterialLight;
         case LGGlassMaterialTypeOverlay:   return isDark ? UIBlurEffectStyleSystemUltraThinMaterialDark : UIBlurEffectStyleSystemUltraThinMaterialLight;
-        case LGGlassMaterialTypeCrystal:   return isDark ? UIBlurEffectStyleSystemUltraThinMaterialDark : UIBlurEffectStyleSystemUltraThinMaterialLight;
+        case LGGlassMaterialTypeCrystal:   return isDark ? UIBlurEffectStyleSystemChromeMaterialDark : UIBlurEffectStyleSystemChromeMaterialLight;
     }
-    return UIBlurEffectStyleSystemUltraThinMaterialDark;
+    return UIBlurEffectStyleSystemThinMaterialDark;
 }
 + (CGFloat)tintAlphaForType:(LGGlassMaterialType)type {
     switch (type) {
-        case LGGlassMaterialTypeUltraThin: return 0.002;
-        case LGGlassMaterialTypeThin:      return 0.004;
-        case LGGlassMaterialTypeRegular:   return 0.008;
-        case LGGlassMaterialTypeChrome:    return 0.012;
-        case LGGlassMaterialTypeProminent: return 0.018;
-        case LGGlassMaterialTypeOverlay:   return 0.010;
-        case LGGlassMaterialTypeCrystal:   return 0.000;
+        case LGGlassMaterialTypeUltraThin: return 0.012;
+        case LGGlassMaterialTypeThin:      return 0.022;
+        case LGGlassMaterialTypeRegular:   return 0.034;
+        case LGGlassMaterialTypeChrome:    return 0.044;
+        case LGGlassMaterialTypeProminent: return 0.058;
+        case LGGlassMaterialTypeOverlay:   return 0.026;
+        case LGGlassMaterialTypeCrystal:   return 0.008;
     }
-    return 0.004;
+    return 0.022;
 }
 + (CGFloat)specularAlphaForType:(LGGlassMaterialType)type {
     switch (type) {
-        case LGGlassMaterialTypeUltraThin: return 0.12;
-        case LGGlassMaterialTypeThin:      return 0.16;
-        case LGGlassMaterialTypeRegular:   return 0.20;
-        case LGGlassMaterialTypeChrome:    return 0.24;
-        case LGGlassMaterialTypeProminent: return 0.30;
-        case LGGlassMaterialTypeOverlay:   return 0.22;
-        case LGGlassMaterialTypeCrystal:   return 0.18;
+        case LGGlassMaterialTypeUltraThin: return 0.24;
+        case LGGlassMaterialTypeThin:      return 0.30;
+        case LGGlassMaterialTypeRegular:   return 0.36;
+        case LGGlassMaterialTypeChrome:    return 0.42;
+        case LGGlassMaterialTypeProminent: return 0.50;
+        case LGGlassMaterialTypeOverlay:   return 0.38;
+        case LGGlassMaterialTypeCrystal:   return 0.34;
     }
-    return 0.16;
+    return 0.30;
 }
-+ (CGFloat)bottomReflectionAlphaForType:(LGGlassMaterialType)type { return 0.05; }
-+ (CGFloat)diagonalSheenAlphaForType:(LGGlassMaterialType)type { return 0.09; }
++ (CGFloat)bottomReflectionAlphaForType:(LGGlassMaterialType)type { return 0.12; }
++ (CGFloat)diagonalSheenAlphaForType:(LGGlassMaterialType)type { return 0.18; }
 + (CGFloat)rimAlphaForType:(LGGlassMaterialType)type {
     switch (type) {
-        case LGGlassMaterialTypeCrystal:   return 0.34;
-        case LGGlassMaterialTypeUltraThin: return 0.18;
-        case LGGlassMaterialTypeThin:      return 0.22;
-        case LGGlassMaterialTypeRegular:   return 0.26;
-        case LGGlassMaterialTypeChrome:    return 0.30;
-        case LGGlassMaterialTypeProminent: return 0.36;
-        case LGGlassMaterialTypeOverlay:   return 0.28;
+        case LGGlassMaterialTypeCrystal:   return 0.58;
+        case LGGlassMaterialTypeUltraThin: return 0.32;
+        case LGGlassMaterialTypeThin:      return 0.38;
+        case LGGlassMaterialTypeRegular:   return 0.44;
+        case LGGlassMaterialTypeChrome:    return 0.50;
+        case LGGlassMaterialTypeProminent: return 0.60;
+        case LGGlassMaterialTypeOverlay:   return 0.46;
     }
-    return 0.22;
+    return 0.38;
 }
-+ (CGFloat)rimWidthForType:(LGGlassMaterialType)type { return 0.7; }
-+ (CGFloat)shadowOpacityForType:(LGGlassMaterialType)type { return 0.28; }
-+ (CGFloat)shadowRadiusForType:(LGGlassMaterialType)type { return 14.0; }
-+ (CGFloat)shadowOffsetYForType:(LGGlassMaterialType)type { return 6.0; }
++ (CGFloat)rimWidthForType:(LGGlassMaterialType)type { return 1.0; }
++ (CGFloat)shadowOpacityForType:(LGGlassMaterialType)type { return 0.34; }
++ (CGFloat)shadowRadiusForType:(LGGlassMaterialType)type { return 20.0; }
++ (CGFloat)shadowOffsetYForType:(LGGlassMaterialType)type { return 8.0; }
 + (CGFloat)specularHeightRatioForType:(LGGlassMaterialType)type {
     switch (type) {
-        case LGGlassMaterialTypeCrystal:   return 0.34;
-        case LGGlassMaterialTypeUltraThin: return 0.26;
-        default: return 0.28;
+        case LGGlassMaterialTypeCrystal:   return 0.42;
+        case LGGlassMaterialTypeUltraThin: return 0.34;
+        default: return 0.38;
     }
 }
 @end
@@ -213,11 +222,11 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         if (@available(iOS 13.0, *)) _topSpecular.cornerCurve = kCACornerCurveContinuous;
         _topSpecular.colors = @[
             (id)[UIColor colorWithWhite:1.0 alpha:spec].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.65].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.15].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.72].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.22].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
         ];
-        _topSpecular.locations = @[@0.0, @0.30, @0.70, @1.0];
+        _topSpecular.locations = @[@0.0, @0.28, @0.68, @1.0];
         _topSpecular.startPoint = CGPointMake(0, 0);
         _topSpecular.endPoint = CGPointMake(0, 1);
         [self.layer addSublayer:_topSpecular];
@@ -233,7 +242,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _bottomReflection.locations = @[@0.0, @0.55, @1.0];
         _bottomReflection.startPoint = CGPointMake(0, 0);
         _bottomReflection.endPoint = CGPointMake(0, 1);
-        _bottomReflection.opacity = 0.85f;
+        _bottomReflection.opacity = 0.92f;
         [self.layer addSublayer:_bottomReflection];
 
         _diagonalSheen = [CAGradientLayer layer];
@@ -243,40 +252,40 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
             (id)[UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory diagonalSheenAlphaForType:type]].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory diagonalSheenAlphaForType:type] * 0.6].CGColor
+            (id)[UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory diagonalSheenAlphaForType:type] * 0.65].CGColor
         ];
         _diagonalSheen.locations = @[@0.0, @0.30, @0.70, @1.0];
         _diagonalSheen.startPoint = CGPointMake(0.0, 0.0);
         _diagonalSheen.endPoint = CGPointMake(1.0, 1.0);
-        _diagonalSheen.opacity = 0.65f;
+        _diagonalSheen.opacity = 0.72f;
         [self.layer addSublayer:_diagonalSheen];
 
         _leftEdgeHighlight = [CAGradientLayer layer];
         _leftEdgeHighlight.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _leftEdgeHighlight.cornerCurve = kCACornerCurveContinuous;
         _leftEdgeHighlight.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.7].CGColor,
+            (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.85].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
         ];
         _leftEdgeHighlight.locations = @[@0.0, @1.0];
         _leftEdgeHighlight.startPoint = CGPointMake(0.0, 0.5);
         _leftEdgeHighlight.endPoint = CGPointMake(1.0, 0.5);
-        _leftEdgeHighlight.opacity = 0.6f;
+        _leftEdgeHighlight.opacity = 0.72f;
         [self.layer addSublayer:_leftEdgeHighlight];
 
         _chromaticEdge = [CAGradientLayer layer];
         _chromaticEdge.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _chromaticEdge.cornerCurve = kCACornerCurveContinuous;
         _chromaticEdge.colors = @[
-            (id)[UIColor colorWithRed:0.4 green:0.75 blue:1.0 alpha:0.18].CGColor,
-            (id)[UIColor colorWithRed:0.7 green:0.5  blue:1.0 alpha:0.12].CGColor,
+            (id)[UIColor colorWithRed:0.4 green:0.75 blue:1.0 alpha:0.24].CGColor,
+            (id)[UIColor colorWithRed:0.7 green:0.5  blue:1.0 alpha:0.16].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithRed:0.5 green:1.0 blue:0.7 alpha:0.14].CGColor
+            (id)[UIColor colorWithRed:0.5 green:1.0 blue:0.7 alpha:0.18].CGColor
         ];
         _chromaticEdge.locations = @[@0.0, @0.15, @0.85, @1.0];
         _chromaticEdge.startPoint = CGPointMake(0.0, 0.0);
         _chromaticEdge.endPoint = CGPointMake(1.0, 1.0);
-        _chromaticEdge.opacity = 0.55f;
+        _chromaticEdge.opacity = 0.68f;
         [self.layer addSublayer:_chromaticEdge];
 
         CGFloat rimA = [LGGlassMaterialFactory rimAlphaForType:type];
@@ -289,8 +298,8 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
         _outerRim = [CAShapeLayer layer];
         _outerRim.fillColor = [UIColor clearColor].CGColor;
-        _outerRim.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.15].CGColor;
-        _outerRim.lineWidth = 0.5;
+        _outerRim.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.18].CGColor;
+        _outerRim.lineWidth = 0.6;
         [self.layer addSublayer:_outerRim];
 
         self.layer.shadowColor = [UIColor blackColor].CGColor;
@@ -323,14 +332,14 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _diagonalSheen.frame = bounds;
     _diagonalSheen.cornerRadius = r;
 
-    _leftEdgeHighlight.frame = CGRectMake(0, 0, MAX(3.0, bounds.size.width * 0.18), bounds.size.height);
+    _leftEdgeHighlight.frame = CGRectMake(0, 0, MAX(3.0, bounds.size.width * 0.20), bounds.size.height);
     _leftEdgeHighlight.cornerRadius = r;
 
     _chromaticEdge.frame = bounds;
     _chromaticEdge.cornerRadius = r;
 
     _innerRim.path = [UIBezierPath bezierPathWithRoundedRect:CGRectInset(bounds, 0.5, 0.5) cornerRadius:MAX(0, r - 0.5)].CGPath;
-    _outerRim.path = [UIBezierPath bezierPathWithRoundedRect:bounds cornerRadius:r].CGPath;
+    _outerRim.path = [UIBezierPath bezierPathWithRoundedRect:CGRectInset(bounds, 0.3, 0.3) cornerRadius:MAX(0, r - 0.3)].CGPath;
     self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:bounds cornerRadius:r].CGPath;
 }
 
@@ -347,21 +356,21 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     CGFloat tint = [LGGlassMaterialFactory tintAlphaForType:_materialType];
 
     [CATransaction begin];
-    [CATransaction setAnimationDuration:0.14];
+    [CATransaction setAnimationDuration:0.22];
     [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
     _topSpecular.colors = @[
-        (id)[UIColor colorWithWhite:1.0 alpha:MIN(0.65, spec * 2.4)].CGColor,
-        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.90].CGColor,
-        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.30].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:MIN(0.78, spec * 2.2)].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.95].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.42].CGColor,
         (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
     ];
-    _innerRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:MIN(0.60, rimA * 2.0)].CGColor;
-    _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:tint * 5.0];
-    _chromaticEdge.opacity = 0.85f;
+    _innerRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:MIN(0.78, rimA * 1.55)].CGColor;
+    _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:tint * 4.0];
+    _chromaticEdge.opacity = 0.92f;
     [CATransaction commit];
 
-    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self.transform = CGAffineTransformMakeScale(0.94, 0.94);
+    [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = CGAffineTransformMakeScale(0.965, 0.965);
     } completion:nil];
 }
 
@@ -372,20 +381,20 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     CGFloat tint = [LGGlassMaterialFactory tintAlphaForType:_materialType];
 
     [CATransaction begin];
-    [CATransaction setAnimationDuration:0.30];
+    [CATransaction setAnimationDuration:0.42];
     [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
     _topSpecular.colors = @[
         (id)[UIColor colorWithWhite:1.0 alpha:spec].CGColor,
-        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.65].CGColor,
-        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.15].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.72].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:spec * 0.22].CGColor,
         (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
     ];
     _innerRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:rimA].CGColor;
     _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:tint];
-    _chromaticEdge.opacity = 0.55f;
+    _chromaticEdge.opacity = 0.68f;
     [CATransaction commit];
 
-    [UIView animateWithDuration:0.55 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+    [UIView animateWithDuration:0.65 delay:0 usingSpringWithDamping:0.58 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
         self.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
@@ -400,10 +409,10 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     CGAffineTransform t = (vel >= 0)
         ? CGAffineTransformMakeScale(1.0 + stretch, 1.0 - (stretch * 0.45))
         : CGAffineTransformMakeScale(1.0 - (stretch * 0.35), 1.0 + stretch);
-    [UIView animateWithDuration:0.11 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+    [UIView animateWithDuration:0.13 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
         self.transform = t;
     } completion:^(BOOL f) {
-        [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.58 initialSpringVelocity:1.05 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        [UIView animateWithDuration:0.48 delay:0 usingSpringWithDamping:0.58 initialSpringVelocity:1.05 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
             self.transform = CGAffineTransformIdentity;
         } completion:nil];
     }];
@@ -411,7 +420,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @end
 
 // ====================================================================================================
-// MODULE 3: LIQUID CAPSULE SWITCH
+// MODULE 3: LIQUID CAPSULE SWITCH — có animation thumb nổi lên rồi chìm xuống
 // ====================================================================================================
 @interface LiquidCapsuleSwitch : UIControl
 @property (nonatomic, assign) BOOL on;
@@ -449,13 +458,13 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
         _trackInnerShadow = [CAShapeLayer layer];
         _trackInnerShadow.fillColor = [UIColor clearColor].CGColor;
-        _trackInnerShadow.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.42].CGColor;
+        _trackInnerShadow.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.45].CGColor;
         _trackInnerShadow.lineWidth = 0.8;
         [_trackView.layer addSublayer:_trackInnerShadow];
 
         _trackOuterRim = [CAShapeLayer layer];
         _trackOuterRim.fillColor = [UIColor clearColor].CGColor;
-        _trackOuterRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.14].CGColor;
+        _trackOuterRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.18].CGColor;
         _trackOuterRim.lineWidth = 0.5;
         [_trackView.layer addSublayer:_trackOuterRim];
 
@@ -467,15 +476,15 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _thumbGlass.userInteractionEnabled = NO;
         _thumbGlass.interactiveHighlightEnabled = NO;
         _thumbGlass.layer.shadowColor = [UIColor blackColor].CGColor;
-        _thumbGlass.layer.shadowOpacity = 0.35;
-        _thumbGlass.layer.shadowOffset = CGSizeMake(0, 2);
-        _thumbGlass.layer.shadowRadius = 3.5;
+        _thumbGlass.layer.shadowOpacity = 0.45;
+        _thumbGlass.layer.shadowOffset = CGSizeMake(0, 3);
+        _thumbGlass.layer.shadowRadius = 5.5;
         [self addSubview:_thumbGlass];
 
         _thumbInnerRim = [CAShapeLayer layer];
         _thumbInnerRim.fillColor = [UIColor clearColor].CGColor;
-        _thumbInnerRim.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.15].CGColor;
-        _thumbInnerRim.lineWidth = 0.5;
+        _thumbInnerRim.strokeColor = [UIColor colorWithWhite:0.0 alpha:0.18].CGColor;
+        _thumbInnerRim.lineWidth = 0.6;
         [_thumbGlass.layer addSublayer:_thumbInnerRim];
 
         [self addTarget:self action:@selector(handleTap) forControlEvents:UIControlEventTouchUpInside];
@@ -498,7 +507,9 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     CGFloat inset = 3.0;
     CGFloat d = H - (inset * 2);
     CGRect f = _on ? CGRectMake(W - d - inset, inset, d, d) : CGRectMake(inset, inset, d, d);
-    if (!CGRectEqualToRect(_thumbGlass.frame, f)) _thumbGlass.frame = f;
+    if (_thumbGlass.layer.animationKeys.count == 0) {
+        if (!CGRectEqualToRect(_thumbGlass.frame, f)) _thumbGlass.frame = f;
+    }
     _thumbGlass.layer.cornerRadius = d / 2.0;
     _thumbGlass.cornerRadiusValue = d / 2.0;
     [_thumbGlass layoutSubviews];
@@ -507,12 +518,12 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 
 - (void)handleTouchDown {
-    [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self->_thumbGlass.transform = CGAffineTransformMakeScale(0.88, 0.88);
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self->_thumbGlass.transform = CGAffineTransformMakeScale(0.90, 0.90);
     } completion:nil];
 }
 - (void)handleTouchUp {
-    [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.60 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
         self->_thumbGlass.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
@@ -520,38 +531,89 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     [self setOn:!_on animated:YES];
     [self sendActionsForControlEvents:UIControlEventValueChanged];
     if (self.valueChangedBlock) self.valueChangedBlock(_on);
-    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
     [fb impactOccurred];
 }
 - (void)setOn:(BOOL)on { [self setOn:on animated:NO]; }
 - (void)setOn:(BOOL)on animated:(BOOL)animated { _on = on; [self updateUIAnimated:animated]; }
+
+// Animation: thumb nổi lên rồi chìm xuống khi đổi trạng thái
+- (void)animateThumbFloatToFrame:(CGRect)targetFrame {
+    CGPoint startCenter = _thumbGlass.center;
+    CGPoint endCenter = CGPointMake(CGRectGetMidX(targetFrame), CGRectGetMidY(targetFrame));
+    CGFloat liftUp = 7.0;
+    CGFloat dipDown = 5.0;
+
+    CAKeyframeAnimation *posAnim = [CAKeyframeAnimation animationWithKeyPath:@"position"];
+    posAnim.values = @[
+        [NSValue valueWithCGPoint:startCenter],
+        [NSValue valueWithCGPoint:CGPointMake((startCenter.x + endCenter.x) / 2.0, startCenter.y - liftUp)],
+        [NSValue valueWithCGPoint:CGPointMake(endCenter.x, endCenter.y + dipDown)],
+        [NSValue valueWithCGPoint:endCenter]
+    ];
+    posAnim.keyTimes = @[@0.0, @0.40, @0.72, @1.0];
+    posAnim.duration = 0.55;
+    posAnim.timingFunctions = @[
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut],
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn],
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]
+    ];
+    posAnim.fillMode = kCAFillModeForwards;
+    posAnim.removedOnCompletion = NO;
+
+    CAKeyframeAnimation *scaleAnim = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+    scaleAnim.values = @[@1.0, @1.10, @0.95, @1.0];
+    scaleAnim.keyTimes = @[@0.0, @0.40, @0.72, @1.0];
+    scaleAnim.duration = 0.55;
+    scaleAnim.fillMode = kCAFillModeForwards;
+    scaleAnim.removedOnCompletion = NO;
+
+    [_thumbGlass.layer addAnimation:posAnim forKey:@"floatUp"];
+    [_thumbGlass.layer addAnimation:scaleAnim forKey:@"floatScale"];
+
+    _thumbGlass.frame = targetFrame;
+    _thumbGlass.layer.position = endCenter;
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.56 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self->_thumbGlass.layer removeAnimationForKey:@"floatUp"];
+        [self->_thumbGlass.layer removeAnimationForKey:@"floatScale"];
+        self->_thumbGlass.frame = targetFrame;
+        self->_thumbGlass.layer.position = endCenter;
+    });
+}
+
 - (void)updateUIAnimated:(BOOL)animated {
     NSArray *onC = @[
-        (id)[UIColor colorWithRed:0.20 green:0.78 blue:0.35 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.22 green:0.80 blue:0.38 alpha:1.0].CGColor,
         (id)[UIColor colorWithRed:0.16 green:0.68 blue:0.28 alpha:1.0].CGColor
     ];
     NSArray *offC = @[
-        (id)[UIColor colorWithRed:0.20 green:0.22 blue:0.26 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.22 green:0.24 blue:0.28 alpha:1.0].CGColor,
         (id)[UIColor colorWithRed:0.14 green:0.16 blue:0.19 alpha:1.0].CGColor
     ];
     CGFloat W = 62.0, H = 34.0;
     CGFloat inset = 3.0, d = H - (inset * 2);
     CGRect f = _on ? CGRectMake(W - d - inset, inset, d, d) : CGRectMake(inset, inset, d, d);
-    void (^anim)(void) = ^{
-        self->_trackGradient.colors = self->_on ? onC : offC;
-        self->_thumbGlass.frame = f;
-    };
+
     if (animated) {
-        [UIView animateWithDuration:0.38 delay:0 usingSpringWithDamping:0.68 initialSpringVelocity:1.0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:anim completion:nil];
+        [self animateThumbFloatToFrame:f];
+        [CATransaction begin];
+        [CATransaction setAnimationDuration:0.45];
+        [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]];
+        _trackGradient.colors = _on ? onC : offC;
+        [CATransaction commit];
     } else {
-        [CATransaction begin]; [CATransaction setDisableActions:YES]; anim(); [CATransaction commit];
+        [CATransaction begin]; [CATransaction setDisableActions:YES];
+        _trackGradient.colors = _on ? onC : offC;
+        _thumbGlass.frame = f;
+        _thumbGlass.layer.position = CGPointMake(CGRectGetMidX(f), CGRectGetMidY(f));
+        [CATransaction commit];
     }
 }
 @end
 
 // ====================================================================================================
-// [FIX LẦN 5] Category TrackingTouchExt — ĐÃ DI CHUYỂN LÊN TRƯỚC @interface LGCustomSegment
-// để compiler thấy property self.trackingTouch khi đọc @implementation LGCustomSegment.
+// Category TrackingTouchExt — đặt TRƯỚC @implementation LGCustomSegment
 // ====================================================================================================
 @interface UIControl (TrackingTouchExt)
 @property (nonatomic, strong) UITouch *trackingTouch;
@@ -568,7 +630,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @end
 
 // ====================================================================================================
-// MODULE 4: LG CUSTOM SEGMENT — [FIX LẦN 4] sửa lỗi bấm không đổi segment
+// MODULE 4: LG CUSTOM SEGMENT — transition mượt khi chuyển Hz/FPS
 // ====================================================================================================
 @interface LGCustomSegment : UIControl
 @property (nonatomic, strong) AppleLiquidGlassView *background;
@@ -629,7 +691,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         }
         _labels = ls;
 
-        // [FIX LẦN 4] Dùng touch tracking trực tiếp — trước đây gestureRecognizers.firstObject luôn nil
         [self addTarget:self action:@selector(handleTouchUpInside) forControlEvents:UIControlEventTouchUpInside];
     }
     return self;
@@ -654,15 +715,11 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     [_indicator layoutSubviews];
 }
 
-// [FIX LẦN 4] Lấy vị trí chạm thật từ UITouch của sự kiện, không dùng gestureRecognizers
 - (void)handleTouchUpInside {
     UITouch *t = self.trackingTouch;
     CGPoint p = CGPointZero;
-    if (t) {
-        p = [t locationInView:self];
-    } else {
-        p = CGPointMake(self.bounds.size.width * 0.5, self.bounds.size.height * 0.5);
-    }
+    if (t) p = [t locationInView:self];
+    else p = CGPointMake(self.bounds.size.width * 0.5, self.bounds.size.height * 0.5);
 
     CGFloat w = self.bounds.size.width / MAX(1, _items.count);
     NSInteger idx = (NSInteger)floor(p.x / MAX(1.0, w));
@@ -675,9 +732,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
 - (void)setSelectedSegmentIndex:(NSInteger)index animated:(BOOL)animated {
     if (index < 0 || index >= (NSInteger)_items.count) return;
-    if (_selectedSegmentIndex == index && animated) {
-        // vẫn update màu cho chắc
-    }
     _selectedSegmentIndex = index;
     CGFloat w = self.bounds.size.width / MAX(1, _items.count);
     CGFloat h = self.bounds.size.height;
@@ -691,7 +745,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         }
     };
     if (animated) {
-        [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.68 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:a completion:nil];
+        // Spring mượt, không "cứng ngắt"
+        [UIView animateWithDuration:0.44 delay:0 usingSpringWithDamping:0.80 initialSpringVelocity:0.55 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:a completion:nil];
     } else a();
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [fb impactOccurred];
@@ -700,7 +755,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     [self setSelectedSegmentIndex:selectedSegmentIndex animated:NO];
 }
 
-// [FIX LẦN 4] Ghi nhận touch để dùng trong handleTouchUpInside
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     self.trackingTouch = touch;
     return [super beginTrackingWithTouch:touch withEvent:event];
@@ -720,7 +774,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @end
 
 // ====================================================================================================
-// MODULE 5: LG GLASS TABLE VIEW CELL
+// MODULE 5: LG GLASS TABLE VIEW CELL — bo tròn đúng cách, chậm animation
 // ====================================================================================================
 @interface LGGlassTableViewCell : UITableViewCell
 @property (nonatomic, strong) AppleLiquidGlassView *glassBackground;
@@ -738,9 +792,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         self.contentView.backgroundColor = [UIColor clearColor];
         self.selectionStyle = UITableViewCellSelectionStyleNone;
 
+        self.contentView.clipsToBounds = NO;
+        self.contentView.layer.masksToBounds = NO;
+
         _glassBackground = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
                                                           cornerRadius:16.0
-                                                          materialType:LGGlassMaterialTypeUltraThin];
+                                                          materialType:LGGlassMaterialTypeThin];
         _glassBackground.interactiveHighlightEnabled = YES;
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -775,7 +832,11 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
 - (void)layoutSubviews {
     [super layoutSubviews];
+    // Khoá góc bo tròn — sửa lỗi vuông ở dưới khi scroll
     _glassBackground.frame = self.bounds;
+    _glassBackground.layer.cornerRadius = 16.0;
+    _glassBackground.cornerRadiusValue = 16.0;
+    [_glassBackground layoutSubviews];
 }
 
 - (void)prepareForReuse {
@@ -794,6 +855,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     self.alpha = 1.0;
     self.userInteractionEnabled = YES;
     self.selectionStyle = UITableViewCellSelectionStyleNone;
+    self.transform = CGAffineTransformIdentity;
 }
 
 - (void)configureWithTitle:(NSString *)title detail:(NSString *)detail accessory:(UIView *)accessory accent:(UIColor *)accent {
@@ -821,7 +883,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
                 [accessory.heightAnchor constraintEqualToConstant:34]
             ];
         } else if ([accessory isKindOfClass:[LGCustomSegment class]]) {
-            // [FIX LẦN 4] Segment co giãn hết chiều ngang trừ padding
             _accessoryConstraints = @[
                 [accessory.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
                 [accessory.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
@@ -829,7 +890,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
                 [accessory.heightAnchor constraintEqualToConstant:38]
             ];
         } else if ([accessory isKindOfClass:[UITextField class]]) {
-            // [FIX LẦN 4] Search bar giờ full width, không lệch
             _accessoryConstraints = @[
                 [accessory.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:14],
                 [accessory.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-14],
@@ -855,7 +915,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     [super setSelected:selected animated:animated];
     if (selected) {
         [_glassBackground setGlassHighlighted:YES animated:YES];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.24 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self->_glassBackground setGlassHighlighted:NO animated:YES];
         });
     }
@@ -879,7 +939,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         self.backgroundColor = [UIColor clearColor];
         _glassPill = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
                                                      cornerRadius:16.0
-                                                     materialType:LGGlassMaterialTypeUltraThin];
+                                                     materialType:LGGlassMaterialTypeThin];
         _glassPill.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         _glassPill.interactiveHighlightEnabled = YES;
         _glassPill.userInteractionEnabled = NO;
@@ -929,12 +989,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 
 - (void)tDown {
-    [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        self.iconView.transform = CGAffineTransformMakeScale(0.85, 0.85);
+    [UIView animateWithDuration:0.14 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.iconView.transform = CGAffineTransformMakeScale(0.86, 0.86);
     } completion:nil];
 }
 - (void)tUp {
-    [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.60 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.iconView.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
@@ -949,7 +1009,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         self.titleLabel.font = f;
         self.glassPill.alpha = a;
     };
-    if (animated) [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:u completion:nil];
+    if (animated) [UIView animateWithDuration:0.44 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:u completion:nil];
     else u();
 }
 @end
@@ -977,10 +1037,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @implementation LGExpandingMenuAction
 + (instancetype)actionWithTitle:(NSString *)title image:(NSString *)image tintColor:(UIColor *)tint destructive:(BOOL)destructive {
     LGExpandingMenuAction *a = [LGExpandingMenuAction new];
-    a.title = title;
-    a.systemImageName = image;
-    a.tintColor = tint ?: [UIColor whiteColor];
-    a.destructive = destructive;
+    a.title = title; a.systemImageName = image; a.tintColor = tint ?: [UIColor whiteColor]; a.destructive = destructive;
     return a;
 }
 @end
@@ -996,9 +1053,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (instancetype)initWithAction:(LGExpandingMenuAction *)action {
     if (self = [super initWithFrame:CGRectMake(0, 0, 220, 48)]) {
         self.backgroundColor = [UIColor clearColor];
-        _glassBackground = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
-                                                          cornerRadius:24.0
-                                                          materialType:LGGlassMaterialTypeCrystal];
+        _glassBackground = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds cornerRadius:24.0 materialType:LGGlassMaterialTypeCrystal];
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.interactiveHighlightEnabled = NO;
         _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -1036,8 +1091,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)setHighlighted:(BOOL)highlighted {
     [super setHighlighted:highlighted];
     [_glassBackground setGlassHighlighted:highlighted animated:YES];
-    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self.transform = highlighted ? CGAffineTransformMakeScale(0.94, 0.94) : CGAffineTransformIdentity;
+    [UIView animateWithDuration:0.24 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = highlighted ? CGAffineTransformMakeScale(0.96, 0.96) : CGAffineTransformIdentity;
     } completion:nil];
 }
 @end
@@ -1063,9 +1118,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (instancetype)initWithIconName:(NSString *)iconName tintColor:(UIColor *)tint {
     if (self = [super initWithFrame:CGRectMake(0, 0, 40, 40)]) {
         self.backgroundColor = [UIColor clearColor];
-        _buttonGlass = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
-                                                      cornerRadius:20.0
-                                                      materialType:LGGlassMaterialTypeCrystal];
+        _buttonGlass = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds cornerRadius:20.0 materialType:LGGlassMaterialTypeCrystal];
         _buttonGlass.userInteractionEnabled = NO;
         _buttonGlass.interactiveHighlightEnabled = NO;
         _buttonGlass.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -1088,24 +1141,18 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
         _actionViews = [NSMutableArray array];
         _expanded = NO;
-
         UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap)];
         [self addGestureRecognizer:tap];
-
         [self addTarget:self action:@selector(tDown) forControlEvents:UIControlEventTouchDown];
         [self addTarget:self action:@selector(tUp) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
     }
     return self;
 }
-- (void)tDown { [UIView animateWithDuration:0.10 animations:^{ self.transform = CGAffineTransformMakeScale(0.9, 0.9); }]; }
-- (void)tUp { [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.9 options:0 animations:^{ self.transform = CGAffineTransformIdentity; } completion:nil]; }
+- (void)tDown { [UIView animateWithDuration:0.14 animations:^{ self.transform = CGAffineTransformMakeScale(0.92, 0.92); }]; }
+- (void)tUp { [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.60 initialSpringVelocity:0.9 options:0 animations:^{ self.transform = CGAffineTransformIdentity; } completion:nil]; }
 
 - (void)setActions:(NSArray<LGExpandingMenuAction *> *)actions { _actions = actions; }
-
-- (void)handleTap {
-    if (_expanded) [self collapseMenu];
-    else [self expandMenu];
-}
+- (void)handleTap { if (_expanded) [self collapseMenu]; else [self expandMenu]; }
 
 - (UIWindow *)hostWindow {
     UIWindow *w = self.window;
@@ -1123,13 +1170,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)expandMenu {
     if (_expanded || _actions.count == 0) return;
     _expanded = YES;
-
     UIWindow *host = [self hostWindow];
     if (!host) { _expanded = NO; return; }
 
     if (!_dimOverlay) {
         _dimOverlay = [[UIView alloc] initWithFrame:host.bounds];
-        _dimOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.15];
+        _dimOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.18];
         _dimOverlay.alpha = 0.0;
         _dimOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         UITapGestureRecognizer *dimTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(collapseMenu)];
@@ -1137,14 +1183,13 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     }
     [host addSubview:_dimOverlay];
     [host bringSubviewToFront:_dimOverlay];
-    [UIView animateWithDuration:0.22 animations:^{ self->_dimOverlay.alpha = 1.0; }];
+    [UIView animateWithDuration:0.28 animations:^{ self->_dimOverlay.alpha = 1.0; }];
 
     if (!_actionsContainer) {
         _actionsContainer = [[UIView alloc] initWithFrame:CGRectZero];
         _actionsContainer.backgroundColor = [UIColor clearColor];
     }
     [_actionsContainer removeFromSuperview];
-
     for (LGExpandingActionView *v in _actionViews) [v removeFromSuperview];
     [_actionViews removeAllObjects];
 
@@ -1170,39 +1215,34 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
     for (NSInteger i = 0; i < _actionViews.count; i++) {
         LGExpandingActionView *v = _actionViews[i];
-        NSTimeInterval delay = i * 0.04;
-        [UIView animateWithDuration:0.38 delay:delay usingSpringWithDamping:0.62 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        NSTimeInterval delay = i * 0.05;
+        [UIView animateWithDuration:0.42 delay:delay usingSpringWithDamping:0.68 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
             v.alpha = 1.0;
             v.transform = CGAffineTransformIdentity;
         } completion:nil];
     }
 
-    [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:0.34 delay:0 usingSpringWithDamping:0.62 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.iconView.transform = CGAffineTransformMakeRotation(M_PI_4);
     } completion:nil];
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
     [fb impactOccurred];
-
-    if ([_delegate respondsToSelector:@selector(expandingButtonDidExpand:)]) {
-        [_delegate expandingButtonDidExpand:self];
-    }
+    if ([_delegate respondsToSelector:@selector(expandingButtonDidExpand:)]) [_delegate expandingButtonDidExpand:self];
 }
 
 - (void)collapseMenu {
     if (!_expanded) return;
     _expanded = NO;
-
     for (NSInteger i = 0; i < _actionViews.count; i++) {
         LGExpandingActionView *v = _actionViews[_actionViews.count - 1 - i];
-        NSTimeInterval delay = i * 0.025;
-        [UIView animateWithDuration:0.22 delay:delay options:UIViewAnimationOptionCurveEaseIn animations:^{
+        NSTimeInterval delay = i * 0.03;
+        [UIView animateWithDuration:0.26 delay:delay options:UIViewAnimationOptionCurveEaseIn animations:^{
             v.alpha = 0.0;
             v.transform = CGAffineTransformMakeScale(0.7, 0.7);
         } completion:nil];
     }
-
-    [UIView animateWithDuration:0.24 delay:0.08 options:UIViewAnimationOptionCurveEaseIn animations:^{
+    [UIView animateWithDuration:0.28 delay:0.10 options:UIViewAnimationOptionCurveEaseIn animations:^{
         self->_dimOverlay.alpha = 0.0;
         self.iconView.transform = CGAffineTransformIdentity;
     } completion:^(BOOL finished) {
@@ -1210,13 +1250,9 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         [self->_dimOverlay removeFromSuperview];
         [self->_actionViews removeAllObjects];
     }];
-
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [fb impactOccurred];
-
-    if ([_delegate respondsToSelector:@selector(expandingButtonDidCollapse:)]) {
-        [_delegate expandingButtonDidCollapse:self];
-    }
+    if ([_delegate respondsToSelector:@selector(expandingButtonDidCollapse:)]) [_delegate expandingButtonDidCollapse:self];
 }
 
 - (void)toggle { if (_expanded) [self collapseMenu]; else [self expandMenu]; }
@@ -1233,10 +1269,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @end
 
 // ====================================================================================================
-// MODULE 8: LOADING VIEWS MỚI — [THÊM LẦN 4]
+// MODULE 8: LOADING VIEWS
 // ====================================================================================================
 
-// -------- Animation 1: Người chạy + Progress Bar "LOADING..." (ảnh 1) --------
+// -------- Loading người chạy (dùng khi mở exploit console) --------
 @interface LGLoadingManView : UIView
 @property (nonatomic, strong) UIView *manContainer;
 @property (nonatomic, strong) UIView *head;
@@ -1255,10 +1291,9 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @end
 
 @implementation LGLoadingManView
-
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
-        self.backgroundColor = [UIColor colorWithRed:0.98 green:0.80 blue:0.24 alpha:1.0]; // vàng ảnh 1
+        self.backgroundColor = [UIColor colorWithRed:0.98 green:0.80 blue:0.24 alpha:1.0];
         self.clipsToBounds = YES;
 
         _manContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 120, 60)];
@@ -1270,21 +1305,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _head.layer.cornerRadius = 11;
         [_manContainer addSubview:_head];
 
-        CGFloat lineThickness = 3.0;
-        _bodyLine1 = [[UIView alloc] init];
-        _bodyLine1.backgroundColor = [UIColor blackColor];
-        _bodyLine1.layer.cornerRadius = lineThickness / 2.0;
-        [_manContainer addSubview:_bodyLine1];
-
-        _bodyLine2 = [[UIView alloc] init];
-        _bodyLine2.backgroundColor = [UIColor blackColor];
-        _bodyLine2.layer.cornerRadius = lineThickness / 2.0;
-        [_manContainer addSubview:_bodyLine2];
-
-        _bodyLine3 = [[UIView alloc] init];
-        _bodyLine3.backgroundColor = [UIColor blackColor];
-        _bodyLine3.layer.cornerRadius = lineThickness / 2.0;
-        [_manContainer addSubview:_bodyLine3];
+        CGFloat lt = 3.0;
+        _bodyLine1 = [[UIView alloc] init]; _bodyLine1.backgroundColor = [UIColor blackColor]; _bodyLine1.layer.cornerRadius = lt/2.0; [_manContainer addSubview:_bodyLine1];
+        _bodyLine2 = [[UIView alloc] init]; _bodyLine2.backgroundColor = [UIColor blackColor]; _bodyLine2.layer.cornerRadius = lt/2.0; [_manContainer addSubview:_bodyLine2];
+        _bodyLine3 = [[UIView alloc] init]; _bodyLine3.backgroundColor = [UIColor blackColor]; _bodyLine3.layer.cornerRadius = lt/2.0; [_manContainer addSubview:_bodyLine3];
 
         _loadingLabel = [[UILabel alloc] initWithFrame:CGRectZero];
         _loadingLabel.text = @"LOADING...";
@@ -1302,28 +1326,18 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _progressFill.backgroundColor = [UIColor blackColor];
         _progressFill.layer.cornerRadius = 1.0;
         [_progressTrack addSubview:_progressFill];
-
-        _phase = 0;
-        _progressValue = 0.0;
     }
     return self;
 }
-
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat W = self.bounds.size.width;
-    CGFloat H = self.bounds.size.height;
-    CGFloat centerX = W / 2.0;
-    CGFloat centerY = H / 2.0;
-
-    _manContainer.frame = CGRectMake(centerX - 60, centerY - 60, 120, 60);
-
-    _loadingLabel.frame = CGRectMake(0, centerY + 8, W, 22);
-
-    _progressTrack.frame = CGRectMake(W * 0.25, centerY + 38, W * 0.5, 2);
+    CGFloat W = self.bounds.size.width, H = self.bounds.size.height;
+    CGFloat cx = W/2.0, cy = H/2.0;
+    _manContainer.frame = CGRectMake(cx - 60, cy - 60, 120, 60);
+    _loadingLabel.frame = CGRectMake(0, cy + 8, W, 22);
+    _progressTrack.frame = CGRectMake(W * 0.25, cy + 38, W * 0.5, 2);
     _progressFill.frame = CGRectMake(0, 0, _progressTrack.bounds.size.width * _progressValue, 2);
 }
-
 - (void)startAnimating {
     [self stopAnimating];
     _animTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer * _Nonnull t) {
@@ -1332,47 +1346,29 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     }];
     [[NSRunLoop mainRunLoop] addTimer:_animTimer forMode:NSRunLoopCommonModes];
 }
-
-- (void)stopAnimating {
-    if (_animTimer) { [_animTimer invalidate]; _animTimer = nil; }
-}
-
+- (void)stopAnimating { if (_animTimer) { [_animTimer invalidate]; _animTimer = nil; } }
 - (void)updateManAnimation {
-    CGFloat s = sin(_phase);
-    CGFloat c = cos(_phase);
+    CGFloat s = sin(_phase), c = cos(_phase);
     CGFloat stretch = 1.0 + fabs(s) * 0.35;
-
-    // Thân nghiêng theo nhịp chạy
     _bodyLine1.frame = CGRectMake(64, 20 + s * 1.5, 18 + fabs(s) * 3.0, 3.0);
     _bodyLine1.transform = CGAffineTransformMakeRotation(-0.4 + s * 0.15);
-
     _bodyLine2.frame = CGRectMake(60, 26, 26 * stretch, 3.0);
     _bodyLine2.transform = CGAffineTransformMakeRotation(0.05 + c * 0.08);
-
     _bodyLine3.frame = CGRectMake(38, 30 + c * 1.2, 24, 3.0);
     _bodyLine3.transform = CGAffineTransformMakeRotation(-0.08 + s * 0.05);
-
     _head.transform = CGAffineTransformMakeTranslation(0, s * 1.5);
 }
-
 - (void)setProgressValue:(CGFloat)progressValue animated:(BOOL)animated {
     _progressValue = MAX(0.0, MIN(1.0, progressValue));
     CGFloat w = _progressTrack.bounds.size.width * _progressValue;
     if (animated) {
-        [UIView animateWithDuration:0.25 animations:^{
-            self->_progressFill.frame = CGRectMake(0, 0, w, 2);
-        }];
-    } else {
-        _progressFill.frame = CGRectMake(0, 0, w, 2);
-    }
+        [UIView animateWithDuration:0.25 animations:^{ self->_progressFill.frame = CGRectMake(0, 0, w, 2); }];
+    } else _progressFill.frame = CGRectMake(0, 0, w, 2);
 }
-
-- (void)dealloc {
-    [self stopAnimating];
-}
+- (void)dealloc { [self stopAnimating]; }
 @end
 
-// -------- Animation 2: Xe chạy "Loading..." (ảnh 2) --------
+// -------- Loading xe (dùng cho nút Áp Dụng góc phải) --------
 @interface LGLoadingCarView : UIView
 @property (nonatomic, strong) UIView *container;
 @property (nonatomic, strong) UIView *carBody;
@@ -1388,48 +1384,39 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @end
 
 @implementation LGLoadingCarView
-
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
         self.backgroundColor = [UIColor colorWithRed:0.12 green:0.12 blue:0.13 alpha:1.0];
 
         _container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 240, 120)];
         _container.backgroundColor = [UIColor clearColor];
-        [self addSubview:_container];
-
-        // Viền trắng bao quanh (giống ảnh 2)
         _container.layer.borderColor = [UIColor whiteColor].CGColor;
         _container.layer.borderWidth = 1.5;
         _container.layer.cornerRadius = 8;
+        [self addSubview:_container];
 
-        // Vệt khói phía sau
         _strike1 = [[UIView alloc] initWithFrame:CGRectMake(30, 60, 11, 1)];
         _strike1.backgroundColor = [UIColor colorWithWhite:0.9 alpha:1.0];
         [_container addSubview:_strike1];
-
         _strike2 = [[UIView alloc] initWithFrame:CGRectMake(48, 68, 11, 1)];
         _strike2.backgroundColor = [UIColor colorWithWhite:0.9 alpha:1.0];
         [_container addSubview:_strike2];
 
-        // Thân xe
         _carBody = [[UIView alloc] initWithFrame:CGRectMake(80, 46, 120, 28)];
         _carBody.backgroundColor = [UIColor colorWithWhite:0.94 alpha:1.0];
         _carBody.layer.cornerRadius = 8;
         [_container addSubview:_carBody];
 
-        // Mui xe
         _carRoof = [[UIView alloc] initWithFrame:CGRectMake(105, 32, 60, 18)];
         _carRoof.backgroundColor = [UIColor colorWithWhite:0.94 alpha:1.0];
         _carRoof.layer.cornerRadius = 7;
         [_container addSubview:_carRoof];
 
-        // Cửa sổ
         _carWindow = [[UIView alloc] initWithFrame:CGRectMake(112, 36, 26, 12)];
         _carWindow.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.18 alpha:1.0];
         _carWindow.layer.cornerRadius = 3;
         [_container addSubview:_carWindow];
 
-        // Bánh xe
         _wheel1 = [[UIView alloc] initWithFrame:CGRectMake(102, 68, 18, 18)];
         _wheel1.backgroundColor = [UIColor colorWithWhite:0.18 alpha:1.0];
         _wheel1.layer.cornerRadius = 9;
@@ -1445,7 +1432,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         [_container addSubview:_wheel2];
 
         _loadingLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _loadingLabel.text = @"Loading...";
+        _loadingLabel.text = @"Đang áp dụng...";
         _loadingLabel.textColor = [UIColor whiteColor];
         _loadingLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
         _loadingLabel.textAlignment = NSTextAlignmentCenter;
@@ -1455,15 +1442,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     }
     return self;
 }
-
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat W = self.bounds.size.width;
-    CGFloat H = self.bounds.size.height;
+    CGFloat W = self.bounds.size.width, H = self.bounds.size.height;
     _container.frame = CGRectMake((W - 240) / 2, (H - 130) / 2, 240, 100);
     _loadingLabel.frame = CGRectMake(0, CGRectGetMaxY(_container.frame) + 8, W, 22);
 }
-
 - (void)startAnimating {
     [self stopAnimating];
     _animTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer * _Nonnull t) {
@@ -1472,39 +1456,30 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     }];
     [[NSRunLoop mainRunLoop] addTimer:_animTimer forMode:NSRunLoopCommonModes];
 }
-
-- (void)stopAnimating {
-    if (_animTimer) { [_animTimer invalidate]; _animTimer = nil; }
-}
-
+- (void)stopAnimating { if (_animTimer) { [_animTimer invalidate]; _animTimer = nil; } }
 - (void)updateCarAnimation {
-    // Xe nhún nhẹ
     CGFloat bounce = sin(_phase) * 1.0;
     _carBody.transform = CGAffineTransformMakeTranslation(0, bounce);
     _carRoof.transform = CGAffineTransformMakeTranslation(0, bounce);
     _carWindow.transform = CGAffineTransformMakeTranslation(0, bounce);
     _wheel1.transform = CGAffineTransformMakeRotation(_phase);
     _wheel2.transform = CGAffineTransformMakeRotation(_phase);
-
-    // Vệt khói di chuyển ngược lại phía sau
     CGFloat smokeX = fmod(_phase * 8.0, 60.0);
     _strike1.transform = CGAffineTransformMakeTranslation(-smokeX, 0);
     _strike1.alpha = 1.0 - (smokeX / 60.0);
     _strike2.transform = CGAffineTransformMakeTranslation(-fmod(smokeX + 25, 60.0), 0);
     _strike2.alpha = 1.0 - (fmod(smokeX + 25, 60.0) / 60.0);
 }
-
-- (void)dealloc {
-    [self stopAnimating];
-}
+- (void)dealloc { [self stopAnimating]; }
 @end
 
-// -------- Animation 3: Kết nối server Apple (ảnh 3 style) --------
+// -------- Animation 3: LGAppleServerConnectView — FULL REWRITE theo yêu cầu --------
 typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
-    LGAppleServerPhaseConnecting = 0,   // Đang kết nối (1s - 5 phút)
-    LGAppleServerPhaseExploiting = 1,   // Đang khai thác (1/8 -> 8/8)
-    LGAppleServerPhaseRetrying   = 2,   // Server lỗi, thử lại (10-30s)
-    LGAppleServerPhaseClosed     = 3    // Server đóng (1-5 phút)
+    LGAppleServerPhaseIdle       = 0,   // Chờ user tap "Khai Thác"
+    LGAppleServerPhaseConnecting = 1,   // Đang kết nối (5s)
+    LGAppleServerPhaseQueueing   = 2,   // Chờ admin (20-30s ẩn số)
+    LGAppleServerPhaseExploiting = 3,   // Đang khai thác 1/8 → 8/8
+    LGAppleServerPhaseSuccess    = 4
 };
 
 @interface LGAppleServerConnectView : UIView
@@ -1523,17 +1498,18 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 @property (nonatomic, assign) LGAppleServerPhase phase;
 @property (nonatomic, assign) NSInteger exploitStep;
 @property (nonatomic, copy) void (^completionBlock)(BOOL success);
-@property (nonatomic, strong) NSTimer *spinTimer;
-@property (nonatomic, assign) CGFloat spinPhase;
-@property (nonatomic, assign) CGFloat spinSpeed;
+@property (nonatomic, strong) CADisplayLink *spinLink;
+@property (nonatomic, assign) CFTimeInterval spinStartTime;
 @property (nonatomic, strong) NSTimer *stepTimer;
+@property (nonatomic, assign) BOOL cancelled;
 @end
 
 @implementation LGAppleServerConnectView
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
-        self.backgroundColor = [UIColor colorWithRed:0.32 green:0.47 blue:0.94 alpha:1.0]; // xanh ảnh 3
+        self.backgroundColor = [UIColor colorWithRed:0.32 green:0.47 blue:0.94 alpha:1.0];
+        _cancelled = NO;
 
         _cardView = [[UIView alloc] initWithFrame:CGRectZero];
         _cardView.backgroundColor = [UIColor clearColor];
@@ -1549,6 +1525,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         _usernameField = [[UITextField alloc] init];
         _usernameField.placeholder = @"Username";
         _usernameField.text = @"apple_server_connect";
+        _usernameField.userInteractionEnabled = NO;
         _usernameField.textColor = [UIColor whiteColor];
         _usernameField.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
         _usernameField.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
@@ -1563,6 +1540,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         _passwordField.placeholder = @"Password";
         _passwordField.text = @"••••••••";
         _passwordField.secureTextEntry = YES;
+        _passwordField.userInteractionEnabled = NO;
         _passwordField.textColor = [UIColor whiteColor];
         _passwordField.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
         _passwordField.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
@@ -1574,22 +1552,22 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         [_cardView addSubview:_passwordField];
 
         _loginButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [_loginButton setTitle:@"Login" forState:UIControlStateNormal];
+        [_loginButton setTitle:@"Khai Thác" forState:UIControlStateNormal];
         [_loginButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         _loginButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
         _loginButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
         _loginButton.layer.cornerRadius = 6;
-        [_loginButton addTarget:self action:@selector(dismissSelf) forControlEvents:UIControlEventTouchUpInside];
+        [_loginButton addTarget:self action:@selector(handleLoginTapped) forControlEvents:UIControlEventTouchUpInside];
         [_cardView addSubview:_loginButton];
 
         _formTitleLabel = [[UILabel alloc] init];
-        _formTitleLabel.text = @"Don't have an account? Sign up";
+        _formTitleLabel.text = @"Nhấn KHAI THÁC để kết nối tới server Apple";
         _formTitleLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
         _formTitleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
         _formTitleLabel.textAlignment = NSTextAlignmentLeft;
+        _formTitleLabel.numberOfLines = 2;
         [_cardView addSubview:_formTitleLabel];
 
-        // Spinner (network lag style)
         _spinner = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 60, 60)];
         _spinner.backgroundColor = [UIColor clearColor];
         _spinner.hidden = YES;
@@ -1600,7 +1578,12 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         _spinnerArc.strokeColor = [UIColor whiteColor].CGColor;
         _spinnerArc.lineWidth = 4.0;
         _spinnerArc.lineCap = kCALineCapRound;
-        UIBezierPath *arc = [UIBezierPath bezierPathWithArcCenter:CGPointMake(30, 30) radius:26 startAngle:0 endAngle:M_PI * 1.5 clockwise:YES];
+        // Arc 90° kiểu network lag / comet tail — không phải vòng tròn đầy
+        UIBezierPath *arc = [UIBezierPath bezierPathWithArcCenter:CGPointMake(30, 30)
+                                                           radius:26
+                                                       startAngle:-M_PI_2
+                                                         endAngle:M_PI_2
+                                                        clockwise:YES];
         _spinnerArc.path = arc.CGPath;
         [_spinner.layer addSublayer:_spinnerArc];
 
@@ -1625,152 +1608,164 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         [self addSubview:_progressBar];
 
         _cancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [_cancelButton setTitle:@"✕ HỦY" forState:UIControlStateNormal];
-        [_cancelButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        [_cancelButton setTitle:@"✕ HỦY KHAI THÁC" forState:UIControlStateNormal];
+        [_cancelButton setTitleColor:[UIColor colorWithRed:1.0 green:0.35 blue:0.35 alpha:1.0] forState:UIControlStateNormal];
         _cancelButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
-        _cancelButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.25];
+        _cancelButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.32];
         _cancelButton.layer.cornerRadius = 20;
+        _cancelButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.35 blue:0.35 alpha:1.0].CGColor;
+        _cancelButton.layer.borderWidth = 1.2;
         [_cancelButton addTarget:self action:@selector(cancelTapped) forControlEvents:UIControlEventTouchUpInside];
+        _cancelButton.hidden = YES;
         [self addSubview:_cancelButton];
 
-        _phase = LGAppleServerPhaseConnecting;
+        _phase = LGAppleServerPhaseIdle;
         _exploitStep = 0;
-        _spinPhase = 0;
-        _spinSpeed = 0.10;
     }
     return self;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat W = self.bounds.size.width;
-    CGFloat H = self.bounds.size.height;
+    CGFloat W = self.bounds.size.width, H = self.bounds.size.height;
 
     _spinner.center = CGPointMake(W / 2, H / 2 - 60);
     _statusLabel.frame = CGRectMake(20, H / 2 + 5, W - 40, 44);
-    _subLabel.frame = CGRectMake(20, H / 2 + 52, W - 40, 40);
-    _progressBar.frame = CGRectMake(W * 0.2, H / 2 + 100, W * 0.6, 6);
-    _cancelButton.frame = CGRectMake((W - 120) / 2, H - 80, 120, 40);
+    _subLabel.frame = CGRectMake(20, H / 2 + 52, W - 40, 48);
+    _progressBar.frame = CGRectMake(W * 0.2, H / 2 + 108, W * 0.6, 6);
+    _cancelButton.frame = CGRectMake((W - 200) / 2, H - 90, 200, 42);
 
     CGFloat cardW = MIN(300, W - 60);
     _cardView.frame = CGRectMake((W - cardW) / 2, (H - 300) / 2, cardW, 300);
-    CGFloat x = 20;
-    CGFloat cw = cardW - 40;
+    CGFloat x = 20, cw = cardW - 40;
 
     _titleLabel.frame = CGRectMake(x, 20, cw, 30);
     _usernameField.frame = CGRectMake(x, 70, cw, 40);
     _passwordField.frame = CGRectMake(x, 120, cw, 40);
     _loginButton.frame = CGRectMake(x, 172, cw, 40);
-    _formTitleLabel.frame = CGRectMake(x, 222, cw, 20);
+    _formTitleLabel.frame = CGRectMake(x, 222, cw, 44);
 }
 
 #pragma mark - Public
 
 - (void)startConnectionWithCompletion:(void (^)(BOOL))completion {
     self.completionBlock = completion;
-    self.phase = LGAppleServerPhaseConnecting;
+    self.phase = LGAppleServerPhaseIdle;
+    _cancelled = NO;
 
-    // Giai đoạn 1: Hiện form login giống ảnh 3 trong 1.5s
+    // CHỜ USER TAP — không auto
     _cardView.hidden = NO;
     _cardView.alpha = 1.0;
     _spinner.hidden = YES;
     _statusLabel.hidden = YES;
     _subLabel.hidden = YES;
     _progressBar.hidden = YES;
-    _cancelButton.hidden = NO;
-
-    _formTitleLabel.text = @"Don't have an account? Sign up";
-
-    // Delay 1.5s rồi chuyển sang kết nối thật
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        // Chuyển sang giai đoạn kết nối
-        [UIView animateWithDuration:0.3 animations:^{
-            self->_cardView.alpha = 0.0;
-        } completion:^(BOOL finished) {
-            self->_cardView.hidden = YES;
-            self->_spinner.hidden = NO;
-            self->_statusLabel.hidden = NO;
-            self->_subLabel.hidden = NO;
-            self->_cancelButton.hidden = NO;
-            [self runConnectingPhase];
-        }];
-    });
+    _cancelButton.hidden = YES;
 }
 
-- (void)dismissSelf {
-    // Không cho login button làm gì thật (chỉ phòng trường hợp lộ ra)
+- (void)handleLoginTapped {
+    if (_phase != LGAppleServerPhaseIdle) return;
+
+    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [fb impactOccurred];
+
+    [UIView animateWithDuration:0.30 animations:^{
+        self->_cardView.alpha = 0.0;
+    } completion:^(BOOL finished) {
+        self->_cardView.hidden = YES;
+        self->_spinner.hidden = NO;
+        self->_statusLabel.hidden = NO;
+        self->_subLabel.hidden = NO;
+        self->_cancelButton.hidden = NO;
+        [self runConnectingPhase];
+    }];
 }
 
 - (void)cancelTapped {
+    _cancelled = YES;
     [self stopAllTimers];
     if (self.completionBlock) self.completionBlock(NO);
-    [self removeFromSuperview];
+    [UIView animateWithDuration:0.3 animations:^{ self.alpha = 0.0; } completion:^(BOOL f){ [self removeFromSuperview]; }];
 }
 
-#pragma mark - Timers
-
-- (void)stopAllTimers {
-    if (_spinTimer) { [_spinTimer invalidate]; _spinTimer = nil; }
-    if (_stepTimer) { [_stepTimer invalidate]; _stepTimer = nil; }
-}
+#pragma mark - Spinner (network lag — arc 90° xoay + alpha fade)
 
 - (void)startSpinner {
     [self stopSpinner];
-    _spinTimer = [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer * _Nonnull t) {
-        self.spinPhase += self.spinSpeed;
-        self.spinnerArc.transform = CATransform3DMakeRotation(self.spinPhase, 0, 0, 1);
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:_spinTimer forMode:NSRunLoopCommonModes];
+    _spinStartTime = CACurrentMediaTime();
+    _spinLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(spinnerTick:)];
+    [_spinLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+- (void)stopSpinner {
+    if (_spinLink) { [_spinLink invalidate]; _spinLink = nil; }
+}
+- (void)spinnerTick:(CADisplayLink *)link {
+    CFTimeInterval t = link.timestamp - _spinStartTime;
+    CGFloat angle = fmod(t * (M_PI * 2.0 / 1.15), M_PI * 2.0);
+    _spinnerArc.transform = CATransform3DMakeRotation(angle, 0, 0, 1);
+    // Alpha fade kiểu comet tail bị lag
+    CGFloat alpha = 0.40 + 0.60 * (0.5 + 0.5 * sin(t * 4.4));
+    _spinnerArc.opacity = alpha;
 }
 
-- (void)stopSpinner {
-    if (_spinTimer) { [_spinTimer invalidate]; _spinTimer = nil; }
+#pragma mark - Timers
+- (void)stopAllTimers {
+    [self stopSpinner];
+    if (_stepTimer) { [_stepTimer invalidate]; _stepTimer = nil; }
 }
 
 #pragma mark - Phases
 
-// Phase 1: Đang kết nối server Apple — chờ 1s-5 phút (ngẫu nhiên)
+// Phase 1: 5s connecting → 10% crash / 45% success / 45% queue
 - (void)runConnectingPhase {
+    _phase = LGAppleServerPhaseConnecting;
     _statusLabel.text = @"🔌 Đang kết nối tới server Apple...";
     _subLabel.text = @"Vui lòng chờ trong giây lát";
     [self startSpinner];
 
-    // Random 1s - 300s (5 phút). Thực tế nên để 1-10s để test.
-    // User yêu cầu 1s-5m, nhưng để trải nghiệm không quá tệ tôi để max 30s trong bản này,
-    // muốn max 5 phút thì đổi giá trị dưới.
-    NSTimeInterval wait = 1.0 + (arc4random_uniform(1000) / 100.0); // 1 - 11s
-    // NSTimeInterval wait = 1.0 + (arc4random_uniform(29900) / 100.0); // 1 - 300s (5 phút) - bật nếu muốn
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self->_cancelled) return;
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        // Random 70% thành công kết nối, 30% server lỗi
         NSInteger roll = arc4random_uniform(100);
-        if (roll < 70) {
-            [self runConnectedThenExploit];
-        } else if (roll < 90) {
-            [self runServerRetry];
+        if (roll < 10) {
+            [self handleConnectionError];  // 10% crash app
+        } else if (roll < 55) {
+            [self runConnectedThenExploit];  // 45% success
         } else {
-            [self runServerClosed];
+            [self runQueuePhase];  // 45% queue
         }
     });
 }
 
-// Phase 2a: Đã kết nối thành công -> chạy exploit 1/8 -> 8/8
+// Phase error: crash app — đếm 3 lần thì bảng "server ngắt"
+- (void)handleConnectionError {
+    _statusLabel.text = @"❌ Kết nối thất bại";
+    _subLabel.text = @"Đang khởi động lại...";
+
+    NSInteger cc = Titanium_GetCrashCount();
+    Titanium_SetCrashCount(cc + 1);
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        Titanium_ForceCrashApp();
+    });
+}
+
+// Phase success → exploit
 - (void)runConnectedThenExploit {
     _statusLabel.text = @"✅ Đã kết nối tới server Apple";
-    _subLabel.text = @"Đang đồng bộ cấu hình hệ thống...";
-    [self startSpinner];
+    _subLabel.text = @"Đang đồng bộ cấu hình...";
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self->_cancelled) return;
         [self runExploitSteps];
     });
 }
 
-// Phase 2b: Đang khai thác 1/8 -> 8/8
 - (void)runExploitSteps {
-    self.phase = LGAppleServerPhaseExploiting;
-    self.exploitStep = 1;
+    _phase = LGAppleServerPhaseExploiting;
+    _exploitStep = 1;
 
     NSArray *steps = @[
         @"Bypass PAC arm64e...",
@@ -1787,7 +1782,8 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
     _progressBar.progress = 0.0;
 
     __block NSInteger idx = 0;
-    _stepTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull t) {
+    _stepTimer = [NSTimer scheduledTimerWithTimeInterval:0.9 repeats:YES block:^(NSTimer * _Nonnull t) {
+        if (self->_cancelled) { [t invalidate]; return; }
         if (idx >= 8) {
             [t invalidate];
             self->_stepTimer = nil;
@@ -1796,85 +1792,53 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         }
         idx++;
         self->_progressBar.progress = (float)idx / 8.0;
-        NSString *desc = steps[idx - 1];
         self->_statusLabel.text = [NSString stringWithFormat:@"⚡ Đang khai thác %ld/8", (long)idx];
-        self->_subLabel.text = desc;
+        self->_subLabel.text = steps[idx - 1];
         UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         [fb impactOccurred];
     }];
     [[NSRunLoop mainRunLoop] addTimer:_stepTimer forMode:NSRunLoopCommonModes];
 }
 
-// Phase 3: Server lỗi - chờ 10-30s
-- (void)runServerRetry {
-    self.phase = LGAppleServerPhaseRetrying;
-    _statusLabel.text = @"⚠️ Server đang bị lỗi";
-    _subLabel.text = @"Đang chờ kết nối lại...";
-    _spinSpeed = 0.30; // Quay nhanh hơn (kiểu mạng lag)
-    _spinnerArc.strokeColor = [UIColor systemYellowColor].CGColor;
-    [self startSpinner];
+// Phase queue — 20-30s ẩn số → auto success
+- (void)runQueuePhase {
+    _phase = LGAppleServerPhaseQueueing;
+    _statusLabel.text = @"⏳ Đang chờ admin kết nối Apple...";
+    _subLabel.text = @"Hệ thống đang xếp hàng. Vui lòng chờ.";
 
-    NSTimeInterval wait = 10.0 + (arc4random_uniform(2100) / 100.0); // 10 - 31s
+    NSTimeInterval wait = 20.0 + (arc4random_uniform(1100) / 100.0); // 20-31s
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        _spinSpeed = 0.10;
-        _spinnerArc.strokeColor = [UIColor whiteColor].CGColor;
-        [self runConnectingPhase];
+        if (self->_cancelled) return;
+        self->_statusLabel.text = @"✅ Đã kết nối đến server Apple";
+        self->_subLabel.text = @"Đang hoàn tất cấu hình...";
+        UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+        [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self->_cancelled) return;
+            [self runComplete];
+        });
     });
 }
 
-// Phase 4: Server đóng - hiện X ở giữa, chờ 1-5 phút
-- (void)runServerClosed {
-    self.phase = LGAppleServerPhaseClosed;
-    [self stopSpinner];
-    _spinner.hidden = YES;
-
-    // Hiện dấu X đỏ
-    UILabel *xLabel = [[UILabel alloc] init];
-    xLabel.text = @"❌";
-    xLabel.font = [UIFont systemFontOfSize:56 weight:UIFontWeightBold];
-    xLabel.textAlignment = NSTextAlignmentCenter;
-    xLabel.tag = 999;
-    [self addSubview:xLabel];
-    xLabel.frame = CGRectMake(0, self.bounds.size.height / 2 - 110, self.bounds.size.width, 80);
-
-    _statusLabel.text = @"🚫 Server Apple đang đóng";
-    _subLabel.text = @"Vui lòng thử lại sau vài phút";
-
-    NSTimeInterval wait = 60.0 + (arc4random_uniform(24000) / 100.0); // 60 - 300s
-    // Để test nhanh, đổi thành:
-    // NSTimeInterval wait = 5.0 + (arc4random_uniform(2500) / 100.0); // 5 - 30s
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [xLabel removeFromSuperview];
-        self->_spinner.hidden = NO;
-        [self runConnectingPhase];
-    });
-}
-
-// Phase 5: Hoàn thành
 - (void)runComplete {
+    _phase = LGAppleServerPhaseSuccess;
     [self stopAllTimers];
     _statusLabel.text = @"✅ KHAI THÁC THÀNH CÔNG";
     _subLabel.text = @"Đã lưu cấu hình vĩnh viễn";
     _progressBar.progress = 1.0;
     _spinner.hidden = YES;
+    _cancelButton.hidden = YES;
 
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self.completionBlock) self.completionBlock(YES);
-        [UIView animateWithDuration:0.3 animations:^{
-            self.alpha = 0.0;
-        } completion:^(BOOL finished) {
-            [self removeFromSuperview];
-        }];
+        [UIView animateWithDuration:0.3 animations:^{ self.alpha = 0.0; } completion:^(BOOL finished) { [self removeFromSuperview]; }];
     });
 }
 
-- (void)dealloc {
-    [self stopAllTimers];
-}
+- (void)dealloc { [self stopAllTimers]; }
 @end
 
 // ====================================================================================================
@@ -2008,22 +1972,27 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     LGExpandingNavBarButton *_expandingBoltButton;
     LGExpandingNavBarButton *_expandingLockButton;
 
-    // [THÊM LẦN 4] state cho chip error random + apply button
+    // Chip error
     BOOL _chipErrorActive;
     NSTimer *_chipErrorTimer;
     NSTimer *_chipRecoverTimer;
     NSInteger _chipErrorRandomSeconds;
 
-    // [THÊM LẦN 4] state cho apply button — lưu Hz/FPS đã áp dụng gần nhất
+    // Apply state
     NSInteger _lastAppliedHz;
     NSInteger _lastAppliedFPS;
 
-    // [THÊM LẦN 4] Loading views overlay
+    // Loading
     UIView *_loadingOverlay;
     LGLoadingCarView *_carView;
 
-    // [THÊM LẦN 4] view cho tập hợp nút ở góc phải (để tách khoảng cách)
-    UIView *_rightButtonsContainer;
+    // Server status
+    UILabel *_serverStatusLabel;
+    UIView *_serverStatusDot;
+    NSTimer *_serverBlinkTimer;
+    NSTimer *_latencyTimer;
+    NSInteger _currentLatencyMs;
+    BOOL _serverDown;
 }
 @end
 
@@ -2039,6 +2008,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"";
+
+    // Deletion detection — nếu tweak không chạy, reset exploit
+    [self detectTweakDeletionIfNeeded];
 
     CAGradientLayer *bg = [CAGradientLayer layer];
     bg.frame = self.view.bounds;
@@ -2066,9 +2038,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _chipErrorActive = NO;
     _lastAppliedHz = 144;
     _lastAppliedFPS = 144;
+    _currentLatencyMs = 45;
+    _serverDown = NO;
 
     [self loadSettingsData];
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
+
+    // Auto theme
+    if ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue]) {
+        self.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+    } else {
+        self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    }
 
     NSUUID *uuid = [[UIDevice currentDevice] identifierForVendor];
     _deviceUUIDString = uuid ? [uuid UUIDString] : @"UNKNOWN-DEVICE-UUID";
@@ -2088,15 +2069,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self setupMainTableView];
     [self setupLiquidGlassLens];
 
+    [self startLatencyMonitor];
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self loadInstalledAppsAsync];
         if (self->_isKernelExploited) [self applyDeepSpringBoardAndUIKitTweaks];
     });
 
-    // Popup khai thác Darwin
     if (!_isKernelExploited) {
+        NSInteger cc = Titanium_GetCrashCount();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self showExploitRequiredPopup];
+            if (cc >= 3) [self showServerDownAlert];
+            else [self showExploitRequiredPopup];
         });
     }
 }
@@ -2114,11 +2098,34 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [_expandingLockButton collapseMenu];
 }
 
-#pragma mark - Exploit Required Popup
+// Deletion detection
+- (void)detectTweakDeletionIfNeeded {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:PRIMARY_SYNC_FILE] &&
+        ![[NSFileManager defaultManager] fileExistsAtPath:SECONDARY_SYNC_FILE]) {
+        if ([self.settingsDict[@"IsKernelExploited"] boolValue]) {
+            self.settingsDict[@"IsKernelExploited"] = @NO;
+            self.settingsDict[@"Enabled"] = @NO;
+            [self saveSettingsDataAndSync];
+            Titanium_ResetCrashCount();
+        }
+    }
+}
+
+#pragma mark - Server alerts
+
+- (void)showServerDownAlert {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🚫 Server đang bị ngắt"
+                                                               message:@"Server Apple hiện không phản hồi.\n\nVui lòng chờ 1-10 phút để server khởi động lại rồi thử lại."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        Titanium_ResetCrashCount();
+    }]];
+    [self presentViewController:a animated:YES completion:nil];
+}
 
 - (void)showExploitRequiredPopup {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔒 CẦN KHAI THÁC DARWIN"
-                                                                   message:@"Ứng dụng cần khai thác Darwin Kernel để kích hoạt toàn bộ tính năng.\n\nNếu không khai thác, Tweak sẽ TẮT HOÀN TOÀN 100% và mọi công tắc đều bị vô hiệu hoá.\n\nVào tab ⚙️ CÀI ĐẶT → chạm vào dòng ĐỎ để bắt đầu khai thác."
+                                                                   message:@"Ứng dụng cần khai thác Darwin Kernel để kích hoạt toàn bộ tính năng.\n\nNếu không khai thác, Tweak sẽ TẮT HOÀN TOÀN 100%.\n\nVào tab ⚙️ CÀI ĐẶT → chạm dòng ĐỎ để bắt đầu."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"✕ Để sau" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"⚡ Khai Thác Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -2133,16 +2140,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - Bridge
 
 - (void)setupBottomNavigationBar { [self setupLiquidGlassNavBar]; }
-- (void)onBottomTabChanged:(UISegmentedControl *)sender {
-    if (sender) [self selectTabIndex:sender.selectedSegmentIndex animated:YES];
-}
-- (void)onSwitchToggled:(UISwitch *)sender {
-    if (sender) [self.customTableView reloadData];
-}
+- (void)onBottomTabChanged:(UISegmentedControl *)sender { if (sender) [self selectTabIndex:sender.selectedSegmentIndex animated:YES]; }
+- (void)onSwitchToggled:(UISwitch *)sender { if (sender) [self.customTableView reloadData]; }
 
 - (void)showLanguagePickerPopup:(id)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"🌐 CHỌN NGÔN NGỮ" message:@"Lựa chọn ngôn ngữ hiển thị hệ thống:" preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt (Mặc Định)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"🌐 CHỌN NGÔN NGỮ" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         self.settingsDict[@"AppLanguage"] = @"vi";
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
@@ -2155,19 +2158,139 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         sheet.popoverPresentationController.sourceView = self.view;
-        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width/2, self.view.bounds.size.height/2, 1, 1);
     }
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-#pragma mark - Expanding Navigation Items — [FIX LẦN 4] tách khoảng cách bằng container
+#pragma mark - Server status indicator + latency
+
+- (void)setupTopHeaderBar {
+    UILabel *brandLabel = [[UILabel alloc] init];
+    brandLabel.text = @"💧 Liquid Glass";
+    brandLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.95];
+    brandLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightHeavy];
+
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 30)];
+
+    _serverStatusDot = [[UIView alloc] initWithFrame:CGRectMake(0, 11, 8, 8)];
+    _serverStatusDot.layer.cornerRadius = 4;
+    _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
+    [container addSubview:_serverStatusDot];
+
+    _serverStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 4, 200, 22)];
+    _serverStatusLabel.text = @"Server: Ổn định";
+    _serverStatusLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
+    _serverStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    [container addSubview:_serverStatusLabel];
+
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
+    [self updateServerStatusIndicator];
+}
+
+- (void)startLatencyMonitor {
+    if (_latencyTimer) [_latencyTimer invalidate];
+    _latencyTimer = [NSTimer scheduledTimerWithTimeInterval:2.5 repeats:YES block:^(NSTimer * _Nonnull t) {
+        [self tickLatency];
+    }];
+    [[NSRunLoop mainRunLoop] addTimer:_latencyTimer forMode:NSRunLoopCommonModes];
+
+    if (_serverBlinkTimer) [_serverBlinkTimer invalidate];
+    _serverBlinkTimer = [NSTimer scheduledTimerWithTimeInterval:10.0 repeats:YES block:^(NSTimer * _Nonnull t) {
+        [self blinkServerStatus];
+    }];
+    [[NSRunLoop mainRunLoop] addTimer:_serverBlinkTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)tickLatency {
+    NSInteger baseLatency = 30 + arc4random_uniform(120); // 30-150ms bình thường
+
+    // 30% spike > 500ms
+    if (arc4random_uniform(100) < 30) {
+        baseLatency = 500 + arc4random_uniform(300);
+        if (!_serverDown) [self showLatencyWarning];
+    }
+    // 5% spike ≥ 900ms → server sập 20 phút + tắt tổng
+    if (arc4random_uniform(100) < 5) {
+        baseLatency = 900 + arc4random_uniform(200);
+        [self handleServerCrash];
+    }
+
+    _currentLatencyMs = baseLatency;
+    [self updateServerStatusIndicator];
+    if (_currentBottomTab == 4) [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationNone];
+}
+
+- (void)handleServerCrash {
+    if (_serverDown) return;
+    _serverDown = YES;
+    // Tắt tổng
+    self.settingsDict[@"Enabled"] = @NO;
+    [self saveSettingsDataAndSync];
+
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🚨 SERVER SẬP"
+                                                               message:@"Server Apple hiện đã sập.\nVui lòng đợi 20 phút để hệ thống khôi phục.\n\nToàn bộ tweak đã được TẮT tạm thời."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * 60 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        self->_serverDown = NO;
+        [self updateServerStatusIndicator];
+    });
+}
+
+- (void)showLatencyWarning {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"⚠️ Server quá tải"
+                                                               message:@"Server đang quá tải do nhiều người sử dụng.\n\nChúng tôi sẽ sớm khắc phục trong 1-5 phút."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)updateServerStatusIndicator {
+    if (!_serverStatusDot || !_serverStatusLabel) return;
+    if (_serverDown) {
+        _serverStatusDot.backgroundColor = [UIColor systemRedColor];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"Server: Sập - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.textColor = [UIColor systemRedColor];
+    } else if (_currentLatencyMs >= 500) {
+        _serverStatusDot.backgroundColor = [UIColor systemRedColor];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"Server: Chậm - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.textColor = [UIColor systemRedColor];
+    } else if (_currentLatencyMs >= 150) {
+        _serverStatusDot.backgroundColor = [UIColor systemYellowColor];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"Server: Kém - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.textColor = [UIColor systemYellowColor];
+    } else {
+        _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"Server: Ổn định - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
+    }
+}
+
+- (void)blinkServerStatus {
+    if (!_serverStatusLabel) return;
+    if (_serverDown || _currentLatencyMs >= 150) return;
+    CGFloat savedAlpha = _serverStatusLabel.alpha;
+    [UIView animateWithDuration:0.5 animations:^{
+        self->_serverStatusLabel.alpha = 0.0;
+    } completion:^(BOOL f) {
+        self->_serverStatusLabel.text = @"Server: Ổn định";
+        self->_serverStatusLabel.textColor = [UIColor systemGreenColor];
+        [UIView animateWithDuration:0.8 animations:^{
+            self->_serverStatusLabel.alpha = savedAlpha;
+        }];
+    }];
+}
+
+#pragma mark - Expanding nav
 
 - (void)setupExpandingNavigationItems {
-    _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill"
-                                                                   tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
+    _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
     _expandingBoltButton.delegate = self;
     [_expandingBoltButton setActions:@[
-        [LGExpandingMenuAction actionWithTitle:@"⚡ Đồng Bộ Tức Thì" image:@"arrow.clockwise" tintColor:[UIColor whiteColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"⚡ Áp Dụng Ngay" image:@"arrow.clockwise" tintColor:[UIColor whiteColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"🔥 Ép Xung 144Hz" image:@"bolt.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"🎯 Reset Tần Số" image:@"arrow.counterclockwise" tintColor:[UIColor systemOrangeColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"💧 Glass Redraw" image:@"sparkles" tintColor:[UIColor colorWithRed:0.5 green:0.8 blue:1.0 alpha:1.0] destructive:NO],
@@ -2176,34 +2299,32 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _expandingLockButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"lock.open.fill" tintColor:[UIColor whiteColor]];
     _expandingLockButton.delegate = self;
     [_expandingLockButton setActions:@[
-        [LGExpandingMenuAction actionWithTitle:@"🔓 Mở Khóa Chỉnh Sửa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"🔒 Khóa Cấu Hình" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"💾 Lưu Ngay" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"🔓 Mở Khóa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"🔒 Khóa" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"💾 Lưu" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
     ]];
 
     _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal" tintColor:[UIColor whiteColor]];
     _expandingMenuButton.delegate = self;
     [_expandingMenuButton setActions:@[
-        [LGExpandingMenuAction actionWithTitle:@"⚡ Respring Nhanh" image:@"arrow.triangle.2.circlepath" tintColor:[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1.0] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"🔥 Khởi Động Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"🛡️ Vào Safe Mode" image:@"shield.lefthalf.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"♻ Đặt Lại & Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
+        [LGExpandingMenuAction actionWithTitle:@"⚡ Respring" image:@"arrow.triangle.2.circlepath" tintColor:[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"🔥 Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"🛡️ Safe Mode" image:@"shield.lefthalf.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"♻ Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
     ]];
 
-    // [FIX LẦN 4] Gói 3 nút vào một UIStackView với spacing rõ ràng, tránh bị gộp dính
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[_expandingMenuButton, _expandingLockButton, _expandingBoltButton]];
     stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.spacing = 14.0;              // khoảng cách giữa 3 nút
+    stack.spacing = 16.0;
     stack.alignment = UIStackViewAlignmentCenter;
     stack.distribution = UIStackViewDistributionFillEqually;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [NSLayoutConstraint activateConstraints:@[
-        [stack.widthAnchor constraintEqualToConstant:40 * 3 + 14 * 2],  // 148
+        [stack.widthAnchor constraintEqualToConstant:40 * 3 + 16 * 2],
         [stack.heightAnchor constraintEqualToConstant:40]
     ]];
 
-    UIBarButtonItem *rightItem = [[UIBarButtonItem alloc] initWithCustomView:stack];
-    self.navigationItem.rightBarButtonItem = rightItem;
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:stack];
     [self updateLockIcon];
 }
 
@@ -2217,11 +2338,23 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         }
     } else if (button == _expandingBoltButton) {
         switch (index) {
-            case 0: [self applySettingsInstantNoRespringAction]; break;
+            case 0: {
+                // ÁP DỤNG NGAY — hiện loading xe 5s rồi apply
+                if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
+                [self showLoadingCarOverlayDuration:5.0 completion:^{
+                    [self applyDeepSpringBoardAndUIKitTweaks];
+                    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+                    [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
+                    [self.customTableView reloadData];
+                }];
+                break;
+            }
             case 1:
                 self.settingsDict[@"TargetRefreshRate"] = @144;
                 self.settingsDict[@"TargetFPSRate"] = @144;
                 self.settingsDict[@"ForceOverclock144Hz"] = @YES;
+                _lastAppliedHz = 144;
+                _lastAppliedFPS = 144;
                 [self saveSettingsDataAndSync];
                 [self applyDeepSpringBoardAndUIKitTweaks];
                 [self.customTableView reloadData];
@@ -2230,6 +2363,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 self.settingsDict[@"TargetRefreshRate"] = @60;
                 self.settingsDict[@"TargetFPSRate"] = @60;
                 self.settingsDict[@"ForceOverclock144Hz"] = @NO;
+                _lastAppliedHz = 60;
+                _lastAppliedFPS = 60;
                 [self saveSettingsDataAndSync];
                 [self applyDeepSpringBoardAndUIKitTweaks];
                 [self.customTableView reloadData];
@@ -2237,8 +2372,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             case 3:
                 [self.view setNeedsLayout];
                 [self.view layoutIfNeeded];
-                UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-                [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
+                {UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+                 [fb notificationOccurred:UINotificationFeedbackTypeSuccess];}
                 break;
         }
     } else if (button == _expandingLockButton) {
@@ -2270,7 +2405,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (button != _expandingLockButton) [_expandingLockButton collapseMenu];
 }
 
-#pragma mark - Liquid Glass Nav Bar
+#pragma mark - Liquid Nav Bar
 
 - (void)setupLiquidGlassNavBar {
     CGFloat barHeight = 62.0;
@@ -2282,9 +2417,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                                                             materialType:LGGlassMaterialTypeCrystal];
     _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     _liquidNavBarContainer.interactiveHighlightEnabled = NO;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.38;
-    _liquidNavBarContainer.layer.shadowRadius = 20.0;
-    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 8);
+    _liquidNavBarContainer.layer.shadowOpacity = 0.42;
+    _liquidNavBarContainer.layer.shadowRadius = 22.0;
+    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 9);
     _liquidNavBarContainer.layer.shadowColor = [UIColor blackColor].CGColor;
 
     _tabConfigs = @[
@@ -2302,9 +2437,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                                                             materialType:LGGlassMaterialTypeThin];
     _activeGlassIndicator.userInteractionEnabled = NO;
     _activeGlassIndicator.interactiveHighlightEnabled = NO;
-    _activeGlassIndicator.layer.shadowOpacity = 0.28;
-    _activeGlassIndicator.layer.shadowRadius = 6.0;
-    _activeGlassIndicator.layer.shadowOffset = CGSizeMake(0, 2);
+    _activeGlassIndicator.layer.shadowOpacity = 0.32;
+    _activeGlassIndicator.layer.shadowRadius = 8.0;
+    _activeGlassIndicator.layer.shadowOffset = CGSizeMake(0, 3);
     [_liquidNavBarContainer addSubview:_activeGlassIndicator];
 
     for (NSInteger i = 0; i < _tabConfigs.count; i++) {
@@ -2316,7 +2451,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
 
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleTabLongPress:)];
-        longPress.minimumPressDuration = 0.12;
+        longPress.minimumPressDuration = 0.14;
         [btn addGestureRecognizer:longPress];
 
         [_liquidNavBarContainer addSubview:btn];
@@ -2324,14 +2459,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 
     if (_tabButtons.count > 0) [_tabButtons[0] updateTabSelected:YES animated:NO];
-
     [self.view addSubview:_liquidNavBarContainer];
 }
 
-- (void)onCustomTabButtonClicked:(LGGlassNavButton *)sender {
-    [self selectTabIndex:sender.tag animated:YES];
-}
+- (void)onCustomTabButtonClicked:(LGGlassNavButton *)sender { [self selectTabIndex:sender.tag animated:YES]; }
 
+// Crossfade nội dung khi đổi tab — không còn "cứng ngắt"
 - (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
     if (index < 0 || index >= _tabConfigs.count) return;
     NSInteger oldTab = _currentBottomTab;
@@ -2352,29 +2485,34 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.40 delay:0 usingSpringWithDamping:0.68 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
+        [UIView animateWithDuration:0.44 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
     } else animations();
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [fb impactOccurred];
-    [self.customTableView reloadData];
+
+    if (animated) {
+        [UIView transitionWithView:self.customTableView duration:0.34 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+            [self.customTableView reloadData];
+        } completion:nil];
+    } else {
+        [self.customTableView reloadData];
+    }
 }
 
-#pragma mark - Liquid Glass Lens
+#pragma mark - Liquid Lens
 
 - (void)setupLiquidGlassLens {
     _liquidGlassLensContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 68, 68)];
     _liquidGlassLensContainer.hidden = YES;
     _liquidGlassLensContainer.userInteractionEnabled = NO;
 
-    _lensGlassEffectView = [[AppleLiquidGlassView alloc] initWithFrame:_liquidGlassLensContainer.bounds
-                                                          cornerRadius:34.0
-                                                          materialType:LGGlassMaterialTypeCrystal];
+    _lensGlassEffectView = [[AppleLiquidGlassView alloc] initWithFrame:_liquidGlassLensContainer.bounds cornerRadius:34.0 materialType:LGGlassMaterialTypeCrystal];
     _lensGlassEffectView.interactiveHighlightEnabled = NO;
     _lensGlassEffectView.layer.shadowColor = [UIColor blackColor].CGColor;
-    _lensGlassEffectView.layer.shadowOpacity = 0.38;
-    _lensGlassEffectView.layer.shadowRadius = 16.0;
-    _lensGlassEffectView.layer.shadowOffset = CGSizeMake(0, 6);
+    _lensGlassEffectView.layer.shadowOpacity = 0.42;
+    _lensGlassEffectView.layer.shadowRadius = 18.0;
+    _lensGlassEffectView.layer.shadowOffset = CGSizeMake(0, 7);
     [_liquidGlassLensContainer addSubview:_lensGlassEffectView];
 
     _lensTitleLabel = [[UILabel alloc] initWithFrame:_liquidGlassLensContainer.bounds];
@@ -2397,7 +2535,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         _liquidGlassLensContainer.alpha = 0.0;
         _liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.3, 0.3);
         _lensTitleLabel.text = _tabConfigs[btn.tag][@"title"];
-        [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.60 initialSpringVelocity:1.1 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.62 initialSpringVelocity:1.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
             self->_liquidGlassLensContainer.alpha = 1.0;
             self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
         } completion:nil];
@@ -2416,7 +2554,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             }
         }
     } else {
-        [UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+        [UIView animateWithDuration:0.24 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
             self->_liquidGlassLensContainer.alpha = 0.0;
             self->_liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.2, 0.2);
         } completion:^(BOOL finished) {
@@ -2426,53 +2564,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
 }
 
-#pragma mark - Navigation
-
-- (void)setupTopHeaderBar {
-    UILabel *brandLabel = [[UILabel alloc] init];
-    brandLabel.text = @"💧 Liquid Glass";
-    brandLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.95];
-    brandLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightHeavy];
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:brandLabel];
-}
+#pragma mark - Lock + apply
 
 - (void)updateLockIcon {
     NSString *iconName = _isRateLocked ? @"lock.fill" : @"lock.open.fill";
     UIImage *img = [UIImage systemImageNamed:iconName];
     [_expandingLockButton.iconView setImage:[img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
     _expandingLockButton.iconView.tintColor = _isRateLocked ? [UIColor systemRedColor] : [UIColor whiteColor];
-}
-
-- (void)applySettingsInstantNoRespringAction {
-    if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
-    [self saveSettingsDataAndSync];
-    [self applyDeepSpringBoardAndUIKitTweaks];
-    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-    [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-
-    AppleLiquidGlassView *toast = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(30, 100, self.view.bounds.size.width - 60, 46)
-                                                                 cornerRadius:23.0
-                                                                 materialType:LGGlassMaterialTypeCrystal];
-    toast.interactiveHighlightEnabled = NO;
-    UILabel *tl = [[UILabel alloc] initWithFrame:toast.bounds];
-    tl.text = @"⚡ ĐÃ ĐỒNG BỘ TỨC THÌ";
-    tl.textColor = [UIColor colorWithWhite:1.0 alpha:0.95];
-    tl.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
-    tl.textAlignment = NSTextAlignmentCenter;
-    [toast addSubview:tl];
-
-    [self.view addSubview:toast];
-    toast.alpha = 0.0;
-    toast.transform = CGAffineTransformMakeScale(0.85, 0.85);
-    [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.65 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        toast.alpha = 1.0;
-        toast.transform = CGAffineTransformIdentity;
-    } completion:^(BOOL finished) {
-        [UIView animateWithDuration:0.35 delay:1.6 options:0 animations:^{
-            toast.alpha = 0.0;
-            toast.transform = CGAffineTransformMakeTranslation(0, -15);
-        } completion:^(BOOL finished) { [toast removeFromSuperview]; }];
-    }];
 }
 
 - (void)toggleRateLockAction {
@@ -2487,16 +2585,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self.customTableView reloadData];
 }
 
-// [THÊM LẦN 4] Loading overlay với xe chạy
 - (void)showLoadingCarOverlayDuration:(NSTimeInterval)duration completion:(void (^)(void))completion {
     UIWindow *host = self.view.window;
-    if (!host) {
-        if (completion) completion();
-        return;
-    }
+    if (!host) { if (completion) completion(); return; }
 
     _loadingOverlay = [[UIView alloc] initWithFrame:host.bounds];
-    _loadingOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+    _loadingOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.62];
     _loadingOverlay.alpha = 0.0;
     _loadingOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [host addSubview:_loadingOverlay];
@@ -2506,15 +2600,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [_loadingOverlay addSubview:_carView];
     [_carView startAnimating];
 
-    [UIView animateWithDuration:0.25 animations:^{
-        self->_loadingOverlay.alpha = 1.0;
-    }];
+    [UIView animateWithDuration:0.28 animations:^{ self->_loadingOverlay.alpha = 1.0; }];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(duration * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self->_carView stopAnimating];
-        [UIView animateWithDuration:0.30 animations:^{
-            self->_loadingOverlay.alpha = 0.0;
-        } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.32 animations:^{ self->_loadingOverlay.alpha = 0.0; } completion:^(BOOL finished) {
             [self->_loadingOverlay removeFromSuperview];
             self->_loadingOverlay = nil;
             self->_carView = nil;
@@ -2540,8 +2630,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (_currentBottomTab == 0) return 6;
     if (_currentBottomTab == 1) return 3;
     if (_currentBottomTab == 2) return 2;
-    if (_currentBottomTab == 3) return 2;
-    return 3;
+    if (_currentBottomTab == 3) return 3;  // Bật tất cả + Search + Apps
+    return 4;  // Thêm mục server latency
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -2571,11 +2661,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             default: return 6;
         }
     } else if (_currentBottomTab == 3) {
-        if (section == 0) return 1;
+        if (section == 0) return 1; // Bật tất cả
+        if (section == 1) return 1; // Search
         return MAX(1, _filteredAppsList.count);
     } else {
         if (section == 0) return 2;
         if (section == 1) return _isKernelExploited ? 8 : 1;
+        if (section == 2) return 3;  // Server latency + status + auto theme
         return 4;
     }
 }
@@ -2584,37 +2676,39 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (!_isKernelExploited && _currentBottomTab != 4) return @"🔒 CẦN KHAI THÁC DARWIN";
     if (_currentBottomTab == 0) {
         if (section == 0) return @"🎛️ ĐIỀU KHIỂN HỆ THỐNG ĐO";
-        if (section == 1) return @"🧠 BỘ XỬ LÝ TRUNG TÂM (CPU)";
-        if (section == 2) return @"🎮 BỘ XỬ LÝ ĐỒ HỌA (GPU)";
-        if (section == 3) return @"💾 BỘ NHỚ TRUY XUẤT (RAM)";
-        if (section == 4) return @"🔋 NGUỒN ĐIỆN & PIN";
-        return @"🖥️ MÀN HÌNH HIỂN THỊ";
+        if (section == 1) return @"🧠 CPU";
+        if (section == 2) return @"🎮 GPU";
+        if (section == 3) return @"💾 RAM";
+        if (section == 4) return @"🔋 PIN";
+        return @"🖥️ MÀN HÌNH";
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return @"ℹ️ NGUYÊN LÝ HOẠT ĐỘNG HZ & FPS";
-        if (section == 1) return @"⚡ ĐIỀU PHỐI ĐỘC LẬP TẦN SỐ QUÉT";
-        return (_currentHzFpsSubTab == 0) ? @"🎛️ KHÓA TẦN SỐ QUÉT (HZ)" : @"🎮 KHÓA KHUNG HÌNH (FPS)";
+        if (section == 0) return @"ℹ️ NGUYÊN LÝ";
+        if (section == 1) return @"⚡ CHỌN CHẾ ĐỘ";
+        return (_currentHzFpsSubTab == 0) ? @"🎛️ KHÓA HZ" : @"🎮 KHÓA FPS";
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return @"🎚️ CHỌN PHÂN NHÓM CÔNG TẮC";
+        if (section == 0) return @"🎚️ CHỌN NHÓM";
         switch (_currentSwitchSubTab) {
-            case 0: return @"🧠 NHÓM CPU";
-            case 1: return @"🎮 NHÓM GPU";
-            case 2: return @"🖥️ NHÓM MÀN HÌNH";
-            case 3: return @"🔋 NHÓM PIN";
-            case 4: return @"⚡ NHÓM HỆ THỐNG";
+            case 0: return @"🧠 CPU";
+            case 1: return @"🎮 GPU";
+            case 2: return @"🖥️ MÀN HÌNH";
+            case 3: return @"🔋 PIN";
+            case 4: return @"⚡ HỆ THỐNG";
             default: return @"🟢 CÔNG TẮC";
         }
     } else if (_currentBottomTab == 3) {
-        if (section == 0) return @"🔍 TÌM KIẾM ỨNG DỤNG";
-        return @"📱 QUẢN LÝ ỨNG DỤNG TƯƠNG TÁC";
+        if (section == 0) return @"🚀 THAO TÁC NHANH";
+        if (section == 1) return @"🔍 TÌM KIẾM";
+        return @"📱 QUẢN LÝ ỨNG DỤNG";
     } else {
-        if (section == 0) return @"🛡️ TRẠNG THÁI KHAI THÁC HỆ THỐNG";
-        if (section == 1) return @"📱 THÔNG TIN PHẦN CỨNG THIẾT BỊ";
-        return @"🛡️ THÔNG TIN VÙNG SANDBOX";
+        if (section == 0) return @"🛡️ KHAI THÁC";
+        if (section == 1) return @"📱 PHẦN CỨNG";
+        if (section == 2) return @"🌐 SERVER & GIAO DIỆN";
+        return @"🛡️ SANDBOX";
     }
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (_currentBottomTab == 3 && indexPath.section == 0) return 52.0;
+    if (_currentBottomTab == 3 && indexPath.section == 1) return 52.0;
     return 58.0;
 }
 
@@ -2628,7 +2722,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     UIView *accessory = nil;
     UIColor *accent = nil;
 
-    // Chưa khai thác
     if (!_isKernelExploited && _currentBottomTab != 4) {
         title = @"🔒 CẦN KHAI THÁC DARWIN ĐỂ SỬ DỤNG";
         detail = @"Vào Cài Đặt";
@@ -2640,10 +2733,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     cell.userInteractionEnabled = YES;
     cell.alpha = 1.0;
 
-    // TAB 0 — TRANG CHỦ
+    // ============ TAB 0 — TRANG CHỦ ============
     if (_currentBottomTab == 0) {
         if (indexPath.section == 0) {
-            title = @"⚡ Kích Hoạt Bộ Đo Phần Cứng Realtime";
+            title = @"⚡ Kích Hoạt Bộ Đo Phần Cứng";
             LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
             s.on = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
             __weak typeof(self) wS = self;
@@ -2652,18 +2745,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 if (!sS) return;
                 sS.settingsDict[@"EnableSystemMonitoring"] = @(isOn);
                 [sS saveSettingsDataAndSync];
-                if (isOn) {
-                    [sS scheduleChipErrorRandomOnHome];
-                } else {
-                    [sS cancelChipErrorRandom];
-                }
                 [sS.customTableView reloadData];
             };
             accessory = s;
         } else {
             BOOL mA = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
             if (!mA) { title = @"🔒 Bộ đo đang tắt"; detail = @"[TẮT]"; }
-            // [THÊM LẦN 4] Chip error random 5-20s tự khôi phục
             else if (_chipErrorActive) {
                 title = @"⚠️ Chip đang lỗi, không thể đo";
                 detail = [NSString stringWithFormat:@"Tự khôi phục %lds...", (long)_chipErrorRandomSeconds];
@@ -2675,53 +2762,52 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 float gpu = Titanium_GetLiveGPULoadPercentage();
                 if (indexPath.section == 1) {
                     if (indexPath.row == 0) { title = _isCpuExpanded ? @"🧠 CPU ▼" : @"🧠 CPU ▶"; detail = [NSString stringWithFormat:@"%.1f°C | %.1f%%", baseTemp, cpu]; }
-                    else if (indexPath.row == 1) { title = @"   Nhiệt độ CPU"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp]; }
-                    else if (indexPath.row == 2) { title = @"   Tải CPU"; detail = [NSString stringWithFormat:@"%.1f%%", cpu]; }
+                    else if (indexPath.row == 1) { title = @"   Nhiệt độ"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp]; }
+                    else if (indexPath.row == 2) { title = @"   Tải"; detail = [NSString stringWithFormat:@"%.1f%%", cpu]; }
                     else if (indexPath.row == 3) { float ghz = (cpu > 60.0f) ? 2.49f : ((cpu > 25.0f) ? 1.85f : 1.10f); title = @"   Xung P-Core"; detail = [NSString stringWithFormat:@"%.2f GHz", ghz]; }
-                    else if (indexPath.row == 4) { title = @"   Điều Phối Lõi"; detail = (cpu > 40.0f) ? @"P-Core Realtime" : @"E-Core PowerSave"; }
-                    else { title = @"   Số Nhân CPU"; detail = _deepCoreCountString ?: @"6 Cores"; }
+                    else if (indexPath.row == 4) { title = @"   Điều Phối"; detail = (cpu > 40.0f) ? @"P-Core" : @"E-Core"; }
+                    else { title = @"   Số Nhân"; detail = _deepCoreCountString ?: @"6 Cores"; }
                 } else if (indexPath.section == 2) {
                     if (indexPath.row == 0) { title = _isGpuExpanded ? @"🎮 GPU ▼" : @"🎮 GPU ▶"; detail = [NSString stringWithFormat:@"%.1f°C | %.1f%%", baseTemp - 0.7f, gpu]; }
-                    else if (indexPath.row == 1) { title = @"   Nhiệt GPU"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp - 0.7f]; }
+                    else if (indexPath.row == 1) { title = @"   Nhiệt"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp - 0.7f]; }
                     else if (indexPath.row == 2) { title = @"   Tải Metal"; detail = [NSString stringWithFormat:@"%.1f%%", gpu]; }
                     else if (indexPath.row == 3) { title = @"   Xung Metal"; detail = @"600 MHz Locked"; }
-                    else if (indexPath.row == 4) { title = @"   Buffer Display"; detail = @"Triple Buffering"; }
-                    else { title = @"   Metal Version"; detail = @"Apple GPU"; }
+                    else if (indexPath.row == 4) { title = @"   Buffer"; detail = @"Triple Buffering"; }
+                    else { title = @"   Metal"; detail = @"Apple GPU"; }
                 } else if (indexPath.section == 3) {
                     if (indexPath.row == 0) { title = _isRamExpanded ? @"💾 RAM ▼" : @"💾 RAM ▶"; detail = [NSString stringWithFormat:@"%.1f°C | 42.5%%", baseTemp - 1.2f]; }
                     else if (indexPath.row == 1) { title = @"   Nhiệt LPDDR"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp - 1.2f]; }
                     else if (indexPath.row == 2) { title = @"   Dung lượng"; detail = _deepRamString ?: @"4.00 GB"; }
-                    else if (indexPath.row == 3) { title = @"   Mach Purgable"; detail = @"Clean (Auto Purge)"; }
-                    else { title = @"   Bộ nhớ ảo"; detail = @"Active"; }
+                    else if (indexPath.row == 3) { title = @"   Purgable"; detail = @"Clean"; }
+                    else { title = @"   Ảo"; detail = @"Active"; }
                 } else if (indexPath.section == 4) {
                     [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
                     int level = (int)([[UIDevice currentDevice] batteryLevel] * 100);
                     if (level < 0) level = 100;
                     float bl = (cpu * 0.45f) + 8.5f;
                     if (indexPath.row == 0) { title = _isBatteryExpanded ? @"🔋 Pin ▼" : @"🔋 Pin ▶"; detail = [NSString stringWithFormat:@"%.1f°C | %.1f%%", baseTemp - 2.0f, bl]; }
-                    else if (indexPath.row == 1) { title = @"   Nhiệt Cell Pin"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp - 2.0f]; }
-                    else if (indexPath.row == 2) { title = @"   Dòng xả tải"; detail = [NSString stringWithFormat:@"%.1f%% Load", bl]; }
-                    else if (indexPath.row == 3) { title = @"   Dung lượng hiện tại"; detail = [NSString stringWithFormat:@"%d%%", level]; }
-                    else if (indexPath.row == 4) { title = @"   Trạng thái sạc"; detail = @"Li-ion Native"; }
-                    else { title = @"   Chu kỳ pin"; detail = @"Optimal"; }
+                    else if (indexPath.row == 1) { title = @"   Nhiệt Cell"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp - 2.0f]; }
+                    else if (indexPath.row == 2) { title = @"   Dòng xả"; detail = [NSString stringWithFormat:@"%.1f%%", bl]; }
+                    else if (indexPath.row == 3) { title = @"   Dung lượng"; detail = [NSString stringWithFormat:@"%d%%", level]; }
+                    else if (indexPath.row == 4) { title = @"   Sạc"; detail = @"Li-ion"; }
+                    else { title = @"   Chu kỳ"; detail = @"Optimal"; }
                 } else {
                     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
                     NSInteger fps = [self.settingsDict[@"TargetFPSRate"] ?: @144 integerValue];
                     if (indexPath.row == 0) { title = _isScreenExpanded ? @"🖥️ Màn Hình ▼" : @"🖥️ Màn Hình ▶"; detail = [NSString stringWithFormat:@"%.1f°C | %ld Hz", baseTemp - 1.5f, (long)hz]; }
                     else if (indexPath.row == 1) { title = @"   Nhiệt bề mặt"; detail = [NSString stringWithFormat:@"%.1f°C", baseTemp - 1.5f]; }
-                    else if (indexPath.row == 2) { title = @"   Tần số quét (Hz)"; detail = [NSString stringWithFormat:@"%ld Hz", (long)hz]; }
-                    else if (indexPath.row == 3) { title = @"   Khung hình (FPS)"; detail = [NSString stringWithFormat:@"%ld FPS", (long)fps]; }
-                    else { title = @"   ProMotion"; detail = @"120Hz Adaptive"; }
+                    else if (indexPath.row == 2) { title = @"   Hz"; detail = [NSString stringWithFormat:@"%ld Hz", (long)hz]; }
+                    else if (indexPath.row == 3) { title = @"   FPS"; detail = [NSString stringWithFormat:@"%ld FPS", (long)fps]; }
+                    else { title = @"   ProMotion"; detail = @"120Hz"; }
                 }
             }
         }
     }
-    // TAB 1 — HZ/FPS
+    // ============ TAB 1 — HZ/FPS ============
     else if (_currentBottomTab == 1) {
         if (indexPath.section == 0) {
-            title = @"📌 Tần số Hz & FPS được điều phối tới CADisplayLink & CoreAnimation.";
+            title = @"📌 Tần số Hz & FPS điều phối CADisplayLink & CoreAnimation. Nhấn ⚡ Áp Dụng (góc phải trên) để đồng bộ.";
         } else if (indexPath.section == 1) {
-            // [FIX LẦN 4] Segment giờ dùng tracked touch, bấm đổi được
             LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Tần Số (Hz)", @"Khung Hình (FPS)"]];
             seg.selectedSegmentIndex = _currentHzFpsSubTab;
             __weak typeof(self) wS = self;
@@ -2730,7 +2816,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 if (!sS) return;
                 if (sS->_currentHzFpsSubTab == index) return;
                 sS->_currentHzFpsSubTab = index;
-                // reload nhẹ nhàng hơn: reload cả bảng để màu và số liệu cập nhật
                 [sS.customTableView reloadData];
             };
             accessory = seg;
@@ -2739,34 +2824,23 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             BOOL isHz = (_currentHzFpsSubTab == 0);
             NSInteger cur = isHz ? [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue] : [self.settingsDict[@"TargetFPSRate"] ?: @144 integerValue];
             NSArray *rates = @[@30, @60, @90, @120];
+            NSInteger applied = isHz ? _lastAppliedHz : _lastAppliedFPS;
             if (indexPath.row < 4) {
                 NSInteger r = [rates[indexPath.row] integerValue];
                 title = [NSString stringWithFormat:@"Khóa %ld %@", (long)r, isHz ? @"Hz" : @"FPS"];
-                // [THÊM LẦN 4] Đổi màu xanh cho dòng đã áp dụng
-                NSInteger applied = isHz ? _lastAppliedHz : _lastAppliedFPS;
-                if (cur == r) {
-                    detail = @"✓";
-                    accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
-                } else if (applied == r) {
-                    detail = @"";
-                    accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
-                }
+                if (cur == r) { detail = @"✓"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
+                else if (applied == r) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
             } else if (indexPath.row == 4) {
                 title = [NSString stringWithFormat:@"⚡ Mở Rộng 144 %@", isHz ? @"Hz" : @"FPS"];
-                NSInteger applied = isHz ? _lastAppliedHz : _lastAppliedFPS;
-                if (cur == 144) {
-                    detail = @"✓";
-                    accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
-                } else if (applied == 144) {
-                    accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
-                }
+                if (cur == 144) { detail = @"✓"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
+                else if (applied == 144) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
             } else {
                 title = @"⌨️ Nhập Tùy Chỉnh (15-144)...";
                 detail = [NSString stringWithFormat:@"Hiện: %ld", (long)cur];
             }
         }
     }
-    // TAB 2 — SWITCH
+    // ============ TAB 2 — SWITCH ============
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
             LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"CPU", @"GPU", @"Màn", @"Pin", @"Hệ Thống"]];
@@ -2784,44 +2858,44 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         } else {
             NSString *prefKey = @"";
             if (_currentSwitchSubTab == 0) {
-                if (indexPath.row == 0) { title = @"Ưu Tiên P-Core Realtime"; prefKey = @"pCoreRealtimePriority"; }
-                else if (indexPath.row == 1) { title = @"Điều Phối CPU Scheduler"; prefKey = @"schedulerGovernor"; }
-                else if (indexPath.row == 2) { title = @"Đồng Bộ Xung Quantum"; prefKey = @"quantumCoreSync"; }
-                else if (indexPath.row == 3) { title = @"Khóa Tần Số CPU Sàn"; prefKey = @"lockHighIdleFloor"; }
-                else if (indexPath.row == 4) { title = @"Chống Bóp Xung Nhiệt"; prefKey = @"AntiThermalThrottling"; }
-                else if (indexPath.row == 5) { title = @"Tăng Ưu Tiên I/O Disk"; prefKey = @"iopolVipPriority"; }
-                else { title = @"Hạ Nhiệt Khi Tải Nặng"; prefKey = @"coolDownHeavyLoad"; }
+                if (indexPath.row == 0) { title = @"Ưu Tiên P-Core"; prefKey = @"pCoreRealtimePriority"; }
+                else if (indexPath.row == 1) { title = @"CPU Scheduler"; prefKey = @"schedulerGovernor"; }
+                else if (indexPath.row == 2) { title = @"Quantum Sync"; prefKey = @"quantumCoreSync"; }
+                else if (indexPath.row == 3) { title = @"CPU Sàn"; prefKey = @"lockHighIdleFloor"; }
+                else if (indexPath.row == 4) { title = @"Anti Thermal"; prefKey = @"AntiThermalThrottling"; }
+                else if (indexPath.row == 5) { title = @"I/O Disk VIP"; prefKey = @"iopolVipPriority"; }
+                else { title = @"Cool Down"; prefKey = @"coolDownHeavyLoad"; }
             } else if (_currentSwitchSubTab == 1) {
-                if (indexPath.row == 0) { title = @"Metal Triple Buffering"; prefKey = @"MetalHexBuffering"; }
-                else if (indexPath.row == 1) { title = @"Isolate Render Pipeline"; prefKey = @"IsolateRenderPipeline"; }
-                else if (indexPath.row == 2) { title = @"Bỏ Khóa V-Sync Khung Hình"; prefKey = @"vsyncAdaptiveBuffer"; }
-                else if (indexPath.row == 3) { title = @"Ổn Định FPS Chơi Game"; prefKey = @"gameFPSStabilizer"; }
-                else if (indexPath.row == 4) { title = @"Triệt Tiêu Blur Động"; prefKey = @"flatTintBlur"; }
-                else { title = @"Tối Ưu Neural Buffer"; prefKey = @"neuralBufferOpt"; }
+                if (indexPath.row == 0) { title = @"Triple Buffering"; prefKey = @"MetalHexBuffering"; }
+                else if (indexPath.row == 1) { title = @"Isolate Pipeline"; prefKey = @"IsolateRenderPipeline"; }
+                else if (indexPath.row == 2) { title = @"Bỏ V-Sync"; prefKey = @"vsyncAdaptiveBuffer"; }
+                else if (indexPath.row == 3) { title = @"Game FPS"; prefKey = @"gameFPSStabilizer"; }
+                else if (indexPath.row == 4) { title = @"Flat Blur"; prefKey = @"flatTintBlur"; }
+                else { title = @"Neural Buffer"; prefKey = @"neuralBufferOpt"; }
             } else if (_currentSwitchSubTab == 2) {
-                if (indexPath.row == 0) { title = @"🔥 Ép 144Hz Toàn Máy"; prefKey = @"ForceOverclock144Hz"; }
-                else if (indexPath.row == 1) { title = @"ProMotion Engine Beta 7"; prefKey = @"ProMotionEngineBeta7"; }
-                else if (indexPath.row == 2) { title = @"Cảm Ứng 0ms Touch Boost"; prefKey = @"TouchResponseBoost"; }
-                else if (indexPath.row == 3) { title = @"Cuộn ColorOS 17 Engine"; prefKey = @"ColorOs17SmoothEngine"; }
-                else if (indexPath.row == 4) { title = @"Dự Đoán Tọa Độ Neural"; prefKey = @"zeroLagNeural"; }
-                else { title = @"Ultra Responsiveness"; prefKey = @"ultraResponsiveness"; }
+                if (indexPath.row == 0) { title = @"🔥 Ép 144Hz"; prefKey = @"ForceOverclock144Hz"; }
+                else if (indexPath.row == 1) { title = @"ProMotion Beta 7"; prefKey = @"ProMotionEngineBeta7"; }
+                else if (indexPath.row == 2) { title = @"0ms Touch"; prefKey = @"TouchResponseBoost"; }
+                else if (indexPath.row == 3) { title = @"ColorOS 17"; prefKey = @"ColorOs17SmoothEngine"; }
+                else if (indexPath.row == 4) { title = @"Neural Touch"; prefKey = @"zeroLagNeural"; }
+                else { title = @"Ultra Responsive"; prefKey = @"ultraResponsiveness"; }
             } else if (_currentSwitchSubTab == 3) {
-                if (indexPath.row == 0) { title = @"Lọc Loạn Cảm Ứng Sạc"; prefKey = @"AntiGhostTouch"; }
-                else if (indexPath.row == 1) { title = @"Khử Nhiễu Sóng Củ Sạc"; prefKey = @"ChargerRippleRejection"; }
-                else if (indexPath.row == 2) { title = @"Giả Lập Pin Đầy"; prefKey = @"fakeFullBatteryState"; }
-                else if (indexPath.row == 3) { title = @"Khóa 30 FPS Khi Quá Nhiệt"; prefKey = @"lock30FpsOnOverheat"; }
-                else if (indexPath.row == 4) { title = @"Chế Độ Tiết Kiệm Pin 60Hz"; prefKey = @"batterySaver60Hz"; }
-                else { title = @"Power Save Mode"; prefKey = @"powerSaveMode"; }
+                if (indexPath.row == 0) { title = @"Anti Ghost"; prefKey = @"AntiGhostTouch"; }
+                else if (indexPath.row == 1) { title = @"Charger Ripple"; prefKey = @"ChargerRippleRejection"; }
+                else if (indexPath.row == 2) { title = @"Fake Full Battery"; prefKey = @"fakeFullBatteryState"; }
+                else if (indexPath.row == 3) { title = @"Lock 30FPS"; prefKey = @"lock30FpsOnOverheat"; }
+                else if (indexPath.row == 4) { title = @"Battery Saver 60Hz"; prefKey = @"batterySaver60Hz"; }
+                else { title = @"Power Save"; prefKey = @"powerSaveMode"; }
             } else {
-                if (indexPath.row == 0) { title = @"Khởi Động App Siêu Tốc"; prefKey = @"TurboAppLaunch"; }
-                else if (indexPath.row == 1) { title = @"Trị Dứt Điểm Đen App"; prefKey = @"FixAppLaunchBlackScreen"; }
-                else if (indexPath.row == 2) { title = @"Giảm Lag Đa Nhiệm"; prefKey = @"ReduceMultiTaskLag"; }
-                else if (indexPath.row == 3) { title = @"Chống Khựng Thoát App"; prefKey = @"FixAppExitStutter"; }
-                else if (indexPath.row == 4) { title = @"Dọn RAM Chuyên Sâu"; prefKey = @"hyperMemoryGuardian"; }
-                else if (indexPath.row == 5) { title = @"Tự Động Đóng App Nền"; prefKey = @"autoKillBackground"; }
-                else if (indexPath.row == 6) { title = @"Dọn RAM Định Kỳ"; prefKey = @"periodicRamClean"; }
-                else if (indexPath.row == 7) { title = @"Mach VM Purge RAM"; prefKey = @"machVMPurgeRam"; }
-                else { title = @"Background Pacing Daemon"; prefKey = @"backgroundPacingDaemon"; }
+                if (indexPath.row == 0) { title = @"Turbo App Launch"; prefKey = @"TurboAppLaunch"; }
+                else if (indexPath.row == 1) { title = @"Fix Black Screen"; prefKey = @"FixAppLaunchBlackScreen"; }
+                else if (indexPath.row == 2) { title = @"Reduce Multitask Lag"; prefKey = @"ReduceMultiTaskLag"; }
+                else if (indexPath.row == 3) { title = @"Fix Exit Stutter"; prefKey = @"FixAppExitStutter"; }
+                else if (indexPath.row == 4) { title = @"Hyper Memory"; prefKey = @"hyperMemoryGuardian"; }
+                else if (indexPath.row == 5) { title = @"Auto Kill Background"; prefKey = @"autoKillBackground"; }
+                else if (indexPath.row == 6) { title = @"Periodic RAM Clean"; prefKey = @"periodicRamClean"; }
+                else if (indexPath.row == 7) { title = @"Mach VM Purge"; prefKey = @"machVMPurgeRam"; }
+                else { title = @"Background Pacing"; prefKey = @"backgroundPacingDaemon"; }
             }
             LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
             s.on = [self.settingsDict[prefKey] ?: @NO boolValue];
@@ -2832,18 +2906,30 @@ static inline float Titanium_GetBaseThermalTemp(void) {
                 sS.settingsDict[prefKey] = @(isOn);
                 [sS saveSettingsDataAndSync];
                 [sS applyDeepSpringBoardAndUIKitTweaks];
-                // [THÊM LẦN 4] animate lại cell để switch đổi màu mượt
-                [UIView animateWithDuration:0.25 animations:^{
-                    [sS.customTableView beginUpdates];
-                    [sS.customTableView endUpdates];
-                }];
             };
             accessory = s;
         }
     }
-    // TAB 3 — APP
+    // ============ TAB 3 — APP ============
     else if (_currentBottomTab == 3) {
         if (indexPath.section == 0) {
+            title = @"✅ Bật Tất Cả Ứng Dụng";
+            BOOL allOn = YES;
+            for (NSString *bid in _appTweakStates) if (![_appTweakStates[bid] boolValue]) { allOn = NO; break; }
+            LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
+            s.on = allOn;
+            __weak typeof(self) wS = self;
+            s.valueChangedBlock = ^(BOOL isOn) {
+                __strong typeof(wS) sS = wS;
+                if (!sS) return;
+                for (NSString *bid in sS->_appTweakStates) sS->_appTweakStates[bid] = @(isOn);
+                sS.settingsDict[@"AppTweakStates"] = sS->_appTweakStates;
+                [sS saveSettingsDataAndSync];
+                [sS applyDeepSpringBoardAndUIKitTweaks];
+                [sS.customTableView reloadData];
+            };
+            accessory = s;
+        } else if (indexPath.section == 1) {
             UITextField *searchField = [[UITextField alloc] init];
             searchField.placeholder = @"🔍 Tìm app...";
             searchField.text = _appSearchQuery;
@@ -2861,13 +2947,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             searchField.returnKeyType = UIReturnKeySearch;
             [searchField addTarget:self action:@selector(onAppSearchChanged:) forControlEvents:UIControlEventEditingChanged];
             accessory = searchField;
-            title = @"";
-            detail = @"";
         } else {
             if (_filteredAppsList.count == 0) {
-                title = _scannedAppsList.count == 0 ? @"⏳ Đang quét ứng dụng..." : @"🔍 Không có app khớp";
-                detail = @"";
-                [cell configureWithTitle:title detail:detail accessory:nil accent:[UIColor colorWithWhite:0.6 alpha:1.0]];
+                title = _scannedAppsList.count == 0 ? @"⏳ Đang quét..." : @"🔍 Không có app khớp";
+                [cell configureWithTitle:title detail:@"" accessory:nil accent:[UIColor colorWithWhite:0.6 alpha:1.0]];
                 cell.userInteractionEnabled = NO;
                 cell.alpha = 0.6;
                 return cell;
@@ -2889,17 +2972,17 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             accessory = s;
         }
     }
-    // TAB 4 — CÀI ĐẶT
+    // ============ TAB 4 — CÀI ĐẶT ============
     else {
         if (indexPath.section == 0) {
             if (indexPath.row == 0) {
                 if (_isKernelExploited) {
-                    title = @"🟢 ĐÃ KHAI THÁC DARWIN — SẴN SÀNG";
-                    detail = @"✓ Đã Lưu Vĩnh Viễn";
+                    title = @"🟢 ĐÃ KHAI THÁC DARWIN";
+                    detail = @"✓ Sẵn Sàng";
                     accent = [UIColor colorWithRed:0.4 green:1.0 blue:0.6 alpha:1.0];
                 } else {
-                    title = @"🔴 CHƯA KHAI THÁC — CHẠM ĐỂ BẮT ĐẦU";
-                    detail = @"✕ Bấm Ngay";
+                    title = @"🔴 CHƯA KHAI THÁC — CHẠM";
+                    detail = @"✕ Bấm";
                     accent = [UIColor colorWithRed:1.0 green:0.45 blue:0.45 alpha:1.0];
                 }
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
@@ -2907,53 +2990,86 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             } else {
                 NSString *curIOS = [[UIDevice currentDevice] systemVersion];
                 if (Titanium_IsSupportedIOSVersion()) {
-                    title = [NSString stringWithFormat:@"🟢 iOS %@ — Tương Thích", curIOS];
+                    title = [NSString stringWithFormat:@"🟢 iOS %@ — OK", curIOS];
                     detail = @"15-26";
                     accent = [UIColor colorWithRed:0.4 green:1.0 blue:0.6 alpha:1.0];
                 } else {
                     title = [NSString stringWithFormat:@"🔴 iOS %@ — Không Hỗ Trợ", curIOS];
-                    detail = @"";
                     accent = [UIColor colorWithRed:1.0 green:0.35 blue:0.35 alpha:1.0];
                 }
             }
         } else if (indexPath.section == 1) {
             if (!_isKernelExploited) {
-                title = @"📱 Thông Tin Phần Cứng";
-                detail = @"Cần khai thác";
+                title = @"📱 Cần khai thác";
                 accent = [UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0];
-                [cell configureWithTitle:title detail:detail accessory:nil accent:accent];
+                [cell configureWithTitle:title detail:@"" accessory:nil accent:accent];
                 cell.userInteractionEnabled = NO;
                 cell.alpha = 0.55;
                 return cell;
+            }
+            struct utsname si; uname(&si);
+            NSString *dm = [NSString stringWithCString:si.machine encoding:NSUTF8StringEncoding];
+            NSString *ov = [[UIDevice currentDevice] systemVersion];
+            if (indexPath.row == 0) { title = @"🆔 UID"; detail = _deviceUUIDString; }
+            else if (indexPath.row == 1) { title = @"📱 Mã"; detail = dm; }
+            else if (indexPath.row == 2) { title = @"🏗️ Kiến Trúc"; detail = _deepArchString; }
+            else if (indexPath.row == 3) { title = @"📲 iOS"; detail = [NSString stringWithFormat:@"%@", ov]; }
+            else if (indexPath.row == 4) { title = @"✏️ Tên"; detail = [[UIDevice currentDevice] name]; }
+            else if (indexPath.row == 5) { title = @"🧠 CPU"; detail = _deepCoreCountString; }
+            else if (indexPath.row == 6) { title = @"💾 RAM"; detail = _deepRamString; }
+            else { title = @"🐧 Darwin"; detail = _deepKernelString; }
+        } else if (indexPath.section == 2) {
+            // SERVER & GIAO DIỆN
+            if (indexPath.row == 0) {
+                title = @"🌐 Độ Trễ Server";
+                detail = [NSString stringWithFormat:@"%ld ms", (long)_currentLatencyMs];
+                if (_serverDown) { accent = [UIColor systemRedColor]; detail = @"SẬP"; }
+                else if (_currentLatencyMs >= 500) accent = [UIColor systemRedColor];
+                else if (_currentLatencyMs >= 150) accent = [UIColor systemYellowColor];
+                else accent = [UIColor systemGreenColor];
+            } else if (indexPath.row == 1) {
+                title = @"📊 Trạng Thái";
+                if (_serverDown) detail = @"❌ Sập";
+                else if (_currentLatencyMs >= 500) detail = @"⚠️ Quá tải";
+                else if (_currentLatencyMs >= 150) detail = @"🟡 Kém";
+                else detail = @"✅ Ổn định";
             } else {
-                struct utsname si; uname(&si);
-                NSString *dm = [NSString stringWithCString:si.machine encoding:NSUTF8StringEncoding];
-                NSString *ov = [[UIDevice currentDevice] systemVersion];
-                if (indexPath.row == 0) { title = @"🆔 UID Thiết Bị"; detail = _deviceUUIDString; }
-                else if (indexPath.row == 1) { title = @"📱 Mã Thiết Bị"; detail = dm; }
-                else if (indexPath.row == 2) { title = @"🏗️ Kiến Trúc"; detail = _deepArchString; }
-                else if (indexPath.row == 3) { title = @"📲 Phiên Bản iOS"; detail = [NSString stringWithFormat:@"iOS %@", ov]; }
-                else if (indexPath.row == 4) { title = @"✏️ Tên Thiết Bị"; detail = [[UIDevice currentDevice] name]; }
-                else if (indexPath.row == 5) { title = @"🧠 Số Nhân CPU"; detail = _deepCoreCountString; }
-                else if (indexPath.row == 6) { title = @"💾 RAM Khả Dụng"; detail = _deepRamString; }
-                else { title = @"🐧 Darwin Release"; detail = _deepKernelString; }
+                title = @"🎨 Sáng/Tối Tự Động";
+                LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
+                s.on = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
+                __weak typeof(self) wS = self;
+                s.valueChangedBlock = ^(BOOL isOn) {
+                    __strong typeof(wS) sS = wS;
+                    if (!sS) return;
+                    sS.settingsDict[TI_AUTO_THEME_KEY] = @(isOn);
+                    [sS saveSettingsDataAndSync];
+                    if (@available(iOS 13.0, *)) {
+                        if (isOn) {
+                            sS.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+                            sS.view.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+                        } else {
+                            sS.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+                            sS.view.window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+                        }
+                    }
+                };
+                accessory = s;
             }
         } else {
             if (!_isKernelExploited) {
-                title = @"🛡️ Thông Tin Sandbox";
-                detail = @"Cần khai thác";
+                title = @"🛡️ Cần khai thác";
                 accent = [UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0];
-                [cell configureWithTitle:title detail:detail accessory:nil accent:accent];
+                [cell configureWithTitle:title detail:@"" accessory:nil accent:accent];
                 cell.userInteractionEnabled = NO;
                 cell.alpha = 0.55;
                 return cell;
             }
             NSString *jbRoot = Titanium_GetRootHidePrefixPath();
             BOOL isR = [jbRoot containsString:@"/var/jb"];
-            if (indexPath.row == 0) { title = @"🔧 Môi Trường"; detail = isR ? @"Rootless / RootHide" : @"Rootful"; }
-            else if (indexPath.row == 1) { title = @"📁 Vùng Thư Mục"; detail = jbRoot; }
-            else if (indexPath.row == 2) { title = @"🔓 Trạng Thái Sandbox"; detail = _isKernelExploited ? @"Đã Phá Bỏ" : @"Đang Khóa"; }
-            else { title = @"💾 Quyền Ghi IPC"; detail = @"🟢 Sẵn Sàng (RW)"; }
+            if (indexPath.row == 0) { title = @"🔧 Môi Trường"; detail = isR ? @"Rootless" : @"Rootful"; }
+            else if (indexPath.row == 1) { title = @"📁 Vùng"; detail = jbRoot; }
+            else if (indexPath.row == 2) { title = @"🔓 Sandbox"; detail = @"Đã Phá"; }
+            else { title = @"💾 IPC"; detail = @"🟢 RW"; }
         }
     }
 
@@ -2966,7 +3082,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     if (!_isKernelExploited) {
         if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
-            [self openDopamineStyleExploitConsole];
+            NSInteger cc = Titanium_GetCrashCount();
+            if (cc >= 3) [self showServerDownAlert];
+            else [self openDopamineStyleExploitConsole];
         }
         return;
     }
@@ -2978,7 +3096,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             else if (indexPath.section == 3) _isRamExpanded = !_isRamExpanded;
             else if (indexPath.section == 4) _isBatteryExpanded = !_isBatteryExpanded;
             else if (indexPath.section == 5) _isScreenExpanded = !_isScreenExpanded;
-
             UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
             [fb impactOccurred];
             [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];
@@ -2988,8 +3105,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     if (_currentBottomTab == 1 && indexPath.section == 2) {
         if (_isRateLocked) {
-            UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🔒 ĐÃ KHÓA" message:@"Mở khóa góc phải trước khi chỉnh." preferredStyle:UIAlertControllerStyleAlert];
-            [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
+            UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🔒 KHÓA" message:@"Mở khóa góc phải trước." preferredStyle:UIAlertControllerStyleAlert];
+            [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
             [self presentViewController:a animated:YES completion:nil];
             return;
         }
@@ -3000,18 +3117,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         else if (indexPath.row == 4) targetRate = 144;
         else { [self showCustomRateInputAlertForHz:isHz]; return; }
 
-        // [THÊM LẦN 4] Hiện loading xe + chờ 5s "server áp dụng sâu"
-        [self showLoadingCarOverlayDuration:5.0 completion:^{
-            [self applyRateValue:targetRate isDynamic:NO isFPS:!isHz];
-            [self applyDeepSpringBoardAndUIKitTweaks];
-            if (isHz) self->_lastAppliedHz = targetRate;
-            else self->_lastAppliedFPS = targetRate;
-            UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-            [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-            [self.customTableView reloadData];
-        }];
+        // Chỉ cập nhật giá trị — KHÔNG loading xe ở đây (loading nằm ở nút Áp Dụng)
+        [self applyRateValue:targetRate isDynamic:NO isFPS:!isHz];
+        [self applyDeepSpringBoardAndUIKitTweaks];
+        [self.customTableView reloadData];
     } else if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
-        [self openDopamineStyleExploitConsole];
+        NSInteger cc = Titanium_GetCrashCount();
+        if (cc >= 3) [self showServerDownAlert];
+        else [self openDopamineStyleExploitConsole];
     }
 }
 
@@ -3020,7 +3133,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)onAppSearchChanged:(UITextField *)field {
     _appSearchQuery = field.text ?: @"";
     [self applyAppFilter];
-    [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone];
+    [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)applyAppFilter {
@@ -3032,36 +3145,33 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         for (NSDictionary *app in _scannedAppsList) {
             NSString *name = [(NSString *)app[@"name"] lowercaseString];
             NSString *bid = [(NSString *)app[@"bundleID"] lowercaseString];
-            if ([name containsString:q] || [bid containsString:q]) {
-                [_filteredAppsList addObject:app];
-            }
+            if ([name containsString:q] || [bid containsString:q]) [_filteredAppsList addObject:app];
         }
     }
 }
 
-#pragma mark - Chip error random 5-20s tự khôi phục
+#pragma mark - Chip error (realtime, không phụ thuộc toggle)
 
+- (void)startChipErrorLoop {
+    [self cancelChipErrorRandom];
+    [self scheduleChipErrorRandomOnHome];
+}
 - (void)scheduleChipErrorRandomOnHome {
     [self cancelChipErrorRandom];
-    if (!_isKernelExploited) return;
-
-    // Random 20-90s mới lỗi, kéo dài 5-20s rồi tự khôi phục
-    NSTimeInterval delay = 20.0 + (arc4random_uniform(7000) / 100.0); // 20-90s
+    NSTimeInterval delay = 25.0 + (arc4random_uniform(6000) / 100.0); // 25-85s
     _chipErrorTimer = [NSTimer scheduledTimerWithTimeInterval:delay repeats:NO block:^(NSTimer * _Nonnull t) {
         [self triggerChipError];
     }];
     [[NSRunLoop mainRunLoop] addTimer:_chipErrorTimer forMode:NSRunLoopCommonModes];
 }
-
 - (void)cancelChipErrorRandom {
     if (_chipErrorTimer) { [_chipErrorTimer invalidate]; _chipErrorTimer = nil; }
     if (_chipRecoverTimer) { [_chipRecoverTimer invalidate]; _chipRecoverTimer = nil; }
     _chipErrorActive = NO;
 }
-
 - (void)triggerChipError {
     _chipErrorActive = YES;
-    _chipErrorRandomSeconds = 5 + arc4random_uniform(16); // 5-20s
+    _chipErrorRandomSeconds = 6 + arc4random_uniform(15); // 6-20s
     if (_currentBottomTab == 0) [self.customTableView reloadData];
 
     _chipRecoverTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull t) {
@@ -3072,7 +3182,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             self->_chipRecoverTimer = nil;
             self->_chipErrorActive = NO;
             if (self->_currentBottomTab == 0) [self.customTableView reloadData];
-            // lên lịch lỗi tiếp theo
             [self scheduleChipErrorRandomOnHome];
         }
     }];
@@ -3085,7 +3194,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _currentHzFpsSubTab = sender.selectedSegmentIndex;
     [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationFade];
 }
-
 - (void)onSwitchSubTabChanged:(UISegmentedControl *)sender {
     _currentSwitchSubTab = sender.selectedSegmentIndex;
     [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
@@ -3093,7 +3201,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
     NSString *unit = isHz ? @"Hz" : @"FPS";
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"⌨️ NHẬP %@", unit] message:[NSString stringWithFormat:@"Giá trị 15 - 144 %@", unit] preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"⌨️ NHẬP %@", unit] message:[NSString stringWithFormat:@"15 - 144 %@", unit] preferredStyle:UIAlertControllerStyleAlert];
     [a addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull tf) {
         tf.keyboardType = UIKeyboardTypeNumberPad;
         tf.placeholder = [NSString stringWithFormat:@"15 - 144 %@", unit];
@@ -3103,28 +3211,25 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         NSInteger val = [tf.text integerValue];
         if (val < 15) val = 15;
         if (val > 144) val = 144;
-        [self showLoadingCarOverlayDuration:5.0 completion:^{
-            [self applyRateValue:val isDynamic:NO isFPS:!isHz];
-            [self applyDeepSpringBoardAndUIKitTweaks];
-            if (isHz) self->_lastAppliedHz = val;
-            else self->_lastAppliedFPS = val;
-            UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-            [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-            [self.customTableView reloadData];
-        }];
+        [self applyRateValue:val isDynamic:NO isFPS:!isHz];
+        [self applyDeepSpringBoardAndUIKitTweaks];
+        [self.customTableView reloadData];
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
+// Fix sync: cập nhật cache ngay, đồng bộ notify
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
     if (isFPS) {
         self.settingsDict[@"TargetFPSRate"] = @(rate);
         self.settingsDict[@"EnableFPSControl"] = @YES;
+        self->_lastAppliedFPS = rate;
     } else {
         self.settingsDict[@"TargetRefreshRate"] = @(rate);
         self.settingsDict[@"EnableHzControl"] = @YES;
         self.settingsDict[@"ForceOverclock144Hz"] = @(rate >= 144);
+        self->_lastAppliedHz = rate;
     }
     [self saveSettingsDataAndSync];
 }
@@ -3133,6 +3238,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)startContinuousHardwareHUD {
     [self stopContinuousHardwareHUD];
+    [self startChipErrorLoop];
+
     _hudTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), (uint64_t)(0.8 * NSEC_PER_SEC), (uint64_t)(0.1 * NSEC_PER_SEC));
     __weak typeof(self) wS = self;
@@ -3144,10 +3251,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     });
     dispatch_resume(_hudTimer);
 }
-
 - (void)stopContinuousHardwareHUD {
     if (_hudTimer) { dispatch_source_cancel(_hudTimer); _hudTimer = nil; }
-    [self cancelChipErrorRandom];
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
@@ -3155,7 +3260,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     ApexV285ProPayload p;
     memset(&p, 0, sizeof(ApexV285ProPayload));
     p.magic = APEX_SYNC_MAGIC_V285;
-    p.masterEnabled = (enabled && _isKernelExploited) ? 1 : 0;
+    p.masterEnabled = (enabled && _isKernelExploited && !_serverDown) ? 1 : 0;
     int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
     int32_t fps = [self.settingsDict[@"TargetFPSRate"] ?: @144 intValue];
     BOOL oc = [self.settingsDict[@"ForceOverclock144Hz"] ?: @NO boolValue];
@@ -3220,17 +3325,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self syncSharedMemoryFile:master];
 }
 
-#pragma mark - Exploit Console (thay bằng Apple Server Connect)
+#pragma mark - Exploit
 
 - (void)showUnexploitedWarningAlert {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🔒 CẦN KHAI THÁC DARWIN" message:@"Vào tab Cài Đặt, nhấn vào dòng ĐỎ để bắt đầu." preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleCancel handler:nil]];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"🔒 CẦN KHAI THÁC DARWIN" message:@"Vào tab Cài Đặt → nhấn dòng ĐỎ." preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
-// [THAY LẦN 4] Khai thác mới = LGAppleServerConnectView
 - (void)openDopamineStyleExploitConsole {
-    // [THÊM LẦN 4] Hiện loading người chạy + progress bar (ảnh 1) trong 3s trước khi vào kết nối
     UIWindow *host = self.view.window ?: [UIApplication sharedApplication].keyWindow;
     if (!host) return;
 
@@ -3239,11 +3342,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [host addSubview:manView];
     [manView startAnimating];
 
-    [UIView animateWithDuration:0.3 animations:^{
-        manView.alpha = 1.0;
-    }];
+    [UIView animateWithDuration:0.3 animations:^{ manView.alpha = 1.0; }];
 
-    // Tăng progress 0 -> 1 trong 3s
     __block NSInteger step = 0;
     NSTimer *progTimer = [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer * _Nonnull t) {
         step++;
@@ -3252,11 +3352,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (step >= 30) {
             [t invalidate];
             [manView stopAnimating];
-            [UIView animateWithDuration:0.25 animations:^{
-                manView.alpha = 0.0;
-            } completion:^(BOOL finished) {
+            [UIView animateWithDuration:0.25 animations:^{ manView.alpha = 0.0; } completion:^(BOOL finished) {
                 [manView removeFromSuperview];
-                // Sau khi loading xong -> mở kết nối server Apple
                 [self presentAppleServerConnectFlow];
             }];
         }
@@ -3272,9 +3369,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     serverView.alpha = 0.0;
     [host addSubview:serverView];
 
-    [UIView animateWithDuration:0.3 animations:^{
-        serverView.alpha = 1.0;
-    }];
+    [UIView animateWithDuration:0.3 animations:^{ serverView.alpha = 1.0; }];
 
     __weak typeof(self) wS = self;
     [serverView startConnectionWithCompletion:^(BOOL success) {
@@ -3283,6 +3378,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         if (success) {
             [sS persistExploitDataToDisk];
             [sS applyDeepSpringBoardAndUIKitTweaks];
+            Titanium_ResetCrashCount();
             UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
             [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
             [sS.customTableView reloadData];
@@ -3319,6 +3415,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _deepCacheString = (l2 > 0) ? [NSString stringWithFormat:@"%lld KB L2", l2 / 1024] : @"Silicon Cache";
     _isKernelExploited = YES;
     self.settingsDict[@"IsKernelExploited"] = @YES;
+    self.settingsDict[@"Enabled"] = @YES;
     self.settingsDict[@"SavedArchString"] = _deepArchString;
     self.settingsDict[@"SavedCoreCountString"] = _deepCoreCountString;
     self.settingsDict[@"SavedRamString"] = _deepRamString;
@@ -3326,9 +3423,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.settingsDict[@"SavedCacheString"] = _deepCacheString;
     self.settingsDict[@"SavedDeviceUUID"] = _deviceUUIDString;
     [self saveSettingsDataAndSync];
-
-    // Lên lịch chip error random khi vào home tab
-    [self scheduleChipErrorRandomOnHome];
+    [self startChipErrorLoop];
 }
 
 #pragma mark - Persistence
@@ -3373,7 +3468,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         @"syncModuleDelay", @"antiBlackScreenLaunch", @"reduceMultitaskLag",
         @"turboLaunch", @"ultraResponsivenessProEngineOfficial",
         @"dynamicThermalEngine", @"ultraResponsivenessPro",
-        @"IsRateLocked", @"IsKernelExploited"
+        @"IsRateLocked", @"IsKernelExploited", TI_AUTO_THEME_KEY
     ];
     for (NSString *k in keys) {
         if (!self.settingsDict[k]) self.settingsDict[k] = @NO;
@@ -3382,6 +3477,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @144;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"IsKernelExploited"])self.settingsDict[@"IsKernelExploited"]= @NO;
+    if (!self.settingsDict[TI_AUTO_THEME_KEY])   self.settingsDict[TI_AUTO_THEME_KEY]   = @NO;
 }
 
 - (void)loadInstalledAppsAsync {
@@ -3451,7 +3547,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)executeResetConfiguration {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"⚠️ XÓA SẠCH" message:@"Toàn bộ cấu hình sẽ bị xóa." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"⚠️ XÓA SẠCH" message:@"Toàn bộ cấu hình sẽ bị xóa. Bạn sẽ cần KHAI THÁC lại." preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Xác Nhận" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         NSString *p = Titanium_ResolvePrefPath();
         [[NSFileManager defaultManager] removeItemAtPath:p error:nil];
@@ -3465,6 +3561,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         self->_deepRamString = nil;
         self->_deepKernelString = nil;
         self->_deepCacheString = nil;
+        Titanium_ResetCrashCount();
         [self ensureDefaultSettingsExist];
         [self stopContinuousHardwareHUD];
         notify_post(NOTIFY_RELOAD);
