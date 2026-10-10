@@ -5612,7 +5612,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_LiquidGlass_Opt);
                     %init(Group_Switcher30Apps_Virtualization);
                     %init(Group_Display_SpringBoardV285);
-#if TITANIUM_V10_PERFORMANCE
+                    %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
                     %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
 #endif
                     %init(Group_V285_FloatingWindow_PiP);
