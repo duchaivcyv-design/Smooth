@@ -2082,6 +2082,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     BOOL _isAdminServer;
     NSString *_adminServerUser;
+    NSString *_adminAccessToken;
+    NSString *_adminRole;
 }
 @end
 
@@ -2134,6 +2136,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     _isAdminServer = [[NSUserDefaults standardUserDefaults] boolForKey:TI_ADMIN_SERVER_KEY];
     _adminServerUser = [[NSUserDefaults standardUserDefaults] stringForKey:TI_ADMIN_USER_KEY];
+    NSString *savedServerMode = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    // Never trust a locally stored Admin flag: without a server-issued session it is forgeable.
+    _isAdminServer = NO;
+    _adminServerUser = nil;
+    _adminAccessToken = nil;
+    _adminRole = nil;
+    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TI_ADMIN_SERVER_KEY];
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
+    if ([savedServerMode isEqualToString:@"admin"]) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
+    }
+    [[NSUserDefaults standardUserDefaults] synchronize];
 
     if ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue]) {
         self.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
@@ -2157,6 +2171,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self setupExpandingNavigationItems];
     [self setupLiquidGlassNavBar];
     [self setupMainTableView];
+    NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    self.customTableView.userInteractionEnabled = ([initialServerChoice isEqualToString:@"free"] || _isAdminServer);
     [self setupLiquidGlassLens];
 
     [self startLatencyMonitor];
@@ -2185,11 +2201,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         });
     }
 
-    // Bắt buộc chọn server nếu chưa lưu lựa chọn; không phụ thuộc trạng thái server.
-    // Cờ chỉ được ghi sau khi người dùng thực sự chọn một mục.
+    // Fail closed: the app remains locked until a server choice is completed.
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    if (selectedServer.length == 0) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer) {
+        dispatch_async(dispatch_get_main_queue(), ^{
             if (!self.presentedViewController) [self showFirstInstallServerPicker];
         });
     }
@@ -2200,6 +2215,14 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     if (_isAdminServer) {
         if (_isKernelExploited) [self startContinuousHardwareHUD];
+        return;
+    }
+
+    NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!self.presentedViewController) [self showFirstInstallServerPicker];
+        });
         return;
     }
 
@@ -2294,44 +2317,35 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - First Install Picker
 
 - (void)showFirstInstallServerPicker {
-    // Không đánh dấu đã chọn ở thời điểm mở sheet; người dùng có thể hủy.
-    UIAlertController *sheet = [UIAlertController
-        alertControllerWithTitle:@"Chọn Server"
-        message:@"Vui lòng chọn server để sử dụng.\n\nServer Admin: ping luôn xanh, không bao giờ sập, cần tài khoản admin.\n\nServer Free: dùng miễn phí, có thể quá tải hoặc sập khi đông người."
-        preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if ([selected isEqualToString:@"free"] || self->_isAdminServer) return;
 
-    __weak typeof(self) wS = self;
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Đăng Nhập Server Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        __strong typeof(wS) sS = wS;
-        if (!sS) return;
-        [[NSUserDefaults standardUserDefaults] setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [sS showAdminServerLogin];
+    // Centered modal; no Cancel action. Choosing Admin does NOT unlock the app.
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"Chưa chọn server"
+        message:@"Bạn phải chọn server trước khi sử dụng tweak. Server Admin yêu cầu xác thực tài khoản; Server Free có thể bị quá tải."
+        preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Server Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) selfRef = weakSelf;
+        if (!selfRef) return;
+        [selfRef showAdminServerLogin];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Server Free" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) selfRef = weakSelf;
+        if (!selfRef) return;
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
+        [defaults setBool:YES forKey:TI_FIRST_INSTALL_KEY];
+        [defaults synchronize];
+        selfRef.customTableView.userInteractionEnabled = YES;
+        [selfRef updateServerStatusIndicator];
+        [selfRef.customTableView reloadData];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [selfRef openDopamineStyleExploitConsole];
         });
     }]];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Dùng Server Free" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        __strong typeof(wS) sS = wS;
-        if (!sS) return;
-        [[NSUserDefaults standardUserDefaults] setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        // Chuyển thẳng vào flow hiện có.
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [sS openDopamineStyleExploitConsole];
-        });
-    }]];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.sourceView = self.view;
-        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
-    } else {
-        sheet.popoverPresentationController.sourceView = self.view;
-        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height - 100, 1, 1);
-    }
-    [self presentViewController:sheet animated:YES completion:nil];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - Server alerts
@@ -2409,17 +2423,68 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     loginBtn.layer.cornerRadius = 8;
     loginBtn.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
     [loginBtn setTitleColor:[UIColor colorWithRed:1.0 green:0.85 blue:0.35 alpha:1.0] forState:UIControlStateNormal];
-    [loginBtn addTarget:self action:@selector(showAdminServerLogin) forControlEvents:UIControlEventTouchUpInside];
+    [loginBtn addTarget:self action:@selector(handleServerButtonTap) forControlEvents:UIControlEventTouchUpInside];
     [container addSubview:loginBtn];
 
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
     [self updateServerStatusIndicator];
 }
 
+- (void)handleServerButtonTap {
+    NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if (![selected isEqualToString:@"free"] && !self->_isAdminServer) {
+        [self showFirstInstallServerPicker];
+        return;
+    }
+    [self showAdminServerLogin];
+}
+
+// IMPORTANT: Replace this host with the HTTPS URL where you deploy admin-backend.
+static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrender.com";
+
+- (BOOL)serverSideAdminAuthenticationConfigured {
+    return [TIAdminAPIBaseURL hasPrefix:@"https://"] &&
+           ![TIAdminAPIBaseURL containsString:@"YOUR_BACKEND_HOST"];
+}
+
+- (void)performAdminLoginWithUsername:(NSString *)username
+                             password:(NSString *)password
+                           completion:(void (^)(NSDictionary * _Nullable result, NSError * _Nullable error))completion {
+    if (![self serverSideAdminAuthenticationConfigured]) {
+        NSError *error = [NSError errorWithDomain:@"TIAdminAPI" code:1001 userInfo:@{NSLocalizedDescriptionKey: @"Chưa cấu hình URL HTTPS của backend trong RootListController.m."}];
+        completion(nil, error);
+        return;
+    }
+    NSURL *url = [NSURL URLWithString:[TIAdminAPIBaseURL stringByAppendingString:@"/v1/auth/login"]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:15.0];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    NSDictionary *body = @{ @"username": username ?: @"", @"password": password ?: @"", @"client": @"ios-tweak", @"device_id": self->_deviceUUIDString ?: @"" };
+    NSError *jsonError = nil;
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
+    if (jsonError) { completion(nil, jsonError); return; }
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 15.0;
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
+    [[session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) { completion(nil, error); return; }
+        NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
+        NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if (http.statusCode < 200 || http.statusCode >= 300 || ![json isKindOfClass:[NSDictionary class]]) {
+            NSString *message = [json isKindOfClass:[NSDictionary class]] ? (json[@"error"] ?: @"Xác thực bị từ chối.") : @"Phản hồi backend không hợp lệ.";
+            NSError *apiError = [NSError errorWithDomain:@"TIAdminAPI" code:http.statusCode userInfo:@{NSLocalizedDescriptionKey: message}];
+            completion(nil, apiError);
+            return;
+        }
+        completion(json, nil);
+    }] resume];
+}
+
 - (void)showAdminServerLogin {
     UIAlertController *a = [UIAlertController
         alertControllerWithTitle:@"Đăng Nhập Server Riêng"
-        message:@"Nhập tài khoản admin để chuyển sang server riêng.\nPing sẽ luôn xanh và không bao giờ sập."
+        message:@"Tài khoản được xác thực bởi backend. Vai trò và quyền truy cập do máy chủ quyết định."
         preferredStyle:UIAlertControllerStyleAlert];
     [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.placeholder = @"Tài khoản";
@@ -2433,59 +2498,90 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
         tf.autocorrectionType = UITextAutocorrectionTypeNo;
     }];
-    __weak typeof(self) wS = self;
+    __weak typeof(self) weakSelf = self;
     [a addAction:[UIAlertAction actionWithTitle:@"Đăng Nhập" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
-        __strong typeof(wS) sS = wS;
-        if (!sS) return;
-        NSString *u = a.textFields[0].text ?: @"";
-        NSString *p = a.textFields[1].text ?: @"";
-        if ([u isEqualToString:@"apple.com.server"] && [p isEqualToString:@"apple.com.admin"]) {
-            sS->_isAdminServer = YES;
-            sS->_adminServerUser = u;
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
-            [[NSUserDefaults standardUserDefaults] setObject:u forKey:TI_ADMIN_USER_KEY];
-            [[NSUserDefaults standardUserDefaults] setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
-            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-
-            // Xoá mọi persistent state khi đăng nhập admin — admin luôn ổn định
-            Titanium_ClearPersistentServerState();
-            [sS.settingsDict removeObjectForKey:TI_SERVER_DOWN_KEY];
-            [sS saveSettingsDataAndSync];
-            [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SERVER_DOWN_KEY];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            sS->_serverDown = NO;
-
-            [sS updateServerStatusIndicator];
-            [sS.customTableView reloadData];
-
-            UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-            [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-
-            UIAlertController *ok = [UIAlertController
-                alertControllerWithTitle:@"Đã Đăng Nhập"
-                message:[NSString stringWithFormat:@"Đã chuyển đến server riêng cho admin.\nTài khoản: %@\n\nPing sẽ luôn xanh và không bao giờ sập.", u]
-                preferredStyle:UIAlertControllerStyleAlert];
-            [ok addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                // Tự động chuyển sang flow khai thác với admin mode
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [sS openDopamineStyleExploitConsole];
-                });
-            }]];
-            [sS presentViewController:ok animated:YES completion:nil];
-        } else {
-            UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-            [fb notificationOccurred:UINotificationFeedbackTypeError];
-            UIAlertController *err = [UIAlertController
-                alertControllerWithTitle:@"Sai Thông Tin"
-                message:@"Tài khoản hoặc mật khẩu không đúng."
-                preferredStyle:UIAlertControllerStyleAlert];
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        NSString *username = a.textFields[0].text ?: @"";
+        NSString *password = a.textFields[1].text ?: @"";
+        if (username.length == 0 || password.length == 0) {
+            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Thiếu thông tin" message:@"Hãy nhập cả tài khoản và mật khẩu." preferredStyle:UIAlertControllerStyleAlert];
             [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-            [sS presentViewController:err animated:YES completion:nil];
+            [strongSelf presentViewController:err animated:YES completion:nil];
+            return;
+        }
+        if (![strongSelf serverSideAdminAuthenticationConfigured]) {
+            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Chưa cấu hình backend" message:@"Hãy đặt TIAdminAPIBaseURL trong RootListController.m thành URL HTTPS của backend đã triển khai rồi biên dịch lại tweak." preferredStyle:UIAlertControllerStyleAlert];
+            [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+            [strongSelf presentViewController:err animated:YES completion:nil];
+            return;
+        }
+        UIAlertController *loading = [UIAlertController alertControllerWithTitle:@"Đang xác thực" message:@"Đang kiểm tra thông tin với máy chủ…" preferredStyle:UIAlertControllerStyleAlert];
+        [strongSelf presentViewController:loading animated:YES completion:nil];
+        [strongSelf performAdminLoginWithUsername:username password:password completion:^(NSDictionary *result, NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [loading dismissViewControllerAnimated:YES completion:^{
+                    if (error || ![result[@"access_token"] isKindOfClass:[NSString class]] || ![result[@"role"] isKindOfClass:[NSString class]]) {
+                        NSString *message = error.localizedDescription ?: @"Backend không trả về phiên xác thực hợp lệ.";
+                        UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Đăng nhập thất bại" message:message preferredStyle:UIAlertControllerStyleAlert];
+                        [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+                        [strongSelf presentViewController:err animated:YES completion:nil];
+                        return;
+                    }
+                    NSString *role = result[@"role"];
+                    if (![role isEqualToString:@"admin"] && ![role isEqualToString:@"admin_dev"]) {
+                        UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Không đủ quyền" message:@"Tài khoản không có vai trò quản trị được phép." preferredStyle:UIAlertControllerStyleAlert];
+                        [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+                        [strongSelf presentViewController:err animated:YES completion:nil];
+                        return;
+                    }
+                    strongSelf->_adminAccessToken = result[@"access_token"];
+                    strongSelf->_adminRole = role;
+                    strongSelf->_isAdminServer = YES;
+                    strongSelf->_adminServerUser = username;
+                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
+                    [[NSUserDefaults standardUserDefaults] setObject:username forKey:TI_ADMIN_USER_KEY];
+                    [[NSUserDefaults standardUserDefaults] setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
+                    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
+                    // Token is held in memory only; the backend remains the authority for role/revocation.
+                    [strongSelf.customTableView setUserInteractionEnabled:YES];
+                    [strongSelf updateServerStatusIndicator];
+                    [strongSelf.customTableView reloadData];
+                    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+                    [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
+                    NSString *roleLabel = [role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin";
+                    UIAlertController *ok = [UIAlertController alertControllerWithTitle:@"Đã xác thực" message:[NSString stringWithFormat:@"Đăng nhập thành công.\nVai trò: %@", roleLabel] preferredStyle:UIAlertControllerStyleAlert];
+                    [ok addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                        if ([role isEqualToString:@"admin_dev"]) {
+                            [strongSelf revealAdminDevOnlyControlsIfAvailable];
+                        }
+                        [strongSelf openDopamineStyleExploitConsole];
+                    }]];
+                    [strongSelf presentViewController:ok animated:YES completion:nil];
+                }];
+            });
+        }];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+        if (![selected isEqualToString:@"free"] && !strongSelf->_isAdminServer) {
+            dispatch_async(dispatch_get_main_queue(), ^{ [strongSelf showFirstInstallServerPicker]; });
         }
     }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
+}
+
+- (BOOL)isAdminDevRole {
+    return self->_isAdminServer && [self->_adminRole isEqualToString:@"admin_dev"];
+}
+
+- (void)revealAdminDevOnlyControlsIfAvailable {
+    // Role gate for future dev-only controls. Keep hidden controls absent by default;
+    // any privileged action must still be authorized by the backend on every API request.
+    if (![self isAdminDevRole]) return;
+    [self.customTableView reloadData];
 }
 
 #pragma mark - Latency
@@ -3451,6 +3547,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer) {
+        [self showFirstInstallServerPicker];
+        return;
+    }
 
     if (!_isKernelExploited) {
         if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
