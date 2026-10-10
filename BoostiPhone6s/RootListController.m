@@ -39,6 +39,7 @@ extern char **environ;
 #define TI_ADMIN_SERVER_KEY @"ti_admin_server_v7"
 #define TI_ADMIN_USER_KEY   @"ti_admin_user_v7"
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
+#define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
 
 // ====================================================================================================
 // SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
@@ -2184,11 +2185,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         });
     }
 
-    // Popup chọn server khi mới cài
-    BOOL firstInstallShown = [[NSUserDefaults standardUserDefaults] boolForKey:TI_FIRST_INSTALL_KEY];
-    if (!firstInstallShown && !_isAdminServer && [self isServerStateOK]) {
+    // Bắt buộc chọn server nếu chưa lưu lựa chọn; không phụ thuộc trạng thái server.
+    // Cờ chỉ được ghi sau khi người dùng thực sự chọn một mục.
+    NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if (selectedServer.length == 0) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self showFirstInstallServerPicker];
+            if (!self.presentedViewController) [self showFirstInstallServerPicker];
         });
     }
 }
@@ -2292,9 +2294,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 #pragma mark - First Install Picker
 
 - (void)showFirstInstallServerPicker {
-    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-
+    // Không đánh dấu đã chọn ở thời điểm mở sheet; người dùng có thể hủy.
     UIAlertController *sheet = [UIAlertController
         alertControllerWithTitle:@"Chọn Server"
         message:@"Vui lòng chọn server để sử dụng.\n\nServer Admin: ping luôn xanh, không bao giờ sập, cần tài khoản admin.\n\nServer Free: dùng miễn phí, có thể quá tải hoặc sập khi đông người."
@@ -2304,6 +2304,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [sheet addAction:[UIAlertAction actionWithTitle:@"Đăng Nhập Server Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         __strong typeof(wS) sS = wS;
         if (!sS) return;
+        [[NSUserDefaults standardUserDefaults] setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
+        [[NSUserDefaults standardUserDefaults] synchronize];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [sS showAdminServerLogin];
         });
@@ -2312,7 +2315,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [sheet addAction:[UIAlertAction actionWithTitle:@"Dùng Server Free" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         __strong typeof(wS) sS = wS;
         if (!sS) return;
-        // Chuyển thẳng vào flow khai thác (đi qua LGLoadingManView → LGAppleServerConnectView)
+        [[NSUserDefaults standardUserDefaults] setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        // Chuyển thẳng vào flow hiện có.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [sS openDopamineStyleExploitConsole];
         });
@@ -2438,6 +2444,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
             sS->_adminServerUser = u;
             [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
             [[NSUserDefaults standardUserDefaults] setObject:u forKey:TI_ADMIN_USER_KEY];
+            [[NSUserDefaults standardUserDefaults] setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
+            [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
             [[NSUserDefaults standardUserDefaults] synchronize];
 
             // Xoá mọi persistent state khi đăng nhập admin — admin luôn ổn định
@@ -3939,6 +3947,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FIRST_INSTALL_KEY];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] synchronize];
         // Xoá cả persistent state
         Titanium_ClearPersistentServerState();
