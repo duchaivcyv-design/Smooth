@@ -5572,11 +5572,11 @@ static inline void Init_CAWindowServer_Hooks(void) {
 }
 
 // ====================================================================================================
-// RUNTIME INITIALIZER: ĐÃ ĐỒNG BỘ HOÀN TOÀN — ĐÃ SỬA LỖI BIÊN DỊCH
-// ====================================================================================================
+// RUNTIME INITIALIZER: ĐÃ ĐỒ_tNG BỘ HOÀN TOÀN — ĐÃ SỬA LỖI BIÊN DỊCH
+ s// ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
-    static dispatch_once_t s_coreInitToken;
+   _coreInitToken;
     dispatch_once(&s_coreInitToken, ^{
         @autoreleasepool {
             @try {
@@ -5664,8 +5664,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_SpringBoard_ProcessManagerV285);
 
                     Init_CAWindowServer_Hooks();
-                    
+
+#if TITANIUM_ENABLE_RATE_KEEPER
                     [TitaniumRateKeeper start];
+#endif
 
                     @try {
                         Titanium_StartThermalAndChargingWatchdog();
