@@ -29,6 +29,9 @@
 // 17. CATransaction flush: bật lại QoS demotion nhưng có điều kiện rất chặt (không còn gây xám/đen).
 // 18. SpringBoard ghi IPC đồng bộ (rename atomic) xong mới Post — app con nhận được ngay, không còn race.
 // 19. RateKeeper: cho preferredFrameRateRange co giãn xuống 24Hz khi rảnh (không còn kẹt 60Hz floor cứng).
+// [FIX BUILD LẦN 4]: Chuyển @interface BoostConfigV285Pro + CFG285 + g_cachedResolvedHz + g_cachedResolvedFPS
+//     lên NGAY SAU định nghĩa ApexV285ProPayload. Trước đây chúng nằm ở mục "BOOST CONFIGURATION ENGINE" (giữa file)
+//     nên helper Titanium_EnforceThreadVIPPolicy và các hook ở trên báo lỗi "use of undeclared identifier".
 // ====================================================================================================
 
 // ==================== MACH & XNU KERNEL ====================
@@ -261,6 +264,82 @@ typedef struct __attribute__((packed)) {
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
+
+// ====================================================================================================
+// [FIX BUILD LẦN 4] KHAI BÁO SỚM: BoostConfigV285Pro + CFG285 + g_cachedResolvedHz + g_cachedResolvedFPS
+// Đặt NGAY SAU payload struct để mọi helper/hook bên dưới (Titanium_EnforceThreadVIPPolicy,
+// Titanium_TuneWindowServerDisplayDirectly, các %hook, ...) đều thấy được.
+// Trước đây khối này nằm ở mục "BOOST CONFIGURATION ENGINE" (giữa file) nên trình biên dịch
+// báo lỗi "use of undeclared identifier 'CFG285' / 'g_cachedResolvedHz' / 'g_cachedResolvedFPS'".
+// ====================================================================================================
+
+@interface BoostConfigV285Pro : NSObject
+@property (nonatomic, assign) BOOL enabled;
+@property (nonatomic, strong) NSString *selectedLanguage;
+@property (nonatomic, assign) BOOL enableHzControl;
+@property (nonatomic, assign) NSInteger targetHz;
+@property (nonatomic, assign) BOOL enableFPSControl;
+@property (nonatomic, assign) NSInteger targetFPS;
+@property (nonatomic, assign) BOOL forceOverclock144Hz;
+@property (nonatomic, assign) BOOL proMotionEngineBeta7;
+@property (nonatomic, assign) BOOL touchResponseBoost;
+@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
+@property (nonatomic, assign) BOOL keyboardZeroLagV24;
+@property (nonatomic, assign) BOOL keyboardZeroLagV3;
+@property (nonatomic, assign) BOOL reduceMultitaskLag;
+@property (nonatomic, assign) BOOL reduceMultiTaskLag;
+@property (nonatomic, assign) BOOL metalHexBuffering;
+@property (nonatomic, assign) BOOL neuralBufferOpt;
+@property (nonatomic, assign) BOOL fixAppExitStutter;
+@property (nonatomic, assign) BOOL vsyncAdaptiveBuffer;
+@property (nonatomic, assign) BOOL quantumRenderShield;
+@property (nonatomic, assign) BOOL autoCloseBackgroundApp;
+@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
+@property (nonatomic, assign) BOOL syncModuleDelay;
+@property (nonatomic, assign) BOOL isolateRenderPipeline;
+@property (nonatomic, assign) BOOL antiBlackScreenLaunch;
+@property (nonatomic, assign) BOOL turboAppLaunch;
+@property (nonatomic, assign) BOOL turboLaunch;
+@property (nonatomic, assign) BOOL ultraResponsiveness;
+@property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
+@property (nonatomic, assign) BOOL aggressiveRamClean;
+@property (nonatomic, assign) BOOL periodicRamClean;
+@property (nonatomic, assign) BOOL machVMPurgeRam;
+@property (nonatomic, assign) BOOL antiThermalThrottling;
+@property (nonatomic, assign) BOOL antiThermalThrottle;
+@property (nonatomic, assign) BOOL powerSaveMode;
+@property (nonatomic, assign) BOOL antiGhostTouch;
+@property (nonatomic, assign) BOOL chargerRippleRejection;
+@property (nonatomic, assign) BOOL batterySaver60Hz;
+@property (nonatomic, assign) BOOL lock30FpsOnOverheat;
+@property (nonatomic, assign) BOOL dynamicThermalEngine;
+@property (nonatomic, assign) BOOL fakeFullBatteryState;
+@property (nonatomic, assign) BOOL gameFPSStabilizer;
+@property (nonatomic, assign) BOOL lockHighIdleFloor;
+@property (nonatomic, assign) BOOL quantumCoreSync;
+@property (nonatomic, assign) BOOL pCoreRealtimePriority;
+@property (nonatomic, assign) BOOL flatTintBlur;
+@property (nonatomic, assign) BOOL zeroLagNeural;
+@property (nonatomic, assign) BOOL schedulerGovernor;
+@property (nonatomic, assign) BOOL iopolVipPriority;
+@property (nonatomic, assign) BOOL ultraResponsivenessPro;
+@property (nonatomic, assign) BOOL coolDownHeavyLoad;
+@property (nonatomic, assign) BOOL backgroundPacingDaemon;
+@property (nonatomic, assign) BOOL autoKillBackground;
+@property (nonatomic, assign) BOOL hyperMemoryGuardian;
+
++ (instancetype)sharedInstance;
+- (void)loadSettings;
+- (NSInteger)resolvedTargetHz;
+- (NSInteger)resolvedTargetFPS;
+- (NSInteger)resolvedFrameInterval;
+@end
+
+static BoostConfigV285Pro *CFG285 = nil;
+#define IS_ACTIVE (CFG285 && CFG285.enabled)
+
+static volatile NSInteger g_cachedResolvedHz = 144;
+static volatile NSInteger g_cachedResolvedFPS = 144;
 
 // ====================================================================================================
 // SYSTEM PRIVATE INTERFACES
@@ -1460,75 +1539,10 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 // ====================================================================================================
 // BOOST CONFIGURATION ENGINE
+// [FIX BUILD LẦN 4] @interface BoostConfigV285Pro + CFG285 + g_cachedResolvedHz + g_cachedResolvedFPS
+// đã được CHUYỂN LÊN NGAY SAU ApexV285ProPayload (xem đầu file).
+// Ở đây chỉ còn lại Titanium_TuneWindowServerDisplayDirectly + @implementation BoostConfigV285Pro.
 // ====================================================================================================
-
-@interface BoostConfigV285Pro : NSObject
-@property (nonatomic, assign) BOOL enabled;
-@property (nonatomic, strong) NSString *selectedLanguage;
-@property (nonatomic, assign) BOOL enableHzControl;
-@property (nonatomic, assign) NSInteger targetHz;
-@property (nonatomic, assign) BOOL enableFPSControl;
-@property (nonatomic, assign) NSInteger targetFPS;
-@property (nonatomic, assign) BOOL forceOverclock144Hz;
-@property (nonatomic, assign) BOOL proMotionEngineBeta7;
-@property (nonatomic, assign) BOOL touchResponseBoost;
-@property (nonatomic, assign) BOOL colorOs17SmoothEngine;
-@property (nonatomic, assign) BOOL keyboardZeroLagV24;
-@property (nonatomic, assign) BOOL keyboardZeroLagV3;
-@property (nonatomic, assign) BOOL reduceMultitaskLag;
-@property (nonatomic, assign) BOOL reduceMultiTaskLag;
-@property (nonatomic, assign) BOOL metalHexBuffering;
-@property (nonatomic, assign) BOOL neuralBufferOpt;
-@property (nonatomic, assign) BOOL fixAppExitStutter;
-@property (nonatomic, assign) BOOL vsyncAdaptiveBuffer;
-@property (nonatomic, assign) BOOL quantumRenderShield;
-@property (nonatomic, assign) BOOL autoCloseBackgroundApp;
-@property (nonatomic, assign) BOOL fixAppLaunchBlackScreen;
-@property (nonatomic, assign) BOOL syncModuleDelay;
-@property (nonatomic, assign) BOOL isolateRenderPipeline;
-@property (nonatomic, assign) BOOL antiBlackScreenLaunch;
-@property (nonatomic, assign) BOOL turboAppLaunch;
-@property (nonatomic, assign) BOOL turboLaunch;
-@property (nonatomic, assign) BOOL ultraResponsiveness;
-@property (nonatomic, assign) BOOL ultraResponsivenessProEngineOfficial;
-@property (nonatomic, assign) BOOL aggressiveRamClean;
-@property (nonatomic, assign) BOOL periodicRamClean;
-@property (nonatomic, assign) BOOL machVMPurgeRam;
-@property (nonatomic, assign) BOOL antiThermalThrottling;
-@property (nonatomic, assign) BOOL antiThermalThrottle;
-@property (nonatomic, assign) BOOL powerSaveMode;
-@property (nonatomic, assign) BOOL antiGhostTouch;
-@property (nonatomic, assign) BOOL chargerRippleRejection;
-@property (nonatomic, assign) BOOL batterySaver60Hz;
-@property (nonatomic, assign) BOOL lock30FpsOnOverheat;
-@property (nonatomic, assign) BOOL dynamicThermalEngine;
-@property (nonatomic, assign) BOOL fakeFullBatteryState;
-@property (nonatomic, assign) BOOL gameFPSStabilizer;
-@property (nonatomic, assign) BOOL lockHighIdleFloor;
-@property (nonatomic, assign) BOOL quantumCoreSync;
-@property (nonatomic, assign) BOOL pCoreRealtimePriority;
-@property (nonatomic, assign) BOOL flatTintBlur;
-@property (nonatomic, assign) BOOL zeroLagNeural;
-@property (nonatomic, assign) BOOL schedulerGovernor;
-@property (nonatomic, assign) BOOL iopolVipPriority;
-@property (nonatomic, assign) BOOL ultraResponsivenessPro;
-@property (nonatomic, assign) BOOL coolDownHeavyLoad;
-@property (nonatomic, assign) BOOL backgroundPacingDaemon;
-@property (nonatomic, assign) BOOL autoKillBackground;
-@property (nonatomic, assign) BOOL hyperMemoryGuardian;
-
-+ (instancetype)sharedInstance;
-- (void)loadSettings;
-- (NSInteger)resolvedTargetHz;
-- (NSInteger)resolvedTargetFPS;
-- (NSInteger)resolvedFrameInterval;
-@end
-
-static BoostConfigV285Pro *CFG285 = nil;
-#define IS_ACTIVE (CFG285 && CFG285.enabled)
-
-static volatile NSInteger g_cachedResolvedHz = 144;
-static volatile NSInteger g_cachedResolvedFPS = 144;
 
 static void Titanium_TuneWindowServerDisplayDirectly(void) {
     if (!Titanium_DisplaySpoofAllowed()) return;
