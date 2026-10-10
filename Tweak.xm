@@ -3344,7 +3344,7 @@ extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
             CFEqual(property, CFSTR("DeviceSupportsProMotion")))
             return CFRetain(kCFBooleanTrue);
     }
-    return %orig(property);
+    return %orig;
 }
 %hook IOHIDEventSystemClient
 - (void)setProperty:(id)property forKey:(NSString *)key {
