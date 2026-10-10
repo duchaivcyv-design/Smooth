@@ -5667,7 +5667,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_Switcher30Apps_Virtualization);
                     %init(Group_Display_SpringBoardV285);
                     %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
-                    %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
 #endif
                     %init(Group_V285_FloatingWindow_PiP);
                     %init(Group_SpringBoard_ProcessManagerV285);
