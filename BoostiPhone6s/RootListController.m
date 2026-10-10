@@ -505,12 +505,13 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     _chromaticEdge.opacity = 0.72;
     [CATransaction commit];
 
-    CGFloat scaleX = 0.972 + (1.0 - intensity) * 0.012;
-    CGFloat scaleY = 0.958 + (1.0 - intensity) * 0.022;
-    CGFloat tiltX = (p.x - self.bounds.size.width/2) / self.bounds.size.width * 1.6;
-    CGFloat tiltY = (p.y - self.bounds.size.height/2) / self.bounds.size.height * 1.1;
+    // [V10.1 SỬA LỖI MÉO VUÔNG 2 BÊN]: scale ĐỒNG ĐỀU X=Y, chỉ dịch chuyển nhẹ theo ngón tay.
+    // Khi nhấn giữ: kính lỏng PHỒNG lên nhẹ như giọt nước (scale 1.03), không méo hình.
+    CGFloat pressScale = 1.0 + intensity * 0.035;
+    CGFloat moveX = (p.x - self.bounds.size.width/2) / self.bounds.size.width * 2.0;
+    CGFloat moveY = (p.y - self.bounds.size.height/2) / self.bounds.size.height * 1.5;
     [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self.transform = CGAffineTransformTranslate(CGAffineTransformMakeScale(scaleX, scaleY), tiltX, tiltY);
+        self.transform = CGAffineTransformTranslate(CGAffineTransformMakeScale(pressScale, pressScale), moveX, moveY);
     } completion:nil];
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
@@ -534,19 +535,14 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         CGFloat maxDist = hypot(self.bounds.size.width/2, self.bounds.size.height/2);
         CGFloat distRatio = fminf(1.0, distFromCenter / maxDist);
 
-        CGFloat stretchX = 1.0 + fabs(ndx) * 0.07;
-        CGFloat stretchY = 1.0 - fabs(ndx) * 0.035;
-        CGFloat moveX = ndx * 5.0;
-        CGFloat moveY = ndy * 2.5;
-
-        CATransform3D t3d = CATransform3DIdentity;
-        t3d.m34 = 1.0 / -420.0;
-        t3d = CATransform3DRotate(t3d, -ndy * 0.09, 1, 0, 0);
-        t3d = CATransform3DRotate(t3d, ndx * 0.09, 0, 1, 0);
+        // [V10.1 SỬA LỖI MÉO VUÔNG]: BỎ hẳn 3D transform (xung đột với 2D transform gây méo).
+        // Chỉ dùng 2D affine, scale ĐỒNG ĐỀU, kính lỏng trượt theo ngón tay như giọt nước.
+        CGFloat dragScale = 1.0 + distRatio * 0.04;
+        CGFloat moveX = ndx * 6.0;
+        CGFloat moveY = ndy * 3.0;
 
         [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-            self.layer.transform = t3d;
-            self.transform = CGAffineTransformTranslate(CGAffineTransformMakeScale(stretchX, stretchY), moveX, moveY);
+            self.transform = CGAffineTransformTranslate(CGAffineTransformMakeScale(dragScale, dragScale), moveX, moveY);
         } completion:nil];
 
         _diagonalSheen.opacity = 0.42 + distRatio * 0.28;
@@ -583,7 +579,6 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     [CATransaction commit];
 
     [UIView animateWithDuration:0.68 delay:0 usingSpringWithDamping:0.50 initialSpringVelocity:releasedInside ? 1.4 : 0.5 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self.layer.transform = CATransform3DIdentity;
         self.transform = CGAffineTransformIdentity;
     } completion:nil];
 
@@ -2887,16 +2882,20 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
         [LGExpandingMenuAction actionWithTitle:@"Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
     ]];
 
-    CGFloat btnSize = 40.0;
-    CGFloat spacing = 12.0;
+    // [V10.1 SỬA LỖI 1 NÚT BỊ CHE]: giảm kích thước xuống 36, spacing 10, container rộng vừa đủ,
+    // clipsToBounds=NO, thứ tự add từ phải sang trái để nút ngoài cùng không bị che.
+    CGFloat btnSize = 36.0;
+    CGFloat spacing = 10.0;
     CGFloat totalW = btnSize * 3 + spacing * 2;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
     container.backgroundColor = [UIColor clearColor];
     container.userInteractionEnabled = YES;
+    container.clipsToBounds = NO;
 
-    _expandingMenuButton.frame = CGRectMake(0, 0, btnSize, btnSize);
+    _expandingBoltButton.frame = CGRectMake(0, 0, btnSize, btnSize);
     _expandingLockButton.frame = CGRectMake(btnSize + spacing, 0, btnSize, btnSize);
-    _expandingBoltButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
+    _expandingMenuButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
+    // Thứ tự add: nút phải cùng (bolt) add cuối để nằm trên cùng, không bị che
     [container addSubview:_expandingMenuButton];
     [container addSubview:_expandingLockButton];
     [container addSubview:_expandingBoltButton];
