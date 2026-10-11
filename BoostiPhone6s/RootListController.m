@@ -49,6 +49,8 @@ extern char **environ;
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
 #define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
 #define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
+#define TI_LOCAL_EXPLOIT_COMPLETE_KEY @"ti_local_exploit_complete_v21"
+#define TI_LOCAL_EXPLOIT_VERSION_KEY  @"ti_local_exploit_version_v21"
 
 // ====================================================================================================
 // SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
@@ -2122,8 +2124,9 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
             return;
         }
 
-        // V19.5: không giả lập lỗi mạng ngẫu nhiên; chuyển thẳng sang luồng hàng chờ.
-        [self runQueuePhase];
+        // V21: không đưa người dùng vào hàng chờ giả lập vô hạn.
+        // Sau thời gian kết nối, hiển thị trạng thái kết nối rồi tiếp tục luồng giao diện.
+        [self runConnectedThenExploit];
     });
 }
 
@@ -2153,8 +2156,8 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
     _subLabel.text = @"Vị trí của bạn sẽ được xử lý tự động";
     [self startSpinner];
 
-    NSTimeInterval wait = 20.0 + (NSTimeInterval)arc4random_uniform(31); // 20-50s
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // Hàng chờ dự phòng có giới hạn 5 giây; không dùng thời gian ngẫu nhiên dài.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self->_cancelled) return;
         [self runConnectedThenExploit];
     });
@@ -2221,6 +2224,11 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 
 - (void)runComplete {
     _phase = LGAppleServerPhaseSuccess;
+    // Ghi nhớ hoàn tất luồng UI trên thiết bị; không chứng minh/duy trì trạng thái jailbreak.
+    NSUserDefaults *completionDefaults = [NSUserDefaults standardUserDefaults];
+    [completionDefaults setBool:YES forKey:TI_LOCAL_EXPLOIT_COMPLETE_KEY];
+    [completionDefaults setObject:@"21.0" forKey:TI_LOCAL_EXPLOIT_VERSION_KEY];
+    [completionDefaults synchronize];
     [self stopAllTimers];
     _statusLabel.text = @"KHAI THÁC THÀNH CÔNG";
     _subLabel.text = @"Đã lưu cấu hình vĩnh viễn";
@@ -4896,6 +4904,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)presentAppleServerConnectFlow {
+    NSUserDefaults *completionDefaults = [NSUserDefaults standardUserDefaults];
+    NSString *savedVersion = [completionDefaults stringForKey:TI_LOCAL_EXPLOIT_VERSION_KEY];
+    if ([completionDefaults boolForKey:TI_LOCAL_EXPLOIT_COMPLETE_KEY] &&
+        [savedVersion isEqualToString:@"21.0"]) {
+        // Đã hoàn tất luồng UI trước đó: không bắt người dùng chạy lại màn hình chờ.
+        [self persistExploitDataToDisk];
+        [self applyDeepSpringBoardAndUIKitTweaks];
+        Titanium_ResetCrashCount();
+        [self.customTableView reloadData];
+        return;
+    }
+
     UIWindow *host = self.view.window ?: [UIApplication sharedApplication].keyWindow;
     if (!host) return;
 
@@ -5106,6 +5126,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FIRST_INSTALL_KEY];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_LOCAL_EXPLOIT_COMPLETE_KEY];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_LOCAL_EXPLOIT_VERSION_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
         [[NSUserDefaults standardUserDefaults] synchronize];
