@@ -1,183 +1,136 @@
-name: Build BoostiPhone6s Rootless Deb
+name: build
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-
-permissions:
-  contents: write
+    inputs:
+      scheme:
+        description: "scheme"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - rootless
+          - rootful
+          - roothide
 
 jobs:
-  build-deb:
-    runs-on: macos-14
-    timeout-minutes: 15
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: set matrix
+        id: set-matrix
+        run: |
+          SCHEME="${{ github.event.inputs.scheme }}"
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "all" ]; then
+            echo 'matrix=["rootless","rootful","roothide"]' >> $GITHUB_OUTPUT
+          else
+            echo "matrix=[\"$SCHEME\"]" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: setup
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        scheme: ${{ fromJson(needs.setup.outputs.matrix) }}
+      fail-fast: false
+
+    env:
+      DEVICE_TARGET: "iphone:clang:16.5:14.0"
 
     steps:
-      - name: Checkout Code
+      - name: checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # ============================================================
-      # CACHE THEOS + SDK + HOMEBREW PACKAGES
-      # ============================================================
-      - name: Cache Theos + SDK
-        id: cache-theos
+      - name: setup theos
+        uses: actions/checkout@v4
+        with:
+          repository: roothide/theos
+          path: theos
+          submodules: recursive
+
+      - name: cache sdks
+        id: cache-sdks
         uses: actions/cache@v4
         with:
-          path: |
-            ~/theos
-            ~/Library/Caches/Homebrew/downloads
-          key: theos-sdk-165-${{ runner.os }}-v3
+          path: theos/sdks
+          key: theos-sdks-16.5
 
-      # ============================================================
-      # CÀI CÔNG CỤ — LUÔN CHẠY, KHÔNG PHỤ THUỘC CACHE
-      # ============================================================
-      - name: Setup Tools (Always Run)
+      - name: download sdks
+        if: steps.cache-sdks.outputs.cache-hit != 'true'
         run: |
-          export HOMEBREW_NO_AUTO_UPDATE=1
-          export HOMEBREW_NO_INSTALL_CLEANUP=1
-          export HOMEBREW_NO_ANALYTICS=1
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip -q master.zip
+          mkdir -p theos/sdks
+          mv sdks-master/*.sdk theos/sdks/
+          rm -rf master.zip sdks-master
 
-          # Cài dpkg + ldid nếu chưa có
-          if ! command -v dpkg-deb &> /dev/null; then
-            echo "📦 Installing dpkg..."
-            brew install dpkg
-          fi
-          if ! command -v ldid &> /dev/null; then
-            echo "🔐 Installing ldid..."
-            brew install ldid
-          fi
+      - name: set THEOS env var
+        run: echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
 
-          # Xác định đường dẫn ldid thật
-          LDID_PATH=$(which ldid)
-          echo "🔍 ldid found at: $LDID_PATH"
-
-          if [ -z "$LDID_PATH" ]; then
-            echo "❌ ldid install failed!"
-            exit 1
-          fi
-
-          # Đảm bảo $THEOS/bin tồn tại
-          mkdir -p "$HOME/theos/bin"
-
-          # Link ldid vào $THEOS/bin — LUÔN CHẠY (cache hit hay miss đều ok)
-          ln -sf "$LDID_PATH" "$HOME/theos/bin/ldid"
-          chmod +x "$HOME/theos/bin/ldid"
-
-          # Verify
-          "$HOME/theos/bin/ldid" -h 2>&1 | head -1 || echo "⚠️ ldid check"
-
-          # Xuất biến môi trường
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
-          echo "$HOME/theos/bin" >> $GITHUB_PATH
-          # Thêm luôn homebrew bin cho chắc
-          echo "/opt/homebrew/bin" >> $GITHUB_PATH
-          echo "/usr/local/bin" >> $GITHUB_PATH
-          echo "THEOS_PACKAGE_SCHEME=rootless" >> $GITHUB_ENV
-          echo "THEOS_NO_AUTO_UPDATE=1" >> $GITHUB_ENV
-
-      # ============================================================
-      # CLONE THEOS + SDK — CHỈ KHI CACHE MISS
-      # ============================================================
-      - name: Clone Theos + SDK (Cache Miss Only)
-        if: steps.cache-theos.outputs.cache-hit != 'true'
+      - name: install deps
         run: |
-          TARGET_DIR="$HOME/theos"
-          rm -rf "$TARGET_DIR"
-          git clone --recursive --depth=1 https://github.com/theos/theos.git "$TARGET_DIR"
+          brew install ldid make
+          echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-          # Tải SDK 16.5 (sparse)
-          mkdir -p "$TARGET_DIR/sdks"
-          git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/sdks
-          cd /tmp/sdks
-          git sparse-checkout set iPhoneOS16.5.sdk
-          mv iPhoneOS16.5.sdk "$TARGET_DIR/sdks/"
-          rm -rf /tmp/sdks
-
-          echo "✅ Theos + SDK 16.5 cài lần đầu xong"
-
-      # ============================================================
-      # VERIFY LDID TRƯỚC KHI BUILD — ĐẢM BẢO KHÔNG FAIL Ở SIGNING
-      # ============================================================
-      - name: Verify ldid Available
+      - name: build (${{ matrix.scheme }})
         run: |
-          echo "=== Verify ldid ==="
-          which ldid || echo "ldid not in PATH"
-          ls -la "$HOME/theos/bin/ldid" || echo "no ldid in theos/bin"
-          file "$HOME/theos/bin/ldid" 2>/dev/null || true
-
-          if [ ! -e "$HOME/theos/bin/ldid" ]; then
-            echo "❌ LỖI: ldid không tồn tại trong $HOME/theos/bin/"
-            # Fallback: cài lại trực tiếp
-            brew install ldid || true
-            mkdir -p "$HOME/theos/bin"
-            ln -sf "$(which ldid)" "$HOME/theos/bin/ldid"
+          SCHEME_FLAG=""
+          if [ "${{ matrix.scheme }}" = "rootless" ]; then
+            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=rootless"
+          elif [ "${{ matrix.scheme }}" = "roothide" ]; then
+            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=roothide"
           fi
-
-          "$HOME/theos/bin/ldid" -h 2>&1 | head -3
-          echo "✅ ldid OK"
-
-      # ============================================================
-      # BUILD — CHỈ `make package`
-      # ============================================================
-      - name: Build Package (Rootless)
-        run: |
-          cd "$GITHUB_WORKSPACE"
-
-          if [ ! -f Makefile ]; then
-            echo "❌ Không tìm thấy Makefile!"; exit 1
-          fi
-
-          rm -rf packages obj .theos
-
-          # Fix quyền DEBIAN
-          for DEBIAN_DIR in "layout/DEBIAN" "DEBIAN"; do
-            if [ -d "$DEBIAN_DIR" ]; then
-              find "$DEBIAN_DIR" -type f -exec chmod 644 {} +
-              find "$DEBIAN_DIR" -type f \( -name "postinst" -o -name "prerm" -o -name "postrm" -o -name "preinst" \) -exec chmod 755 {} +
-              chmod 755 "$DEBIAN_DIR"
-            fi
-          done
-
-          # Ensure ldid is symlinked once more before build
-          mkdir -p "$HOME/theos/bin"
-          if [ ! -e "$HOME/theos/bin/ldid" ]; then
-            ln -sf "$(which ldid)" "$HOME/theos/bin/ldid"
-          fi
-
-          BUILD_LOG="/tmp/theos_build.log"
-          set -o pipefail
-          NCPU=$(sysctl -n hw.ncpu | head -1)
-          if [ -z "$NCPU" ] || [ "$NCPU" -lt 2 ]; then NCPU=4; fi
-
+          make clean
           make package \
+            ARCHS="arm64 arm64e" \
+            TARGET="$DEVICE_TARGET" \
             FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=rootless \
-            SDKVERSION=16.5 \
-            -j"$NCPU" 2>&1 | tee "$BUILD_LOG" || BUILD_FAILED=1
+            $SCHEME_FLAG
 
-          if [ "$BUILD_FAILED" = "1" ]; then
-            echo ""
-            echo "======================================================================"
-            echo "🚨 BIÊN DỊCH THẤT BẠI!"
-            echo "======================================================================"
-            grep -E '(error:|fatal error:|command not found)' "$BUILD_LOG" || true
-            echo ""
-            tail -n 60 "$BUILD_LOG"
-            exit 1
-          fi
-
-          ls -lh packages/*.deb
-
-      # ============================================================
-      # UPLOAD ARTIFACT
-      # ============================================================
-      - name: Upload Deb Artifact
+      - name: upload package (${{ matrix.scheme }})
         uses: actions/upload-artifact@v4
         with:
-          name: BoostiPhone6s-Rootless-FullPackage
+          name: ${{ matrix.scheme }}-package
           path: packages/*.deb
-          if-no-files-found: error
-          compression-level: 0
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all-packages
+          pattern: "*-package"
+          merge-multiple: true
+
+      - name: update nightly release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./all-packages/*.deb"
+          allowUpdates: true
+          tag: nightly
+          name: "Nightly"
+          body: |
+            This build was automatically generated from the latest commit on `main`.
+            
+            **Commit SHA:** ${{ github.sha }}
+            **Triggered by:** @${{ github.actor }}
+            
+            > [!NOTE]
+            > A nightly build is basically the next update partially done. Additionally, this build might have the old version number but the code itself should has the latest commit.
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
