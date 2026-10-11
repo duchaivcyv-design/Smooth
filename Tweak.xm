@@ -5707,59 +5707,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-%group Group_TitaniumSafeHomeGesture_V22
-
-%hook SBHomeGestureInteraction
-
-- (void)_handleGestureBegan:(id)gesture {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_isContinuousSwiping = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-    }
-    %orig;
-}
-
-- (void)_handleGestureChanged:(id)gesture {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_isContinuousSwiping = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-    }
-    %orig;
-}
-
-- (void)_handleGestureEnded:(id)gesture {
-    %orig;
-    g_isContinuousSwiping = NO;
-    g_lastInteractionMachTime = mach_absolute_time();
-}
-
-- (void)_handleGestureCancelled:(id)gesture {
-    %orig;
-    g_isContinuousSwiping = NO;
-    g_lastInteractionMachTime = mach_absolute_time();
-}
-
-%end
-
-%hook CASpringAnimation
-
-- (CGFloat)damping {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12() && orig < 14.0) {
-        return 14.0;
-    }
-    return orig;
-}
-
-- (void)setDamping:(CGFloat)damping {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12() && damping < 14.0) {
-        damping = 14.0;
-    }
-    %orig(damping);
-}
-
-%end
-
 %end
 
 // ----------------------------------------------------------------------------------------------------
