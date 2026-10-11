@@ -1,350 +1,810 @@
-# SmoothIOS pro Admin dev
+#  Apple-Compatible Service Gateway
 
 <p align="center">
-  <strong>Secure • Lightweight • Role-Based • SQLite-Powered</strong>
-  <br>
-  Backend quản lý quyền Admin/Admin Dev, phiên đăng nhập, blacklist thiết bị và nhật ký kiểm toán dành cho hệ sinh thái iOS tweak.
+  <strong>Secure Backend Infrastructure for iOS Tweaks</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Node.js-20%2B-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js 20+">
-  <img src="https://img.shields.io/badge/Express.js-Backend-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express.js">
-  <img src="https://img.shields.io/badge/Database-SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
-  <img src="https://img.shields.io/badge/Auth-Bearer%20Token-blue?style=for-the-badge" alt="Bearer Token">
-  <img src="https://img.shields.io/badge/Transport-HTTPS%20Required-success?style=for-the-badge" alt="HTTPS">
+  Authentication · Access Control · Session Management · Device Monitoring
+</p>
+
+<p align="center">
+  ![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
+  ![Express](https://img.shields.io/badge/Express-Backend-000000?style=for-the-badge&logo=express&logoColor=white)
+  ![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+  ![HTTPS](https://img.shields.io/badge/HTTPS-Required-2EA44F?style=for-the-badge&logo=letsencrypt&logoColor=white)
 </p>
 
 ---
 
-## ✨ Overview
+## Table of Contents
 
-**iOS Tweak Admin Backend** là backend Node.js/Express sử dụng SQLite để quản lý xác thực và quyền truy cập cho ứng dụng quản trị tweak iOS.
+* [Overview](#overview)
+* [System Architecture](#system-architecture)
+* [Project Structure](#project-structure)
+* [Core Components](#core-components)
+* [Authentication System](#authentication-system)
+* [Authorization and Roles](#authorization-and-roles)
+* [Session Management](#session-management)
+* [Device Monitoring](#device-monitoring)
+* [Blacklist Management](#blacklist-management)
+* [Violation Management](#violation-management)
+* [Audit Logging](#audit-logging)
+* [API Reference](#api-reference)
+* [Database Design](#database-design)
+* [Environment Configuration](#environment-configuration)
+* [Installation](#installation)
+* [Production Deployment](#production-deployment)
+* [Security Recommendations](#security-recommendations)
+* [Troubleshooting](#troubleshooting)
+* [Disclaimer](#disclaimer)
 
-Các chức năng chính:
+---
 
-* 🔐 Xác thực Admin và Admin Dev.
-* 👥 Phân quyền dựa trên vai trò tài khoản.
-* 🎫 Xác thực yêu cầu bằng Bearer token.
-* 📱 Theo dõi trạng thái check-in bằng mã thiết bị giả danh.
-* 🚫 Quản lý blacklist thiết bị.
-* 🔄 Thu hồi phiên đăng nhập.
-* 🧾 Ghi nhật ký audit phục vụ kiểm tra hoạt động.
-* ⏱️ Quản lý các khoảng thời gian vi phạm.
-* 💾 Lưu dữ liệu bền vững bằng SQLite.
-* 🩺 Endpoint health check dành cho giám sát dịch vụ.
+## Overview
 
-> **Security first:** Các thao tác đặc quyền phải được xác thực và kiểm tra quyền tại backend. Ẩn nút trên giao diện ứng dụng không thay thế được việc kiểm tra quyền ở máy chủ.
+Apple-Compatible Service Gateway is a backend service architecture designed for iOS tweak authentication, administrative access control, session handling, device monitoring, and server-side authorization.
 
-## 🧩 Architecture
+The service provides a centralized backend for an iOS tweak to communicate with authentication and administration endpoints over HTTPS.
+
+The interface name is configurable. This project is an independent service and is not an official Apple service or an Apple-operated server.
+
+### Key Features
+
+| Component          | Description                                   |
+| ------------------ | --------------------------------------------- |
+| Authentication     | Server-side account authentication            |
+| Password Security  | Password hashing using bcrypt                 |
+| Role Management    | Separation between Admin and Admin Dev        |
+| Session Control    | Session validation and revocation             |
+| Device Monitoring  | Device identifier and tweak-version check-ins |
+| Blacklist          | Persistent server-side device restrictions    |
+| Violation Tracking | Configurable account violation policies       |
+| Audit Logging      | Records administrative operations             |
+| Database           | Persistent SQLite storage                     |
+| Transport Security | HTTPS deployment behind a reverse proxy       |
+| Health Check       | Endpoint for basic service availability       |
+
+### Design Principles
+
+* **Server-side authorization:** privileged operations must be validated by the backend.
+* **Persistent state:** security-related records must survive application restarts.
+* **Least privilege:** each role receives only the permissions it needs.
+* **Explicit failure handling:** authentication and authorization failures must not be treated as successful.
+* **Minimal data collection:** collect only the device and account information needed for the service.
+* **Maintainability:** separate HTTP routes, business logic, persistence, and configuration when the project structure supports it.
+
+---
+
+## System Architecture
+
+The following diagram describes the intended request flow. Actual module boundaries depend on the backend implementation.
 
 ```mermaid
 flowchart TD
-    A[iOS Tweak / Admin App] -->|HTTPS| B[Node.js + Express]
-    B --> C[Authentication Middleware]
-    C --> D{Role Authorization}
-    D -->|Admin| E[Allowed Admin Operations]
-    D -->|Admin Dev| F[Privileged Admin API]
-    E --> G[(SQLite Database)]
-    F --> G
-    B --> H[Health Check]
-    F --> I[Audit Log]
-    F --> J[Session Revocation]
-    F --> K[Device Blacklist]
+    A[iOS Tweak] -->|HTTPS Request| B[Reverse Proxy / TLS]
+    B --> C[Express Application]
+    C --> D[Request Validation]
+    D --> E[Authentication Middleware]
+    E --> F[Role Authorization]
+    F --> G[API Routes]
+    G --> H[Authentication Service]
+    G --> I[Administration Service]
+    G --> J[Monitoring Service]
+    H --> K[(SQLite Database)]
+    I --> K
+    J --> K
+    G --> L[Audit Logging]
+    L --> K
 ```
 
-### Technology stack
+### Request Lifecycle
 
-| Component            | Technology                      |
-| -------------------- | ------------------------------- |
-| Runtime              | Node.js 20+                     |
-| HTTP server          | Express.js                      |
-| Database             | SQLite                          |
-| Password storage     | bcrypt hash                     |
-| API authentication   | Bearer token                    |
-| Production transport | HTTPS                           |
-| Deployment           | Node.js hosting + reverse proxy |
+1. The iOS tweak sends an HTTPS request to the configured service endpoint.
+2. The reverse proxy terminates TLS and forwards the request to the application.
+3. The application validates the request method, body, and required parameters.
+4. Authentication middleware validates the session or bearer token where required.
+5. Authorization middleware checks the role required by the endpoint.
+6. The route invokes the relevant service logic.
+7. Database changes are persisted where applicable.
+8. The application returns a structured HTTP response.
 
-## 📁 Project Structure
+A successful login must not automatically grant administrative privileges. Each privileged endpoint must independently enforce its authorization rules.
 
-Cấu trúc tham khảo; tên file thực tế phụ thuộc vào repository của bạn.
+---
+
+## Project Structure
+
+The following is a reference structure for organizing the backend. It is not a claim that every directory already exists in the current implementation.
 
 ```text
-.
-├── src/
-│   ├── routes/          # API routes
-│   ├── middleware/      # Authentication and authorization
-│   ├── services/        # Business logic
-│   └── database/        # SQLite access
-├── .env.example         # Environment variable template
-├── .gitignore
+apple-compatible-service-gateway/
+├── server.js
 ├── package.json
 ├── package-lock.json
-└── README.md
+├── .env
+├── .env.example
+├── .gitignore
+├── README.md
+│
+├── src/
+│   ├── app.js
+│   │
+│   ├── config/
+│   │   ├── environment.js
+│   │   └── database.js
+│   │
+│   ├── routes/
+│   │   ├── auth.routes.js
+│   │   ├── admin.routes.js
+│   │   ├── monitoring.routes.js
+│   │   └── health.routes.js
+│   │
+│   ├── middleware/
+│   │   ├── authenticate.js
+│   │   ├── authorize.js
+│   │   ├── validateRequest.js
+│   │   ├── rateLimit.js
+│   │   └── errorHandler.js
+│   │
+│   ├── services/
+│   │   ├── auth.service.js
+│   │   ├── session.service.js
+│   │   ├── admin.service.js
+│   │   ├── monitoring.service.js
+│   │   └── violation.service.js
+│   │
+│   ├── repositories/
+│   │   ├── user.repository.js
+│   │   ├── session.repository.js
+│   │   ├── device.repository.js
+│   │   └── audit.repository.js
+│   │
+│   └── utils/
+│       ├── response.js
+│       └── logger.js
+│
+├── data/
+│   └── .gitkeep
+│
+├── logs/
+│   └── .gitkeep
+│
+└── tests/
+    ├── auth.test.js
+    ├── admin.test.js
+    └── monitoring.test.js
 ```
 
-## 🚀 Getting Started
+### Directory Responsibilities
 
-### Requirements
+| Path                | Responsibility                                                |
+| ------------------- | ------------------------------------------------------------- |
+| `server.js`         | Application entry point, if used by the project               |
+| `src/app.js`        | Express application setup                                     |
+| `src/config/`       | Environment and database configuration                        |
+| `src/routes/`       | HTTP endpoint definitions                                     |
+| `src/middleware/`   | Authentication, authorization, validation, and error handling |
+| `src/services/`     | Business rules and workflows                                  |
+| `src/repositories/` | Database access layer                                         |
+| `src/utils/`        | Shared utility functions                                      |
+| `data/`             | Persistent database files, if configured here                 |
+| `logs/`             | Application logs, if file logging is enabled                  |
+| `tests/`            | Automated test suites                                         |
 
-* Node.js 20 trở lên
-* npm
-* SQLite tương thích với dependency của dự án
-* HTTPS endpoint khi triển khai công khai
+If the current backend is a single-file Node.js application, these directories are an optional refactoring plan rather than files that can be assumed to exist.
 
-### 1. Clone repository
+---
 
-```bash
-git clone <YOUR_REPOSITORY_URL>
-cd <YOUR_PROJECT_DIRECTORY>
+## Core Components
+
+### 1. HTTP Application
+
+The HTTP layer receives requests and produces responses. It should handle:
+
+* Route registration.
+* JSON request parsing.
+* Request-size limits.
+* CORS policy, if cross-origin clients are needed.
+* Request validation.
+* Centralized error handling.
+* Health-check responses.
+
+Do not expose stack traces, database paths, environment variables, or secret configuration in production error responses.
+
+### 2. Authentication Service
+
+The authentication layer verifies submitted credentials against stored account records.
+
+Expected responsibilities:
+
+* Validate username and password input.
+* Retrieve the relevant account.
+* Compare the submitted password with its bcrypt hash.
+* Reject disabled or restricted accounts.
+* Create an authenticated session after successful verification.
+* Return only the public account fields required by the client.
+
+### 3. Authorization Service
+
+Authentication determines who is making a request. Authorization determines whether that account may perform the requested action.
+
+Every administrative endpoint must validate the account's role and session status on the server. Hiding a button in the iOS interface is not an authorization mechanism.
+
+### 4. Persistence Layer
+
+The database layer stores durable application state, including accounts, sessions, blacklist records, monitoring records, and audit events where supported by the schema.
+
+Database access should use parameterized queries and appropriate transactions. Database files and backups must not be publicly accessible.
+
+---
+
+## Authentication System
+
+### Login
+
+**Endpoint:** `POST /v1/auth/login`
+
+Example request:
+
+```json
+{
+  "username": "example_user",
+  "password": "replace_with_your_password",
+  "device_id": "example-device-id"
+}
 ```
 
-Thay hai giá trị placeholder bằng URL và tên thư mục repository thực tế.
+The `device_id` field is optional in the documented API contract.
 
-### 2. Install dependencies
+A successful response should contain only the information required by the client, such as a session token and minimal account metadata. The precise response fields must match the actual backend implementation.
 
-```bash
-npm install
+### Current Session
+
+**Endpoint:** `GET /v1/auth/me`
+
+Required header:
+
+```http
+Authorization: Bearer YOUR_SESSION_TOKEN
 ```
 
-### 3. Configure environment
+This endpoint checks whether the current session is valid and whether the associated account remains permitted to access the service.
+
+### Logout
+
+**Endpoint:** `POST /v1/auth/logout`
+
+The server should invalidate the active session where session revocation is supported. Removing a token only from local storage does not invalidate a copied token on the server.
+
+### Password Storage
+
+Passwords should never be stored in plaintext. Use bcrypt or another appropriate password-hashing algorithm with a suitable work factor.
+
+Never commit production passwords, access tokens, private keys, or `.env` files to a public repository.
+
+---
+
+## Authorization and Roles
+
+The documented account roles are:
+
+| Role        | Intended permissions                                                                      |
+| ----------- | ----------------------------------------------------------------------------------------- |
+| `admin`     | Standard administrative access defined by the backend                                     |
+| `admin_dev` | Development administration, including designated device and security-management endpoints |
+
+The exact permissions must be enforced by server-side middleware and route handlers.
+
+### Role Configuration
+
+```dotenv
+ADMIN_USER=change_this_admin_username
+ADMIN_PASSWORD=replace_with_a_strong_password
+
+DEV_ADMIN_USER=change_this_dev_username
+DEV_ADMIN_PASSWORD=replace_with_another_strong_password
+```
+
+These are example environment variable names. Configure them only if the application actually reads them.
+
+### Authorization Requirements
+
+* Validate the session before executing privileged operations.
+* Check role permissions on every restricted endpoint.
+* Reject missing, malformed, expired, revoked, or invalid credentials.
+* Avoid returning sensitive account information in API responses.
+* Log security-relevant administrative actions.
+* Do not rely on client-side flags to grant elevated access.
+
+---
+
+## Session Management
+
+Session management allows the server to determine whether an authenticated client remains authorized.
+
+### Expected Capabilities
+
+* Session creation after successful authentication.
+* Server-side validation of bearer tokens.
+* Session invalidation on logout, where implemented.
+* Administrative session revocation.
+* Rejection of revoked sessions.
+* Revalidation of authorization for sensitive operations.
+
+### Revoke Session
+
+**Endpoint:** `POST /v1/admin/revoke-session`
+
+Permission: `admin_dev`.
+
+Example request:
+
+```json
+{
+  "session_id": "example-session-id"
+}
+```
+
+The backend should verify the caller's role before revoking the target session and record the action in the audit log when audit logging is enabled.
+
+Do not assume that revocation reaches an offline client immediately. A disconnected client cannot receive an immediate server response; access must be checked again when it reconnects.
+
+---
+
+## Device Monitoring
+
+### Check-in
+
+**Endpoint:** `POST /v1/monitor/checkin`
+
+Required authentication: bearer token.
+
+Example request:
+
+```json
+{
+  "device_id": "example-device-id",
+  "tweak_version": "1.0.0"
+}
+```
+
+The monitoring endpoint can be used to record a device identifier, the reported tweak version, and the last-seen timestamp.
+
+### Device Data
+
+The documented monitoring design uses minimal operational metadata, such as:
+
+* Pseudonymous device identifier.
+* Reported tweak version.
+* Last-seen timestamp.
+* Relevant status information, if supported.
+
+Avoid collecting unrelated personal data. Explain the collection and retention policy to users where appropriate.
+
+A client-reported device identifier or version is not, by itself, proof that a device or binary is genuine.
+
+---
+
+## Blacklist Management
+
+Blacklist records allow the backend to persist restrictions against designated device identifiers.
+
+### List Devices
+
+**Endpoint:** `GET /v1/admin/devices`
+
+Permission: `admin_dev`.
+
+### Add a Blacklist Entry
+
+**Endpoint:** `POST /v1/admin/blacklist`
+
+Permission: `admin_dev`.
+
+Example request:
+
+```json
+{
+  "device_id": "example-device-id",
+  "reason": "Administrative review"
+}
+```
+
+### Remove a Blacklist Entry
+
+**Endpoint:** `DELETE /v1/admin/blacklist/:deviceId`
+
+Permission: `admin_dev`.
+
+### Operational Requirements
+
+* Validate device identifiers before database operations.
+* Record the reason and timestamp where the schema supports them.
+* Restrict modifications to authorized administrators.
+* Use parameterized database queries.
+* Audit changes to the blacklist.
+* Define a retention and review policy for blacklist entries.
+
+---
+
+## Violation Management
+
+**Endpoint:** `POST /v1/admin/violation`
+
+Permission: `admin_dev`.
+
+Example request:
+
+```json
+{
+  "username": "example_user",
+  "device_id": "example-device-id"
+}
+```
+
+The documented policy describes the following escalation schedule:
+
+| Violation        | Intended restriction          |
+| ---------------- | ----------------------------- |
+| First violation  | 3-hour restriction            |
+| Second violation | 3-day restriction             |
+| Third violation  | Permanent account disablement |
+
+This schedule is the documented policy, not a guarantee that every backend version implements it exactly. Verify the actual code before relying on these durations.
+
+### Recommended Implementation Rules
+
+* Store violation events durably.
+* Use server-side timestamps.
+* Define how violation counts are calculated and reset, if applicable.
+* Make permanent disablement explicit and auditable.
+* Prevent unauthorized clients from submitting administrative violations.
+* Provide a controlled process for reviewing and correcting erroneous restrictions.
+
+---
+
+## Audit Logging
+
+**Endpoint:** `GET /v1/admin/audit`
+
+Permission: `admin_dev`.
+
+Audit logs provide a record of important security and administration events.
+
+Examples include:
+
+* Successful or failed administrative actions.
+* Blacklist additions and removals.
+* Session revocation.
+* Violation-policy actions.
+* Relevant account-management changes.
+
+Where supported by the database schema, audit records should include an event type, timestamp, acting account, target resource, and outcome.
+
+Do not log plaintext passwords, bearer tokens, private keys, or complete authentication secrets. Restrict access to audit data and define a retention policy.
+
+---
+
+## API Reference
+
+The following table summarizes the documented endpoint contract.
+
+| Method   | Endpoint                        | Purpose                              |
+| -------- | ------------------------------- | ------------------------------------ |
+| `GET`    | `/health`                       | Basic service health check           |
+| `POST`   | `/v1/auth/login`                | Authenticate an account              |
+| `GET`    | `/v1/auth/me`                   | Validate the current session         |
+| `POST`   | `/v1/auth/logout`               | End the current session              |
+| `POST`   | `/v1/monitor/checkin`           | Submit a monitoring check-in         |
+| `GET`    | `/v1/admin/devices`             | Retrieve device information          |
+| `POST`   | `/v1/admin/blacklist`           | Add a blacklist entry                |
+| `DELETE` | `/v1/admin/blacklist/:deviceId` | Remove a blacklist entry             |
+| `POST`   | `/v1/admin/revoke-session`      | Revoke a session                     |
+| `POST`   | `/v1/admin/violation`           | Register an administrative violation |
+| `GET`    | `/v1/admin/audit`               | Retrieve audit events                |
+
+### Access Requirements
+
+| Endpoint group | Authentication            | Authorization                              |
+| -------------- | ------------------------- | ------------------------------------------ |
+| Health         | Usually not required      | Public health status only                  |
+| Login          | Not required before login | Credential validation                      |
+| Session        | Bearer token              | Valid session                              |
+| Monitoring     | Bearer token              | Valid session and applicable account rules |
+| Administration | Bearer token              | Required administrative role               |
+
+The table describes the intended contract. Confirm the implementation for exact response formats, status codes, and role assignments.
+
+---
+
+## Database Design
+
+The backend uses SQLite according to the documented project description.
+
+The following is a conceptual data model, not a verified list of tables from the current database.
+
+```mermaid
+erDiagram
+    USERS ||--o{ SESSIONS : owns
+    USERS ||--o{ VIOLATIONS : receives
+    USERS ||--o{ AUDIT_LOGS : initiates
+    DEVICES ||--o{ MONITORING_EVENTS : reports
+    DEVICES ||--o{ BLACKLIST_ENTRIES : may_match
+
+    USERS {
+        integer id
+        text username
+        text password_hash
+        text role
+        text account_status
+    }
+
+    SESSIONS {
+        text session_id
+        integer user_id
+        text expires_at
+        text revoked_at
+    }
+
+    DEVICES {
+        text device_id
+        text last_seen
+        text tweak_version
+    }
+
+    BLACKLIST_ENTRIES {
+        integer id
+        text device_id
+        text reason
+        text created_at
+    }
+
+    VIOLATIONS {
+        integer id
+        integer user_id
+        text violation_type
+        text created_at
+    }
+
+    AUDIT_LOGS {
+        integer id
+        integer actor_user_id
+        text event_type
+        text created_at
+    }
+```
+
+### Database Operations
+
+* Keep the database in a private application data directory.
+* Back up the database securely.
+* Use transactions for related changes.
+* Add indexes to frequently queried fields where appropriate.
+* Use parameterized queries.
+* Test migrations and restore procedures before production deployment.
+* Avoid storing secrets that are not required for the service.
+
+---
+
+## Environment Configuration
+
+Create a local environment file from the example configuration if the project provides one.
 
 ```bash
 cp .env.example .env
 ```
 
-Mở `.env` và thay toàn bộ mật khẩu mẫu bằng thông tin bí mật riêng. Kiểm tra các biến môi trường mà ứng dụng thực sự hỗ trợ trước khi khởi động.
+Example configuration:
 
-**Không commit `.env` hoặc mật khẩu thật lên GitHub.**
+```dotenv
+NODE_ENV=production
+PORT=8080
 
-### 4. Start the server
+ADMIN_USER=change_this_admin_username
+ADMIN_PASSWORD=replace_with_a_strong_password
+
+DEV_ADMIN_USER=change_this_dev_username
+DEV_ADMIN_PASSWORD=replace_with_another_strong_password
+
+DB_PATH=./data/service.sqlite
+```
+
+Only retain variables supported by the actual application. The server must explicitly load and validate each variable it requires.
+
+### Configuration Checklist
+
+* Replace all example credentials.
+* Keep `.env` out of version control.
+* Set restrictive permissions on secrets and database files.
+* Use a stable, writable database path.
+* Configure production logging without exposing secrets.
+* Place the service behind HTTPS.
+* Never assume that a variable is active simply because it appears in this example.
+
+---
+
+## Installation
+
+### Requirements
+
+* Node.js 20 or later.
+* npm.
+* SQLite support compatible with the project's dependencies.
+* A server or development environment with permission to run the application.
+
+### Install Dependencies
+
+```bash
+npm install
+```
+
+### Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and replace every example credential before starting the service.
+
+### Start the Application
 
 ```bash
 npm start
 ```
 
-### 5. Check service health
+The actual startup command depends on the scripts defined in `package.json`. If `npm start` is not configured, use the command documented by the project.
 
-Khi server chạy trên máy cục bộ tại cổng `8080`:
+### Health Check
+
+For local development:
 
 ```bash
 curl http://127.0.0.1:8080/health
 ```
 
-Endpoint này dùng để kiểm tra tình trạng dịch vụ, không nên được xem là bằng chứng rằng mọi API quản trị đều hoạt động chính xác.
+This example assumes the application listens on port `8080` and exposes the documented health route.
 
-### 6. Production deployment
-
-Trước khi đưa backend lên Internet:
-
-* Cấu hình HTTPS thông qua Caddy, nginx hoặc nền tảng hosting phù hợp.
-* Giới hạn quyền truy cập vào database và file backup.
-* Cấu hình firewall, giới hạn tốc độ yêu cầu và logging.
-* Sử dụng mật khẩu mạnh, riêng biệt cho từng tài khoản.
-* Không truyền thông tin đăng nhập qua kết nối HTTP công khai.
+Do not expose the development HTTP endpoint directly to the public internet.
 
 ---
 
-## 👤 Accounts & Roles
+## Production Deployment
 
-| Role      | Environment variables                   | Intended access                              |
-| --------- | --------------------------------------- | -------------------------------------------- |
-| Admin     | `ADMIN_USER` / `ADMIN_PASSWORD`         | Các thao tác được backend cho phép           |
-| Admin Dev | `DEV_ADMIN_USER` / `DEV_ADMIN_PASSWORD` | API quản trị đặc quyền được backend cho phép |
+### Recommended Network Layout
 
-Mật khẩu được lưu dưới dạng bcrypt hash. Theo cấu hình dự án, thông tin tài khoản đã tồn tại không bị ghi đè mỗi lần server khởi động.
-
-### Credential management
-
-* Không sử dụng mật khẩu ví dụ trong môi trường thật.
-* Không đưa mật khẩu, token hoặc secret vào source code.
-* Xây dựng quy trình đổi mật khẩu và thu hồi phiên riêng.
-* Giới hạn quyền truy cập database cho tài khoản hệ thống cần thiết.
-* Không coi tên tài khoản hoặc giao diện client là bằng chứng về quyền Admin Dev.
-
-## 🌐 API Reference
-
-Tất cả endpoint dưới đây được lấy từ cấu hình dự án đã mô tả. Các endpoint yêu cầu Bearer token cần gửi token trong header:
-
-```http
-Authorization: Bearer YOUR_ACCESS_TOKEN
+```text
+iOS Tweak
+    |
+    | HTTPS
+    v
+Public Reverse Proxy
+    |
+    | Private application connection
+    v
+Node.js / Express Service
+    |
+    v
+Private SQLite Database
 ```
+
+The public service name can be configured independently from the internal application layout. A reverse proxy can provide a stable public hostname without exposing the backend's private network address.
+
+### Reverse Proxy Requirements
+
+* Use a valid TLS certificate.
+* Redirect public HTTP traffic to HTTPS.
+* Forward requests only to the intended application service.
+* Apply request-size and timeout limits.
+* Restrict direct access to the backend port.
+* Keep private service addresses out of public documentation and client-facing error messages.
+
+### iOS Client Configuration
+
+The tweak should use the actual HTTPS base URL configured for the deployment.
+
+For example, in a local development configuration:
+
+```text
+https://api.example.com
+```
+
+Replace the example hostname with the domain you control. Do not publish a real private hostname in a public README unless you intentionally want it to be public.
+
+Changing a display label in documentation does not change the URL embedded in the tweak, DNS records, reverse-proxy configuration, or network requests.
+
+---
+
+## Security Recommendations
 
 ### Authentication
 
-| Method | Endpoint          | Purpose                              |
-| ------ | ----------------- | ------------------------------------ |
-| `POST` | `/v1/auth/login`  | Đăng nhập                            |
-| `GET`  | `/v1/auth/me`     | Kiểm tra tài khoản và phiên hiện tại |
-| `POST` | `/v1/auth/logout` | Đăng xuất                            |
+* Hash passwords using bcrypt or an appropriate password-hashing algorithm.
+* Apply login rate limits.
+* Return generic authentication errors where appropriate.
+* Never log submitted passwords.
+* Rotate credentials if they are exposed.
 
-**Login request example**
+### API Security
 
-```json
-{
-  "username": "your_username",
-  "password": "your_password",
-  "device_id": "optional-pseudonymous-id"
-}
-```
+* Require HTTPS for production credentials and session tokens.
+* Validate input types, lengths, and allowed values.
+* Enforce authorization on the server for every privileged endpoint.
+* Apply rate limits to sensitive routes.
+* Use a centralized error handler.
+* Avoid leaking internal stack traces or configuration.
 
-Không sử dụng thông tin đăng nhập thật trong ví dụ, log công khai hoặc ảnh chụp màn hình.
+### Session Security
 
-### Device monitoring
+* Use sufficiently unpredictable session tokens.
+* Define session expiry.
+* Invalidate revoked sessions server-side.
+* Recheck authorization for sensitive actions.
+* Avoid storing bearer tokens in logs or public files.
 
-| Method | Endpoint              | Purpose                              |
-| ------ | --------------------- | ------------------------------------ |
-| `POST` | `/v1/monitor/checkin` | Gửi trạng thái check-in của thiết bị |
+### Database Security
 
-Request example:
+* Restrict database file permissions.
+* Use prepared statements.
+* Back up data to a protected location.
+* Test restoration.
+* Keep database backups outside the public web root.
 
-```json
-{
-  "device_id": "stable-random-id",
-  "tweak_version": "1.0.0"
-}
-```
+### Operational Security
 
-Endpoint check-in yêu cầu Bearer token theo mô tả hiện tại.
-
-### Admin Dev operations
-
-| Method   | Endpoint                        | Access    | Purpose                     |
-| -------- | ------------------------------- | --------- | --------------------------- |
-| `GET`    | `/v1/admin/devices`             | Admin Dev | Xem danh sách thiết bị      |
-| `POST`   | `/v1/admin/blacklist`           | Admin Dev | Thêm thiết bị vào blacklist |
-| `DELETE` | `/v1/admin/blacklist/:deviceId` | Admin Dev | Xóa thiết bị khỏi blacklist |
-| `POST`   | `/v1/admin/revoke-session`      | Admin Dev | Thu hồi phiên đăng nhập     |
-| `POST`   | `/v1/admin/violation`           | Admin Dev | Ghi nhận vi phạm tài khoản  |
-| `GET`    | `/v1/admin/audit`               | Admin Dev | Xem audit log               |
-
-**Blacklist request**
-
-```json
-{
-  "device_id": "stable-random-id",
-  "reason": "Policy violation"
-}
-```
-
-**Revoke session request**
-
-```json
-{
-  "session_id": "session-id-to-revoke"
-}
-```
-
-**Violation request**
-
-```json
-{
-  "username": "target_username",
-  "device_id": "optional-pseudonymous-id"
-}
-```
-
-Theo chính sách được mô tả, các lần vi phạm có thể dẫn đến khóa tài khoản theo thời hạn tăng dần. Hãy kiểm tra implementation thực tế trước khi dựa vào các mốc thời gian hoặc cơ chế khóa vĩnh viễn.
+* Keep dependencies updated.
+* Monitor application errors and service health.
+* Protect SSH and server administration access.
+* Store production secrets in an appropriate secret-management mechanism.
+* Test security-sensitive workflows before deployment.
 
 ---
 
-## 🔒 Security
+## Troubleshooting
 
-### Password security
+### Application Does Not Start
 
-* Dùng bcrypt để lưu hash mật khẩu.
-* Không lưu mật khẩu dạng văn bản thuần.
-* Không ghi thông tin đăng nhập vào audit log.
-* Bổ sung giới hạn số lần đăng nhập thất bại và quy trình đổi mật khẩu an toàn nếu chưa có.
+Check the Node.js version, installed dependencies, startup script, required environment variables, and application logs.
 
-### Session security
+```bash
+node --version
+npm --version
+npm install
+npm start
+```
 
-* Kiểm tra token và quyền truy cập ở phía server.
-* Thu hồi phiên khi phát hiện phiên không còn hợp lệ.
-* Các thao tác nhạy cảm cần từ chối truy cập khi không thể xác minh quyền.
-* Không dựa hoàn toàn vào dữ liệu quyền được lưu ở client.
+### Database Errors
 
-### Database & audit
+Check that the configured database directory exists, the application has write permissions, and the SQLite dependency is installed correctly.
 
-* Bảo vệ file SQLite và bản backup bằng quyền truy cập phù hợp.
-* Lưu audit log đủ để điều tra nhưng không chứa mật khẩu hoặc token bí mật.
-* Kiểm tra khả năng phục hồi database và quy trình backup định kỳ.
-* Kiểm soát quyền truy cập endpoint quản trị bằng middleware phía server.
+### Authentication Fails
 
-### Privacy
+Verify that the account exists, the password matches its stored hash, the account is enabled, and the server and client agree on the authentication request format.
 
-API monitoring được thiết kế để lưu mã thiết bị giả danh do client gửi, phiên bản tweak và thời điểm check-in gần nhất.
+### Administrative Request Returns Unauthorized
 
-Mã thiết bị giả danh vẫn có thể được liên kết với một thiết bị hoặc người dùng nếu có dữ liệu đối chiếu. Vì vậy, cần giới hạn mục đích sử dụng, quyền truy cập và thời gian lưu dữ liệu.
+Check the bearer token, session validity, role assignment, and server-side authorization middleware. A client-side role label does not grant permission.
 
-Backend không nên được mô tả là có quyền truy cập iCloud hoặc dữ liệu riêng tư của thiết bị nếu không có cơ chế được cấp quyền tương ứng.
+### Tweak Cannot Connect
 
-### Important limitations
+Verify DNS, TLS certificate validity, the configured HTTPS base URL, reverse-proxy routing, server availability, and the API paths expected by the client.
 
-* Thu hồi quyền không thể được bảo đảm tức thời khi thiết bị mất kết nối mạng.
-* Client có thể bị sửa đổi; mọi thao tác đặc quyền phải được backend xác minh.
-* Hệ thống này không tự cung cấp khả năng vượt entitlement của iOS.
-* Backend không thực hiện gỡ tweak từ xa hoặc làm ứng dụng bị crash theo mô tả hiện tại.
-* Chỉ nên công bố các cơ chế bảo mật đã được kiểm thử thực tế.
+Do not solve connection failures by disabling TLS verification in production.
 
 ---
 
-## ⚙️ Configuration
+## Disclaimer
 
-Các biến dưới đây là những biến được đề cập trong tài liệu dự án. Kiểm tra `.env.example` để biết tên biến đầy đủ và giá trị mặc định thực tế.
+Apple-Compatible Service Gateway is an independent backend project intended for authorized administration and service integration.
 
-| Variable             | Description                 |
-| -------------------- | --------------------------- |
-| `ADMIN_USER`         | Tên đăng nhập Admin         |
-| `ADMIN_PASSWORD`     | Mật khẩu khởi tạo Admin     |
-| `DEV_ADMIN_USER`     | Tên đăng nhập Admin Dev     |
-| `DEV_ADMIN_PASSWORD` | Mật khẩu khởi tạo Admin Dev |
-| `DB_PATH`            | Vị trí file database SQLite |
+The name and visual presentation used in this README do not imply endorsement, ownership, operation, or certification by Apple Inc.
 
-Không công khai giá trị thật của các biến trên. Nếu đổi mật khẩu của tài khoản đã tồn tại, hãy sử dụng quy trình reset hoặc migration phù hợp với implementation hiện tại; không giả định rằng đổi `.env` sẽ tự thay mật khẩu trong database.
-
-## 🧪 Recommended Testing
-
-Trước khi phát hành, hãy kiểm tra ít nhất:
-
-* [ ] Đăng nhập đúng và sai mật khẩu.
-* [ ] Token không hợp lệ hoặc hết hạn bị từ chối.
-* [ ] Admin không thể gọi endpoint chỉ dành cho Admin Dev.
-* [ ] Blacklist được áp dụng đúng và có thể gỡ theo quyền.
-* [ ] Thu hồi phiên có hiệu lực ở các yêu cầu tiếp theo.
-* [ ] Quy tắc xử lý vi phạm hoạt động đúng với từng trường hợp.
-* [ ] Audit log không làm lộ mật khẩu hoặc token.
-* [ ] Database vẫn tồn tại sau khi restart server.
-* [ ] API nhạy cảm được bảo vệ qua HTTPS khi triển khai công khai.
-* [ ] Hành vi khi server offline hoặc database gặp lỗi là an toàn.
-
-## 🗺️ Roadmap
-
-Các mục dưới đây là đề xuất phát triển, không phải cam kết rằng chúng đã được triển khai.
-
-* [ ] Rate limiting cho đăng nhập và API nhạy cảm
-* [ ] Quy trình reset mật khẩu an toàn
-* [ ] Kiểm thử tự động cho authorization
-* [ ] Health check mở rộng và monitoring
-* [ ] Quy trình backup/restore database
-* [ ] Chính sách lưu trữ và xóa dữ liệu monitoring
-* [ ] CI kiểm tra lint, test và build trước khi release
-
-## 🤝 Contributing
-
-1. Fork repository.
-2. Tạo branch riêng cho thay đổi.
-3. Thêm test cho các thay đổi liên quan đến bảo mật.
-4. Chạy test trước khi gửi pull request.
-5. Không đưa secret, database production hoặc dữ liệu người dùng vào commit.
-
-## 📄 License
-
-Thêm giấy phép phù hợp với quyền phân phối của dự án, ví dụ MIT, Apache-2.0 hoặc giấy phép riêng. Không nên ghi một license khi chưa xác định quyền sử dụng và phân phối source code.
+Use only systems and device identifiers you are authorized to administer. Protect account credentials, minimize data collection, and follow applicable privacy and security requirements.
 
 ---
 
 <p align="center">
-  <strong>Built for maintainability. Designed with security in mind.</strong>
+  <strong>Independent Service Gateway</strong>
   <br>
-  <sub>Documented behavior should always match the actual server implementation.</sub>
+  Secure · Maintainable · Server-Side Access Control
 </p>
