@@ -1,171 +1,141 @@
-### Extended iOS-to-Backend Architecture
+## System Architecture — Apple-to-Backend Integration Flow
 
-> **Architecture simulation:** This diagram illustrates a proposed integration model. Apple system components and external Apple services are not assumed to forward requests to the project backend. Only supported, explicitly configured integrations should be enabled.
+> **Architecture model — not an official Apple infrastructure diagram.** This diagram illustrates the conceptual path from the iOS device and optional Apple service integration to the project's own backend. Actual Apple services, intermediate providers, and network hops depend on the supported APIs and deployment configuration.
+
+### 1. Full Connection Flow
 
 ```mermaid
-flowchart TB
+flowchart TD
 
-    subgraph IOS["LAYER 1 — iOS SYSTEM"]
-        A01["01 · Server Apple
-        A02["02 · iOS Runtime"]
-        A03["03 · System Frameworks"]
-        A04["04 · Application / Tweak Host"]
-        A05["05 · Tweak Runtime"]
-        A06["06 · Local Preferences"]
-        A06["07 · RootListController"]
-        A01 --> A02 --> A03 --> A04 --> A05 --> A06 --> A07
+    A["01 · iPhone / iOS Device"]
+    B["02 · iOS System Frameworks"]
+    C["03 · App or Tweak Runtime"]
+    D["04 · Local Configuration"]
+    E["05 · API Request Preparation"]
+
+    A --> B --> C --> D --> E
+
+    subgraph APPLE["APPLE SERVICES — ONLY WHEN SUPPORTED AND CONFIGURED"]
+        F["06 · Apple Service Entry Point"]
+        G["07 · Apple Authentication / Authorization"]
+        H["08 · Apple Service API"]
+        I["09 · Apple Service Response"]
+        F --> G --> H --> I
     end
 
-    subgraph FEATURES["LAYER 2 — FEATURE ROUTING"]
-        B07["07 · Feature Dispatcher"]
-        B08["08 · Home"]
-        B09["09 · Hz / FPS"]
-        B10["10 · Switch"]
-        B11["11 · Apps"]
-        B12["12 · Settings"]
-        B13["13 · Admin"]
-        B14["14 · Admin Dev"]
-        A06 --> B07
-        B07 --> B08
-        B07 --> B09
-        B07 --> B10
-        B07 --> B11
-        B07 --> B12
-        B07 --> B13
-        B07 --> B14
+    E -. "Optional Apple API request" .-> F
+    I -. "Optional service response" .-> E
+
+    subgraph CLIENT_NETWORK["CLIENT NETWORK PATH"]
+        J["10 · iOS Network Stack"]
+        K["11 · DNS Resolver"]
+        L["12 · TLS Certificate Verification"]
+        M["13 · Configured Project HTTPS Hostname"]
+        J --> K --> L --> M
     end
 
-    subgraph CLIENT["LAYER 3 — CLIENT REQUEST PIPELINE"]
-        C15["15 · API Client"]
-        C16["16 · Endpoint Configuration"]
-        C17["17 · Request Builder"]
-        C18["18 · Input Validation"]
-        C19["19 · Session Credential"]
-        C20["20 · iOS Network Stack"]
-        C21["21 · DNS Resolution"]
-        C22["22 · TLS Certificate Validation"]
-        B08 --> C15
-        B09 --> C15
-        B10 --> C15
-        B11 --> C15
-        B12 --> C15
-        B13 --> C15
-        B14 --> C15
-        C15 --> C16 --> C17 --> C18 --> C19 --> C20 --> C21 --> C22
+    E --> J
+
+    subgraph EDGE["PROJECT NETWORK EDGE"]
+        N["14 · Public Network Boundary"]
+        O["15 · CDN / Edge Proxy — if configured"]
+        P["16 · Reverse Proxy / Load Balancer — if configured"]
+        Q["17 · Firewall and Ingress Rules"]
+        R["18 · Request Routing"]
+        N --> O --> P --> Q --> R
     end
 
-    subgraph EXTERNAL["LAYER 4 — EXTERNAL SERVICE BOUNDARY"]
-        D23["23 · Optional Apple Service Integration"]
-        D24["24 · Supported Apple API"]
-        D25["25 · External Response Validation"]
-        D23 --> D24 --> D25
+    M --> N
+
+    subgraph BACKEND["PROJECT BACKEND"]
+        S["19 · Node.js Runtime"]
+        T["20 · Express Application"]
+        U["21 · HTTP Method and Payload Validation"]
+        V["22 · Authentication Middleware"]
+        W["23 · Session Validation"]
+        X["24 · Role and Permission Checks"]
+        Y["25 · Application Service Router"]
+
+        S --> T --> U --> V --> W --> X --> Y
     end
 
-    subgraph GATEWAY["LAYER 5 — PROJECT GATEWAY"]
-        E26["26 · Project HTTPS Endpoint"]
-        E27["27 · Public Network Boundary"]
-        E28["28 · Reverse Proxy"]
-        E29["29 · TLS / Connection Policy"]
-        E30["30 · Request Limits"]
-        C22 --> E26 --> E27 --> E28 --> E29 --> E30
+    R --> S
+
+    subgraph SERVICES["APPLICATION SERVICES"]
+        Z["26 · Login / Authentication Service"]
+        AA["27 · Device Monitoring Service"]
+        AB["28 · Account and Session Management"]
+        AC["29 · Blacklist Service"]
+        AD["30 · Violation Policy Service"]
+        AE["31 · Admin Dev Service"]
+        AF["32 · Audit Logging Service"]
+
+        Y --> Z
+        Y --> AA
+        Y --> AB
+        Y --> AC
+        Y --> AD
+        Y --> AE
+        Y --> AF
     end
 
-    subgraph SECURITY["LAYER 6 — BACKEND SECURITY"]
-        F31["31 · Express Application"]
-        F32["32 · HTTP Request Validation"]
-        F33["33 · Authentication Middleware"]
-        F34["34 · Session Verification"]
-        F35["35 · Role-Based Authorization"]
-        E30 --> F31 --> F32 --> F33 --> F34 --> F35
+    subgraph DATA["PERSISTENCE AND OPERATIONS"]
+        AG["33 · Data Access Layer"]
+        AH[("34 · SQLite Database")]
+        AI["35 · Backup and Recovery"]
+        AJ["36 · Security Event Records"]
+
+        Z --> AG
+        AA --> AG
+        AB --> AG
+        AC --> AG
+        AD --> AG
+        AE --> AG
+        AF --> AG
+        AG --> AH
+        AH --> AI
+        AF --> AJ
     end
 
-    subgraph SERVICES["LAYER 7 — APPLICATION SERVICES"]
-        G36["36 · Application Service Router"]
-        G37["37 · Device Monitoring"]
-        G38["38 · Account / Session Management"]
-        G39["39 · Blacklist / Violation Policies"]
-        G40["40 · Admin Dev Operations"]
-        G41["41 · Audit Logging"]
-        F35 --> G36
-        G36 --> G37
-        G36 --> G38
-        G36 --> G39
-        G36 --> G40
-        G36 --> G41
+    subgraph RESPONSE["RESPONSE PATH"]
+        AK["37 · Service Result"]
+        AL["38 · HTTP Status and Response Body"]
+        AM["39 · Client Response Validation"]
+        AN["40 · UI State Update"]
+
+        AK --> AL --> AM --> AN
     end
 
-    subgraph STORAGE["LAYER 8 — PERSISTENCE"]
-        H42["42 · Data Access Layer"]
-        H43[("43 · SQLite Database")]
-        H44["44 · Protected Backup / Recovery"]
-        G37 --> H42
-        G38 --> H42
-        G39 --> H42
-        G40 --> H42
-        G41 --> H42
-        H42 --> H43
-        H43 --> H44
-    end
-
-    subgraph RESPONSE["LAYER 9 — RESPONSE PATH"]
-        I45["45 · Result Mapping"]
-        I46["46 · Error Handling"]
-        I47["47 · HTTP Response"]
-        I48["48 · Client Response Validation"]
-        I49["49 · UI State Update"]
-        I50["50 · Feature Refresh"]
-        H42 -. "Operation result" .-> I45
-        D25 -. "Optional external result" .-> I45
-        I45 --> I46 --> I47 --> I48 --> I49 --> I50
-        I50 -. "Updated state" .-> A06
-    end
-
-    classDef ios fill:#263b59,stroke:#78a6e8,color:#ffffff
-    classDef feature fill:#283d32,stroke:#6fba8c,color:#ffffff
-    classDef network fill:#3b344d,stroke:#b19ae8,color:#ffffff
-    classDef security fill:#4a3035,stroke:#e78c98,color:#ffffff
-    classDef storage fill:#263d42,stroke:#7cc6ce,color:#ffffff
-
-    class A01,A02,A03,A04,A05,A06 ios
-    class B07,B08,B09,B10,B11,B12,B13,B14,I49,I50 feature
-    class C15,C16,C17,C18,C19,C20,C21,C22,D23,D24,D25,E26,E27,E28,E29,E30 network
-    class F31,F32,F33,F34,F35,G36,G37,G38,G39,G40,G41,I45,I46,I47,I48 security
-    class H42,H43,H44 storage
+    AG -. "Result" .-> AK
+    AN -. "Display updated result" .-> D
 ```
 
-### Connection Groups
+### 2. What Each Server Layer Does
 
-| Group                | Points | Purpose                                                        |
-| -------------------- | -----: | -------------------------------------------------------------- |
-| iOS System           |  01–06 | Runtime, supported frameworks, local configuration             |
-| Feature Routing      |  07–14 | Main interface and administrative sections                     |
-| Client Pipeline      |  15–22 | Request construction, endpoint selection, DNS and TLS          |
-| External Integration |  23–25 | Optional supported Apple API integration                       |
-| Project Gateway      |  26–30 | Public endpoint, reverse proxy and request limits              |
-| Backend Security     |  31–35 | Request validation, authentication, sessions and authorization |
-| Application Services |  36–41 | Monitoring, account administration, restrictions and audit     |
-| Persistence          |  42–44 | Data access, database, backup and recovery                     |
-| Response Path        |  45–50 | Result handling, HTTP response and client UI refresh           |
+| Stage | Layer                   | Purpose                                                                             |
+| ----: | ----------------------- | ----------------------------------------------------------------------------------- |
+| 01–05 | iOS client              | Runs the supported client code and prepares requests.                               |
+| 06–09 | Optional Apple services | Handles only the Apple APIs explicitly supported and configured by the project.     |
+| 10–13 | Client networking       | Resolves the configured hostname and establishes a validated HTTPS connection.      |
+| 14–18 | Network edge            | Optionally filters, proxies, and routes incoming traffic.                           |
+| 19–25 | Backend security        | Receives requests, validates input, authenticates sessions, and checks permissions. |
+| 26–32 | Application services    | Handles login, monitoring, sessions, restrictions, Admin Dev, and auditing.         |
+| 33–36 | Persistence             | Stores records and supports backup and security operations.                         |
+| 37–40 | Response path           | Returns the operation result to the client and updates the interface.               |
 
-### Trust Boundaries
+### 3. Important Connection Rules
 
-1. **iOS to network:** client input and local state are untrusted.
-2. **Network to gateway:** requests must use the configured HTTPS endpoint.
-3. **Gateway to backend:** only approved traffic should reach the application.
-4. **Backend authentication:** credentials and sessions must be validated.
-5. **Backend authorization:** every privileged operation must verify permissions.
-6. **Backend to database:** access must use controlled application code and parameterized queries.
-7. **External service integration:** Apple API access must use supported endpoints and valid authorization.
-8. **Response to client:** responses must be validated and must not be treated as successful solely because a connection was established.
+* Apple services and the project backend are separate trust domains.
+* The project backend receives requests only when the client or an authorized integration actually sends them to the configured project endpoint.
+* A CDN, load balancer, or reverse proxy is present only if deployed.
+* Authentication and role checks must be enforced by the backend, not just by the interface.
+* The database should not be directly exposed to the public network.
+* Apple authentication does not automatically authenticate a user to the project's own backend.
+* A successful TLS connection does not mean the requested operation is authorized.
+* Error responses must not be treated as successful operations.
 
-### Integration Status
+### 4. Actual Deployment Versus Conceptual Architecture
 
-* **iOS system layer:** depends on the actual tweak runtime and supported iOS APIs.
-* **Feature routing:** depends on the implementation of `RootListController.m` and the feature handlers.
-* **Project gateway:** requires a real configured endpoint and deployment.
-* **Authentication and Admin Dev:** require implemented backend routes and server-side permission checks.
-* **Apple service integration:** optional; inactive unless a supported API and valid credentials are configured.
-* **Database and backup:** depend on the actual backend schema and deployment configuration.
-* **Response path:** depends on the client's request and error-handling implementation.
+The diagram is a **proposed integration model**. Before describing any component as active, verify the actual hostname, supported Apple API, proxy configuration, backend route, authentication policy, and database implementation.
 
-This extended diagram is an architectural model, not evidence that every numbered component is already connected or operational.
+Do not label a privately operated server as an official Apple server. A project-controlled gateway can use a neutral name such as `Service Gateway` or `Apple API Integration Gateway` when it genuinely connects to a supported Apple API, provided the documentation clearly identifies the project as independent.
