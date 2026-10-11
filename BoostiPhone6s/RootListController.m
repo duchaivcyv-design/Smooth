@@ -1,4 +1,4 @@
-// V19.8 RootListController — role-gated server configuration and safer authentication.
+// V20.1 RootListController — safe Liquid Glass layout, stable transitions, role gates, theme and redraw controls.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -48,6 +48,7 @@ extern char **environ;
 #define TI_ADMIN_USER_KEY   @"ti_admin_user_v7"
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
 #define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
+#define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
 
 // ====================================================================================================
 // SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
@@ -72,7 +73,7 @@ static void Titanium_SavePersistentServerState(int state, NSTimeInterval untilTi
         @"updated": @([[NSDate date] timeIntervalSince1970])
     };
     [d writeToFile:kPersistServerStatePath atomically:YES];
-    chmod([kPersistServerStatePath UTF8String], 0666);
+    chmod([kPersistServerStatePath UTF8String], 0600);
 }
 
 static void Titanium_ClearPersistentServerState(void) {
@@ -223,7 +224,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         case LGGlassMaterialTypeChrome:    return isDark ? UIBlurEffectStyleSystemChromeMaterialDark : UIBlurEffectStyleSystemChromeMaterialLight;
         case LGGlassMaterialTypeProminent: return isDark ? UIBlurEffectStyleSystemMaterialDark : UIBlurEffectStyleSystemMaterialLight;
         case LGGlassMaterialTypeOverlay:   return isDark ? UIBlurEffectStyleSystemUltraThinMaterialDark : UIBlurEffectStyleSystemUltraThinMaterialLight;
-        case LGGlassMaterialTypeCrystal:   return isDark ? UIBlurEffectStyleSystemChromeMaterialDark : UIBlurEffectStyleSystemChromeMaterialLight;
+        case LGGlassMaterialTypeCrystal:   return isDark ? UIBlurEffectStyleSystemUltraThinMaterialDark : UIBlurEffectStyleSystemUltraThinMaterialLight;
     }
     return UIBlurEffectStyleSystemThinMaterialDark;
 }
@@ -266,8 +267,30 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     return 0.38;
 }
 + (CGFloat)rimWidthForType:(LGGlassMaterialType)type { return 1.0; }
-+ (CGFloat)shadowOpacityForType:(LGGlassMaterialType)type { return 0.34; }
-+ (CGFloat)shadowRadiusForType:(LGGlassMaterialType)type { return 20.0; }
++ (CGFloat)shadowOpacityForType:(LGGlassMaterialType)type {
+    switch (type) {
+        case LGGlassMaterialTypeUltraThin: return 0.08;
+        case LGGlassMaterialTypeThin: return 0.12;
+        case LGGlassMaterialTypeRegular: return 0.15;
+        case LGGlassMaterialTypeChrome: return 0.22;
+        case LGGlassMaterialTypeProminent: return 0.18;
+        case LGGlassMaterialTypeOverlay: return 0.10;
+        case LGGlassMaterialTypeCrystal: return 0.16;
+    }
+    return 0.12;
+}
++ (CGFloat)shadowRadiusForType:(LGGlassMaterialType)type {
+    switch (type) {
+        case LGGlassMaterialTypeUltraThin: return 7.0;
+        case LGGlassMaterialTypeThin: return 9.0;
+        case LGGlassMaterialTypeRegular: return 11.0;
+        case LGGlassMaterialTypeChrome: return 14.0;
+        case LGGlassMaterialTypeProminent: return 14.0;
+        case LGGlassMaterialTypeOverlay: return 8.0;
+        case LGGlassMaterialTypeCrystal: return 12.0;
+    }
+    return 9.0;
+}
 + (CGFloat)shadowOffsetYForType:(LGGlassMaterialType)type { return 8.0; }
 + (CGFloat)specularHeightRatioForType:(LGGlassMaterialType)type {
     switch (type) {
@@ -304,6 +327,11 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 - (instancetype)initWithFrame:(CGRect)frame cornerRadius:(CGFloat)radius materialType:(LGGlassMaterialType)type;
 - (void)applyFluidJiggleAnimationWithVelocity:(CGFloat)vel;
 - (void)setGlassHighlighted:(BOOL)highlighted animated:(BOOL)animated;
+- (void)setGlassTransparencyEnabled:(BOOL)enabled;
+- (void)refreshMaterialForCurrentTraits;
+@property (nonatomic, assign) CGRect v20LastLayoutBounds;
+@property (nonatomic, assign) CGFloat v20LastCornerRadius;
+@property (nonatomic, assign) BOOL v20TransparencyEnabled;
 @end
 
 @implementation AppleLiquidGlassView
@@ -443,8 +471,42 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         self.layer.shadowRadius = [LGGlassMaterialFactory shadowRadiusForType:type];
 
         [self updateLayoutForBounds:self.bounds];
+        id savedGlassSetting = [[NSUserDefaults standardUserDefaults] objectForKey:TI_GLASS_TRANSPARENCY_KEY];
+        [self setGlassTransparencyEnabled:(savedGlassSetting ? [savedGlassSetting boolValue] : YES)];
     }
     return self;
+}
+
+- (void)setGlassTransparencyEnabled:(BOOL)enabled {
+    _v20TransparencyEnabled = enabled;
+    _blurView.hidden = !enabled;
+    if (enabled) {
+        self.backgroundColor = [UIColor clearColor];
+        _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory tintAlphaForType:_materialType]];
+    } else {
+        // Opaque fallback removes backdrop blur when Glass Redraw is disabled.
+        UIColor *opaqueGlass = [UIColor colorWithRed:0.075 green:0.065 blue:0.105 alpha:0.985];
+        self.backgroundColor = opaqueGlass;
+        _tintView.backgroundColor = opaqueGlass;
+    }
+    [self setNeedsLayout];
+}
+
+- (void)refreshMaterialForCurrentTraits {
+    if (@available(iOS 13.0, *)) {
+        BOOL dark = (self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight);
+        _blurView.effect = [UIBlurEffect effectWithStyle:[LGGlassMaterialFactory blurStyleForType:_materialType isDark:dark]];
+    }
+    [self setGlassTransparencyEnabled:_v20TransparencyEnabled];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        if (!previousTraitCollection || self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle) {
+            [self refreshMaterialForCurrentTraits];
+        }
+    }
 }
 
 - (void)updateLayoutForBounds:(CGRect)bounds {
@@ -481,7 +543,11 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 - (void)layoutSubviews {
     [super layoutSubviews];
     self.layer.cornerRadius = _cornerRadiusValue;
-    [self updateLayoutForBounds:self.bounds];
+    if (!CGRectEqualToRect(_v20LastLayoutBounds, self.bounds) || fabs(_v20LastCornerRadius - _cornerRadiusValue) > 0.01) {
+        _v20LastLayoutBounds = self.bounds;
+        _v20LastCornerRadius = _cornerRadiusValue;
+        [self updateLayoutForBounds:self.bounds];
+    }
 }
 
 - (void)animatePressIn {
@@ -991,7 +1057,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     CGFloat h = self.bounds.size.height;
     CGRect ind = CGRectMake(index * w + 3, 3, w - 6, h - 6);
     // [V10.3 - THEO VIDEO #2 Fluid Glass]: indicator co giãn theo vận tốc khi trượt, spring mượt
-    CGFloat stretch = (animated && oldIdx != index) ? MIN(1.25, 1.0 + fabs(index - oldIdx) * 0.12) : 1.0;
+    CGFloat stretch = (animated && oldIdx != index) ? MIN(1.25, 1.0 + fabs((CGFloat)(index - oldIdx)) * 0.12) : 1.0;
     void (^a)(void) = ^{
         self->_indicator.frame = ind;
         self->_indicator.transform = CGAffineTransformIdentity;
@@ -1038,7 +1104,9 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @property (nonatomic, strong) UILabel *detailL;
 @property (nonatomic, strong) UIView *accessoryContainer;
 @property (nonatomic, strong) NSArray<NSLayoutConstraint *> *accessoryConstraints;
+@property (nonatomic, strong) UIColor *v20AccentColor;
 - (void)configureWithTitle:(NSString *)title detail:(NSString *)detail accessory:(UIView *)accessory accent:(UIColor *)accent;
+- (void)applyV20CellTheme;
 @end
 
 @implementation LGGlassTableViewCell
@@ -1054,7 +1122,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _glassBackground = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
                                                           cornerRadius:16.0
                                                           materialType:LGGlassMaterialTypeThin];
-        _glassBackground.interactiveHighlightEnabled = YES;
+        // Table rows avoid repeated multi-layer spring transforms on every selection; keep taps lightweight.
+        _glassBackground.interactiveHighlightEnabled = NO;
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [self.contentView insertSubview:_glassBackground atIndex:0];
@@ -1073,6 +1142,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _detailL.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
         _detailL.textAlignment = NSTextAlignmentRight;
         _detailL.translatesAutoresizingMaskIntoConstraints = NO;
+        [self applyV20CellTheme];
         [self.contentView addSubview:_detailL];
 
         [NSLayoutConstraint activateConstraints:@[
@@ -1084,6 +1154,20 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         ]];
     }
     return self;
+}
+
+- (void)applyV20CellTheme {
+    BOOL dark = YES;
+    if (@available(iOS 13.0, *)) dark = self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
+    _titleL.textColor = _v20AccentColor ?: (dark ? [UIColor whiteColor] : [UIColor colorWithWhite:0.12 alpha:1.0]);
+    _detailL.textColor = dark ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        if (!previousTraitCollection || self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle) [self applyV20CellTheme];
+    }
 }
 
 - (void)layoutSubviews {
@@ -1106,8 +1190,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     }
     _titleL.text = nil;
     _detailL.text = nil;
-    _titleL.textColor = [UIColor whiteColor];
+    _v20AccentColor = nil;
+    [self applyV20CellTheme];
     self.alpha = 1.0;
+    self.contentView.alpha = 1.0;
     self.userInteractionEnabled = YES;
     self.selectionStyle = UITableViewCellSelectionStyleNone;
     self.transform = CGAffineTransformIdentity;
@@ -1116,7 +1202,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)configureWithTitle:(NSString *)title detail:(NSString *)detail accessory:(UIView *)accessory accent:(UIColor *)accent {
     _titleL.text = title;
     _detailL.text = detail;
-    _titleL.textColor = accent ?: [UIColor whiteColor];
+    _v20AccentColor = accent;
+    [self applyV20CellTheme];
 
     if (_accessoryContainer) {
         if (_accessoryConstraints) {
@@ -1163,17 +1250,15 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
 - (void)setHighlighted:(BOOL)highlighted animated:(BOOL)animated {
     [super setHighlighted:highlighted animated:animated];
-    [_glassBackground setGlassHighlighted:highlighted animated:animated];
+    [UIView animateWithDuration:(animated ? 0.10 : 0.0) delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut animations:^{
+        self.contentView.alpha = highlighted ? 0.94 : 1.0;
+    } completion:nil];
 }
 
 - (void)setSelected:(BOOL)selected animated:(BOOL)animated {
     [super setSelected:selected animated:animated];
-    if (selected) {
-        [_glassBackground setGlassHighlighted:YES animated:YES];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.24 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self->_glassBackground setGlassHighlighted:NO animated:YES];
-        });
-    }
+    // No row-scale/blur rebuild here: selection and reloadSections used to fight each other visually.
+    if (!selected) self.contentView.alpha = 1.0;
 }
 @end
 
@@ -1184,6 +1269,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @property (nonatomic, strong) AppleLiquidGlassView *glassPill;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, assign) BOOL v20TabSelected;
+@property (nonatomic, assign) BOOL v20TabPressed;
 - (instancetype)initWithIconName:(NSString *)iconName title:(NSString *)title;
 - (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated;
 @end
@@ -1230,7 +1317,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
             [_titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-2]
         ]];
         [self addTarget:self action:@selector(tDown) forControlEvents:UIControlEventTouchDown];
-        [self addTarget:self action:@selector(tUp) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel | UIControlEventTouchDragExit];
+        [self addTarget:self action:@selector(tUp) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel | UIControlEventTouchDragExit];
     }
     return self;
 }
@@ -1243,34 +1330,56 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     [_glassPill layoutSubviews];
 }
 
+- (CGAffineTransform)v20IconTransformForSelected:(BOOL)selected pressed:(BOOL)pressed {
+    // The icon only lifts to the stationary glass lens when selection changes;
+    // touch-down itself never translates the glyph, preventing the "icon drops" glitch.
+    (void)pressed;
+    CGFloat scale = selected ? 0.98 : 1.0;
+    CGFloat y = selected ? -12.0 : 0.0;
+    return CGAffineTransformMake(scale, 0.0, 0.0, scale, 0.0, y);
+}
 - (void)tDown {
-    [UIView animateWithDuration:0.14 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        self.iconView.transform = CGAffineTransformMakeScale(0.86, 0.86);
+    self.v20TabPressed = YES;
+    [UIView animateWithDuration:0.10 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = CGAffineTransformMakeScale(0.975, 0.975);
+        self.iconView.transform = [self v20IconTransformForSelected:self.v20TabSelected pressed:YES];
     } completion:nil];
 }
 - (void)tUp {
-    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.60 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        self.iconView.transform = CGAffineTransformIdentity;
+    self.v20TabPressed = NO;
+    [UIView animateWithDuration:0.20 delay:0 usingSpringWithDamping:0.84 initialSpringVelocity:0.25 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.transform = CGAffineTransformIdentity;
+        self.iconView.transform = [self v20IconTransformForSelected:self.v20TabSelected pressed:NO];
     } completion:nil];
 }
 - (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated {
     [super setSelected:selected];
-    // [V10.2 - LIQUID NAVIGATION]: tab được chọn -> icon NỔI LÊN TRÊN giọt nước (translateY -16), màu trắng đậm.
-    // Không dùng glassPill nền nữa (indicator là giọt nước chung). Tab không chọn -> icon về vị trí cũ, màu xám.
-    UIColor *c = selected ? [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:1.0] : [UIColor colorWithWhite:0.78 alpha:1.0];
+    self.v20TabSelected = selected;
+    BOOL dark = YES;
+    if (@available(iOS 13.0, *)) dark = self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
+    UIColor *c = selected ? [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:1.0] :
+                 (dark ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0]);
     UIFont *f = selected ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
-    CGAffineTransform t = selected ? CGAffineTransformMakeTranslation(0, -16.0) : CGAffineTransformIdentity;
-    CGFloat titleAlpha = selected ? 0.0 : 1.0;
+    CGAffineTransform t = [self v20IconTransformForSelected:selected pressed:self.v20TabPressed];
+    CGFloat titleAlpha = 1.0;
     void (^u)(void) = ^{
         self.iconView.tintColor = c;
         self.iconView.transform = t;
-        self.titleLabel.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
+        self.titleLabel.textColor = dark ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
         self.titleLabel.font = f;
         self.titleLabel.alpha = titleAlpha;
         self.glassPill.alpha = 0.0;
     };
-    if (animated) [UIView animateWithDuration:0.52 delay:0 usingSpringWithDamping:0.62 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:u completion:nil];
+    if (animated) [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.42 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:u completion:nil];
     else u();
+}
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        if (!previousTraitCollection || self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle) {
+            [self updateTabSelected:self.v20TabSelected animated:NO];
+        }
+    }
 }
 @end
 
@@ -1612,13 +1721,13 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)startAnimating {
     [self stopAnimating];
     _phase = 0;
-    _animTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer * _Nonnull t) {
+    _animTimer = [NSTimer scheduledTimerWithTimeInterval:0.10 repeats:YES block:^(NSTimer * _Nonnull t) {
         self.phase += 0.18;
         CGFloat s1 = sin(self.phase);
         CGFloat s2 = sin(self.phase + 0.8);
         CGFloat s3 = sin(self.phase + 1.6);
         CGFloat baseY = self.bounds.size.height / 2.0 - 14.0;
-        [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
             self.dot1.transform = CGAffineTransformMakeTranslation(0, s1 * 8.0);
             self.dot2.transform = CGAffineTransformMakeTranslation(0, s2 * 8.0);
             self.dot3.transform = CGAffineTransformMakeTranslation(0, s3 * 8.0);
@@ -2291,6 +2400,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     BOOL _isRamExpanded;
     BOOL _isBatteryExpanded;
     BOOL _isScreenExpanded;
+    BOOL _hasPlayedEntranceAnimation;
+    BOOL _hasStartedAppScan;
+    uint64_t _searchUpdateGeneration;
+    uint64_t _v20TableTransitionGeneration;
+    NSInteger _v20LongPressPreviewTab;
+    CGSize _v20LastNavLayoutSize;
+    CGRect _v20LastNavFrame;
 
     NSString *_deepArchString;
     NSString *_deepCoreCountString;
@@ -2340,6 +2456,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSString *_adminAccessToken;
     NSString *_adminRole;
 }
+- (void)applyThemePreferenceAnimated:(BOOL)animated;
+- (void)applyGlassTransparencyRecursively:(UIView *)view enabled:(BOOL)enabled;
+- (void)refreshBottomTabsAvailability;
+- (void)updateRoleBadgeTitle:(NSString *)title;
+- (void)layoutLiquidGlassControlsForCurrentBounds;
+- (void)setupTopHeaderBar;
+- (void)setupExpandingNavigationItems;
+- (void)reloadVisibleContentWithSubtleTransition;
+- (void)v20HandleForegroundTransition:(NSNotification *)notification;
 @end
 
 @implementation RootListController
@@ -2359,9 +2484,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     CAGradientLayer *bg = [CAGradientLayer layer];
     bg.frame = self.view.bounds;
+    bg.name = @"TI_V20_1_BackgroundGradient";
     bg.colors = @[
-        (id)[UIColor colorWithRed:0.04 green:0.05 blue:0.09 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.01 green:0.01 blue:0.03 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.055 green:0.035 blue:0.105 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.008 green:0.008 blue:0.025 alpha:1.0].CGColor
     ];
     bg.startPoint = CGPointMake(0.0, 0.0);
     bg.endPoint = CGPointMake(0.0, 1.0);
@@ -2369,6 +2495,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.02 blue:0.05 alpha:1.0];
 
     _currentBottomTab = 0;
+    _hasPlayedEntranceAnimation = NO;
+    _searchUpdateGeneration = 0;
+    _v20TableTransitionGeneration = 0;
+    _v20LongPressPreviewTab = -1;
+    _v20LastNavLayoutSize = CGSizeZero;
+    _v20LastNavFrame = CGRectNull;
     _currentHzFpsSubTab = 0;
     _currentSwitchSubTab = 0;
 
@@ -2383,14 +2515,17 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _chipErrorActive = NO;
     _lastAppliedHz = 144;
     _lastAppliedFPS = 144;
-    _currentLatencyMs = 45;
+    _currentLatencyMs = -1;
     _serverDown = NO;
 
     [self loadSettingsData];
+    if (![[NSUserDefaults standardUserDefaults] objectForKey:TI_GLASS_TRANSPARENCY_KEY]) {
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_GLASS_TRANSPARENCY_KEY];
+    }
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
 
     _isAdminServer = [[NSUserDefaults standardUserDefaults] boolForKey:TI_ADMIN_SERVER_KEY];
-    _adminServerUser = [[NSUserDefaults standardUserDefaults] stringForKey:TI_ADMIN_USER_KEY];
+    _adminServerUser = nil; // username is never restored from disk
     NSString *savedServerMode = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     // Never trust a locally stored Admin flag: without a server-issued session it is forgeable.
     _isAdminServer = NO;
@@ -2399,9 +2534,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _adminRole = nil;
     [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TI_ADMIN_SERVER_KEY];
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
-    if ([savedServerMode isEqualToString:@"admin"]) {
+    if (![savedServerMode isEqualToString:@"free"]) {
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
     }
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
     [[NSUserDefaults standardUserDefaults] synchronize];
 
     if ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue]) {
@@ -2413,7 +2550,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSUUID *uuid = [[UIDevice currentDevice] identifierForVendor];
     _deviceUUIDString = uuid ? [uuid UUIDString] : @"UNKNOWN-DEVICE-UUID";
 
-    _isKernelExploited = [self.settingsDict[@"IsKernelExploited"] boolValue];
+    // Treat activation as session-scoped UI state. Never trust an editable plist to claim that
+    // a kernel exploit is active; this controller's connection animation is not a kernel exploit.
+    _isKernelExploited = NO;
+    if (!_isKernelExploited || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) _currentBottomTab = 4;
     if (_isKernelExploited) {
         _deepArchString = self.settingsDict[@"SavedArchString"] ?: @"arm64e (Apple Silicon PAC)";
         _deepCoreCountString = self.settingsDict[@"SavedCoreCountString"] ?: @"SoC Clustered P/E Cores";
@@ -2429,13 +2569,23 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     self.customTableView.userInteractionEnabled = ([initialServerChoice isEqualToString:@"free"] || _isAdminServer);
     [self setupLiquidGlassLens];
+    [self applyThemePreferenceAnimated:NO];
+    [self refreshBottomTabsAvailability];
+    if (@available(iOS 9.0, *)) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20PowerOrThermalStateDidChange:) name:NSProcessInfoPowerStateDidChangeNotification object:nil];
+    }
+    if (@available(iOS 11.0, *)) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20PowerOrThermalStateDidChange:) name:NSProcessInfoThermalStateDidChangeNotification object:nil];
+    }
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20HandleForegroundTransition:) name:UIApplicationWillEnterForegroundNotification object:nil];
 
     [self startLatencyMonitor];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self loadInstalledAppsAsync];
-        if (self->_isKernelExploited) [self applyDeepSpringBoardAndUIKitTweaks];
-    });
+    if (_isKernelExploited) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self applyDeepSpringBoardAndUIKitTweaks];
+        });
+    }
 
     // Kiểm tra persistent server state — ưu tiên cao nhất
     if (_isAdminServer) {
@@ -2448,11 +2598,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self showPersistentServerStateAlert];
         });
-    } else if (!_isKernelExploited) {
+    } else if (!_isKernelExploited && ([savedServerMode isEqualToString:@"free"] || _isAdminServer)) {
         NSInteger cc = Titanium_GetCrashCount();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (cc >= 3) [self showServerDownAlert];
-            else [self showExploitRequiredPopup];
+            else if (!self.presentedViewController) [self showExploitRequiredPopup];
         });
     }
 
@@ -2467,6 +2617,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    if (!_hasPlayedEntranceAnimation) {
+        // Keep content visible; a full alpha fade looked like a screen-wide blur/flash.
+        self.customTableView.alpha = 1.0;
+        self.customTableView.transform = CGAffineTransformMakeTranslation(0, 4.0);
+        _liquidNavBarContainer.alpha = 1.0;
+    }
+    [self refreshBottomTabsAvailability];
 
     if (_isAdminServer) {
         if (_isKernelExploited) [self startContinuousHardwareHUD];
@@ -2492,8 +2649,108 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (_isKernelExploited) [self startContinuousHardwareHUD];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (!_hasPlayedEntranceAnimation) {
+        _hasPlayedEntranceAnimation = YES;
+        [UIView animateWithDuration:0.20 delay:0.0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            self.customTableView.alpha = 1.0;
+            self.customTableView.transform = CGAffineTransformIdentity;
+            self->_liquidNavBarContainer.alpha = 1.0;
+        } completion:nil];
+    }
+    [self v20StartBackgroundMotionIfAllowed];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CAGradientLayer *gradient = nil;
+    for (CALayer *layer in self.view.layer.sublayers) {
+        if ([layer.name isEqualToString:@"TI_V20_1_BackgroundGradient"] && [layer isKindOfClass:[CAGradientLayer class]]) {
+            gradient = (CAGradientLayer *)layer;
+            break;
+        }
+    }
+    if (gradient) gradient.frame = self.view.bounds;
+    [self layoutLiquidGlassControlsForCurrentBounds];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        BOOL autoTheme = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
+        if (autoTheme && (!previousTraitCollection || self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle)) {
+            [self applyThemePreferenceAnimated:YES];
+        }
+    }
+}
+
+- (void)v20HandleForegroundTransition:(NSNotification *)notification {
+    if (!self.isViewLoaded || !self.view.window) return;
+    if ([NSProcessInfo processInfo].isLowPowerModeEnabled) return;
+    self.customTableView.transform = CGAffineTransformMakeTranslation(0.0, 2.0);
+    self.customTableView.alpha = 0.985;
+    [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.customTableView.transform = CGAffineTransformIdentity;
+        self.customTableView.alpha = 1.0;
+    } completion:nil];
+}
+
+- (void)v20PowerOrThermalStateDidChange:(NSNotification *)notification {
+    NSProcessInfo *info = [NSProcessInfo processInfo];
+    BOOL seriousThermalState = NO;
+    if (@available(iOS 11.0, *)) seriousThermalState = (info.thermalState >= NSProcessInfoThermalStateSerious);
+    if (info.isLowPowerModeEnabled || seriousThermalState) {
+        [self v20StopBackgroundMotion];
+    } else if (self.view.window && self.viewIfLoaded.window) {
+        [self v20StartBackgroundMotionIfAllowed];
+    }
+}
+
+- (void)v20StartBackgroundMotionIfAllowed {
+    NSProcessInfo *info = [NSProcessInfo processInfo];
+    BOOL seriousThermalState = NO;
+    if (@available(iOS 11.0, *)) seriousThermalState = (info.thermalState >= NSProcessInfoThermalStateSerious);
+    if (!self.view.window || info.isLowPowerModeEnabled || seriousThermalState) return;
+    CAGradientLayer *gradient = nil;
+    for (CALayer *layer in self.view.layer.sublayers) {
+        if ([layer.name isEqualToString:@"TI_V20_1_BackgroundGradient"] && [layer isKindOfClass:[CAGradientLayer class]]) {
+            gradient = (CAGradientLayer *)layer;
+            break;
+        }
+    }
+    if (!gradient || [gradient animationForKey:@"TI_V20_1_BackgroundDrift"]) return;
+    CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"startPoint"];
+    drift.fromValue = [NSValue valueWithCGPoint:CGPointMake(0.0, 0.0)];
+    drift.toValue = [NSValue valueWithCGPoint:CGPointMake(0.08, 0.035)];
+    drift.duration = 18.0;
+    drift.autoreverses = YES;
+    drift.repeatCount = HUGE_VALF;
+    drift.removedOnCompletion = NO;
+    drift.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [gradient addAnimation:drift forKey:@"TI_V20_1_BackgroundDrift"];
+}
+
+- (void)v20StopBackgroundMotion {
+    for (CALayer *layer in self.view.layer.sublayers) {
+        if ([layer.name isEqualToString:@"TI_V20_1_BackgroundGradient"]) {
+            [layer removeAnimationForKey:@"TI_V20_1_BackgroundDrift"];
+            break;
+        }
+    }
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [_latencyTimer invalidate];
+    [_serverBlinkTimer invalidate];
+    [self v20StopBackgroundMotion];
+}
+
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self v20StopBackgroundMotion];
+    [self cancelChipErrorRandom];
     [self stopContinuousHardwareHUD];
     [_expandingMenuButton collapseMenu];
     [_expandingBoltButton collapseMenu];
@@ -2574,6 +2831,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)showFirstInstallServerPicker {
     NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     if ([selected isEqualToString:@"free"] || self->_isAdminServer) return;
+    if (self.presentedViewController) return;
 
     // Centered modal; no Cancel action. Choosing Admin does NOT unlock the app.
     UIAlertController *alert = [UIAlertController
@@ -2594,10 +2852,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         [defaults setBool:YES forKey:TI_FIRST_INSTALL_KEY];
         [defaults synchronize];
         selfRef.customTableView.userInteractionEnabled = YES;
+        [selfRef updateRoleBadgeTitle:@"Free"];
         [selfRef updateServerStatusIndicator];
+        [selfRef refreshBottomTabsAvailability];
+        [selfRef selectTabIndex:4 animated:YES];
         [selfRef.customTableView reloadData];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [selfRef openDopamineStyleExploitConsole];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!selfRef.presentedViewController) [selfRef openDopamineStyleExploitConsole];
         });
     }]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -2616,8 +2877,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 - (void)showExploitRequiredPopup {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"CẦN KHAI THÁC DARWIN"
-                                                                   message:@"Ứng dụng cần khai thác Darwin Kernel để kích hoạt toàn bộ tính năng.\n\nNếu không khai thác, Tweak sẽ TẮT HOÀN TOÀN 100%.\n\nVào tab CÀI ĐẶT → chạm dòng ĐỎ để bắt đầu."
+    if (self.presentedViewController) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"CẦN KÍCH HOẠT"
+                                                                   message:@"Các mục đang bị khóa. Hãy chọn server và hoàn tất bước kích hoạt trong Cài Đặt để mở giao diện điều khiển."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Khai Thác Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -2657,15 +2919,20 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 #pragma mark - Top header bar + Admin login
 
+- (void)setupNavigationItems {
+    if (!_serverStatusLabel) [self setupTopHeaderBar];
+    if (!_expandingBoltButton || !_expandingLockButton || !_expandingMenuButton) [self setupExpandingNavigationItems];
+}
+
 - (void)setupTopHeaderBar {
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 260, 30)];
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 212, 30)];
 
     _serverStatusDot = [[UIView alloc] initWithFrame:CGRectMake(0, 11, 8, 8)];
     _serverStatusDot.layer.cornerRadius = 4;
     _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
     [container addSubview:_serverStatusDot];
 
-    _serverStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 4, 190, 22)];
+    _serverStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 4, 116, 22)];
     _serverStatusLabel.text = @"Server Free: Ổn định";
     _serverStatusLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
     _serverStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
@@ -2679,7 +2946,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSString *savedRoleTitle = [savedServerMode isEqualToString:@"free"] ? @"Free" : @"Server";
     [loginBtn setTitle:savedRoleTitle forState:UIControlStateNormal];
     loginBtn.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
-    loginBtn.frame = CGRectMake(206, 0, 54, 30);
+    loginBtn.frame = CGRectMake(136, 0, 72, 30);
     loginBtn.layer.cornerRadius = 8;
     loginBtn.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
     [loginBtn setTitleColor:[UIColor colorWithRed:1.0 green:0.85 blue:0.35 alpha:1.0] forState:UIControlStateNormal];
@@ -2688,6 +2955,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
     [self updateServerStatusIndicator];
+}
+
+- (void)updateRoleBadgeTitle:(NSString *)title {
+    UIView *container = self.navigationItem.leftBarButtonItem.customView;
+    UIButton *button = (UIButton *)[container viewWithTag:731904];
+    if (![button isKindOfClass:[UIButton class]]) return;
+    NSString *safeTitle = title.length ? title : @"Server";
+    [button setTitle:safeTitle forState:UIControlStateNormal];
+    CGFloat width = [safeTitle isEqualToString:@"Admin Dev"] ? 82.0 : ([safeTitle isEqualToString:@"Server"] ? 72.0 : 58.0);
+    button.frame = CGRectMake(136.0, 0, width, 30.0);
+    container.frame = CGRectMake(0, 0, 136.0 + width, 30.0);
+    _serverStatusLabel.frame = CGRectMake(14.0, 4.0, 116.0, 22.0);
 }
 
 - (void)handleServerButtonTap {
@@ -2765,7 +3044,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         tf.placeholder = @"Tài khoản";
         tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
         tf.autocorrectionType = UITextAutocorrectionTypeNo;
-        tf.text = self->_adminServerUser ?: @"";
+        tf.text = @"";
     }];
     [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.placeholder = @"Mật khẩu";
@@ -2793,6 +3072,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
         UIAlertController *loading = [UIAlertController alertControllerWithTitle:@"Đang xác thực" message:@"Đang kiểm tra thông tin với máy chủ…" preferredStyle:UIAlertControllerStyleAlert];
         [strongSelf presentViewController:loading animated:YES completion:nil];
+        CFTimeInterval authStartTime = CACurrentMediaTime();
         [strongSelf performAdminLoginWithUsername:username password:password completion:^(NSDictionary *result, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [loading dismissViewControllerAnimated:YES completion:^{
@@ -2817,23 +3097,22 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                         [strongSelf presentViewController:err animated:YES completion:nil];
                         return;
                     }
+                    strongSelf->_currentLatencyMs = (NSInteger)MAX(0.0, round((CACurrentMediaTime() - authStartTime) * 1000.0));
                     strongSelf->_adminAccessToken = result[@"access_token"];
                     strongSelf->_adminRole = role;
                     strongSelf->_isAdminServer = YES;
                     strongSelf->_adminServerUser = username;
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
-                    [[NSUserDefaults standardUserDefaults] setObject:username forKey:TI_ADMIN_USER_KEY];
+                    // Keep username in memory only; don't retain it in the readable preferences file.
+                    [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
                     [[NSUserDefaults standardUserDefaults] setObject:role forKey:@"TIAdminRole"];
                     [[NSUserDefaults standardUserDefaults] setObject:([role isEqualToString:@"admin_dev"] ? @"admin_dev" : @"admin") forKey:TI_SELECTED_SERVER_KEY];
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
                     // Token is held in memory only; the backend remains the authority for role/revocation.
                     [strongSelf.customTableView setUserInteractionEnabled:YES];
                     [strongSelf updateServerStatusIndicator];
-                    UIButton *roleButton = (UIButton *)[strongSelf.navigationItem.leftBarButtonItem.customView viewWithTag:731904];
-                    if ([roleButton isKindOfClass:[UIButton class]]) {
-                        [roleButton setTitle:([role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin") forState:UIControlStateNormal];
-                        [roleButton sizeToFit];
-                    }
+                    [strongSelf updateRoleBadgeTitle:([role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin")];
+                    [strongSelf refreshBottomTabsAvailability];
                     [strongSelf.customTableView reloadData];
                     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
                     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
@@ -3064,40 +3343,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Latency
 
 - (void)startLatencyMonitor {
-    if (_latencyTimer) [_latencyTimer invalidate];
-    _latencyTimer = [NSTimer scheduledTimerWithTimeInterval:2.5 repeats:YES block:^(NSTimer * _Nonnull t) {
-        [self tickLatency];
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:_latencyTimer forMode:NSRunLoopCommonModes];
-
-    if (_serverBlinkTimer) [_serverBlinkTimer invalidate];
-    _serverBlinkTimer = [NSTimer scheduledTimerWithTimeInterval:10.0 repeats:YES block:^(NSTimer * _Nonnull t) {
-        [self blinkServerStatus];
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:_serverBlinkTimer forMode:NSRunLoopCommonModes];
+    // V20.1: no random RTT simulation and no periodic blink/reload timer. The value is populated
+    // only by a real request (admin login); otherwise the UI says it hasn't been measured.
+    [_latencyTimer invalidate]; _latencyTimer = nil;
+    [_serverBlinkTimer invalidate]; _serverBlinkTimer = nil;
+    _currentLatencyMs = -1;
+    [self updateServerStatusIndicator];
 }
 
 // Tỉ lệ: 0.01% sập (1/10000), 0.1% quá tải hoặc lỗi (10/10000)
 - (void)tickLatency {
-    if (_isAdminServer) {
-        _currentLatencyMs = 15 + arc4random_uniform(30);
-        [self updateServerStatusIndicator];
-        if (_currentBottomTab == 4 && !self.presentedViewController) {
-            [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2]
-                                withRowAnimation:UITableViewRowAnimationNone];
-        }
-        return;
-    }
-
-    // V19.5: không giả lập lỗi/sập server ngẫu nhiên hoặc ghi trạng thái sập giả vào đĩa.
-    // Đây vẫn chỉ là con số hiển thị nội bộ, không phải phép đo RTT thực từ backend.
-    NSInteger baseLatency = 30 + arc4random_uniform(120);
-    _currentLatencyMs = baseLatency;
+    // Intentionally no simulated random ping. A network request should set this value when measured.
     [self updateServerStatusIndicator];
-    if (_currentBottomTab == 4) {
-        [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2]
-                            withRowAnimation:UITableViewRowAnimationNone];
-    }
 }
 
 - (void)handleServerCrash {
@@ -3129,7 +3386,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     if (_isAdminServer) {
         _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
-        _serverStatusLabel.text = [NSString stringWithFormat:@"Server Admin: %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.text = (_currentLatencyMs >= 0)
+            ? [NSString stringWithFormat:@"Admin: %ld ms", (long)_currentLatencyMs]
+            : @"Admin: Đã xác thực";
         _serverStatusLabel.textColor = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
         return;
     }
@@ -3137,16 +3396,20 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     int pState = Titanium_CurrentPersistentServerState();
     if (pState == TI_STATE_DOWN) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = @"Server Free: Sập - _____ms";
+        _serverStatusLabel.text = @"Server Free: Đang gặp sự cố";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
     } else if (pState == TI_STATE_OVERLOAD) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = @"Server Free: Quá tải - _____ms";
+        _serverStatusLabel.text = @"Server Free: Đang quá tải";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
     } else if (pState == TI_STATE_ERROR) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = @"Server Free: Lỗi - _____ms";
+        _serverStatusLabel.text = @"Server Free: Lỗi kết nối";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
+    } else if (_currentLatencyMs < 0) {
+        _serverStatusDot.backgroundColor = [UIColor colorWithWhite:0.55 alpha:1.0];
+        _serverStatusLabel.text = @"Server Free: Chưa đo ping";
+        _serverStatusLabel.textColor = [UIColor colorWithWhite:0.75 alpha:1.0];
     } else if (_currentLatencyMs >= 500) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
         _serverStatusLabel.text = [NSString stringWithFormat:@"Server Free: Chậm - %ldms", (long)_currentLatencyMs];
@@ -3163,20 +3426,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)blinkServerStatus {
-    if (!_serverStatusLabel) return;
-    if (_isAdminServer) return;
-    if ([self isServerCurrentlyDown] || [self isServerCurrentlyOverloadedOrError]) return;
-    if (_currentLatencyMs >= 150) return;
-    CGFloat savedAlpha = _serverStatusLabel.alpha;
-    [UIView animateWithDuration:0.5 animations:^{
-        self->_serverStatusLabel.alpha = 0.0;
-    } completion:^(BOOL f) {
-        self->_serverStatusLabel.text = @"Server Free: Ổn định";
-        self->_serverStatusLabel.textColor = [UIColor systemGreenColor];
-        [UIView animateWithDuration:0.8 animations:^{
-            self->_serverStatusLabel.alpha = savedAlpha;
-        }];
-    }];
+    // Kept for source compatibility; status is deliberately never faded/blinked.
+    if (_serverStatusLabel && _serverStatusLabel.alpha < 1.0) _serverStatusLabel.alpha = 1.0;
 }
 
 #pragma mark - Expanding nav
@@ -3246,6 +3497,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index {
+    if (!_isKernelExploited) {
+        if ([button respondsToSelector:@selector(collapseMenu)]) [button collapseMenu];
+        [self showUnexploitedWarningAlert];
+        return;
+    }
     if (button == _expandingMenuButton) {
         switch (index) {
             case 0: [self executeRespring]; break;
@@ -3279,12 +3535,20 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 [self applyDeepSpringBoardAndUIKitTweaks];
                 [self.customTableView reloadData];
                 break;
-            case 3:
-                [self.view setNeedsLayout];
-                [self.view layoutIfNeeded];
-                {UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-                 [fb notificationOccurred:UINotificationFeedbackTypeSuccess];}
+            case 3: {
+                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                id saved = [defaults objectForKey:TI_GLASS_TRANSPARENCY_KEY];
+                BOOL currentlyEnabled = saved ? [saved boolValue] : YES;
+                BOOL enableTransparency = !currentlyEnabled;
+                [defaults setBool:enableTransparency forKey:TI_GLASS_TRANSPARENCY_KEY];
+                self.settingsDict[@"GlassTransparencyEnabled"] = @(enableTransparency);
+                [self saveSettingsDataAndSync];
+                UIView *root = self.view.window ?: self.view;
+                [self applyGlassTransparencyRecursively:root enabled:enableTransparency];
+                UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+                [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
                 break;
+            }
         }
     } else if (button == _expandingLockButton) {
         switch (index) {
@@ -3321,21 +3585,136 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }];
 }
 
+#pragma mark - V20.1 Theme, Glass and locked-state helpers
+
+- (void)applyThemePreferenceAnimated:(BOOL)animated {
+    BOOL followsSystem = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
+    if (@available(iOS 13.0, *)) {
+        UIUserInterfaceStyle style = followsSystem ? UIUserInterfaceStyleUnspecified : UIUserInterfaceStyleDark;
+        self.overrideUserInterfaceStyle = style;
+        self.navigationController.overrideUserInterfaceStyle = style;
+        if (self.view.window) self.view.window.overrideUserInterfaceStyle = style;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BOOL dark = !followsSystem || self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
+        NSArray *colors = dark ? @[
+            (id)[UIColor colorWithRed:0.055 green:0.035 blue:0.105 alpha:1.0].CGColor,
+            (id)[UIColor colorWithRed:0.008 green:0.008 blue:0.025 alpha:1.0].CGColor
+        ] : @[
+            (id)[UIColor colorWithRed:0.88 green:0.89 blue:0.94 alpha:1.0].CGColor,
+            (id)[UIColor colorWithRed:0.97 green:0.97 blue:0.99 alpha:1.0].CGColor
+        ];
+        CAGradientLayer *gradient = nil;
+        for (CALayer *layer in self.view.layer.sublayers) {
+            if ([layer.name isEqualToString:@"TI_V20_1_BackgroundGradient"] && [layer isKindOfClass:[CAGradientLayer class]]) {
+                gradient = (CAGradientLayer *)layer;
+                break;
+            }
+        }
+        [CATransaction begin];
+        [CATransaction setDisableActions:!animated];
+        [CATransaction setAnimationDuration:animated ? 0.24 : 0.0];
+        gradient.colors = colors;
+        [CATransaction commit];
+        self.view.backgroundColor = dark ? [UIColor colorWithRed:0.01 green:0.01 blue:0.03 alpha:1.0] : [UIColor colorWithWhite:0.97 alpha:1.0];
+        for (LGGlassNavButton *button in self->_tabButtons) {
+            [button updateTabSelected:button.v20TabSelected animated:NO];
+        }
+        if (self.customTableView) {
+            [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+        }
+        [self.view setNeedsLayout];
+    });
+}
+
+- (void)applyGlassTransparencyRecursively:(UIView *)view enabled:(BOOL)enabled {
+    if (!view) return;
+    if ([view isKindOfClass:[AppleLiquidGlassView class]]) {
+        [(AppleLiquidGlassView *)view setGlassTransparencyEnabled:enabled];
+    }
+    for (UIView *subview in view.subviews) [self applyGlassTransparencyRecursively:subview enabled:enabled];
+}
+
+- (void)refreshBottomTabsAvailability {
+    NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
+    BOOL fullyUnlocked = serverChosen && _isKernelExploited;
+    if (!fullyUnlocked && _tabButtons.count > 4) _currentBottomTab = 4;
+    for (NSInteger i = 0; i < _tabButtons.count; i++) {
+        LGGlassNavButton *button = _tabButtons[i];
+        BOOL enabled = fullyUnlocked || i == 4;
+        button.userInteractionEnabled = YES; // locked tabs show the picker/warning, but can't enter a feature
+        button.alpha = enabled ? 1.0 : 0.38;
+        [button updateTabSelected:(i == _currentBottomTab) animated:NO];
+    }
+    if (_activeGlassIndicator && _liquidNavBarContainer.bounds.size.width > 0.0) {
+        CGFloat w = _liquidNavBarContainer.bounds.size.width / MAX(1, _tabButtons.count);
+        _activeGlassIndicator.center = CGPointMake(_currentBottomTab * w + w * 0.5, _activeGlassIndicator.center.y);
+    }
+    [self.customTableView setUserInteractionEnabled:serverChosen];
+}
+
+- (void)layoutLiquidGlassControlsForCurrentBounds {
+    if (!_liquidNavBarContainer || CGRectIsNull(self.view.bounds)) return;
+    CGFloat W = CGRectGetWidth(self.view.bounds);
+    CGFloat H = CGRectGetHeight(self.view.bounds);
+    if (W <= 0.0 || H <= 0.0) return;
+    CGFloat barHeight = 66.0;
+    CGFloat margin = 10.0;
+    CGFloat bottomSafe = MAX(0.0, self.view.safeAreaInsets.bottom);
+    CGFloat y = MAX(8.0, H - bottomSafe - barHeight - 8.0);
+    CGRect newFrame = CGRectMake(margin, y, MAX(0.0, W - margin * 2.0), barHeight);
+    BOOL sizeChanged = !CGSizeEqualToSize(_v20LastNavLayoutSize, self.view.bounds.size) || !CGRectEqualToRect(_v20LastNavFrame, newFrame);
+    if (!CGRectEqualToRect(_liquidNavBarContainer.frame, newFrame)) _liquidNavBarContainer.frame = newFrame;
+    if (sizeChanged) {
+        _v20LastNavLayoutSize = self.view.bounds.size;
+        _v20LastNavFrame = newFrame;
+        CGFloat btnW = CGRectGetWidth(newFrame) / MAX(1, _tabButtons.count);
+        for (NSInteger i = 0; i < _tabButtons.count; i++) {
+            _tabButtons[i].frame = CGRectMake(i * btnW + 2.0, 2.0, MAX(0.0, btnW - 4.0), barHeight - 4.0);
+        }
+        CGFloat blobSize = 48.0;
+        CGRect blobFrame = CGRectMake((btnW - blobSize) * 0.5, -12.0, blobSize, blobSize);
+        _activeGlassIndicator.frame = blobFrame;
+        if (_currentBottomTab >= 0 && _currentBottomTab < _tabButtons.count) {
+            _activeGlassIndicator.center = CGPointMake(_currentBottomTab * btnW + btnW * 0.5, _activeGlassIndicator.center.y);
+        }
+    }
+    if (_liquidGlassLensContainer && !_liquidGlassLensContainer.hidden) {
+        CGFloat currentX = MIN(MAX(CGRectGetMidX(_liquidGlassLensContainer.frame), 40.0), W - 40.0);
+        _liquidGlassLensContainer.center = CGPointMake(currentX, CGRectGetMinY(newFrame) - 22.0);
+    }
+    if (self.customTableView) {
+        CGRect tableFrame = self.customTableView.frame;
+        CGFloat topSafe = MAX(0.0, self.view.safeAreaInsets.top);
+        tableFrame.origin.x = 0.0;
+        tableFrame.origin.y = topSafe;
+        tableFrame.size.width = W;
+        tableFrame.size.height = MAX(0.0, y - topSafe - 12.0);
+        if (!CGRectEqualToRect(self.customTableView.frame, tableFrame)) self.customTableView.frame = tableFrame;
+        UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, 10.0, 0.0);
+        if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
+        if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.scrollIndicatorInsets, desiredInset)) self.customTableView.scrollIndicatorInsets = desiredInset;
+    }
+}
+
 #pragma mark - Liquid Nav Bar
 
 - (void)setupLiquidGlassNavBar {
-    CGFloat barHeight = 62.0;
-    CGFloat barMargin = 14.0;
-    CGFloat barY = self.view.bounds.size.height - barHeight - 34;
+    CGFloat barHeight = 66.0;
+    CGFloat barMargin = 10.0;
+    CGFloat barY = self.view.bounds.size.height - self.view.safeAreaInsets.bottom - barHeight - 8.0;
 
     _liquidNavBarContainer = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight)
                                                             cornerRadius:barHeight / 2.0
                                                             materialType:LGGlassMaterialTypeCrystal];
     _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     _liquidNavBarContainer.interactiveHighlightEnabled = NO;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.42;
-    _liquidNavBarContainer.layer.shadowRadius = 22.0;
-    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 9);
+    _liquidNavBarContainer.clipsToBounds = NO;
+    _liquidNavBarContainer.layer.masksToBounds = NO;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.24;
+    _liquidNavBarContainer.layer.shadowRadius = 12.0;
+    _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 4);
     _liquidNavBarContainer.layer.shadowColor = [UIColor blackColor].CGColor;
 
     _tabConfigs = @[
@@ -3351,7 +3730,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     // [V10.2 - LIQUID NAVIGATION THEO VIDEO TIKTOK]: indicator là GIỌT NƯỚC TRÒN (blob) nổi lên PHÍA TRÊN thanh nav,
     // không nằm trong thanh. Di chuyển mượt giữa các tab, co giãn theo vận tốc như giọt nước thật.
     CGFloat blobSize = 48.0;
-    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth - blobSize)/2.0 + 3, -14.0, blobSize, blobSize)
+    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth - blobSize)/2.0, -12.0, blobSize, blobSize)
                                                             cornerRadius:blobSize / 2.0
                                                             materialType:LGGlassMaterialTypeCrystal];
     _activeGlassIndicator.userInteractionEnabled = NO;
@@ -3366,20 +3745,25 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     for (NSInteger i = 0; i < _tabConfigs.count; i++) {
         NSDictionary *conf = _tabConfigs[i];
         LGGlassNavButton *btn = [[LGGlassNavButton alloc] initWithIconName:conf[@"icon"] title:conf[@"title"]];
-        btn.frame = CGRectMake(i * btnWidth + 3, 3, btnWidth - 6, barHeight - 6);
-        btn.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        btn.frame = CGRectMake(i * btnWidth + 2.0, 2.0, btnWidth - 4.0, barHeight - 4.0);
+        btn.autoresizingMask = UIViewAutoresizingNone;
         btn.tag = i;
         [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
 
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleTabLongPress:)];
-        longPress.minimumPressDuration = 0.14;
+        longPress.minimumPressDuration = 0.30;
+        longPress.cancelsTouchesInView = YES;
+        longPress.delaysTouchesBegan = NO;
         [btn addGestureRecognizer:longPress];
 
         [_liquidNavBarContainer addSubview:btn];
         [_tabButtons addObject:btn];
     }
 
-    if (_tabButtons.count > 0) [_tabButtons[0] updateTabSelected:YES animated:NO];
+    if (_tabButtons.count > 0) {
+        NSInteger initialIndex = (_currentBottomTab >= 0 && _currentBottomTab < _tabButtons.count) ? _currentBottomTab : 0;
+        [_tabButtons[initialIndex] updateTabSelected:YES animated:NO];
+    }
     [self.view addSubview:_liquidNavBarContainer];
 }
 
@@ -3387,13 +3771,27 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
     if (index < 0 || index >= _tabConfigs.count) return;
+    NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
+    if (!serverChosen) {
+        [self showFirstInstallServerPicker];
+        return;
+    }
+    if (!_isKernelExploited && index != 4) {
+        [self showUnexploitedWarningAlert];
+        return;
+    }
     NSInteger oldTab = _currentBottomTab;
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
+    if (_currentBottomTab == 3 && !_hasStartedAppScan) {
+        _hasStartedAppScan = YES;
+        [self loadInstalledAppsAsync];
+    }
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
     CGFloat blobSize = 48.0;
     // Giọt nước di chuyển đến centerX của tab được chọn, giữ nguyên vị trí y (nổi trên thanh)
-    CGFloat targetCenterX = (index * btnWidth) + (btnWidth / 2.0) + 3;
+    CGFloat targetCenterX = (index * btnWidth) + (btnWidth / 2.0);
     CGFloat oldCenterX = _activeGlassIndicator.center.x;
     CGFloat distance = fabs(targetCenterX - oldCenterX);
 
@@ -3422,12 +3820,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [fb impactOccurred];
 
     if (animated) {
-        [UIView transitionWithView:self.customTableView duration:0.52 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
-            [self.customTableView reloadData];
-        } completion:nil];
+        [self reloadVisibleContentWithSubtleTransition];
     } else {
-        [self.customTableView reloadData];
+        [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
     }
+    // Do not re-run the synchronous lock-state refresh here: it would cancel the just-started
+    // selected-tab spring animation. Access rights are refreshed on login, activation and reset.
 }
 
 #pragma mark - Liquid Lens
@@ -3455,38 +3853,45 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)handleTabLongPress:(UILongPressGestureRecognizer *)gesture {
-    LGGlassNavButton *btn = (LGGlassNavButton *)gesture.view;
-    CGPoint touchInView = [gesture locationInView:self.view];
+    LGGlassNavButton *pressedButton = (LGGlassNavButton *)gesture.view;
+    if (![pressedButton isKindOfClass:[LGGlassNavButton class]]) return;
+    CGPoint pointInRoot = [gesture locationInView:self.view];
+    CGFloat safeX = MIN(MAX(pointInRoot.x, 40.0), MAX(40.0, self.view.bounds.size.width - 40.0));
+    NSInteger previewIndex = -1;
+    CGPoint pointInBar = [gesture locationInView:_liquidNavBarContainer];
+    for (NSInteger i = 0; i < _tabButtons.count; i++) {
+        LGGlassNavButton *candidate = _tabButtons[i];
+        if (CGRectContainsPoint(candidate.frame, pointInBar)) { previewIndex = i; break; }
+    }
 
     if (gesture.state == UIGestureRecognizerStateBegan) {
-        CGPoint cp = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 24);
-        _liquidGlassLensContainer.center = cp;
+        _v20LongPressPreviewTab = pressedButton.tag;
+        _liquidGlassLensContainer.center = CGPointMake(safeX, CGRectGetMinY(_liquidNavBarContainer.frame) - 22.0);
         _liquidGlassLensContainer.hidden = NO;
         _liquidGlassLensContainer.alpha = 0.0;
-        _liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.3, 0.3);
-        _lensTitleLabel.text = _tabConfigs[btn.tag][@"title"];
-        [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.62 initialSpringVelocity:1.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        _liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.82, 0.82);
+        _lensTitleLabel.text = _tabConfigs[pressedButton.tag][@"title"];
+        [UIView animateWithDuration:0.20 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
             self->_liquidGlassLensContainer.alpha = 1.0;
             self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
         } completion:nil];
-        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         [fb impactOccurred];
     } else if (gesture.state == UIGestureRecognizerStateChanged) {
-        CGPoint cp = CGPointMake(touchInView.x, _liquidNavBarContainer.center.y - 24);
-        _liquidGlassLensContainer.center = cp;
-        for (NSInteger i = 0; i < _tabButtons.count; i++) {
-            LGGlassNavButton *b = _tabButtons[i];
-            CGPoint p = [gesture locationInView:b];
-            if (CGRectContainsPoint(b.bounds, p)) {
-                _lensTitleLabel.text = _tabConfigs[i][@"title"];
-                if (_currentBottomTab != [_tabConfigs[i][@"tab"] integerValue]) [self selectTabIndex:i animated:YES];
-                break;
-            }
+        _liquidGlassLensContainer.center = CGPointMake(safeX, CGRectGetMinY(_liquidNavBarContainer.frame) - 22.0);
+        if (previewIndex >= 0 && previewIndex < _tabConfigs.count) {
+            _v20LongPressPreviewTab = previewIndex;
+            _lensTitleLabel.text = _tabConfigs[previewIndex][@"title"];
         }
     } else {
-        [UIView animateWithDuration:0.24 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+        NSInteger finalIndex = (previewIndex >= 0 && previewIndex < _tabConfigs.count) ? previewIndex : _v20LongPressPreviewTab;
+        _v20LongPressPreviewTab = -1;
+        if (gesture.state == UIGestureRecognizerStateEnded && finalIndex >= 0 && finalIndex < _tabConfigs.count && finalIndex != _currentBottomTab) {
+            [self selectTabIndex:finalIndex animated:YES];
+        }
+        [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
             self->_liquidGlassLensContainer.alpha = 0.0;
-            self->_liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.2, 0.2);
+            self->_liquidGlassLensContainer.transform = CGAffineTransformMakeScale(0.92, 0.92);
         } completion:^(BOOL finished) {
             self->_liquidGlassLensContainer.hidden = YES;
             self->_liquidGlassLensContainer.transform = CGAffineTransformIdentity;
@@ -3550,6 +3955,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
     self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.04];
+    if (@available(iOS 11.0, *)) self.customTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    self.customTableView.estimatedRowHeight = 0.0;
+    self.customTableView.estimatedSectionHeaderHeight = 0.0;
+    self.customTableView.estimatedSectionFooterHeight = 0.0;
+    if (@available(iOS 15.0, *)) self.customTableView.sectionHeaderTopPadding = 0.0;
     self.customTableView.delegate = self;
     self.customTableView.dataSource = self;
     self.customTableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
@@ -3958,11 +4368,16 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 title = @"Độ Trễ Server";
                 int pState = Titanium_CurrentPersistentServerState();
                 if (_isAdminServer) {
-                    detail = [NSString stringWithFormat:@"%ld ms (Admin)", (long)_currentLatencyMs];
+                    detail = (_currentLatencyMs >= 0)
+                        ? [NSString stringWithFormat:@"%ld ms (Admin)", (long)_currentLatencyMs]
+                        : ([self isAdminDevRole] ? @"Admin Dev · Đã xác thực" : @"Admin · Đã xác thực");
                     accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
                 } else if (pState != TI_STATE_OK) {
-                    detail = @"_____ms";
+                    detail = (pState == TI_STATE_DOWN) ? @"Đang gặp sự cố" : ((pState == TI_STATE_OVERLOAD) ? @"Đang quá tải" : @"Lỗi kết nối");
                     accent = [UIColor systemRedColor];
+                } else if (_currentLatencyMs < 0) {
+                    detail = @"Chưa đo ping";
+                    accent = [UIColor colorWithWhite:0.70 alpha:1.0];
                 } else {
                     detail = [NSString stringWithFormat:@"%ld ms", (long)_currentLatencyMs];
                     if (_currentLatencyMs >= 500) accent = [UIColor systemRedColor];
@@ -3982,7 +4397,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             } else if (indexPath.row == 2) {
                 title = @"Đăng Nhập Server Riêng";
                 if (_isAdminServer) {
-                    detail = [NSString stringWithFormat:@"✓ %@", _adminServerUser ?: @"Admin"];
+                    detail = [self isAdminDevRole] ? @"✓ Admin Dev đã xác thực" : @"✓ Admin đã xác thực";
                     accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
                 } else {
                     detail = @"Admin";
@@ -3999,22 +4414,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     if (!sS) return;
                     sS.settingsDict[TI_AUTO_THEME_KEY] = @(isOn);
                     [sS saveSettingsDataAndSync];
-                    if (@available(iOS 13.0, *)) {
-                        if (isOn) {
-                            sS.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
-                            sS.view.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
-                        } else {
-                            sS.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-                            sS.view.window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-                        }
-                    }
+                    [sS applyThemePreferenceAnimated:YES];
                 };
                 accessory = s;
             } else if (indexPath.row == 4 && [self isAdminDevRole]) {
                 title = @"Server API URL";
                 NSString *base = [self currentAdminAPIBaseURL];
                 NSURLComponents *parts = [NSURLComponents componentsWithString:base];
-                detail = parts.host ?: @"Đã cấu hình HTTPS";
+                // Keep endpoint hostname hidden in the overview; URL is visible only in the Dev editor.
+                detail = parts.host.length ? @"HTTPS đã cấu hình · chạm để sửa" : @"Chưa cấu hình HTTPS";
                 accent = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:1.0];
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else if (indexPath.row == 5 && [self isAdminDevRole]) {
@@ -4046,6 +4454,16 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
     }
 
+    BOOL activationEntry = (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0);
+    BOOL adminLoginEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2);
+    if (!_isKernelExploited && _currentBottomTab == 4 && !activationEntry && !adminLoginEntry) {
+        // Prevent accessory switches and segmented controls from being usable while locked.
+        if ([accessory isKindOfClass:[UIView class]]) accessory.userInteractionEnabled = NO;
+        cell.userInteractionEnabled = NO;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.alpha = 0.38;
+        detail = @"🔒 Cần kích hoạt";
+    }
     [cell configureWithTitle:title detail:detail accessory:accessory accent:accent];
     return cell;
 }
@@ -4110,8 +4528,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [self showAdminServerLogin];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4) {
         if ([self isAdminDevRole]) [self showAdminDevAPIURLEditor];
+        else [self showUnexploitedWarningAlert];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 5) {
         if ([self isAdminDevRole]) [self showAdminDevConsole];
+        else [self showUnexploitedWarningAlert];
     }
 }
 
@@ -4119,8 +4539,35 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)onAppSearchChanged:(UITextField *)field {
     _appSearchQuery = field.text ?: @"";
-    [self applyAppFilter];
-    [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationNone];
+    uint64_t generation = ++_searchUpdateGeneration;
+    NSString *query = [_appSearchQuery lowercaseString];
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) owner = weakSelf;
+        if (!owner || generation != owner->_searchUpdateGeneration) return;
+        NSArray<NSDictionary *> *snapshot = [owner->_scannedAppsList copy] ?: @[];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            NSMutableArray<NSDictionary *> *matches = [NSMutableArray array];
+            for (NSDictionary *app in snapshot) {
+                NSString *name = [(NSString *)app[@"name"] lowercaseString];
+                NSString *bundleID = [(NSString *)app[@"bundleID"] lowercaseString];
+                if (query.length == 0 || [name containsString:query] || [bundleID containsString:query]) {
+                    [matches addObject:app];
+                }
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf || generation != strongSelf->_searchUpdateGeneration ||
+                    strongSelf->_currentBottomTab != 3 || !strongSelf.customTableView.window) return;
+                if (snapshot.count != strongSelf->_scannedAppsList.count) {
+                    [strongSelf applyAppFilter];
+                } else {
+                    strongSelf->_filteredAppsList = matches;
+                }
+                [UIView performWithoutAnimation:^{ [strongSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationNone]; }];
+            });
+        });
+    });
 }
 
 - (void)applyAppFilter {
@@ -4177,13 +4624,34 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 #pragma mark - Actions
 
+- (void)reloadVisibleContentWithSubtleTransition {
+    UITableView *table = self.customTableView;
+    if (!table) return;
+    if (!table.window || !self.isViewLoaded) {
+        [UIView performWithoutAnimation:^{ [table reloadData]; }];
+        return;
+    }
+    uint64_t generation = ++_v20TableTransitionGeneration;
+    [UIView animateWithDuration:0.07 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        table.alpha = 0.92;
+        table.transform = CGAffineTransformMakeTranslation(0.0, 1.5);
+    } completion:^(BOOL finished) {
+        if (generation != self->_v20TableTransitionGeneration) return;
+        [UIView performWithoutAnimation:^{ [table reloadData]; }];
+        [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            table.alpha = 1.0;
+            table.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }];
+}
+
 - (void)onHzFpsSubTabChanged:(UISegmentedControl *)sender {
     _currentHzFpsSubTab = sender.selectedSegmentIndex;
-    [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationFade];
+    [self reloadVisibleContentWithSubtleTransition];
 }
 - (void)onSwitchSubTabChanged:(UISegmentedControl *)sender {
     _currentSwitchSubTab = sender.selectedSegmentIndex;
-    [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationFade];
+    [self reloadVisibleContentWithSubtleTransition];
 }
 
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
@@ -4221,8 +4689,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)smoothReloadTable {
     if (!self.customTableView) return;
-    [UIView transitionWithView:self.customTableView duration:0.38 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction animations:^{
-        [self.customTableView reloadData];
+    [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+    self.customTableView.transform = CGAffineTransformMakeTranslation(0.0, 1.5);
+    [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self.customTableView.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
 
@@ -4230,15 +4700,24 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)startContinuousHardwareHUD {
     [self stopContinuousHardwareHUD];
-    [self startChipErrorLoop];
 
     _hudTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), (uint64_t)(0.8 * NSEC_PER_SEC), (uint64_t)(0.1 * NSEC_PER_SEC));
+    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)), (uint64_t)(2.8 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
     __weak typeof(self) wS = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(wS) sS = wS;
         if (sS && sS->_currentBottomTab == 0 && sS->_isKernelExploited && [sS.settingsDict[@"EnableSystemMonitoring"] boolValue] && !sS->_chipErrorActive) {
-            [sS.customTableView reloadData];
+            NSArray<NSIndexPath *> *visible = sS.customTableView.indexPathsForVisibleRows ?: @[];
+            NSMutableArray<NSIndexPath *> *rows = [NSMutableArray arrayWithCapacity:visible.count];
+            for (NSIndexPath *ip in visible) {
+                if (ip.section > 0) [rows addObject:ip];
+            }
+            UITableView *table = sS.customTableView;
+            if (rows.count > 0 && !table.dragging && !table.decelerating && !table.tracking) {
+                [UIView performWithoutAnimation:^{
+                    [table reloadRowsAtIndexPaths:rows withRowAnimation:UITableViewRowAnimationNone];
+                }];
+            }
         }
     });
     dispatch_resume(_hudTimer);
@@ -4339,19 +4818,26 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)applyDeepSpringBoardAndUIKitTweaks {
     if (!_isKernelExploited) return;
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    if (self.view.window) self.view.window.layer.drawsAsynchronously = YES;
+    // Keep the default scheduler and Core Animation drawing behavior; forcing high QoS or
+    // asynchronous window drawing can increase heat and create extra contention.
     if (@available(iOS 15.0, *)) {
         dispatch_async(dispatch_get_main_queue(), ^{
             NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 144) targetHz = 144;
+            NSInteger nativeMax = 60;
+            UIScreen *mainScreen = [UIScreen mainScreen];
+            if ([mainScreen respondsToSelector:@selector(maximumFramesPerSecond)]) {
+                NSInteger reportedMax = (NSInteger)mainScreen.maximumFramesPerSecond;
+                if (reportedMax >= 30 && reportedMax <= 240) nativeMax = reportedMax;
+            }
+            targetHz = MIN(targetHz, nativeMax);
             SEL sel = NSSelectorFromString(@"setPreferredFrameRateRange:");
             for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
                 if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
                     if ([ws respondsToSelector:sel]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, (float)targetHz, (float)targetHz);
+                        CAFrameRateRange range = CAFrameRateRangeMake((float)MIN(30, targetHz), (float)targetHz, (float)targetHz);
                         void (*setRange)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
                         setRange(ws, sel, range);
                     }
@@ -4366,8 +4852,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Exploit
 
 - (void)showUnexploitedWarningAlert {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"CẦN KHAI THÁC DARWIN" message:@"Vào tab Cài Đặt → nhấn dòng ĐỎ." preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+    if (self.presentedViewController) return;
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"TÍNH NĂNG ĐANG KHÓA"
+                                                               message:@"Chọn server và hoàn tất bước kích hoạt trước khi dùng các mục này."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [a addAction:[UIAlertAction actionWithTitle:@"Mở kích hoạt" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf selectTabIndex:4 animated:YES];
+    }]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
@@ -4462,7 +4957,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     self.settingsDict[@"SavedCacheString"] = _deepCacheString;
     self.settingsDict[@"SavedDeviceUUID"] = _deviceUUIDString;
     [self saveSettingsDataAndSync];
-    [self startChipErrorLoop];
+    [self refreshBottomTabsAvailability];
+    [self selectTabIndex:0 animated:YES];
 }
 
 #pragma mark - Persistence
@@ -4481,10 +4977,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSString *p = Titanium_ResolvePrefPath();
     NSString *d = [p stringByDeletingLastPathComponent];
     if (![[NSFileManager defaultManager] fileExistsAtPath:d]) {
-        [[NSFileManager defaultManager] createDirectoryAtPath:d withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+        [[NSFileManager defaultManager] createDirectoryAtPath:d withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0700)} error:nil];
     }
     [self.settingsDict writeToFile:p atomically:YES];
-    chmod([p UTF8String], 0666);
+    chmod([p UTF8String], 0600);
     id downVal = self.settingsDict[TI_SERVER_DOWN_KEY];
     if (downVal) {
         [[NSUserDefaults standardUserDefaults] setDouble:[downVal doubleValue] forKey:TI_SERVER_DOWN_KEY];
@@ -4544,7 +5040,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                         NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:info];
                         NSString *name = dict[@"CFBundleDisplayName"] ?: dict[@"CFBundleName"] ?: [item stringByDeletingPathExtension];
                         NSString *bid = dict[@"CFBundleIdentifier"] ?: item;
-                        if (self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @NO;
                         [temp addObject:@{@"name": name, @"bundleID": bid, @"path": full}];
                     }
                 }
@@ -4555,8 +5050,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }];
         dispatch_async(dispatch_get_main_queue(), ^{
             self->_scannedAppsList = temp;
+            for (NSDictionary *app in temp) {
+                NSString *bid = app[@"bundleID"];
+                if (bid.length && self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @NO;
+            }
             [self applyAppFilter];
-            if (self->_currentBottomTab == 3 && self->_isKernelExploited) [self.customTableView reloadData];
+            if (self->_currentBottomTab == 3 && self->_isKernelExploited) {
+                [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+            }
         });
     });
 }
@@ -4606,11 +5107,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FIRST_INSTALL_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         // Xoá cả persistent state
         Titanium_ClearPersistentServerState();
         self->_isAdminServer = NO;
         self->_adminServerUser = nil;
+        self->_adminAccessToken = nil;
+        self->_adminRole = nil;
         self.settingsDict = [NSMutableDictionary dictionary];
         self->_isKernelExploited = NO;
         self->_deepArchString = nil;
@@ -4625,7 +5129,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         notify_post(NOTIFY_UIKIT_RELOAD);
         UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
         [fb notificationOccurred:UINotificationFeedbackTypeWarning];
-        [self.customTableView reloadData];
+        [self.customTableView setUserInteractionEnabled:NO];
+        [self updateRoleBadgeTitle:@"Server"];
+        [self refreshBottomTabsAvailability];
+        [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ if (!self.presentedViewController) [self showFirstInstallServerPicker]; });
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
