@@ -2773,7 +2773,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 }
 
 // Default is a deployment hint only; set the real HTTPS endpoint in Settings → Server API URL.
-static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrender.com";
+static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
 
 - (NSString *)adminAPIBaseURL {
     NSString *stored = [[NSUserDefaults standardUserDefaults] stringForKey:TI_ADMIN_API_URL_KEY];
@@ -2828,7 +2828,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
 - (void)showAdminServerLogin {
     UIAlertController *a = [UIAlertController
         alertControllerWithTitle:@"Đăng Nhập Server Riêng"
-        message:[NSString stringWithFormat:@"API: %@\nAdmin username (nếu backend dùng cấu hình mẫu): apple.com\nAdmin Dev username: admin.apple.com\nMật khẩu được cấu hình ở backend; vai trò do server quyết định.", [self adminAPIBaseURL]]
+        message:[NSString stringWithFormat:@"API: %@\nAdmin username mỗi người sẽ có vai trò do server quyết định.", [self adminAPIBaseURL]]
         preferredStyle:UIAlertControllerStyleAlert];
     [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.placeholder = @"Admin: apple.com · Admin Dev: admin.apple.com";
