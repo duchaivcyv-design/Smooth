@@ -910,12 +910,16 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
 - (void)setSelectedSegmentIndex:(NSInteger)index animated:(BOOL)animated {
     if (index < 0 || index >= (NSInteger)_items.count) return;
+    NSInteger oldIdx = _selectedSegmentIndex;
     _selectedSegmentIndex = index;
     CGFloat w = self.bounds.size.width / MAX(1, _items.count);
     CGFloat h = self.bounds.size.height;
     CGRect ind = CGRectMake(index * w + 3, 3, w - 6, h - 6);
+    // [V10.3 - THEO VIDEO #2 Fluid Glass]: indicator co giãn theo vận tốc khi trượt, spring mượt
+    CGFloat stretch = (animated && oldIdx != index) ? MIN(1.25, 1.0 + fabs(index - oldIdx) * 0.12) : 1.0;
     void (^a)(void) = ^{
         self->_indicator.frame = ind;
+        self->_indicator.transform = CGAffineTransformIdentity;
         for (NSInteger i = 0; i < self->_labels.count; i++) {
             BOOL s = (i == index);
             self->_labels[i].textColor = s ? [UIColor whiteColor] : [UIColor colorWithWhite:0.78 alpha:1.0];
@@ -1176,16 +1180,21 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 - (void)updateTabSelected:(BOOL)selected animated:(BOOL)animated {
     [super setSelected:selected];
-    UIColor *c = selected ? [UIColor whiteColor] : [UIColor colorWithWhite:0.78 alpha:1.0];
+    // [V10.2 - LIQUID NAVIGATION]: tab được chọn -> icon NỔI LÊN TRÊN giọt nước (translateY -16), màu trắng đậm.
+    // Không dùng glassPill nền nữa (indicator là giọt nước chung). Tab không chọn -> icon về vị trí cũ, màu xám.
+    UIColor *c = selected ? [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:1.0] : [UIColor colorWithWhite:0.78 alpha:1.0];
     UIFont *f = selected ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
-    CGFloat a = selected ? 1.0 : 0.0;
+    CGAffineTransform t = selected ? CGAffineTransformMakeTranslation(0, -16.0) : CGAffineTransformIdentity;
+    CGFloat titleAlpha = selected ? 0.0 : 1.0;
     void (^u)(void) = ^{
         self.iconView.tintColor = c;
-        self.titleLabel.textColor = c;
+        self.iconView.transform = t;
+        self.titleLabel.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
         self.titleLabel.font = f;
-        self.glassPill.alpha = a;
+        self.titleLabel.alpha = titleAlpha;
+        self.glassPill.alpha = 0.0;
     };
-    if (animated) [UIView animateWithDuration:0.44 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:u completion:nil];
+    if (animated) [UIView animateWithDuration:0.52 delay:0 usingSpringWithDamping:0.62 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:u completion:nil];
     else u();
 }
 @end
@@ -1462,14 +1471,11 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 // MODULE 8: LOADING VIEWS
 // ====================================================================================================
 @interface LGLoadingManView : UIView
-@property (nonatomic, strong) UIView *manContainer;
-@property (nonatomic, strong) UIView *head;
-@property (nonatomic, strong) UIView *bodyLine1;
-@property (nonatomic, strong) UIView *bodyLine2;
-@property (nonatomic, strong) UIView *bodyLine3;
+// [V10.3 - THEO VIDEO TIKTOK #7]: 3 chấm tròn nhảy lên xuống (bouncing dots), nền kính lỏng tối
+@property (nonatomic, strong) UIView *dot1;
+@property (nonatomic, strong) UIView *dot2;
+@property (nonatomic, strong) UIView *dot3;
 @property (nonatomic, strong) UILabel *loadingLabel;
-@property (nonatomic, strong) UIView *progressTrack;
-@property (nonatomic, strong) UIView *progressFill;
 @property (nonatomic, strong) NSTimer *animTimer;
 @property (nonatomic, assign) CGFloat phase;
 @property (nonatomic, assign) CGFloat progressValue;
@@ -1481,78 +1487,78 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 @implementation LGLoadingManView
 - (instancetype)initWithFrame:(CGRect)frame {
     if (self = [super initWithFrame:frame]) {
-        self.backgroundColor = [UIColor colorWithRed:0.98 green:0.80 blue:0.24 alpha:1.0];
+        // [V10.3] Nền kính lỏng tối, bo tròn mềm
+        self.backgroundColor = [UIColor colorWithRed:0.10 green:0.11 blue:0.14 alpha:0.92];
         self.clipsToBounds = YES;
+        self.layer.cornerRadius = 18.0;
+        if (@available(iOS 13.0, *)) self.layer.cornerCurve = kCACornerCurveContinuous;
 
-        _manContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 120, 60)];
-        _manContainer.backgroundColor = [UIColor clearColor];
-        [self addSubview:_manContainer];
+        CGFloat dotSize = 12.0;
+        CGFloat spacing = 14.0;
+        CGFloat totalW = dotSize * 3 + spacing * 2;
+        CGFloat startX = (frame.size.width - totalW) / 2.0;
+        CGFloat dotY = frame.size.height / 2.0 - 14.0;
 
-        _head = [[UIView alloc] initWithFrame:CGRectMake(86, 14, 22, 22)];
-        _head.backgroundColor = [UIColor blackColor];
-        _head.layer.cornerRadius = 11;
-        [_manContainer addSubview:_head];
+        _dot1 = [[UIView alloc] initWithFrame:CGRectMake(startX, dotY, dotSize, dotSize)];
+        _dot1.backgroundColor = [UIColor colorWithRed:0.35 green:0.95 blue:0.60 alpha:1.0];
+        _dot1.layer.cornerRadius = dotSize / 2.0;
+        [self addSubview:_dot1];
 
-        CGFloat lt = 3.0;
-        _bodyLine1 = [[UIView alloc] init]; _bodyLine1.backgroundColor = [UIColor blackColor]; _bodyLine1.layer.cornerRadius = lt/2.0; [_manContainer addSubview:_bodyLine1];
-        _bodyLine2 = [[UIView alloc] init]; _bodyLine2.backgroundColor = [UIColor blackColor]; _bodyLine2.layer.cornerRadius = lt/2.0; [_manContainer addSubview:_bodyLine2];
-        _bodyLine3 = [[UIView alloc] init]; _bodyLine3.backgroundColor = [UIColor blackColor]; _bodyLine3.layer.cornerRadius = lt/2.0; [_manContainer addSubview:_bodyLine3];
+        _dot2 = [[UIView alloc] initWithFrame:CGRectMake(startX + dotSize + spacing, dotY, dotSize, dotSize)];
+        _dot2.backgroundColor = [UIColor colorWithRed:0.40 green:0.85 blue:1.0 alpha:1.0];
+        _dot2.layer.cornerRadius = dotSize / 2.0;
+        [self addSubview:_dot2];
 
-        _loadingLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _loadingLabel.text = @"LOADING...";
-        _loadingLabel.textColor = [UIColor blackColor];
-        _loadingLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+        _dot3 = [[UIView alloc] initWithFrame:CGRectMake(startX + (dotSize + spacing) * 2, dotY, dotSize, dotSize)];
+        _dot3.backgroundColor = [UIColor colorWithRed:1.0 green:0.80 blue:0.30 alpha:1.0];
+        _dot3.layer.cornerRadius = dotSize / 2.0;
+        [self addSubview:_dot3];
+
+        _loadingLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, frame.size.height - 28, frame.size.width, 20)];
+        _loadingLabel.text = @"ĐANG ÁP DỤNG...";
+        _loadingLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
+        _loadingLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
         _loadingLabel.textAlignment = NSTextAlignmentCenter;
         [self addSubview:_loadingLabel];
-
-        _progressTrack = [[UIView alloc] initWithFrame:CGRectZero];
-        _progressTrack.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.22];
-        _progressTrack.layer.cornerRadius = 1.0;
-        [self addSubview:_progressTrack];
-
-        _progressFill = [[UIView alloc] initWithFrame:CGRectZero];
-        _progressFill.backgroundColor = [UIColor blackColor];
-        _progressFill.layer.cornerRadius = 1.0;
-        [_progressTrack addSubview:_progressFill];
     }
     return self;
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat W = self.bounds.size.width, H = self.bounds.size.height;
-    CGFloat cx = W/2.0, cy = H/2.0;
-    _manContainer.frame = CGRectMake(cx - 60, cy - 60, 120, 60);
-    _loadingLabel.frame = CGRectMake(0, cy + 8, W, 22);
-    _progressTrack.frame = CGRectMake(W * 0.25, cy + 38, W * 0.5, 2);
-    _progressFill.frame = CGRectMake(0, 0, _progressTrack.bounds.size.width * _progressValue, 2);
+    CGFloat dotSize = 12.0, spacing = 14.0;
+    CGFloat totalW = dotSize * 3 + spacing * 2;
+    CGFloat startX = (self.bounds.size.width - totalW) / 2.0;
+    CGFloat dotY = self.bounds.size.height / 2.0 - 14.0;
+    _dot1.frame = CGRectMake(startX, dotY, dotSize, dotSize);
+    _dot2.frame = CGRectMake(startX + dotSize + spacing, dotY, dotSize, dotSize);
+    _dot3.frame = CGRectMake(startX + (dotSize + spacing) * 2, dotY, dotSize, dotSize);
+    _loadingLabel.frame = CGRectMake(0, self.bounds.size.height - 28, self.bounds.size.width, 20);
 }
 - (void)startAnimating {
     [self stopAnimating];
+    _phase = 0;
     _animTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer * _Nonnull t) {
-        self.phase += 0.14;
-        [self updateManAnimation];
+        self.phase += 0.18;
+        CGFloat s1 = sin(self.phase);
+        CGFloat s2 = sin(self.phase + 0.8);
+        CGFloat s3 = sin(self.phase + 1.6);
+        CGFloat baseY = self.bounds.size.height / 2.0 - 14.0;
+        [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            self.dot1.transform = CGAffineTransformMakeTranslation(0, s1 * 8.0);
+            self.dot2.transform = CGAffineTransformMakeTranslation(0, s2 * 8.0);
+            self.dot3.transform = CGAffineTransformMakeTranslation(0, s3 * 8.0);
+            CGFloat sc1 = 1.0 + fabs(s1) * 0.15;
+            CGFloat sc2 = 1.0 + fabs(s2) * 0.15;
+            CGFloat sc3 = 1.0 + fabs(s3) * 0.15;
+            self.dot1.transform = CGAffineTransformScale(CGAffineTransformMakeTranslation(0, s1 * 8.0), sc1, sc1);
+            self.dot2.transform = CGAffineTransformScale(CGAffineTransformMakeTranslation(0, s2 * 8.0), sc2, sc2);
+            self.dot3.transform = CGAffineTransformScale(CGAffineTransformMakeTranslation(0, s3 * 8.0), sc3, sc3);
+        } completion:nil];
     }];
     [[NSRunLoop mainRunLoop] addTimer:_animTimer forMode:NSRunLoopCommonModes];
 }
 - (void)stopAnimating { if (_animTimer) { [_animTimer invalidate]; _animTimer = nil; } }
-- (void)updateManAnimation {
-    CGFloat s = sin(_phase), c = cos(_phase);
-    CGFloat stretch = 1.0 + fabs(s) * 0.35;
-    _bodyLine1.frame = CGRectMake(64, 20 + s * 1.5, 18 + fabs(s) * 3.0, 3.0);
-    _bodyLine1.transform = CGAffineTransformMakeRotation(-0.4 + s * 0.15);
-    _bodyLine2.frame = CGRectMake(60, 26, 26 * stretch, 3.0);
-    _bodyLine2.transform = CGAffineTransformMakeRotation(0.05 + c * 0.08);
-    _bodyLine3.frame = CGRectMake(38, 30 + c * 1.2, 24, 3.0);
-    _bodyLine3.transform = CGAffineTransformMakeRotation(-0.08 + s * 0.05);
-    _head.transform = CGAffineTransformMakeTranslation(0, s * 1.5);
-}
-- (void)setProgressValue:(CGFloat)progressValue animated:(BOOL)animated {
-    _progressValue = MAX(0.0, MIN(1.0, progressValue));
-    CGFloat w = _progressTrack.bounds.size.width * _progressValue;
-    if (animated) {
-        [UIView animateWithDuration:0.25 animations:^{ self->_progressFill.frame = CGRectMake(0, 0, w, 2); }];
-    } else _progressFill.frame = CGRectMake(0, 0, w, 2);
-}
+- (void)setProgressValue:(CGFloat)progressValue animated:(BOOL)animated { _progressValue = MAX(0.0, MIN(1.0, progressValue)); }
 - (void)dealloc { [self stopAnimating]; }
 @end
 
@@ -3015,15 +3021,20 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
 
-    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(3, 3, btnWidth - 6, barHeight - 6)
-                                                            cornerRadius:(barHeight - 6) / 2.0
-                                                            materialType:LGGlassMaterialTypeThin];
+    // [V10.2 - LIQUID NAVIGATION THEO VIDEO TIKTOK]: indicator là GIỌT NƯỚC TRÒN (blob) nổi lên PHÍA TRÊN thanh nav,
+    // không nằm trong thanh. Di chuyển mượt giữa các tab, co giãn theo vận tốc như giọt nước thật.
+    CGFloat blobSize = 48.0;
+    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth - blobSize)/2.0 + 3, -14.0, blobSize, blobSize)
+                                                            cornerRadius:blobSize / 2.0
+                                                            materialType:LGGlassMaterialTypeCrystal];
     _activeGlassIndicator.userInteractionEnabled = NO;
     _activeGlassIndicator.interactiveHighlightEnabled = NO;
-    _activeGlassIndicator.layer.shadowOpacity = 0.32;
-    _activeGlassIndicator.layer.shadowRadius = 8.0;
-    _activeGlassIndicator.layer.shadowOffset = CGSizeMake(0, 3);
+    _activeGlassIndicator.layer.shadowOpacity = 0.45;
+    _activeGlassIndicator.layer.shadowRadius = 12.0;
+    _activeGlassIndicator.layer.shadowOffset = CGSizeMake(0, 5);
+    _activeGlassIndicator.layer.shadowColor = [UIColor blackColor].CGColor;
     [_liquidNavBarContainer addSubview:_activeGlassIndicator];
+    [_liquidNavBarContainer bringSubviewToFront:_activeGlassIndicator];
 
     for (NSInteger i = 0; i < _tabConfigs.count; i++) {
         NSDictionary *conf = _tabConfigs[i];
@@ -3053,13 +3064,17 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
-    CGRect targetFrame = CGRectMake((index * btnWidth) + 3, 3, btnWidth - 6, _liquidNavBarContainer.bounds.size.height - 6);
-
-    CGFloat velocity = (index - oldTab) * 480.0;
-    if (animated) [_activeGlassIndicator applyFluidJiggleAnimationWithVelocity:velocity];
+    CGFloat blobSize = 48.0;
+    // Giọt nước di chuyển đến centerX của tab được chọn, giữ nguyên vị trí y (nổi trên thanh)
+    CGFloat targetCenterX = (index * btnWidth) + (btnWidth / 2.0) + 3;
+    CGFloat oldCenterX = _activeGlassIndicator.center.x;
+    CGFloat distance = fabs(targetCenterX - oldCenterX);
 
     void (^animations)(void) = ^{
-        self->_activeGlassIndicator.frame = targetFrame;
+        // [V10.2] Giọt nước co giãn theo vận tốc: di chuyển nhanh thì dài ra theo phương ngang,
+        // gần đến đích thì co lại thành tròn — giống giọt nước trượt trên kính thật.
+        self->_activeGlassIndicator.center = CGPointMake(targetCenterX, self->_activeGlassIndicator.center.y);
+        self->_activeGlassIndicator.transform = CGAffineTransformIdentity;
         for (NSInteger i = 0; i < self->_tabButtons.count; i++) {
             LGGlassNavButton *b = self->_tabButtons[i];
             [b updateTabSelected:(i == index) animated:animated];
@@ -3067,7 +3082,13 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
     };
 
     if (animated) {
-        [UIView animateWithDuration:0.62 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0.35 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
+        // Giọt nước bật co giãn: giữa quãng đường stretch ngang, cuối co về tròn
+        CGFloat stretch = MIN(1.35, 1.0 + distance / 200.0);
+        [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            self->_activeGlassIndicator.transform = CGAffineTransformMakeScale(stretch, 1.0 / stretch);
+        } completion:^(BOOL f) {
+            [UIView animateWithDuration:0.48 delay:0 usingSpringWithDamping:0.58 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:animations completion:nil];
+        }];
     } else animations();
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
