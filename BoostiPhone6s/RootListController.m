@@ -2089,7 +2089,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
     rotation.duration = 1.15;
     rotation.repeatCount = HUGE_VALF;
     rotation.removedOnCompletion = NO;
-    [_spinnerArc.layer addAnimation:rotation forKey:@"V22.spinner.rotation"];
+    [_spinnerArc addAnimation:rotation forKey:@"V22.spinner.rotation"];
     CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
     pulse.fromValue = @0.45;
     pulse.toValue = @1.0;
@@ -2097,12 +2097,12 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
     pulse.autoreverses = YES;
     pulse.repeatCount = HUGE_VALF;
     pulse.removedOnCompletion = NO;
-    [_spinnerArc.layer addAnimation:pulse forKey:@"V22.spinner.opacity"];
+    [_spinnerArc addAnimation:pulse forKey:@"V22.spinner.opacity"];
 }
 - (void)stopSpinner {
     if (_spinLink) { [_spinLink invalidate]; _spinLink = nil; }
-    [_spinnerArc.layer removeAnimationForKey:@"V22.spinner.rotation"];
-    [_spinnerArc.layer removeAnimationForKey:@"V22.spinner.opacity"];
+    [_spinnerArc removeAnimationForKey:@"V22.spinner.rotation"];
+    [_spinnerArc removeAnimationForKey:@"V22.spinner.opacity"];
 }
 
 - (void)stopAllTimers {
