@@ -6,14 +6,14 @@
 flowchart TB
 
     subgraph IOS["LAYER 1 — iOS SYSTEM"]
-        A00["00 · Server Apple
-        A01["01 · iOS Runtime"]
-        A02["02 · System Frameworks"]
-        A03["03 · Application / Tweak Host"]
-        A04["04 · Tweak Runtime"]
-        A05["05 · Local Preferences"]
-        A06["06 · RootListController"]
-        A01 --> A02 --> A03 --> A04 --> A05 --> A06
+        A01["01 · Server Apple
+        A02["02 · iOS Runtime"]
+        A03["03 · System Frameworks"]
+        A04["04 · Application / Tweak Host"]
+        A05["05 · Tweak Runtime"]
+        A06["06 · Local Preferences"]
+        A06["07 · RootListController"]
+        A01 --> A02 --> A03 --> A04 --> A05 --> A06 --> A07
     end
 
     subgraph FEATURES["LAYER 2 — FEATURE ROUTING"]
