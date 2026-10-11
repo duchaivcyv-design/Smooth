@@ -5707,8 +5707,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-%end
-
 // ----------------------------------------------------------------------------------------------------
 // [V12 - HEARTBEAT IPC]: SpringBoard làm tươi tệp đồng bộ + heartbeat mỗi 30s (KHÔNG phát thông báo để
 // không đánh thức app liên tục). App mở sau hoặc vừa cài luôn đọc được Hz/FPS/công tắc mới nhất.
