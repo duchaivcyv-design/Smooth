@@ -1,3 +1,4 @@
+// V19.8 RootListController — role-gated server configuration and safer authentication.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -2012,13 +2013,8 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
             return;
         }
 
-        // FREE: 1% kết nối không thành công
-        NSInteger roll = arc4random_uniform(100);
-        if (roll < 1) {
-            [self showConnectFailThenQueue];
-        } else {
-            [self runQueuePhase];
-        }
+        // V19.5: không giả lập lỗi mạng ngẫu nhiên; chuyển thẳng sang luồng hàng chờ.
+        [self runQueuePhase];
     });
 }
 
@@ -2678,10 +2674,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     UIButton *loginBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     loginBtn.tag = 731904;
     NSUserDefaults *roleDefaults = [NSUserDefaults standardUserDefaults];
-    NSString *savedRole = [roleDefaults stringForKey:@"TIAdminRole"];
     NSString *savedServerMode = [roleDefaults stringForKey:TI_SELECTED_SERVER_KEY];
-    NSString *savedRoleTitle = [savedRole isEqualToString:@"admin_dev"] ? @"Admin Dev" :
-                               ([savedServerMode isEqualToString:@"free"] ? @"Free" : @"Admin");
+    // UI label is not an authorization token. Admin roles are shown only after the backend authenticates this session.
+    NSString *savedRoleTitle = [savedServerMode isEqualToString:@"free"] ? @"Free" : @"Server";
     [loginBtn setTitle:savedRoleTitle forState:UIControlStateNormal];
     loginBtn.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
     loginBtn.frame = CGRectMake(206, 0, 54, 30);
@@ -2704,12 +2699,26 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self showAdminServerLogin];
 }
 
-// IMPORTANT: Replace this host with the HTTPS URL where you deploy admin-backend.
-static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrender.com";
+// Default backend endpoint. Only an authenticated admin_dev session can view or change the override in the UI.
+static NSString * const TIAdminAPIBaseURLDefault = @"https://tweak-admin-backend.onrender.com";
+static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_override_v195";
+
+- (NSString *)currentAdminAPIBaseURL {
+    NSString *candidate = [[NSUserDefaults standardUserDefaults] stringForKey:TIAdminAPIBaseURLOverrideKey];
+    if (![candidate isKindOfClass:[NSString class]] || candidate.length == 0) candidate = TIAdminAPIBaseURLDefault;
+    NSURLComponents *parts = [NSURLComponents componentsWithString:candidate];
+    if (![parts.scheme.lowercaseString isEqualToString:@"https"] || parts.host.length == 0 || parts.user.length > 0 || parts.password.length > 0) {
+        return TIAdminAPIBaseURLDefault;
+    }
+    while (candidate.length > 0 && [candidate hasSuffix:@"/"]) candidate = [candidate substringToIndex:candidate.length - 1];
+    return candidate;
+}
 
 - (BOOL)serverSideAdminAuthenticationConfigured {
-    return [TIAdminAPIBaseURL hasPrefix:@"https://"] &&
-           ![TIAdminAPIBaseURL containsString:@"YOUR_BACKEND_HOST"];
+    NSString *baseURL = [self currentAdminAPIBaseURL];
+    NSURLComponents *parts = [NSURLComponents componentsWithString:baseURL];
+    return [parts.scheme.lowercaseString isEqualToString:@"https"] && parts.host.length > 0 &&
+           ![parts.host containsString:@"YOUR_BACKEND_HOST"];
 }
 
 - (void)performAdminLoginWithUsername:(NSString *)username
@@ -2720,7 +2729,8 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
         completion(nil, error);
         return;
     }
-    NSURL *url = [NSURL URLWithString:[TIAdminAPIBaseURL stringByAppendingString:@"/v1/auth/login"]];
+    NSString *baseURL = [self currentAdminAPIBaseURL];
+    NSURL *url = [NSURL URLWithString:[baseURL stringByAppendingString:@"/v1/auth/login"]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:15.0];
     request.HTTPMethod = @"POST";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
@@ -2776,7 +2786,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
             return;
         }
         if (![strongSelf serverSideAdminAuthenticationConfigured]) {
-            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Chưa cấu hình backend" message:@"Hãy đặt TIAdminAPIBaseURL trong RootListController.m thành URL HTTPS của backend đã triển khai rồi biên dịch lại tweak." preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Chưa cấu hình backend" message:@"Máy chủ đăng nhập chưa được cấu hình. Hãy liên hệ người quản trị để kiểm tra cấu hình server." preferredStyle:UIAlertControllerStyleAlert];
             [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
             [strongSelf presentViewController:err animated:YES completion:nil];
             return;
@@ -2800,6 +2810,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
                         return;
                     }
                     NSString *role = result[@"role"];
+                    if ([role isEqualToString:@"dev"]) role = @"admin_dev";
                     if (![role isEqualToString:@"admin"] && ![role isEqualToString:@"admin_dev"]) {
                         UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Không đủ quyền" message:@"Tài khoản không có vai trò quản trị được phép." preferredStyle:UIAlertControllerStyleAlert];
                         [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
@@ -2812,11 +2823,17 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
                     strongSelf->_adminServerUser = username;
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
                     [[NSUserDefaults standardUserDefaults] setObject:username forKey:TI_ADMIN_USER_KEY];
-                    [[NSUserDefaults standardUserDefaults] setObject:role forKey:@"TIAdminRole"];\n                    [[NSUserDefaults standardUserDefaults] setObject:([role isEqualToString:@"admin_dev"] ? @"admin_dev" : @"admin") forKey:TI_SELECTED_SERVER_KEY];
+                    [[NSUserDefaults standardUserDefaults] setObject:role forKey:@"TIAdminRole"];
+                    [[NSUserDefaults standardUserDefaults] setObject:([role isEqualToString:@"admin_dev"] ? @"admin_dev" : @"admin") forKey:TI_SELECTED_SERVER_KEY];
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
                     // Token is held in memory only; the backend remains the authority for role/revocation.
                     [strongSelf.customTableView setUserInteractionEnabled:YES];
                     [strongSelf updateServerStatusIndicator];
+                    UIButton *roleButton = (UIButton *)[strongSelf.navigationItem.leftBarButtonItem.customView viewWithTag:731904];
+                    if ([roleButton isKindOfClass:[UIButton class]]) {
+                        [roleButton setTitle:([role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin") forState:UIControlStateNormal];
+                        [roleButton sizeToFit];
+                    }
                     [strongSelf.customTableView reloadData];
                     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
                     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
@@ -2826,7 +2843,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
                         if ([role isEqualToString:@"admin_dev"]) {
                             [strongSelf revealAdminDevOnlyControlsIfAvailable];
                         }
-                        [strongSelf openDopamineStyleExploitConsole];
+                        [strongSelf.customTableView reloadData];
                     }]];
                     [strongSelf presentViewController:ok animated:YES completion:nil];
                 }];
@@ -2842,6 +2859,195 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
         }
     }]];
     [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)showAdminDevAPIURLEditor {
+    if (![self isAdminDevRole]) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Server API URL"
+                                                                   message:@"Chỉ Admin Dev được đổi endpoint. Dùng địa chỉ HTTPS đáng tin cậy."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"https://server.example.com";
+        field.keyboardType = UIKeyboardTypeURL;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.text = [self currentAdminAPIBaseURL];
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Lưu" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || ![strongSelf isAdminDevRole]) return;
+        NSString *candidate = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSURLComponents *parts = [NSURLComponents componentsWithString:candidate ?: @""];
+        if (![parts.scheme.lowercaseString isEqualToString:@"https"] || parts.host.length == 0 || parts.user.length > 0 || parts.password.length > 0) {
+            UIAlertController *error = [UIAlertController alertControllerWithTitle:@"URL không hợp lệ" message:@"Nhập URL HTTPS có hostname hợp lệ; không dùng thông tin đăng nhập nhúng trong URL." preferredStyle:UIAlertControllerStyleAlert];
+            [error addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+            [strongSelf presentViewController:error animated:YES completion:nil];
+            return;
+        }
+        while (candidate.length > 0 && [candidate hasSuffix:@"/"]) candidate = [candidate substringToIndex:candidate.length - 1];
+        [[NSUserDefaults standardUserDefaults] setObject:candidate forKey:TIAdminAPIBaseURLOverrideKey];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        [strongSelf.customTableView reloadData];
+        UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Đã lưu" message:@"Endpoint đã lưu trên thiết bị. Phiên đăng nhập hiện tại vẫn được kiểm soát bởi backend cũ cho đến khi đăng nhập lại." preferredStyle:UIAlertControllerStyleAlert];
+        [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [strongSelf presentViewController:saved animated:YES completion:nil];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)performAdminDevRequestPath:(NSString *)path
+                            method:(NSString *)method
+                              body:(NSDictionary *)body
+                        completion:(void (^)(NSDictionary * _Nullable result, NSError * _Nullable error))completion {
+    if (![self isAdminDevRole] || self->_adminAccessToken.length == 0) {
+        NSError *e = [NSError errorWithDomain:@"TIAdminAPI" code:401 userInfo:@{NSLocalizedDescriptionKey:@"Phiên Admin Dev đã hết hạn. Hãy đăng nhập lại."}];
+        if (completion) completion(nil, e);
+        return;
+    }
+    NSString *base = [self currentAdminAPIBaseURL];
+    NSURL *url = [NSURL URLWithString:[base stringByAppendingString:path ?: @""]];
+    if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
+        NSError *e = [NSError errorWithDomain:@"TIAdminAPI" code:1002 userInfo:@{NSLocalizedDescriptionKey:@"Endpoint HTTPS không hợp lệ."}];
+        if (completion) completion(nil, e);
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:15.0];
+    request.HTTPMethod = method ?: @"GET";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:[NSString stringWithFormat:@"Bearer %@", self->_adminAccessToken] forHTTPHeaderField:@"Authorization"];
+    if (body) {
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        NSError *jsonError = nil;
+        request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
+        if (jsonError) { if (completion) completion(nil, jsonError); return; }
+    }
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 15.0;
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
+    [[session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *networkError) {
+        if (networkError) { if (completion) completion(nil, networkError); return; }
+        NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
+        NSError *parseError = nil;
+        id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&parseError] : @{@"ok":@YES};
+        if (http.statusCode < 200 || http.statusCode >= 300 || ![object isKindOfClass:[NSDictionary class]]) {
+            NSString *message = (http.statusCode == 401 || http.statusCode == 403) ? @"Backend từ chối quyền truy cập. Hãy đăng nhập lại hoặc kiểm tra quyền Admin Dev." : @"Yêu cầu không thành công. Hãy kiểm tra backend và thử lại.";
+            NSError *apiError = [NSError errorWithDomain:@"TIAdminAPI" code:http.statusCode userInfo:@{NSLocalizedDescriptionKey:message}];
+            if (completion) completion(nil, apiError);
+            return;
+        }
+        if (completion) completion((NSDictionary *)object, nil);
+    }] resume];
+}
+
+- (void)showAdminDevResponseTitle:(NSString *)title path:(NSString *)path {
+    __weak typeof(self) weakSelf = self;
+    [self performAdminDevRequestPath:path method:@"GET" body:nil completion:^(NSDictionary *result, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) selfRef = weakSelf;
+            if (!selfRef) return;
+            NSString *message = nil;
+            if (error) {
+                message = error.localizedDescription ?: @"Không thể tải dữ liệu.";
+            } else {
+                NSData *json = [NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil];
+                message = json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"Backend trả dữ liệu không đọc được.";
+                if (message.length > 3200) message = [[message substringToIndex:3200] stringByAppendingString:@"\n… (đã rút gọn)"];
+            }
+            UIAlertController *info = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+            [info addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+            [selfRef presentViewController:info animated:YES completion:nil];
+        });
+    }];
+}
+
+- (void)showAdminDevConsole {
+    if (![self isAdminDevRole]) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Admin Dev Console"
+                                                                   message:@"Các yêu cầu quản trị được xác thực bởi backend và chỉ gửi khi phiên Admin Dev còn hiệu lực."
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Thiết bị" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [weakSelf showAdminDevResponseTitle:@"Thiết bị" path:@"/v1/admin/devices"];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Danh sách tài khoản" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [weakSelf showAdminDevResponseTitle:@"Tài khoản" path:@"/v1/admin/users"];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Audit log" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [weakSelf showAdminDevResponseTitle:@"Audit log" path:@"/v1/admin/audit"];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Thêm thiết bị vào blacklist" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) selfRef = weakSelf;
+        if (!selfRef || ![selfRef isAdminDevRole]) return;
+        UIAlertController *form = [UIAlertController alertControllerWithTitle:@"Blacklist thiết bị" message:@"Nhập Device ID và lý do. Backend sẽ xác thực quyền trước khi ghi." preferredStyle:UIAlertControllerStyleAlert];
+        [form addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"Device ID"; field.autocapitalizationType = UITextAutocapitalizationTypeNone; field.autocorrectionType = UITextAutocorrectionTypeNo; }];
+        [form addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"Lý do (tuỳ chọn)"; }];
+        [form addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+        [form addAction:[UIAlertAction actionWithTitle:@"Xác nhận" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *confirm) {
+            NSString *deviceID = [form.textFields[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *reason = form.textFields[1].text ?: @"policy";
+            if (deviceID.length == 0 || deviceID.length > 128) return;
+            [selfRef performAdminDevRequestPath:@"/v1/admin/blacklist" method:@"POST" body:@{@"device_id":deviceID, @"reason":reason} completion:^(NSDictionary *result, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    NSString *msg = error ? (error.localizedDescription ?: @"Thao tác thất bại.") : @"Thiết bị đã được gửi tới backend để blacklist.";
+                    UIAlertController *done = [UIAlertController alertControllerWithTitle:error ? @"Không thành công" : @"Đã gửi yêu cầu" message:msg preferredStyle:UIAlertControllerStyleAlert];
+                    [done addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                    [selfRef presentViewController:done animated:YES completion:nil];
+                });
+            }];
+        }]];
+        [selfRef presentViewController:form animated:YES completion:nil];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Gỡ khỏi blacklist" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) selfRef = weakSelf;
+        if (!selfRef || ![selfRef isAdminDevRole]) return;
+        UIAlertController *form = [UIAlertController alertControllerWithTitle:@"Gỡ blacklist" message:@"Nhập chính xác Device ID." preferredStyle:UIAlertControllerStyleAlert];
+        [form addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"Device ID"; field.autocapitalizationType = UITextAutocapitalizationTypeNone; field.autocorrectionType = UITextAutocorrectionTypeNo; }];
+        [form addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+        [form addAction:[UIAlertAction actionWithTitle:@"Gỡ" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *confirm) {
+            NSString *deviceID = [form.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (deviceID.length == 0 || deviceID.length > 128) return;
+            NSCharacterSet *safeChars = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."];
+            NSString *encoded = [deviceID stringByAddingPercentEncodingWithAllowedCharacters:safeChars];
+            if (!encoded) return;
+            NSString *path = [@"/v1/admin/blacklist/" stringByAppendingString:encoded];
+            [selfRef performAdminDevRequestPath:path method:@"DELETE" body:nil completion:^(NSDictionary *result, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    NSString *msg = error ? (error.localizedDescription ?: @"Thao tác thất bại.") : ([result[@"removed"] boolValue] ? @"Đã gỡ thiết bị khỏi blacklist." : @"Backend không tìm thấy thiết bị trong blacklist.");
+                    UIAlertController *done = [UIAlertController alertControllerWithTitle:error ? @"Không thành công" : @"Kết quả" message:msg preferredStyle:UIAlertControllerStyleAlert];
+                    [done addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                    [selfRef presentViewController:done animated:YES completion:nil];
+                });
+            }];
+        }]];
+        [selfRef presentViewController:form animated:YES completion:nil];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Thu hồi phiên" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) selfRef = weakSelf;
+        if (!selfRef || ![selfRef isAdminDevRole]) return;
+        UIAlertController *form = [UIAlertController alertControllerWithTitle:@"Thu hồi phiên đăng nhập" message:@"Nhập Session ID do backend cung cấp." preferredStyle:UIAlertControllerStyleAlert];
+        [form addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"Session ID"; field.autocapitalizationType = UITextAutocapitalizationTypeNone; field.autocorrectionType = UITextAutocorrectionTypeNo; }];
+        [form addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+        [form addAction:[UIAlertAction actionWithTitle:@"Thu hồi" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *confirm) {
+            NSString *sessionID = [form.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (sessionID.length == 0 || sessionID.length > 80) return;
+            [selfRef performAdminDevRequestPath:@"/v1/admin/revoke-session" method:@"POST" body:@{@"session_id":sessionID} completion:^(NSDictionary *result, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    NSString *msg = error ? (error.localizedDescription ?: @"Thao tác thất bại.") : ([result[@"revoked"] boolValue] ? @"Đã thu hồi phiên." : @"Backend không tìm thấy phiên còn hiệu lực.");
+                    UIAlertController *done = [UIAlertController alertControllerWithTitle:error ? @"Không thành công" : @"Kết quả" message:msg preferredStyle:UIAlertControllerStyleAlert];
+                    [done addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                    [selfRef presentViewController:done animated:YES completion:nil];
+                });
+            }];
+        }]];
+        [selfRef presentViewController:form animated:YES completion:nil];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = alert.popoverPresentationController;
+    if (popover) { popover.sourceView = self.view; popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1); }
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (BOOL)isAdminDevRole {
@@ -2876,36 +3082,16 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
     if (_isAdminServer) {
         _currentLatencyMs = 15 + arc4random_uniform(30);
         [self updateServerStatusIndicator];
-        if (_currentBottomTab == 4) {
+        if (_currentBottomTab == 4 && !self.presentedViewController) {
             [self.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2]
                                 withRowAnimation:UITableViewRowAnimationNone];
         }
         return;
     }
 
+    // V19.5: không giả lập lỗi/sập server ngẫu nhiên hoặc ghi trạng thái sập giả vào đĩa.
+    // Đây vẫn chỉ là con số hiển thị nội bộ, không phải phép đo RTT thực từ backend.
     NSInteger baseLatency = 30 + arc4random_uniform(120);
-    NSInteger roll = arc4random_uniform(10000);
-
-    if (roll < 1) {
-        // 0.01% sập server — lưu persistent 20 phút
-        NSTimeInterval until = [[NSDate date] timeIntervalSince1970] + 20 * 60;
-        Titanium_SavePersistentServerState(TI_STATE_DOWN, until);
-        baseLatency = 900 + arc4random_uniform(200);
-        [self handleServerCrash];
-    } else if (roll < 11) {
-        // 0.1% quá tải hoặc lỗi — chia 50/50, lưu persistent 3 phút
-        NSTimeInterval until = [[NSDate date] timeIntervalSince1970] + 3 * 60;
-        if (arc4random_uniform(2) == 0) {
-            Titanium_SavePersistentServerState(TI_STATE_OVERLOAD, until);
-            baseLatency = 500 + arc4random_uniform(300);
-            [self showLatencyWarning];
-        } else {
-            Titanium_SavePersistentServerState(TI_STATE_ERROR, until);
-            baseLatency = 400 + arc4random_uniform(300);
-            [self showLatencyWarning];
-        }
-    }
-
     _currentLatencyMs = baseLatency;
     [self updateServerStatusIndicator];
     if (_currentBottomTab == 4) {
@@ -3411,7 +3597,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
     } else {
         if (section == 0) return 2;
         if (section == 1) return _isKernelExploited ? 8 : 1;
-        if (section == 2) return 4;
+        if (section == 2) return 4 + ([self isAdminDevRole] ? 2 : 0);
         return 4;
     }
 }
@@ -3803,7 +3989,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
                     accent = [UIColor colorWithRed:1.0 green:0.85 blue:0.35 alpha:1.0];
                 }
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else {
+            } else if (indexPath.row == 3) {
                 title = @"Sáng/Tối Tự Động";
                 LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
                 s.on = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
@@ -3824,6 +4010,23 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
                     }
                 };
                 accessory = s;
+            } else if (indexPath.row == 4 && [self isAdminDevRole]) {
+                title = @"Server API URL";
+                NSString *base = [self currentAdminAPIBaseURL];
+                NSURLComponents *parts = [NSURLComponents componentsWithString:base];
+                detail = parts.host ?: @"Đã cấu hình HTTPS";
+                accent = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:1.0];
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+            } else if (indexPath.row == 5 && [self isAdminDevRole]) {
+                title = @"Admin Dev Console";
+                detail = @"Thiết bị · blacklist · phiên · audit";
+                accent = [UIColor colorWithRed:1.0 green:0.68 blue:0.20 alpha:1.0];
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+            } else {
+                title = @"Không khả dụng";
+                detail = @"Quyền truy cập bị giới hạn";
+                cell.userInteractionEnabled = NO;
+                cell.alpha = 0.55;
             }
         } else {
             if (!_isKernelExploited) {
@@ -3905,6 +4108,10 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
         else [self openDopamineStyleExploitConsole];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2) {
         [self showAdminServerLogin];
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4) {
+        if ([self isAdminDevRole]) [self showAdminDevAPIURLEditor];
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 5) {
+        if ([self isAdminDevRole]) [self showAdminDevConsole];
     }
 }
 
