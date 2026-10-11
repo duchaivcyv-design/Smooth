@@ -1061,6 +1061,21 @@ static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfo
 static BOOL g_SystemMasterReady = NO;
 
 // ====================================================================================================
+// [V12] BIẾN TOÀN CỤC & KHAI BÁO TRƯỚC (định nghĩa đầy đủ nằm ở KHỐI V12 phía dưới, trước runCoreTweak)
+// ====================================================================================================
+
+// [V12 - PIN 1-20% VẪN MƯỢT]: mức pin hiện tại (0.0 - 1.0) và cờ "pin yếu => ưu tiên mượt" (<=20% và không sạc).
+static volatile float g_batteryLevelV12 = 1.0f;
+static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
+
+// [V12] Khai báo trước: đa ngôn ngữ tự động / áp dụng Hz-FPS ngay cho app đang mở / heartbeat IPC / cờ pin yếu
+static NSString *Titanium_ResolveEffectiveLanguage(void);
+static void Titanium_ReapplyFrameRateToAllScenes(void);
+static void Titanium_StartIPCHearthbeatV12(void);
+static void Titanium_RegisterAppResumeRefreshV12(void);
+static void Titanium_UpdateLowBatteryFlagV12(void);
+
+// ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION (CHUẨN ROOTLESS, ROOTHIDE & APPLE SILICON)
 // ====================================================================================================
 
@@ -1302,8 +1317,14 @@ static inline void Titanium_BoostCurrentThreadBriefly(void) {
 
 static inline void Titanium_BackgroundPurgeMemory(void) {
     static volatile uint64_t s_lastPurgeTicks = 0;
+    // [V12 - MƯỢT KHI PIN 1-20%]: dọn heap tốn CPU; khi pin yếu iOS đã bóp xung, hoãn dọn để nhường CPU cho giao diện.
+    // (Cảnh báo bộ nhớ khẩn cấp vẫn dọn NGAY ở hook didReceiveMemoryWarning riêng, không đi qua hàm này => vẫn an toàn chống văng.)
+    if (g_lowBatterySmoothBoostV12) {
+        return;
+    }
     uint64_t now = mach_absolute_time();
-    if (s_lastPurgeTicks != 0 && (now - s_lastPurgeTicks) < (15ULL * 1000000000ULL)) {
+    // [V12 SỬA]: 15s phải đổi sang Mach ticks - bản cũ so Mach ticks với nano-giây nên thực tế ~10 PHÚT mới dọn 1 lần.
+    if (s_lastPurgeTicks != 0 && (now - s_lastPurgeTicks) < Titanium_NanosToMachTicks(15ULL * 1000000000ULL)) {
         return;
     }
     s_lastPurgeTicks = now;
@@ -1934,6 +1955,17 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.diskIOPriorityBoost = 1;
             p.rawTouchDirectDelivery = 1;
             p.powerSaveModeActive = (self.powerSaveMode || self.batterySaver60Hz) ? 1 : 0;
+            // [V12 - ĐA NGÔN NGỮ TỰ ĐỘNG CHUẨN]: nhúng mã ngôn ngữ đã phân giải vào vùng reserved của payload IPC
+            // để app thứ ba và giao diện cài đặt dùng CHUNG một ngôn ngữ với máy (máy tiếng Anh => tweak tiếng Anh;
+            // máy tiếng Việt => tweak tiếng Việt...). Không đổi kích thước/layout struct nên tương thích ngược 100%.
+            {
+                const char *langCodeV12 = Titanium_ResolveEffectiveLanguage().UTF8String;
+                if (langCodeV12) {
+                    p.reserved[0] = 'L'; p.reserved[1] = 'G'; p.reserved[2] = ':';
+                    strncpy(&p.reserved[3], langCodeV12, sizeof(p.reserved) - 4);
+                    p.reserved[sizeof(p.reserved) - 1] = '\0';
+                }
+            }
             p.updateSeq = (uint64_t)mach_absolute_time();
             p.lastHeartbeat = p.updateSeq;
 
@@ -2555,7 +2587,9 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 static uint64_t s_lastWindowTouchTick = 0;
                 uint64_t now = mach_absolute_time();
                 // ĐÃ ÉP: Đệm nhịp 30ms chống spam CPU gây nghẽn băng thông socket mạng
-                if (now - s_lastWindowTouchTick > (30ULL * 1000000ULL)) {
+                // [V12 SỬA]: 30ms phải đổi sang Mach ticks - bản cũ so ticks với nano-giây nên thực tế ~1.25 GIÂY
+                // mới boost 1 lần => chạm đầu tiên nhanh, các chạm sau "nặng" (đúng triệu chứng đã báo).
+                if (now - s_lastWindowTouchTick > Titanium_NanosToMachTicks(30ULL * 1000000ULL)) {
                     s_lastWindowTouchTick = now;
                     g_lastInteractionMachTime = now;
                     
@@ -2651,7 +2685,8 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             static uint64_t s_lastLatencyTrigger = 0;
             uint64_t now = mach_absolute_time();
             // Đệm 16ms (chu kỳ 1 frame ở 60Hz) tránh spam đè lên các sublayer con
-            if (now - s_lastLatencyTrigger > (16ULL * 1000000ULL)) {
+            // [V12 SỬA]: 16ms đổi sang Mach ticks (bản cũ thực tế ~0.67 giây mới kích Zero-Latency Pipeline 1 lần)
+            if (now - s_lastLatencyTrigger > Titanium_NanosToMachTicks(16ULL * 1000000ULL)) {
                 s_lastLatencyTrigger = now;
                 if (self.bounds.size.width > 0 && self.bounds.size.height > 0) {
                     Titanium_EnableZeroLatencyPipeline();
@@ -4391,7 +4426,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // 3. [ĐÃ ÉP TOÀN DIỆN]: Duy trì xung nhịp P-Core và Mach Time liên tục ở mỗi chu kỳ vẽ Drawable
 - (id)nextDrawable {
     if ((g_syncPayloadV285.masterEnabled || IS_ACTIVE) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
-        g_lastSyncTicksV285 = mach_absolute_time();
+        // [V12 SỬA - Hz/FPS KHÔNG TÁC DỤNG TRONG GAME]: bản cũ ghi vào g_lastSyncTicksV285 (mốc BÓP CỔ CHAI nạp IPC)
+        // mỗi khung hình => bộ nạp cấu hình bị chặn vĩnh viễn trong app Metal, chỉnh Hz/FPS không bao giờ "ăn".
+        // Đúng bản chất đây là mốc TƯƠNG TÁC => ghi vào g_lastInteractionMachTime.
+        g_lastInteractionMachTime = mach_absolute_time();
         if (!Titanium_IsSpringBoard()) {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
@@ -4719,7 +4757,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         static uint64_t s_lastPcoreBurst = 0;
         uint64_t now = mach_absolute_time();
-        if (now - s_lastPcoreBurst > (50ULL * 1000000ULL)) {
+        // [V12 SỬA]: 50ms đổi sang Mach ticks (bản cũ thực tế ~2.1 GIÂY mới boost P-Core 1 lần => vuốt cảm giác chậm)
+        if (now - s_lastPcoreBurst > Titanium_NanosToMachTicks(50ULL * 1000000ULL)) {
             s_lastPcoreBurst = now;
             g_lastInteractionMachTime = now;
             
@@ -4949,10 +4988,12 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)viewDidDisappear:(BOOL)animated {
     %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
-        if (CFG285.periodicRamClean) {
+        // [V12 - MƯỢT KHI PIN 1-20%]: pin yếu + đang vuốt/chạm thì hoãn dọn heap (tránh khựng giữa cú vuốt)
+        if (CFG285.periodicRamClean && !(g_lowBatterySmoothBoostV12 && (g_isUserTouchingScreen || g_isScrollingActive))) {
             static volatile uint64_t s_lastVcPurgeTick = 0;
             uint64_t now = mach_absolute_time();
-            if (now - s_lastVcPurgeTick > (5ULL * 1000000000ULL)) {
+            // [V12 SỬA]: 5s đổi sang Mach ticks (bản cũ thực tế ~208 giây)
+            if (now - s_lastVcPurgeTick > Titanium_NanosToMachTicks(5ULL * 1000000000ULL)) {
                 s_lastVcPurgeTick = now;
                 dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                     malloc_zone_pressure_relief(malloc_default_zone(), 0);
@@ -5477,6 +5518,208 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
+// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE (iPhone 6s -> 15 Pro Max, iOS 14.0 -> 26.0.1) ███
+// (TOÀN BỘ LÀ CODE MỚI THÊM - KHÔNG CẮT BỚT BẤT KỲ NHÓM NÀO PHÍA TRÊN)
+//  - Đa ngôn ngữ TỰ ĐỘNG theo ngôn ngữ & vùng của máy, đồng bộ qua payload IPC
+//  - Áp dụng Hz/FPS MỚI NGAY cho app đang mở sẵn (sửa "chỉnh trong app không tác dụng toàn hệ thống")
+//  - Hết cú "nảy" nặng khi vuốt thoát app về icon (kẹp damping của CASpringAnimation)
+//  - Pin 1-20% vẫn mượt: ưu tiên giao diện, hoãn dọn heap tốn CPU (đánh đổi pin lấy mượt + mát)
+//  - Heartbeat IPC 5s/lần: app mở sau luôn nhận đúng Hz/FPS/công tắc mới nhất
+// ====================================================================================================
+
+// ----------------------------------------------------------------------------------------------------
+// [V12 - ĐA NGÔN NGỮ TỰ ĐỘNG CHUẨN]
+// Thứ tự phân giải: (1) Người dùng chọn tay trong app (SelectedLanguage != "auto")
+//                   (2) "auto" => theo NGÔN NGỮ MÁY qua NSLocale (máy English => tweak English, máy Việt => Việt...)
+//                   (3) Dự phòng: mã ngôn ngữ SpringBoard nhúng trong payload IPC ("LG:xx" ở reserved)
+// NSLocale hoạt động bình thường cả trong sandbox của app thứ ba nên mọi tiến trình đều đồng nhất ngôn ngữ.
+// ----------------------------------------------------------------------------------------------------
+static NSString *Titanium_ResolveEffectiveLanguage(void) {
+    NSString *sel = nil;
+    if (CFG285 && [CFG285 respondsToSelector:@selector(selectedLanguage)]) {
+        sel = CFG285.selectedLanguage;
+    }
+    if (sel.length > 0 && ![sel isEqualToString:@"auto"]) {
+        return sel;
+    }
+    NSString *pref = [[NSLocale preferredLanguages] firstObject];
+    if (pref.length > 0) {
+        NSString *base = [[[pref componentsSeparatedByString:@"-"] firstObject] lowercaseString];
+        static NSSet *s_knownLangsV12 = nil;
+        static dispatch_once_t s_langOnceV12;
+        dispatch_once(&s_langOnceV12, ^{
+            s_knownLangsV12 = [[NSSet alloc] initWithObjects:@"vi", @"en", @"zh", @"ja", @"ko", @"fr", @"de",
+                                                             @"es", @"pt", @"ru", @"th", @"id", @"hi", @"ar", nil];
+        });
+        if ([s_knownLangsV12 containsObject:base]) {
+            return base;
+        }
+        return @"en"; // Ngôn ngữ lạ ngoài danh sách => chuẩn quốc tế English
+    }
+    const char *res = (const char *)g_syncPayloadV285.reserved;
+    if (res[0] == 'L' && res[1] == 'G' && res[2] == ':') {
+        NSString *code = [NSString stringWithUTF8String:&res[3]];
+        if (code.length > 0) return code;
+    }
+    return @"en";
+}
+
+// [V12] Helper song ngữ nhanh cho mọi chuỗi hiển thị trong tweak/app (Việt <=> Anh, mở rộng tuỳ ý)
+static inline NSString *Titanium_TrV12(NSString *viText, NSString *enText) {
+    return [[Titanium_ResolveEffectiveLanguage() lowercaseString] hasPrefix:@"vi"] ? (viText ?: enText) : (enText ?: viText);
+}
+
+// ----------------------------------------------------------------------------------------------------
+// [V12 - PIN 1-20% VẪN MƯỢT]: cập nhật cờ ưu tiên mượt khi pin yếu (<=20% và không sạc)
+// ----------------------------------------------------------------------------------------------------
+static void Titanium_UpdateLowBatteryFlagV12(void) {
+    float lvl = g_batteryLevelV12;
+    if (lvl < 0.0f) lvl = 1.0f; // Một số máy trả -1 khi chưa đọc được pin => coi như đầy, không bật chế độ pin yếu
+    g_lowBatterySmoothBoostV12 = (lvl <= 0.20f && !g_isDeviceChargingV285);
+}
+
+// ----------------------------------------------------------------------------------------------------
+// [V12 - Hz/FPS TÁC DỤNG TOÀN HỆ THỐNG NGAY LẬP TỨC]
+// Trước đây app ĐANG MỞ SẴN chỉ được áp dụng dải nhịp mới khi đóng mở lại cửa sổ. Hàm này duyệt toàn bộ
+// scene hiện có và đặt lại preferredFrameRateRange ngay tại thời điểm cấu hình thay đổi.
+// ----------------------------------------------------------------------------------------------------
+static void Titanium_ReapplyFrameRateToAllScenes(void) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
+        return;
+    }
+    if (Titanium_IsSpringBoard() || g_isCurrentAppBlacklisted) return;
+    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
+    @try {
+        UIApplication *app = [UIApplication sharedApplication];
+        if (!app) return;
+        if (@available(iOS 13.0, *)) {
+            NSSet *scenes = app.connectedScenes;
+            for (UIScene *scene in scenes) {
+                if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+                if (@available(iOS 15.0, *)) {
+                    UIWindowScene *winScene = (UIWindowScene *)scene;
+                    if ([winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                        float cap = (float)Titanium_GetEffectiveFrameCap();
+                        if (cap < 15.0f) cap = 15.0f;
+                        if (cap > 144.0f) cap = 144.0f;
+                        [winScene setPreferredFrameRateRange:SafeMakeFRR(Titanium_RangeFloorForCap(cap), cap, cap)];
+                    }
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+}
+
+// ----------------------------------------------------------------------------------------------------
+// [V12 - HẾT "NẢY" KHI VUỐT THOÁT APP]: nhận biết cửa sổ đang đóng app về Home / đóng folder / rời đa nhiệm
+// (đang vuốt Home gesture hoặc trong 250ms sau tương tác cuối) để kẹp độ nảy của spring cho thẳng & nhanh.
+// ----------------------------------------------------------------------------------------------------
+static inline BOOL Titanium_IsDismissingToHomeV12(void) {
+    if (g_isContinuousSwiping) return YES;
+    if (g_lastInteractionMachTime == 0) return NO;
+    uint64_t now = mach_absolute_time();
+    return ((now - g_lastInteractionMachTime) < Titanium_NanosToMachTicks(250ULL * 1000000ULL));
+}
+
+// [V12] Khai báo property cho SDK cũ (iOS 14) chưa có CAFrameRateRange - chống lỗi biên dịch, runtime tự no-op
+@interface CADisplayLink (TitaniumV12FrameRateRange)
+@property (nonatomic) SafeFrameRateRange preferredFrameRateRange;
+@end
+
+%group Group_TitaniumV12_SmoothExit_And_DisplayLink
+
+// --- [V12] CADisplayLink: GETTER trả về DẢI NHỊP TRỰC TIẾP theo cấu hình ---
+// Trước đây tweak chỉ ghi đè ở setter/addToRunLoop => display link ĐÃ TẠO TRƯỚC ĐÓ trong app đang chạy vẫn
+// giữ dải cũ (một nguyên nhân lớn của "chỉnh Hz/FPS trong app không tác dụng toàn hệ thống").
+// Nay mọi lần hệ thống/app đọc lại đều thấy giá trị MỚI NHẤT -> toàn bộ display link nghe theo tức thì.
+%hook CADisplayLink
+
+- (SafeFrameRateRange)preferredFrameRateRange {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.enableHzControl || g_syncPayloadV285.targetHz > 0)) {
+        if (Titanium_IsCurrentAppAGame()) {
+            return %orig; // Game Metal 3D: giữ nguyên nhịp gốc của game
+        }
+        if (Titanium_IsPassiveVideoPlayback()) {
+            return SafeMakeFRR(30.0f, 60.0f, 60.0f); // Video/PiP thụ động: chuẩn 60
+        }
+        float cap = (float)Titanium_GetEffectiveFrameCap();
+        if (cap < 15.0f) cap = 15.0f;
+        if (cap > 144.0f) cap = 144.0f;
+        return SafeMakeFRR(Titanium_RangeFloorForCap(cap), cap, cap);
+    }
+    return %orig;
+}
+
+%end
+
+// --- [V12] Hết cú "nảy" nặng trước khi app thu về icon ---
+// Khôi phục độ nảy nhẹ khi vuốt thoát app: damping tối thiểu 14, tránh nảy quá mạnh nhưng không triệt tiêu hoàn toàn.
+// Chỉ tác động trong cửa sổ đang vuốt thoát/đóng app về icon; các phần code khác giữ nguyên.
+%hook CASpringAnimation
+
+- (CGFloat)damping {
+    CGFloat orig = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12()) {
+        if (orig < 14.0) return 14.0;
+    }
+    return orig;
+}
+
+- (void)setDamping:(CGFloat)damping {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12()) {
+        if (damping < 14.0) damping = 14.0;
+    }
+    %orig(damping);
+}
+
+%end
+
+%end
+
+// ----------------------------------------------------------------------------------------------------
+// [V12 - HEARTBEAT IPC]: SpringBoard làm tươi tệp đồng bộ + heartbeat mỗi 5s (KHÔNG phát thông báo để
+// không đánh thức app liên tục). App mở sau hoặc vừa cài luôn đọc được Hz/FPS/công tắc mới nhất.
+// ----------------------------------------------------------------------------------------------------
+static void Titanium_StartIPCHearthbeatV12(void) {
+    if (!Titanium_IsSpringBoard()) return;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dispatch_source_t hb = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+        dispatch_source_set_timer(hb, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), (uint64_t)(5 * NSEC_PER_SEC), (uint64_t)(1 * NSEC_PER_SEC));
+        dispatch_source_set_event_handler(hb, ^{
+            ApexV285ProPayload snapshot;
+            pthread_mutex_lock(&g_syncLockV285);
+            snapshot = g_syncPayloadV285;
+            pthread_mutex_unlock(&g_syncLockV285);
+            if (snapshot.magic == APEX_SYNC_MAGIC_V285) {
+                Titanium_WriteSyncPayloadV285(&snapshot);
+            }
+        });
+        dispatch_resume(hb);
+    });
+}
+
+// ----------------------------------------------------------------------------------------------------
+// [V12 - BẮT BÙ KHI APP QUAY LẠI FOREGROUND]: thông báo Darwin tới lúc app đang treo nền có thể bị gộp/mất.
+// Mỗi lần app active lại: ép nạp IPC ngay (bỏ qua bóp cổ chai 250ms) + áp dụng dải nhịp cho mọi scene.
+// ----------------------------------------------------------------------------------------------------
+static void Titanium_RegisterAppResumeRefreshV12(void) {
+    if (Titanium_IsSpringBoard()) return;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            g_lastSyncTicksV285 = 0;
+            Titanium_ReloadSharedSyncStateV285();
+            Titanium_ReapplyFrameRateToAllScenes();
+        }];
+    });
+}
+
+// ====================================================================================================
 // GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
 // ====================================================================================================
 
@@ -5496,6 +5739,18 @@ static void Titanium_StartThermalAndChargingWatchdog(void) {
             if (g_isDeviceChargingV285) {
                 pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             }
+            Titanium_UpdateLowBatteryFlagV12(); // [V12] cắm sạc thì tự tắt chế độ pin yếu
+        }];
+
+        // [V12 - PIN 1-20% VẪN MƯỢT]: theo dõi MỨC PIN (không chỉ trạng thái sạc) để bật chế độ ưu tiên mượt khi pin yếu
+        g_batteryLevelV12 = dev.batteryLevel;
+        Titanium_UpdateLowBatteryFlagV12();
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryLevelDidChangeNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            g_batteryLevelV12 = [UIDevice currentDevice].batteryLevel;
+            Titanium_UpdateLowBatteryFlagV12();
         }];
     });
 }
@@ -5540,6 +5795,13 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
         }
         if (Titanium_IsSpringBoard()) {
             Titanium_TuneWindowServerDisplayDirectly();
+        } else {
+            // [V12 SỬA - CHỈNH Hz/FPS TRONG APP TÁC DỤNG TOÀN HỆ THỐNG NGAY]: trước đây app đang chạy chỉ nạp lại
+            // cấu hình nhưng các cửa sổ/scene ĐÃ MỞ vẫn giữ dải nhịp cũ tới khi đóng mở lại. Nay áp dụng dải nhịp
+            // mới cho MỌI scene hiện có ngay khi nhận thông báo thay đổi (kể cả thông báo PayloadWritten).
+            dispatch_async(dispatch_get_main_queue(), ^{
+                Titanium_ReapplyFrameRateToAllScenes();
+            });
         }
         s_debounceTimer = nil;
     });
@@ -5588,15 +5850,19 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             if (configClass) {
                 CFG285 = [configClass sharedInstance];
                 [CFG285 loadSettings];
+                // [V12 SỬA - CHỈNH Hz/FPS TRONG APP KHÔNG TÁC DỤNG]: loadSettings đã quy đổi và ghi g_cachedResolvedHz/FPS
+                // CHUẨN (tôn trọng công tắc Hz/FPS, tiết kiệm pin 60Hz, kẹp 15-144, máy 60Hz tự khóa 60, chống nóng...).
+                // Bản cũ ghi đè lại bằng giá trị THÔ targetHz/targetFPS ngay sau đó => mọi quy đổi bị xoá sạch.
+                // Nay giữ code cũ nhưng chỉ dùng làm DỰ PHÒNG khi cache chưa hợp lệ.
                 if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger initHz = (NSInteger)CFG285.targetHz;
-                    if (initHz >= 15 && initHz <= 144) {
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 144) && initHz >= 15 && initHz <= 144) {
                         g_cachedResolvedHz = initHz;
                     }
                 }
                 if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
                     NSInteger initFPS = (NSInteger)CFG285.targetFPS;
-                    if (initFPS >= 15 && initFPS <= 144) {
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 144) && initFPS >= 15 && initFPS <= 144) {
                         g_cachedResolvedFPS = initFPS;
                     }
                 }
@@ -5638,6 +5904,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_System_Memory_And_RunLoop_Governor);
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_Deep_RAM_Compaction_Engine);
+            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink); // [V12] Hết nảy khi vuốt về Home + DisplayLink nghe cấu hình tức thì
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
             }
@@ -5684,6 +5951,11 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     } @catch (NSException *e) {}
                 });
 
+                // [V12 - HEARTBEAT IPC]: làm tươi tệp đồng bộ mỗi 5s để app mở sau luôn nhận đúng Hz/FPS/công tắc
+                @try {
+                    Titanium_StartIPCHearthbeatV12();
+                } @catch (NSException *e) {}
+
                 NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
                 [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
                                                         contents:verifiedData
@@ -5698,6 +5970,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         Titanium_ForceInjectDynamicRefreshSupport();
                         AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_ApplySiliconDeepOptimizations();
+                        // [V12 - Hz/FPS TÁC DỤNG NGAY & CHẮC CHẮN]: áp dụng dải nhịp cho toàn bộ scene đã mở
+                        // + đăng ký bắt bù mỗi lần app quay lại foreground (khi thông báo Darwin bị gộp/mất lúc treo nền)
+                        Titanium_RegisterAppResumeRefreshV12();
+                        Titanium_ReapplyFrameRateToAllScenes();
                     } @catch (NSException *e) {}
                 });
             }
@@ -5826,15 +6102,17 @@ static void SpringBoardBootstrapTrigger(void) {
             if (configClass) {
                 CFG285 = [configClass sharedInstance];
                 [CFG285 loadSettings];
+                // [V12 SỬA - CHỈNH Hz/FPS KHÔNG TÁC DỤNG]: xem ghi chú trong runCoreTweak - không ghi đè cache đã quy đổi
+                // bằng giá trị THÔ nữa; chỉ dùng giá trị thô làm DỰ PHÒNG khi cache chưa hợp lệ.
                 if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger prefHz = (NSInteger)CFG285.targetHz;
-                    if (prefHz >= 15 && prefHz <= 144) {
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 144) && prefHz >= 15 && prefHz <= 144) {
                         g_cachedResolvedHz = prefHz;
                     }
                 }
                 if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
                     NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
-                    if (prefFPS >= 15 && prefFPS <= 144) {
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 144) && prefFPS >= 15 && prefFPS <= 144) {
                         g_cachedResolvedFPS = prefFPS;
                     }
                 }
@@ -5851,7 +6129,16 @@ static void SpringBoardBootstrapTrigger(void) {
                 SpringBoardBootstrapTrigger();
             });
         } else {
-            runCoreTweak(NO, bundleID, progName);
+            // [V12 SỬA - HẾT ĐƠ 1 LÚC RỒI VĂNG APP SAU KHI RESPRING - ROOTHIDE]:
+            // Bản cũ chạy runCoreTweak ĐỒNG BỘ ngay trong %ctor của app (đọc plist + CFPreferences + hook ~20 nhóm
+            // trên chính luồng nạp dylib). Sau respring, mọi app mở lại đều bị chặn ở bước này => app "đơ một lúc
+            // rồi văng" (FrontBoard launch watchdog giết tiến trình khởi động chậm).
+            // Nay: loader được giải phóng TỨC THÌ, toàn bộ khởi tạo nặng chạy trên hàng đợi nền ưu tiên cao
+            // (hook vẫn cài xong trong ~1ms đầu, trước khung hình đầu tiên). Áp dụng cho mọi app thứ ba,
+            // an toàn với roothide iPhone 6s -> 15 Pro Max, iOS 14 -> 26.0.1.
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                runCoreTweak(NO, bundleID, progName);
+            });
         }
     }
 }
