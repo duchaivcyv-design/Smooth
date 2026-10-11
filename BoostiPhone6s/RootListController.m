@@ -47,7 +47,6 @@ extern char **environ;
 #define TI_ADMIN_USER_KEY   @"ti_admin_user_v7"
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
 #define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
-#define TI_ADMIN_API_URL_KEY @"ti_admin_api_url_v16"
 
 // ====================================================================================================
 // SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
@@ -168,56 +167,6 @@ static void Titanium_SynchronizeLinkedPreferences(NSMutableDictionary *settings,
         if (!value) continue;
         for (NSString *key in group) settings[key] = value;
     }
-}
-
-static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings);
-static NSString *Titanium_LocalizeControllerText(NSString *text, NSDictionary *settings) {
-    if (![text isKindOfClass:[NSString class]] || text.length == 0) return text ?: @"";
-    NSString *language = Titanium_ResolvePayloadLanguage(settings ?: @{});
-    if ([language hasPrefix:@"vi"]) return text;
-    static NSDictionary<NSString *, NSString *> *translations = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        translations = @{
-            @"Trang Chủ": @"Home", @"Switch": @"Switch", @"App": @"Apps", @"Cài Đặt": @"Settings",
-            @"ĐIỀU KHIỂN HỆ THỐNG ĐO": @"SYSTEM MONITORING", @"MÀN HÌNH": @"DISPLAY",
-            @"NGUYÊN LÝ": @"OVERVIEW", @"CHỌN CHẾ ĐỘ": @"SELECT MODE", @"KHÓA HZ": @"HZ LIMIT",
-            @"KHÓA FPS": @"FPS LIMIT", @"CHỌN NHÓM": @"SELECT GROUP", @"THAO TÁC NHANH": @"QUICK ACTIONS",
-            @"TÌM KIẾM": @"SEARCH", @"QUẢN LÝ ỨNG DỤNG": @"APP MANAGEMENT", @"KHAI THÁC": @"EXPLOIT",
-            @"PHẦN CỨNG": @"HARDWARE", @"SERVER & GIAO DIỆN": @"SERVER & APPEARANCE", @"SANDBOX": @"SANDBOX",
-            @"CPU": @"CPU", @"GPU": @"GPU", @"RAM": @"RAM", @"PIN": @"BATTERY",
-            @"CẦN KHAI THÁC DARWIN": @"DARWIN EXPLOIT REQUIRED", @"CẦN KHAI THÁC DARWIN ĐỂ SỬ DỤNG": @"RUN THE DARWIN EXPLOIT TO USE THIS TWEAK",
-            @"Tần số Hz & FPS điều phối CADisplayLink & CoreAnimation. Nhấn Áp Dụng (góc phải trên) để đồng bộ.": @"Hz and FPS are separate caps. Tap Apply (top-right) to sync settings.",
-            @"Tần Số (Hz)": @"Refresh rate (Hz)", @"Khung Hình (FPS)": @"Frame rate (FPS)", @"Chế độ:": @"Mode:",
-            @"Bật kiểm soát Hz": @"Enable Hz control", @"Bật kiểm soát FPS": @"Enable FPS control",
-            @"Đang áp dụng trần đã chọn": @"Selected cap is active", @"Tắt: để ứng dụng và iOS tự điều phối": @"Off: let iOS and apps manage frame pacing",
-            @"Nhập Tùy Chỉnh (15-144)...": @"Custom value (15–144)…", @"Hiện:": @"Current:",
-            @"Độ Trễ Server": @"Server latency", @"Trạng Thái Server": @"Server status",
-            @"Đăng Nhập Server Riêng": @"Private server login", @"Sáng/Tối Tự Động": @"Auto appearance",
-            @"Ngôn Ngữ": @"Language", @"Server API URL": @"Server API URL", @"Admin Dev Console": @"Admin Dev console",
-            @"Admin": @"Admin", @"Admin Dev": @"Admin Dev", @"Admin Session": @"Admin Session", @"Ổn định": @"Stable", @"Quá tải": @"Overloaded",
-            @"Sập": @"Down", @"Lỗi": @"Error", @"Chậm": @"Slow", @"Kém": @"Poor",
-            @"Đã khai thác": @"Exploited", @"Chưa khai thác": @"Not exploited", @"Cần khai thác": @"Exploit required",
-            @"Môi Trường": @"Environment", @"Vùng": @"Root path", @"Đã Phá": @"Bypassed", @"IPC": @"IPC",
-            @"UID": @"UID", @"Mã": @"Model", @"Kiến Trúc": @"Architecture", @"iOS": @"iOS", @"Tên": @"Name",
-            @"Sẵn Sàng": @"Ready", @"Bấm": @"Tap", @"Tự động theo máy": @"Automatic (device language)",
-            @"Theo máy": @"Device language", @"Tiếng Việt": @"Vietnamese", @"English": @"English",
-            @"Nhập tài khoản": @"Enter account", @"Mật khẩu": @"Password", @"Hiện": @"Show", @"Ẩn": @"Hide",
-            @"Đăng Nhập": @"Sign in", @"Hủy": @"Cancel", @"Đóng": @"Close", @"Lưu": @"Save", @"OK": @"OK",
-            @"Không có app khớp": @"No matching apps", @"Đang quét...": @"Scanning…", @"Tìm app...": @"Search apps…",
-            @"Bật Tất Cả Ứng Dụng": @"Enable all apps", @"Server Free: Ổn định": @"Free server: Stable",
-            @"Server Free: Sập - _____ms": @"Free server: Down — _____ ms", @"Server Free: Quá tải - _____ms": @"Free server: Overloaded — _____ ms",
-            @"Server Free: Lỗi - _____ms": @"Free server: Error — _____ ms"
-        };
-    });
-    NSString *translated = translations[text];
-    if (translated) return translated;
-    if ([text hasPrefix:@"Server Free: Ổn định - "]) return [text stringByReplacingOccurrencesOfString:@"Server Free: Ổn định - " withString:@"Free server: Stable — "];
-    if ([text hasPrefix:@"Server Free: Chậm - "]) return [text stringByReplacingOccurrencesOfString:@"Server Free: Chậm - " withString:@"Free server: Slow — "];
-    if ([text hasPrefix:@"Server Free: Kém - "]) return [text stringByReplacingOccurrencesOfString:@"Server Free: Kém - " withString:@"Free server: Poor — "];
-    if ([text hasSuffix:@" Hz"]) return text;
-    if ([text hasSuffix:@" FPS"]) return text;
-    return text;
 }
 
 static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings) {
@@ -2394,17 +2343,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSString *_adminServerUser;
     NSString *_adminAccessToken;
     NSString *_adminRole;
-    
 }
-- (NSString *)adminAPIBaseURL;
-- (BOOL)serverSideAdminAuthenticationConfigured;
-- (void)showAdminAPIURLPrompt;
-- (void)showAdminConsole;
-- (void)showAdminDevConsole;
-- (void)toggleAdminPasswordVisibility:(UIButton *)sender;
-- (void)performAdminRequestPath:(NSString *)path method:(NSString *)method body:(NSDictionary * _Nullable)body completion:(void (^)(NSDictionary * _Nullable, NSError * _Nullable))completion;
-- (void)promptAdminForTitle:(NSString *)title placeholders:(NSArray<NSString *> *)placeholders completion:(void (^)(NSArray<NSString *> *values))completion;
-- (void)presentAdminRequestResult:(NSDictionary * _Nullable)result error:(NSError * _Nullable)error title:(NSString *)title;
 @end
 
 @implementation RootListController
@@ -2446,8 +2385,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _appSearchQuery = @"";
 
     _chipErrorActive = NO;
-    _lastAppliedHz = [UIScreen mainScreen].maximumFramesPerSecond > 0 ? MIN(144, [UIScreen mainScreen].maximumFramesPerSecond) : 60;
-    _lastAppliedFPS = [UIScreen mainScreen].maximumFramesPerSecond > 0 ? MIN(144, [UIScreen mainScreen].maximumFramesPerSecond) : 60;
+    _lastAppliedHz = 144;
+    _lastAppliedFPS = 144;
     _currentLatencyMs = 45;
     _serverDown = NO;
 
@@ -2701,31 +2640,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)onSwitchToggled:(UISwitch *)sender { if (sender) [self.customTableView reloadData]; }
 
 - (void)showLanguagePickerPopup:(id)sender {
-    NSString *language = Titanium_ResolvePayloadLanguage(self.settingsDict);
-    BOOL english = ![language hasPrefix:@"vi"];
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:(english ? @"APP LANGUAGE" : @"CHỌN NGÔN NGỮ") message:(english ? @"Automatic follows the iPhone/iPad preferred language." : @"Tự động theo ngôn ngữ ưu tiên của iPhone/iPad.") preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:(english ? @"Automatic (device)" : @"Tự động theo máy") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        self.settingsDict[@"SelectedLanguage"] = @"auto";
-        self.settingsDict[@"AppLanguage"] = @"auto";
-        [self saveSettingsDataAndSync];
-        [self rebuildLocalizedNavigation];
-        [self.customTableView reloadData];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        self.settingsDict[@"SelectedLanguage"] = @"vi";
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"CHỌN NGÔN NGỮ" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         self.settingsDict[@"AppLanguage"] = @"vi";
         [self saveSettingsDataAndSync];
-        [self rebuildLocalizedNavigation];
         [self.customTableView reloadData];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        self.settingsDict[@"SelectedLanguage"] = @"en";
+    [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         self.settingsDict[@"AppLanguage"] = @"en";
         [self saveSettingsDataAndSync];
-        [self rebuildLocalizedNavigation];
         [self.customTableView reloadData];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:(english ? @"Cancel" : @"Đóng") style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         sheet.popoverPresentationController.sourceView = self.view;
         sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width/2, self.view.bounds.size.height/2, 1, 1);
@@ -2750,7 +2676,13 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [container addSubview:_serverStatusLabel];
 
     UIButton *loginBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [loginBtn setTitle:@"Admin" forState:UIControlStateNormal];
+    loginBtn.tag = 731904;
+    NSUserDefaults *roleDefaults = [NSUserDefaults standardUserDefaults];
+    NSString *savedRole = [roleDefaults stringForKey:@"TIAdminRole"];
+    NSString *savedServerMode = [roleDefaults stringForKey:TI_SELECTED_SERVER_KEY];
+    NSString *savedRoleTitle = [savedRole isEqualToString:@"admin_dev"] ? @"Admin Dev" :
+                               ([savedServerMode isEqualToString:@"free"] ? @"Free" : @"Admin");
+    [loginBtn setTitle:savedRoleTitle forState:UIControlStateNormal];
     loginBtn.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
     loginBtn.frame = CGRectMake(206, 0, 54, 30);
     loginBtn.layer.cornerRadius = 8;
@@ -2772,23 +2704,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self showAdminServerLogin];
 }
 
-// Default is a deployment hint only; set the real HTTPS endpoint in Settings → Server API URL.
-static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
-
-- (NSString *)adminAPIBaseURL {
-    NSString *stored = [[NSUserDefaults standardUserDefaults] stringForKey:TI_ADMIN_API_URL_KEY];
-    NSString *value = stored.length ? stored : TIAdminAPIBaseURL;
-    value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    while ([value hasSuffix:@"/"]) value = [value substringToIndex:value.length - 1];
-    return value;
-}
+// IMPORTANT: Replace this host with the HTTPS URL where you deploy admin-backend.
+static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrender.com";
 
 - (BOOL)serverSideAdminAuthenticationConfigured {
-    NSURLComponents *parts = [NSURLComponents componentsWithString:[self adminAPIBaseURL]];
-    return [[parts.scheme lowercaseString] isEqualToString:@"https"] && parts.host.length > 0 &&
-           ![[parts.host lowercaseString] isEqualToString:@"example.com"] &&
-           ![[parts.host lowercaseString] isEqualToString:@"your-host.example"] &&
-           ![[parts.host lowercaseString] containsString:@"your-backend-host"];
+    return [TIAdminAPIBaseURL hasPrefix:@"https://"] &&
+           ![TIAdminAPIBaseURL containsString:@"YOUR_BACKEND_HOST"];
 }
 
 - (void)performAdminLoginWithUsername:(NSString *)username
@@ -2799,7 +2720,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         completion(nil, error);
         return;
     }
-    NSURL *url = [NSURL URLWithString:[[self adminAPIBaseURL] stringByAppendingString:@"/v1/auth/login"]];
+    NSURL *url = [NSURL URLWithString:[TIAdminAPIBaseURL stringByAppendingString:@"/v1/auth/login"]];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:15.0];
     request.HTTPMethod = @"POST";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
@@ -2828,10 +2749,10 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
 - (void)showAdminServerLogin {
     UIAlertController *a = [UIAlertController
         alertControllerWithTitle:@"Đăng Nhập Server Riêng"
-        message:[NSString stringWithFormat:@"API: %@\nAdmin username mỗi người sẽ có vai trò do server quyết định.", [self adminAPIBaseURL]]
+        message:@"Nhập tài khoản được cấp. Vai trò và quyền truy cập sẽ được máy chủ xác nhận."
         preferredStyle:UIAlertControllerStyleAlert];
     [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
-        tf.placeholder = @"Admin: apple.com · Admin Dev: admin.apple.com";
+        tf.placeholder = @"Tài khoản";
         tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
         tf.autocorrectionType = UITextAutocorrectionTypeNo;
         tf.text = self->_adminServerUser ?: @"";
@@ -2841,21 +2762,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         tf.secureTextEntry = YES;
         tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
         tf.autocorrectionType = UITextAutocorrectionTypeNo;
-        UIButton *eye = [UIButton buttonWithType:UIButtonTypeSystem];
-        [eye setImage:[UIImage systemImageNamed:@"eye"] forState:UIControlStateNormal];
-        eye.tintColor = [UIColor secondaryLabelColor];
-        eye.frame = CGRectMake(0, 0, 36, 32);
-        [eye addTarget:self action:@selector(toggleAdminPasswordVisibility:) forControlEvents:UIControlEventTouchUpInside];
-        tf.rightView = eye;
-        tf.rightViewMode = UITextFieldViewModeAlways;
-    }];
-    [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
-        tf.placeholder = @"Admin API URL (HTTPS)";
-        tf.text = [self adminAPIBaseURL];
-        tf.keyboardType = UIKeyboardTypeURL;
-        tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        tf.autocorrectionType = UITextAutocorrectionTypeNo;
-        tf.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     __weak typeof(self) weakSelf = self;
     [a addAction:[UIAlertAction actionWithTitle:@"Đăng Nhập" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
@@ -2863,17 +2769,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         if (!strongSelf) return;
         NSString *username = a.textFields[0].text ?: @"";
         NSString *password = a.textFields[1].text ?: @"";
-        NSString *enteredAPI = a.textFields.count > 2 ? [a.textFields[2].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] : @"";
-        while ([enteredAPI hasSuffix:@"/"]) enteredAPI = [enteredAPI substringToIndex:enteredAPI.length - 1];
-        NSURLComponents *apiParts = [NSURLComponents componentsWithString:enteredAPI];
-        if (![[apiParts.scheme lowercaseString] isEqualToString:@"https"] || apiParts.host.length == 0) {
-            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"API URL không hợp lệ" message:@"Nhập URL backend đã triển khai và dùng HTTPS. Mật khẩu không được gửi nếu URL chưa hợp lệ." preferredStyle:UIAlertControllerStyleAlert];
-            [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-            [strongSelf presentViewController:err animated:YES completion:nil];
-            return;
-        }
-        [[NSUserDefaults standardUserDefaults] setObject:enteredAPI forKey:TI_ADMIN_API_URL_KEY];
-        [[NSUserDefaults standardUserDefaults] synchronize];
         if (username.length == 0 || password.length == 0) {
             UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Thiếu thông tin" message:@"Hãy nhập cả tài khoản và mật khẩu." preferredStyle:UIAlertControllerStyleAlert];
             [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
@@ -2881,7 +2776,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
             return;
         }
         if (![strongSelf serverSideAdminAuthenticationConfigured]) {
-            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Chưa cấu hình backend" message:@"Hãy mở Cài Đặt → Server API URL và nhập địa chỉ HTTPS backend đã triển khai." preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Chưa cấu hình backend" message:@"Hãy đặt TIAdminAPIBaseURL trong RootListController.m thành URL HTTPS của backend đã triển khai rồi biên dịch lại tweak." preferredStyle:UIAlertControllerStyleAlert];
             [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
             [strongSelf presentViewController:err animated:YES completion:nil];
             return;
@@ -2892,7 +2787,13 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
             dispatch_async(dispatch_get_main_queue(), ^{
                 [loading dismissViewControllerAnimated:YES completion:^{
                     if (error || ![result[@"access_token"] isKindOfClass:[NSString class]] || ![result[@"role"] isKindOfClass:[NSString class]]) {
-                        NSString *message = error.localizedDescription ?: @"Backend không trả về phiên xác thực hợp lệ.";
+                        NSString *message = @"Không thể đăng nhập. Hãy kiểm tra tài khoản, mật khẩu và kết nối rồi thử lại.";
+                        if (error && [error.domain isEqualToString:NSURLErrorDomain]) {
+                            if (error.code == NSURLErrorNotConnectedToInternet) message = @"Không có kết nối Internet.";
+                            else if (error.code == NSURLErrorTimedOut) message = @"Máy chủ phản hồi quá lâu. Vui lòng thử lại.";
+                        } else if (error && error.code >= 400 && error.code < 500) {
+                            message = @"Thông tin đăng nhập không hợp lệ hoặc tài khoản không được phép truy cập.";
+                        }
                         UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Đăng nhập thất bại" message:message preferredStyle:UIAlertControllerStyleAlert];
                         [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
                         [strongSelf presentViewController:err animated:YES completion:nil];
@@ -2911,7 +2812,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
                     strongSelf->_adminServerUser = username;
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
                     [[NSUserDefaults standardUserDefaults] setObject:username forKey:TI_ADMIN_USER_KEY];
-                    [[NSUserDefaults standardUserDefaults] setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
+                    [[NSUserDefaults standardUserDefaults] setObject:role forKey:@"TIAdminRole"];\n                    [[NSUserDefaults standardUserDefaults] setObject:([role isEqualToString:@"admin_dev"] ? @"admin_dev" : @"admin") forKey:TI_SELECTED_SERVER_KEY];
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
                     // Token is held in memory only; the backend remains the authority for role/revocation.
                     [strongSelf.customTableView setUserInteractionEnabled:YES];
@@ -2948,230 +2849,10 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
 }
 
 - (void)revealAdminDevOnlyControlsIfAvailable {
+    // Role gate for future dev-only controls. Keep hidden controls absent by default;
+    // any privileged action must still be authorized by the backend on every API request.
     if (![self isAdminDevRole]) return;
     [self.customTableView reloadData];
-}
-
-- (void)toggleAdminPasswordVisibility:(UIButton *)sender {
-    UIAlertController *alert = (UIAlertController *)self.presentedViewController;
-    if (![alert isKindOfClass:[UIAlertController class]] || alert.textFields.count < 2) return;
-    UITextField *passwordField = alert.textFields[1];
-    BOOL show = passwordField.secureTextEntry;
-    NSString *keep = passwordField.text ?: @"";
-    passwordField.secureTextEntry = !show;
-    passwordField.text = keep;
-    [sender setImage:[UIImage systemImageNamed:(show ? @"eye.slash" : @"eye")] forState:UIControlStateNormal];
-}
-
-- (void)showAdminAPIURLPrompt {
-    BOOL english = ![Titanium_ResolvePayloadLanguage(self.settingsDict) hasPrefix:@"vi"];
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:(english ? @"Admin API endpoint" : @"Địa chỉ API Admin")
-                                                               message:(english ? @"Enter the deployed HTTPS origin (without /v1/... ). The default URL is only a hint and is not verified." : @"Nhập địa chỉ HTTPS đã triển khai (không thêm /v1/... ). URL mặc định chỉ là gợi ý, chưa được xác minh.")
-                                                        preferredStyle:UIAlertControllerStyleAlert];
-    [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
-        tf.text = [self adminAPIBaseURL];
-        tf.placeholder = @"https://your-host.example";
-        tf.keyboardType = UIKeyboardTypeURL;
-        tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        tf.autocorrectionType = UITextAutocorrectionTypeNo;
-        tf.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-    [a addAction:[UIAlertAction actionWithTitle:(english ? @"Save" : @"Lưu") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        NSString *value = [a.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] ?: @"";
-        while ([value hasSuffix:@"/"]) value = [value substringToIndex:value.length - 1];
-        NSURLComponents *parts = [NSURLComponents componentsWithString:value];
-        if (![[parts.scheme lowercaseString] isEqualToString:@"https"] || parts.host.length == 0) {
-            UIAlertController *bad = [UIAlertController alertControllerWithTitle:(english ? @"Invalid URL" : @"URL không hợp lệ") message:(english ? @"The API URL must use HTTPS and include a hostname." : @"URL API phải dùng HTTPS và có tên máy chủ hợp lệ.") preferredStyle:UIAlertControllerStyleAlert];
-            [bad addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-            [self presentViewController:bad animated:YES completion:nil];
-            return;
-        }
-        [[NSUserDefaults standardUserDefaults] setObject:value forKey:TI_ADMIN_API_URL_KEY];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        [self.customTableView reloadData];
-        UIAlertController *saved = [UIAlertController alertControllerWithTitle:(english ? @"Saved" : @"Đã lưu") message:value preferredStyle:UIAlertControllerStyleAlert];
-        [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-        [self presentViewController:saved animated:YES completion:nil];
-    }]];
-    [a addAction:[UIAlertAction actionWithTitle:(english ? @"Cancel" : @"Hủy") style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:a animated:YES completion:nil];
-}
-
-- (void)performAdminRequestPath:(NSString *)path method:(NSString *)method body:(NSDictionary *)body completion:(void (^)(NSDictionary * _Nullable, NSError * _Nullable))completion {
-    if (!_isAdminServer || _adminAccessToken.length == 0) {
-        NSError *e = [NSError errorWithDomain:@"TIAdminAPI" code:401 userInfo:@{NSLocalizedDescriptionKey:@"Cần đăng nhập bằng tài khoản Admin còn hiệu lực."}];
-        if (completion) completion(nil, e);
-        return;
-    }
-    NSString *cleanPath = [path hasPrefix:@"/"] ? path : [@"/" stringByAppendingString:path ?: @""];
-    NSURL *url = [NSURL URLWithString:[[self adminAPIBaseURL] stringByAppendingString:cleanPath]];
-    if (!url || ![[url.scheme lowercaseString] isEqualToString:@"https"]) {
-        NSError *e = [NSError errorWithDomain:@"TIAdminAPI" code:1002 userInfo:@{NSLocalizedDescriptionKey:@"Địa chỉ API HTTPS không hợp lệ."}];
-        if (completion) completion(nil, e);
-        return;
-    }
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:15.0];
-    request.HTTPMethod = method ?: @"GET";
-    [request setValue:[NSString stringWithFormat:@"Bearer %@", _adminAccessToken] forHTTPHeaderField:@"Authorization"];
-    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    if (body) {
-        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-        NSError *jsonError = nil;
-        request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
-        if (jsonError) { if (completion) completion(nil, jsonError); return; }
-    }
-    NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-    cfg.timeoutIntervalForRequest = 15.0;
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:cfg];
-    [[session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) { if (completion) completion(nil, error); return; }
-        NSInteger status = [(NSHTTPURLResponse *)response statusCode];
-        id decoded = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : @{ @"ok": @YES };
-        NSDictionary *result = [decoded isKindOfClass:[NSDictionary class]] ? decoded : @{ @"response": decoded ?: @"" };
-        if (status < 200 || status >= 300) {
-            NSString *message = [result[@"error"] isKindOfClass:[NSString class]] ? result[@"error"] : [NSString stringWithFormat:@"HTTP %ld", (long)status];
-            NSError *apiError = [NSError errorWithDomain:@"TIAdminAPI" code:status userInfo:@{NSLocalizedDescriptionKey:message}];
-            if (completion) completion(result, apiError);
-            return;
-        }
-        if (completion) completion(result, nil);
-    }] resume];
-}
-
-- (void)presentAdminRequestResult:(NSDictionary *)result error:(NSError *)error title:(NSString *)title {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *message = nil;
-        if (error) message = [NSString stringWithFormat:@"%@\n\n%@", error.localizedDescription ?: @"Request failed", result ?: @{}];
-        else {
-            NSData *data = [NSJSONSerialization dataWithJSONObject:(result ?: @{}) options:NSJSONWritingPrettyPrinted error:nil];
-            message = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"OK";
-        }
-        if (message.length > 3600) message = [[message substringToIndex:3600] stringByAppendingString:@"\n… (đã rút gọn)"];
-        UIAlertController *a = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-        [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-        if (message.length > 200) [a addAction:[UIAlertAction actionWithTitle:@"Sao chép" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [UIPasteboard generalPasteboard].string = message; }]];
-        if (self.presentedViewController) [self.presentedViewController presentViewController:a animated:YES completion:nil];
-        else [self presentViewController:a animated:YES completion:nil];
-    });
-}
-
-- (void)promptAdminForTitle:(NSString *)title placeholders:(NSArray<NSString *> *)placeholders completion:(void (^)(NSArray<NSString *> *values))completion {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleAlert];
-    for (NSString *placeholder in placeholders) {
-        [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
-            tf.placeholder = placeholder;
-            tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
-            tf.autocorrectionType = UITextAutocorrectionTypeNo;
-            tf.clearButtonMode = UITextFieldViewModeWhileEditing;
-        }];
-    }
-    [a addAction:[UIAlertAction actionWithTitle:@"Thực hiện" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        NSMutableArray *values = [NSMutableArray array];
-        for (UITextField *tf in a.textFields) [values addObject:[tf.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] ?: @""];
-        if (completion) completion(values);
-    }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:a animated:YES completion:nil];
-}
-
-- (void)showAdminConsole {
-    if (!_isAdminServer || _adminAccessToken.length == 0) {
-        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Admin" message:@"Hãy đăng nhập lại để nhận token do backend cấp." preferredStyle:UIAlertControllerStyleAlert];
-        [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-        [self presentViewController:a animated:YES completion:nil];
-        return;
-    }
-    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"ADMIN" message:[self adminAPIBaseURL] preferredStyle:UIAlertControllerStyleActionSheet];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Kiểm tra tài khoản / phiên" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self performAdminRequestPath:@"/v1/auth/me" method:@"GET" body:nil completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Phiên Admin"]; }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Đăng xuất" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
-        [self performAdminRequestPath:@"/v1/auth/logout" method:@"POST" body:@{} completion:^(NSDictionary *r, NSError *e) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self->_isAdminServer = NO; self->_adminRole = nil; self->_adminAccessToken = nil;
-                [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TI_ADMIN_SERVER_KEY];
-                [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
-                [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
-                [[NSUserDefaults standardUserDefaults] synchronize];
-                self.customTableView.userInteractionEnabled = YES;
-                [self updateServerStatusIndicator];
-                [self.customTableView reloadData];
-                [self presentAdminRequestResult:r error:e title:@"Đăng xuất Admin"];
-            });
-        }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        menu.popoverPresentationController.sourceView = self.view;
-        menu.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
-    }
-    [self presentViewController:menu animated:YES completion:nil];
-}
-
-- (void)showAdminDevConsole {
-    if (![self isAdminDevRole] || _adminAccessToken.length == 0) {
-        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Admin Dev" message:@"Đăng nhập lại bằng tài khoản có role admin_dev." preferredStyle:UIAlertControllerStyleAlert];
-        [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-        [self presentViewController:a animated:YES completion:nil];
-        return;
-    }
-    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"ADMIN DEV" message:[self adminAPIBaseURL] preferredStyle:UIAlertControllerStyleActionSheet];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Kiểm tra phiên" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self performAdminRequestPath:@"/v1/auth/me" method:@"GET" body:nil completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Phiên Admin Dev"]; }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Danh sách thiết bị" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self performAdminRequestPath:@"/v1/admin/devices" method:@"GET" body:nil completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Thiết bị"]; }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Nhật ký audit" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self performAdminRequestPath:@"/v1/admin/audit" method:@"GET" body:nil completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Audit log"]; }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Chặn thiết bị" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self promptAdminForTitle:@"Chặn thiết bị" placeholders:@[@"Device ID", @"Lý do (tùy chọn)"] completion:^(NSArray<NSString *> *v) {
-            if (v.count < 2 || v[0].length == 0) return;
-            [self performAdminRequestPath:@"/v1/admin/blacklist" method:@"POST" body:@{@"device_id":v[0], @"reason":v[1]} completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Chặn thiết bị"]; }];
-        }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Gỡ chặn thiết bị" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self promptAdminForTitle:@"Gỡ chặn thiết bị" placeholders:@[@"Device ID"] completion:^(NSArray<NSString *> *v) {
-            if (v.count == 0 || v[0].length == 0) return;
-            NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"];
-            NSString *safeID = [v[0] stringByAddingPercentEncodingWithAllowedCharacters:allowed];
-            [self performAdminRequestPath:[@"/v1/admin/blacklist/" stringByAppendingString:(safeID ?: @"")] method:@"DELETE" body:nil completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Gỡ chặn"]; }];
-        }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Thu hồi phiên" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self promptAdminForTitle:@"Thu hồi phiên" placeholders:@[@"Session ID"] completion:^(NSArray<NSString *> *v) {
-            if (v.count == 0 || v[0].length == 0) return;
-            [self performAdminRequestPath:@"/v1/admin/revoke-session" method:@"POST" body:@{@"session_id":v[0]} completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Thu hồi phiên"]; }];
-        }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Ghi nhận vi phạm" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a) {
-        [self promptAdminForTitle:@"Ghi nhận vi phạm" placeholders:@[@"Username", @"Device ID (có thể để trống)"] completion:^(NSArray<NSString *> *v) {
-            if (v.count == 0 || v[0].length == 0) return;
-            [self performAdminRequestPath:@"/v1/admin/violation" method:@"POST" body:@{@"username":v[0], @"device_id":(v.count > 1 ? v[1] : @"")} completion:^(NSDictionary *r, NSError *e) { [self presentAdminRequestResult:r error:e title:@"Ghi nhận vi phạm"]; }];
-        }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Đăng xuất Admin" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) {
-        [self performAdminRequestPath:@"/v1/auth/logout" method:@"POST" body:@{} completion:^(NSDictionary *r, NSError *e) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self->_isAdminServer = NO; self->_adminRole = nil; self->_adminAccessToken = nil;
-                [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TI_ADMIN_SERVER_KEY];
-                [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
-                [[NSUserDefaults standardUserDefaults] setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
-                [[NSUserDefaults standardUserDefaults] synchronize];
-                [self.customTableView setUserInteractionEnabled:YES];
-                [self updateServerStatusIndicator];
-                [self.customTableView reloadData];
-                [self presentAdminRequestResult:r error:e title:@"Đã đăng xuất"];
-            });
-        }];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        menu.popoverPresentationController.sourceView = self.view;
-        menu.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
-    }
-    [self presentViewController:menu animated:YES completion:nil];
 }
 
 #pragma mark - Latency
@@ -3464,20 +3145,19 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     _liquidNavBarContainer = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight)
                                                             cornerRadius:barHeight / 2.0
                                                             materialType:LGGlassMaterialTypeCrystal];
-    _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingNone;
+    _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     _liquidNavBarContainer.interactiveHighlightEnabled = NO;
     _liquidNavBarContainer.layer.shadowOpacity = 0.42;
     _liquidNavBarContainer.layer.shadowRadius = 22.0;
     _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 9);
     _liquidNavBarContainer.layer.shadowColor = [UIColor blackColor].CGColor;
 
-    BOOL englishTabs = ![Titanium_ResolvePayloadLanguage(self.settingsDict) hasPrefix:@"vi"];
     _tabConfigs = @[
-        @{@"title": (englishTabs ? @"Home" : @"Trang Chủ"), @"icon": @"house.fill",  @"tab": @0},
+        @{@"title": @"Trang Chủ", @"icon": @"house.fill",  @"tab": @0},
         @{@"title": @"Hz/FPS",    @"icon": @"speedometer", @"tab": @1},
         @{@"title": @"Switch",    @"icon": @"bolt.fill",   @"tab": @2},
-        @{@"title": (englishTabs ? @"Apps" : @"App"),       @"icon": @"iphone",      @"tab": @3},
-        @{@"title": (englishTabs ? @"Settings" : @"Cài Đặt"), @"icon": @"gearshape",   @"tab": @4}
+        @{@"title": @"App",       @"icon": @"iphone",      @"tab": @3},
+        @{@"title": @"Cài Đặt",   @"icon": @"gearshape",   @"tab": @4}
     ];
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
@@ -3485,7 +3165,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     // [V10.2 - LIQUID NAVIGATION THEO VIDEO TIKTOK]: indicator là GIỌT NƯỚC TRÒN (blob) nổi lên PHÍA TRÊN thanh nav,
     // không nằm trong thanh. Di chuyển mượt giữa các tab, co giãn theo vận tốc như giọt nước thật.
     CGFloat blobSize = 48.0;
-    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth - blobSize)/2.0, -14.0, blobSize, blobSize)
+    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth - blobSize)/2.0 + 3, -14.0, blobSize, blobSize)
                                                             cornerRadius:blobSize / 2.0
                                                             materialType:LGGlassMaterialTypeCrystal];
     _activeGlassIndicator.userInteractionEnabled = NO;
@@ -3501,7 +3181,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         NSDictionary *conf = _tabConfigs[i];
         LGGlassNavButton *btn = [[LGGlassNavButton alloc] initWithIconName:conf[@"icon"] title:conf[@"title"]];
         btn.frame = CGRectMake(i * btnWidth + 3, 3, btnWidth - 6, barHeight - 6);
-        btn.autoresizingMask = UIViewAutoresizingNone;
+        btn.autoresizingMask = UIViewAutoresizingFlexibleWidth;
         btn.tag = i;
         [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
 
@@ -3515,51 +3195,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
 
     if (_tabButtons.count > 0) [_tabButtons[0] updateTabSelected:YES animated:NO];
     [self.view addSubview:_liquidNavBarContainer];
-    [self layoutLiquidGlassNavBar];
-}
-
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    [self layoutLiquidGlassNavBar];
-}
-
-- (void)layoutLiquidGlassNavBar {
-    if (!_liquidNavBarContainer || _tabConfigs.count == 0) return;
-    CGFloat width = self.view.bounds.size.width;
-    CGFloat height = self.view.bounds.size.height;
-    CGFloat barHeight = 62.0;
-    CGFloat margin = 14.0;
-    UIEdgeInsets safeInsets = self.view.safeAreaInsets;
-    CGFloat bottomGap = MAX(14.0, safeInsets.bottom + 3.0);
-    CGFloat safeX = safeInsets.left + margin;
-    CGFloat safeWidth = MAX(0.0, width - safeInsets.left - safeInsets.right - 2.0 * margin);
-    CGRect frame = CGRectMake(safeX, MAX(0.0, height - barHeight - bottomGap), safeWidth, barHeight);
-    if (!CGRectEqualToRect(_liquidNavBarContainer.frame, frame)) _liquidNavBarContainer.frame = frame;
-    CGFloat buttonWidth = CGRectGetWidth(_liquidNavBarContainer.bounds) / (CGFloat)_tabConfigs.count;
-    for (NSInteger i = 0; i < _tabButtons.count; i++) {
-        LGGlassNavButton *button = _tabButtons[i];
-        CGRect buttonFrame = CGRectMake(i * buttonWidth + 3.0, 3.0, MAX(0.0, buttonWidth - 6.0), barHeight - 6.0);
-        if (!CGRectEqualToRect(button.frame, buttonFrame)) button.frame = buttonFrame;
-    }
-    NSInteger selected = MAX(0, MIN(_currentBottomTab, (NSInteger)_tabConfigs.count - 1));
-    CGFloat blobSize = 48.0;
-    CGFloat centerX = ((CGFloat)selected + 0.5) * buttonWidth;
-    CGRect blobFrame = CGRectMake(centerX - blobSize / 2.0, -14.0, blobSize, blobSize);
-    if (!CGRectEqualToRect(_activeGlassIndicator.frame, blobFrame)) _activeGlassIndicator.frame = blobFrame;
-}
-
-- (void)rebuildLocalizedNavigation {
-    BOOL english = ![Titanium_ResolvePayloadLanguage(self.settingsDict) hasPrefix:@"vi"];
-    NSArray<NSString *> *titles = english ? @[@"Home", @"Hz/FPS", @"Switch", @"Apps", @"Settings"] : @[@"Trang Chủ", @"Hz/FPS", @"Switch", @"App", @"Cài Đặt"];
-    NSMutableArray *configs = [NSMutableArray arrayWithCapacity:5];
-    for (NSInteger i = 0; i < MIN((NSInteger)5, (NSInteger)_tabConfigs.count); i++) {
-        NSMutableDictionary *entry = [_tabConfigs[i] mutableCopy];
-        entry[@"title"] = titles[i];
-        [configs addObject:entry];
-        if (i < _tabButtons.count) _tabButtons[i].titleLabel.text = titles[i];
-    }
-    if (configs.count == 5) _tabConfigs = [configs copy];
-    [self layoutLiquidGlassNavBar];
 }
 
 - (void)onCustomTabButtonClicked:(LGGlassNavButton *)sender { [self selectTabIndex:sender.tag animated:YES]; }
@@ -3572,7 +3207,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
     CGFloat blobSize = 48.0;
     // Giọt nước di chuyển đến centerX của tab được chọn, giữ nguyên vị trí y (nổi trên thanh)
-    CGFloat targetCenterX = (index * btnWidth) + (btnWidth / 2.0);
+    CGFloat targetCenterX = (index * btnWidth) + (btnWidth / 2.0) + 3;
     CGFloat oldCenterX = _activeGlassIndicator.center.x;
     CGFloat distance = fabs(targetCenterX - oldCenterX);
 
@@ -3758,7 +3393,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     } else if (_currentBottomTab == 1) {
         if (section == 0) return 1;
         if (section == 1) return 1;
-        return 7;
+        return 6;
     } else if (_currentBottomTab == 2) {
         if (section == 0) return 1;
         switch (_currentSwitchSubTab) {
@@ -3776,46 +3411,44 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     } else {
         if (section == 0) return 2;
         if (section == 1) return _isKernelExploited ? 8 : 1;
-        if (section == 2) return 6 + (_isAdminServer ? 1 : 0);
+        if (section == 2) return 4;
         return 4;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    NSString *heading = @"";
-    if (!_isKernelExploited && _currentBottomTab != 4) heading = @"CẦN KHAI THÁC DARWIN";
-    else if (_currentBottomTab == 0) {
-        if (section == 0) heading = @"ĐIỀU KHIỂN HỆ THỐNG ĐO";
-        else if (section == 1) heading = @"CPU";
-        else if (section == 2) heading = @"GPU";
-        else if (section == 3) heading = @"RAM";
-        else if (section == 4) heading = @"PIN";
-        else heading = @"MÀN HÌNH";
+    if (!_isKernelExploited && _currentBottomTab != 4) return @"CẦN KHAI THÁC DARWIN";
+    if (_currentBottomTab == 0) {
+        if (section == 0) return @"ĐIỀU KHIỂN HỆ THỐNG ĐO";
+        if (section == 1) return @"CPU";
+        if (section == 2) return @"GPU";
+        if (section == 3) return @"RAM";
+        if (section == 4) return @"PIN";
+        return @"MÀN HÌNH";
     } else if (_currentBottomTab == 1) {
-        if (section == 0) heading = @"NGUYÊN LÝ";
-        else if (section == 1) heading = @"CHỌN CHẾ ĐỘ";
-        else heading = (_currentHzFpsSubTab == 0) ? @"KHÓA HZ" : @"KHÓA FPS";
+        if (section == 0) return @"NGUYÊN LÝ";
+        if (section == 1) return @"CHỌN CHẾ ĐỘ";
+        return (_currentHzFpsSubTab == 0) ? @"KHÓA HZ" : @"KHÓA FPS";
     } else if (_currentBottomTab == 2) {
-        if (section == 0) heading = @"CHỌN NHÓM";
-        else switch (_currentSwitchSubTab) {
-            case 0: heading = @"CPU"; break;
-            case 1: heading = @"GPU"; break;
-            case 2: heading = @"MÀN HÌNH"; break;
-            case 3: heading = @"PIN"; break;
-            case 4: heading = @"HỆ THỐNG"; break;
-            default: heading = @"CÔNG TẮC"; break;
+        if (section == 0) return @"CHỌN NHÓM";
+        switch (_currentSwitchSubTab) {
+            case 0: return @"CPU";
+            case 1: return @"GPU";
+            case 2: return @"MÀN HÌNH";
+            case 3: return @"PIN";
+            case 4: return @"HỆ THỐNG";
+            default: return @"CÔNG TẮC";
         }
     } else if (_currentBottomTab == 3) {
-        if (section == 0) heading = @"THAO TÁC NHANH";
-        else if (section == 1) heading = @"TÌM KIẾM";
-        else heading = @"QUẢN LÝ ỨNG DỤNG";
+        if (section == 0) return @"THAO TÁC NHANH";
+        if (section == 1) return @"TÌM KIẾM";
+        return @"QUẢN LÝ ỨNG DỤNG";
     } else {
-        if (section == 0) heading = @"KHAI THÁC";
-        else if (section == 1) heading = @"PHẦN CỨNG";
-        else if (section == 2) heading = @"SERVER & GIAO DIỆN";
-        else heading = @"SANDBOX";
+        if (section == 0) return @"KHAI THÁC";
+        if (section == 1) return @"PHẦN CỨNG";
+        if (section == 2) return @"SERVER & GIAO DIỆN";
+        return @"SANDBOX";
     }
-    return Titanium_LocalizeControllerText(heading, self.settingsDict);
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -3940,33 +3573,12 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
                 if (cur == r) { detail = @"✓"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
                 else if (applied == r) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
             } else if (indexPath.row == 4) {
-                NSInteger deviceMax = [UIScreen mainScreen].maximumFramesPerSecond;
-                if (deviceMax <= 0) deviceMax = 60;
-                deviceMax = MIN(deviceMax, 120);
                 title = [NSString stringWithFormat:@"Mở Rộng 144 %@", isHz ? @"Hz" : @"FPS"];
-                detail = [NSString stringWithFormat:@"Máy tối đa %ld %@", (long)deviceMax, isHz ? @"Hz" : @"FPS"];
-                if (cur == 144) { detail = [NSString stringWithFormat:@"✓ · máy tối đa %ld %@", (long)deviceMax, isHz ? @"Hz" : @"FPS"]; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
+                if (cur == 144) { detail = @"✓"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
                 else if (applied == 144) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
-            } else if (indexPath.row == 5) {
+            } else {
                 title = @"Nhập Tùy Chỉnh (15-144)...";
                 detail = [NSString stringWithFormat:@"Hiện: %ld", (long)cur];
-            } else {
-                NSString *controlKey = isHz ? @"EnableHzControl" : @"EnableFPSControl";
-                BOOL controlOn = self.settingsDict[controlKey] ? [self.settingsDict[controlKey] boolValue] : NO;
-                title = isHz ? @"Bật kiểm soát Hz" : @"Bật kiểm soát FPS";
-                detail = controlOn ? @"Đang áp dụng trần đã chọn" : @"Tắt: để ứng dụng và iOS tự điều phối";
-                LiquidCapsuleSwitch *rateSwitch = [[LiquidCapsuleSwitch alloc] init];
-                rateSwitch.on = controlOn;
-                __weak typeof(self) weakRateSelf = self;
-                rateSwitch.valueChangedBlock = ^(BOOL isOn) {
-                    __strong typeof(weakRateSelf) strongRateSelf = weakRateSelf;
-                    if (!strongRateSelf) return;
-                    strongRateSelf.settingsDict[controlKey] = @(isOn);
-                    [strongRateSelf saveSettingsDataAndSync];
-                    [strongRateSelf applyDeepSpringBoardAndUIKitTweaks];
-                    [strongRateSelf smoothReloadTable];
-                };
-                accessory = rateSwitch;
             }
         }
     }
@@ -4191,7 +3803,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
                     accent = [UIColor colorWithRed:1.0 green:0.85 blue:0.35 alpha:1.0];
                 }
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else if (indexPath.row == 3) {
+            } else {
                 title = @"Sáng/Tối Tự Động";
                 LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
                 s.on = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
@@ -4212,32 +3824,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
                     }
                 };
                 accessory = s;
-            } else if (indexPath.row == 4) {
-                title = @"Ngôn Ngữ";
-                NSString *lang = Titanium_ResolvePayloadLanguage(self.settingsDict);
-                NSString *raw = self.settingsDict[@"SelectedLanguage"] ?: @"auto";
-                NSString *deviceLanguageName = [[NSLocale currentLocale] localizedStringForLanguageCode:lang] ?: lang;
-                detail = [raw isEqualToString:@"auto"] ? [NSString stringWithFormat:@"Theo máy (%@)", deviceLanguageName] : ([lang hasPrefix:@"vi"] ? @"Tiếng Việt" : @"English");
-                accent = [UIColor colorWithWhite:0.85 alpha:1.0];
-                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else if (indexPath.row == 5) {
-                title = @"Server API URL";
-                NSString *base = [self adminAPIBaseURL];
-                NSURLComponents *parts = [NSURLComponents componentsWithString:base];
-                detail = parts.host ?: base;
-                accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
-                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else if (indexPath.row == 6 && _isAdminServer) {
-                if ([self isAdminDevRole]) {
-                    title = @"Admin Dev Console";
-                    detail = @"Thiết bị · blacklist · phiên · audit";
-                    accent = [UIColor colorWithRed:1.0 green:0.72 blue:0.28 alpha:1.0];
-                } else {
-                    title = @"Admin Session";
-                    detail = @"Kiểm tra phiên · đăng xuất";
-                    accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
-                }
-                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             }
         } else {
             if (!_isKernelExploited) {
@@ -4257,8 +3843,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         }
     }
 
-    title = Titanium_LocalizeControllerText(title, self.settingsDict);
-    detail = Titanium_LocalizeControllerText(detail, self.settingsDict);
     [cell configureWithTitle:title detail:detail accessory:accessory accent:accent];
     return cell;
 }
@@ -4269,13 +3853,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer) {
         [self showFirstInstallServerPicker];
         return;
-    }
-
-    if (_currentBottomTab == 4 && indexPath.section == 2) {
-        if (indexPath.row == 2) { [self showAdminServerLogin]; return; }
-        if (indexPath.row == 4) { [self showLanguagePickerPopup:nil]; return; }
-        if (indexPath.row == 5) { [self showAdminAPIURLPrompt]; return; }
-        if (indexPath.row == 6 && _isAdminServer) { if ([self isAdminDevRole]) [self showAdminDevConsole]; else [self showAdminConsole]; return; }
     }
 
     if (!_isKernelExploited) {
@@ -4310,15 +3887,6 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
             return;
         }
         BOOL isHz = (_currentHzFpsSubTab == 0);
-        if (indexPath.row == 6) {
-            NSString *controlKey = isHz ? @"EnableHzControl" : @"EnableFPSControl";
-            BOOL currentlyOn = [self.settingsDict[controlKey] boolValue];
-            self.settingsDict[controlKey] = @(!currentlyOn);
-            [self saveSettingsDataAndSync];
-            [self applyDeepSpringBoardAndUIKitTweaks];
-            [self smoothReloadTable];
-            return;
-        }
         NSArray *rates = @[@30, @60, @90, @120];
         NSInteger targetRate = 0;
         if (indexPath.row < 4) targetRate = [rates[indexPath.row] integerValue];
@@ -4335,6 +3903,8 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         NSInteger cc = Titanium_GetCrashCount();
         if (cc >= 3) [self showServerDownAlert];
         else [self openDopamineStyleExploitConsole];
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2) {
+        [self showAdminServerLogin];
     }
 }
 
@@ -4430,19 +4000,15 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
 }
 
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
-    (void)d;
     if (rate < 15) rate = 15;
     if (rate > 144) rate = 144;
-    if (isFPS) {
-        self.settingsDict[@"TargetFPSRate"] = @(rate);
-        self.settingsDict[@"EnableFPSControl"] = @YES;
-        self->_lastAppliedFPS = rate;
-    } else {
-        self.settingsDict[@"TargetRefreshRate"] = @(rate);
-        self.settingsDict[@"EnableHzControl"] = @YES;
-        self.settingsDict[@"ForceOverclock144Hz"] = @(rate >= 144);
-        self->_lastAppliedHz = rate;
-    }
+    self.settingsDict[@"TargetRefreshRate"] = @(rate);
+    self.settingsDict[@"TargetFPSRate"] = @(rate);
+    self.settingsDict[@"EnableHzControl"] = @YES;
+    self.settingsDict[@"EnableFPSControl"] = @YES;
+    self.settingsDict[@"ForceOverclock144Hz"] = @(rate >= 144);
+    self->_lastAppliedHz = rate;
+    self->_lastAppliedFPS = rate;
     [self saveSettingsDataAndSync];
 }
 
@@ -4498,11 +4064,8 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] ?: @NO boolValue] ||
                      [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
 
-    NSInteger nativeMax = [UIScreen mainScreen].maximumFramesPerSecond;
-    if (nativeMax <= 0) nativeMax = 60;
-    nativeMax = MIN(nativeMax, 120);
-    NSInteger resolvedHz = (!masterEnabled || powerSave) ? MIN(60, nativeMax) : (hzControlEnabled ? MIN(requestedHz, nativeMax) : nativeMax);
-    NSInteger resolvedFPS = (!masterEnabled || powerSave) ? MIN(60, nativeMax) : (fpsControlEnabled ? MIN(requestedFPS, nativeMax) : nativeMax);
+    NSInteger resolvedHz = (!masterEnabled || !hzControlEnabled || powerSave) ? 60 : requestedHz;
+    NSInteger resolvedFPS = (!masterEnabled || !fpsControlEnabled || powerSave) ? 60 : requestedFPS;
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
@@ -4532,10 +4095,9 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     const char *languageUTF8 = languageCode.UTF8String;
     if (languageUTF8) {
         p.reserved[0] = 'L'; p.reserved[1] = 'G'; p.reserved[2] = ':';
-        strncpy(&p.reserved[3], languageUTF8, 20);
-        p.reserved[23] = '\0';
+        strncpy(&p.reserved[3], languageUTF8, sizeof(p.reserved) - 4);
+        p.reserved[sizeof(p.reserved) - 1] = '\0';
     }
-    snprintf(&p.reserved[24], sizeof(p.reserved) - 24, "HZ=%u;FPS=%u", hzControlEnabled ? 1U : 0U, fpsControlEnabled ? 1U : 0U);
 
     p.updateSeq = (uint64_t)mach_absolute_time();
     p.lastHeartbeat = p.updateSeq;
@@ -4574,22 +4136,15 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
     if (self.view.window) self.view.window.layer.drawsAsynchronously = YES;
     if (@available(iOS 15.0, *)) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSInteger nativeMax = [UIScreen mainScreen].maximumFramesPerSecond;
-            if (nativeMax <= 0) nativeMax = 60;
-            nativeMax = MIN(nativeMax, 120);
-            BOOL masterEnabled = [self.settingsDict[@"Enabled"] boolValue];
-            BOOL hzEnabled = self.settingsDict[@"EnableHzControl"] ? [self.settingsDict[@"EnableHzControl"] boolValue] : YES;
-            BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] boolValue] || [self.settingsDict[@"batterySaver60Hz"] boolValue];
-            NSInteger targetHz = (masterEnabled && hzEnabled) ? [self.settingsDict[@"TargetRefreshRate"] ?: @(nativeMax) integerValue] : nativeMax;
-            if (powerSave) targetHz = MIN(targetHz, MIN(60, nativeMax));
-            targetHz = MAX(15, MIN(targetHz, nativeMax));
+            NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
+            if (targetHz < 15) targetHz = 15;
+            if (targetHz > 144) targetHz = 144;
             SEL sel = NSSelectorFromString(@"setPreferredFrameRateRange:");
             for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
                 if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
                     if ([ws respondsToSelector:sel]) {
-                        CGFloat floorRate = MIN(30.0f, (CGFloat)targetHz);
-                        CAFrameRateRange range = CAFrameRateRangeMake(floorRate, (float)targetHz, (float)targetHz);
+                        CAFrameRateRange range = CAFrameRateRangeMake(30.0f, (float)targetHz, (float)targetHz);
                         void (*setRange)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
                         setRange(ws, sel, range);
                     }
@@ -4735,7 +4290,7 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
 - (void)ensureDefaultSettingsExist {
     NSArray *keys = @[
         @"Enabled", @"EnableSystemMonitoring",
-        @"TargetRefreshRate", @"TargetFPSRate",
+        @"TargetRefreshRate", @"TargetFPSRate", @"EnableHzControl", @"EnableFPSControl",
         @"pCoreRealtimePriority", @"schedulerGovernor", @"quantumCoreSync",
         @"lockHighIdleFloor", @"AntiThermalThrottling", @"AntiThermalThrottle",
         @"iopolVipPriority", @"coolDownHeavyLoad", @"backgroundPacingDaemon",
@@ -4752,20 +4307,16 @@ static NSString * const TIAdminAPIBaseURL = @"Https://apple.com";
         @"syncModuleDelay", @"antiBlackScreenLaunch", @"reduceMultitaskLag",
         @"turboLaunch", @"ultraResponsivenessProEngineOfficial",
         @"dynamicThermalEngine", @"ultraResponsivenessPro",
-        @"IsRateLocked", @"IsKernelExploited", TI_AUTO_THEME_KEY, @"SelectedLanguage", @"AppLanguage"
+        @"IsRateLocked", @"IsKernelExploited", TI_AUTO_THEME_KEY
     ];
     for (NSString *k in keys) {
         if (!self.settingsDict[k]) self.settingsDict[k] = @NO;
     }
     if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
     if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @144;
-    if (!self.settingsDict[@"EnableHzControl"]) self.settingsDict[@"EnableHzControl"] = @YES;
-    if (!self.settingsDict[@"EnableFPSControl"]) self.settingsDict[@"EnableFPSControl"] = @YES;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"IsKernelExploited"])self.settingsDict[@"IsKernelExploited"]= @NO;
     if (!self.settingsDict[TI_AUTO_THEME_KEY])   self.settingsDict[TI_AUTO_THEME_KEY]   = @NO;
-    if (!self.settingsDict[@"SelectedLanguage"]) self.settingsDict[@"SelectedLanguage"] = @"auto";
-    if (!self.settingsDict[@"AppLanguage"]) self.settingsDict[@"AppLanguage"] = self.settingsDict[@"SelectedLanguage"] ?: @"auto";
     if (!self.settingsDict[@"IsAdminServer"])    self.settingsDict[@"IsAdminServer"]    = @NO;
 }
 
