@@ -2004,9 +2004,10 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                 const char *langCodeV12 = Titanium_ResolveEffectiveLanguage().UTF8String;
                 if (langCodeV12) {
                     p.reserved[0] = 'L'; p.reserved[1] = 'G'; p.reserved[2] = ':';
-                    strncpy(&p.reserved[3], langCodeV12, sizeof(p.reserved) - 4);
-                    p.reserved[sizeof(p.reserved) - 1] = '\0';
+                    strncpy(&p.reserved[3], langCodeV12, 20);
+                    p.reserved[23] = '\0';
                 }
+                snprintf(&p.reserved[24], sizeof(p.reserved) - 24, "HZ=%u;FPS=%u", self.enableHzControl ? 1U : 0U, self.enableFPSControl ? 1U : 0U);
             }
             p.updateSeq = (uint64_t)mach_absolute_time();
             p.lastHeartbeat = p.updateSeq;
@@ -2058,9 +2059,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     if (CFG285) {
         [CFG285 loadSettings];
-        if (Titanium_IsSpringBoard()) {
-            Titanium_TuneWindowServerDisplayDirectly();
-        }
+        if (Titanium_IsSpringBoard()) Titanium_TuneWindowServerDisplayDirectly();
+        Titanium_ReapplyFrameRateToAllScenes();
     }
 }
 
@@ -2763,6 +2763,59 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     // [ĐÃ SỬA ĐỢT 5 - CHỐNG NÓNG]: máy nóng tự hạ FPS về tối đa 60 tạm thời.
     if (g_thermalSeriousV285 && userFPS > 60) userFPS = 60;
     return userFPS;
+}
+
+// Independent rate toggles are carried in payload.reserved[24..47] for processes that cannot
+// refresh the preferences plist immediately. A missing marker means an older payload: preserve legacy ON behavior.
+static inline BOOL Titanium_IsRateControlEnabled(BOOL forFPS) {
+    const char *flags = &g_syncPayloadV285.reserved[24];
+    // Fixed-format, bounded checks: safe even if an old/corrupt payload has no NUL at the end.
+    BOOL hasRateFlags = (strncmp(flags, "HZ=0;", 5) == 0) || (strncmp(flags, "HZ=1;", 5) == 0);
+    if (hasRateFlags) {
+        if (!forFPS) return flags[3] == '1';
+        if (strncmp(flags + 5, "FPS=0", 5) == 0) return NO;
+        if (strncmp(flags + 5, "FPS=1", 5) == 0) return YES;
+    }
+    if (CFG285) return forFPS ? CFG285.enableFPSControl : CFG285.enableHzControl;
+    return YES;
+}
+
+static inline float Titanium_RangeFloorForCap(float cap);
+
+// Weak registry lets a live preference toggle reapply/restore already-running display links without retaining app objects.
+static NSHashTable<CADisplayLink *> *s_titaniumTrackedDisplayLinks = nil;
+static void Titanium_RegisterTrackedDisplayLink(CADisplayLink *link) {
+    if (!link) return;
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ Titanium_RegisterTrackedDisplayLink(link); });
+        return;
+    }
+    if (!s_titaniumTrackedDisplayLinks) s_titaniumTrackedDisplayLinks = [NSHashTable weakObjectsHashTable];
+    [s_titaniumTrackedDisplayLinks addObject:link];
+}
+
+static void Titanium_ReapplyTrackedDisplayLinks(void) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyTrackedDisplayLinks(); });
+        return;
+    }
+    if (!s_titaniumTrackedDisplayLinks || g_isCurrentAppBlacklisted || Titanium_IsPassiveVideoPlayback()) return;
+    BOOL masterActive = (IS_ACTIVE || g_syncPayloadV285.masterEnabled);
+    BOOL fpsActive = masterActive && Titanium_IsRateControlEnabled(YES);
+    NSInteger nativeMax = Titanium_NativeMaximumFPS();
+    NSInteger cap = fpsActive ? Titanium_GetTargetConfiguredFPS() : nativeMax;
+    cap = MAX(15, MIN(cap, nativeMax));
+    for (CADisplayLink *link in s_titaniumTrackedDisplayLinks.allObjects) {
+        if (@available(iOS 15.0, *)) {
+            if ([link respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                // With FPS control off, give iOS the full native range instead of leaving an old custom cap stuck.
+                float floorRate = fpsActive ? Titanium_RangeFloorForCap((float)cap) : MIN(30.0f, (float)nativeMax);
+                link.preferredFrameRateRange = SafeMakeFRR(floorRate, (float)(fpsActive ? cap : nativeMax), (float)(fpsActive ? cap : nativeMax));
+                continue;
+            }
+        }
+        link.preferredFramesPerSecond = fpsActive ? cap : 0; // 0 restores UIKit's default selection on older iOS.
+    }
 }
 
 // [ĐÃ BỔ SUNG - Hz/FPS CÓ TÁC DỤNG TOÀN HỆ THỐNG]: trần khung hình hiệu lực = giá trị THẤP HƠN giữa Hz và FPS đã chọn.
@@ -5527,8 +5580,8 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
         return;
     }
-    if (Titanium_IsSpringBoard() || g_isCurrentAppBlacklisted) return;
-    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
+    if (g_isCurrentAppBlacklisted) return;
+    BOOL masterActive = (IS_ACTIVE || g_syncPayloadV285.masterEnabled);
     @try {
         UIApplication *app = [UIApplication sharedApplication];
         if (!app) return;
@@ -5539,9 +5592,10 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
                 if (@available(iOS 15.0, *)) {
                     UIWindowScene *winScene = (UIWindowScene *)scene;
                     if ([winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        float cap = (float)Titanium_GetEffectiveFrameCap();
-                        if (cap < 15.0f) cap = 15.0f;
                         float nativeMax = (float)Titanium_NativeMaximumFPS();
+                        float cap = (masterActive && Titanium_IsRateControlEnabled(NO)) ? (float)Titanium_GetTargetConfiguredHz() : nativeMax;
+                        if (masterActive && ((CFG285 && (CFG285.powerSaveMode || CFG285.batterySaver60Hz)) || g_syncPayloadV285.powerSaveModeActive || g_thermalSeriousV285)) cap = MIN(cap, MIN(60.0f, nativeMax));
+                        if (cap < 15.0f) cap = 15.0f;
                         if (cap > nativeMax) cap = nativeMax;
                         [winScene setPreferredFrameRateRange:SafeMakeFRR(Titanium_RangeFloorForCap(cap), cap, cap)];
                     }
@@ -5549,6 +5603,7 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
             }
         }
     } @catch (NSException *e) {}
+    Titanium_ReapplyTrackedDisplayLinks();
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -5626,8 +5681,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %hook CADisplayLink
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsRateControlEnabled(YES) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
+        NSInteger cap = Titanium_GetTargetConfiguredFPS();
         NSInteger nativeMax = Titanium_NativeMaximumFPS();
         if (cap < 15) cap = 15;
         if (cap > nativeMax) cap = nativeMax;
@@ -5639,8 +5694,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
-            float cap = (float)Titanium_GetEffectiveFrameCap();
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsRateControlEnabled(YES) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
+            float cap = (float)Titanium_GetTargetConfiguredFPS();
             float nativeMax = (float)Titanium_NativeMaximumFPS();
             if (cap < 15.0f) cap = 15.0f;
             if (cap > nativeMax) cap = nativeMax;
@@ -5652,8 +5707,9 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
     %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
+    Titanium_RegisterTrackedDisplayLink(self);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsRateControlEnabled(YES) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
+        NSInteger cap = Titanium_GetTargetConfiguredFPS();
         NSInteger nativeMax = Titanium_NativeMaximumFPS();
         if (cap < 15) cap = 15;
         if (cap > nativeMax) cap = nativeMax;
@@ -5677,7 +5733,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %hook UIScrollView
 
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+    // Chỉ đánh dấu tương tác khi người dùng thật sự đang kéo; tránh coi cuộn lập trình là thao tác tay.
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (self.dragging || self.tracking || self.decelerating)) {
         g_lastInteractionMachTime = mach_absolute_time();
     }
     %orig(contentOffset, animated);
