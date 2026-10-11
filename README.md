@@ -1,4 +1,4 @@
-# 🛡️ iOS Tweak Admin Backend
+# SmoothIOS pro Admin dev
 
 <p align="center">
   <strong>Secure • Lightweight • Role-Based • SQLite-Powered</strong>
