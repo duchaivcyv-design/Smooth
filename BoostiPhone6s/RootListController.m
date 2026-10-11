@@ -1,4 +1,3 @@
-// V20.1 RootListController — safe Liquid Glass layout, stable transitions, role gates, theme and redraw controls.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -12,6 +11,8 @@
 #import <unistd.h>
 #include <errno.h>
 #include <stdint.h>
+#include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #import <notify.h>
@@ -49,8 +50,6 @@ extern char **environ;
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
 #define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
 #define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
-#define TI_LOCAL_EXPLOIT_COMPLETE_KEY @"ti_local_exploit_complete_v21"
-#define TI_LOCAL_EXPLOIT_VERSION_KEY  @"ti_local_exploit_version_v21"
 
 // ====================================================================================================
 // SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
@@ -1941,7 +1940,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         [_cardView addSubview:_loginButton];
 
         _formTitleLabel = [[UILabel alloc] init];
-        _formTitleLabel.text = _isAdminMode ? @"Nhấn KHAI THÁC để kết nối tới server Admin riêng" : @"Nhấn KHAI THÁC để kết nối tới server Apple";
+        _formTitleLabel.text = _isAdminMode ? @"Nhấn KÍCH HOẠT để kiểm tra cấu hình server Admin" : @"Nhấn KÍCH HOẠT để kiểm tra cấu hình";
         _formTitleLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
         _formTitleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
         _formTitleLabel.textAlignment = NSTextAlignmentLeft;
@@ -1990,7 +1989,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         [self addSubview:_progressBar];
 
         _cancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [_cancelButton setTitle:@"HỦY KHAI THÁC" forState:UIControlStateNormal];
+        [_cancelButton setTitle:@"HỦY KÍCH HOẠT" forState:UIControlStateNormal];
         [_cancelButton setTitleColor:[UIColor colorWithRed:1.0 green:0.35 blue:0.35 alpha:1.0] forState:UIControlStateNormal];
         _cancelButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
         _cancelButton.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.32];
@@ -2049,7 +2048,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 - (void)handleLoginTapped {
     if (_phase != LGAppleServerPhaseIdle) return;
 
-    // Không cho khai thác nếu server đang sập/quá tải (admin miễn nhiễm)
+    // Không cho kích hoạt nếu server đang sập/quá tải (admin miễn nhiễm)
     if (!_isAdminMode) {
         int pState = Titanium_CurrentPersistentServerState();
         if (pState != TI_STATE_OK) {
@@ -2083,19 +2082,27 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 
 - (void)startSpinner {
     [self stopSpinner];
-    _spinStartTime = CACurrentMediaTime();
-    _spinLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(spinnerTick:)];
-    [_spinLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    // V22: render spinner on Core Animation's compositor instead of mutating a layer every display tick on main.
+    CABasicAnimation *rotation = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+    rotation.fromValue = @0.0;
+    rotation.toValue = @(M_PI * 2.0);
+    rotation.duration = 1.15;
+    rotation.repeatCount = HUGE_VALF;
+    rotation.removedOnCompletion = NO;
+    [_spinnerArc.layer addAnimation:rotation forKey:@"V22.spinner.rotation"];
+    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    pulse.fromValue = @0.45;
+    pulse.toValue = @1.0;
+    pulse.duration = 0.9;
+    pulse.autoreverses = YES;
+    pulse.repeatCount = HUGE_VALF;
+    pulse.removedOnCompletion = NO;
+    [_spinnerArc.layer addAnimation:pulse forKey:@"V22.spinner.opacity"];
 }
 - (void)stopSpinner {
     if (_spinLink) { [_spinLink invalidate]; _spinLink = nil; }
-}
-- (void)spinnerTick:(CADisplayLink *)link {
-    CFTimeInterval t = link.timestamp - _spinStartTime;
-    CGFloat angle = fmod(t * (M_PI * 2.0 / 1.15), M_PI * 2.0);
-    _spinnerArc.transform = CATransform3DMakeRotation(angle, 0, 0, 1);
-    CGFloat alpha = 0.40 + 0.60 * (0.5 + 0.5 * sin(t * 4.4));
-    _spinnerArc.opacity = alpha;
+    [_spinnerArc.layer removeAnimationForKey:@"V22.spinner.rotation"];
+    [_spinnerArc.layer removeAnimationForKey:@"V22.spinner.opacity"];
 }
 
 - (void)stopAllTimers {
@@ -2111,21 +2118,12 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 // ============================================
 - (void)runConnectingPhase {
     _phase = LGAppleServerPhaseConnecting;
-    _statusLabel.text = @"Đang kết nối tới server Apple...";
-    _subLabel.text = @"Vui lòng chờ trong giây lát";
+    _statusLabel.text = @"Đang kiểm tra cấu hình cục bộ...";
+    _subLabel.text = @"Không kết nối Apple; không thực hiện thao tác kernel";
     [self startSpinner];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self->_cancelled) return;
-
-        // ADMIN: ổn định 100% → đi thẳng exploit
-        if (self->_isAdminMode) {
-            [self runConnectedThenExploit];
-            return;
-        }
-
-        // V21: không đưa người dùng vào hàng chờ giả lập vô hạn.
-        // Sau thời gian kết nối, hiển thị trạng thái kết nối rồi tiếp tục luồng giao diện.
         [self runConnectedThenExploit];
     });
 }
@@ -2134,14 +2132,11 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 // FREE: hiển thị fail 1.5s → nhảy vào hàng chờ
 // ============================================
 - (void)showConnectFailThenQueue {
-    _statusLabel.text = @"Kết nối không thành công";
-    _subLabel.text = @"Đang chuyển sang hàng chờ...";
+    // No simulated network failures or artificial queue delays.
+    _statusLabel.text = @"Đang kiểm tra cấu hình";
+    _subLabel.text = @"Tiếp tục khi hoàn tất kiểm tra cục bộ";
     [self stopSpinner];
-
-    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-    [fb notificationOccurred:UINotificationFeedbackTypeWarning];
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self->_cancelled) return;
         [self runQueuePhase];
     });
@@ -2151,13 +2146,12 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 // Queue 20-50s random → connected
 // ============================================
 - (void)runQueuePhase {
+    // Kept for source compatibility; no fabricated 20–50 second queue.
     _phase = LGAppleServerPhaseQueueing;
-    _statusLabel.text = @"Đang trong hàng chờ";
-    _subLabel.text = @"Vị trí của bạn sẽ được xử lý tự động";
-    [self startSpinner];
-
-    // Hàng chờ dự phòng có giới hạn 5 giây; không dùng thời gian ngẫu nhiên dài.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    _statusLabel.text = @"Đang chuẩn bị cấu hình";
+    _subLabel.text = @"Không cần chờ hàng đợi mô phỏng";
+    [self stopSpinner];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self->_cancelled) return;
         [self runConnectedThenExploit];
     });
@@ -2167,13 +2161,10 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 // Connected message 2.5s → exploit
 // ============================================
 - (void)runConnectedThenExploit {
-    _statusLabel.text = @"Đã kết nối tới server Apple";
-    _subLabel.text = @"Đang đồng bộ cấu hình...";
+    _statusLabel.text = @"Đang kiểm tra cấu hình";
+    _subLabel.text = @"Không thay đổi kernel hoặc nhịp hệ thống";
     [self stopSpinner];
-    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-    [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self->_cancelled) return;
         [self runExploitSteps];
     });
@@ -2183,55 +2174,34 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 // Exploit: 10-20s random, 8 steps
 // ============================================
 - (void)runExploitSteps {
+    // This controller does not contain a kernel exploit. It performs a short local configuration check only.
     _phase = LGAppleServerPhaseExploiting;
     _exploitStep = 1;
-
-    NSArray *steps = @[
-        @"Bypass PAC arm64e...",
-        @"Allocate P-Core realtime thread...",
-        @"Hook XNU scheduler...",
-        @"Patch Metal pipeline triple buffering...",
-        @"Sync shared memory IPC...",
-        @"Reload CoreAnimation server...",
-        @"Rebuild CADisplayLink chain...",
-        @"Finalize exploit persistence..."
-    ];
-
+    NSArray *steps = @[@"Kiểm tra tùy chọn người dùng…", @"Lưu trạng thái kích hoạt…", @"Hoàn tất kiểm tra giao diện…"];
     _progressBar.hidden = NO;
     _progressBar.progress = 0.0;
-
-    NSTimeInterval totalTime = 10.0 + (NSTimeInterval)arc4random_uniform(11); // 10-20s
-    NSTimeInterval stepInterval = totalTime / 8.0;
-
     __block NSInteger idx = 0;
-    _stepTimer = [NSTimer scheduledTimerWithTimeInterval:stepInterval repeats:YES block:^(NSTimer * _Nonnull t) {
-        if (self->_cancelled) { [t invalidate]; return; }
-        if (idx >= 8) {
-            [t invalidate];
+    _stepTimer = [NSTimer scheduledTimerWithTimeInterval:0.18 repeats:YES block:^(NSTimer * _Nonnull timer) {
+        if (self->_cancelled) { [timer invalidate]; self->_stepTimer = nil; return; }
+        if (idx >= steps.count) {
+            [timer invalidate];
             self->_stepTimer = nil;
             [self runComplete];
             return;
         }
+        self->_statusLabel.text = [NSString stringWithFormat:@"Đang kiểm tra %ld/%lu", (long)(idx + 1), (unsigned long)steps.count];
+        self->_subLabel.text = steps[idx];
+        self->_progressBar.progress = (float)(idx + 1) / (float)steps.count;
         idx++;
-        self->_progressBar.progress = (float)idx / 8.0;
-        self->_statusLabel.text = [NSString stringWithFormat:@"Đang khai thác %ld/8", (long)idx];
-        self->_subLabel.text = steps[idx - 1];
-        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-        [fb impactOccurred];
     }];
     [[NSRunLoop mainRunLoop] addTimer:_stepTimer forMode:NSRunLoopCommonModes];
 }
 
 - (void)runComplete {
     _phase = LGAppleServerPhaseSuccess;
-    // Ghi nhớ hoàn tất luồng UI trên thiết bị; không chứng minh/duy trì trạng thái jailbreak.
-    NSUserDefaults *completionDefaults = [NSUserDefaults standardUserDefaults];
-    [completionDefaults setBool:YES forKey:TI_LOCAL_EXPLOIT_COMPLETE_KEY];
-    [completionDefaults setObject:@"21.0" forKey:TI_LOCAL_EXPLOIT_VERSION_KEY];
-    [completionDefaults synchronize];
     [self stopAllTimers];
-    _statusLabel.text = @"KHAI THÁC THÀNH CÔNG";
-    _subLabel.text = @"Đã lưu cấu hình vĩnh viễn";
+    _statusLabel.text = @"HOÀN TẤT CẤU HÌNH";
+    _subLabel.text = @"Đã lưu tuỳ chọn giao diện; không thực hiện khai thác kernel";
     _progressBar.progress = 1.0;
     _spinner.hidden = YES;
     _cancelButton.hidden = YES;
@@ -2287,7 +2257,7 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
         NSString *c = [p stringByAppendingPathComponent:name];
         if (access([c UTF8String], X_OK) == 0) return c;
     }
-    return name;
+    return nil;
 }
 static BOOL Titanium_WriteAllBytes(int fd, const void *data, size_t size) {
     const uint8_t *cursor = (const uint8_t *)data;
@@ -2402,13 +2372,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSInteger _currentHzFpsSubTab;
     NSInteger _currentSwitchSubTab;
     BOOL _isRateLocked;
-    BOOL _isKernelExploited;
+    BOOL _isFeatureActivated;
+    NSUInteger _v22ApplyGeneration;
     BOOL _isCpuExpanded;
     BOOL _isGpuExpanded;
     BOOL _isRamExpanded;
     BOOL _isBatteryExpanded;
     BOOL _isScreenExpanded;
     BOOL _hasPlayedEntranceAnimation;
+    BOOL _activationFlowPresenting;
     BOOL _hasStartedAppScan;
     uint64_t _searchUpdateGeneration;
     uint64_t _v20TableTransitionGeneration;
@@ -2527,6 +2499,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     _serverDown = NO;
 
     [self loadSettingsData];
+    // Migrate the old UI-only flag: previous builds called this "kernel exploited" even though
+    // the controller only ran a timed UI sequence. Preserve the user's settings without claiming kernel access.
+    if (!self.settingsDict[@"FeatureActivationComplete"] && [self.settingsDict[@"IsKernelExploited"] boolValue]) {
+        self.settingsDict[@"FeatureActivationComplete"] = @YES;
+    }
+    [self.settingsDict removeObjectForKey:@"IsKernelExploited"];
     if (![[NSUserDefaults standardUserDefaults] objectForKey:TI_GLASS_TRANSPARENCY_KEY]) {
         [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_GLASS_TRANSPARENCY_KEY];
     }
@@ -2560,9 +2538,9 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     // Treat activation as session-scoped UI state. Never trust an editable plist to claim that
     // a kernel exploit is active; this controller's connection animation is not a kernel exploit.
-    _isKernelExploited = NO;
-    if (!_isKernelExploited || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) _currentBottomTab = 4;
-    if (_isKernelExploited) {
+    _isFeatureActivated = [self.settingsDict[@"FeatureActivationComplete"] boolValue];
+    if (!_isFeatureActivated || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) _currentBottomTab = 4;
+    if (_isFeatureActivated) {
         _deepArchString = self.settingsDict[@"SavedArchString"] ?: @"arm64e (Apple Silicon PAC)";
         _deepCoreCountString = self.settingsDict[@"SavedCoreCountString"] ?: @"SoC Clustered P/E Cores";
         _deepRamString = self.settingsDict[@"SavedRamString"] ?: @"LPDDR Mach Purgable";
@@ -2589,7 +2567,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     [self startLatencyMonitor];
 
-    if (_isKernelExploited) {
+    if (_isFeatureActivated) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self applyDeepSpringBoardAndUIKitTweaks];
         });
@@ -2606,7 +2584,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self showPersistentServerStateAlert];
         });
-    } else if (!_isKernelExploited && ([savedServerMode isEqualToString:@"free"] || _isAdminServer)) {
+    } else if (!_isFeatureActivated && ([savedServerMode isEqualToString:@"free"] || _isAdminServer)) {
         NSInteger cc = Titanium_GetCrashCount();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (cc >= 3) [self showServerDownAlert];
@@ -2634,7 +2612,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     [self refreshBottomTabsAvailability];
 
     if (_isAdminServer) {
-        if (_isKernelExploited) [self startContinuousHardwareHUD];
+        if (_isFeatureActivated) [self startContinuousHardwareHUD];
         return;
     }
 
@@ -2654,7 +2632,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         return;
     }
 
-    if (_isKernelExploited) [self startContinuousHardwareHUD];
+    if (_isFeatureActivated) [self startContinuousHardwareHUD];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -2887,10 +2865,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)showExploitRequiredPopup {
     if (self.presentedViewController) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"CẦN KÍCH HOẠT"
-                                                                   message:@"Các mục đang bị khóa. Hãy chọn server và hoàn tất bước kích hoạt trong Cài Đặt để mở giao diện điều khiển."
+                                                                   message:@"Các mục đang bị khóa. Chọn server và hoàn tất bước kiểm tra cấu hình để mở giao diện. Luồng này không thực hiện kích hoạt kernel."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Khai Thác Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Kích hoạt ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self selectTabIndex:4 animated:YES];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self openDopamineStyleExploitConsole];
@@ -3089,22 +3067,34 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                         if (error && [error.domain isEqualToString:NSURLErrorDomain]) {
                             if (error.code == NSURLErrorNotConnectedToInternet) message = @"Không có kết nối Internet.";
                             else if (error.code == NSURLErrorTimedOut) message = @"Máy chủ phản hồi quá lâu. Vui lòng thử lại.";
+                        } else if (error && [error.domain isEqualToString:@"TIAdminAPI"] && error.code == 403) {
+                            NSString *serverMessage = error.localizedDescription ?: @"";
+                            if ([serverMessage.lowercaseString containsString:@"blacklist"] || [serverMessage.lowercaseString containsString:@"khóa"] || [serverMessage.lowercaseString containsString:@"khoá"]) {
+                                message = [NSString stringWithFormat:@"Backend từ chối đăng nhập: %@", serverMessage];
+                            } else {
+                                message = [NSString stringWithFormat:@"Backend từ chối quyền đăng nhập (HTTP 403): %@. Kiểm tra tài khoản, trạng thái hoạt động và role trên backend; Admin Dev phải có role admin_dev.", serverMessage];
+                            }
+                        } else if (error && [error.domain isEqualToString:@"TIAdminAPI"] && error.code == 429) {
+                            message = @"Máy chủ giới hạn số lần đăng nhập. Hãy chờ rồi thử lại.";
+                        } else if (error && [error.domain isEqualToString:@"TIAdminAPI"] && error.code == 401) {
+                            message = @"Sai tài khoản hoặc mật khẩu, hoặc tài khoản đã bị vô hiệu hóa.";
                         } else if (error && error.code >= 400 && error.code < 500) {
-                            message = @"Thông tin đăng nhập không hợp lệ hoặc tài khoản không được phép truy cập.";
+                            message = @"Thông tin đăng nhập không hợp lệ hoặc yêu cầu bị backend từ chối.";
                         }
                         UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Đăng nhập thất bại" message:message preferredStyle:UIAlertControllerStyleAlert];
                         [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
                         [strongSelf presentViewController:err animated:YES completion:nil];
                         return;
                     }
-                    NSString *role = result[@"role"];
-                    if ([role isEqualToString:@"dev"]) role = @"admin_dev";
+                    NSString *role = [result[@"role"] isKindOfClass:[NSString class]] ? [result[@"role"] lowercaseString] : @"";
+                    if ([role isEqualToString:@"dev"] || [role isEqualToString:@"admin-dev"] || [role isEqualToString:@"developer"]) role = @"admin_dev";
                     if (![role isEqualToString:@"admin"] && ![role isEqualToString:@"admin_dev"]) {
                         UIAlertController *err = [UIAlertController alertControllerWithTitle:@"Không đủ quyền" message:@"Tài khoản không có vai trò quản trị được phép." preferredStyle:UIAlertControllerStyleAlert];
                         [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
                         [strongSelf presentViewController:err animated:YES completion:nil];
                         return;
                     }
+                    // This is login-request elapsed time, not continuous network ping.
                     strongSelf->_currentLatencyMs = (NSInteger)MAX(0.0, round((CACurrentMediaTime() - authStartTime) * 1000.0));
                     strongSelf->_adminAccessToken = result[@"access_token"];
                     strongSelf->_adminRole = role;
@@ -3220,7 +3210,49 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSError *parseError = nil;
         id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&parseError] : @{@"ok":@YES};
         if (http.statusCode < 200 || http.statusCode >= 300 || ![object isKindOfClass:[NSDictionary class]]) {
-            NSString *message = (http.statusCode == 401 || http.statusCode == 403) ? @"Backend từ chối quyền truy cập. Hãy đăng nhập lại hoặc kiểm tra quyền Admin Dev." : @"Yêu cầu không thành công. Hãy kiểm tra backend và thử lại.";
+            NSString *message = nil;
+            if (http.statusCode == 401) {
+                message = [NSString stringWithFormat:@"Phiên đăng nhập bị hết hạn/thu hồi (HTTP 401, %@). Hãy đăng nhập lại.", path ?: @"/v1"];
+            } else if (http.statusCode == 403) {
+                // Diagnose the role from the backend itself. Never promote a role on the client.
+                NSString *tokenForDiagnostic = [self->_adminAccessToken copy] ?: @"";
+                NSURL *meURL = [NSURL URLWithString:[base stringByAppendingString:@"/v1/auth/me"]];
+                if (meURL && tokenForDiagnostic.length > 0) {
+                    NSMutableURLRequest *meRequest = [NSMutableURLRequest requestWithURL:meURL cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:8.0];
+                    meRequest.HTTPMethod = @"GET";
+                    [meRequest setValue:[NSString stringWithFormat:@"Bearer %@", tokenForDiagnostic] forHTTPHeaderField:@"Authorization"];
+                    [meRequest setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+                    [[session dataTaskWithRequest:meRequest completionHandler:^(NSData *meData, NSURLResponse *meResponse, NSError *meError) {
+                        NSHTTPURLResponse *meHTTP = (NSHTTPURLResponse *)meResponse;
+                        NSDictionary *meJSON = nil;
+                        if (meData.length > 0) {
+                            id parsedMe = [NSJSONSerialization JSONObjectWithData:meData options:0 error:nil];
+                            if ([parsedMe isKindOfClass:[NSDictionary class]]) meJSON = (NSDictionary *)parsedMe;
+                        }
+                        NSString *serverRole = [meJSON[@"role"] isKindOfClass:[NSString class]] ? [meJSON[@"role"] lowercaseString] : @"";
+                        NSString *diagnosticMessage;
+                        if (meError || !meHTTP) {
+                            diagnosticMessage = [NSString stringWithFormat:@"Backend từ chối %@ (HTTP 403). Không kiểm tra được /v1/auth/me; kiểm tra kết nối, token và backend.", path ?: @"/v1"];
+                        } else if (meHTTP.statusCode == 401) {
+                            diagnosticMessage = @"Phiên đã hết hạn hoặc bị thu hồi. Hãy đăng nhập lại để nhận token mới.";
+                        } else if (meHTTP.statusCode >= 200 && meHTTP.statusCode < 300 && [serverRole isEqualToString:@"admin_dev"]) {
+                            diagnosticMessage = [NSString stringWithFormat:@"Backend xác nhận role admin_dev nhưng endpoint %@ trả HTTP 403. Kiểm tra phiên bản backend/route middleware hoặc chính sách quyền của endpoint; không sửa bằng cách bỏ xác thực ở client.", path ?: @"/v1"];
+                        } else if (meHTTP.statusCode >= 200 && meHTTP.statusCode < 300) {
+                            diagnosticMessage = [NSString stringWithFormat:@"Backend xác nhận role hiện tại là '%@', không phải admin_dev. Sửa role tài khoản trong backend rồi đăng nhập lại.", serverRole.length ? serverRole : @"không xác định"];
+                        } else {
+                            diagnosticMessage = [NSString stringWithFormat:@"Backend từ chối %@ (HTTP 403); endpoint /v1/auth/me trả HTTP %ld. Kiểm tra role DB, phiên và cấu hình backend.", path ?: @"/v1", (long)meHTTP.statusCode];
+                        }
+                        NSError *apiError = [NSError errorWithDomain:@"TIAdminAPI" code:403 userInfo:@{NSLocalizedDescriptionKey:diagnosticMessage}];
+                        if (completion) completion(nil, apiError);
+                    }] resume];
+                    return;
+                }
+                message = [NSString stringWithFormat:@"Backend từ chối endpoint %@ (HTTP 403). Nhãn trên giao diện không cấp quyền; đăng nhập lại và kiểm tra role trên backend.", path ?: @"/v1"];
+            } else if (http.statusCode == 404) {
+                message = [NSString stringWithFormat:@"Backend chưa có endpoint %@ (HTTP 404). Cần cập nhật backend tương thích; không nên bỏ kiểm tra quyền ở client.", path ?: @"/v1"];
+            } else {
+                message = [NSString stringWithFormat:@"Yêu cầu %@ thất bại (HTTP %ld). Kiểm tra backend và thử lại.", path ?: @"/v1", (long)http.statusCode];
+            }
             NSError *apiError = [NSError errorWithDomain:@"TIAdminAPI" code:http.statusCode userInfo:@{NSLocalizedDescriptionKey:message}];
             if (completion) completion(nil, apiError);
             return;
@@ -3351,7 +3383,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Latency
 
 - (void)startLatencyMonitor {
-    // V20.1: no random RTT simulation and no periodic blink/reload timer. The value is populated
+    // V22: no random RTT simulation and no periodic blink/reload timer. The value is populated
     // only by a real request (admin login); otherwise the UI says it hasn't been measured.
     [_latencyTimer invalidate]; _latencyTimer = nil;
     [_serverBlinkTimer invalidate]; _serverBlinkTimer = nil;
@@ -3505,7 +3537,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index {
-    if (!_isKernelExploited) {
+    if (!_isFeatureActivated) {
         if ([button respondsToSelector:@selector(collapseMenu)]) [button collapseMenu];
         [self showUnexploitedWarningAlert];
         return;
@@ -3561,7 +3593,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else if (button == _expandingLockButton) {
         switch (index) {
             case 0:
-                if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
+                if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
                 _isRateLocked = NO;
                 self.settingsDict[@"IsRateLocked"] = @NO;
                 [self saveSettingsDataAndSync];
@@ -3569,7 +3601,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 [self.customTableView reloadData];
                 break;
             case 1:
-                if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
+                if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
                 _isRateLocked = YES;
                 self.settingsDict[@"IsRateLocked"] = @YES;
                 [self saveSettingsDataAndSync];
@@ -3583,14 +3615,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)runApplyWithLoading {
-    if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
-    if (_loadingOverlay) return;
-    [self showLoadingCarOverlayDuration:5.0 completion:^{
-        [self applyDeepSpringBoardAndUIKitTweaks];
-        UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
-        [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
-        [self smoothReloadTable];
-    }];
+    if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
+    // V22: avoid a 5-second full-screen dim overlay and per-frame car timer.
+    // The actual preference/payload work is coalesced and applied by applyDeepSpringBoardAndUIKitTweaks.
+    [self applyDeepSpringBoardAndUIKitTweaks];
+    [self updateServerStatusIndicator];
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [feedback impactOccurred];
+    [self smoothReloadTable];
 }
 
 #pragma mark - V20.1 Theme, Glass and locked-state helpers
@@ -3646,7 +3678,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)refreshBottomTabsAvailability {
     NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
-    BOOL fullyUnlocked = serverChosen && _isKernelExploited;
+    BOOL fullyUnlocked = serverChosen && _isFeatureActivated;
     if (!fullyUnlocked && _tabButtons.count > 4) _currentBottomTab = 4;
     for (NSInteger i = 0; i < _tabButtons.count; i++) {
         LGGlassNavButton *button = _tabButtons[i];
@@ -3785,7 +3817,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [self showFirstInstallServerPicker];
         return;
     }
-    if (!_isKernelExploited && index != 4) {
+    if (!_isFeatureActivated && index != 4) {
         [self showUnexploitedWarningAlert];
         return;
     }
@@ -3917,7 +3949,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)toggleRateLockAction {
-    if (!_isKernelExploited) { [self showUnexploitedWarningAlert]; return; }
+    if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
     _isRateLocked = !_isRateLocked;
     self.settingsDict[@"IsRateLocked"] = @(_isRateLocked);
     [self saveSettingsDataAndSync];
@@ -3983,7 +4015,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (!_isKernelExploited && _currentBottomTab != 4) return 1;
+    if (!_isFeatureActivated && _currentBottomTab != 4) return 1;
 
     if (_currentBottomTab == 0) {
         if (section == 0) return 1;
@@ -4014,14 +4046,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         return MAX(1, _filteredAppsList.count);
     } else {
         if (section == 0) return 2;
-        if (section == 1) return _isKernelExploited ? 8 : 1;
+        if (section == 1) return _isFeatureActivated ? 8 : 1;
         if (section == 2) return 4 + ([self isAdminDevRole] ? 2 : 0);
         return 4;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (!_isKernelExploited && _currentBottomTab != 4) return @"CẦN KHAI THÁC DARWIN";
+    if (!_isFeatureActivated && _currentBottomTab != 4) return @"CẦN KÍCH HOẠT CẤU HÌNH";
     if (_currentBottomTab == 0) {
         if (section == 0) return @"ĐIỀU KHIỂN HỆ THỐNG ĐO";
         if (section == 1) return @"CPU";
@@ -4048,7 +4080,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 1) return @"TÌM KIẾM";
         return @"QUẢN LÝ ỨNG DỤNG";
     } else {
-        if (section == 0) return @"KHAI THÁC";
+        if (section == 0) return @"KÍCH HOẠT";
         if (section == 1) return @"PHẦN CỨNG";
         if (section == 2) return @"SERVER & GIAO DIỆN";
         return @"SANDBOX";
@@ -4070,8 +4102,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIView *accessory = nil;
     UIColor *accent = nil;
 
-    if (!_isKernelExploited && _currentBottomTab != 4) {
-        title = @"CẦN KHAI THÁC DARWIN ĐỂ SỬ DỤNG";
+    if (!_isFeatureActivated && _currentBottomTab != 4) {
+        title = @"CẦN KÍCH HOẠT CẤU HÌNH";
         detail = @"Vào Cài Đặt";
         [cell configureWithTitle:title detail:detail accessory:nil accent:[UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0]];
         cell.userInteractionEnabled = NO;
@@ -4329,12 +4361,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     else {
         if (indexPath.section == 0) {
             if (indexPath.row == 0) {
-                if (_isKernelExploited) {
-                    title = @"ĐÃ KHAI THÁC DARWIN";
+                if (_isFeatureActivated) {
+                    title = @"ĐÃ KÍCH HOẠT";
                     detail = @"Sẵn Sàng";
                     accent = [UIColor colorWithRed:0.4 green:1.0 blue:0.6 alpha:1.0];
                 } else {
-                    title = @"CHƯA KHAI THÁC — CHẠM";
+                    title = @"CHƯA KÍCH HOẠT — CHẠM";
                     detail = @"Bấm";
                     accent = [UIColor colorWithRed:1.0 green:0.45 blue:0.45 alpha:1.0];
                 }
@@ -4352,8 +4384,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 }
             }
         } else if (indexPath.section == 1) {
-            if (!_isKernelExploited) {
-                title = @"Cần khai thác";
+            if (!_isFeatureActivated) {
+                title = @"Cần kích hoạt";
                 accent = [UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0];
                 [cell configureWithTitle:title detail:@"" accessory:nil accent:accent];
                 cell.userInteractionEnabled = NO;
@@ -4445,8 +4477,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 cell.alpha = 0.55;
             }
         } else {
-            if (!_isKernelExploited) {
-                title = @"Cần khai thác";
+            if (!_isFeatureActivated) {
+                title = @"Cần kích hoạt";
                 accent = [UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0];
                 [cell configureWithTitle:title detail:@"" accessory:nil accent:accent];
                 cell.userInteractionEnabled = NO;
@@ -4464,7 +4496,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     BOOL activationEntry = (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0);
     BOOL adminLoginEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2);
-    if (!_isKernelExploited && _currentBottomTab == 4 && !activationEntry && !adminLoginEntry) {
+    if (!_isFeatureActivated && _currentBottomTab == 4 && !activationEntry && !adminLoginEntry) {
         // Prevent accessory switches and segmented controls from being usable while locked.
         if ([accessory isKindOfClass:[UIView class]]) accessory.userInteractionEnabled = NO;
         cell.userInteractionEnabled = NO;
@@ -4484,7 +4516,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         return;
     }
 
-    if (!_isKernelExploited) {
+    if (!_isFeatureActivated) {
         if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
             if (!_isAdminServer && !([self isServerStateOK])) { [self showPersistentServerStateAlert]; return; }
             NSInteger cc = Titanium_GetCrashCount();
@@ -4595,40 +4627,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Chip error
 
 - (void)startChipErrorLoop {
+    // V22: do not inject randomized fake chip/server failures or reload the table every second.
     [self cancelChipErrorRandom];
-    [self scheduleChipErrorRandomOnHome];
 }
-- (void)scheduleChipErrorRandomOnHome {
-    [self cancelChipErrorRandom];
-    NSTimeInterval delay = 25.0 + (arc4random_uniform(6000) / 100.0);
-    _chipErrorTimer = [NSTimer scheduledTimerWithTimeInterval:delay repeats:NO block:^(NSTimer * _Nonnull t) {
-        [self triggerChipError];
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:_chipErrorTimer forMode:NSRunLoopCommonModes];
-}
+- (void)scheduleChipErrorRandomOnHome { [self cancelChipErrorRandom]; }
 - (void)cancelChipErrorRandom {
     if (_chipErrorTimer) { [_chipErrorTimer invalidate]; _chipErrorTimer = nil; }
     if (_chipRecoverTimer) { [_chipRecoverTimer invalidate]; _chipRecoverTimer = nil; }
     _chipErrorActive = NO;
+    _chipErrorRandomSeconds = 0;
 }
-- (void)triggerChipError {
-    _chipErrorActive = YES;
-    _chipErrorRandomSeconds = 6 + arc4random_uniform(15);
-    if (_currentBottomTab == 0) [self.customTableView reloadData];
-
-    _chipRecoverTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull t) {
-        self->_chipErrorRandomSeconds--;
-        if (self->_currentBottomTab == 0) [self.customTableView reloadData];
-        if (self->_chipErrorRandomSeconds <= 0) {
-            [t invalidate];
-            self->_chipRecoverTimer = nil;
-            self->_chipErrorActive = NO;
-            if (self->_currentBottomTab == 0) [self.customTableView reloadData];
-            [self scheduleChipErrorRandomOnHome];
-        }
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:_chipRecoverTimer forMode:NSRunLoopCommonModes];
-}
+- (void)triggerChipError { [self cancelChipErrorRandom]; }
 
 #pragma mark - Actions
 
@@ -4696,12 +4705,20 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)smoothReloadTable {
-    if (!self.customTableView) return;
-    [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
-    self.customTableView.transform = CGAffineTransformMakeTranslation(0.0, 1.5);
-    [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self.customTableView.transform = CGAffineTransformIdentity;
-    } completion:nil];
+    UITableView *table = self.customTableView;
+    if (!table) return;
+    // Avoid translating/animating the whole scroll view after every setting change; that can look like a frame hitch.
+    CGPoint oldOffset = table.contentOffset;
+    BOOL wasInteracting = table.dragging || table.decelerating || table.tracking;
+    [UIView performWithoutAnimation:^{
+        [table reloadData];
+        [table layoutIfNeeded];
+    }];
+    if (!wasInteracting && isfinite(oldOffset.x) && isfinite(oldOffset.y)) {
+        CGFloat maxY = MAX(-table.adjustedContentInset.top, table.contentSize.height - table.bounds.size.height + table.adjustedContentInset.bottom);
+        CGPoint preserved = CGPointMake(oldOffset.x, MIN(MAX(oldOffset.y, -table.adjustedContentInset.top), maxY));
+        [table setContentOffset:preserved animated:NO];
+    }
 }
 
 #pragma mark - HUD
@@ -4710,11 +4727,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [self stopContinuousHardwareHUD];
 
     _hudTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)), (uint64_t)(2.8 * NSEC_PER_SEC), (uint64_t)(0.2 * NSEC_PER_SEC));
+    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), (uint64_t)(5.0 * NSEC_PER_SEC), (uint64_t)(0.5 * NSEC_PER_SEC));
     __weak typeof(self) wS = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(wS) sS = wS;
-        if (sS && sS->_currentBottomTab == 0 && sS->_isKernelExploited && [sS.settingsDict[@"EnableSystemMonitoring"] boolValue] && !sS->_chipErrorActive) {
+        if (sS && sS->_currentBottomTab == 0 && sS->_isFeatureActivated && [sS.settingsDict[@"EnableSystemMonitoring"] boolValue] && !sS->_chipErrorActive) {
             NSArray<NSIndexPath *> *visible = sS.customTableView.indexPathsForVisibleRows ?: @[];
             NSMutableArray<NSIndexPath *> *rows = [NSMutableArray arrayWithCapacity:visible.count];
             for (NSIndexPath *ip in visible) {
@@ -4735,7 +4752,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
-    if (!_isKernelExploited) return;
+    if (!_isFeatureActivated) return;
 
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
 
@@ -4743,7 +4760,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     memset(&p, 0, sizeof(ApexV285ProPayload));
     p.magic = APEX_SYNC_MAGIC_V285;
 
-    BOOL masterEnabled = (enabled && _isKernelExploited && !_serverDown);
+    BOOL masterEnabled = (enabled && _isFeatureActivated && !_serverDown);
     p.masterEnabled = masterEnabled ? 1 : 0;
 
     NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
@@ -4825,11 +4842,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)applyDeepSpringBoardAndUIKitTweaks {
-    if (!_isKernelExploited) return;
-    // Keep the default scheduler and Core Animation drawing behavior; forcing high QoS or
-    // asynchronous window drawing can increase heat and create extra contention.
-    if (@available(iOS 15.0, *)) {
-        dispatch_async(dispatch_get_main_queue(), ^{
+    if (!_isFeatureActivated) return;
+    // V22: coalesce rapid preference changes. Hz/FPS values and native caps are unchanged;
+    // only redundant main-queue application work is skipped.
+    NSUInteger generation = ++_v22ApplyGeneration;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.04 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (generation != self->_v22ApplyGeneration) return;
+        if (@available(iOS 15.0, *)) {
             NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 144) targetHz = 144;
@@ -4851,10 +4870,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     }
                 }
             }
-        });
-    }
-    BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
-    [self syncSharedMemoryFile:master];
+        }
+        BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
+        [self syncSharedMemoryFile:master];
+    });
 }
 
 #pragma mark - Exploit
@@ -4875,49 +4894,31 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)openDopamineStyleExploitConsole {
-    if (!_isAdminServer && !([self isServerStateOK])) { [self showPersistentServerStateAlert]; return; }
-    UIWindow *host = self.view.window ?: [UIApplication sharedApplication].keyWindow;
-    if (!host) return;
-
-    LGLoadingManView *manView = [[LGLoadingManView alloc] initWithFrame:host.bounds];
-    manView.alpha = 0.0;
-    [host addSubview:manView];
-    [manView startAnimating];
-
-    [UIView animateWithDuration:0.3 animations:^{ manView.alpha = 1.0; }];
-
-    __block NSInteger step = 0;
-    NSTimer *progTimer = [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer * _Nonnull t) {
-        step++;
-        CGFloat v = MIN(1.0, step / 30.0);
-        [manView setProgressValue:v animated:YES];
-        if (step >= 30) {
-            [t invalidate];
-            [manView stopAnimating];
-            [UIView animateWithDuration:0.25 animations:^{ manView.alpha = 0.0; } completion:^(BOOL finished) {
-                [manView removeFromSuperview];
-                [self presentAppleServerConnectFlow];
-            }];
-        }
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:progTimer forMode:NSRunLoopCommonModes];
-}
-
-- (void)presentAppleServerConnectFlow {
-    NSUserDefaults *completionDefaults = [NSUserDefaults standardUserDefaults];
-    NSString *savedVersion = [completionDefaults stringForKey:TI_LOCAL_EXPLOIT_VERSION_KEY];
-    if ([completionDefaults boolForKey:TI_LOCAL_EXPLOIT_COMPLETE_KEY] &&
-        [savedVersion isEqualToString:@"21.0"]) {
-        // Đã hoàn tất luồng UI trước đó: không bắt người dùng chạy lại màn hình chờ.
-        [self persistExploitDataToDisk];
+    if (!_isAdminServer && ![self isServerStateOK]) { [self showPersistentServerStateAlert]; return; }
+    NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if (![selectedServer isEqualToString:@"free"] && !_isAdminServer) {
+        [self showFirstInstallServerPicker];
+        return;
+    }
+    if (_activationFlowPresenting) return;
+    if (_isFeatureActivated) {
         [self applyDeepSpringBoardAndUIKitTweaks];
-        Titanium_ResetCrashCount();
-        [self.customTableView reloadData];
         return;
     }
 
+    // This is a local UI/configuration unlock, not a kernel exploit or a remote Apple-server operation.
+    // Skip fake queue/spinner overlays so first-run doesn't dim the whole screen or hold up interaction.
+    _activationFlowPresenting = YES;
+    [self persistActivationDataToDisk];
+    [self applyDeepSpringBoardAndUIKitTweaks];
+    _activationFlowPresenting = NO;
+    [self updateServerStatusIndicator];
+    [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+}
+- (void)presentAppleServerConnectFlow {
+    // Legacy visual panel retained for compatibility; activation no longer calls this timer-driven overlay.
     UIWindow *host = self.view.window ?: [UIApplication sharedApplication].keyWindow;
-    if (!host) return;
+    if (!host) { _activationFlowPresenting = NO; return; }
 
     LGAppleServerConnectView *serverView = [[LGAppleServerConnectView alloc] initWithFrame:host.bounds];
     serverView.alpha = 0.0;
@@ -4929,10 +4930,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [serverView startConnectionWithCompletion:^(BOOL success) {
         __strong typeof(wS) sS = wS;
         if (!sS) return;
+        sS->_activationFlowPresenting = NO;
         if (success) {
-            [sS persistExploitDataToDisk];
+            [sS persistActivationDataToDisk];
             [sS applyDeepSpringBoardAndUIKitTweaks];
-            Titanium_ResetCrashCount();
             UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
             [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
             [sS.customTableView reloadData];
@@ -4940,7 +4941,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }];
 }
 
-- (void)persistExploitDataToDisk {
+- (void)persistActivationDataToDisk {
     char cts[128] = {0};
     size_t size = sizeof(cts);
     sysctlbyname("machdep.cpu.brand_string", cts, &size, NULL, 0);
@@ -4967,8 +4968,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     int64_t l2 = 0; size = sizeof(l2);
     sysctlbyname("hw.l2cachesize", &l2, &size, NULL, 0);
     _deepCacheString = (l2 > 0) ? [NSString stringWithFormat:@"%lld KB L2", l2 / 1024] : @"Silicon Cache";
-    _isKernelExploited = YES;
-    self.settingsDict[@"IsKernelExploited"] = @YES;
+    _isFeatureActivated = YES;
+    self.settingsDict[@"FeatureActivationComplete"] = @YES;
+    [self.settingsDict removeObjectForKey:@"IsKernelExploited"];
     self.settingsDict[@"Enabled"] = @YES;
     self.settingsDict[@"SavedArchString"] = _deepArchString;
     self.settingsDict[@"SavedCoreCountString"] = _deepCoreCountString;
@@ -5030,7 +5032,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         @"syncModuleDelay", @"antiBlackScreenLaunch", @"reduceMultitaskLag",
         @"turboLaunch", @"ultraResponsivenessProEngineOfficial",
         @"dynamicThermalEngine", @"ultraResponsivenessPro",
-        @"IsRateLocked", @"IsKernelExploited", TI_AUTO_THEME_KEY
+        @"IsRateLocked", @"FeatureActivationComplete", TI_AUTO_THEME_KEY
     ];
     for (NSString *k in keys) {
         if (!self.settingsDict[k]) self.settingsDict[k] = @NO;
@@ -5038,7 +5040,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
     if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @144;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
-    if (!self.settingsDict[@"IsKernelExploited"])self.settingsDict[@"IsKernelExploited"]= @NO;
+    if (!self.settingsDict[@"FeatureActivationComplete"]) self.settingsDict[@"FeatureActivationComplete"] = @NO;
     if (!self.settingsDict[TI_AUTO_THEME_KEY])   self.settingsDict[TI_AUTO_THEME_KEY]   = @NO;
     if (!self.settingsDict[@"IsAdminServer"])    self.settingsDict[@"IsAdminServer"]    = @NO;
 }
@@ -5075,7 +5077,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if (bid.length && self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @NO;
             }
             [self applyAppFilter];
-            if (self->_currentBottomTab == 3 && self->_isKernelExploited) {
+            if (self->_currentBottomTab == 3 && self->_isFeatureActivated) {
                 [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
             }
         });
@@ -5084,38 +5086,80 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 #pragma mark - System Actions
 
-- (void)executeRespring {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        NSString *b = Titanium_FindExecutablePath(@"sbreload");
-        char *argv[] = {(char *)[b UTF8String], NULL};
-        pid_t pid;
-        posix_spawn(&pid, [b UTF8String], NULL, NULL, argv, environ);
-        waitpid(pid, NULL, 0);
+- (void)runSystemUtility:(NSString *)name arguments:(NSArray<NSString *> *)arguments actionLabel:(NSString *)actionLabel {
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSString *path = Titanium_FindExecutablePath(name);
+        if (path.length == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Không tìm thấy công cụ"
+                                                                           message:[NSString stringWithFormat:@"Không tìm thấy %@ trong các đường dẫn jailbreak đã kiểm tra. Không thực hiện thao tác.", name]
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+                [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                [strongSelf presentViewController:a animated:YES completion:nil];
+            });
+            return;
+        }
+        NSMutableArray<NSString *> *args = [NSMutableArray arrayWithObject:path];
+        [args addObjectsFromArray:arguments ?: @[]];
+        char **argv = calloc(args.count + 1, sizeof(char *));
+        if (!argv) return;
+        for (NSUInteger i = 0; i < args.count; i++) argv[i] = (char *)[args[i] UTF8String];
+        argv[args.count] = NULL;
+        pid_t child = -1;
+        int spawnError = posix_spawn(&child, [path fileSystemRepresentation], NULL, NULL, argv, environ);
+        free(argv);
+        if (spawnError != 0 || child <= 0) {
+            NSString *detail = [NSString stringWithFormat:@"Không thể chạy %@ (lỗi %d). Kiểm tra quyền và môi trường jailbreak.", actionLabel ?: name, spawnError];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Không chạy được lệnh" message:detail preferredStyle:UIAlertControllerStyleAlert];
+                [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                [strongSelf presentViewController:a animated:YES completion:nil];
+            });
+            return;
+        }
+        // Wait only on a utility worker, never on the UIKit thread; tolerate EINTR.
+        // Report an actual non-zero exit so unsupported Dopamine/RootHide commands do not look like an endless spinner.
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            int status = 0;
+            pid_t waited;
+            do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+            BOOL failed = (waited == child) && (!WIFEXITED(status) || WEXITSTATUS(status) != 0);
+            if (failed) {
+                NSString *detail = WIFEXITED(status)
+                    ? [NSString stringWithFormat:@"%@ kết thúc với mã %d. Lệnh này có thể không được hỗ trợ trong phiên bản jailbreak hiện tại.", actionLabel ?: name, WEXITSTATUS(status)]
+                    : [NSString stringWithFormat:@"%@ bị dừng bất thường. Kiểm tra log jailbreak trước khi thử lại.", actionLabel ?: name];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    if (!strongSelf || !strongSelf.view.window) return;
+                    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Thao tác không hoàn tất" message:detail preferredStyle:UIAlertControllerStyleAlert];
+                    [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                    [strongSelf presentViewController:a animated:YES completion:nil];
+                });
+            }
+        });
     });
+}
+
+- (void)executeRespring {
+    [self runSystemUtility:@"sbreload" arguments:@[] actionLabel:@"respring"];
 }
 
 - (void)executeSReboot {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        NSString *b = Titanium_FindExecutablePath(@"launchctl");
-        char *argv[] = {(char *)[b UTF8String], (char *)"reboot", (char *)"userspace", NULL};
-        pid_t pid;
-        posix_spawn(&pid, [b UTF8String], NULL, NULL, argv, environ);
-        waitpid(pid, NULL, 0);
-    });
+    // launchctl reboot userspace can take the current session down; never wait on main.
+    [self runSystemUtility:@"launchctl" arguments:@[@"reboot", @"userspace"] actionLabel:@"userspace reboot"];
 }
 
 - (void)executeSafeMode {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        NSString *b = Titanium_FindExecutablePath(@"killall");
-        char *argv[] = {(char *)[b UTF8String], (char *)"-SEGV", (char *)"SpringBoard", NULL};
-        pid_t pid;
-        posix_spawn(&pid, [b UTF8String], NULL, NULL, argv, environ);
-        waitpid(pid, NULL, 0);
-    });
+    [self runSystemUtility:@"killall" arguments:@[@"-SEGV", @"SpringBoard"] actionLabel:@"Safe Mode"];
 }
 
 - (void)executeResetConfiguration {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"XÓA SẠCH" message:@"Toàn bộ cấu hình sẽ bị xóa. Bạn sẽ cần KHAI THÁC lại." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"XÓA SẠCH" message:@"Toàn bộ cấu hình sẽ bị xóa. Bạn sẽ cần chọn server và kích hoạt cấu hình lại." preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Xác Nhận" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         NSString *p = Titanium_ResolvePrefPath();
         [[NSFileManager defaultManager] removeItemAtPath:p error:nil];
@@ -5126,8 +5170,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FIRST_INSTALL_KEY];
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_LOCAL_EXPLOIT_COMPLETE_KEY];
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_LOCAL_EXPLOIT_VERSION_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
         [[NSUserDefaults standardUserDefaults] synchronize];
@@ -5138,7 +5180,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         self->_adminAccessToken = nil;
         self->_adminRole = nil;
         self.settingsDict = [NSMutableDictionary dictionary];
-        self->_isKernelExploited = NO;
+        self->_isFeatureActivated = NO;
+        self.settingsDict[@"FeatureActivationComplete"] = @NO;
+        self->_activationFlowPresenting = NO;
         self->_deepArchString = nil;
         self->_deepCoreCountString = nil;
         self->_deepRamString = nil;
