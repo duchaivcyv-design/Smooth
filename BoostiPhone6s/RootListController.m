@@ -9,6 +9,10 @@
 #import <sys/sysctl.h>
 #import <fcntl.h>
 #import <unistd.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #import <notify.h>
 #import <dlfcn.h>
 #import <mach/mach.h>
@@ -32,6 +36,9 @@ extern char **environ;
 #define NOTIFY_HARDWARE_SYNC "com.taojb.boostiphone6s/HardwareSync"
 #define NOTIFY_FPS_CHANGED   "com.taojb.boostiphone6s/FPSChanged"
 #define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
+#define NOTIFY_PAYLOAD_WRITTEN "com.taojb.boostiphone6s/PayloadWritten"
+#define APPS_SYNC_FILE_PRIMARY   @"/tmp/.boost_hz_apps"
+#define APPS_SYNC_FILE_SECONDARY @"/var/jb/tmp/.boost_hz_apps"
 
 #define TI_CRASH_COUNT_KEY  @"ti_network_crash_count_v7"
 #define TI_AUTO_THEME_KEY   @"ti_auto_theme_v7"
@@ -94,7 +101,7 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t magic, masterEnabled;
     int32_t targetHz, targetFPS;
     uint32_t forceOverclock, pipSyncEnabled, thermalShield, antiStutterExit;
@@ -111,6 +118,73 @@ static void Titanium_ForceCrashApp(void) { __builtin_trap(); }
 static NSInteger Titanium_GetCrashCount(void) { return [[NSUserDefaults standardUserDefaults] integerForKey:TI_CRASH_COUNT_KEY]; }
 static void Titanium_SetCrashCount(NSInteger n) { [[NSUserDefaults standardUserDefaults] setInteger:n forKey:TI_CRASH_COUNT_KEY]; [[NSUserDefaults standardUserDefaults] synchronize]; }
 static void Titanium_ResetCrashCount(void) { Titanium_SetCrashCount(0); }
+
+// Keep RootListController UI keys and the canonical keys read by Tweak.xm in sync.
+// Several controller toggles are legacy aliases of one Tweak.xm setting/property.
+static NSArray<NSArray<NSString *> *> *Titanium_LinkedPreferenceGroups(void) {
+    static NSArray<NSArray<NSString *> *> *groups = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        groups = @[
+            @[@"pCoreRealtimePriority", @"RealtimeThreadSched"],
+            @[@"schedulerGovernor", @"IOSchedulerEngine"],
+            @[@"lockHighIdleFloor", @"CPUGPUFreqOptimizer"],
+            @[@"iopolVipPriority", @"SystemProcessOpt"],
+            @[@"quantumCoreSync", @"QuantumCoreSync"],
+            @[@"coolDownHeavyLoad", @"HeavyLoadCooling"],
+            @[@"backgroundPacingDaemon", @"BackgroundPacingDaemon"],
+            @[@"autoKillBackground", @"AutoCloseBackgroundApp"],
+            @[@"hyperMemoryGuardian", @"HyperMemoryGuardian"],
+            @[@"fakeFullBatteryState", @"DeviceSpoofer"],
+            @[@"zeroLagNeural", @"ZeroLagNeuralBooster"],
+            @[@"ultraResponsiveness", @"UltraResponsiveness"],
+            @[@"lock30FpsOnOverheat", @"SmartThermalDispatch"],
+            @[@"flatTintBlur", @"QuantumRenderShield"],
+            @[@"powerSaveMode", @"batterySaver60Hz", @"PowerSaveMode"],
+            @[@"MetalHexBuffering", @"neuralBufferOpt"],
+            @[@"FixAppExitStutter", @"vsyncAdaptiveBuffer"],
+            @[@"FixAppLaunchBlackScreen", @"IsolateRenderPipeline"],
+            @[@"periodicRamClean", @"machVMPurgeRam", @"aggressiveRamClean", @"AggressiveRamClean"]
+        ];
+    });
+    return groups;
+}
+
+static void Titanium_SynchronizeLinkedPreferences(NSMutableDictionary *settings, NSString *changedKey) {
+    if (![settings isKindOfClass:[NSMutableDictionary class]]) return;
+    for (NSArray<NSString *> *group in Titanium_LinkedPreferenceGroups()) {
+        NSString *sourceKey = nil;
+        if (changedKey.length > 0) {
+            if ([group containsObject:changedKey] && settings[changedKey] != nil) sourceKey = changedKey;
+            else continue;
+        } else {
+            // The first key in each group is the controller-facing key; use it when present.
+            for (NSString *key in group) {
+                if (settings[key] != nil) { sourceKey = key; break; }
+            }
+        }
+        id value = sourceKey ? settings[sourceKey] : nil;
+        if (!value) continue;
+        for (NSString *key in group) settings[key] = value;
+    }
+}
+
+static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings) {
+    id rawSelected = settings[@"SelectedLanguage"];
+    NSString *selected = [rawSelected isKindOfClass:[NSString class]] ? (NSString *)rawSelected : @"auto";
+    if (selected.length > 0 && ![selected isEqualToString:@"auto"]) return selected;
+
+    NSString *preferred = [[NSLocale preferredLanguages] firstObject];
+    if (preferred.length == 0) return @"en";
+    NSArray<NSString *> *languageParts = [preferred componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"-_"]];
+    NSString *base = languageParts.count > 0 ? [languageParts[0] lowercaseString] : @"en";
+    static NSSet<NSString *> *knownLanguages = nil;
+    static dispatch_once_t languageOnce;
+    dispatch_once(&languageOnce, ^{
+        knownLanguages = [NSSet setWithArray:@[@"vi", @"en", @"zh", @"ja", @"ko", @"fr", @"de", @"es", @"pt", @"ru", @"th", @"id", @"hi", @"ar"]];
+    });
+    return [knownLanguages containsObject:base] ? base : @"en";
+}
 
 // ====================================================================================================
 // MODULE 1: GLASS MATERIAL FACTORY
@@ -2102,15 +2176,70 @@ static inline NSString *Titanium_FindExecutablePath(NSString *name) {
     }
     return name;
 }
+static BOOL Titanium_WriteAllBytes(int fd, const void *data, size_t size) {
+    const uint8_t *cursor = (const uint8_t *)data;
+    size_t remaining = size;
+    while (remaining > 0) {
+        ssize_t written = write(fd, cursor, remaining);
+        if (written < 0 && errno == EINTR) continue;
+        if (written <= 0) return NO;
+        cursor += (size_t)written;
+        remaining -= (size_t)written;
+    }
+    return YES;
+}
+
+// Atomic file replacement prevents Tweak.xm from reading a partially written payload.
 static void Titanium_WriteSyncPayloadUniversal(const void *data, size_t size) {
-    NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
+    if (!data || size == 0) return;
+    NSArray<NSString *> *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
     for (NSString *path in paths) {
         NSString *dir = [path stringByDeletingLastPathComponent];
         if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir
+                                      withIntermediateDirectories:YES
+                                                       attributes:@{NSFilePosixPermissions: @(0777)}
+                                                            error:nil];
         }
-        int fd = open([path UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd >= 0) { write(fd, data, size); close(fd); chmod([path UTF8String], 0666); }
+        NSString *tempPath = [path stringByAppendingString:@".tmp"];
+        int fd = open([tempPath fileSystemRepresentation], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd < 0) continue;
+        BOOL ok = Titanium_WriteAllBytes(fd, data, size);
+        if (ok) fsync(fd);
+        fchmod(fd, 0666);
+        close(fd);
+        if (ok && rename([tempPath fileSystemRepresentation], [path fileSystemRepresentation]) == 0) {
+            chmod([path fileSystemRepresentation], 0666);
+        } else {
+            unlink([tempPath fileSystemRepresentation]);
+        }
+    }
+}
+
+// Same disabled-bundle IPC file format consumed by Tweak.xm in third-party app sandboxes.
+static void Titanium_WriteDisabledAppsFile(NSString *joinedIDs) {
+    NSData *data = [(joinedIDs ?: @"") dataUsingEncoding:NSUTF8StringEncoding];
+    NSArray<NSString *> *paths = @[APPS_SYNC_FILE_PRIMARY, APPS_SYNC_FILE_SECONDARY];
+    for (NSString *path in paths) {
+        NSString *dir = [path stringByDeletingLastPathComponent];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:dir
+                                      withIntermediateDirectories:YES
+                                                       attributes:@{NSFilePosixPermissions: @(0777)}
+                                                            error:nil];
+        }
+        NSString *tempPath = [path stringByAppendingString:@".tmp"];
+        int fd = open([tempPath fileSystemRepresentation], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd < 0) continue;
+        BOOL ok = (data.length == 0) || Titanium_WriteAllBytes(fd, data.bytes, data.length);
+        if (ok) fsync(fd);
+        fchmod(fd, 0666);
+        close(fd);
+        if (ok && rename([tempPath fileSystemRepresentation], [path fileSystemRepresentation]) == 0) {
+            chmod([path fileSystemRepresentation], 0666);
+        } else {
+            unlink([tempPath fileSystemRepresentation]);
+        }
     }
 }
 static inline BOOL Titanium_IsSupportedIOSVersion(void) {
@@ -3504,6 +3633,7 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
                 __strong typeof(wS) sS = wS;
                 if (!sS) return;
                 sS.settingsDict[prefKey] = @(isOn);
+                Titanium_SynchronizeLinkedPreferences(sS.settingsDict, prefKey);
                 [sS saveSettingsDataAndSync];
                 [sS applyDeepSpringBoardAndUIKitTweaks];
             };
@@ -3900,16 +4030,34 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
     if (!_isKernelExploited) return;
+
+    Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
+
     ApexV285ProPayload p;
     memset(&p, 0, sizeof(ApexV285ProPayload));
     p.magic = APEX_SYNC_MAGIC_V285;
-    p.masterEnabled = (enabled && _isKernelExploited && !_serverDown) ? 1 : 0;
-    int32_t hz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 intValue];
-    int32_t fps = [self.settingsDict[@"TargetFPSRate"] ?: @144 intValue];
-    BOOL oc = [self.settingsDict[@"ForceOverclock144Hz"] ?: @NO boolValue];
-    p.targetHz = hz;
-    p.targetFPS = fps;
-    p.forceOverclock = (oc || hz >= 144) ? 1 : 0;
+
+    BOOL masterEnabled = (enabled && _isKernelExploited && !_serverDown);
+    p.masterEnabled = masterEnabled ? 1 : 0;
+
+    NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
+    NSInteger requestedFPS = [self.settingsDict[@"TargetFPSRate"] ?: @144 integerValue];
+    if (requestedHz < 15) requestedHz = 15;
+    if (requestedHz > 144) requestedHz = 144;
+    if (requestedFPS < 15) requestedFPS = 15;
+    if (requestedFPS > 144) requestedFPS = 144;
+
+    BOOL hzControlEnabled = self.settingsDict[@"EnableHzControl"] ? [self.settingsDict[@"EnableHzControl"] boolValue] : YES;
+    BOOL fpsControlEnabled = self.settingsDict[@"EnableFPSControl"] ? [self.settingsDict[@"EnableFPSControl"] boolValue] : YES;
+    BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] ?: @NO boolValue] ||
+                     [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
+
+    NSInteger resolvedHz = (!masterEnabled || !hzControlEnabled || powerSave) ? 60 : requestedHz;
+    NSInteger resolvedFPS = (!masterEnabled || !fpsControlEnabled || powerSave) ? 60 : requestedFPS;
+
+    p.targetHz = (int32_t)resolvedHz;
+    p.targetFPS = (int32_t)resolvedFPS;
+    p.forceOverclock = (resolvedHz >= 144) ? 1 : 0;
     p.pipSyncEnabled = 1;
     p.thermalShield = [self.settingsDict[@"AntiThermalThrottling"] ?: @NO boolValue] ? 1 : 0;
     p.antiStutterExit = [self.settingsDict[@"FixAppExitStutter"] ?: @NO boolValue] ? 1 : 0;
@@ -3923,17 +4071,45 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
     p.metalPacingEnabled = [self.settingsDict[@"MetalHexBuffering"] ?: @NO boolValue] ? 1 : 0;
     p.runloopHangGuard = 1;
     p.keyboardZeroLagV3 = [self.settingsDict[@"KeyboardZeroLagV24"] ?: @NO boolValue] ? 1 : 0;
-    p.aggressiveRamCleaner = [self.settingsDict[@"hyperMemoryGuardian"] ?: @NO boolValue] ? 1 : 0;
-    p.lockFixedFpsWhenThermal = [self.settingsDict[@"lock30FpsOnOverheat"] ?: @NO boolValue] ? 1 : 0;
+    p.aggressiveRamCleaner = [self.settingsDict[@"AggressiveRamClean"] ?: @NO boolValue] ? 1 : 0;
+    p.lockFixedFpsWhenThermal = p.thermalShield;
     p.antiGhostTouch = [self.settingsDict[@"AntiGhostTouch"] ?: @NO boolValue] ? 1 : 0;
-    p.diskIOPriorityBoost = [self.settingsDict[@"pCoreRealtimePriority"] ?: @NO boolValue] ? 1 : 0;
+    p.diskIOPriorityBoost = 1;
     p.rawTouchDirectDelivery = 1;
-    p.powerSaveModeActive = [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue] ? 1 : 0;
+    p.powerSaveModeActive = powerSave ? 1 : 0;
+
+    // Match Tweak.xm's V12 language marker format in reserved[0..47].
+    NSString *languageCode = Titanium_ResolvePayloadLanguage(self.settingsDict);
+    const char *languageUTF8 = languageCode.UTF8String;
+    if (languageUTF8) {
+        p.reserved[0] = 'L'; p.reserved[1] = 'G'; p.reserved[2] = ':';
+        strncpy(&p.reserved[3], languageUTF8, sizeof(p.reserved) - 4);
+        p.reserved[sizeof(p.reserved) - 1] = '\0';
+    }
+
     p.updateSeq = (uint64_t)mach_absolute_time();
     p.lastHeartbeat = p.updateSeq;
 
+    // Share the exact exclusion list format that Tweak.xm reads outside the SpringBoard sandbox.
+    NSMutableArray<NSString *> *disabledIDs = [NSMutableArray array];
+    id statesObj = self.settingsDict[@"AppTweakStates"];
+    if ([statesObj isKindOfClass:[NSDictionary class]]) {
+        [(NSDictionary *)statesObj enumerateKeysAndObjectsUsingBlock:^(id key, id value, BOOL *stop) {
+            if ([key isKindOfClass:[NSString class]] && ![value boolValue]) {
+                [disabledIDs addObject:(NSString *)key];
+            }
+        }];
+    }
+    NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
+    ApexV285ProPayload payloadCopy = p;
+
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        Titanium_WriteSyncPayloadUniversal(&p, sizeof(ApexV285ProPayload));
+        Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayload));
+        Titanium_WriteDisabledAppsFile(disabledJoined);
+
+        // Notify only after both atomic IPC files are replaced, then send the legacy reload events.
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                              CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
@@ -4077,10 +4253,12 @@ static NSString * const TIAdminAPIBaseURL = @"https://tweak-admin-backend.onrend
     if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
         self.settingsDict = [NSMutableDictionary dictionaryWithContentsOfFile:p] ?: [NSMutableDictionary dictionary];
     } else self.settingsDict = [NSMutableDictionary dictionary];
+    Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
     [self ensureDefaultSettingsExist];
 }
 
 - (void)saveSettingsDataAndSync {
+    Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
     NSString *p = Titanium_ResolvePrefPath();
     NSString *d = [p stringByDeletingLastPathComponent];
     if (![[NSFileManager defaultManager] fileExistsAtPath:d]) {
