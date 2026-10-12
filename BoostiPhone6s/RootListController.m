@@ -25,6 +25,8 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreImage/CoreImage.h>
+#import <Security/Security.h>
+#import <os/lock.h>
 
 extern char **environ;
 
@@ -50,6 +52,50 @@ extern char **environ;
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
 #define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
 #define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
+#define TI_THEME_MODE_KEY          @"ti_theme_mode_v25" // system | light | dark
+#define TI_ADMIN_TOKEN_SERVICE     @"com.taojb.boostiphone6s.admin-session"
+#define TI_ADMIN_TOKEN_ACCOUNT     @"server-access-token"
+
+// Never keep a bearer token in the readable preferences plist. The backend remains the
+// authority: a saved token is revalidated with /v1/auth/me on the next launch.
+static NSString *Titanium_KeychainReadAdminToken(void) {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: TI_ADMIN_TOKEN_SERVICE,
+        (__bridge id)kSecAttrAccount: TI_ADMIN_TOKEN_ACCOUNT,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne
+    };
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status != errSecSuccess || !result) return nil;
+    NSData *data = CFBridgingRelease(result);
+    NSString *token = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    return token.length ? token : nil;
+}
+
+static BOOL Titanium_KeychainStoreAdminToken(NSString *token) {
+    if (![token isKindOfClass:[NSString class]] || token.length == 0) return NO;
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: TI_ADMIN_TOKEN_SERVICE,
+        (__bridge id)kSecAttrAccount: TI_ADMIN_TOKEN_ACCOUNT
+    };
+    SecItemDelete((__bridge CFDictionaryRef)query);
+    NSMutableDictionary *item = [query mutableCopy];
+    item[(__bridge id)kSecValueData] = [token dataUsingEncoding:NSUTF8StringEncoding];
+    item[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+    return SecItemAdd((__bridge CFDictionaryRef)item, NULL) == errSecSuccess;
+}
+
+static void Titanium_KeychainDeleteAdminToken(void) {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: TI_ADMIN_TOKEN_SERVICE,
+        (__bridge id)kSecAttrAccount: TI_ADMIN_TOKEN_ACCOUNT
+    };
+    SecItemDelete((__bridge CFDictionaryRef)query);
+}
 
 // ====================================================================================================
 // SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
@@ -174,8 +220,19 @@ static void Titanium_SynchronizeLinkedPreferences(NSMutableDictionary *settings,
 
 static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings) {
     id rawSelected = settings[@"SelectedLanguage"];
-    NSString *selected = [rawSelected isKindOfClass:[NSString class]] ? (NSString *)rawSelected : @"auto";
-    if (selected.length > 0 && ![selected isEqualToString:@"auto"]) return selected;
+    NSString *selected = [rawSelected isKindOfClass:[NSString class]] ? (NSString *)rawSelected : nil;
+    if (selected.length == 0) {
+        id legacy = settings[@"AppLanguage"];
+        if ([legacy isKindOfClass:[NSString class]]) selected = (NSString *)legacy;
+    }
+    if (selected.length > 0 && ![selected isEqualToString:@"auto"]) {
+        NSArray<NSString *> *parts = [selected componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"-_ "]];
+        NSString *base = parts.count ? parts[0].lowercaseString : selected.lowercaseString;
+        static NSSet<NSString *> *supported = nil;
+        static dispatch_once_t supportedOnce;
+        dispatch_once(&supportedOnce, ^{ supported = [NSSet setWithArray:@[@"vi", @"en", @"zh", @"ja", @"ko", @"fr", @"de", @"es", @"pt", @"ru", @"th", @"id", @"hi", @"ar"]]; });
+        return [supported containsObject:base] ? base : @"en";
+    }
 
     NSString *preferred = [[NSLocale preferredLanguages] firstObject];
     if (preferred.length == 0) return @"en";
@@ -485,8 +542,19 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         self.backgroundColor = [UIColor clearColor];
         _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory tintAlphaForType:_materialType]];
     } else {
-        // Opaque fallback removes backdrop blur when Glass Redraw is disabled.
-        UIColor *opaqueGlass = [UIColor colorWithRed:0.075 green:0.065 blue:0.105 alpha:0.985];
+        // V25: disable backdrop sampling without forcing a near-black slab. Keep a themed,
+        // softly tinted opaque surface in both appearances.
+        UIColor *opaqueGlass;
+        if (@available(iOS 13.0, *)) {
+            opaqueGlass = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+                if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
+                    return [UIColor colorWithWhite:0.94 alpha:0.965];
+                }
+                return [UIColor colorWithRed:0.15 green:0.145 blue:0.19 alpha:0.965];
+            }];
+        } else {
+            opaqueGlass = [UIColor colorWithWhite:0.18 alpha:0.965];
+        }
         self.backgroundColor = opaqueGlass;
         _tintView.backgroundColor = opaqueGlass;
     }
@@ -745,6 +813,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 @property (nonatomic, strong) CAShapeLayer *thumbInnerRim;
 @property (nonatomic, copy) void (^valueChangedBlock)(BOOL isOn);
 @property (nonatomic, assign) BOOL isAnimating;
+@property (nonatomic, assign) NSUInteger animationGeneration;
 - (void)setOn:(BOOL)on animated:(BOOL)animated;
 @end
 
@@ -832,68 +901,84 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 
 - (void)handleTouchDown {
-    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        self->_thumbGlass.transform = CGAffineTransformMakeScale(0.90, 0.90);
+    if (UIAccessibilityIsReduceMotionEnabled()) return;
+    [UIView animateWithDuration:0.08 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        self->_thumbGlass.transform = CGAffineTransformMakeScale(0.94, 0.94);
     } completion:nil];
 }
 - (void)handleTouchUp {
-    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.60 initialSpringVelocity:0.9 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+    if (UIAccessibilityIsReduceMotionEnabled()) {
+        _thumbGlass.transform = CGAffineTransformIdentity;
+        return;
+    }
+    [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
         self->_thumbGlass.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
 - (void)handleTap {
-    if (_isAnimating) return;
+    // Restore the press-scale on touch-up-inside, then allow the new transition to start from the presentation position.
+    _thumbGlass.transform = CGAffineTransformIdentity;
+    // Do not discard taps during the visual transition; the state and settings update immediately.
     [self setOn:!_on animated:YES];
     [self sendActionsForControlEvents:UIControlEventValueChanged];
     if (self.valueChangedBlock) self.valueChangedBlock(_on);
-    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
-    [fb impactOccurred];
+    if (!UIAccessibilityIsReduceMotionEnabled()) {
+        UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [fb impactOccurred];
+    }
 }
 - (void)setOn:(BOOL)on { [self setOn:on animated:NO]; }
 - (void)setOn:(BOOL)on animated:(BOOL)animated { _on = on; [self updateUIAnimated:animated]; }
 
 - (void)animateThumbFloatToFrame:(CGRect)targetFrame goingOn:(BOOL)goingOn {
-    _isAnimating = YES;
-    CGPoint startCenter = _thumbGlass.center;
+    NSUInteger generation = ++_animationGeneration;
+    CGPoint startCenter = _thumbGlass.layer.position;
+    CGFloat startScale = 1.0;
+    CALayer *presentation = (CALayer *)_thumbGlass.layer.presentationLayer;
+    if (presentation) {
+        startCenter = presentation.position;
+        id scaleValue = [presentation valueForKeyPath:@"transform.scale"];
+        if ([scaleValue respondsToSelector:@selector(doubleValue)]) startScale = (CGFloat)[scaleValue doubleValue];
+    }
+    [_thumbGlass.layer removeAnimationForKey:@"floatUp"];
+    [_thumbGlass.layer removeAnimationForKey:@"floatScale"];
+
     CGPoint endCenter = CGPointMake(CGRectGetMidX(targetFrame), CGRectGetMidY(targetFrame));
-    // [V10 iOS27] BẬT (sang phải): đi xuống dưới một chút rồi bật lên về vị trí mới
-    //              TẮT (sang trái): đi lên trên một chút rồi đẩy xuống về vị trí cũ
-    CGFloat midY = goingOn ? (startCenter.y + 6.5) : (startCenter.y - 5.5);
-    CGFloat nearEndY = goingOn ? (endCenter.y + 2.5) : (endCenter.y - 1.5);
-    CGFloat midScale = goingOn ? 1.08 : 0.94;
-    CGFloat nearEndScale = goingOn ? 0.96 : 1.03;
+    _thumbGlass.frame = targetFrame;
+    _thumbGlass.layer.position = endCenter;
+    if (UIAccessibilityIsReduceMotionEnabled()) {
+        _isAnimating = NO;
+        return;
+    }
+
+    _isAnimating = YES;
+    CGFloat lift = goingOn ? 1.8 : -1.5;
+    CGPoint midCenter = CGPointMake((startCenter.x + endCenter.x) / 2.0, endCenter.y + lift);
 
     CAKeyframeAnimation *posAnim = [CAKeyframeAnimation animationWithKeyPath:@"position"];
     posAnim.values = @[
         [NSValue valueWithCGPoint:startCenter],
-        [NSValue valueWithCGPoint:CGPointMake((startCenter.x + endCenter.x) / 2.0, midY)],
-        [NSValue valueWithCGPoint:CGPointMake(endCenter.x, nearEndY)],
+        [NSValue valueWithCGPoint:midCenter],
         [NSValue valueWithCGPoint:endCenter]
     ];
-    posAnim.keyTimes = @[@0.0, @0.38, @0.70, @1.0];
-    posAnim.duration = 0.62;
+    posAnim.keyTimes = @[@0.0, @0.48, @1.0];
+    posAnim.duration = 0.22;
     posAnim.timingFunctions = @[
         [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut],
-        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn],
-        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]
+        [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]
     ];
-    posAnim.fillMode = kCAFillModeForwards;
-    posAnim.removedOnCompletion = NO;
+    posAnim.removedOnCompletion = YES;
 
     CAKeyframeAnimation *scaleAnim = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-    scaleAnim.values = @[@1.0, [NSNumber numberWithFloat:midScale], [NSNumber numberWithFloat:nearEndScale], @1.0];
-    scaleAnim.keyTimes = @[@0.0, @0.38, @0.70, @1.0];
-    scaleAnim.duration = 0.62;
-    scaleAnim.fillMode = kCAFillModeForwards;
-    scaleAnim.removedOnCompletion = NO;
+    scaleAnim.values = @[@(MAX(0.94, MIN(startScale, 1.06))), @1.025, @1.0];
+    scaleAnim.keyTimes = @[@0.0, @0.48, @1.0];
+    scaleAnim.duration = 0.22;
+    scaleAnim.removedOnCompletion = YES;
 
     [_thumbGlass.layer addAnimation:posAnim forKey:@"floatUp"];
     [_thumbGlass.layer addAnimation:scaleAnim forKey:@"floatScale"];
-
-    _thumbGlass.frame = targetFrame;
-    _thumbGlass.layer.position = endCenter;
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.64 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(240 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        if (generation != self->_animationGeneration) return;
         [self->_thumbGlass.layer removeAnimationForKey:@"floatUp"];
         [self->_thumbGlass.layer removeAnimationForKey:@"floatScale"];
         self->_thumbGlass.frame = targetFrame;
@@ -915,18 +1000,24 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
     CGFloat inset = 3.0, d = H - (inset * 2);
     CGRect f = _on ? CGRectMake(W - d - inset, inset, d, d) : CGRectMake(inset, inset, d, d);
 
-    if (animated) {
+    BOOL allowAnimation = animated && !UIAccessibilityIsReduceMotionEnabled();
+    if (allowAnimation) {
         [self animateThumbFloatToFrame:f goingOn:_on];
         [CATransaction begin];
-        [CATransaction setAnimationDuration:0.45];
+        [CATransaction setAnimationDuration:0.20];
         [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]];
         _trackGradient.colors = _on ? onC : offC;
         [CATransaction commit];
     } else {
+        ++_animationGeneration;
+        _isAnimating = NO;
+        [_thumbGlass.layer removeAnimationForKey:@"floatUp"];
+        [_thumbGlass.layer removeAnimationForKey:@"floatScale"];
         [CATransaction begin]; [CATransaction setDisableActions:YES];
         _trackGradient.colors = _on ? onC : offC;
         _thumbGlass.frame = f;
         _thumbGlass.layer.position = CGPointMake(CGRectGetMidX(f), CGRectGetMidY(f));
+        _thumbGlass.transform = CGAffineTransformIdentity;
         [CATransaction commit];
     }
 }
@@ -1931,7 +2022,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
         [_cardView addSubview:_passwordField];
 
         _loginButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [_loginButton setTitle:@"Khai Thác" forState:UIControlStateNormal];
+        [_loginButton setTitle:@"Kích hoạt" forState:UIControlStateNormal];
         [_loginButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         _loginButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
         _loginButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
@@ -2237,6 +2328,24 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     });
     return cached;
 }
+static inline NSString *Titanium_DetectJailbreakTypeForUI(void) {
+    Dl_info info;
+    memset(&info, 0, sizeof(info));
+    if (dladdr((const void *)Titanium_DetectJailbreakTypeForUI, &info) && info.dli_fname) {
+        NSString *imagePath = [NSString stringWithUTF8String:info.dli_fname];
+        if ([imagePath containsString:@"/var/jb/"]) {
+            // The /var/jb prefix is evidence of a rootless-style layout, but cannot reliably
+            // distinguish RootHide from ordinary rootless across every bootstrap version.
+            return @"RootHide / Rootless";
+        }
+        if ([imagePath containsString:@"/Library/MobileSubstrate/DynamicLibraries/"] ||
+            [imagePath containsString:@"/usr/lib/TweakInject/"]) {
+            return @"Rootful";
+        }
+    }
+    // Do not infer RootHide/Rootless from Titanium_GetRootHidePrefixPath()'s /var/jb fallback.
+    return @"Không xác định";
+}
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
     if (root && root.length > 0 && ![root isEqualToString:@"/"]) {
@@ -2272,58 +2381,72 @@ static BOOL Titanium_WriteAllBytes(int fd, const void *data, size_t size) {
     return YES;
 }
 
-// Atomic file replacement prevents Tweak.xm from reading a partially written payload.
-static void Titanium_WriteSyncPayloadUniversal(const void *data, size_t size) {
-    if (!data || size == 0) return;
-    NSArray<NSString *> *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
-    for (NSString *path in paths) {
-        NSString *dir = [path stringByDeletingLastPathComponent];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:dir
-                                      withIntermediateDirectories:YES
-                                                       attributes:@{NSFilePosixPermissions: @(0777)}
-                                                            error:nil];
-        }
-        NSString *tempPath = [path stringByAppendingString:@".tmp"];
-        int fd = open([tempPath fileSystemRepresentation], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) continue;
-        BOOL ok = Titanium_WriteAllBytes(fd, data, size);
-        if (ok) fsync(fd);
-        fchmod(fd, 0666);
-        close(fd);
-        if (ok && rename([tempPath fileSystemRepresentation], [path fileSystemRepresentation]) == 0) {
-            chmod([path fileSystemRepresentation], 0666);
-        } else {
-            unlink([tempPath fileSystemRepresentation]);
-        }
+// Sequence values must be comparable across processes and across device reboots. mach_absolute_time()
+// resets after reboot, so use an epoch-nanosecond token for IPC ordering (the payload is private to this tweak).
+static uint64_t Titanium_IPCSequenceNow(void) {
+    NSTimeInterval epoch = [[NSDate date] timeIntervalSince1970];
+    uint64_t candidate = (isfinite(epoch) && epoch >= 1.0)
+        ? (uint64_t)(epoch * 1000000000.0) : (uint64_t)mach_absolute_time();
+    // Keep same-process writes strictly ordered even when NSDate returns the same clock tick.
+    static os_unfair_lock sequenceLock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t lastSequence = 0;
+    os_unfair_lock_lock(&sequenceLock);
+    if (candidate <= lastSequence) candidate = lastSequence + 1;
+    lastSequence = candidate;
+    os_unfair_lock_unlock(&sequenceLock);
+    return candidate;
+}
+
+static BOOL Titanium_WriteAtomicBytesAtPath(NSString *path, const void *data, size_t size) {
+    if (path.length == 0 || (size > 0 && data == NULL)) return NO;
+    NSString *dir = [path stringByDeletingLastPathComponent];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:dir] && ![fm createDirectoryAtPath:dir
+                                        withIntermediateDirectories:YES
+                                                         attributes:@{NSFilePosixPermissions: @(0777)}
+                                                              error:nil] && ![fm fileExistsAtPath:dir]) return NO;
+
+    NSString *template = [path stringByAppendingString:@".tmp.XXXXXX"];
+    char *temporaryPath = strdup([template fileSystemRepresentation]);
+    if (!temporaryPath) return NO;
+    int fd = mkstemp(temporaryPath);
+    if (fd < 0) { free(temporaryPath); return NO; }
+    BOOL ok = Titanium_WriteAllBytes(fd, data, size);
+    if (ok && fsync(fd) != 0) ok = NO;
+    if (ok && fchmod(fd, 0644) != 0) ok = NO;
+    if (close(fd) != 0) ok = NO;
+    if (ok && rename(temporaryPath, [path fileSystemRepresentation]) == 0) {
+        (void)chmod([path fileSystemRepresentation], 0644);
+        int dirFD = open([dir fileSystemRepresentation], O_RDONLY);
+        if (dirFD >= 0) { (void)fsync(dirFD); close(dirFD); }
+    } else {
+        (void)unlink(temporaryPath);
+        ok = NO;
     }
+    free(temporaryPath);
+    return ok;
+}
+
+// Atomic replacement prevents Tweak.xm from reading a partly written payload. Each write gets
+// its own temporary file, so rapid UI toggles cannot overwrite one another's staging file.
+static void Titanium_WriteSyncPayloadUniversal(const void *data, size_t size) {
+    if (!data || size != sizeof(ApexV285ProPayload)) return;
+    (void)Titanium_WriteAtomicBytesAtPath(PRIMARY_SYNC_FILE, data, size);
+    (void)Titanium_WriteAtomicBytesAtPath(SECONDARY_SYNC_FILE, data, size);
 }
 
 // Same disabled-bundle IPC file format consumed by Tweak.xm in third-party app sandboxes.
 static void Titanium_WriteDisabledAppsFile(NSString *joinedIDs) {
     NSData *data = [(joinedIDs ?: @"") dataUsingEncoding:NSUTF8StringEncoding];
-    NSArray<NSString *> *paths = @[APPS_SYNC_FILE_PRIMARY, APPS_SYNC_FILE_SECONDARY];
-    for (NSString *path in paths) {
-        NSString *dir = [path stringByDeletingLastPathComponent];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:dir
-                                      withIntermediateDirectories:YES
-                                                       attributes:@{NSFilePosixPermissions: @(0777)}
-                                                            error:nil];
-        }
-        NSString *tempPath = [path stringByAppendingString:@".tmp"];
-        int fd = open([tempPath fileSystemRepresentation], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) continue;
-        BOOL ok = (data.length == 0) || Titanium_WriteAllBytes(fd, data.bytes, data.length);
-        if (ok) fsync(fd);
-        fchmod(fd, 0666);
-        close(fd);
-        if (ok && rename([tempPath fileSystemRepresentation], [path fileSystemRepresentation]) == 0) {
-            chmod([path fileSystemRepresentation], 0666);
-        } else {
-            unlink([tempPath fileSystemRepresentation]);
-        }
-    }
+    (void)Titanium_WriteAtomicBytesAtPath(APPS_SYNC_FILE_PRIMARY, data.bytes, data.length);
+    (void)Titanium_WriteAtomicBytesAtPath(APPS_SYNC_FILE_SECONDARY, data.bytes, data.length);
+}
+
+static dispatch_queue_t Titanium_IPCWriterQueue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ queue = dispatch_queue_create("com.taojb.boostiphone6s.ipc-writer", DISPATCH_QUEUE_SERIAL); });
+    return queue;
 }
 static inline BOOL Titanium_IsSupportedIOSVersion(void) {
     NSOperatingSystemVersion os = [[NSProcessInfo processInfo] operatingSystemVersion];
@@ -2429,9 +2552,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSTimer *_serverBlinkTimer;
     NSTimer *_latencyTimer;
     NSInteger _currentLatencyMs;
+    NSInteger _serverLastHTTPStatus;
     BOOL _serverDown;
+    BOOL _serverPingReachable;
+    BOOL _serverPingAttempted;
+    BOOL _pingRequestInFlight;
+    uint64_t _serverPingGeneration;
 
     BOOL _isAdminServer;
+    BOOL _adminSessionRestorePending;
     NSString *_adminServerUser;
     NSString *_adminAccessToken;
     NSString *_adminRole;
@@ -2445,6 +2574,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)setupExpandingNavigationItems;
 - (void)reloadVisibleContentWithSubtleTransition;
 - (void)v20HandleForegroundTransition:(NSNotification *)notification;
+- (void)restoreStoredAdminSession;
+- (void)handleExpiredAdminSessionForPath:(NSString *)path;
+- (void)showThemeModePicker;
+- (void)tickLatency;
 @end
 
 @implementation RootListController
@@ -2510,27 +2643,38 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     }
     _isRateLocked = [self.settingsDict[@"IsRateLocked"] boolValue];
 
-    _isAdminServer = [[NSUserDefaults standardUserDefaults] boolForKey:TI_ADMIN_SERVER_KEY];
-    _adminServerUser = nil; // username is never restored from disk
-    NSString *savedServerMode = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    // Never trust a locally stored Admin flag: without a server-issued session it is forgeable.
-    _isAdminServer = NO;
-    _adminServerUser = nil;
-    _adminAccessToken = nil;
-    _adminRole = nil;
-    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TI_ADMIN_SERVER_KEY];
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
-    if (![savedServerMode isEqualToString:@"free"]) {
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
+    NSUserDefaults *sessionDefaults = [NSUserDefaults standardUserDefaults];
+    NSString *savedServerMode = [sessionDefaults stringForKey:TI_SELECTED_SERVER_KEY];
+    _adminAccessToken = Titanium_KeychainReadAdminToken();
+    _adminServerUser = [sessionDefaults stringForKey:TI_ADMIN_USER_KEY];
+    _adminRole = [[sessionDefaults stringForKey:@"TIAdminRole"] lowercaseString];
+    if ([_adminRole isEqualToString:@"dev"] || [_adminRole isEqualToString:@"admin-dev"] || [_adminRole isEqualToString:@"developer"]) _adminRole = @"admin_dev";
+    _isAdminServer = NO; // Do not enable privileged UI until the backend validates the saved token.
+    _adminSessionRestorePending = (_adminAccessToken.length > 0);
+    [sessionDefaults setBool:NO forKey:TI_ADMIN_SERVER_KEY];
+    if (!_adminSessionRestorePending && ![savedServerMode isEqualToString:@"free"] &&
+        ![savedServerMode isEqualToString:@"admin"] && ![savedServerMode isEqualToString:@"admin_dev"]) {
+        [sessionDefaults removeObjectForKey:TI_SELECTED_SERVER_KEY];
+        [sessionDefaults removeObjectForKey:@"TIAdminRole"];
+        [sessionDefaults removeObjectForKey:TI_ADMIN_USER_KEY];
+        _adminServerUser = nil;
+        _adminRole = nil;
     }
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    // Keep the server choice even if the saved admin token is missing/expired. Do not silently
+    // turn an Admin/Admin Dev selection into the first-install/Free flow; authentication still
+    // remains disabled until a fresh backend login succeeds.
+    BOOL selectedAdminMode = [savedServerMode isEqualToString:@"admin"] || [savedServerMode isEqualToString:@"admin_dev"];
+    if (!_adminSessionRestorePending && selectedAdminMode) {
+        [sessionDefaults removeObjectForKey:@"TIAdminRole"];
+        _adminRole = nil;
+        _adminServerUser = [sessionDefaults stringForKey:TI_ADMIN_USER_KEY];
+    }
+    [sessionDefaults synchronize];
 
-    if ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue]) {
-        self.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
-    } else {
-        self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    NSString *themeMode = self.settingsDict[TI_THEME_MODE_KEY];
+    if (![themeMode isKindOfClass:[NSString class]] || themeMode.length == 0) themeMode = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark";
+    if (@available(iOS 13.0, *)) {
+        self.overrideUserInterfaceStyle = [themeMode isEqualToString:@"light"] ? UIUserInterfaceStyleLight : ([themeMode isEqualToString:@"dark"] ? UIUserInterfaceStyleDark : UIUserInterfaceStyleUnspecified);
     }
 
     NSUUID *uuid = [[UIDevice currentDevice] identifierForVendor];
@@ -2576,15 +2720,15 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     // Kiểm tra persistent server state — ưu tiên cao nhất
     if (_isAdminServer) {
         // admin — bỏ qua
-    } else if ([self isServerCurrentlyDown]) {
+    } else if (!_adminSessionRestorePending && [self isServerCurrentlyDown]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self showPersistentServerStateAlert];
         });
-    } else if ([self isServerCurrentlyOverloadedOrError]) {
+    } else if (!_adminSessionRestorePending && [self isServerCurrentlyOverloadedOrError]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self showPersistentServerStateAlert];
         });
-    } else if (!_isFeatureActivated && ([savedServerMode isEqualToString:@"free"] || _isAdminServer)) {
+    } else if (!_adminSessionRestorePending && !_isFeatureActivated && ([savedServerMode isEqualToString:@"free"] || _isAdminServer)) {
         NSInteger cc = Titanium_GetCrashCount();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (cc >= 3) [self showServerDownAlert];
@@ -2594,11 +2738,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     // Fail closed: the app remains locked until a server choice is completed.
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer) {
+    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer && !self->_adminSessionRestorePending) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!self.presentedViewController) [self showFirstInstallServerPicker];
         });
     }
+    if (_adminSessionRestorePending) [self restoreStoredAdminSession];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -2610,6 +2755,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         _liquidNavBarContainer.alpha = 1.0;
     }
     [self refreshBottomTabsAvailability];
+    if (_adminSessionRestorePending) return;
 
     if (_isAdminServer) {
         if (_isFeatureActivated) [self startContinuousHardwareHUD];
@@ -2664,8 +2810,8 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
     if (@available(iOS 13.0, *)) {
-        BOOL autoTheme = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
-        if (autoTheme && (!previousTraitCollection || self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle)) {
+        NSString *themeMode = self.settingsDict[TI_THEME_MODE_KEY] ?: ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
+        if ([themeMode isEqualToString:@"system"] && (!previousTraitCollection || self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle)) {
             [self applyThemePreferenceAnimated:YES];
         }
     }
@@ -2673,7 +2819,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)v20HandleForegroundTransition:(NSNotification *)notification {
     if (!self.isViewLoaded || !self.view.window) return;
-    if ([NSProcessInfo processInfo].isLowPowerModeEnabled) return;
+    if ([NSProcessInfo processInfo].isLowPowerModeEnabled || UIAccessibilityIsReduceMotionEnabled()) return;
     self.customTableView.transform = CGAffineTransformMakeTranslation(0.0, 2.0);
     self.customTableView.alpha = 0.985;
     [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
@@ -2884,13 +3030,21 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)onSwitchToggled:(UISwitch *)sender { if (sender) [self.customTableView reloadData]; }
 
 - (void)showLanguagePickerPopup:(id)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"CHỌN NGÔN NGỮ" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"CHỌN NGÔN NGỮ" message:@"Tự động sẽ dùng ngôn ngữ ưu tiên của iPhone/iPad." preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Tự động theo máy" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"SelectedLanguage"] = @"auto";
+        self.settingsDict[@"AppLanguage"] = @"auto";
+        [self saveSettingsDataAndSync];
+        [self.customTableView reloadData];
+    }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"SelectedLanguage"] = @"vi";
         self.settingsDict[@"AppLanguage"] = @"vi";
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        self.settingsDict[@"SelectedLanguage"] = @"en";
         self.settingsDict[@"AppLanguage"] = @"en";
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
@@ -2899,6 +3053,34 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         sheet.popoverPresentationController.sourceView = self.view;
         sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width/2, self.view.bounds.size.height/2, 1, 1);
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showThemeModePicker {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"GIAO DIỆN" message:@"Chọn chế độ theo nhu cầu. Tự động sẽ theo giao diện hệ thống." preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"Tự động theo máy", @"mode": @"system"},
+        @{@"title": @"Sáng", @"mode": @"light"},
+        @{@"title": @"Tối", @"mode": @"dark"}
+    ];
+    for (NSDictionary *option in options) {
+        [sheet addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            __strong typeof(weakSelf) owner = weakSelf;
+            if (!owner) return;
+            NSString *mode = option[@"mode"];
+            owner.settingsDict[TI_THEME_MODE_KEY] = mode;
+            owner.settingsDict[TI_AUTO_THEME_KEY] = @([mode isEqualToString:@"system"]);
+            [owner saveSettingsDataAndSync];
+            [owner applyThemePreferenceAnimated:YES];
+            [owner.customTableView reloadData];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.sourceView = self.view;
+        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1.0, 1.0);
     }
     [self presentViewController:sheet animated:YES completion:nil];
 }
@@ -2957,6 +3139,10 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)handleServerButtonTap {
     NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    if ([selected isEqualToString:@"admin"] || [selected isEqualToString:@"admin_dev"]) {
+        [self showAdminServerLogin]; // Re-authenticate in-place; do not silently switch the selection to Free.
+        return;
+    }
     if (![selected isEqualToString:@"free"] && !self->_isAdminServer) {
         [self showFirstInstallServerPicker];
         return;
@@ -3058,7 +3244,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
         UIAlertController *loading = [UIAlertController alertControllerWithTitle:@"Đang xác thực" message:@"Đang kiểm tra thông tin với máy chủ…" preferredStyle:UIAlertControllerStyleAlert];
         [strongSelf presentViewController:loading animated:YES completion:nil];
-        CFTimeInterval authStartTime = CACurrentMediaTime();
         [strongSelf performAdminLoginWithUsername:username password:password completion:^(NSDictionary *result, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [loading dismissViewControllerAnimated:YES completion:^{
@@ -3094,28 +3279,33 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                         [strongSelf presentViewController:err animated:YES completion:nil];
                         return;
                     }
-                    // This is login-request elapsed time, not continuous network ping.
-                    strongSelf->_currentLatencyMs = (NSInteger)MAX(0.0, round((CACurrentMediaTime() - authStartTime) * 1000.0));
+                    // RTT is measured by the dedicated HTTP ping monitor, never by login duration.
+                    strongSelf->_currentLatencyMs = -1;
+                    strongSelf->_serverPingReachable = NO;
+                    strongSelf->_serverPingAttempted = NO;
                     strongSelf->_adminAccessToken = result[@"access_token"];
+                    BOOL tokenStored = Titanium_KeychainStoreAdminToken(strongSelf->_adminAccessToken);
                     strongSelf->_adminRole = role;
                     strongSelf->_isAdminServer = YES;
                     strongSelf->_adminServerUser = username;
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_ADMIN_SERVER_KEY];
-                    // Keep username in memory only; don't retain it in the readable preferences file.
-                    [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
+                    // Username is not a secret; persisting it avoids losing the selected account label.
+                    [[NSUserDefaults standardUserDefaults] setObject:username forKey:TI_ADMIN_USER_KEY];
                     [[NSUserDefaults standardUserDefaults] setObject:role forKey:@"TIAdminRole"];
                     [[NSUserDefaults standardUserDefaults] setObject:([role isEqualToString:@"admin_dev"] ? @"admin_dev" : @"admin") forKey:TI_SELECTED_SERVER_KEY];
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TI_FIRST_INSTALL_KEY];
-                    // Token is held in memory only; the backend remains the authority for role/revocation.
+                    // Token is stored in Keychain; the backend remains authoritative for role and revocation.
                     [strongSelf.customTableView setUserInteractionEnabled:YES];
                     [strongSelf updateServerStatusIndicator];
                     [strongSelf updateRoleBadgeTitle:([role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin")];
                     [strongSelf refreshBottomTabsAvailability];
                     [strongSelf.customTableView reloadData];
+                    [strongSelf tickLatency];
                     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
                     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
                     NSString *roleLabel = [role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin";
-                    UIAlertController *ok = [UIAlertController alertControllerWithTitle:@"Đã xác thực" message:[NSString stringWithFormat:@"Đăng nhập thành công.\nVai trò: %@", roleLabel] preferredStyle:UIAlertControllerStyleAlert];
+                    NSString *successMessage = [NSString stringWithFormat:@"Đăng nhập thành công.\nVai trò: %@%@", roleLabel, tokenStored ? @"" : @"\n\nCảnh báo: iOS không lưu được phiên vào Keychain; có thể cần đăng nhập lại sau khi đóng Cài đặt."];
+                    UIAlertController *ok = [UIAlertController alertControllerWithTitle:@"Đã xác thực" message:successMessage preferredStyle:UIAlertControllerStyleAlert];
                     [ok addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
                         if ([role isEqualToString:@"admin_dev"]) {
                             [strongSelf revealAdminDevOnlyControlsIfAvailable];
@@ -3136,6 +3326,110 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
     }]];
     [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)restoreStoredAdminSession {
+    NSString *token = _adminAccessToken;
+    if (!_adminSessionRestorePending || token.length == 0) { _adminSessionRestorePending = NO; return; }
+    NSString *base = [self currentAdminAPIBaseURL];
+    NSURL *url = [NSURL URLWithString:[base stringByAppendingString:@"/v1/auth/me"]];
+    if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
+        _adminSessionRestorePending = NO;
+        _isAdminServer = NO;
+        self.customTableView.userInteractionEnabled = NO;
+        if (self.view.window && !self.presentedViewController) {
+            UIAlertController *invalid = [UIAlertController alertControllerWithTitle:@"Endpoint không hợp lệ" message:@"Không thể xác minh phiên Admin vì URL backend không phải HTTPS hợp lệ. Kiểm tra URL rồi đăng nhập lại." preferredStyle:UIAlertControllerStyleAlert];
+            [invalid addAction:[UIAlertAction actionWithTitle:@"Đăng nhập lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [self showAdminServerLogin]; }]];
+            [invalid addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+            [self presentViewController:invalid animated:YES completion:nil];
+        }
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:8.0];
+    request.HTTPMethod = @"GET";
+    [request setValue:[NSString stringWithFormat:@"Bearer %@", token] forHTTPHeaderField:@"Authorization"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    __weak typeof(self) weakSelf = self;
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
+        id parsed = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSDictionary *json = [parsed isKindOfClass:[NSDictionary class]] ? parsed : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) owner = weakSelf;
+            if (!owner) return;
+            owner->_adminSessionRestorePending = NO;
+            NSString *role = [json[@"role"] isKindOfClass:[NSString class]] ? [json[@"role"] lowercaseString] : @"";
+            if ([role isEqualToString:@"dev"] || [role isEqualToString:@"admin-dev"] || [role isEqualToString:@"developer"]) role = @"admin_dev";
+            if (!error && http.statusCode >= 200 && http.statusCode < 300 && ([role isEqualToString:@"admin"] || [role isEqualToString:@"admin_dev"])) {
+                owner->_adminRole = role;
+                owner->_adminServerUser = [json[@"username"] isKindOfClass:[NSString class]] ? json[@"username"] : owner->_adminServerUser;
+                owner->_isAdminServer = YES;
+                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                [defaults setBool:YES forKey:TI_ADMIN_SERVER_KEY];
+                [defaults setObject:role forKey:@"TIAdminRole"];
+                if (owner->_adminServerUser.length) [defaults setObject:owner->_adminServerUser forKey:TI_ADMIN_USER_KEY];
+                [defaults setObject:role forKey:TI_SELECTED_SERVER_KEY];
+                [defaults synchronize];
+                owner.customTableView.userInteractionEnabled = YES;
+                [owner updateRoleBadgeTitle:([role isEqualToString:@"admin_dev"] ? @"Admin Dev" : @"Admin")];
+                [owner updateServerStatusIndicator];
+                [owner refreshBottomTabsAvailability];
+                [owner.customTableView reloadData];
+                [owner tickLatency];
+                if (owner->_isFeatureActivated) [owner startContinuousHardwareHUD];
+                return;
+            }
+
+            owner->_isAdminServer = NO;
+            [owner updateRoleBadgeTitle:@"Server"];
+            owner.customTableView.userInteractionEnabled = NO;
+            [owner refreshBottomTabsAvailability];
+            [owner.customTableView reloadData];
+            if (http.statusCode == 401 || http.statusCode == 403) {
+                Titanium_KeychainDeleteAdminToken();
+                owner->_adminAccessToken = nil;
+                owner->_adminRole = nil;
+                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                [defaults setBool:NO forKey:TI_ADMIN_SERVER_KEY];
+                [defaults removeObjectForKey:@"TIAdminRole"];
+                [defaults synchronize];
+                UIAlertController *expired = [UIAlertController alertControllerWithTitle:@"Phiên Admin hết hạn" message:@"Máy chủ đã hết hạn hoặc thu hồi phiên đã lưu. Hãy đăng nhập lại; quyền truy cập vẫn được kiểm tra bởi backend." preferredStyle:UIAlertControllerStyleAlert];
+                [expired addAction:[UIAlertAction actionWithTitle:@"Đăng nhập lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [owner showAdminServerLogin]; }]];
+                [expired addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
+                if (owner.view.window && !owner.presentedViewController) [owner presentViewController:expired animated:YES completion:nil];
+            } else {
+                // Keep the Keychain token after a transient network error, but fail closed until /me succeeds.
+                if (owner.view.window && !owner.presentedViewController) {
+                    NSString *message = error.localizedDescription ?: @"Không thể xác minh phiên với backend. Hãy thử lại khi có kết nối.";
+                    UIAlertController *offline = [UIAlertController alertControllerWithTitle:@"Chưa xác minh được phiên" message:message preferredStyle:UIAlertControllerStyleAlert];
+                    [offline addAction:[UIAlertAction actionWithTitle:@"Thử lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { owner->_adminSessionRestorePending = YES; [owner restoreStoredAdminSession]; }]];
+                    [offline addAction:[UIAlertAction actionWithTitle:@"Đăng nhập lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [owner showAdminServerLogin]; }]];
+                    [owner presentViewController:offline animated:YES completion:nil];
+                }
+            }
+        });
+    }] resume];
+}
+
+- (void)handleExpiredAdminSessionForPath:(NSString *)path {
+    (void)path;
+    Titanium_KeychainDeleteAdminToken();
+    _adminAccessToken = nil;
+    _adminRole = nil;
+    _isAdminServer = NO;
+    _adminSessionRestorePending = NO;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:NO forKey:TI_ADMIN_SERVER_KEY];
+    [defaults removeObjectForKey:@"TIAdminRole"];
+    // Keep TI_SELECTED_SERVER_KEY as admin/admin_dev so the next tap offers re-login, not Free.
+    [defaults synchronize];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateRoleBadgeTitle:@"Server"];
+        self.customTableView.userInteractionEnabled = NO;
+        [self refreshBottomTabsAvailability];
+        [self updateServerStatusIndicator];
+        [self.customTableView reloadData];
+    });
 }
 
 - (void)showAdminDevAPIURLEditor {
@@ -3165,10 +3459,25 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             return;
         }
         while (candidate.length > 0 && [candidate hasSuffix:@"/"]) candidate = [candidate substringToIndex:candidate.length - 1];
+        NSString *previousBase = [strongSelf currentAdminAPIBaseURL];
         [[NSUserDefaults standardUserDefaults] setObject:candidate forKey:TIAdminAPIBaseURLOverrideKey];
-        [[NSUserDefaults standardUserDefaults] synchronize];
+        if (![candidate isEqualToString:previousBase]) {
+            Titanium_KeychainDeleteAdminToken();
+            strongSelf->_adminAccessToken = nil;
+            strongSelf->_adminRole = nil;
+            strongSelf->_isAdminServer = NO;
+            strongSelf->_adminSessionRestorePending = NO;
+            [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TI_ADMIN_SERVER_KEY];
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            [strongSelf updateRoleBadgeTitle:@"Server"];
+            strongSelf.customTableView.userInteractionEnabled = NO;
+        } else {
+            [[NSUserDefaults standardUserDefaults] synchronize];
+        }
         [strongSelf.customTableView reloadData];
-        UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Đã lưu" message:@"Endpoint đã lưu trên thiết bị. Phiên đăng nhập hiện tại vẫn được kiểm soát bởi backend cũ cho đến khi đăng nhập lại." preferredStyle:UIAlertControllerStyleAlert];
+        [strongSelf refreshBottomTabsAvailability];
+        UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Đã lưu" message:@"Endpoint đã lưu. Vì phiên đăng nhập gắn với máy chủ, hãy đăng nhập lại để xác minh quyền trên endpoint mới." preferredStyle:UIAlertControllerStyleAlert];
         [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [strongSelf presentViewController:saved animated:YES completion:nil];
     }]];
@@ -3212,7 +3521,64 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (http.statusCode < 200 || http.statusCode >= 300 || ![object isKindOfClass:[NSDictionary class]]) {
             NSString *message = nil;
             if (http.statusCode == 401) {
-                message = [NSString stringWithFormat:@"Phiên đăng nhập bị hết hạn/thu hồi (HTTP 401, %@). Hãy đăng nhập lại.", path ?: @"/v1"];
+                // A route-specific 401 does not by itself prove the whole session expired. Validate
+                // the same bearer token at /v1/auth/me before clearing Keychain and role state.
+                NSString *tokenForDiagnostic = [self->_adminAccessToken copy] ?: @"";
+                NSURL *meURL = [NSURL URLWithString:[base stringByAppendingString:@"/v1/auth/me"]];
+                if (meURL && tokenForDiagnostic.length > 0) {
+                    NSMutableURLRequest *meRequest = [NSMutableURLRequest requestWithURL:meURL cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:8.0];
+                    meRequest.HTTPMethod = @"GET";
+                    [meRequest setValue:[NSString stringWithFormat:@"Bearer %@", tokenForDiagnostic] forHTTPHeaderField:@"Authorization"];
+                    [meRequest setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+                    [[session dataTaskWithRequest:meRequest completionHandler:^(NSData *meData, NSURLResponse *meResponse, NSError *meError) {
+                        NSHTTPURLResponse *meHTTP = [meResponse isKindOfClass:[NSHTTPURLResponse class]] ? (NSHTTPURLResponse *)meResponse : nil;
+                        id parsedMe = meData.length ? [NSJSONSerialization JSONObjectWithData:meData options:0 error:nil] : nil;
+                        NSDictionary *meJSON = [parsedMe isKindOfClass:[NSDictionary class]] ? (NSDictionary *)parsedMe : nil;
+                        NSString *serverRole = [meJSON[@"role"] isKindOfClass:[NSString class]] ? [meJSON[@"role"] lowercaseString] : @"";
+                        if ([serverRole isEqualToString:@"dev"] || [serverRole isEqualToString:@"admin-dev"] || [serverRole isEqualToString:@"developer"]) serverRole = @"admin_dev";
+
+                        NSInteger errorCode = 1402;
+                        NSString *diagnostic = nil;
+                        BOOL validated = !meError && meHTTP.statusCode >= 200 && meHTTP.statusCode < 300;
+                        if (validated) {
+                            if ([serverRole isEqualToString:@"admin_dev"]) {
+                                errorCode = 1401;
+                                diagnostic = [NSString stringWithFormat:@"/v1/auth/me vẫn xác nhận admin_dev nhưng %@ trả HTTP 401. Phiên chưa bị xóa; kiểm tra route/middleware hoặc cấu hình backend của endpoint.", path ?: @"/v1"];
+                            } else if ([serverRole isEqualToString:@"admin"]) {
+                                errorCode = 1403;
+                                diagnostic = [NSString stringWithFormat:@"/v1/auth/me xác nhận role admin, không phải admin_dev; endpoint %@ bị từ chối. Vai trò giao diện sẽ được hạ về Admin.", path ?: @"/v1"];
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    self->_adminRole = @"admin";
+                                    self->_isAdminServer = YES;
+                                    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                                    [defaults setBool:YES forKey:TI_ADMIN_SERVER_KEY];
+                                    [defaults setObject:@"admin" forKey:@"TIAdminRole"];
+                                    [defaults setObject:@"admin" forKey:TI_SELECTED_SERVER_KEY];
+                                    [defaults synchronize];
+                                    [self updateRoleBadgeTitle:@"Admin"];
+                                    [self refreshBottomTabsAvailability];
+                                    [self.customTableView reloadData];
+                                });
+                            } else {
+                                errorCode = 401;
+                                diagnostic = [NSString stringWithFormat:@"/v1/auth/me không trả về vai trò quản trị hợp lệ cho endpoint %@. Phiên bị vô hiệu hóa ở giao diện; hãy đăng nhập lại hoặc kiểm tra role trong backend.", path ?: @"/v1"];
+                                dispatch_async(dispatch_get_main_queue(), ^{ [self handleExpiredAdminSessionForPath:path]; });
+                            }
+                        } else if (meHTTP.statusCode == 401 || meHTTP.statusCode == 403) {
+                            errorCode = 401;
+                            diagnostic = @"Backend cũng từ chối /v1/auth/me (401/403). Phiên có thể hết hạn hoặc bị thu hồi; đăng nhập lại để lấy token mới.";
+                            dispatch_async(dispatch_get_main_queue(), ^{ [self handleExpiredAdminSessionForPath:path]; });
+                        } else {
+                            errorCode = 1402;
+                            diagnostic = [NSString stringWithFormat:@"%@ trả HTTP 401 nhưng chưa xác minh được /v1/auth/me. Token được giữ nguyên; kiểm tra mạng/backend rồi thử lại.", path ?: @"/v1"];
+                        }
+                        NSError *diagnosticError = [NSError errorWithDomain:@"TIAdminAPI" code:errorCode userInfo:@{NSLocalizedDescriptionKey:diagnostic}];
+                        if (completion) completion(nil, diagnosticError);
+                    }] resume];
+                    return;
+                }
+                dispatch_async(dispatch_get_main_queue(), ^{ [self handleExpiredAdminSessionForPath:path]; });
+                message = [NSString stringWithFormat:@"Phiên đăng nhập không có token hợp lệ (HTTP 401, %@). Hãy đăng nhập lại.", path ?: @"/v1"];
             } else if (http.statusCode == 403) {
                 // Diagnose the role from the backend itself. Never promote a role on the client.
                 NSString *tokenForDiagnostic = [self->_adminAccessToken copy] ?: @"";
@@ -3275,7 +3641,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 message = json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"Backend trả dữ liệu không đọc được.";
                 if (message.length > 3200) message = [[message substringToIndex:3200] stringByAppendingString:@"\n… (đã rút gọn)"];
             }
-            UIAlertController *info = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+            BOOL sessionExpired = error && [error.domain isEqualToString:@"TIAdminAPI"] && error.code == 401;
+            UIAlertController *info = [UIAlertController alertControllerWithTitle:(sessionExpired ? @"Phiên đăng nhập hết hạn" : title) message:message preferredStyle:UIAlertControllerStyleAlert];
+            if (sessionExpired) {
+                [info addAction:[UIAlertAction actionWithTitle:@"Đăng nhập lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [selfRef showAdminServerLogin]; }]];
+            }
             [info addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
             [selfRef presentViewController:info animated:YES completion:nil];
         });
@@ -3383,18 +3753,91 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Latency
 
 - (void)startLatencyMonitor {
-    // V22: no random RTT simulation and no periodic blink/reload timer. The value is populated
-    // only by a real request (admin login); otherwise the UI says it hasn't been measured.
+    // V25: real HTTP round-trip measurement, no random values and no periodic table reloads.
     [_latencyTimer invalidate]; _latencyTimer = nil;
     [_serverBlinkTimer invalidate]; _serverBlinkTimer = nil;
     _currentLatencyMs = -1;
-    [self updateServerStatusIndicator];
+    _serverPingReachable = NO;
+    _serverPingAttempted = NO;
+    _serverLastHTTPStatus = 0;
+    _pingRequestInFlight = NO;
+    [self tickLatency];
+    _latencyTimer = [NSTimer scheduledTimerWithTimeInterval:20.0 target:self selector:@selector(tickLatency) userInfo:nil repeats:YES];
 }
 
-// Tỉ lệ: 0.01% sập (1/10000), 0.1% quá tải hoặc lỗi (10/10000)
 - (void)tickLatency {
-    // Intentionally no simulated random ping. A network request should set this value when measured.
+    if (_pingRequestInFlight) return;
+    NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    BOOL adminMode = _isAdminServer || [selected isEqualToString:@"admin"] || [selected isEqualToString:@"admin_dev"];
+    if (!adminMode) {
+        // No Free-server URL was provided in the source. Do not ping an unrelated Admin endpoint
+        // and incorrectly label that number as the Free server's latency.
+        _currentLatencyMs = -1;
+        _serverPingReachable = NO;
+        _serverPingAttempted = NO;
+        [self updateServerStatusIndicator];
+        return;
+    }
+
+    NSString *base = [self currentAdminAPIBaseURL];
+    NSURL *url = [NSURL URLWithString:[base stringByAppendingString:@"/"]];
+    if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
+        _serverPingAttempted = YES;
+        _serverPingReachable = NO;
+        _currentLatencyMs = -1;
+        [self updateServerStatusIndicator];
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:6.0];
+    request.HTTPMethod = @"GET";
+    [request setValue:@"no-cache" forHTTPHeaderField:@"Cache-Control"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    _pingRequestInFlight = YES;
+    _serverPingAttempted = YES;
+    uint64_t generation = ++_serverPingGeneration;
+    CFTimeInterval started = CACurrentMediaTime();
+    if (_serverStatusDot && ![_serverStatusDot.layer animationForKey:@"TI_ServerPingPulse"]) {
+        CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        pulse.fromValue = @0.40; pulse.toValue = @1.0; pulse.duration = 0.65;
+        pulse.autoreverses = YES; pulse.repeatCount = HUGE_VALF;
+        [_serverStatusDot.layer addAnimation:pulse forKey:@"TI_ServerPingPulse"];
+        if (_serverStatusLabel && ![_serverStatusLabel.layer animationForKey:@"TI_ServerPingPulse"]) {
+            [_serverStatusLabel.layer addAnimation:pulse forKey:@"TI_ServerPingPulse"];
+        }
+    }
     [self updateServerStatusIndicator];
+
+    __weak typeof(self) weakSelf = self;
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        (void)data;
+        NSHTTPURLResponse *http = [response isKindOfClass:[NSHTTPURLResponse class]] ? (NSHTTPURLResponse *)response : nil;
+        NSInteger elapsed = (NSInteger)MAX(0.0, round((CACurrentMediaTime() - started) * 1000.0));
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) owner = weakSelf;
+            if (!owner || generation != owner->_serverPingGeneration) return;
+            owner->_pingRequestInFlight = NO;
+            [owner->_serverStatusDot.layer removeAnimationForKey:@"TI_ServerPingPulse"];
+            [owner->_serverStatusLabel.layer removeAnimationForKey:@"TI_ServerPingPulse"];
+            owner->_serverStatusDot.layer.opacity = 1.0;
+            owner->_serverStatusLabel.layer.opacity = 1.0;
+            if (!error && http) {
+                // Any HTTP response proves network reachability; RTT is reported separately from route status.
+                owner->_serverPingReachable = YES;
+                owner->_currentLatencyMs = elapsed;
+                owner->_serverLastHTTPStatus = http.statusCode;
+            } else {
+                owner->_serverPingReachable = NO;
+                owner->_currentLatencyMs = -1;
+                owner->_serverLastHTTPStatus = 0;
+            }
+            [owner updateServerStatusIndicator];
+            if (owner->_currentBottomTab == 4 && owner.customTableView.numberOfSections > 2 && [owner.customTableView numberOfRowsInSection:2] > 1) {
+                NSArray *rows = @[[NSIndexPath indexPathForRow:0 inSection:2], [NSIndexPath indexPathForRow:1 inSection:2]];
+                [UIView performWithoutAnimation:^{ [owner.customTableView reloadRowsAtIndexPaths:rows withRowAnimation:UITableViewRowAnimationNone]; }];
+            }
+        });
+    }] resume];
 }
 
 - (void)handleServerCrash {
@@ -3423,32 +3866,48 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)updateServerStatusIndicator {
     if (!_serverStatusDot || !_serverStatusLabel) return;
+    NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    BOOL adminMode = _isAdminServer || [selected isEqualToString:@"admin"] || [selected isEqualToString:@"admin_dev"];
 
-    if (_isAdminServer) {
-        _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
-        _serverStatusLabel.text = (_currentLatencyMs >= 0)
-            ? [NSString stringWithFormat:@"Admin: %ld ms", (long)_currentLatencyMs]
-            : @"Admin: Đã xác thực";
-        _serverStatusLabel.textColor = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
+    if (adminMode) {
+        if (_serverPingReachable && _currentLatencyMs >= 0) {
+            if (_currentLatencyMs >= 500) _serverStatusDot.backgroundColor = [UIColor systemRedColor];
+            else if (_currentLatencyMs >= 150) _serverStatusDot.backgroundColor = [UIColor systemYellowColor];
+            else _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
+            _serverStatusLabel.text = [NSString stringWithFormat:@"Admin: %ld ms", (long)_currentLatencyMs];
+            _serverStatusLabel.textColor = _serverStatusDot.backgroundColor;
+        } else if (_pingRequestInFlight) {
+            _serverStatusDot.backgroundColor = [UIColor systemYellowColor];
+            _serverStatusLabel.text = @"Admin: Đang đo…";
+            _serverStatusLabel.textColor = [UIColor systemYellowColor];
+        } else if (_serverPingAttempted) {
+            _serverStatusDot.backgroundColor = [UIColor systemRedColor];
+            _serverStatusLabel.text = @"Admin: Mất kết nối";
+            _serverStatusLabel.textColor = [UIColor systemRedColor];
+        } else {
+            _serverStatusDot.backgroundColor = [UIColor colorWithWhite:0.55 alpha:1.0];
+            _serverStatusLabel.text = @"Admin: Chưa đo";
+            _serverStatusLabel.textColor = [UIColor colorWithWhite:0.75 alpha:1.0];
+        }
         return;
     }
 
     int pState = Titanium_CurrentPersistentServerState();
     if (pState == TI_STATE_DOWN) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = @"Server Free: Đang gặp sự cố";
+        _serverStatusLabel.text = @"Free: Đang sự cố";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
     } else if (pState == TI_STATE_OVERLOAD) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = @"Server Free: Đang quá tải";
+        _serverStatusLabel.text = @"Free: Quá tải";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
     } else if (pState == TI_STATE_ERROR) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = @"Server Free: Lỗi kết nối";
+        _serverStatusLabel.text = @"Free: Lỗi kết nối";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
     } else if (_currentLatencyMs < 0) {
         _serverStatusDot.backgroundColor = [UIColor colorWithWhite:0.55 alpha:1.0];
-        _serverStatusLabel.text = @"Server Free: Chưa đo ping";
+        _serverStatusLabel.text = @"Free: Chưa có URL ping";
         _serverStatusLabel.textColor = [UIColor colorWithWhite:0.75 alpha:1.0];
     } else if (_currentLatencyMs >= 500) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
@@ -3628,15 +4087,16 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - V20.1 Theme, Glass and locked-state helpers
 
 - (void)applyThemePreferenceAnimated:(BOOL)animated {
-    BOOL followsSystem = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
+    NSString *themeMode = self.settingsDict[TI_THEME_MODE_KEY] ?: ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
+    BOOL followsSystem = [themeMode isEqualToString:@"system"];
     if (@available(iOS 13.0, *)) {
-        UIUserInterfaceStyle style = followsSystem ? UIUserInterfaceStyleUnspecified : UIUserInterfaceStyleDark;
+        UIUserInterfaceStyle style = followsSystem ? UIUserInterfaceStyleUnspecified : ([themeMode isEqualToString:@"light"] ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark);
         self.overrideUserInterfaceStyle = style;
         self.navigationController.overrideUserInterfaceStyle = style;
         if (self.view.window) self.view.window.overrideUserInterfaceStyle = style;
     }
     dispatch_async(dispatch_get_main_queue(), ^{
-        BOOL dark = !followsSystem || self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
+        BOOL dark = [themeMode isEqualToString:@"dark"] || (followsSystem && self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight);
         NSArray *colors = dark ? @[
             (id)[UIColor colorWithRed:0.055 green:0.035 blue:0.105 alpha:1.0].CGColor,
             (id)[UIColor colorWithRed:0.008 green:0.008 blue:0.025 alpha:1.0].CGColor
@@ -3652,8 +4112,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             }
         }
         [CATransaction begin];
-        [CATransaction setDisableActions:!animated];
-        [CATransaction setAnimationDuration:animated ? 0.24 : 0.0];
+        BOOL allowAnimation = animated && !UIAccessibilityIsReduceMotionEnabled();
+        [CATransaction setDisableActions:!allowAnimation];
+        [CATransaction setAnimationDuration:allowAnimation ? 0.24 : 0.0];
         gradient.colors = colors;
         [CATransaction commit];
         self.view.backgroundColor = dark ? [UIColor colorWithRed:0.01 green:0.01 blue:0.03 alpha:1.0] : [UIColor colorWithWhite:0.97 alpha:1.0];
@@ -4407,16 +4868,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             if (indexPath.row == 0) {
                 title = @"Độ Trễ Server";
                 int pState = Titanium_CurrentPersistentServerState();
-                if (_isAdminServer) {
-                    detail = (_currentLatencyMs >= 0)
-                        ? [NSString stringWithFormat:@"%ld ms (Admin)", (long)_currentLatencyMs]
-                        : ([self isAdminDevRole] ? @"Admin Dev · Đã xác thực" : @"Admin · Đã xác thực");
-                    accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0];
+                NSString *selectedMode = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+                BOOL adminMode = _isAdminServer || [selectedMode isEqualToString:@"admin"] || [selectedMode isEqualToString:@"admin_dev"];
+                if (adminMode) {
+                    detail = _serverPingReachable && _currentLatencyMs >= 0
+                        ? [NSString stringWithFormat:@"%ld ms HTTP RTT", (long)_currentLatencyMs]
+                        : (_pingRequestInFlight ? @"Đang đo HTTP RTT…" : (_serverPingAttempted ? @"Không kết nối được API" : @"Đang chờ đo API"));
+                    accent = _serverPingReachable ? (_currentLatencyMs >= 500 ? [UIColor systemRedColor] : (_currentLatencyMs >= 150 ? [UIColor systemYellowColor] : [UIColor systemGreenColor])) : [UIColor colorWithWhite:0.70 alpha:1.0];
                 } else if (pState != TI_STATE_OK) {
                     detail = (pState == TI_STATE_DOWN) ? @"Đang gặp sự cố" : ((pState == TI_STATE_OVERLOAD) ? @"Đang quá tải" : @"Lỗi kết nối");
                     accent = [UIColor systemRedColor];
                 } else if (_currentLatencyMs < 0) {
-                    detail = @"Chưa đo ping";
+                    detail = @"Chưa cấu hình URL ping cho Server Free";
                     accent = [UIColor colorWithWhite:0.70 alpha:1.0];
                 } else {
                     detail = [NSString stringWithFormat:@"%ld ms", (long)_currentLatencyMs];
@@ -4445,18 +4908,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 }
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else if (indexPath.row == 3) {
-                title = @"Sáng/Tối Tự Động";
-                LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
-                s.on = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue];
-                __weak typeof(self) wS = self;
-                s.valueChangedBlock = ^(BOOL isOn) {
-                    __strong typeof(wS) sS = wS;
-                    if (!sS) return;
-                    sS.settingsDict[TI_AUTO_THEME_KEY] = @(isOn);
-                    [sS saveSettingsDataAndSync];
-                    [sS applyThemePreferenceAnimated:YES];
-                };
-                accessory = s;
+                title = @"Giao diện Sáng / Tối / Tự động";
+                NSString *mode = self.settingsDict[TI_THEME_MODE_KEY] ?: ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
+                detail = [mode isEqualToString:@"light"] ? @"Sáng" : ([mode isEqualToString:@"dark"] ? @"Tối" : @"Theo giao diện hệ thống");
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else if (indexPath.row == 4 && [self isAdminDevRole]) {
                 title = @"Server API URL";
                 NSString *base = [self currentAdminAPIBaseURL];
@@ -4486,11 +4941,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 return cell;
             }
             NSString *jbRoot = Titanium_GetRootHidePrefixPath();
-            BOOL isR = [jbRoot containsString:@"/var/jb"];
-            if (indexPath.row == 0) { title = @"Môi Trường"; detail = isR ? @"Rootless" : @"Rootful"; }
-            else if (indexPath.row == 1) { title = @"Vùng"; detail = jbRoot; }
-            else if (indexPath.row == 2) { title = @"Sandbox"; detail = @"Đã Phá"; }
-            else { title = @"IPC"; detail = @"RW"; }
+            if (indexPath.row == 0) { title = @"Môi Trường Jailbreak"; detail = Titanium_DetectJailbreakTypeForUI(); }
+            else if (indexPath.row == 1) { title = @"Prefix Bootstrap"; detail = jbRoot ?: @"Không xác định"; }
+            else if (indexPath.row == 2) { title = @"Sandbox"; detail = @"Không thể xác minh từ ứng dụng"; }
+            else { title = @"IPC"; detail = @"Đường dẫn đồng bộ nội bộ"; }
         }
     }
 
@@ -4566,6 +5020,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         else [self openDopamineStyleExploitConsole];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2) {
         [self showAdminServerLogin];
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3) {
+        [self showThemeModePicker];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4) {
         if ([self isAdminDevRole]) [self showAdminDevAPIURLEditor];
         else [self showUnexploitedWarningAlert];
@@ -4810,7 +5266,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         p.reserved[sizeof(p.reserved) - 1] = '\0';
     }
 
-    p.updateSeq = (uint64_t)mach_absolute_time();
+    p.updateSeq = Titanium_IPCSequenceNow();
     p.lastHeartbeat = p.updateSeq;
 
     // Share the exact exclusion list format that Tweak.xm reads outside the SpringBoard sandbox.
@@ -4826,7 +5282,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
     ApexV285ProPayload payloadCopy = p;
 
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    dispatch_async(Titanium_IPCWriterQueue(), ^{
         Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayload));
         Titanium_WriteDisabledAppsFile(disabledJoined);
 
@@ -5042,6 +5498,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"FeatureActivationComplete"]) self.settingsDict[@"FeatureActivationComplete"] = @NO;
     if (!self.settingsDict[TI_AUTO_THEME_KEY])   self.settingsDict[TI_AUTO_THEME_KEY]   = @NO;
+    if (![self.settingsDict[TI_THEME_MODE_KEY] isKindOfClass:[NSString class]]) {
+        self.settingsDict[TI_THEME_MODE_KEY] = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark";
+    }
+    if (!self.settingsDict[@"SelectedLanguage"]) {
+        self.settingsDict[@"SelectedLanguage"] = self.settingsDict[@"AppLanguage"] ?: @"auto";
+    }
     if (!self.settingsDict[@"IsAdminServer"])    self.settingsDict[@"IsAdminServer"]    = @NO;
 }
 
@@ -5169,6 +5631,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SERVER_DOWN_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
+        Titanium_KeychainDeleteAdminToken();
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FIRST_INSTALL_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
