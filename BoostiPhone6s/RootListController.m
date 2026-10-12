@@ -98,7 +98,7 @@ static void Titanium_KeychainDeleteAdminToken(void) {
 }
 
 // ====================================================================================================
-// SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại qua cả uninstall
+// SERVER STATE PERSISTENT — sống ngoài tweak plist, tồn tại 
 // States: 0=OK, 1=Overload, 2=Error, 3=Down
 // ====================================================================================================
 #define TI_STATE_OK       0
