@@ -1415,8 +1415,8 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
         }
     }
 
-    NSString *template = [targetPath stringByAppendingString:@".tmp.XXXXXX"];
-    char *temporaryPath = strdup([template fileSystemRepresentation]);
+    NSString *temporaryTemplate = [targetPath stringByAppendingString:@".tmp.XXXXXX"];
+    char *temporaryPath = strdup([temporaryTemplate fileSystemRepresentation]);
     if (!temporaryPath) return NO;
 
     int fd = mkstemp(temporaryPath);
