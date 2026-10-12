@@ -1398,25 +1398,102 @@ static void Titanium_ApplySiliconDeepOptimizations(void) {
 #endif
 }
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ghi đồng bộ tệp IPC atomic ra cả hai phân vùng Rootless & Rootful
+// V25: safe IPC writer. Use per-write temporary files (not a shared .tmp name),
+// retry interrupted/short writes and replace the target only after the full payload is durable.
+static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes, size_t length) {
+    if (targetPath.length == 0 || (length > 0 && bytes == NULL)) return NO;
+
+    NSString *directory = [targetPath stringByDeletingLastPathComponent];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:directory]) {
+        NSError *directoryError = nil;
+        if (![fm createDirectoryAtPath:directory
+           withIntermediateDirectories:YES
+                            attributes:@{NSFilePosixPermissions: @(0755)}
+                                 error:&directoryError] && ![fm fileExistsAtPath:directory]) {
+            return NO;
+        }
+    }
+
+    NSString *template = [targetPath stringByAppendingString:@".tmp.XXXXXX"];
+    char *temporaryPath = strdup([template fileSystemRepresentation]);
+    if (!temporaryPath) return NO;
+
+    int fd = mkstemp(temporaryPath);
+    if (fd < 0) {
+        free(temporaryPath);
+        return NO;
+    }
+
+    BOOL ok = YES;
+    const uint8_t *cursor = (const uint8_t *)bytes;
+    size_t remaining = length;
+    while (remaining > 0) {
+        ssize_t written = write(fd, cursor, remaining);
+        if (written < 0 && errno == EINTR) continue;
+        if (written <= 0) { ok = NO; break; }
+        cursor += (size_t)written;
+        remaining -= (size_t)written;
+    }
+    if (ok && fsync(fd) != 0) ok = NO;
+    if (ok && fchmod(fd, 0644) != 0) ok = NO;
+    if (close(fd) != 0) ok = NO;
+
+    if (ok && rename(temporaryPath, [targetPath fileSystemRepresentation]) == 0) {
+        (void)chmod([targetPath fileSystemRepresentation], 0644);
+        int dirFD = open([directory fileSystemRepresentation], O_RDONLY);
+        if (dirFD >= 0) { (void)fsync(dirFD); close(dirFD); }
+    } else {
+        (void)unlink(temporaryPath);
+        ok = NO;
+    }
+    free(temporaryPath);
+    return ok;
+}
+
+static uint64_t Titanium_IPCSequenceNowV25(void) {
+    NSTimeInterval epoch = [[NSDate date] timeIntervalSince1970];
+    uint64_t candidate = (isfinite(epoch) && epoch >= 1.0)
+        ? (uint64_t)(epoch * 1000000000.0) : (uint64_t)mach_absolute_time();
+    // SpringBoard emits the preference sequence; make rapid same-process changes strictly ordered.
+    static os_unfair_lock sequenceLock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t lastSequence = 0;
+    os_unfair_lock_lock(&sequenceLock);
+    if (candidate <= lastSequence) candidate = lastSequence + 1;
+    lastSequence = candidate;
+    os_unfair_lock_unlock(&sequenceLock);
+    return candidate;
+}
+
+// Don't let an older queued heartbeat replace a newer preference payload. Per-path comparison
+// is necessary because the primary and RootHide-compatible files can briefly differ during writes.
 static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t dataSize) {
-    if (!payloadData || dataSize == 0) return;
+    if (!payloadData || dataSize != sizeof(ApexV285ProPayload)) return;
+    ApexV285ProPayload incoming;
+    memcpy(&incoming, payloadData, sizeof(incoming));
+    if (incoming.magic != APEX_SYNC_MAGIC_V285) return;
 
-    NSArray *targetPaths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
-    for (NSString *targetPath in targetPaths) {
-        NSString *dir = [targetPath stringByDeletingLastPathComponent];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
-        }
-
-        NSString *tempPath = [targetPath stringByAppendingString:@".tmp"];
-        int fd = open([tempPath UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
+    for (NSString *path in paths) {
+        int fd = open([path UTF8String], O_RDONLY);
         if (fd >= 0) {
-            write(fd, payloadData, dataSize);
+            ApexV285ProPayload existing;
+            uint8_t *cursor = (uint8_t *)&existing;
+            size_t remaining = sizeof(existing);
+            BOOL readOK = YES;
+            while (remaining > 0) {
+                ssize_t count = read(fd, cursor, remaining);
+                if (count < 0 && errno == EINTR) continue;
+                if (count <= 0) { readOK = NO; break; }
+                cursor += (size_t)count;
+                remaining -= (size_t)count;
+            }
             close(fd);
-            chmod([tempPath UTF8String], 0666);
-            rename([tempPath UTF8String], [targetPath UTF8String]);
+            if (readOK && existing.magic == APEX_SYNC_MAGIC_V285 && existing.updateSeq > incoming.updateSeq) {
+                continue;
+            }
         }
+        (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
     }
 }
 
@@ -1424,8 +1501,8 @@ static void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload) {
     if (!payload) return;
     ApexV285ProPayload temp = *payload;
     temp.magic = APEX_SYNC_MAGIC_V285;
-    temp.updateSeq = (uint64_t)mach_absolute_time();
-    temp.lastHeartbeat = temp.updateSeq;
+    if (temp.updateSeq == 0) temp.updateSeq = Titanium_IPCSequenceNowV25();
+    temp.lastHeartbeat = Titanium_IPCSequenceNowV25();
 
     Titanium_WriteSyncPayloadUniversal(&temp, sizeof(ApexV285ProPayload));
 }
@@ -1445,23 +1522,35 @@ static inline void Titanium_ReloadSharedSyncStateV285(void) {
 
     pthread_mutex_lock(&g_syncLockV285);
     NSArray *checkPaths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
+    ApexV285ProPayload newestPayload;
+    memset(&newestPayload, 0, sizeof(newestPayload));
+    BOOL foundPayload = NO;
     for (NSString *path in checkPaths) {
-        if (access([path UTF8String], R_OK) == 0) {
-            int fd = open([path UTF8String], O_RDONLY);
-            if (fd >= 0) {
-                ApexV285ProPayload temp;
-                ssize_t bytes = read(fd, &temp, sizeof(temp));
-                if (bytes == sizeof(temp) && temp.magic == APEX_SYNC_MAGIC_V285) {
-                    if (temp.updateSeq != g_syncPayloadV285.updateSeq) {
-                        g_syncPayloadV285 = temp;
-                    }
-                    g_lastSyncTicksV285 = now;
-                    close(fd);
-                    break;
-                }
-                close(fd);
-            }
+        int fd = open([path UTF8String], O_RDONLY);
+        if (fd < 0) continue;
+        ApexV285ProPayload temp;
+        uint8_t *cursor = (uint8_t *)&temp;
+        size_t remaining = sizeof(temp);
+        BOOL readOK = YES;
+        while (remaining > 0) {
+            ssize_t count = read(fd, cursor, remaining);
+            if (count < 0 && errno == EINTR) continue;
+            if (count <= 0) { readOK = NO; break; }
+            cursor += (size_t)count;
+            remaining -= (size_t)count;
         }
+        close(fd);
+        if (!readOK || temp.magic != APEX_SYNC_MAGIC_V285) continue;
+        if (!foundPayload || temp.updateSeq > newestPayload.updateSeq) {
+            newestPayload = temp;
+            foundPayload = YES;
+        }
+    }
+    if (foundPayload) {
+        if (newestPayload.updateSeq > g_syncPayloadV285.updateSeq) {
+            g_syncPayloadV285 = newestPayload;
+        }
+        g_lastSyncTicksV285 = now;
     }
     pthread_mutex_unlock(&g_syncLockV285);
 }
@@ -1469,24 +1558,9 @@ static inline void Titanium_ReloadSharedSyncStateV285(void) {
 // [ĐÃ BỔ SUNG - CÔNG TẮC TỔNG / LOẠI TRỪ APP]: SpringBoard đọc được plist cấu hình nên ghi danh sách bundle ID bị TẮT ra tệp văn bản
 // (mỗi dòng một ID). App thứ ba trong sandbox đọc tệp này để biết mình có bị loại trừ hay không.
 static void Titanium_WriteDisabledAppsFile(NSString *joinedIDs) {
-    NSData *data = [(joinedIDs ? joinedIDs : @"") dataUsingEncoding:NSUTF8StringEncoding];
-    NSArray *targetPaths = @[APPS_SYNC_FILE_PRIMARY, APPS_SYNC_FILE_SECONDARY];
-    for (NSString *targetPath in targetPaths) {
-        NSString *dir = [targetPath stringByDeletingLastPathComponent];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:dir]) {
-            [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0777)} error:nil];
-        }
-        NSString *tempPath = [targetPath stringByAppendingString:@".tmp"];
-        int fd = open([tempPath UTF8String], O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd >= 0) {
-            if (data.length > 0) {
-                write(fd, data.bytes, data.length);
-            }
-            close(fd);
-            chmod([tempPath UTF8String], 0666);
-            rename([tempPath UTF8String], [targetPath UTF8String]);
-        }
-    }
+    NSData *data = [(joinedIDs ?: @"") dataUsingEncoding:NSUTF8StringEncoding];
+    (void)Titanium_WriteAtomicIPCFile(APPS_SYNC_FILE_PRIMARY, data.bytes, data.length);
+    (void)Titanium_WriteAtomicIPCFile(APPS_SYNC_FILE_SECONDARY, data.bytes, data.length);
 }
 
 static BOOL Titanium_IsBundleDisabledViaIPC(NSString *bundleID) {
@@ -1797,7 +1871,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         // (AN TOÀN TUYỆT ĐỐI: KHÔNG TREO I/O, KHÔNG ĐEN MÀN HÌNH, KHÔNG NGHẼN MẠNG)
         // ==============================================================================================
         if (!diskDict || diskDict.count == 0) {
-            // ĐÃ ÉP: Đọc tệp IPC đồng bộ từ App Control Master với phân quyền 0666
+            // V25: Đọc tệp IPC đồng bộ chỉ đọc; payload được thay nguyên tử với quyền 0644.
             NSArray *checkFiles = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
             for (NSString *sf in checkFiles) {
                 if (access([sf UTF8String], R_OK) == 0) {
@@ -2034,7 +2108,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                     p.reserved[sizeof(p.reserved) - 1] = '\0';
                 }
             }
-            p.updateSeq = (uint64_t)mach_absolute_time();
+            p.updateSeq = Titanium_IPCSequenceNowV25();
             p.lastHeartbeat = p.updateSeq;
 
             // [ĐÃ SỬA - CÔNG TẮC TỔNG]: cập nhật payload của CHÍNH SpringBoard ngay lập tức. Bản cũ chỉ ghi tệp rồi chờ lượt nạp lại
@@ -2084,9 +2158,11 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     if (CFG285) {
         [CFG285 loadSettings];
+#if !TITANIUM_SAFE_STABILITY_PROFILE
         if (Titanium_IsSpringBoard()) {
             Titanium_TuneWindowServerDisplayDirectly();
         }
+#endif
     }
 }
 
@@ -2802,6 +2878,40 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
 // Sàn dải tần theo trần: bình thường 60; nếu trần thấp hơn 60 (người dùng hạ xuống 30...) thì sàn bằng trần để trần có hiệu lực thật.
 static inline float Titanium_RangeFloorForCap(float cap) {
     return (cap < TITANIUM_FRAME_RATE_FLOOR) ? cap : TITANIUM_FRAME_RATE_FLOOR;
+}
+
+// Normalize invalid/adaptive-zero frame ranges without raising an app above either its native panel
+// limit or the user's effective Hz/FPS cap. Invalid ranges fall back to a conservative 30Hz minimum
+// for both system UI and apps; valid native adaptive ranges are otherwise preserved.
+static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL systemUI) {
+    NSInteger nativeMax = Titanium_NativeMaximumFPS();
+    NSInteger cap = Titanium_GetEffectiveFrameCap();
+    if (nativeMax < 15) nativeMax = 60;
+    if (cap < 15) cap = 15;
+    if (cap > nativeMax) cap = nativeMax;
+
+    float maximum = range.maximum;
+    if (!isfinite(maximum) || maximum <= 0.0f) {
+        maximum = (float)cap;
+    } else if (maximum > (float)cap) {
+        maximum = (float)cap;
+    }
+
+    float floorValue = 30.0f;
+    (void)systemUI; // Keep system UI and app scenes on the same conservative fallback floor.
+    if (floorValue > maximum) floorValue = maximum;
+    float minimum = range.minimum;
+    if (!isfinite(minimum) || minimum <= 0.0f) {
+        minimum = floorValue;
+    }
+    if (minimum > maximum) minimum = maximum;
+
+    float preferred = range.preferred;
+    if (!isfinite(preferred) || preferred <= 0.0f || preferred > maximum) {
+        preferred = maximum;
+    }
+    if (preferred < minimum) preferred = minimum;
+    return SafeMakeFRR(minimum, maximum, preferred);
 }
 
 #if TITANIUM_ENABLE_RATE_KEEPER
@@ -5526,7 +5636,7 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
         return;
     }
-    if (Titanium_IsSpringBoard() || g_isCurrentAppBlacklisted) return;
+    if (g_isCurrentAppBlacklisted) return;
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
     @try {
         UIApplication *app = [UIApplication sharedApplication];
@@ -5537,22 +5647,15 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
                 if (![scene isKindOfClass:[UIWindowScene class]]) continue;
                 if (@available(iOS 15.0, *)) {
                     UIWindowScene *winScene = (UIWindowScene *)scene;
-                    if ([winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        float cap = (float)Titanium_GetEffectiveFrameCap();
-                        float nativeMax = (float)Titanium_NativeMaximumFPS();
-                        if (cap < 15.0f) cap = 15.0f;
-                        if (cap > nativeMax) cap = nativeMax;
-                        // V22: khi cap bằng trần panel, không ghi range ép buộc; để compositor tự chọn cadence.
-                        if (cap >= nativeMax) continue;
-                        SafeFrameRateRange current = winScene.preferredFrameRateRange;
-                        if (!isfinite(current.maximum) || current.maximum <= cap) continue;
-                        float minValue = isfinite(current.minimum) ? current.minimum : 0.0f;
-                        float preferred = isfinite(current.preferred) ? current.preferred : cap;
-                        if (minValue > cap) minValue = cap;
-                        if (preferred <= 0.0f || preferred > cap) preferred = cap;
-                        if (preferred < minValue) preferred = minValue;
-                        [winScene setPreferredFrameRateRange:SafeMakeFRR(minValue, cap, preferred)];
-                    }
+                    if (![winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) continue;
+
+                    SafeFrameRateRange current = winScene.preferredFrameRateRange;
+                    SafeFrameRateRange normalized = Titanium_NormalizeFrameRateRange(current, Titanium_IsSpringBoard());
+                    BOOL changed = !isfinite(current.minimum) || !isfinite(current.maximum) || !isfinite(current.preferred) ||
+                                   fabsf(current.minimum - normalized.minimum) > 0.5f ||
+                                   fabsf(current.maximum - normalized.maximum) > 0.5f ||
+                                   fabsf(current.preferred - normalized.preferred) > 0.5f;
+                    if (changed) [winScene setPreferredFrameRateRange:normalized];
                 }
             }
         }
@@ -5633,12 +5736,18 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %hook CADisplayLink
 
-// V22: chỉ hạ FPS nếu cap người dùng thấp hơn trần phần cứng. Nếu đã ở native max thì để iOS tự lập lịch.
+// Clamp explicit over-cap requests only when the user has enabled the tweak. A rate of 0 means
+// system-managed/adaptive scheduling and must be preserved rather than converted into a fixed loop.
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
         NSInteger nativeMax = Titanium_NativeMaximumFPS();
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap >= 15 && cap < nativeMax && (fps <= 0 || fps > cap)) {
+        if (cap < 15) cap = 15;
+        if (cap > nativeMax) cap = nativeMax;
+        // preferredFramesPerSecond == 0 is Apple's valid system-managed/adaptive mode.
+        // Clamp only explicit rates above the hardware/configuration limit; do not pin idle links.
+        BOOL shouldClamp = (fps > cap);
+        if (shouldClamp) {
             %orig(cap);
             return;
         }
@@ -5650,7 +5759,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-// iOS 15+: nhóm riêng vì selector này không có trên một số phiên bản iOS đời cũ.
+// iOS 15+: normalize zero/invalid ranges and clamp to the hardware/configured cap.
 %group Group_TitaniumSafeRangeRuntime_V22
 
 %hook CADisplayLink
@@ -5658,17 +5767,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
-            NSInteger nativeMax = Titanium_NativeMaximumFPS();
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap >= 15 && cap < nativeMax && isfinite(range.maximum) && range.maximum > (float)cap) {
-                float safeCap = (float)cap;
-                float minValue = isfinite(range.minimum) ? range.minimum : 0.0f;
-                float preferred = isfinite(range.preferred) ? range.preferred : safeCap;
-                if (minValue > safeCap) minValue = safeCap;
-                if (preferred > safeCap || preferred <= 0.0f) preferred = safeCap;
-                if (preferred < minValue) preferred = minValue;
-                range = SafeMakeFRR(minValue, safeCap, preferred);
-            }
+            range = Titanium_NormalizeFrameRateRange(range, Titanium_IsSpringBoard());
         }
     }
     %orig(range);
@@ -5678,8 +5777,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-// iOS 15+: public scene frame-rate API. Clamp only when the configured cap is LOWER than
-// the panel capability; otherwise pass the app's original request through unchanged.
+// iOS 15+: use the same zero-safe policy for app scenes and SpringBoard system scenes.
 %group Group_TitaniumSafeSceneRangeRuntime_V22
 
 %hook UIWindowScene
@@ -5687,17 +5785,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            NSInteger nativeMax = Titanium_NativeMaximumFPS();
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap >= 15 && cap < nativeMax && isfinite(range.maximum) && range.maximum > (float)cap) {
-                float safeCap = (float)cap;
-                float minValue = isfinite(range.minimum) ? range.minimum : 0.0f;
-                float preferred = isfinite(range.preferred) ? range.preferred : safeCap;
-                if (minValue > safeCap) minValue = safeCap;
-                if (preferred <= 0.0f || preferred > safeCap) preferred = safeCap;
-                if (preferred < minValue) preferred = minValue;
-                range = SafeMakeFRR(minValue, safeCap, preferred);
-            }
+            range = Titanium_NormalizeFrameRateRange(range, Titanium_IsSpringBoard());
         }
     }
     %orig(range);
@@ -5841,16 +5929,15 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
             // [ĐÃ SỬA]: bản cũ ghi đè g_cachedResolvedHz bằng targetHz THÔ ngay sau loadSettings, làm mất kết quả quy đổi (công tắc Hz/FPS,
             // tiết kiệm pin 60Hz, cờ ép 144...). loadSettings đã tự đặt đúng g_cachedResolvedHz/FPS nên không ghi đè nữa.
         }
+#if !TITANIUM_SAFE_STABILITY_PROFILE
         if (Titanium_IsSpringBoard()) {
             Titanium_TuneWindowServerDisplayDirectly();
-        } else {
-            // [V12 SỬA - CHỈNH Hz/FPS TRONG APP TÁC DỤNG TOÀN HỆ THỐNG NGAY]: trước đây app đang chạy chỉ nạp lại
-            // cấu hình nhưng các cửa sổ/scene ĐÃ MỞ vẫn giữ dải nhịp cũ tới khi đóng mở lại. Nay áp dụng dải nhịp
-            // mới cho MỌI scene hiện có ngay khi nhận thông báo thay đổi (kể cả thông báo PayloadWritten).
-            dispatch_async(dispatch_get_main_queue(), ^{
-                Titanium_ReapplyFrameRateToAllScenes();
-            });
         }
+#endif
+        // Apply the same validated range to already-connected scenes in SpringBoard and app processes.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            Titanium_ReapplyFrameRateToAllScenes();
+        });
         s_debounceTimer = nil;
     });
     dispatch_resume(s_debounceTimer);
@@ -5937,7 +6024,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             if (isSpringBoard) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    @try { Titanium_StartThermalAndChargingWatchdog(); } @catch (NSException *e) {}
+                    @try {
+                        Titanium_StartThermalAndChargingWatchdog();
+                        Titanium_ReapplyFrameRateToAllScenes();
+                    } @catch (NSException *e) {}
                 });
                 Titanium_StartIPCHearthbeatV12();
                 NSData *verifiedData = [@"VERIFIED-V22-SAFE" dataUsingEncoding:NSUTF8StringEncoding];
@@ -6165,6 +6255,27 @@ static void SpringBoardBootstrapTrigger(void) {
         }
 
         BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
+
+        // Browser host apps are left completely untouched. This avoids applying a third-party frame
+        // pacing dylib during initial WebKit process startup/navigation while the reported browser
+        // crash/grey-loading issue is being isolated. The list is intentionally limited to known browsers.
+        if (!isSpringBoard && bundleID.length > 0) {
+            static NSSet<NSString *> *s_browserBundleIDs = nil;
+            static dispatch_once_t s_browserBundleOnce;
+            dispatch_once(&s_browserBundleOnce, ^{
+                s_browserBundleIDs = [NSSet setWithArray:@[
+                    @"com.apple.mobilesafari",
+                    @"com.google.chrome.ios",
+                    @"org.mozilla.ios.Firefox",
+                    @"com.microsoft.msedge",
+                    @"com.brave.ios.browser",
+                    @"com.duckduckgo.mobile.ios",
+                    @"com.operasoftware.touch",
+                    @"com.vivaldi.browser"
+                ]];
+            });
+            if ([s_browserBundleIDs containsObject:bundleID]) return;
+        }
 
         if (isSpringBoard) {
             if (!Titanium_CheckAndPreventBootloopUniversal()) {
