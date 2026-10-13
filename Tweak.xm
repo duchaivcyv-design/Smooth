@@ -2766,6 +2766,8 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 %end
 
+%end
+
 // ====================================================================================================
 // NHÓM 2: OVERDRIVE METAL GRAPHICS - CHỐNG ĐEN APP, CHỐNG GIẬT LAG & BẢO VỆ SAFEMODE TUYỆT ĐỐI
 // ====================================================================================================
