@@ -6521,9 +6521,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
                 Init_CAWindowServer_Hooks();
 
-#if TITANIUM_ENABLE_RATE_KEEPER
-                [TitaniumRateKeeper start];
-#endif
+                if (TITANIUM_ENABLE_RATE_KEEPER) {
+                    [TitaniumRateKeeper start];
+                }
+            }
 
                 @try {
                     Titanium_StartThermalAndChargingWatchdog();
