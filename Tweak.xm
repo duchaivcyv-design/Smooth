@@ -269,7 +269,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @end
 
 @interface UIWindow (TitaniumApexPrivate)
-- (void)_setSecure:(BOOL)1;
+- (void)_setSecure:(BOOL)arg1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
 - (UIScreen *)screen;
@@ -312,7 +312,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
-- (void)_scrollViewAnimationEnded:(id)1 finished:(BOOL)2;
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
 - (BOOL)isDragging;
 - (BOOL)isDecelerating;
 - (CGFloat)decelerationRate;
@@ -336,7 +336,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 
 @interface UIEventFetcher : NSObject
 - (void)_receiveHIDEvent:(void *)event;
-- (void)displayLinkDidFire:(id)1;
+- (void)displayLinkDidFire:(id)arg1;
 @end
 
 @interface _UIEventFetcher : NSObject
@@ -372,7 +372,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -620,8 +620,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)_handleApplicationProcessExited:(id)processDescription;
 - (void)handleApplicationLaunch:(id)application;
 - (void)handleApplicationSuspended:(id)application;
-// [MỚI]: Điều phối cử chỉ vuốt tắt app
-- (void)_handleDismissOverlaysGesture:(id)1;
+- (void)_handleDismissOverlaysGesture:(id)arg1;
 @end
 
 @interface SBWindowScene : NSObject
@@ -638,7 +637,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @end
 
 @interface SBPIPController : NSObject
-- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)1;
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
 - (void)_updatePictureInPictureWindowMargin;
 - (UIEdgeInsets)pictureInPictureWindowMargin;
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion;
@@ -881,7 +880,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
-- (void)_reboot:(BOOL)1;
+- (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
 @end
 
@@ -983,12 +982,9 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (double)homeGestureDamping;
 @end
 
-// [MỚI]: Bộ quản lý cử chỉ đa nhiệm
-@interface SBFluidSwitcherGestureManager : NSObject
-- (void)fluidSwitcherGestureManager:(id)1 didBeginGesture:(id)2;
-- (void)fluidSwitcherGestureManager:(id)1 didUpdateGesture:(id)2;
-- (void)fluidSwitcherGestureManager:(id)1 didEndGesture:(id)2;
-@end
+- (void)fluidSwitcherGestureManager:(id)arg1 didBeginGesture:(id)arg2;
+- (void)fluidSwitcherGestureManager:(id)1 didUpdateGesture:(id)arg2;
+- (void)fluidSwitcherGestureManager:(id)arg1 didEndGesture:(id)arg2;
 
 // --- WATCHDOG IMMUNITY & PROCESS ASSERTION ---
 @interface FBProcessWatchdog : NSObject
