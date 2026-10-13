@@ -3067,7 +3067,8 @@ static dispatch_source_t s_keeperPoller = nil;
             float targetHz = (float)Titanium_GetTargetConfiguredHz();
             if (targetHz < 15.0f) targetHz = 15.0f;
             if (targetHz > 144.0f) targetHz = 144.0f;
-            s_keeperLink.preferredFrameRateRange = SafeMakeFRR(Titanium_RangeFloorForCap(targetHz), targetHz, targetHz);
+            // Khóa cứng sàn và trần của RateKeeper đúng bằng targetHz đã chỉnh
+            s_keeperLink.preferredFrameRateRange = SafeMakeFRR(targetHz, targetHz, targetHz);
         }
         [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
     }
@@ -3139,14 +3140,8 @@ static dispatch_source_t s_keeperPoller = nil;
             if (maxTarget < 15.0f) maxTarget = 15.0f;
             if (maxTarget > 144.0f) maxTarget = 144.0f;
 
-            // KIỂM TRA CỬA SỔ HOẠT ĐỘNG THỜI GIAN THỰC
-            if (Titanium_ShouldLockTargetRate()) {
-                // ĐANG CHẠM / VUỐT / HOẠT ẢNH: Khóa cứng trần tối đa (120Hz/144Hz)
-                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
-            } else {
-                // MÀN HÌNH TĨNH: Hạ sâu về sàn 15Hz để CPU & GPU nghỉ, tiết kiệm pin
-                range = SafeMakeFRR(15.0f, maxTarget, 15.0f);
-            }
+            // Khóa cứng toàn bộ dải nhịp (min, max, preferred) theo đúng mức đã chỉnh trong app
+            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
         }
     }
     %orig(range);
@@ -3222,7 +3217,7 @@ static dispatch_source_t s_keeperPoller = nil;
 
 %hook CAAnimation
 
-// Đồng bộ dải 15Hz - Max theo trạng thái tương tác
+// Đồng bộ dải nhịp theo đúng mức cấu hình, không nhả về 15Hz khi kết thúc tương tác
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -3232,12 +3227,9 @@ static dispatch_source_t s_keeperPoller = nil;
 
             if (Titanium_IsPassiveVideoPlayback()) {
                 range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
-            } else if (Titanium_ShouldLockTargetRate()) {
-                // Đang có cử chỉ hoặc chuyển cảnh: Khóa trần tối đa
-                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             } else {
-                // Hết hoạt ảnh, đứng yên: Cho phép hạ về sàn 15Hz
-                range = SafeMakeFRR(15.0f, maxTarget, 15.0f);
+                // Khóa cứng (min, max, preferred) bằng maxTarget đã chỉnh trong app
+                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             }
         }
     }
@@ -3258,10 +3250,9 @@ static dispatch_source_t s_keeperPoller = nil;
 
             if (Titanium_IsPassiveVideoPlayback()) {
                 range = SafeMakeFRR(30.0f, 60.0f, 60.0f);
-            } else if (Titanium_ShouldLockTargetRate()) {
-                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             } else {
-                range = SafeMakeFRR(15.0f, maxTarget, 15.0f);
+                // Khóa cứng theo mức cấu hình, triệt tiêu tụt về 15Hz
+                range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
             }
         }
     }
