@@ -5231,7 +5231,7 @@ static inline void Titanium_SeizeKernelHardwareControl(void) {
         // 2. Ép nhân Mach XNU trao quyền Foreground Hardware tuyệt đối cho tiến trình
         #ifdef TASK_CATEGORY_POLICY
         task_category_policy_data_t catPolicy;
-        catPolicy.role = TASK_FOREGROUND_APPLICATION;
+        catPolicy.role = (task_role_t)TASK_FOREGROUND_APPLICATION;
         task_policy_set(mach_task_self(), TASK_CATEGORY_POLICY, (task_policy_t)&catPolicy, TASK_CATEGORY_POLICY_COUNT);
         #endif
 
@@ -5483,14 +5483,19 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %hook UIScene
 
-- (void)openURL:(NSURL *)url options:(id)options completionHandler:(void (^)(BOOL success))completion API_AVAILABLE(ios(13.0)) {
+- (void)openURL:(NSURL *)url options:(id)options completionHandler:(void (^)(BOOL success))completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
         Titanium_TriggerInstantTouchBurst();
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
-    %orig(url, options, completion);
+
+    if (@available(iOS 13.0, *)) {
+        %orig(url, options, completion);
+    } else {
+        %orig(url, options, completion);
+    }
 }
 
 %end
@@ -7327,19 +7332,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
         return;
     }
     %orig(draws);
-}
-
-%end
-
-// 3. Khử trễ cuộn khung chat văn bản
-%hook UITextView
-
-- (void)didMoveToWindow {
-    %orig;
-    if (Titanium_IsAIApp() && self.window) {
-        self.delaysContentTouches = NO;
-        self.canCancelContentTouches = YES;
-    }
 }
 
 %end
