@@ -6512,10 +6512,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             if (isSpringBoard) {
                 %init(Group_LiquidGlass_Opt);
                 %init(Group_Switcher30Apps_Virtualization);
+                %init(Group_SpringBoard_Switcher_Opt);
                 %init(Group_Display_SpringBoardV285);
                 %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
                 %init(Group_V285_FloatingWindow_PiP);
                 %init(Group_SpringBoard_ProcessManagerV285);
+                %init(Group_KeepAppsAlive_NoKill);
 
                 Init_CAWindowServer_Hooks();
 
