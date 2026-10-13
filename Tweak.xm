@@ -1138,6 +1138,14 @@ static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_StartIPCHearthbeatV12(void);
 static void Titanium_RegisterAppResumeRefreshV12(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
+// [V26 FIX SAFEMODE #4]: Implementation rỗng — hàm này chỉ có khai báo không có thân, gọi sẽ crash.
+// Theo dõi pin không cần thiết cho chức năng Hz/FPS, để rỗng an toàn.
+static void Titanium_UpdateLowBatteryFlagV12_Impl(void) {
+    @try {
+        g_lowBatterySmoothBoostV12 = (g_batteryLevelV12 > 0 && g_batteryLevelV12 <= 0.20);
+    } @catch (NSException *e) {}
+}
+#define Titanium_UpdateLowBatteryFlagV12 Titanium_UpdateLowBatteryFlagV12_Impl
 
 // ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION (CHUẨN ROOTLESS, ROOTHIDE & APPLE SILICON)
@@ -7590,9 +7598,11 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             if (isSpringBoard) {
                 // [V26 FIX SAFEMODE #2]: KHÔNG gọi UIDevice batteryMonitoring ngay khi SpringBoard vừa khởi động
                 // (có thể deadlock với backboardd trên iOS 14-15 RootHide). Delay 5s.
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                // [V26 FIX SAFEMODE #5]: VÔ HIỆU HÓA thermal watchdog — nó gọi Titanium_UpdateLowBatteryFlagV12
+                // (chỉ có khai báo không có thân) → crash vài giây sau khi vào màn hình chính.
+                // Chỉ giữ ReapplyFrameRate (an toàn, đã có @try/@catch bên trong).
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     @try {
-                        Titanium_StartThermalAndChargingWatchdog();
                         Titanium_ReapplyFrameRateToAllScenes();
                     } @catch (NSException *e) {}
                 });
@@ -7602,7 +7612,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                         contents:verifiedData
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                // [V26 FIX SAFEMODE #6]: Delay 5s thay vì 300ms — SpringBoard cần thời gian ổn định sau respring.
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_RegisterAppResumeRefreshV12();
                         Titanium_ReapplyFrameRateToAllScenes();
