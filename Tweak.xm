@@ -2333,14 +2333,6 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 // 3. ĐIỀU PHỐI XUNG NHỊP CẢM ỨNG (CƯỚP QUYỀN P-CORE TOÀN HỆ THỐNG - KHÔNG NGHẼN SOCKET)
 // ====================================================================================================
 
-#if TITANIUM_ENABLE_RATE_KEEPER
-// [ĐÃ BỔ SUNG]: bộ giữ nhịp cho SpringBoard (phần cài đặt nằm sau Titanium_GetTargetConfiguredFPS)
-@interface TitaniumRateKeeper : NSObject
-+ (void)start;
-+ (void)kick;
-@end
-#endif
-
 // [ĐÃ ÉP CƯỠNG BỨC PHẦN CỨNG]: Khóa luồng chính vào P-Core Real-Time + Ép CADisplay 0.0ms (Chống nghẽn Syscall)
 static inline void Titanium_LockMainThreadFast(void) {
     if (![NSThread isMainThread]) return;
