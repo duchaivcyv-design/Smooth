@@ -36,14 +36,16 @@ jobs:
 
   build:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     strategy:
+      max-parallel: 1
       matrix:
         scheme: ${{ fromJson(needs.setup.outputs.matrix) }}
       fail-fast: false
 
     env:
       DEVICE_TARGET: "iphone:clang:16.5:14.0"
+      HOMEBREW_NO_AUTO_UPDATE: "1"
 
     steps:
       - name: checkout
@@ -77,10 +79,10 @@ jobs:
       - name: set THEOS env var
         run: echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
 
-      - name: install build dependencies
+      - name: install deps
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential fakeroot libtinfo5
+          brew install ldid make
+          echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
       - name: build (${{ matrix.scheme }})
         run: |
