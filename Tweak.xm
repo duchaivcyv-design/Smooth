@@ -982,11 +982,12 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (double)homeGestureDamping;
 @end
 
+@interface SBFluidSwitcherGestureManager : NSObject
 - (void)fluidSwitcherGestureManager:(id)arg1 didBeginGesture:(id)arg2;
-- (void)fluidSwitcherGestureManager:(id)1 didUpdateGesture:(id)arg2;
+- (void)fluidSwitcherGestureManager:(id)arg1 didUpdateGesture:(id)arg2;
 - (void)fluidSwitcherGestureManager:(id)arg1 didEndGesture:(id)arg2;
+@end
 
-// --- WATCHDOG IMMUNITY & PROCESS ASSERTION ---
 @interface FBProcessWatchdog : NSObject
 - (void)start;
 @end
