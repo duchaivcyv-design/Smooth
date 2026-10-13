@@ -3813,8 +3813,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             }
         };
 
+        // [ĐÃ SỬA VẾT CẮT 1]: Đóng hoàn chỉnh khối dispatch_after và gọi %orig
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            g_is
+            g_isInteracting = NO;
+            g_lastInteractiveTick = mach_absolute_time();
+        });
+
+        %orig(flag, safeDismissCompletion);
+        return;
+    }
+    %orig(flag, completion);
+}
+
+%end
+
 
 // ====================================================================================================
 // 5.1. BẮT TRẠNG THÁI GESTURE VUỐT THỰC TẾ & BÙ TỌA ĐỘ ĐÓN ĐẦU NGÓN TAY (MÔ PHỎNG SIÊU MƯỢT 120HZ)
@@ -3858,9 +3870,22 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             
             // Kiểm tra an toàn giá trị số học
             if (isfinite(velocity.x) && isfinite(velocity.y)) {
-                // Bù đúng 1 chu kỳ quét V-Sync (~16.6ms
+                // [ĐÃ SỬA VẾT CẮT 2]: Bù 16.6ms đón đầu ngón tay và đóng kín toàn bộ khối
+                const CGFloat kLeadFactor = 0.0166f;
+                original.x += velocity.x * kLeadFactor;
+                original.y += velocity.y * kLeadFactor;
+            }
+        }
+    }
+    return original;
+}
 
+%end
+
+
+// ====================================================================================================
 // 5. ĐỘNG CƠ CUỘN SCROLLVIEW: ÉP BÁM TAY TỨC THÌ & BẢO TOÀN THUẬT TOÁN PAGING TIKTOK
+// ====================================================================================================
 %hook UIScrollView
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép Pan Gesture bắt đầu ngay pixel đầu tiên
@@ -3915,7 +3940,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         uint64_t now = mach_absolute_time();
         g_isUserTouchingScreen = NO;
-        // Nếu không trôi quán tính thì nhả trạng thái tương tác ngay
         if (!self.isDecelerating) {
             g_isScrollingActive = NO;
             g_isInteracting = NO;
@@ -3952,8 +3976,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
 }
 
-// [ĐÃ SỬA TRIỆT ĐỂ]: Kể cả khi đã buông tay, nếu màn hình đang trôi quán tính (isDecelerating)
-// thì VẪN PHẢI duy trì trần 120/144Hz liên tục, không để bị rớt nhịp về 15Hz giữa chừng!
 - (void)_notifyDidScroll {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
@@ -3966,7 +3988,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
 }
 
-// NẰM TRONG %group Group_Scroll_And_Keyboard_Opt -> %hook UIScrollView
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
@@ -3975,7 +3996,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
-        // Giảm lực hãm ma sát khi đang trôi quán tính
         if (!self.isPagingEnabled && self.isDecelerating) {
             self.decelerationRate = 0.994f;
         }
@@ -3983,7 +4003,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
 }
 
-// [ĐÃ ÉP TOÀN DIỆN]: Ép giữ quán tính chuẩn cho feed thường, không can thiệp TikTok paging
 - (CGFloat)decelerationRate {
     if (TITANIUM_LITE_MODE) return %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
@@ -3993,7 +4012,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
-// Dừng quán tính cuộn -> Bắt đầu tính cửa sổ đệm trước khi hạ về 15Hz
 - (void)_stopScrollDecelerationNotify:(BOOL)notify {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
