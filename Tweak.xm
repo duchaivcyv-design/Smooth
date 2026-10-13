@@ -231,15 +231,14 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
+static inline BOOL Titanium_IsAIApp(void);
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
 
-// ====================================================================================================
-// SYSTEM PRIVATE INTERFACES (ĐẦY ĐỦ 100% CHO CẢ 18 NHÓM GIA TỐC HỆ THỐNG & SPRINGBOARD SWITCHER)
-// ====================================================================================================
+//khai báo full
 
 // --- UIKIT CORE & DISPATCHER ---
 @interface UIEvent (TitaniumApexPrivate)
@@ -1050,6 +1049,22 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @interface WKWebView (TitaniumWebKitPrivate)
 - (void)_close;
 - (void)_purgePageCache;
+@end
+
+@interface FBProcessWatchdog : NSObject
+- (void)start;
+- (void)invalidate;
+@end
+
+@interface FBSceneWatchdog : NSObject
+- (id)initWithTimeout:(double)timeout;
+@end
+
+// 3. INTERFACE CHO BỘ GIỮ NHỊP SPRINGBOARD RATE KEEPER
+@interface TitaniumRateKeeper : NSObject
++ (void)start;
++ (void)kick;
++ (void)tick:(id)link;
 @end
 
 // ====================================================================================================
@@ -6467,7 +6482,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 #endif
 
             if (TITANIUM_ENABLE_WATCHDOG_IMMUNITY) {
-            %init(Group_AntiWatchdog_Immunity);
+                %init(Group_AntiWatchdog_Immunity);
             }
 
             %init(Group_ZeroLatency_Touch_Opt);
@@ -6517,7 +6532,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
                 Init_CAWindowServer_Hooks();
 
-                #if TITANIUM_ENABLE_RATE_KEEPER
+#if TITANIUM_ENABLE_RATE_KEEPER
                 [TitaniumRateKeeper start];
 #endif
 
