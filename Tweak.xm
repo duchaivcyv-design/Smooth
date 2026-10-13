@@ -6479,6 +6479,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_Metal_ZeroTearing_Pacing);
             %init(Group_FluidTransitions_Pacing);
+            %init(Group_AI_Stream_Optimization); // <--- CHÈN VÀO ĐÂY
             %init(Group_FastLaunch_SuperEngineV285);
             %init(Group_Scroll_And_Keyboard_Opt);
             %init(Group_InstantActionAndMenuTransitions_Boost);
@@ -6511,12 +6512,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             if (isSpringBoard) {
                 %init(Group_LiquidGlass_Opt);
                 %init(Group_Switcher30Apps_Virtualization);
-                %init(Group_SpringBoard_Switcher_Opt);
+                %init(Group_SpringBoard_Switcher_Opt); // <--- CHÈN VÀO ĐÂY
                 %init(Group_Display_SpringBoardV285);
                 %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
                 %init(Group_V285_FloatingWindow_PiP);
                 %init(Group_SpringBoard_ProcessManagerV285);
-                %init(Group_KeepAppsAlive_NoKill);
+                %init(Group_KeepAppsAlive_NoKill);     // <--- VÀ CHÈN VÀO ĐÂY
 
                 Init_CAWindowServer_Hooks();
 
