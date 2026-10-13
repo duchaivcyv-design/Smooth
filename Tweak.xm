@@ -6501,7 +6501,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_Deep_RAM_Compaction_Engine);
             %init(Group_TitaniumV12_SmoothExit_And_DisplayLink); // [V12] Hết nảy khi vuốt về Home + DisplayLink nghe cấu hình tức thì
-            
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
             }
@@ -6511,15 +6510,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             }
 
             if (isSpringBoard) {
-                // Đóng ngoặc chuẩn xác và khôi phục đầy đủ các nhóm SpringBoard
                 %init(Group_LiquidGlass_Opt);
                 %init(Group_Switcher30Apps_Virtualization);
-                %init(Group_SpringBoard_Switcher_Opt); // Nhóm tối ưu cử chỉ Home & Đa nhiệm chống lag
                 %init(Group_Display_SpringBoardV285);
                 %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
                 %init(Group_V285_FloatingWindow_PiP);
                 %init(Group_SpringBoard_ProcessManagerV285);
-                %init(Group_KeepAppsAlive_NoKill);
 
                 Init_CAWindowServer_Hooks();
 
