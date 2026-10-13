@@ -2930,11 +2930,10 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     
     if (userHz < 15) userHz = 15;
     if (userHz > 144) userHz = 144;
-    // [ĐÃ SỬA - TRUNG THỰC VỚI PHẦN CỨNG]: tấm nền không có ProMotion chỉ quét tối đa 60Hz. Yêu cầu 144Hz không tạo thêm khung hình nào
-    // mà làm hệ thống đàm phán nhịp sai (hoạt ảnh đứng hẳn khi không chạm, app đen lúc mở).
+    // [TRUNG THỰC VỚI PHẦN CỨNG]: tấm nền không có ProMotion chỉ quét tối đa 60Hz
     NSInteger nativeMaxHz = Titanium_NativeMaximumFPS();
     if (userHz > nativeMaxHz) userHz = nativeMaxHz;
-    // [ĐÃ SỬA ĐỢT 5 - CHỐNG NÓNG]: máy nóng Serious/Critical tự hạ VỀ TỐI ĐA 60Hz tạm thời (giữ nguyên nếu người dùng đã chọn thấp hơn 60), hết nóng tự về mức đã chọn.
+    // [CHỐNG NÓNG]: máy nóng Serious/Critical tự hạ về tối đa 60Hz tạm thời
     if (Titanium_ShouldApplyEcoFrameCapV19() && userHz > 60) userHz = 60;
     return userHz;
 }
@@ -2955,32 +2954,30 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     
     if (userFPS < 15) userFPS = 15;
     if (userFPS > 144) userFPS = 144;
-    // [ĐÃ SỬA - TRUNG THỰC VỚI PHẦN CỨNG]: xem ghi chú ở Titanium_GetTargetConfiguredHz (khóa 30 FPS vẫn hoạt động bình thường)
+
     NSInteger nativeMaxFPS = Titanium_NativeMaximumFPS();
     if (userFPS > nativeMaxFPS) userFPS = nativeMaxFPS;
-    // [ĐÃ SỬA ĐỢT 5 - CHỐNG NÓNG]: máy nóng tự hạ FPS về tối đa 60 tạm thời.
+
     if (Titanium_ShouldApplyEcoFrameCapV19() && userFPS > 60) userFPS = 60;
     return userFPS;
 }
 
-// [ĐÃ BỔ SUNG - Hz/FPS CÓ TÁC DỤNG TOÀN HỆ THỐNG]: trần khung hình hiệu lực = giá trị THẤP HƠN giữa Hz và FPS đã chọn.
-// Hạ Hz hoặc FPS (vd 30) là toàn bộ hoạt ảnh/display link của hệ thống và app chạy tối đa ở mức đó. Tăng thì bị chặn bởi khả năng thật của màn hình.
+// [Hz/FPS CÓ TÁC DỤNG TOÀN HỆ THỐNG]: trần khung hình hiệu lực = giá trị THẤP HƠN giữa Hz và FPS đã chọn
 static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
     NSInteger hzCap = Titanium_GetTargetConfiguredHz();
     NSInteger fpsCap = Titanium_GetTargetConfiguredFPS();
     return (hzCap < fpsCap) ? hzCap : fpsCap;
 }
 
-// Sàn dải tần theo trần: bình thường 60; nếu trần thấp hơn 60 (người dùng hạ xuống 30...) thì sàn bằng trần để trần có hiệu lực thật.
+// [KHÓA CỨNG SÀN]: Sàn luôn bằng đúng trần hiệu lực đã cấu hình, không cho phép rớt sâu
 static inline float Titanium_RangeFloorForCap(float cap) {
-    return (cap < TITANIUM_FRAME_RATE_FLOOR) ? cap : TITANIUM_FRAME_RATE_FLOOR;
+    return cap;
 }
 
-// Normalize invalid/adaptive-zero frame ranges without raising an app above either its native panel
-// limit or the user's effective Hz/FPS cap. Invalid ranges fall back to a conservative 30Hz minimum
-// for both system UI and apps; valid native adaptive ranges are otherwise preserved.
+// [KHÓA CỨNG DẢI TẦN SỐ QUÉT]: Ép toàn bộ dải (min, max, preferred) bằng đúng mức đã chọn
 static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL systemUI) {
     (void)systemUI;
+    (void)range;
     
     NSInteger nativeMax = Titanium_NativeMaximumFPS();
     NSInteger cap = Titanium_GetEffectiveFrameCap();
@@ -2988,40 +2985,13 @@ static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateR
     if (cap < 15) cap = 15;
     if (cap > nativeMax) cap = nativeMax;
 
-    // 1. Chuẩn hóa trần (Maximum)
-    float maximum = range.maximum;
-    if (!isfinite(maximum) || maximum <= 0.0f || maximum > (float)cap) {
-        maximum = (float)cap;
-    }
-
-    // 2. Chuẩn hóa sàn (Minimum) theo trạng thái tương tác
-    float minimum = range.minimum;
-    if (Titanium_ShouldLockTargetRate()) {
-        // ĐANG CHẠM / HOẠT ẢNH: Ghim sàn bằng trần để triệt tiêu hoàn toàn tụt khung hình
-        minimum = maximum;
-    } else {
-        // MÀN HÌNH TĨNH: không ép sàn 1/15Hz; giữ mức adaptive do iOS cung cấp.
-        if (!isfinite(minimum) || minimum < 0.0f) {
-            minimum = 0.0f;
-        }
-    }
-    if (minimum > maximum) minimum = maximum;
-
-    // 3. Chuẩn hóa nhịp ưu tiên (Preferred)
-    float preferred = range.preferred;
-    if (Titanium_ShouldLockTargetRate()) {
-        preferred = maximum;
-    } else {
-        if (!isfinite(preferred) || preferred <= 0.0f || preferred > maximum) {
-            preferred = maximum;
-        }
-        if (preferred < minimum) preferred = minimum;
-    }
-
-    return SafeMakeFRR(minimum, maximum, preferred);
+    float target = (float)cap;
+    // Khóa cứng tuyệt đối: Minimum = Maximum = Preferred = target
+    return SafeMakeFRR(target, target, target);
 }
 
 #if TITANIUM_ENABLE_RATE_KEEPER
+
 // ====================================================================================================
 // [ĐÃ BỔ SUNG]: BỘ GIỮ NHỊP CHO SPRINGBOARD (KEEP-ALIVE DISPLAYLINK)
 // Trong video: hoạt ảnh chạy một đoạn rồi ĐỨNG HẲN 1-3 giây ngay khi nhả tay và chỉ chạy tiếp khi có chạm / bấm nút âm lượng.
@@ -5819,12 +5789,13 @@ static inline NSString *Titanium_TrV12(NSString *viText, NSString *enText) {
 }
 
 // ----------------------------------------------------------------------------------------------------
-// [V12 - PIN 1-20% VẪN MƯỢT]: cập nhật cờ ưu tiên mượt khi pin yếu (<=20% và không sạc)
+// [V12 - PIN 1-80% VẪN MƯỢT]: cập nhật cờ ưu tiên mượt từ 1% đến 80% pin (<=80% và không sạc)
 // ----------------------------------------------------------------------------------------------------
 static void Titanium_UpdateLowBatteryFlagV12(void) {
     float lvl = g_batteryLevelV12;
-    if (lvl < 0.0f) lvl = 1.0f; // Một số máy trả -1 khi chưa đọc được pin => coi như đầy, không bật chế độ pin yếu
-    g_lowBatterySmoothBoostV12 = (lvl <= 0.20f && !g_isDeviceChargingV285);
+    if (lvl < 0.0f) lvl = 1.0f; // Một số máy trả -1 khi chưa đọc được pin => coi như đầy
+    // Đổi ngưỡng từ 0.20f thành 0.80f: duy trì ưu tiên mượt và hoãn dọn dẹp nặng từ 80% xuống 1%
+    g_lowBatterySmoothBoostV12 = (lvl <= 0.80f && !g_isDeviceChargingV285);
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -5939,21 +5910,17 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %hook CADisplayLink
 
-// Clamp explicit over-cap requests only when the user has enabled the tweak. A rate of 0 means
-// system-managed/adaptive scheduling and must be preserved rather than converted into a fixed loop.
+// [ĐÃ KHÓA CỨNG]: Luôn ép khung hình chạy đúng mức đã chọn trong tweak, không để app/hệ thống hạ về 30 FPS
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsPassiveVideoPlayback()) {
         NSInteger nativeMax = Titanium_NativeMaximumFPS();
         NSInteger cap = Titanium_GetEffectiveFrameCap();
         if (cap < 15) cap = 15;
         if (cap > nativeMax) cap = nativeMax;
-        // preferredFramesPerSecond == 0 is Apple's valid system-managed/adaptive mode.
-        // Clamp only explicit rates above the hardware/configuration limit; do not pin idle links.
-        BOOL shouldClamp = (fps > cap);
-        if (shouldClamp) {
-            %orig(cap);
-            return;
-        }
+
+        // Khóa cứng FPS luôn bằng cap (ví dụ 60, 120)
+        %orig(cap);
+        return;
     }
     %orig;
 }
@@ -5973,11 +5940,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
             if (maxCap < 15.0f) maxCap = 15.0f;
             if (maxCap > 144.0f) maxCap = 144.0f;
 
-            if (Titanium_ShouldLockTargetRate()) {
-                range = SafeMakeFRR(maxCap, maxCap, maxCap);
-            } else {
-                range = SafeMakeFRR(15.0f, maxCap, 15.0f);
-            }
+            // [ĐÃ KHÓA CỨNG]: Xóa bỏ hoàn toàn nhánh hạ về 15Hz, giữ cố định min = max = preferred
+            range = SafeMakeFRR(maxCap, maxCap, maxCap);
         }
     }
     %orig(range);
