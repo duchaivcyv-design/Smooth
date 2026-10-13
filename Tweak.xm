@@ -6862,7 +6862,14 @@ static const void *kAICachedCellTimeKey        = &kAICachedCellTimeKey;
 }
 %end
 
+// Định nghĩa kiểu block cho performBatchUpdates để Theos không bị lỗi phân tích cú pháp chữ ký
+typedef void (^UICollectionBatchUpdatesBlock)(void);
+typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
+
+%group Group_AI_Stream_Optimization
+
 %hook UICollectionView
+
 - (void)scrollToItemAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UICollectionViewScrollPosition)scrollPosition animated:(BOOL)animated {
     if (Titanium_IsAIApp()) {
         if (self.isTracking || self.isDragging || self.isDecelerating || Titanium_IsUserActivelyScrollingAI()) {
@@ -6874,7 +6881,7 @@ static const void *kAICachedCellTimeKey        = &kAICachedCellTimeKey;
     %orig(indexPath, scrollPosition, animated);
 }
 
-- (void)performBatchUpdates:(void (NS_NOESCAPE ^)(void))updates completion:(void (^)(BOOL finished))completion {
+- (void)performBatchUpdates:(UICollectionBatchUpdatesBlock)updates completion:(UICollectionBatchCompletionBlock)completion {
     if (Titanium_IsAIApp()) {
         [UIView performWithoutAnimation:^{
             %orig(updates, completion);
@@ -6883,6 +6890,7 @@ static const void *kAICachedCellTimeKey        = &kAICachedCellTimeKey;
     }
     %orig(updates, completion);
 }
+
 %end
 
 // 4. Chặn bão InvalidateLayout của CompositionalLayout khi khung Code phình to
