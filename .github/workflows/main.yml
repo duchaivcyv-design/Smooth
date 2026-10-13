@@ -1,4 +1,4 @@
-name: build deb
+name: build
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
         id: set-matrix
         run: |
           SCHEME="${{ github.event.inputs.scheme }}"
-          if [ -z "$SCHEME" ] \vert{}\vert{} [ "$SCHEME" = "all" ]; then
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "all" ]; then
             echo 'matrix=["rootless","rootful","roothide"]' >> $GITHUB_OUTPUT
           else
             echo "matrix=[\"$SCHEME\"]" >> $GITHUB_OUTPUT
@@ -38,14 +38,12 @@ jobs:
     needs: setup
     runs-on: macos-latest
     strategy:
-      max-parallel: 1
       matrix:
         scheme: ${{ fromJson(needs.setup.outputs.matrix) }}
       fail-fast: false
 
     env:
       DEVICE_TARGET: "iphone:clang:16.5:14.0"
-      HOMEBREW_NO_AUTO_UPDATE: "1"
 
     steps:
       - name: checkout
