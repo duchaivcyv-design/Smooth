@@ -25,6 +25,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreImage/CoreImage.h>
+#import <Metal/Metal.h>
 #import <Security/Security.h>
 #import <os/lock.h>
 
@@ -3670,8 +3671,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)showServerAPIURLEditor {
+    if (![self isAdminDevRole]) {
+        [self presentIndependentDocument:@"Restricted" text:@"Admin API configuration is available only to an authenticated Admin Dev role."];
+        return;
+    }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Server API URL"
-                                                                   message:@"Nhập endpoint HTTPS đáng tin cậy của server riêng. Đổi endpoint sẽ xóa phiên đã lưu và yêu cầu đăng nhập lại; quyền Admin vẫn do backend xác thực."
+                                                                   message:@"URL Admin được ẩn khi nhập. Nhập endpoint HTTPS đáng tin cậy; đổi endpoint sẽ xóa phiên đã lưu và yêu cầu đăng nhập lại. Quyền Admin vẫn do backend xác thực."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.placeholder = @"https://server.example.com";
@@ -3679,6 +3684,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         field.autocapitalizationType = UITextAutocapitalizationTypeNone;
         field.autocorrectionType = UITextAutocorrectionTypeNo;
         field.text = [self currentAdminAPIBaseURL];
+        field.secureTextEntry = YES; // Hide the admin endpoint on screen.
         field.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     [alert addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
@@ -4800,7 +4806,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else {
         if (section == 0) return 2;
         if (section == 1) return _isFeatureActivated ? 8 : 1;
-        if (section == 2) return 6 + ([self isAdminDevRole] ? 1 : 0);
+        if (section == 2) return [self isAdminDevRole] ? 7 : 5;
         return 4;
     }
 }
@@ -4909,7 +4915,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 } else if (indexPath.section == 2) {
                     if (indexPath.row == 0) { title = _isGpuExpanded ? @"GPU ▼" : @"GPU ▶"; detail = @"Không có phép đo tải GPU công khai"; }
                     else if (indexPath.row == 1) { title = @"   Tải GPU"; detail = gpu >= 0.0f ? [NSString stringWithFormat:@"%.1f%%", gpu] : @"Không được API công khai hỗ trợ"; }
-                    else if (indexPath.row == 2) { title = @"   Tên GPU"; detail = @"Không xác định được qua API công khai"; }
+                    else if (indexPath.row == 2) { id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice(); title = @"   Tên GPU"; detail = metalDevice.name.length ? metalDevice.name : @"Metal GPU không được hệ thống công khai"; }
                     else if (indexPath.row == 3) { title = @"   Nhiệt GPU"; detail = @"iOS không công khai"; }
                     else if (indexPath.row == 4) { title = @"   Xung GPU"; detail = @"iOS không công khai"; }
                     else { title = @"   Chỉ số GPU"; detail = @"Không có dữ liệu đo thực tế"; }
@@ -4938,9 +4944,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     NSInteger targetFPS = [self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
                     NSInteger maximumHz = 0;
                     if (@available(iOS 10.0, *)) maximumHz = (NSInteger)UIScreen.mainScreen.maximumFramesPerSecond;
-                    if (indexPath.row == 0) { title = _isScreenExpanded ? @"Màn hình ▼" : @"Màn hình ▶"; detail = [NSString stringWithFormat:@"Tối đa %ld Hz", (long)maximumHz]; }
-                    else if (indexPath.row == 1) { title = @"   Nhiệt bề mặt"; detail = @"iOS không công khai"; }
-                    else if (indexPath.row == 2) { title = @"   Tần số tối đa"; detail = maximumHz > 0 ? [NSString stringWithFormat:@"%ld Hz", (long)maximumHz] : @"Không khả dụng"; }
+                    CGRect logicalBounds = UIScreen.mainScreen.bounds;
+                    CGRect nativeBounds = UIScreen.mainScreen.nativeBounds;
+                    CGFloat nativeScale = UIScreen.mainScreen.nativeScale;
+                    if (indexPath.row == 0) { title = _isScreenExpanded ? @"Màn hình ▼" : @"Màn hình ▶"; detail = [NSString stringWithFormat:@"%ld Hz tối đa · %.0f×%.0f px", (long)maximumHz, nativeBounds.size.width, nativeBounds.size.height]; }
+                    else if (indexPath.row == 1) { title = @"   Độ phân giải / scale"; detail = [NSString stringWithFormat:@"%.0f×%.0f px · scale %.2fx · vùng %.0f×%.0f pt", nativeBounds.size.width, nativeBounds.size.height, nativeScale, logicalBounds.size.width, logicalBounds.size.height]; }
+                    else if (indexPath.row == 2) { title = @"   Tần số tối đa do iOS báo"; detail = maximumHz > 0 ? [NSString stringWithFormat:@"%ld Hz", (long)maximumHz] : @"Không khả dụng"; }
                     else if (indexPath.row == 3) { title = @"   FPS mục tiêu đã đặt"; detail = [NSString stringWithFormat:@"%ld FPS (cấu hình, không phải FPS đo thực tế)", (long)targetFPS]; }
                     else { title = @"   Hz mục tiêu đã đặt"; detail = [NSString stringWithFormat:@"%ld Hz (cấu hình, không phải phép đo thực tế)", (long)targetHz]; }
                 }
@@ -5234,19 +5243,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 NSString *mode = self.settingsDict[TI_THEME_MODE_KEY] ?: ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
                 detail = [mode isEqualToString:@"light"] ? @"Sáng" : ([mode isEqualToString:@"dark"] ? @"Tối" : @"Theo giao diện hệ thống");
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else if (indexPath.row == 4) {
-                title = @"Server API URL";
+            } else if (indexPath.row == 4 && [self isAdminDevRole]) {
+                // Admin API endpoint editor is omitted entirely for non-Admin-Dev roles.
+                title = @"Admin Dev · API Endpoint";
                 NSString *base = [self currentAdminAPIBaseURL];
                 NSURLComponents *parts = [NSURLComponents componentsWithString:base];
-                // Keep the host out of the overview; the URL is visible only in the editor.
-                detail = parts.host.length ? @"HTTPS đã cấu hình · chạm để sửa" : @"Chưa cấu hình HTTPS";
+                detail = parts.host.length ? @"Đã cấu hình · URL chỉ hiện trong Admin Dev Console" : @"Chưa cấu hình · chỉ Admin Dev";
                 accent = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:1.0];
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else if (indexPath.row == 5) {
+            } else if (indexPath.row == ([self isAdminDevRole] ? 5 : 4)) {
                 title = @"URL Ping Server Free";
                 NSString *pingURL = [self currentFreeServerPingURL];
                 NSURLComponents *pingParts = [NSURLComponents componentsWithString:pingURL ?: @""];
-                detail = pingParts.host.length ? [NSString stringWithFormat:@"%@ · chạm để sửa", pingParts.host] : @"Chưa cấu hình · chạm để nhập URL HTTPS";
+                detail = pingParts.host.length ? @"HTTPS đã cấu hình · chạm để sửa" : @"Chưa cấu hình · chạm để nhập URL HTTPS";
                 accent = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:1.0];
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else if (indexPath.row == 6 && [self isAdminDevRole]) {
@@ -5264,7 +5273,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             NSString *detectedRoot = Titanium_DetectedBootstrapPrefixForUI();
             if (indexPath.row == 0) {
                 title = @"Môi Trường Jailbreak";
-                detail = Titanium_DetectJailbreakTypeForUI();
+                NSString *jbType = Titanium_DetectJailbreakTypeForUI();
+                BOOL jbPath = access("/var/jb", F_OK) == 0;
+                BOOL substratePath = access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0;
+                BOOL tweakInjectPath = access("/usr/lib/TweakInject", F_OK) == 0;
+                detail = [NSString stringWithFormat:@"%@ · /var/jb:%@ · Substrate:%@ · TweakInject:%@", jbType, jbPath ? @"có" : @"không", substratePath ? @"có" : @"không", tweakInjectPath ? @"có" : @"không"];
             } else if (indexPath.row == 1) {
                 title = @"Prefix Bootstrap";
                 detail = detectedRoot ?: @"Không xác định (chưa phát hiện)";
@@ -5280,10 +5293,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     BOOL activationEntry = (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0);
     BOOL adminLoginEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2);
-    BOOL freePingEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 5);
+    BOOL freePingEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == ([self isAdminDevRole] ? 5 : 4));
     BOOL manualPingEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0);
     BOOL themeEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3);
-    BOOL serverAPIEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4);
+    BOOL serverAPIEntry = (_currentBottomTab == 4 && [self isAdminDevRole] && indexPath.section == 2 && indexPath.row == 4);
     BOOL readOnlySandboxEntry = (_currentBottomTab == 4 && indexPath.section == 3);
     if (!_isFeatureActivated && _currentBottomTab == 4 && !activationEntry && !adminLoginEntry && !freePingEntry && !manualPingEntry && !themeEntry && !serverAPIEntry && !readOnlySandboxEntry) {
         // Prevent accessory switches and segmented controls from being usable while locked.
@@ -5301,9 +5314,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     BOOL themeSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3);
-    BOOL freePingSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 5);
+    BOOL freePingSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == ([self isAdminDevRole] ? 5 : 4));
     BOOL manualPingRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0);
-    BOOL serverAPISettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4);
+    BOOL serverAPISettingsRow = (_currentBottomTab == 4 && [self isAdminDevRole] && indexPath.section == 2 && indexPath.row == 4);
     if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer && !themeSettingsRow && !freePingSettingsRow && !manualPingRow && !serverAPISettingsRow) {
         [self showFirstInstallServerPicker];
         return;
@@ -5374,11 +5387,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [self showAdminServerLogin];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3) {
         [self showThemeModePicker];
-    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4) {
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4 && [self isAdminDevRole]) {
         [self showServerAPIURLEditor];
-    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 5) {
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == ([self isAdminDevRole] ? 5 : 4)) {
         [self showFreeServerPingURLEditor];
-    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 6) {
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 6 && [self isAdminDevRole]) {
         if ([self isAdminDevRole]) [self showAdminDevConsole];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 2) {
         [self showSandboxDiagnosticDetails];
