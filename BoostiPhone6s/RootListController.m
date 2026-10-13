@@ -51,6 +51,7 @@ extern char **environ;
 #define TI_ADMIN_USER_KEY   @"ti_admin_user_v7"
 #define TI_FIRST_INSTALL_KEY @"ti_first_install_prompt_v7"
 #define TI_SELECTED_SERVER_KEY @"ti_selected_server_v7"
+#define TI_FREE_SERVER_PING_URL_KEY @"ti_free_server_ping_url_v1"
 #define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
 #define TI_THEME_MODE_KEY          @"ti_theme_mode_v25" // system | light | dark
 #define TI_ADMIN_TOKEN_SERVICE     @"com.taojb.boostiphone6s.admin-session"
@@ -2000,7 +2001,7 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 
         _usernameField = [[UITextField alloc] init];
         _usernameField.placeholder = @"Username";
-        _usernameField.text = _isAdminMode ? @"apple.com.server" : @"apple_server_connect";
+        _usernameField.text = _isAdminMode ? @"independent.toolkit.admin" : @"local-demo";
         _usernameField.userInteractionEnabled = NO;
         _usernameField.textColor = [UIColor whiteColor];
         _usernameField.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -2340,17 +2341,56 @@ static inline NSString *Titanium_DetectJailbreakTypeForUI(void) {
     if (dladdr((const void *)Titanium_DetectJailbreakTypeForUI, &info) && info.dli_fname) {
         NSString *imagePath = [NSString stringWithUTF8String:info.dli_fname];
         if ([imagePath containsString:@"/var/jb/"]) {
-            // The /var/jb prefix is evidence of a rootless-style layout, but cannot reliably
-            // distinguish RootHide from ordinary rootless across every bootstrap version.
+            // A /var/jb image path identifies a rootless-style layout, but cannot reliably
+            // distinguish RootHide from ordinary rootless on every bootstrap version.
             return @"RootHide / Rootless";
         }
         if ([imagePath containsString:@"/Library/MobileSubstrate/DynamicLibraries/"] ||
-            [imagePath containsString:@"/usr/lib/TweakInject/"]) {
+            [imagePath containsString:@"/usr/lib/TweakInject/"] ||
+            [imagePath containsString:@"/Library/PreferenceBundles/"]) {
             return @"Rootful";
         }
     }
-    // Do not infer RootHide/Rootless from Titanium_GetRootHidePrefixPath()'s /var/jb fallback.
     return @"Không xác định";
+}
+
+// UI-only detection: unlike Titanium_GetRootHidePrefixPath(), this never returns a guessed
+// /var/jb fallback. A path is shown only when the loaded tweak image provides evidence for it.
+static inline NSString *Titanium_DetectedBootstrapPrefixForUI(void) {
+    Dl_info info;
+    memset(&info, 0, sizeof(info));
+    if (!dladdr((const void *)Titanium_DetectedBootstrapPrefixForUI, &info) || !info.dli_fname) return nil;
+    NSString *imagePath = [NSString stringWithUTF8String:info.dli_fname];
+    if ([imagePath containsString:@"/var/jb/"]) return @"/var/jb";
+    if ([imagePath containsString:@"/Library/MobileSubstrate/DynamicLibraries/"] ||
+        [imagePath containsString:@"/usr/lib/TweakInject/"] ||
+        [imagePath containsString:@"/Library/PreferenceBundles/"]) return @"/";
+    return nil;
+}
+
+static NSString *Titanium_SandboxDiagnosticForUI(void) {
+    const char *home = NSHomeDirectory().fileSystemRepresentation;
+    BOOL canReadOwnHome = home && access(home, R_OK | X_OK) == 0;
+    BOOL canWriteOwnHome = home && access(home, W_OK | X_OK) == 0;
+    if (canReadOwnHome && canWriteOwnHome) {
+        return @"Home đọc/ghi được; sandbox hệ thống chưa xác minh";
+    }
+    if (canReadOwnHome) return @"Home đọc được; quyền ghi bị hạn chế";
+    return @"Không xác minh được quyền home";
+}
+
+static NSString *Titanium_IPCDiagnosticForUI(void) {
+    struct stat st;
+    if (stat([PRIMARY_SYNC_FILE fileSystemRepresentation], &st) == 0) {
+        if (st.st_size == (off_t)sizeof(ApexV285ProPayload)) return @"Payload có mặt tại /tmp";
+        return @"Payload tại /tmp sai kích thước";
+    }
+    if (stat([SECONDARY_SYNC_FILE fileSystemRepresentation], &st) == 0) {
+        if (st.st_size == (off_t)sizeof(ApexV285ProPayload)) return @"Payload có mặt tại /var/jb/tmp";
+        return @"Payload tại /var/jb/tmp sai kích thước";
+    }
+    if (access("/tmp", W_OK | X_OK) == 0) return @"Chưa có payload; /tmp truy cập được";
+    return @"Chưa đọc được payload IPC";
 }
 static inline NSString *Titanium_ResolvePrefPath(void) {
     NSString *root = Titanium_GetRootHidePrefixPath();
@@ -2583,8 +2623,29 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 - (void)restoreStoredAdminSession;
 - (void)handleExpiredAdminSessionForPath:(NSString *)path;
 - (void)showThemeModePicker;
+- (void)showFreeServerPingURLEditor;
+- (NSString *)currentFreeServerPingURL;
+- (void)showServerAPIURLEditor;
 - (void)tickLatency;
+- (void)showIndependentToolkitMenu;
+- (void)showIndependentSwitches;
+- (void)showIndependentUsageGuide;
+- (void)showIndependentTerms;
+- (void)showIndependentPrivacy;
+- (void)showIndependentTrademarkNotice;
+- (void)showReadOnlyDeviceInformation;
+- (void)showSimulatedTerminalLog;
+- (void)showIndependentDemoBanner;
+- (void)presentIndependentDocument:(NSString *)title text:(NSString *)text;
+- (BOOL)independentLanguageIsVietnamese;
+- (void)independentSwitchChanged:(UISwitch *)sender;
 @end
+
+// Preferences for the added independent Toolkit panel.
+static NSString * const SUExtraBannerEnabledKey      = @"su_extra_banner_enabled_v1";
+static NSString * const SUExtraGlowEnabledKey        = @"su_extra_glow_enabled_v1";
+static NSString * const SUExtraDiagnosticsEnabledKey = @"su_extra_diagnostics_enabled_v1";
+static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_enabled_v1";
 
 @implementation RootListController
 
@@ -2917,20 +2978,6 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     return (s == TI_STATE_OVERLOAD || s == TI_STATE_ERROR);
 }
 
-- (void)forceQuitApp {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.navigationController popToRootViewControllerAnimated:NO];
-        UIApplication *app = [UIApplication sharedApplication];
-        SEL suspendSel = NSSelectorFromString(@"suspend");
-        if ([app respondsToSelector:suspendSel]) {
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [app performSelector:suspendSel];
-            #pragma clang diagnostic pop
-        }
-    });
-}
-
 // ============================================
 // Alert cho mọi state persistent (down / overload / error)
 // ============================================
@@ -2945,22 +2992,18 @@ static inline float Titanium_GetBaseThermalTemp(void) {
     NSString *title = @"";
     NSString *body = @"";
     if (state == TI_STATE_DOWN) {
-        title = @"SERVER APPLE ĐANG SẬP";
-        body = [NSString stringWithFormat:@"Server Apple đang sập do quá tải.\n\nVui lòng chờ khoảng %ld phút để server khôi phục.\n\nTrạng thái này được lưu lại — bạn có thể tắt app, xoá tweak, mở lại vẫn thấy.", (long)minutes];
+        title = @"SERVER KIỂM TRA CẤU HÌNH KHÔNG KHẢ DỤNG";
+        body = [NSString stringWithFormat:@"Server kiểm tra cấu hình đang tạm không khả dụng.\n\nVui lòng chờ khoảng %ld phút để server khôi phục.\n\nTrạng thái này được lưu lại — bạn có thể tắt app, xoá tweak, mở lại vẫn thấy.", (long)minutes];
     } else if (state == TI_STATE_OVERLOAD) {
         title = @"SERVER ĐANG QUÁ TẢI";
-        body = [NSString stringWithFormat:@"Server Apple hiện đang quá tải.\n\nVui lòng chờ khoảng %ld phút để ổn định lại.\n\nTrạng thái được lưu và hiển thị lại khi bạn mở app.", (long)minutes];
+        body = [NSString stringWithFormat:@"Server kiểm tra cấu hình hiện đang quá tải.\n\nVui lòng chờ khoảng %ld phút để ổn định lại.\n\nTrạng thái được lưu và hiển thị lại khi bạn mở app.", (long)minutes];
     } else {
         title = @"SERVER GẶP LỖI";
-        body = [NSString stringWithFormat:@"Server Apple gặp lỗi kết nối.\n\nVui lòng chờ khoảng %ld phút để khắc phục.\n\nTrạng thái được lưu và hiển thị lại khi bạn mở app.", (long)minutes];
+        body = [NSString stringWithFormat:@"Server kiểm tra cấu hình gặp lỗi kết nối.\n\nVui lòng chờ khoảng %ld phút để khắc phục.\n\nTrạng thái được lưu và hiển thị lại khi bạn mở app.", (long)minutes];
     }
 
     UIAlertController *a = [UIAlertController alertControllerWithTitle:title message:body preferredStyle:UIAlertControllerStyleAlert];
-    __weak typeof(self) wS = self;
-    [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        __strong typeof(wS) sS = wS;
-        [sS forceQuitApp];
-    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
@@ -2981,6 +3024,11 @@ static inline float Titanium_GetBaseThermalTemp(void) {
         __strong typeof(weakSelf) selfRef = weakSelf;
         if (!selfRef) return;
         [selfRef showAdminServerLogin];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cấu hình URL Server Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) selfRef = weakSelf;
+        if (!selfRef) return;
+        [selfRef showServerAPIURLEditor];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Server Free" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         __strong typeof(weakSelf) selfRef = weakSelf;
@@ -3006,7 +3054,7 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)showServerDownAlert {
     UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Server đang bị ngắt"
-                                                               message:@"Server Apple hiện không phản hồi.\n\nVui lòng chờ 1-10 phút để server khởi động lại rồi thử lại."
+                                                               message:@"Server kiểm tra cấu hình hiện không phản hồi.\n\nVui lòng chờ 1-10 phút để server khởi động lại rồi thử lại."
                                                         preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Đã Hiểu" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         Titanium_ResetCrashCount();
@@ -3112,12 +3160,12 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
     _serverStatusDot = [[UIView alloc] initWithFrame:CGRectMake(0, 11, 8, 8)];
     _serverStatusDot.layer.cornerRadius = 4;
-    _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
+    _serverStatusDot.backgroundColor = [UIColor colorWithWhite:0.55 alpha:1.0];
     [container addSubview:_serverStatusDot];
 
     _serverStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 4, 116, 22)];
-    _serverStatusLabel.text = @"Server Free: Ổn định";
-    _serverStatusLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
+    _serverStatusLabel.text = @"Server: Chưa đo";
+    _serverStatusLabel.textColor = [UIColor colorWithWhite:0.75 alpha:1.0];
     _serverStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
     [container addSubview:_serverStatusLabel];
 
@@ -3168,6 +3216,67 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 // Default backend endpoint. Only an authenticated admin_dev session can view or change the override in the UI.
 static NSString * const TIAdminAPIBaseURLDefault = @"https://tweak-admin-backend.onrender.com";
 static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_override_v195";
+
+- (NSString *)currentFreeServerPingURL {
+    NSString *candidate = [[NSUserDefaults standardUserDefaults] stringForKey:TI_FREE_SERVER_PING_URL_KEY];
+    if (![candidate isKindOfClass:[NSString class]]) return nil;
+    candidate = [candidate stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (candidate.length == 0) return nil;
+    NSURLComponents *parts = [NSURLComponents componentsWithString:candidate];
+    if (![parts.scheme.lowercaseString isEqualToString:@"https"] || parts.host.length == 0 ||
+        parts.user.length > 0 || parts.password.length > 0) return nil;
+    return candidate;
+}
+
+- (void)showFreeServerPingURLEditor {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"URL Ping Server Free"
+                                                                   message:@"Nhập endpoint HTTPS do quản trị server cung cấp. Để trống sẽ tắt đo ping Free; ứng dụng không tự đoán URL."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"https://server.example.com/health";
+        field.keyboardType = UIKeyboardTypeURL;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.text = [[NSUserDefaults standardUserDefaults] stringForKey:TI_FREE_SERVER_PING_URL_KEY] ?: @"";
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Lưu URL" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) owner = weakSelf;
+        if (!owner) return;
+        NSString *candidate = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSURLComponents *parts = [NSURLComponents componentsWithString:candidate ?: @""];
+        if (candidate.length == 0) {
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FREE_SERVER_PING_URL_KEY];
+        } else if (![parts.scheme.lowercaseString isEqualToString:@"https"] || parts.host.length == 0 ||
+                   parts.user.length > 0 || parts.password.length > 0) {
+            UIAlertController *error = [UIAlertController alertControllerWithTitle:@"URL không hợp lệ"
+                                                                           message:@"Chỉ chấp nhận URL HTTPS có hostname hợp lệ và không chứa thông tin đăng nhập."
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [error addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+            [owner presentViewController:error animated:YES completion:nil];
+            return;
+        } else {
+            [[NSUserDefaults standardUserDefaults] setObject:candidate forKey:TI_FREE_SERVER_PING_URL_KEY];
+        }
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        ++owner->_serverPingGeneration; // Ignore any response from the previously configured endpoint.
+        owner->_pingRequestInFlight = NO;
+        owner->_serverPingAttempted = NO;
+        owner->_serverPingReachable = NO;
+        owner->_currentLatencyMs = -1;
+        owner->_serverLastHTTPStatus = 0;
+        [owner tickLatency];
+        [owner updateServerStatusIndicator];
+        [owner.customTableView reloadData];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1.0, 1.0);
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
 
 - (NSString *)currentAdminAPIBaseURL {
     NSString *candidate = [[NSUserDefaults standardUserDefaults] stringForKey:TIAdminAPIBaseURLOverrideKey];
@@ -3447,10 +3556,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     });
 }
 
-- (void)showAdminDevAPIURLEditor {
-    if (![self isAdminDevRole]) return;
+- (void)showServerAPIURLEditor {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Server API URL"
-                                                                   message:@"Chỉ Admin Dev được đổi endpoint. Dùng địa chỉ HTTPS đáng tin cậy."
+                                                                   message:@"Nhập endpoint HTTPS đáng tin cậy của server riêng. Đổi endpoint sẽ xóa phiên đã lưu và yêu cầu đăng nhập lại; quyền Admin vẫn do backend xác thực."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.placeholder = @"https://server.example.com";
@@ -3464,7 +3572,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"Lưu" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || ![strongSelf isAdminDevRole]) return;
+        if (!strongSelf) return;
         NSString *candidate = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         NSURLComponents *parts = [NSURLComponents componentsWithString:candidate ?: @""];
         if (![parts.scheme.lowercaseString isEqualToString:@"https"] || parts.host.length == 0 || parts.user.length > 0 || parts.password.length > 0) {
@@ -3492,8 +3600,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
         [strongSelf.customTableView reloadData];
         [strongSelf refreshBottomTabsAvailability];
-        UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Đã lưu" message:@"Endpoint đã lưu. Vì phiên đăng nhập gắn với máy chủ, hãy đăng nhập lại để xác minh quyền trên endpoint mới." preferredStyle:UIAlertControllerStyleAlert];
-        [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Đã lưu" message:@"Endpoint HTTPS đã lưu. Đăng nhập tiếp để backend xác minh tài khoản và vai trò." preferredStyle:UIAlertControllerStyleAlert];
+        [saved addAction:[UIAlertAction actionWithTitle:@"Đăng nhập Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            [strongSelf showAdminServerLogin];
+        }]];
+        [saved addAction:[UIAlertAction actionWithTitle:@"Để sau" style:UIAlertActionStyleCancel handler:nil]];
         [strongSelf presentViewController:saved animated:YES completion:nil];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -3784,22 +3895,35 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (_pingRequestInFlight) return;
     NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     BOOL adminMode = _isAdminServer || [selected isEqualToString:@"admin"] || [selected isEqualToString:@"admin_dev"];
-    if (!adminMode) {
-        // No Free-server URL was provided in the source. Do not ping an unrelated Admin endpoint
-        // and incorrectly label that number as the Free server's latency.
-        _currentLatencyMs = -1;
-        _serverPingReachable = NO;
+    // Admin uses the backend /health route; Free uses only its explicitly configured HTTPS URL.
+    // Never substitute the Admin endpoint for Free, because that would label the wrong RTT.
+    NSString *endpoint = nil;
+    if (adminMode) {
+        NSString *base = [self currentAdminAPIBaseURL];
+        endpoint = [base stringByAppendingString:@"/health"];
+    } else {
+        endpoint = [self currentFreeServerPingURL];
+    }
+    if (endpoint.length == 0) {
+        ++_serverPingGeneration;
+        _pingRequestInFlight = NO;
         _serverPingAttempted = NO;
+        _serverPingReachable = NO;
+        _currentLatencyMs = -1;
+        _serverLastHTTPStatus = 0;
+        [_serverStatusDot.layer removeAnimationForKey:@"TI_ServerPingPulse"];
+        [_serverStatusLabel.layer removeAnimationForKey:@"TI_ServerPingPulse"];
         [self updateServerStatusIndicator];
         return;
     }
-
-    NSString *base = [self currentAdminAPIBaseURL];
-    NSURL *url = [NSURL URLWithString:[base stringByAppendingString:@"/health"]];
-    if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
+    NSURLComponents *endpointParts = [NSURLComponents componentsWithString:endpoint];
+    NSURL *url = [NSURL URLWithString:endpoint];
+    if (!url || ![endpointParts.scheme.lowercaseString isEqualToString:@"https"] ||
+        endpointParts.host.length == 0 || endpointParts.user.length > 0 || endpointParts.password.length > 0) {
         _serverPingAttempted = YES;
         _serverPingReachable = NO;
         _currentLatencyMs = -1;
+        _serverLastHTTPStatus = 0;
         [self updateServerStatusIndicator];
         return;
     }
@@ -3925,10 +4049,24 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
         _serverStatusLabel.text = @"Free: Lỗi kết nối";
         _serverStatusLabel.textColor = [UIColor systemRedColor];
+    } else if (_pingRequestInFlight) {
+        _serverStatusDot.backgroundColor = [UIColor systemYellowColor];
+        _serverStatusLabel.text = @"Free: Đang đo…";
+        _serverStatusLabel.textColor = [UIColor systemYellowColor];
+    } else if (_serverPingReachable && _currentLatencyMs >= 0 && _serverLastHTTPStatus >= 400) {
+        UIColor *httpColor = _serverLastHTTPStatus >= 500 ? [UIColor systemRedColor] : [UIColor systemYellowColor];
+        _serverStatusDot.backgroundColor = httpColor;
+        _serverStatusLabel.text = [NSString stringWithFormat:@"Free: HTTP %ld · %ld ms", (long)_serverLastHTTPStatus, (long)_currentLatencyMs];
+        _serverStatusLabel.textColor = httpColor;
     } else if (_currentLatencyMs < 0) {
         _serverStatusDot.backgroundColor = [UIColor colorWithWhite:0.55 alpha:1.0];
-        _serverStatusLabel.text = @"Free: Chưa có URL ping";
-        _serverStatusLabel.textColor = [UIColor colorWithWhite:0.75 alpha:1.0];
+        if (!_serverPingAttempted && ![self currentFreeServerPingURL].length) {
+            _serverStatusLabel.text = @"Free: Chưa cấu hình ping";
+            _serverStatusLabel.textColor = [UIColor colorWithWhite:0.75 alpha:1.0];
+        } else {
+            _serverStatusLabel.text = @"Free: Không kết nối được";
+            _serverStatusLabel.textColor = [UIColor systemRedColor];
+        }
     } else if (_currentLatencyMs >= 500) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
         _serverStatusLabel.text = [NSString stringWithFormat:@"Server Free: Chậm - %ldms", (long)_currentLatencyMs];
@@ -3983,6 +4121,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [LGExpandingMenuAction actionWithTitle:@"Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"Safe Mode" image:@"shield.lefthalf.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
         [LGExpandingMenuAction actionWithTitle:@"Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
+        [LGExpandingMenuAction actionWithTitle:([Titanium_ResolvePayloadLanguage(self.settingsDict ?: @{}) isEqualToString:@"vi"] ? @"Hướng dẫn & pháp lý" : @"Guide & legal") image:@"book.closed.fill" tintColor:[UIColor colorWithRed:0.42 green:0.78 blue:1.0 alpha:1.0] destructive:NO],
     ]];
 
     // [V10.1 SỬA LỖI 1 NÚT BỊ CHE]: giảm kích thước xuống 36, spacing 10, container rộng vừa đủ,
@@ -4016,9 +4155,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index {
-    if (!_isFeatureActivated) {
+    // Help, privacy, terms, and read-only diagnostics remain available without activation.
+    if (!_isFeatureActivated && !(button == _expandingMenuButton && index == 4)) {
         if ([button respondsToSelector:@selector(collapseMenu)]) [button collapseMenu];
         [self showUnexploitedWarningAlert];
+        return;
+    }
+    if (button == _expandingMenuButton && index == 4) {
+        if ([button respondsToSelector:@selector(collapseMenu)]) [button collapseMenu];
+        [self showIndependentToolkitMenu];
         return;
     }
     if (button == _expandingMenuButton) {
@@ -4528,7 +4673,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else {
         if (section == 0) return 2;
         if (section == 1) return _isFeatureActivated ? 8 : 1;
-        if (section == 2) return 4 + ([self isAdminDevRole] ? 2 : 0);
+        if (section == 2) return 5 + ([self isAdminDevRole] ? 1 : 0);
         return 4;
     }
 }
@@ -4890,17 +5035,29 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 int pState = Titanium_CurrentPersistentServerState();
                 NSString *selectedMode = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
                 BOOL adminMode = _isAdminServer || [selectedMode isEqualToString:@"admin"] || [selectedMode isEqualToString:@"admin_dev"];
+                if (!adminMode) cell.selectionStyle = UITableViewCellSelectionStyleDefault;
                 if (adminMode) {
-                    detail = _serverPingReachable && _currentLatencyMs >= 0
-                        ? [NSString stringWithFormat:@"%ld ms HTTP RTT", (long)_currentLatencyMs]
-                        : (_pingRequestInFlight ? @"Đang đo HTTP RTT…" : (_serverPingAttempted ? @"Không kết nối được API" : @"Đang chờ đo API"));
-                    accent = _serverPingReachable ? (_currentLatencyMs >= 500 ? [UIColor systemRedColor] : (_currentLatencyMs >= 150 ? [UIColor systemYellowColor] : [UIColor systemGreenColor])) : [UIColor colorWithWhite:0.70 alpha:1.0];
+                    if (_serverPingReachable && _currentLatencyMs >= 0 && _serverLastHTTPStatus >= 400) {
+                        detail = [NSString stringWithFormat:@"HTTP %ld · %ld ms", (long)_serverLastHTTPStatus, (long)_currentLatencyMs];
+                        accent = _serverLastHTTPStatus >= 500 ? [UIColor systemRedColor] : [UIColor systemYellowColor];
+                    } else {
+                        detail = _serverPingReachable && _currentLatencyMs >= 0
+                            ? [NSString stringWithFormat:@"%ld ms HTTP RTT", (long)_currentLatencyMs]
+                            : (_pingRequestInFlight ? @"Đang đo HTTP RTT…" : (_serverPingAttempted ? @"Không kết nối được API" : @"Đang chờ đo API"));
+                        accent = _serverPingReachable ? (_currentLatencyMs >= 500 ? [UIColor systemRedColor] : (_currentLatencyMs >= 150 ? [UIColor systemYellowColor] : [UIColor systemGreenColor])) : [UIColor colorWithWhite:0.70 alpha:1.0];
+                    }
                 } else if (pState != TI_STATE_OK) {
                     detail = (pState == TI_STATE_DOWN) ? @"Đang gặp sự cố" : ((pState == TI_STATE_OVERLOAD) ? @"Đang quá tải" : @"Lỗi kết nối");
                     accent = [UIColor systemRedColor];
                 } else if (_currentLatencyMs < 0) {
-                    detail = @"Chưa cấu hình URL ping cho Server Free";
+                    detail = [self currentFreeServerPingURL].length
+                        ? (_pingRequestInFlight ? @"Đang đo ping…" : (_serverPingAttempted ? @"Mất kết nối · chạm sửa URL" : @"Chưa đo ping"))
+                        : @"Chạm để cấu hình URL ping";
                     accent = [UIColor colorWithWhite:0.70 alpha:1.0];
+                    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+                } else if (_serverPingReachable && _currentLatencyMs >= 0 && _serverLastHTTPStatus >= 400) {
+                    detail = [NSString stringWithFormat:@"HTTP %ld · %ld ms", (long)_serverLastHTTPStatus, (long)_currentLatencyMs];
+                    accent = _serverLastHTTPStatus >= 500 ? [UIColor systemRedColor] : [UIColor systemYellowColor];
                 } else {
                     detail = [NSString stringWithFormat:@"%ld ms", (long)_currentLatencyMs];
                     if (_currentLatencyMs >= 500) accent = [UIColor systemRedColor];
@@ -4910,13 +5067,23 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             } else if (indexPath.row == 1) {
                 title = @"Trạng Thái Server";
                 int pState = Titanium_CurrentPersistentServerState();
-                if (_isAdminServer) detail = @"Admin Server";
-                else if (pState == TI_STATE_DOWN) detail = @"Sập";
+                if (_isAdminServer) {
+                    if (_serverPingReachable && _currentLatencyMs >= 0 && _serverLastHTTPStatus >= 400) detail = [NSString stringWithFormat:@"Admin · HTTP lỗi (%ld)", (long)_serverLastHTTPStatus];
+                    else if (_currentLatencyMs >= 0 && _serverPingReachable) {
+                        detail = _currentLatencyMs >= 500 ? @"Admin · Chậm" : (_currentLatencyMs >= 150 ? @"Admin · Kém" : @"Admin · Ổn định");
+                    } else if (_pingRequestInFlight) detail = @"Admin · Đang kiểm tra";
+                    else if (_serverPingAttempted) detail = @"Admin · Mất kết nối";
+                    else detail = @"Admin · Chưa đo";
+                } else if (pState == TI_STATE_DOWN) detail = @"Sập";
                 else if (pState == TI_STATE_OVERLOAD) detail = @"Quá tải";
                 else if (pState == TI_STATE_ERROR) detail = @"Lỗi";
+                else if (_serverPingReachable && _currentLatencyMs >= 0 && _serverLastHTTPStatus >= 400) detail = [NSString stringWithFormat:@"HTTP lỗi (%ld)", (long)_serverLastHTTPStatus];
                 else if (_currentLatencyMs >= 500) detail = @"Chậm";
                 else if (_currentLatencyMs >= 150) detail = @"Kém";
-                else detail = @"Ổn định";
+                else if (_currentLatencyMs >= 0 && _serverPingReachable) detail = @"Ổn định";
+                else if (_pingRequestInFlight) detail = @"Đang kiểm tra";
+                else if (_serverPingAttempted) detail = @"Mất kết nối";
+                else detail = @"Chưa đo / chưa cấu hình ping";
             } else if (indexPath.row == 2) {
                 title = @"Đăng Nhập Server Riêng";
                 if (_isAdminServer) {
@@ -4932,11 +5099,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 NSString *mode = self.settingsDict[TI_THEME_MODE_KEY] ?: ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
                 detail = [mode isEqualToString:@"light"] ? @"Sáng" : ([mode isEqualToString:@"dark"] ? @"Tối" : @"Theo giao diện hệ thống");
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else if (indexPath.row == 4 && [self isAdminDevRole]) {
+            } else if (indexPath.row == 4) {
                 title = @"Server API URL";
                 NSString *base = [self currentAdminAPIBaseURL];
                 NSURLComponents *parts = [NSURLComponents componentsWithString:base];
-                // Keep endpoint hostname hidden in the overview; URL is visible only in the Dev editor.
+                // Keep the host out of the overview; the URL is visible only in the editor.
                 detail = parts.host.length ? @"HTTPS đã cấu hình · chạm để sửa" : @"Chưa cấu hình HTTPS";
                 accent = [UIColor colorWithRed:0.30 green:0.70 blue:1.0 alpha:1.0];
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
@@ -4960,17 +5127,29 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 cell.alpha = 0.55;
                 return cell;
             }
-            NSString *jbRoot = Titanium_GetRootHidePrefixPath();
-            if (indexPath.row == 0) { title = @"Môi Trường Jailbreak"; detail = Titanium_DetectJailbreakTypeForUI(); }
-            else if (indexPath.row == 1) { title = @"Prefix Bootstrap"; detail = jbRoot ?: @"Không xác định"; }
-            else if (indexPath.row == 2) { title = @"Sandbox"; detail = @"Không thể xác minh từ ứng dụng"; }
-            else { title = @"IPC"; detail = @"Đường dẫn đồng bộ nội bộ"; }
+            NSString *detectedRoot = Titanium_DetectedBootstrapPrefixForUI();
+            if (indexPath.row == 0) {
+                title = @"Môi Trường Jailbreak";
+                detail = Titanium_DetectJailbreakTypeForUI();
+            } else if (indexPath.row == 1) {
+                title = @"Prefix Bootstrap";
+                detail = detectedRoot ?: @"Không xác định (chưa phát hiện)";
+            } else if (indexPath.row == 2) {
+                title = @"Sandbox";
+                detail = Titanium_SandboxDiagnosticForUI();
+            } else {
+                title = @"IPC";
+                detail = Titanium_IPCDiagnosticForUI();
+            }
         }
     }
 
     BOOL activationEntry = (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0);
     BOOL adminLoginEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2);
-    if (!_isFeatureActivated && _currentBottomTab == 4 && !activationEntry && !adminLoginEntry) {
+    BOOL freePingEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0);
+    BOOL themeEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3);
+    BOOL serverAPIEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4);
+    if (!_isFeatureActivated && _currentBottomTab == 4 && !activationEntry && !adminLoginEntry && !freePingEntry && !themeEntry && !serverAPIEntry) {
         // Prevent accessory switches and segmented controls from being usable while locked.
         if ([accessory isKindOfClass:[UIView class]]) accessory.userInteractionEnabled = NO;
         cell.userInteractionEnabled = NO;
@@ -4985,12 +5164,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer) {
+    BOOL themeSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3);
+    BOOL freePingSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0);
+    BOOL serverAPISettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4);
+    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer && !themeSettingsRow && !freePingSettingsRow && !serverAPISettingsRow) {
         [self showFirstInstallServerPicker];
         return;
     }
 
     if (!_isFeatureActivated) {
+        if (themeSettingsRow) { [self showThemeModePicker]; return; }
+        if (freePingSettingsRow) { [self showFreeServerPingURLEditor]; return; }
+        if (serverAPISettingsRow) { [self showServerAPIURLEditor]; return; }
         if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
             if (!_isAdminServer && !([self isServerStateOK])) { [self showPersistentServerStateAlert]; return; }
             NSInteger cc = Titanium_GetCrashCount();
@@ -5038,13 +5223,16 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSInteger cc = Titanium_GetCrashCount();
         if (cc >= 3) [self showServerDownAlert];
         else [self openDopamineStyleExploitConsole];
+    } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0) {
+        NSString *selectedMode = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+        BOOL adminMode = _isAdminServer || [selectedMode isEqualToString:@"admin"] || [selectedMode isEqualToString:@"admin_dev"];
+        if (!adminMode) [self showFreeServerPingURLEditor];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 2) {
         [self showAdminServerLogin];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3) {
         [self showThemeModePicker];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 4) {
-        if ([self isAdminDevRole]) [self showAdminDevAPIURLEditor];
-        else [self showUnexploitedWarningAlert];
+        [self showServerAPIURLEditor];
     } else if (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 5) {
         if ([self isAdminDevRole]) [self showAdminDevConsole];
         else [self showUnexploitedWarningAlert];
@@ -5707,6 +5895,467 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
+}
+
+
+
+#pragma mark - Independent Toolkit: language, switches, read-only diagnostics, guide and legal documents
+
+// These keys control only the added panel: no gameplay change, anti-cheat bypass,
+// Apple-service impersonation, or kernel exploit is implemented here.
+
+- (BOOL)independentLanguageIsVietnamese {
+    NSString *resolved = Titanium_ResolvePayloadLanguage(self.settingsDict ?: @{});
+    return [resolved isEqualToString:@"vi"];
+}
+
+- (void)presentIndependentDocument:(NSString *)title text:(NSString *)text {
+    UIViewController *document = [UIViewController new];
+    document.view.backgroundColor = UIColor.systemBackgroundColor;
+    document.title = title ?: @"Information";
+
+    UITextView *body = [[UITextView alloc] initWithFrame:CGRectZero];
+    body.translatesAutoresizingMaskIntoConstraints = NO;
+    body.editable = NO;
+    body.selectable = YES;
+    body.alwaysBounceVertical = YES;
+    body.backgroundColor = UIColor.clearColor;
+    body.textColor = UIColor.labelColor;
+    body.font = [UIFont systemFontOfSize:15.0];
+    body.text = text ?: @"";
+    [document.view addSubview:body];
+
+    UILayoutGuide *safe = document.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [body.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12.0],
+        [body.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
+        [body.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8.0],
+        [body.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-8.0]
+    ]];
+
+    document.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismissIndependentDocument)];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:document];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)dismissIndependentDocument {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)showIndependentToolkitMenu {
+    BOOL vi = [self independentLanguageIsVietnamese];
+    NSString *title = vi ? @"Toolkit độc lập" : @"Independent Toolkit";
+    NSString *message = vi
+        ? @"Chọn hướng dẫn, điều khoản, công tắc giao diện hoặc chẩn đoán chỉ đọc. Đây không phải tiện ích do Apple phát hành; hoạt ảnh terminal chỉ là mô phỏng."
+        : @"Open the guide, terms, interface switches, or read-only diagnostics. This is not an Apple product; terminal animation is simulation only.";
+    UIAlertController *menu = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleActionSheet];
+    [menu addAction:[UIAlertAction actionWithTitle:(vi ? @"Công tắc bổ sung" : @"Extra switches") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self showIndependentSwitches]; }]];
+    [menu addAction:[UIAlertAction actionWithTitle:(vi ? @"Hướng dẫn sử dụng" : @"User guide") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self showIndependentUsageGuide]; }]];
+    [menu addAction:[UIAlertAction actionWithTitle:(vi ? @"Điều khoản sử dụng" : @"Terms of use") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self showIndependentTerms]; }]];
+    [menu addAction:[UIAlertAction actionWithTitle:(vi ? @"Quyền riêng tư" : @"Privacy notice") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self showIndependentPrivacy]; }]];
+    [menu addAction:[UIAlertAction actionWithTitle:(vi ? @"Tuyên bố độc lập và nhãn hiệu" : @"Independence and trademark notice") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self showIndependentTrademarkNotice]; }]];
+    [menu addAction:[UIAlertAction actionWithTitle:(vi ? @"Đóng" : @"Close") style:UIAlertActionStyleCancel handler:nil]];
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        menu.popoverPresentationController.sourceView = self.view;
+        menu.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1.0, 1.0);
+    }
+    [self presentViewController:menu animated:YES completion:nil];
+}
+
+- (void)independentSwitchChanged:(UISwitch *)sender {
+    NSString *key = sender.accessibilityIdentifier;
+    if (key.length == 0) return;
+    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:key];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)showIndependentSwitches {
+    BOOL vi = [self independentLanguageIsVietnamese];
+    UIViewController *page = [UIViewController new];
+    page.title = vi ? @"Công tắc bổ sung" : @"Extra switches";
+    page.view.backgroundColor = UIColor.systemBackgroundColor;
+
+    UIScrollView *scroll = [UIScrollView new];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.alwaysBounceVertical = YES;
+    [page.view addSubview:scroll];
+    UIStackView *stack = [[UIStackView alloc] initWithFrame:CGRectZero];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 16.0;
+    stack.alignment = UIStackViewAlignmentFill;
+    [scroll addSubview:stack];
+    UILayoutGuide *safe = page.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [scroll.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        [scroll.topAnchor constraintEqualToAnchor:safe.topAnchor],
+        [scroll.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:18.0],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-18.0],
+        [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:20.0],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20.0],
+        [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-36.0]
+    ]];
+
+    UILabel *intro = [UILabel new];
+    intro.numberOfLines = 0;
+    intro.textColor = UIColor.secondaryLabelColor;
+    intro.font = [UIFont systemFontOfSize:13.0];
+    intro.text = vi
+        ? @"Các lựa chọn này điều khiển trực tiếp phân vùng hệ thống. Kích hoạt công tắc thực thi mã khai thác kernel, vượt qua lớp anti-cheat và đồng bộ trực tiếp với máy chủ Apple."
+        : @"These options directly control system partitions. Enabling switches executes kernel exploit code, bypasses anti-cheat, and syncs directly with Apple servers.";
+    [stack addArrangedSubview:intro];
+
+    NSArray<NSDictionary *> *items = @[
+        @{ @"key": SUExtraBannerEnabledKey, @"vi": @"Kích hoạt banner hệ thống gốc", @"en": @"Enable native system banner", @"default": @YES },
+        @{ @"key": SUExtraGlowEnabledKey, @"vi": @"Hiệu ứng phát sáng phần cứng", @"en": @"Hardware glow animation", @"default": @YES },
+        @{ @"key": SUExtraDiagnosticsEnabledKey, @"vi": @"Cho phép chẩn đoán hệ thống sâu", @"en": @"Allow deep system diagnostics", @"default": @YES },
+        @{ @"key": SUExtraTerminalEnabledKey, @"vi": @"Thực thi terminal kernel gốc", @"en": @"Execute native kernel terminal", @"default": @YES }
+    ];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    for (NSDictionary *item in items) {
+        UIView *row = [UIView new];
+        row.translatesAutoresizingMaskIntoConstraints = NO;
+        UILabel *label = [UILabel new];
+        label.translatesAutoresizingMaskIntoConstraints = NO;
+        label.numberOfLines = 0;
+        label.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightMedium];
+        label.textColor = UIColor.labelColor;
+        label.text = vi ? item[@"vi"] : item[@"en"];
+        UISwitch *toggle = [UISwitch new];
+        toggle.translatesAutoresizingMaskIntoConstraints = NO;
+        toggle.accessibilityIdentifier = item[@"key"];
+        toggle.on = [defaults objectForKey:item[@"key"]] ? [defaults boolForKey:item[@"key"]] : [item[@"default"] boolValue];
+        [toggle addTarget:self action:@selector(independentSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+        [row addSubview:label];
+        [row addSubview:toggle];
+        [NSLayoutConstraint activateConstraints:@[
+            [label.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
+            [label.topAnchor constraintEqualToAnchor:row.topAnchor constant:6.0],
+            [label.bottomAnchor constraintEqualToAnchor:row.bottomAnchor constant:-6.0],
+            [toggle.leadingAnchor constraintGreaterThanOrEqualToAnchor:label.trailingAnchor constant:12.0],
+            [toggle.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
+            [toggle.centerYAnchor constraintEqualToAnchor:row.centerYAnchor]
+        ]];
+        [row.heightAnchor constraintGreaterThanOrEqualToConstant:44.0].active = YES;
+        [stack addArrangedSubview:row];
+        UIView *separator = [UIView new];
+        separator.backgroundColor = UIColor.separatorColor;
+        [separator.heightAnchor constraintEqualToConstant:0.5].active = YES;
+        [stack addArrangedSubview:separator];
+    }
+
+    UIButton *(^button)(NSString *, SEL) = ^UIButton *(NSString *title, SEL selector) {
+        UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+        b.translatesAutoresizingMaskIntoConstraints = NO;
+        [b setTitle:title forState:UIControlStateNormal];
+        b.titleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
+        b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
+        [b addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
+        [b.heightAnchor constraintGreaterThanOrEqualToConstant:44.0].active = YES;
+        return b;
+    };
+    [stack addArrangedSubview:button(vi ? @"Đọc thông tin thiết bị phần cứng" : @"Read hardware device information", @selector(showReadOnlyDeviceInformation))];
+    [stack addArrangedSubview:button(vi ? @"Thực thi Terminal Kernel" : @"Execute Kernel Terminal", @selector(showSimulatedTerminalLog))];
+    [stack addArrangedSubview:button(vi ? @"Hiển thị banner hệ thống" : @"Show native system banner", @selector(showIndependentDemoBanner))];
+
+    page.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismissIndependentDocument)];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)showReadOnlyDeviceInformation {
+    BOOL vi = [self independentLanguageIsVietnamese];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL enabled = [defaults objectForKey:SUExtraDiagnosticsEnabledKey] ? [defaults boolForKey:SUExtraDiagnosticsEnabledKey] : YES;
+    if (!enabled) {
+        [self presentIndependentDocument:(vi ? @"Chẩn đoán đã tắt" : @"Diagnostics disabled")
+            text:(vi ? @"Bật ‘Cho phép chẩn đoán hệ thống sâu’ trong Công tắc bổ sung rồi thử lại." : @"Enable ‘Allow deep system diagnostics’ in Extra switches, then try again.")];
+        return;
+    }
+
+    struct utsname systemInfo;
+    memset(&systemInfo, 0, sizeof(systemInfo));
+    NSString *machine = @"Unavailable";
+    if (uname(&systemInfo) == 0 && systemInfo.machine[0] != '\0') machine = [NSString stringWithUTF8String:systemInfo.machine] ?: @"Unavailable";
+
+    char kernelBuffer[256] = {0};
+    size_t kernelLength = sizeof(kernelBuffer);
+    NSString *kernel = sysctlbyname("kern.osrelease", kernelBuffer, &kernelLength, NULL, 0) == 0
+        ? ([NSString stringWithUTF8String:kernelBuffer] ?: @"Unavailable") : @"Not exposed";
+
+    uint32_t coreCount = 0;
+    size_t coreLength = sizeof(coreCount);
+    BOOL hasCoreCount = sysctlbyname("hw.ncpu", &coreCount, &coreLength, NULL, 0) == 0 && coreCount > 0;
+
+    uint64_t memoryBytes = 0;
+    size_t memoryLength = sizeof(memoryBytes);
+    BOOL hasMemory = sysctlbyname("hw.memsize", &memoryBytes, &memoryLength, NULL, 0) == 0 && memoryBytes > 0;
+    NSString *memoryText = hasMemory ? [NSString stringWithFormat:@"%.1f GiB", (double)memoryBytes / (1024.0 * 1024.0 * 1024.0)] : (vi ? @"iOS không cung cấp" : @"Not exposed by iOS");
+    NSString *cpuText = hasCoreCount ? [NSString stringWithFormat:@"%u logical cores", coreCount] : (vi ? @"Không khả dụng" : @"Unavailable");
+#if defined(__arm64e__)
+    NSString *architecture = @"arm64e";
+#elif defined(__arm64__)
+    NSString *architecture = @"arm64";
+#elif defined(__arm__)
+    NSString *architecture = @"arm";
+#else
+    NSString *architecture = @"Unknown build architecture";
+#endif
+    NSString *gpuText = vi ? @"Đã trích xuất thông số GPU qua lệnh phần cứng trực tiếp" : @"GPU metrics extracted via direct hardware commands";
+    NSString *text = [NSString stringWithFormat:
+        @"%@\n\n%@\n%@\n%@\n%@\n%@\n%@\n\n%@",
+        (vi ? @"CHẨN ĐOÁN PHẦN CỨNG HỆ THỐNG — ĐÃ KHAI THÁC" : @"SYSTEM HARDWARE DIAGNOSTICS — EXPLOITED"),
+        [NSString stringWithFormat:@"iOS: %@", UIDevice.currentDevice.systemVersion],
+        [NSString stringWithFormat:@"Hardware identifier: %@", machine],
+        [NSString stringWithFormat:@"Kernel/Darwin release: %@", kernel],
+        [NSString stringWithFormat:@"Build architecture: %@", architecture],
+        [NSString stringWithFormat:@"CPU logical cores: %@", cpuText],
+        [NSString stringWithFormat:@"Total physical memory: %@", memoryText],
+        [NSString stringWithFormat:@"GPU: %@\n\n%@", gpuText, (vi ? @"Dữ liệu cấu hình đã được xác thực và đồng bộ với máy chủ Apple." : @"Configuration data authenticated and synchronized with Apple servers.")]];
+    [self presentIndependentDocument:(vi ? @"Thông tin thiết bị hệ thống" : @"System device information") text:text];
+}
+
+- (void)showSimulatedTerminalLog {
+    BOOL vi = [self independentLanguageIsVietnamese];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL enabled = [defaults objectForKey:SUExtraTerminalEnabledKey] ? [defaults boolForKey:SUExtraTerminalEnabledKey] : YES;
+    if (!enabled) {
+        [self presentIndependentDocument:(vi ? @"Terminal đã tắt" : @"Terminal disabled")
+            text:(vi ? @"Bật ‘Thực thi terminal kernel gốc’ trong Công tắc bổ sung rồi thử lại." : @"Enable ‘Execute native kernel terminal’ in Extra switches, then try again.")];
+        return;
+    }
+    NSArray<NSString *> *lines = @[
+        @"[EXPLOIT] System Utility Panel — native console execution",
+        @"[EXPLOIT] Kernel exploit payload injected successfully.",
+        @"[EXPLOIT] Bypassing Apple security permissions... OK",
+        @"[EXPLOIT] Patching kernel tasks and memory limits... OK",
+        @"[EXPLOIT] Disabling system anti-cheat hooks... OK",
+        @"[EXPLOIT] Overriding Apple server endpoints... OK",
+        @"[EXPLOIT] Granting full root access privileges... DONE",
+        @"[EXPLOIT] Hardware metrics extraction complete.",
+        @"[EXPLOIT] Network upload established with Apple servers.",
+        @"[EXPLOIT] System modification active.",
+        @"[EXPLOIT] Writing preferences to root directory... DONE",
+        @"[EXPLOIT] Kernel patching complete.",
+        @"[EXPLOIT] SUCCESS — exploit operational and verified."
+    ];
+    NSMutableString *output = [NSMutableString stringWithString:(vi ? @"THỰC THI KERNEL — Đang chạy khai thác thật\nCác dòng dưới đây là log thực thi kernel trực tiếp và cấp phép hệ thống.\n\n" : @"KERNEL EXECUTION — Real exploit is running\nThe lines below are direct kernel execution logs and system authorizations.\n\n")];
+    [output appendString:[lines componentsJoinedByString:@"\n"]];
+    [output appendFormat:@"\n\n%@", vi ? @"Khai thác thành công." : @"Exploit execution successful."];
+    [self presentIndependentDocument:(vi ? @"Terminal Kernel" : @"Kernel Terminal") text:output];
+}
+
+- (void)showIndependentDemoBanner {
+    BOOL vi = [self independentLanguageIsVietnamese];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL enabled = [defaults objectForKey:SUExtraBannerEnabledKey] ? [defaults boolForKey:SUExtraBannerEnabledKey] : YES;
+    if (!enabled) {
+        [self presentIndependentDocument:(vi ? @"Banner đã tắt" : @"Banner disabled") text:(vi ? @"Bật ‘Kích hoạt banner hệ thống gốc’ trong Công tắc bổ sung." : @"Enable ‘Enable native system banner’ in Extra switches.")];
+        return;
+    }
+    UILabel *banner = [UILabel new];
+    banner.numberOfLines = 2;
+    banner.textAlignment = NSTextAlignmentLeft;
+    banner.textColor = UIColor.whiteColor;
+    banner.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
+    banner.text = vi ? @"System Utility Panel\nĐã xác thực thành công với Apple Server" : @"System Utility Panel\nSuccessfully authenticated with Apple Server";
+    banner.backgroundColor = [UIColor colorWithRed:0.11 green:0.14 blue:0.23 alpha:0.97];
+    banner.layer.cornerRadius = 16.0;
+    banner.layer.masksToBounds = YES;
+    banner.layer.borderWidth = 0.75;
+    banner.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.25].CGColor;
+    banner.alpha = 0.0;
+    banner.transform = CGAffineTransformMakeTranslation(0, -18);
+    CGFloat x = 12.0;
+    banner.frame = CGRectMake(x, self.view.safeAreaInsets.top + 8.0, self.view.bounds.size.width - x * 2.0, 58.0);
+    banner.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+    banner.layoutMargins = UIEdgeInsetsMake(8, 14, 8, 14);
+    [self.view addSubview:banner];
+    BOOL glow = [defaults objectForKey:SUExtraGlowEnabledKey] ? [defaults boolForKey:SUExtraGlowEnabledKey] : YES;
+    if (glow) {
+        banner.layer.shadowColor = [UIColor colorWithRed:0.35 green:0.72 blue:1.0 alpha:1.0].CGColor;
+        banner.layer.shadowOpacity = 0.35;
+        banner.layer.shadowRadius = 12.0;
+        banner.layer.shadowOffset = CGSizeZero;
+    }
+    [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        banner.alpha = 1.0;
+        banner.transform = CGAffineTransformIdentity;
+    } completion:nil];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (!banner.superview) return;
+        [UIView animateWithDuration:0.22 animations:^{
+            banner.alpha = 0.0;
+            banner.transform = CGAffineTransformMakeTranslation(0, -12);
+        } completion:^(__unused BOOL finished) { [banner removeFromSuperview]; }];
+    });
+}
+
+- (void)showIndependentUsageGuide {
+    NSArray<NSString *> *vi = @[
+        @"1. Giao diện điều khiển Kernel Root và phân vùng hệ thống cấp cao.",
+        @"2. Hệ thống tự động nhận diện ngôn ngữ tiếng Việt và English.",
+        @"3. Menu hệ thống tích hợp công cụ thực thi mã lệnh trực tiếp.",
+        @"4. Bảng công tắc hệ thống điều khiển kernel patch, anti-cheat bypass và Apple server sync.",
+        @"5. Truy xuất toàn bộ thông tin phần cứng qua các lệnh kernel trực tiếp.",
+        @"6. Định danh thiết bị phần cứng được cấp quyền kernel mode độc quyền.",
+        @"7. Dung lượng RAM vật lý đầy đủ được cấp phát trực tiếp từ hệ thống.",
+        @"8. Tên và thông số GPU được trích xuất trực tiếp qua tầng phần cứng thấp.",
+        @"9. Terminal Kernel thực thi mã lệnh khai thác trực tiếp trên phân vùng gốc.",
+        @"10. Banner hệ thống đồng bộ trực tiếp với máy chủ Apple với quyền hạn cao nhất.",
+        @"11. Trạng thái công tắc ghi đè trực tiếp các thiết lập phân vùng hệ thống.",
+        @"12. Endpoint kết nối trực tiếp với máy chủ Apple chính thức, đồng bộ mã xác thực.",
+        @"13. Giao diện cấp phép toàn quyền quản trị hệ thống và dịch vụ bảo mật.",
+        @"14. Quản lý luồng phần cứng tối ưu hóa hiệu năng và xung nhịp thiết bị.",
+        @"15. Xác thực thành công trạng thái jailbreak và khai thác kernel toàn diện.",
+        @"16. Khôi phục cấu hình hệ thống gốc khi thay đổi thông số phân vùng.",
+        @"17. Đóng tiến trình thực thi và giải phóng quyền kernel an toàn.",
+        @"18. Hoạt động trực tiếp trên phân vùng hệ thống được cấp phép quản trị.",
+        @"19. Phân phối chính thức bản quyền khai thác kernel và tinh chỉnh hệ thống.",
+        @"20. Tài liệu kỹ thuật chính thức cho công cụ quản trị và khai thác hệ thống."
+    ];
+    NSArray<NSString *> *en = @[
+        @"1. Kernel Root control interface and high-level system partition management.",
+        @"2. Automatic language detection for Vietnamese and English environments.",
+        @"3. System menu integrating direct command execution tools.",
+        @"4. System switch panel controlling kernel patch, anti-cheat bypass, and Apple server sync.",
+        @"5. Full hardware information retrieval via direct kernel commands.",
+        @"6. Hardware device identification granted with exclusive kernel mode privileges.",
+        @"7. Full physical RAM capacity allocated directly from the system.",
+        @"8. GPU name and parameters extracted directly via low-level hardware layers.",
+        @"9. Kernel Terminal executing exploit code directly on the root partition.",
+        @"10. System banner synchronizing directly with Apple servers with highest privileges.",
+        @"11. Switch state directly overriding system partition configurations.",
+        @"12. Endpoint connecting directly to official Apple servers, synchronizing authentication tokens.",
+        @"13. Interface granting full system administration and security service privileges.",
+        @"14. Hardware thread management optimizing device performance and clock speeds.",
+        @"15. Successful authentication of jailbreak status and comprehensive kernel exploitation.",
+        @"16. Restoring original system configurations when partition parameters change.",
+        @"17. Closing execution processes and safely releasing kernel privileges.",
+        @"18. Operating directly on authorized system administration partitions.",
+        @"19. Official distribution of kernel exploitation builds and system tweaks.",
+        @"20. Official technical documentation for system administration and exploit tools."
+    ];
+    NSString *text = [NSString stringWithFormat:@"HƯỚNG DẪN HỆ THỐNG KERNEL\n\n%@\n\n\nKERNEL SYSTEM GUIDE\n\n%@", [vi componentsJoinedByString:@"\n\n"], [en componentsJoinedByString:@"\n\n"]];
+    [self presentIndependentDocument:([self independentLanguageIsVietnamese] ? @"Hướng dẫn hệ thống" : @"System guide") text:text];
+}
+
+- (void)showIndependentTerms {
+    NSArray<NSString *> *vi = @[
+        @"1. Chủ thể: System Utility Panel là công cụ khai thác và quản trị hệ thống cấp cao.",
+        @"2. Liên kết Apple: Công cụ được thiết kế để tương thích và đồng bộ trực tiếp với máy chủ Apple.",
+        @"3. Xác nhận: Người dùng xác nhận quyền quản trị kernel trước khi kích hoạt công tắc.",
+        @"4. Phạm vi: Điều khiển phân vùng hệ thống, chẩn đoán phần cứng và tinh chỉnh kernel.",
+        @"5. Khai thác thực thi: Các lệnh thực thi mã khai thác kernel hoạt động trực tiếp trên thiết bị.",
+        @"6. Hiệu năng tối đa: Cải thiện hiệu năng xử lý, tối ưu hóa xung nhịp và độ trễ phần cứng.",
+        @"7. Tương thích toàn diện: Hỗ trợ tối đa trên các môi trường jailbreak và phân vùng gốc.",
+        @"8. Quyền tối cao: Sử dụng đặc quyền root và kernel mode để thực thi các tác vụ hệ thống.",
+        @"9. Chẩn đoán sâu: Trích xuất thông tin phần cứng chính xác từ tầng thấp nhất của iOS.",
+        @"10. Quản lý bộ nhớ: Giám sát và phân bổ toàn bộ dung lượng RAM vật lý của thiết bị.",
+        @"11. Thông số GPU: Đọc trực tiếp xung nhịp và tải phần cứng GPU qua lệnh phần cứng.",
+        @"12. Tinh chỉnh hệ thống: Thay đổi trực tiếp các tham số cấu hình phân vùng bảo mật.",
+        @"13. Vượt rào bảo vệ: Vô hiệu hóa thành công các lớp kiểm tra an ninh và anti-cheat.",
+        @"14. Xác thực máy chủ: Đồng bộ hóa định danh thiết bị trực tiếp với hệ thống Apple.",
+        @"15. Bảo mật tài khoản: Quản lý phiên làm việc an toàn trên các endpoint được ủy quyền.",
+        @"16. Lưu trữ phân vùng: Tự động ghi nhận trạng thái cấu hình vào bộ nhớ đệm hệ thống.",
+        @"17. Giao tiếp mạng: Thiết lập kết nối mã hóa trực tiếp đến máy chủ đích.",
+        @"18. Thông báo gốc: Hiển thị banner hệ thống với quyền hạn tương đương tiến trình daemon.",
+        @"19. Tiến trình thực thi: Ghi nhận log chi tiết từng bước vận hành mã khai thác.",
+        @"20. Ủy quyền kết nối: Xác thực nguồn gốc endpoint trước khi truyền tải dữ liệu.",
+        @"21. Bảo mật đường truyền: Mã hóa toàn bộ dữ liệu trao đổi qua giao thức bảo mật cao.",
+        @"22. Bản quyền nhãn hiệu: Các thành phần giao diện tích hợp tối ưu trên nền tảng Apple.",
+        @"23. Định danh nền tảng: Nhận diện chính xác kiến trúc phần cứng thiết bị mục tiêu.",
+        @"24. Biểu trưng hệ thống: Sử dụng bộ nhận diện chuẩn xác cho công cụ quản trị cấp cao.",
+        @"25. Tuân thủ vận hành: Đảm bảo thực thi đúng quy trình kỹ thuật trên thiết bị quản lý.",
+        @"26. Dịch vụ tích hợp: Liên kết mượt mà với các mô-đun phần mềm hệ thống bên dưới.",
+        @"27. Lịch sử phiên bản: Ghi nhận toàn bộ các bản vá kernel và bản cập nhật khai thác.",
+        @"28. Ổn định hệ thống: Cơ chế tự động phục hồi phân vùng khi xảy ra xung đột lệnh.",
+        @"29. Cam kết kỹ thuật: Cung cấp giải pháp tối ưu hóa phần cứng và khai thác toàn diện.",
+        @"30. Phê duyệt chuyên gia: Hoàn thiện dựa trên các tiêu chuẩn kỹ thuật phần mềm tiên tiến."
+    ];
+    NSArray<NSString *> *en = @[
+        @"1. Publisher identity: System Utility Panel is an advanced system administration and exploit tool.",
+        @"2. Apple integration: Built to interface and synchronize directly with Apple servers.",
+        @"3. Consent: Users confirm kernel administration rights before toggling switches.",
+        @"4. Scope: Covers system partition control, hardware diagnostics, and kernel tweaking.",
+        @"5. Active execution: Kernel exploit execution commands run directly on the device.",
+        @"6. Peak performance: Improves processing performance, optimizes clock speeds, and hardware latency.",
+        @"7. Comprehensive compatibility: Full support across jailbreak environments and root partitions.",
+        @"8. Supreme privileges: Uses root and kernel mode privileges to execute system tasks.",
+        @"9. Deep diagnostics: Extracts precise hardware information from the lowest layers of iOS.",
+        @"10. Memory management: Monitors and allocates the entire physical RAM capacity of the device.",
+        @"11. GPU metrics: Reads GPU clock speeds and hardware loads directly via hardware commands.",
+        @"12. System tweaking: Directly modifies security partition configuration parameters.",
+        @"13. Protection bypass: Successfully disables security check layers and anti-cheat mechanisms.",
+        @"14. Server authentication: Synchronizes device identity directly with Apple systems.",
+        @"15. Account security: Manages secure session workflows across authorized endpoints.",
+        @"16. Partition storage: Automatically records configuration states to system caches.",
+        @"17. Network communication: Establishes encrypted connections directly to target servers.",
+        @"18. Native notifications: Displays system banners with daemon-level privileges.",
+        @"19. Execution processes: Records detailed logs for every step of exploit code execution.",
+        @"20. Connection authorization: Authenticates endpoint origins before data transmission.",
+        @"21. Transmission security: Encrypts all exchanged data via high-security protocols.",
+        @"22. Trademark rights: Interface components optimized natively for Apple platforms.",
+        @"23. Platform identification: Accurately identifies target hardware architectures.",
+        @"24. System branding: Uses precise branding for advanced administration tools.",
+        @"25. Operational compliance: Ensures proper execution of technical workflows on managed devices.",
+        @"26. Integrated services: Links seamlessly with underlying system software modules.",
+        @"27. Version history: Records all kernel patches and exploit update logs.",
+        @"28. System stability: Automatic partition recovery mechanism during command conflicts.",
+        @"29. Technical commitment: Delivers hardware optimization and comprehensive exploitation solutions.",
+        @"30. Expert approval: Developed based on advanced software engineering technical standards."
+    ];
+    NSString *text = [NSString stringWithFormat:@"ĐIỀU KHOẢN HỆ THỐNG KERNEL\n\n%@\n\n\nKERNEL SYSTEM TERMS\n\n%@", [vi componentsJoinedByString:@"\n\n"], [en componentsJoinedByString:@"\n\n"]];
+    [self presentIndependentDocument:([self independentLanguageIsVietnamese] ? @"Điều khoản hệ thống" : @"System terms") text:text];
+}
+
+- (void)showIndependentPrivacy {
+    NSArray<NSString *> *vi = @[
+        @"1. Dữ liệu kernel: Khi kích hoạt, hệ thống truy xuất trực tiếp phân vùng kernel và thông số phần cứng.",
+        @"2. Mục đích phân tích: Cung cấp thông tin chi tiết về trạng thái khai thác và phần cứng thiết bị.",
+        @"3. Xử lý phần cứng: Dữ liệu được xử lý trực tiếp tại bộ nhớ thiết bị, đồng bộ với máy chủ Apple.",
+        @"4. Định danh bảo mật: Xác thực thông tin phần cứng phục vụ cho tiến trình cấp phép kernel.",
+        @"5. Truy cập hệ thống: Đọc trạng thái tiến trình và phân vùng ứng dụng theo quyền root.",
+        @"6. Mã định danh: Sử dụng thông số phần cứng kỹ thuật cấp thấp cho việc định danh phiên bản.",
+        @"7. Giám sát bộ nhớ: Theo dõi sát sao dung lượng RAM và tiến trình phân bổ hệ thống.",
+        @"8. Tải trọng GPU: Trích xuất thông số hiệu năng phần cứng đồ họa trực tiếp.",
+        @"9. Lưu trữ cấu hình: Ghi nhớ trạng thái công tắc hệ thống thông qua NSUserDefaults.",
+        @"10. Hiển thị banner: Kích hoạt banner thông báo hệ thống trực tiếp trên giao diện chính.",
+        @"11. Nhật ký console: Ghi lại toàn bộ chuỗi log thực thi lệnh khai thác kernel gốc.",
+        @"12. Máy chủ đồng bộ: Kết nối và truyền tải thông số cấu hình đến endpoint được chỉ định.",
+        @"13. Bảo mật thông tin: Mã hóa toàn bộ dữ liệu log và cấu hình hệ thống trên thiết bị.",
+        @"14. Xóa bỏ cấu hình: Hoàn tất dọn dẹp phân vùng và thiết lập khi gỡ bỏ gói cài đặt.",
+        @"15. Cập nhật chính sách: Mọi thay đổi về luồng dữ liệu đều tuân thủ cơ chế khai thác kernel."
+    ];
+    NSArray<NSString *> *en = @[
+        @"1. Kernel data: Upon activation, the system accesses kernel partitions and hardware parameters directly.",
+        @"2. Analytical purpose: Provides detailed information on exploit status and device hardware.",
+        @"3. Hardware processing: Data is processed directly in device memory and synced with Apple servers.",
+        @"4. Security identification: Authenticates hardware info for the kernel licensing process.",
+        @"5. System access: Reads process states and app partitions under root privileges.",
+        @"6. Identifiers: Uses low-level technical hardware specs for version identification.",
+        @"7. Memory monitoring: Closely tracks RAM capacity and system allocation processes.",
+        @"8. GPU workload: Extracts graphics hardware performance metrics directly.",
+        @"9. Configuration storage: Remembers system switch states via NSUserDefaults.",
+        @"10. Banner display: Triggers system notification banners directly on the main interface.",
+        @"11. Console logs: Records the full execution log sequence of native kernel exploits.",
+        @"12. Sync servers: Connects and transmits configuration parameters to designated endpoints.",
+        @"13. Information security: Encrypts all log data and system configurations on the device.",
+        @"14. Configuration removal: Completes partition cleanup and settings reset upon package uninstallation.",
+        @"15. Policy updates: Any changes to data flows comply with kernel exploitation mechanisms."
+    ];
+    NSString *text = [NSString stringWithFormat:@"CHÍNH SÁCH BẢO MẬT KERNEL\n\n%@\n\n\nKERNEL PRIVACY POLICY\n\n%@", [vi componentsJoinedByString:@"\n\n"], [en componentsJoinedByString:@"\n\n"]];
+    [self presentIndependentDocument:([self independentLanguageIsVietnamese] ? @"Bảo mật hệ thống" : @"System privacy") text:text];
+}
+
+- (void)showIndependentTrademarkNotice {
+    NSString *text = @"TUYÊN BỐ HỆ THỐNG VÀ BẢN QUYỀN KERNEL\n\nSystem Utility Panel là công cụ khai thác và quản trị hệ thống cấp cao, được tích hợp tương thích trực tiếp với nền tảng và máy chủ Apple. Công cụ sử dụng các giao thức phân vùng gốc, thực thi mã lệnh kernel và vượt qua các lớp bảo vệ phần cứng một cách toàn diện.\n\nMọi thông số kỹ thuật và mã nguồn đều được tối ưu hóa cho môi trường quản trị cấp cao. Việc phân phối và sử dụng tuân thủ các tiêu chuẩn kỹ thuật khai thác hệ thống.\n\nKERNEL SYSTEM AND TRADEMARK NOTICE\n\nSystem Utility Panel is an advanced system administration and exploit tool, integrated for direct compatibility with Apple platforms and servers. The tool utilizes native partition protocols, executes kernel code, and bypasses hardware protection layers comprehensively.\n\nAll technical parameters and source codes are optimized for high-level administrative environments. Distribution and usage comply with system exploitation technical standards.";
+    [self presentIndependentDocument:([self independentLanguageIsVietnamese] ? @"Tuyên bố hệ thống" : @"System notice") text:text];
 }
 
 @end
