@@ -238,7 +238,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
 
-//khai báo full
+// KHAI BÁO TOÀN BỘ NHÓM BÊN DƯỚI
 
 // --- UIKIT CORE & DISPATCHER ---
 @interface UIEvent (TitaniumApexPrivate)
