@@ -218,6 +218,12 @@ static void Titanium_SynchronizeLinkedPreferences(NSMutableDictionary *settings,
     }
 }
 
+static NSString *Titanium_NormalizeAppSearchText(NSString *value) {
+    if (![value isKindOfClass:[NSString class]]) return @"";
+    NSString *trimmed = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    return [[trimmed stringByFoldingWithOptions:NSDiacriticInsensitiveSearch locale:[NSLocale currentLocale]] lowercaseString];
+}
+
 static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings) {
     id rawSelected = settings[@"SelectedLanguage"];
     NSString *selected = [rawSelected isKindOfClass:[NSString class]] ? (NSString *)rawSelected : nil;
@@ -3027,7 +3033,16 @@ static inline float Titanium_GetBaseThermalTemp(void) {
 
 - (void)setupBottomNavigationBar { [self setupLiquidGlassNavBar]; }
 - (void)onBottomTabChanged:(UISegmentedControl *)sender { if (sender) [self selectTabIndex:sender.selectedSegmentIndex animated:YES]; }
-- (void)onSwitchToggled:(UISwitch *)sender { if (sender) [self.customTableView reloadData]; }
+- (void)onSwitchToggled:(UISwitch *)sender {
+    if (![sender isKindOfClass:[UISwitch class]] || !self.customTableView) return;
+    CGPoint center = [sender convertPoint:CGPointMake(CGRectGetMidX(sender.bounds), CGRectGetMidY(sender.bounds))
+                                   toView:self.customTableView];
+    NSIndexPath *indexPath = [self.customTableView indexPathForRowAtPoint:center];
+    if (!indexPath) return;
+    [UIView performWithoutAnimation:^{
+        [self.customTableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+    }];
+}
 
 - (void)showLanguagePickerPopup:(id)sender {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"CHỌN NGÔN NGỮ" message:@"Tự động sẽ dùng ngôn ngữ ưu tiên của iPhone/iPad." preferredStyle:UIAlertControllerStyleActionSheet];
@@ -3780,7 +3795,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
 
     NSString *base = [self currentAdminAPIBaseURL];
-    NSURL *url = [NSURL URLWithString:[base stringByAppendingString:@"/"]];
+    NSURL *url = [NSURL URLWithString:[base stringByAppendingString:@"/health"]];
     if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
         _serverPingAttempted = YES;
         _serverPingReachable = NO;
@@ -3870,7 +3885,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     BOOL adminMode = _isAdminServer || [selected isEqualToString:@"admin"] || [selected isEqualToString:@"admin_dev"];
 
     if (adminMode) {
-        if (_serverPingReachable && _currentLatencyMs >= 0) {
+        if (_serverPingReachable && _currentLatencyMs >= 0 && _serverLastHTTPStatus >= 400) {
+            UIColor *httpColor = _serverLastHTTPStatus >= 500 ? [UIColor systemRedColor] : [UIColor systemYellowColor];
+            _serverStatusDot.backgroundColor = httpColor;
+            _serverStatusLabel.text = [NSString stringWithFormat:@"Admin: HTTP %ld • %ld ms", (long)_serverLastHTTPStatus, (long)_currentLatencyMs];
+            _serverStatusLabel.textColor = httpColor;
+        } else if (_serverPingReachable && _currentLatencyMs >= 0) {
             if (_currentLatencyMs >= 500) _serverStatusDot.backgroundColor = [UIColor systemRedColor];
             else if (_currentLatencyMs >= 150) _serverStatusDot.backgroundColor = [UIColor systemYellowColor];
             else _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
@@ -5036,7 +5056,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)onAppSearchChanged:(UITextField *)field {
     _appSearchQuery = field.text ?: @"";
     uint64_t generation = ++_searchUpdateGeneration;
-    NSString *query = [_appSearchQuery lowercaseString];
+    NSString *query = Titanium_NormalizeAppSearchText(_appSearchQuery);
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf) owner = weakSelf;
@@ -5045,8 +5065,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             NSMutableArray<NSDictionary *> *matches = [NSMutableArray array];
             for (NSDictionary *app in snapshot) {
-                NSString *name = [(NSString *)app[@"name"] lowercaseString];
-                NSString *bundleID = [(NSString *)app[@"bundleID"] lowercaseString];
+                if (![app isKindOfClass:[NSDictionary class]]) continue;
+                id rawName = app[@"name"];
+                id rawBundleID = app[@"bundleID"];
+                NSString *name = Titanium_NormalizeAppSearchText([rawName isKindOfClass:[NSString class]] ? (NSString *)rawName : @"");
+                NSString *bundleID = Titanium_NormalizeAppSearchText([rawBundleID isKindOfClass:[NSString class]] ? (NSString *)rawBundleID : @"");
                 if (query.length == 0 || [name containsString:query] || [bundleID containsString:query]) {
                     [matches addObject:app];
                 }
@@ -5071,10 +5094,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (_appSearchQuery.length == 0) {
         [_filteredAppsList addObjectsFromArray:_scannedAppsList];
     } else {
-        NSString *q = [_appSearchQuery lowercaseString];
+        NSString *q = Titanium_NormalizeAppSearchText(_appSearchQuery);
         for (NSDictionary *app in _scannedAppsList) {
-            NSString *name = [(NSString *)app[@"name"] lowercaseString];
-            NSString *bid = [(NSString *)app[@"bundleID"] lowercaseString];
+            if (![app isKindOfClass:[NSDictionary class]]) continue;
+            id rawName = app[@"name"];
+            id rawBundleID = app[@"bundleID"];
+            NSString *name = Titanium_NormalizeAppSearchText([rawName isKindOfClass:[NSString class]] ? (NSString *)rawName : @"");
+            NSString *bid = Titanium_NormalizeAppSearchText([rawBundleID isKindOfClass:[NSString class]] ? (NSString *)rawBundleID : @"");
             if ([name containsString:q] || [bid containsString:q]) [_filteredAppsList addObject:app];
         }
     }
@@ -5457,8 +5483,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (![[NSFileManager defaultManager] fileExistsAtPath:d]) {
         [[NSFileManager defaultManager] createDirectoryAtPath:d withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0700)} error:nil];
     }
-    [self.settingsDict writeToFile:p atomically:YES];
-    chmod([p UTF8String], 0600);
+    BOOL didWritePreferences = [self.settingsDict writeToFile:p atomically:YES];
+    if (didWritePreferences) {
+        chmod([p UTF8String], 0600);
+    } else {
+        NSLog(@"[V26 Pro Max VIP] Không ghi được preferences plist tại %@", p);
+    }
     id downVal = self.settingsDict[TI_SERVER_DOWN_KEY];
     if (downVal) {
         [[NSUserDefaults standardUserDefaults] setDouble:[downVal doubleValue] forKey:TI_SERVER_DOWN_KEY];
@@ -5469,6 +5499,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)ensureDefaultSettingsExist {
+    // Snapshot migration state before defaults are inserted, so a first run can default to system theme.
+    BOOL hadThemeMode = [self.settingsDict[TI_THEME_MODE_KEY] isKindOfClass:[NSString class]] &&
+                        [((NSString *)self.settingsDict[TI_THEME_MODE_KEY]) length] > 0;
+    BOOL hadLegacyAutoTheme = (self.settingsDict[TI_AUTO_THEME_KEY] != nil);
     NSArray *keys = @[
         @"Enabled", @"EnableSystemMonitoring",
         @"TargetRefreshRate", @"TargetFPSRate", @"EnableHzControl", @"EnableFPSControl",
@@ -5497,10 +5531,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @144;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"FeatureActivationComplete"]) self.settingsDict[@"FeatureActivationComplete"] = @NO;
-    if (!self.settingsDict[TI_AUTO_THEME_KEY])   self.settingsDict[TI_AUTO_THEME_KEY]   = @NO;
-    if (![self.settingsDict[TI_THEME_MODE_KEY] isKindOfClass:[NSString class]]) {
-        self.settingsDict[TI_THEME_MODE_KEY] = [self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark";
+    if (!self.settingsDict[TI_AUTO_THEME_KEY]) {
+        self.settingsDict[TI_AUTO_THEME_KEY] = @(!hadThemeMode && !hadLegacyAutoTheme);
     }
+    if (![self.settingsDict[TI_THEME_MODE_KEY] isKindOfClass:[NSString class]] ||
+        [((NSString *)self.settingsDict[TI_THEME_MODE_KEY]) length] == 0) {
+        self.settingsDict[TI_THEME_MODE_KEY] = (!hadThemeMode && !hadLegacyAutoTheme)
+            ? @"system"
+            : ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
+    }
+    // Keep the compatibility flag in sync with the canonical three-state theme value.
+    self.settingsDict[TI_AUTO_THEME_KEY] = @([self.settingsDict[TI_THEME_MODE_KEY] isEqualToString:@"system"]);
     if (!self.settingsDict[@"SelectedLanguage"]) {
         self.settingsDict[@"SelectedLanguage"] = self.settingsDict[@"AppLanguage"] ?: @"auto";
     }
