@@ -6771,6 +6771,10 @@ static const void *kAIFlushScheduledKey        = &kAIFlushScheduledKey;
 static const void *kAICachedCellSizeKey        = &kAICachedCellSizeKey;
 static const void *kAICachedCellTimeKey        = &kAICachedCellTimeKey;
 
+// Định nghĩa kiểu block cho performBatchUpdates để Theos không bị lỗi phân tích cú pháp chữ ký
+typedef void (^UICollectionBatchUpdatesBlock)(void);
+typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
+
 %group Group_AI_Stream_Optimization
 
 // 1. Ưu tiên tuyệt đối quyền chạm tay của người dùng trên toàn bộ cửa sổ
@@ -6861,12 +6865,6 @@ static const void *kAICachedCellTimeKey        = &kAICachedCellTimeKey;
     %orig(contentOffset, animated);
 }
 %end
-
-// Định nghĩa kiểu block cho performBatchUpdates để Theos không bị lỗi phân tích cú pháp chữ ký
-typedef void (^UICollectionBatchUpdatesBlock)(void);
-typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
-
-%group Group_AI_Stream_Optimization
 
 %hook UICollectionView
 
@@ -7015,7 +7013,7 @@ typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
 }
 %end
 
-%end // End Group_AI_Stream_Optimization
+%end // Kết thúc Group_AI_Stream_Optimization chuẩn xác
 
 // ----------------------------------------------------------------------------------------------------
 // [V12 - Hz/FPS TÁC DỤNG TOÀN HỆ THỐNG NGAY LẬP TỨC]
