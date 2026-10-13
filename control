@@ -1,8 +1,13 @@
 Package: com.taojb.boostiphone6s
-Name: SmoothIOS Pro
-Version: 1.3.0-2-test
+Name: SmoothIOS Pro Test
+Version: 1.4.0-test-1
 Architecture: iphoneos-arm64
-Description: Dynamic variable refresh rate, zero stutter, and seamless animation pacing without overheating.(Tự động điều chỉnh tần số quét, triệt tiêu khựng giật, tối ưu hoạt ảnh và giữ máy mát mẻ) Hỗ trợ ios 14-26.0.1 iphone 6s-15prm
+Description: Fluidity redefined. ProMotion-grade frame pacing and adaptive refresh rate.
+ Redefining system fluidity. Engineered with intelligent variable refresh rates, zero-latency touch response, and seamless animation pacing while maintaining whisper-quiet thermal efficiency.
+ .
+ Tái định nghĩa độ mượt mà của hệ thống. Tối ưu hóa điều tiết khung hình chuẩn ProMotion, triệt tiêu hoàn toàn độ trễ cảm ứng và hoạt ảnh chuyển cảnh tức thì mà vẫn giữ thiết bị luôn mát mẻ.
+ .
+ Compatibility / Tương thích: iOS 14.0 – 26.0.1 (iPhone 6s – iPhone 15 Pro Max).
 Maintainer: TaoJB, NoJB,NoNo
 Author: TaoJB, NoJB, NoNo
 Section: Tweaks
