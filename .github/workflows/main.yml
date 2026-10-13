@@ -18,32 +18,21 @@ on:
           - rootful
           - roothide
 
-jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: set matrix
-        id: set-matrix
-        run: |
-          SCHEME="${{ github.event.inputs.scheme }}"
-          if [ -z "$SCHEME" ] || [ "$SCHEME" = "all" ]; then
-            echo 'matrix=["rootless","rootful","roothide"]' >> $GITHUB_OUTPUT
-          else
-            echo "matrix=[\"$SCHEME\"]" >> $GITHUB_OUTPUT
-          fi
+# Tự động hủy ngay các bản build cũ đang bị kẹt hàng đợi khi bạn lưu code mới
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
   build:
-    needs: setup
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        scheme: ${{ fromJson(needs.setup.outputs.matrix) }}
-      fail-fast: false
+    name: build (${{ github.event.inputs.scheme || 'all' }})
+    # Đổi macos-latest sang macos-14 và chạy trên 1 máy duy nhất để không bao giờ bị kẹt hàng đợi
+    runs-on: macos-14
 
     env:
       DEVICE_TARGET: "iphone:clang:16.5:14.0"
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
 
     steps:
       - name: checkout
@@ -51,7 +40,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: setup theos
+      - name: setup theos (roothide/theos)
         uses: actions/checkout@v4
         with:
           repository: roothide/theos
@@ -68,7 +57,7 @@ jobs:
       - name: download sdks
         if: steps.cache-sdks.outputs.cache-hit != 'true'
         run: |
-          curl -LO https://github.com/theos/sdks/archive/master.zip
+          curl -sLO https://github.com/theos/sdks/archive/master.zip
           unzip -q master.zip
           mkdir -p theos/sdks
           mv sdks-master/*.sdk theos/sdks/
@@ -77,31 +66,69 @@ jobs:
       - name: set THEOS env var
         run: echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
 
-      - name: install deps
+      - name: install deps (Fast Mode)
         run: |
           brew install ldid make
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: build (${{ matrix.scheme }})
+      - name: build rootless
+        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
         run: |
-          SCHEME_FLAG=""
-          if [ "${{ matrix.scheme }}" = "rootless" ]; then
-            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=rootless"
-          elif [ "${{ matrix.scheme }}" = "roothide" ]; then
-            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=roothide"
-          fi
+          mkdir -p ./all-packages/rootless
           make clean
-          make package \
+          make package -j$(sysctl -n hw.ncpu) \
             ARCHS="arm64 arm64e" \
             TARGET="$DEVICE_TARGET" \
             FINALPACKAGE=1 \
-            $SCHEME_FLAG
+            THEOS_PACKAGE_SCHEME=rootless
+          mv packages/*.deb ./all-packages/rootless/
+          rm -rf packages .theos
 
-      - name: upload package (${{ matrix.scheme }})
+      - name: build rootful
+        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootful' }}
+        run: |
+          mkdir -p ./all-packages/rootful
+          make clean
+          make package -j$(sysctl -n hw.ncpu) \
+            ARCHS="arm64 arm64e" \
+            TARGET="$DEVICE_TARGET" \
+            FINALPACKAGE=1
+          mv packages/*.deb ./all-packages/rootful/
+          rm -rf packages .theos
+
+      - name: build roothide
+        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'roothide' }}
+        run: |
+          mkdir -p ./all-packages/roothide
+          make clean
+          make package -j$(sysctl -n hw.ncpu) \
+            ARCHS="arm64 arm64e" \
+            TARGET="$DEVICE_TARGET" \
+            FINALPACKAGE=1 \
+            THEOS_PACKAGE_SCHEME=roothide
+          mv packages/*.deb ./all-packages/roothide/
+          rm -rf packages .theos
+
+      - name: upload rootless-package
+        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.scheme }}-package
-          path: packages/*.deb
+          name: rootless-package
+          path: ./all-packages/rootless/*.deb
+
+      - name: upload rootful-package
+        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootful' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootful-package
+          path: ./all-packages/rootful/*.deb
+
+      - name: upload roothide-package
+        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'roothide' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: roothide-package
+          path: ./all-packages/roothide/*.deb
 
   release:
     needs: build
