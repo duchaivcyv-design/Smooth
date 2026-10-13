@@ -1230,8 +1230,10 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_LITE_MODE 1
 #endif
 
+// Stable default for this build: skip private WindowServer/BackBoard/gesture/Metal override groups.
+// The iOS-native refresh scheduler remains in control; only guarded public DisplayLink/Scene caps are used.
 #ifndef TITANIUM_SAFE_STABILITY_PROFILE
-#define TITANIUM_SAFE_STABILITY_PROFILE 0
+#define TITANIUM_SAFE_STABILITY_PROFILE 1
 #endif
 
 // [V10] Bật boost layout SpringBoard/đa nhiệm/popup (có cache QoS, không overhead). Đặt 0 để tắt.
@@ -2998,9 +3000,9 @@ static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateR
         // ĐANG CHẠM / HOẠT ẢNH: Ghim sàn bằng trần để triệt tiêu hoàn toàn tụt khung hình
         minimum = maximum;
     } else {
-        // MÀN HÌNH TĨNH: Không tự ép sàn xuống 15Hz; giữ nguyên mức hệ thống cung cấp.
+        // MÀN HÌNH TĨNH: không ép sàn 1/15Hz; giữ mức adaptive do iOS cung cấp.
         if (!isfinite(minimum) || minimum < 0.0f) {
-            minimum = 0.0f; // để iOS tự chọn nhịp thích ứng
+            minimum = 0.0f;
         }
     }
     if (minimum > maximum) minimum = maximum;
@@ -4588,7 +4590,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                 if (Titanium_ShouldLockTargetRate()) {
                     self.preferredFrameRateRange = SafeMakeFRR(targetHz, targetHz, targetHz);
                 }
-                // Khi đứng yên không ép 1/15Hz; để iOS tự quản lý nhịp display link.
+                // Khi không tương tác, không ghi đè range bằng 15Hz; để iOS tự quản lý. FPS đã chọn vẫn được dùng khi cần khóa target.
             }
         }
     }
@@ -5939,7 +5941,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
-// V22 ADAPTIVE SAFE RUNTIME: chỉ cài nhóm API DisplayLink công khai trong profile mặc định.
+// V22 ADAPTIVE SAFE RUNTIME: profile mặc định chỉ cài nhóm API DisplayLink/Scene có kiểm tra an toàn.
 // Các nhóm private/Metal/WindowServer khác không được %init mặc định vì có thể gây đen app hoặc kẹt userspace reboot.
 // ====================================================================================================
 %group Group_TitaniumSafeRuntime_V22
@@ -6347,8 +6349,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             });
 
 #if TITANIUM_SAFE_STABILITY_PROFILE
-            // Nhánh mặc định ổn định: cài duy nhất hook API chuẩn cần cho DisplayLink / chuyển Home nhẹ.
-            // Không cài nhóm WindowServer/BackBoard/Metal private/scheduler/memory compaction trong boot path.
+            // Nhánh mặc định ổn định: chỉ cài các hook DisplayLink/Scene có giới hạn phần cứng.
+            // Không cài nhóm WindowServer/BackBoard/gesture/Metal private/scheduler/memory compaction.
+            // Tắt các hook này chủ ý để tránh app đen và Safe Mode; Dynamic Refresh do iOS và panel thật quản lý.
             %init(Group_TitaniumSafeRuntime_V22);
             if (@available(iOS 15.0, *)) {
                 %init(Group_TitaniumSafeRangeRuntime_V22);
