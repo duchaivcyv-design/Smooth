@@ -5920,8 +5920,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-%end
-
 // --- [V12] Hết cú "nảy" nặng trước khi app thu về icon ---
 // Khôi phục độ nảy nhẹ khi vuốt thoát app: damping tối thiểu 14, tránh nảy quá mạnh nhưng không triệt tiêu hoàn toàn.
 // Chỉ tác động trong cửa sổ đang vuốt thoát/đóng app về icon; các phần code khác giữ nguyên.
