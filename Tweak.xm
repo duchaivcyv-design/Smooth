@@ -7355,12 +7355,27 @@ static void Titanium_StartIPCHearthbeatV12(void) {
         dispatch_source_t hb = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
         dispatch_source_set_timer(hb, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), (uint64_t)(30 * NSEC_PER_SEC), (uint64_t)(5 * NSEC_PER_SEC));
         dispatch_source_set_event_handler(hb, ^{
+            // [V26 FIX SAFEMODE #3]: 60s đầu sau boot, /var/jb/tmp có thể chưa mount trên RootHide.
+            // Chỉ ghi vào /tmp (luôn sẵn sàng) để tránh EBUSY/EIO → kernel panic → SafeMode.
+            static time_t s_bootTimestamp = 0;
+            if (s_bootTimestamp == 0) s_bootTimestamp = time(NULL);
+            BOOL earlyBoot = (time(NULL) - s_bootTimestamp) < 60;
+
             ApexV285ProPayload snapshot;
             pthread_mutex_lock(&g_syncLockV285);
             snapshot = g_syncPayloadV285;
             pthread_mutex_unlock(&g_syncLockV285);
             if (snapshot.magic == APEX_SYNC_MAGIC_V285) {
-                Titanium_WriteSyncPayloadV285(&snapshot);
+                if (earlyBoot) {
+                    // Chỉ ghi vào /tmp/.boost_hz_sync, bỏ qua /var/jb/tmp
+                    @try {
+                        Titanium_WriteAtomicIPCFile(PRIMARY_SYNC_FILE, &snapshot, sizeof(snapshot));
+                        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                                               CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
+                    } @catch (NSException *e) {}
+                } else {
+                    Titanium_WriteSyncPayloadV285(&snapshot);
+                }
             }
         });
         dispatch_resume(hb);
@@ -7573,7 +7588,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             g_SystemMasterReady = YES;
 
             if (isSpringBoard) {
-                dispatch_async(dispatch_get_main_queue(), ^{
+                // [V26 FIX SAFEMODE #2]: KHÔNG gọi UIDevice batteryMonitoring ngay khi SpringBoard vừa khởi động
+                // (có thể deadlock với backboardd trên iOS 14-15 RootHide). Delay 5s.
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_StartThermalAndChargingWatchdog();
                         Titanium_ReapplyFrameRateToAllScenes();
@@ -7831,9 +7848,13 @@ static void SpringBoardBootstrapTrigger(void) {
         }
 
         if (isSpringBoard) {
-            if (!Titanium_CheckAndPreventBootloopUniversal()) {
-                return;
-            }
+            // [V26 FIX SAFEMODE #1]: KHÔNG gọi CheckAndPreventBootloop ngay trong %ctor (đọc/ghi file lúc boot
+            // có thể throw exception nếu /tmp chưa sẵn sàng hoặc file guard corrupted). Delay 2s + bọc @try/@catch.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    (void)Titanium_CheckAndPreventBootloopUniversal();
+                } @catch (NSException *e) {}
+            });
         }
 
         if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
