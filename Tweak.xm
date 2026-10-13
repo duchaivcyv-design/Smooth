@@ -236,7 +236,7 @@ static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
 
 // ====================================================================================================
-// SYSTEM PRIVATE INTERFACES (ĐẦY ĐỦ 100% CHO CẢ 18 NHÓM GIA TỐC HỆ THỐNG)
+// SYSTEM PRIVATE INTERFACES (ĐẦY ĐỦ 100% CHO CẢ 18 NHÓM GIA TỐC HỆ THỐNG & SPRINGBOARD SWITCHER)
 // ====================================================================================================
 
 // --- UIKIT CORE & DISPATCHER ---
@@ -260,8 +260,16 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)setDelaysTouchesEnded:(BOOL)flag;
 @end
 
+// [MỚI]: Bổ sung nhận diện cử chỉ viền cạnh màn hình UIKit
+@interface _UIScreenEdgePanGestureRecognizer : UIPanGestureRecognizer
+- (BOOL)delaysTouchesBegan;
+- (void)setDelaysTouchesBegan:(BOOL)delays;
+- (double)_edgeRegionSize;
+- (void)_setEdgeRegionSize:(double)size;
+@end
+
 @interface UIWindow (TitaniumApexPrivate)
-- (void)_setSecure:(BOOL)arg1;
+- (void)_setSecure:(BOOL)1;
 - (BOOL)_isSecure;
 - (UIWindowScene *)windowScene;
 - (UIScreen *)screen;
@@ -304,7 +312,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
-- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
+- (void)_scrollViewAnimationEnded:(id)1 finished:(BOOL)2;
 - (BOOL)isDragging;
 - (BOOL)isDecelerating;
 - (CGFloat)decelerationRate;
@@ -328,7 +336,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 
 @interface UIEventFetcher : NSObject
 - (void)_receiveHIDEvent:(void *)event;
-- (void)displayLinkDidFire:(id)arg1;
+- (void)displayLinkDidFire:(id)1;
 @end
 
 @interface _UIEventFetcher : NSObject
@@ -364,7 +372,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)arg1;
+- (void)textChanged:(id)1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -612,6 +620,8 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)_handleApplicationProcessExited:(id)processDescription;
 - (void)handleApplicationLaunch:(id)application;
 - (void)handleApplicationSuspended:(id)application;
+// [MỚI]: Điều phối cử chỉ vuốt tắt app
+- (void)_handleDismissOverlaysGesture:(id)1;
 @end
 
 @interface SBWindowScene : NSObject
@@ -628,7 +638,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @end
 
 @interface SBPIPController : NSObject
-- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)1;
 - (void)_updatePictureInPictureWindowMargin;
 - (UIEdgeInsets)pictureInPictureWindowMargin;
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion;
@@ -836,10 +846,18 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (void)viewDidDisappear:(BOOL)animated;
 @end
 
+// [MỚI]: Gộp hàm setShadowStyle vào class có sẵn
 @interface SBFluidSwitcherItemContainer : UIView
 - (void)setContentAlpha:(double)alpha;
 - (void)prepareForReuse;
 - (void)setCornerRadius:(CGFloat)radius;
+- (void)setShadowStyle:(long long)style;
+- (long long)shadowStyle;
+@end
+
+// [MỚI]: Bổ sung overlay icon trong switcher
+@interface SBFluidSwitcherIconOverlayView : UIView
+- (double)cornerRadius;
 @end
 
 @interface SBHomeScreenViewController : UIViewController
@@ -863,7 +881,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
-- (void)_reboot:(BOOL)arg1;
+- (void)_reboot:(BOOL)1;
 - (void)_relaunchSpringBoardNow;
 @end
 
@@ -873,9 +891,11 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (BOOL)shouldasyncRenderAppLayouts;
 @end
 
+// [MỚI]: Bổ sung nạp ảnh async cho AppSwitcher
 @interface SBAppSwitcherSnapshotImageCache : NSObject
 - (void)reloadImagesForAllItems;
 - (void)_purgeAllSnapshots;
+- (id)_requestImageForAppLayout:(id)arg1 displayIdentity:(id)arg2 isLowQuality:(BOOL)arg3 async:(BOOL)arg4 withCompletion:(id)arg5;
 @end
 
 @interface SBAppLaunchSettings : NSObject
@@ -950,9 +970,24 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 - (double)_edgeRegionSize;
 @end
 
+// [MỚI]: Bổ sung setDefaultValues cho Animation Settings
 @interface SBFluidSwitcherAnimationSettings : NSObject
 - (double)deckSwipeSpeedFactor;
 - (double)cardFlyInDuration;
+- (void)setDefaultValues;
+@end
+
+// [MỚI]: Thông số độ nảy/cản của thanh Home
+@interface SBHomeGestureSettings : NSObject
+- (double)homeGestureStiffness;
+- (double)homeGestureDamping;
+@end
+
+// [MỚI]: Bộ quản lý cử chỉ đa nhiệm
+@interface SBFluidSwitcherGestureManager : NSObject
+- (void)fluidSwitcherGestureManager:(id)1 didBeginGesture:(id)2;
+- (void)fluidSwitcherGestureManager:(id)1 didUpdateGesture:(id)2;
+- (void)fluidSwitcherGestureManager:(id)1 didEndGesture:(id)2;
 @end
 
 // --- WATCHDOG IMMUNITY & PROCESS ASSERTION ---
