@@ -6479,7 +6479,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_Metal_ZeroTearing_Pacing);
             %init(Group_FluidTransitions_Pacing);
-            %init(Group_AI_Stream_Optimization);
             %init(Group_FastLaunch_SuperEngineV285);
             %init(Group_Scroll_And_Keyboard_Opt);
             %init(Group_InstantActionAndMenuTransitions_Boost);
@@ -6521,10 +6520,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
                 Init_CAWindowServer_Hooks();
 
-                if (TITANIUM_ENABLE_RATE_KEEPER) {
-                    [TitaniumRateKeeper start];
-                }
-            }
+#if TITANIUM_ENABLE_RATE_KEEPER
+                [TitaniumRateKeeper start];
+#endif
 
                 @try {
                     Titanium_StartThermalAndChargingWatchdog();
