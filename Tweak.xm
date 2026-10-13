@@ -1051,15 +1051,6 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)_purgePageCache;
 @end
 
-@interface FBProcessWatchdog : NSObject
-- (void)start;
-- (void)invalidate;
-@end
-
-@interface FBSceneWatchdog : NSObject
-- (id)initWithTimeout:(double)timeout;
-@end
-
 // 3. INTERFACE CHO BỘ GIỮ NHỊP SPRINGBOARD RATE KEEPER
 @interface TitaniumRateKeeper : NSObject
 + (void)start;
