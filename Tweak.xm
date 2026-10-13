@@ -234,6 +234,8 @@ typedef struct __attribute__((packed)) {
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
+static volatile BOOL g_isInteracting = NO;
+static volatile uint64_t g_lastInteractiveTick = 0;
 
 // ====================================================================================================
 // SYSTEM PRIVATE INTERFACES (ĐẦY ĐỦ 100% CHO CẢ 18 NHÓM GIA TỐC HỆ THỐNG & SPRINGBOARD SWITCHER)
@@ -2771,14 +2773,11 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 %group Group_Metal_ZeroTearing_Pacing
 
-// ====================================================================================================
-// METAL LAYER TỐI TÂN: 2 BUFFER (DOUBLE BUFFERING) - V-SYNC KHÓA CỨNG - HẠ 15HZ MƯỢT MÀ
-// ====================================================================================================
 %hook CAMetalLayer
 
 - (void)didMoveToWindow {
     %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.window) {
+     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
         // 1. Nhận diện tiến trình Game Metal chính xác
         CGSize scrSize = [UIScreen mainScreen].bounds.size;
         CGFloat scrArea = scrSize.width * scrSize.height;
