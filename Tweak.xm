@@ -1326,15 +1326,8 @@ static inline void Titanium_EnableZeroLatencyPipeline(void) {
 }
 
 static void Titanium_DisableKernelThreadThrottling(void) {
-    mach_port_t thread = pthread_mach_thread_np(pthread_self());
-    thread_throttle_policy_data_t throttlePolicy;
-    throttlePolicy.pset_limit = 0;
-    thread_policy_set(
-        thread,
-        THREAD_THROTTLE_POLICY,
-        (thread_policy_t)&throttlePolicy,
-        1
-    );
+    // V26 VIP safety: intentionally do not override kernel thread throttling.
+    // iOS owns scheduling and thermal limits; attempting to bypass them can increase heat or instability.
 }
 
 static inline void Titanium_EnforceThreadVIPPolicy(void) {
@@ -1358,20 +1351,27 @@ static inline void Titanium_BoostCurrentThreadBriefly(void) {
 }
 
 static inline void Titanium_BackgroundPurgeMemory(void) {
-    static volatile uint64_t s_lastPurgeTicks = 0;
-    // [V12 - MƯỢT KHI PIN 1-20%]: dọn heap tốn CPU; khi pin yếu iOS đã bóp xung, hoãn dọn để nhường CPU cho giao diện.
-    // (Cảnh báo bộ nhớ khẩn cấp vẫn dọn NGAY ở hook didReceiveMemoryWarning riêng, không đi qua hàm này => vẫn an toàn chống văng.)
-    if (g_lowBatterySmoothBoostV12) {
-        return;
-    }
+    static os_unfair_lock s_purgeLock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t s_lastPurgeTicks = 0;
+    // Heap-pressure relief is not a universal RAM cleaner. Rate-limit non-urgent requests to avoid
+    // allocator work during every app-switch/animation and keep the main thread free.
+    if (g_lowBatterySmoothBoostV12) return;
+
     uint64_t now = mach_absolute_time();
-    // [V12 SỬA]: 15s phải đổi sang Mach ticks - bản cũ so Mach ticks với nano-giây nên thực tế ~10 PHÚT mới dọn 1 lần.
-    if (s_lastPurgeTicks != 0 && (now - s_lastPurgeTicks) < Titanium_NanosToMachTicks(15ULL * 1000000000ULL)) {
-        return;
+    BOOL shouldPurge = NO;
+    os_unfair_lock_lock(&s_purgeLock);
+    uint64_t intervalTicks = Titanium_NanosToMachTicks(15ULL * 1000000000ULL);
+    if (s_lastPurgeTicks == 0 || now - s_lastPurgeTicks >= intervalTicks) {
+        s_lastPurgeTicks = now;
+        shouldPurge = YES;
     }
-    s_lastPurgeTicks = now;
+    os_unfair_lock_unlock(&s_purgeLock);
+    if (!shouldPurge) return;
+
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-        malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        @autoreleasepool {
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        }
     });
 }
 
@@ -1415,8 +1415,8 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
         }
     }
 
-    NSString *temporaryTemplate = [targetPath stringByAppendingString:@".tmp.XXXXXX"];
-    char *temporaryPath = strdup([temporaryTemplate fileSystemRepresentation]);
+    NSString *template = [targetPath stringByAppendingString:@".tmp.XXXXXX"];
+    char *temporaryPath = strdup([template fileSystemRepresentation]);
     if (!temporaryPath) return NO;
 
     int fd = mkstemp(temporaryPath);
@@ -5040,54 +5040,28 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
         // Công tắc: Dọn RAM Chuyên Sâu / Hyper Memory Guardian
         if (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                Class imgCls = objc_getClass("UIImage");
-                if ([imgCls respondsToSelector:@selector(_flushCache)]) {
-                    ((void (*)(id, SEL))objc_msgSend)(imgCls, sel_registerName("_flushCache"));
-                }
-            });
+            // App-background is not itself a memory-pressure event. Avoid flushing UIImage's private
+            // cache here: it can force expensive image decoding and higher CPU/power on next launch.
+            // The allocator scavenger is throttled and runs off the main queue.
+            Titanium_BackgroundPurgeMemory();
         }
     }
 }
 
 %end
 
-%hook UIViewController
-
-// [ĐÃ ÉP TOÀN DIỆN]: Ép xả phân mảnh Heap định kỳ 5s/lần khi màn hình ViewController ẩn
-- (void)viewDidDisappear:(BOOL)animated {
-    %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
-        // [V12 - MƯỢT KHI PIN 1-20%]: pin yếu + đang vuốt/chạm thì hoãn dọn heap (tránh khựng giữa cú vuốt)
-        if (CFG285.periodicRamClean && !(g_lowBatterySmoothBoostV12 && (g_isUserTouchingScreen || g_isScrollingActive))) {
-            static volatile uint64_t s_lastVcPurgeTick = 0;
-            uint64_t now = mach_absolute_time();
-            // [V12 SỬA]: 5s đổi sang Mach ticks (bản cũ thực tế ~208 giây)
-            if (now - s_lastVcPurgeTick > Titanium_NanosToMachTicks(5ULL * 1000000000ULL)) {
-                s_lastVcPurgeTick = now;
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                });
-            }
-        }
-    }
-}
-
-%end
+// V26.5: no UIViewController viewDidDisappear purge hook. That callback is part of app-navigation
+// paths; scavenging there can add work near transition/animation and is not proof of a RAM leak.
 
 %hook SBAppSwitcherSnapshotImageCache
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép dọn RAM ngầm sau khi nạp ảnh thẻ đa nhiệm App Switcher
 - (void)reloadImagesForAllItems {
     %orig;
-    // [ĐÃ SỬA - CHẾ ĐỘ NHẸ]: dọn heap (malloc_zone_pressure_relief, giữ khóa bộ cấp phát) NGAY mỗi lần mở đa nhiệm, không có giới hạn tần suất,
-    // đúng lúc đang chạy hoạt ảnh => khựng khi vào đa nhiệm.
+    // V26 VIP: avoid repeated heap-pressure relief during switcher snapshot animation.
     if (TITANIUM_LITE_MODE) return;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner)) {
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        });
+        Titanium_BackgroundPurgeMemory();
     }
 }
 
@@ -5121,23 +5095,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: Ép xả sạch cache trang và bộ nhớ đệm WebKit ngay khi đóng hoặc đổi tab
 - (void)didMoveToWindow {
     %orig;
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        if (!self.window) {
-            // [ĐÃ SỬA]: bản cũ chạy self.configuration trên luồng nền và capture self vào block nền => khi block là nơi giữ tham chiếu cuối,
-            // WKWebView bị dealloc ở luồng nền (WebKit bắt buộc luồng chính) => văng app trình duyệt. Nay: lấy pool và gọi API WebKit
-            // NGAY trên luồng chính, chỉ đẩy phần dọn heap thuần C xuống luồng nền (không capture đối tượng UIKit/WebKit).
-            WKProcessPool *pool = self.configuration.processPool;
-            if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
-                [pool _clearMemoryCache];
-            }
-            if ([pool respondsToSelector:@selector(_purgePageCache)]) {
-                [pool _purgePageCache];
-            }
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            });
-        }
-    }
+    // V26.5: intentionally do not purge page/memory caches on window detach. Detach is a normal
+    // navigation event, not proof of memory pressure; forced cache clearing can make the next
+    // screen reload and consume more CPU/battery. iOS/WebKit memory-warning handling remains below.
 }
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép WebKit giải phóng sạch buffer ảnh rác khi bộ nhớ chạm ngưỡng cảnh báo
@@ -5157,33 +5117,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-%hook WKProcessPool
-
-// [ĐÃ ÉP TOÀN DIỆN]: Lắng nghe sự kiện App vào background để ép WebKit xả cache tự động
-- (instancetype)init {
-    WKProcessPool *pool = %orig;
-    if (pool && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        // [ĐÃ SỬA]: bản cũ capture `pool` bằng tham chiếu mạnh trong observer sống vĩnh viễn (rò rỉ mọi WKProcessPool, tiến trình web
-        // không bao giờ được giải phóng) và gọi API WebKit ở luồng nền. Nay: tham chiếu YẾU + gọi ngay trên hàng đợi chính.
-        __weak WKProcessPool *weakPool = pool;
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification *note) {
-            WKProcessPool *strongPool = weakPool;
-            if (!strongPool) return;
-            if ([strongPool respondsToSelector:@selector(_clearMemoryCache)]) {
-                [strongPool _clearMemoryCache];
-            }
-            if ([strongPool respondsToSelector:@selector(_purgePageCache)]) {
-                [strongPool _purgePageCache];
-            }
-        }];
-    }
-    return pool;
-}
-
-%end
+// V26.5: removed the process-wide WKProcessPool background observer. Private cache-purge calls
+// on every background transition can discard useful caches and cause expensive reloads on resume.
+// WKWebView's explicit memory-warning hook above remains the pressure-response path.
 
 %end
 
