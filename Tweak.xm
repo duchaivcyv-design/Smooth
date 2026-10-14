@@ -7167,27 +7167,6 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 }
 
 // ====================================================================================================
-// [BẺ KHÓA CHỐT CHẶN QUARTZCORE]: ÉP CAFrameRateRangeIsValid LUÔN TRẢ VỀ TRUE CHO MỌI MỨC HZ/FPS
-// ====================================================================================================
-static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange range) = NULL;
-static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange range) {
-    (void)range;
-    return true;
-}
-
-static void Titanium_BypassQuartzCoreRangeAssertion(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            void *sym = dlsym(RTLD_DEFAULT, "CAFrameRateRangeIsValid");
-            if (sym) {
-                MSHookFunction(sym, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
-            }
-        } @catch (__unused NSException *e) {}
-    });
-}
-
-// ====================================================================================================
 // HÀM KHỞI TẠO DUY NHẤT: KHẮC PHỤC TRIỆT ĐỂ LỖI RE-%INIT TRÊN LOGOS / THEOS
 // ====================================================================================================
 
