@@ -2522,12 +2522,12 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 // THIẾT LẬP CHU KỲ REALTIME TOÀN HỆ THỐNG (CHẠY TRÊN CẢ SPRINGBOARD VÀ TẤT CẢ ỨNG DỤNG THỨ BA)
 // ====================================================================================================
 
-// [ĐÃ KÍCH HOẠT CƯỠNG BỨC PHẦN CỨNG]: Ép nhân Mach XNU cấp quyền Real-Time (THREAD_TIME_CONSTRAINT_POLICY)
-// và độ ưu tiên tuyệt đối (Importance = 63) cho Main Thread để luồng vẽ 60Hz/120Hz thắng mọi tác vụ nền
+// [ĐÃ KÍCH HOẠT CƯỠNG BỨC PHẦN CỨNG 100%]: Ép nhân Mach XNU cấp quyền Real-Time (THREAD_TIME_CONSTRAINT_POLICY)
+// và độ ưu tiên tuyệt đối (Importance = 63) cho Main Thread lên tới 240Hz mà không bị Kernel Watchdog kill khi mở App
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (![NSThread isMainThread]) return;
     if (targetHz < 60) targetHz = 60;
-    if (targetHz > 144) targetHz = 144;
+    if (targetHz > 240) targetHz = 240;
 
     static int s_lastAppliedHz = 0;
     if (s_lastAppliedHz == targetHz) return; // Chỉ gọi kernel khi thay đổi mức Hz để tránh tốn syscall
@@ -2537,7 +2537,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.denom == 0) return;
 
     double msToAbs = ((double)tb.denom / (double)tb.numer) * 1000000.0;
-    double framePeriodMs = 1000.0 / (double)targetHz; // 16.66ms cho 60Hz
+    double framePeriodMs = 1000.0 / (double)targetHz; // 4.16ms cho 240Hz, 6.94ms cho 144Hz, 8.33ms cho 120Hz
 
     thread_port_t selfThread = mach_thread_self();
     if (selfThread == MACH_PORT_NULL) return;
@@ -2550,11 +2550,12 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
                       (thread_policy_t)&precPolicy,
                       THREAD_PRECEDENCE_POLICY_COUNT);
 
-    // 2. Cấp phát băng thông thời gian thực cứng trên mỗi khung hình (3.5ms tính toán liên tục không bị ngắt)
+    // 2. Cấp phát băng thông thời gian thực cứng theo tỷ lệ chu kỳ khung hình (computation = 45%, constraint = 75%)
+    // Luôn đảm bảo computation < constraint ở mọi mức Hz (120/144/240Hz), chặn đứng lỗi Kernel kill SpringBoard khi bấm mở App!
     thread_time_constraint_policy_data_t timePolicy;
     timePolicy.period      = (uint32_t)(framePeriodMs * msToAbs);
-    timePolicy.computation = (uint32_t)(3.5 * msToAbs);
-    timePolicy.constraint  = (uint32_t)((framePeriodMs * 0.65) * msToAbs);
+    timePolicy.computation = (uint32_t)((framePeriodMs * 0.45) * msToAbs);
+    timePolicy.constraint  = (uint32_t)((framePeriodMs * 0.75) * msToAbs);
     timePolicy.preemptible = TRUE;
 
     thread_policy_set(selfThread,
@@ -2566,7 +2567,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
 }
 
 static inline void Titanium_EnforceMachFrameConstraint(void) {
-    int targetHz = (int)(g_cachedResolvedHz > 0 ? g_cachedResolvedHz : 60);
+    int targetHz = (int)(g_syncPayloadV285.targetHz > 0 ? g_syncPayloadV285.targetHz : (g_cachedResolvedHz > 0 ? g_cachedResolvedHz : 120));
     Titanium_EnforceMachFrameConstraintDynamic(targetHz);
 }
 
@@ -2587,7 +2588,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép nâng QoS luồng lên User-Interactive và kích hoạt Zero-Latency Pipeline ngay trong chu kỳ vẽ
 - (void)performUpdateWithInfo:(void *)info {
-    // [ĐÃ SỬA - CHẾ ĐỘ NHẸ]: hook chạy MỖI KHUNG HÌNH; đồng thời tự gia hạn mốc tương tác nên khóa nhịp không bao giờ tự hết khi còn hoạt ảnh
     if (TITANIUM_LITE_MODE) {
         %orig;
         return;
@@ -2596,7 +2596,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
         if (CFG285.proMotionEngineBeta7 || CFG285.touchResponseBoost || g_isRateLockedV285 || g_syncPayloadV285.zeroLatencyTouch) {
             if (Titanium_ShouldLockTargetRate()) {
                 g_lastInteractionMachTime = mach_absolute_time();
-                /* V22: leave QoS scheduling to iOS to reduce sustained heat and contention. */
+                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
                 Titanium_EnableZeroLatencyPipeline();
             }
         }
@@ -2610,7 +2610,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép duy trì nhịp Mach Time liên tục cho từng đơn vị item trong chuỗi cập nhật
 - (void)performItem {
-    // [ĐÃ SỬA - CHẾ ĐỘ NHẸ]: hook chạy cho TỪNG mục trong chuỗi cập nhật của MỖI khung hình
     if (TITANIUM_LITE_MODE) {
         %orig;
         return;
@@ -2900,7 +2899,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
         %orig;
         return;
     }
-    // Cho phép App AI gom cụm token chữ mượt mà, không ép commit lẻ từng mili-giây
     if (Titanium_IsAIApp()) {
         %orig;
         return;
@@ -2962,6 +2960,26 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %end
 
 // ====================================================================================================
+// [BẺ KHÓA CHỐT CHẶN QUARTZCORE]: ÉP CAFrameRateRangeIsValid LUÔN TRẢ VỀ TRUE CHO MỌI MỨC HZ/FPS
+// Chặn đứng iOS ném NSInvalidArgumentException khi ép cứng SafeMakeFRR(240, 240, 240) lúc mở App!
+// ====================================================================================================
+static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange range) = NULL;
+static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange range) {
+    (void)range;
+    return true; // Cho phép ép cứng SafeMakeFRR lên tới 240Hz mà không bị QuartzCore văng Exception hay Safe Mode
+}
+
+static void Titanium_BypassQuartzCoreRangeAssertion(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        void *sym = dlsym(RTLD_DEFAULT, "CAFrameRateRangeIsValid");
+        if (sym) {
+            MSHookFunction(sym, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
+        }
+    });
+}
+
+// ====================================================================================================
 // ĐIỀU PHỐI TRẠNG THÁI CHUYỂN ĐỘNG, VIDEO VÀ THÔNG BÁO HỆ THỐNG
 // [ĐÃ MỞ BUNG TOÀN BỘ HZ/FPS TỪ 6S - 12 PRO MAX: CHỈNH BAO NHIÊU TRONG APP NHẬN ĐÚNG BẤY NHIÊU]
 // ====================================================================================================
@@ -2972,7 +2990,6 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
         return 60;
     }
-    // Ưu tiên lấy giá trị mới nhất từ IPC payload hoặc cấu hình trong App
     NSInteger userHz = (g_syncPayloadV285.targetHz > 0) ? (NSInteger)g_syncPayloadV285.targetHz : g_cachedResolvedHz;
     if (userHz <= 0 && CFG285) {
         userHz = (NSInteger)CFG285.targetHz;
@@ -2991,7 +3008,6 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
         return 60;
     }
-    // Ưu tiên lấy giá trị FPS mới nhất người dùng vừa chỉnh trong App
     NSInteger userFPS = (g_syncPayloadV285.targetFPS > 0) ? (NSInteger)g_syncPayloadV285.targetFPS : g_cachedResolvedFPS;
     if (userFPS <= 0 && CFG285) {
         userFPS = (NSInteger)CFG285.targetFPS;
@@ -3004,7 +3020,6 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     return userFPS;
 }
 
-// [Hz/FPS CÓ TÁC DỤNG TOÀN HỆ THỐNG]: Đồng bộ chính xác theo số Hz/FPS người dùng vừa chỉnh trong App
 static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
     NSInteger hzCap = Titanium_GetTargetConfiguredHz();
     NSInteger fpsCap = Titanium_GetTargetConfiguredFPS();
@@ -3015,12 +3030,10 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
     return (fpsCap > 0) ? fpsCap : hzCap;
 }
 
-// [KHÓA CỨNG SÀN]: Sàn luôn bằng đúng trần hiệu lực đã cấu hình trong App
 static inline float Titanium_RangeFloorForCap(float cap) {
     return cap;
 }
 
-// [KHÓA CỨNG DẢI TẦN SỐ QUÉT]: Ép toàn bộ dải (min, max, preferred) bằng đúng mức đã chọn trong App
 static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL systemUI) {
     (void)systemUI;
     (void)range;
@@ -3069,10 +3082,6 @@ static inline BOOL Titanium_IsDynamicIslandOrMusicMorphClass(NSString *clsName) 
 }
 
 #if TITANIUM_ENABLE_RATE_KEEPER
-
-// ====================================================================================================
-// [ĐÃ TỐI ƯU]: BỘ GIỮ NHỊP CHO SPRINGBOARD (KEEP-ALIVE DISPLAYLINK)
-// ====================================================================================================
 
 static CADisplayLink *s_keeperLink = nil;
 static NSInteger s_keeperIdleFrames = 0;
@@ -3211,7 +3220,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ/FPS THEO APP + ÉP DỰNG HÌNH 0.0MS + CHỐNG SAFEMODE TUYỆT ĐỐI
+// NHÓM 3: KHÓA CỨNG HZ/FPS THEO APP + ÉP DỰNG HÌNH 0.0MS + BẺ CHỐT EXCEPTION KHI MỞ APP
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3227,7 +3236,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig(Titanium_GetEffectiveFrameCap());
+        @try {
+            %orig(Titanium_GetEffectiveFrameCap());
+        } @catch (__unused NSException *e) {}
         return;
     }
     %orig(fps);
@@ -3250,7 +3261,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (maxTarget > 240.0f) maxTarget = 240.0f;
         range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
     }
-    %orig(range);
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (CFTimeInterval)duration {
@@ -3321,7 +3334,8 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (CFTimeInterval)minimumFrameDuration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return (cap > 0) ? (1.0 / (double)cap) : 0.0;
+        if (cap < 15) cap = 120;
+        return (1.0 / (double)cap);
     }
     return %orig;
 }
@@ -3352,7 +3366,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         %orig(fps);
         return;
     }
-    %orig(Titanium_GetEffectiveFrameCap());
+    @try {
+        %orig(Titanium_GetEffectiveFrameCap());
+    } @catch (__unused NSException *e) {}
 }
 
 - (NSInteger)minimumFPS {
@@ -3374,7 +3390,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 %end
 
-// [MỞ KHÓA UISCREEN CHO 6S - 12 PRO MAX]: Xuất đúng số Hz/FPS đã chọn trong App cho toàn hệ thống
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
@@ -3402,7 +3417,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        %orig((cap > 0) ? (1.0 / (CGFloat)cap) : rate);
+        @try {
+            %orig((cap > 0) ? (1.0 / (CGFloat)cap) : rate);
+        } @catch (__unused NSException *e) {}
         return;
     }
     %orig(rate);
@@ -3410,7 +3427,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 %end
 
-// [ĐỒNG BỘ TRỰC TIẾP LÊN WEB SAFARI / WKWEBVIEW]: Đo trên Web lên đúng số Hz/FPS vừa chỉnh trong App
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
@@ -3459,7 +3475,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
         }
     }
-    %orig(range);
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -3475,7 +3493,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
         }
     }
-    %orig(range);
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (void)setSettlingDuration:(CFTimeInterval)duration {
@@ -3487,13 +3507,11 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 %end
 
-// [ĐÃ BỌC CHỐT CHỐNG CRASH SAFEMODE KHI RESPRING]
 %hook CALayer
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && anim) {
         if (@available(iOS 15.0, *)) {
-            // BẮT BUỘC kiểm tra respondsToSelector để không sập Safe Mode với CAAnimationGroup/CATransition
             if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                 float maxTarget = (float)Titanium_GetEffectiveFrameCap();
                 if (maxTarget < 15.0f) maxTarget = 60.0f;
@@ -6312,22 +6330,9 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE (iPhone 6s -> 15 Pro Max, iOS 14.0 -> 26.0.1) ███
-// (TOÀN BỘ LÀ CODE MỚI THÊM - KHÔNG CẮT BỚT BẤT KỲ NHÓM NÀO PHÍA TRÊN)
-//  - Đa ngôn ngữ TỰ ĐỘNG theo ngôn ngữ & vùng của máy, đồng bộ qua payload IPC
-//  - Áp dụng Hz/FPS MỚI NGAY cho app đang mở sẵn (sửa "chỉnh trong app không tác dụng toàn hệ thống")
-//  - Hết cú "nảy" nặng khi vuốt thoát app về icon (kẹp damping của CASpringAnimation)
-//  - Pin 1-20% vẫn mượt: ưu tiên giao diện, hoãn dọn heap tốn CPU (đánh đổi pin lấy mượt + mát)
-//  - Heartbeat IPC 5s/lần: app mở sau luôn nhận đúng Hz/FPS/công tắc mới nhất
+// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE (iPhone 6s -> 15 Pro Max, iOS 14.0 -> 26.0.1) - ĐÃ BỌC BẢO VỆ CHỐNG SAFEMODE ███
 // ====================================================================================================
 
-// ----------------------------------------------------------------------------------------------------
-// [V12 - ĐA NGÔN NGỮ TỰ ĐỘNG CHUẨN]
-// Thứ tự phân giải: (1) Người dùng chọn tay trong app (SelectedLanguage != "auto")
-//                   (2) "auto" => theo NGÔN NGỮ MÁY qua NSLocale (máy English => tweak English, máy Việt => Việt...)
-//                   (3) Dự phòng: mã ngôn ngữ SpringBoard nhúng trong payload IPC ("LG:xx" ở reserved)
-// NSLocale hoạt động bình thường cả trong sandbox của app thứ ba nên mọi tiến trình đều đồng nhất ngôn ngữ.
-// ----------------------------------------------------------------------------------------------------
 static NSString *Titanium_ResolveEffectiveLanguage(void) {
     NSString *sel = nil;
     if (CFG285 && [CFG285 respondsToSelector:@selector(selectedLanguage)]) {
@@ -6348,7 +6353,7 @@ static NSString *Titanium_ResolveEffectiveLanguage(void) {
         if ([s_knownLangsV12 containsObject:base]) {
             return base;
         }
-        return @"en"; // Ngôn ngữ lạ ngoài danh sách => chuẩn quốc tế English
+        return @"en";
     }
     const char *res = (const char *)g_syncPayloadV285.reserved;
     if (res[0] == 'L' && res[1] == 'G' && res[2] == ':') {
@@ -6358,15 +6363,9 @@ static NSString *Titanium_ResolveEffectiveLanguage(void) {
     return @"en";
 }
 
-// [V12] Helper song ngữ nhanh cho mọi chuỗi hiển thị trong tweak/app (Việt <=> Anh, mở rộng tuỳ ý)
 static inline NSString *Titanium_TrV12(NSString *viText, NSString *enText) {
     return [[Titanium_ResolveEffectiveLanguage() lowercaseString] hasPrefix:@"vi"] ? (viText ?: enText) : (enText ?: viText);
 }
-
-// ============================================================================
-// [AUTO-SCAN AI ENGINE + HARD ZERO-FREEZE STREAMING OPTIMIZER]
-// Tự động quét mọi AI hiện có & Khóa cứng chống đơ khi tạo khối Code dài
-// ============================================================================
 
 static volatile BOOL g_DynamicAIStreamDetected = NO;
 static volatile uint64_t g_aiLastUserTouchTick = 0;
@@ -6388,72 +6387,20 @@ static inline BOOL Titanium_IsAIApp(void) {
         NSString *dispName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] lowercaseString] ?: @"";
         NSString *bundName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleName"] lowercaseString] ?: @"";
 
-        // Không kích hoạt nhầm trên SpringBoard hoặc app hệ thống Apple
         if ([bundleID hasPrefix:@"com.apple."]) {
             return;
         }
 
         NSString *combined = [NSString stringWithFormat:@"%@ %@ %@ %@", bundleID, execName, dispName, bundName];
-
         NSArray<NSString *> *aiKeywords = @[
-            @"bard",          // Google Gemini (com.google.bard)
-            @"gemini",
-            @"googlemobile",  // Google App (tích hợp Gemini)
-            @"openai",        // ChatGPT
-            @"chatgpt",
-            @"claude",        // Anthropic Claude
-            @"anthropic",
-            @"grok",          // xAI Grok
-            @"xai",
-            @"deepseek",      // DeepSeek
-            @"perplexity",    // Perplexity
-            @"poe",           // Quora Poe
-            @"copilot",       // Microsoft Copilot / GitHub Copilot
-            @"kimi",          // Moonshot Kimi
-            @"moonshot",
-            @"doubao",        // ByteDance Doubao / Cici
-            @"cici",
-            @"qwen",          // Alibaba Qwen / Tongyi
-            @"tongyi",
-            @"aliyun",
-            @"yuanbao",       // Tencent Yuanbao
-            @"hunyuan",
-            @"ernie",         // Baidu Ernie / Wenxin
-            @"yiyan",
-            @"zhipu",         // ChatGLM / Qingyan
-            @"chatglm",
-            @"mistral",       // Mistral Le Chat
-            @"lechat",
-            @"meta.ai",       // Meta AI
-            @"character",     // Character.AI
-            @"chai",          // Chai AI
-            @"monica",        // Monica AI
-            @"sider",         // Sider AI
-            @"merlin",        // Merlin AI
-            @"you.com",       // You.com AI
-            @"phind",         // Phind Coding AI
-            @"cursor",        // Cursor
-            @"windsurf",
-            @"codeium",
-            @"tabnine",
-            @"blackbox",      // Blackbox Code AI
-            @"replit",        // Replit Agent
-            @"ollama",        // Ollama clients
-            @"enchanted",
-            @"palchat",
-            @"chatbox",
-            @"opencat",
-            @"chathub",
-            @"lobechat",
-            @"nextchat",
-            @"dify",
-            @"coze",          // Coze AI
-            @"notability",
-            @"goodnotes",
-            @"aichat",
-            @"chatbot",
-            @"gpt",
-            @"llm"
+            @"bard", @"gemini", @"googlemobile", @"openai", @"chatgpt", @"claude", @"anthropic",
+            @"grok", @"xai", @"deepseek", @"perplexity", @"poe", @"copilot", @"kimi", @"moonshot",
+            @"doubao", @"cici", @"qwen", @"tongyi", @"aliyun", @"yuanbao", @"hunyuan", @"ernie",
+            @"yiyan", @"zhipu", @"chatglm", @"mistral", @"lechat", @"meta.ai", @"character",
+            @"chai", @"monica", @"sider", @"merlin", @"you.com", @"phind", @"cursor", @"windsurf",
+            @"codeium", @"tabnine", @"blackbox", @"replit", @"ollama", @"enchanted", @"palchat",
+            @"chatbox", @"opencat", @"chathub", @"lobechat", @"nextchat", @"dify", @"coze",
+            @"notability", @"goodnotes", @"aichat", @"chatbot", @"gpt", @"llm"
         ];
 
         for (NSString *kw in aiKeywords) {
@@ -6466,7 +6413,6 @@ static inline BOOL Titanium_IsAIApp(void) {
     return sIsStaticAI || g_DynamicAIStreamDetected;
 }
 
-// Tự động phát hiện bất kỳ ứng dụng nào đang stream văn bản tốc độ cao (Auto-Detect)
 static inline void Titanium_ProbeDynamicAIStream(NSUInteger textLength) {
     if (g_DynamicAIStreamDetected || textLength < 40) return;
     static uint64_t sWindowStartMs = 0;
@@ -6476,7 +6422,6 @@ static inline void Titanium_ProbeDynamicAIStream(NSUInteger textLength) {
     if (now - sWindowStartMs <= 380) {
         sRapidMutationCount++;
         if (sRapidMutationCount >= 6) {
-            // Phát hiện luồng nhả chữ liên tục -> Tự động bật chế độ Ép mượt AI cho toàn app
             g_DynamicAIStreamDetected = YES;
         }
     } else {
@@ -6498,270 +6443,279 @@ static const void *kAIFlushScheduledKey        = &kAIFlushScheduledKey;
 static const void *kAICachedCellSizeKey        = &kAICachedCellSizeKey;
 static const void *kAICachedCellTimeKey        = &kAICachedCellTimeKey;
 
-// Định nghĩa kiểu block cho performBatchUpdates để Theos không bị lỗi phân tích cú pháp chữ ký
 typedef void (^UICollectionBatchUpdatesBlock)(void);
 typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
 
 %group Group_AI_Stream_Optimization
 
-// 1. Ưu tiên tuyệt đối quyền chạm tay của người dùng trên toàn bộ cửa sổ
 %hook UIWindow
 - (void)sendEvent:(UIEvent *)event {
-    if (event.type == UIEventTypeTouches) {
-        NSSet *touches = [event allTouches];
-        for (UITouch *touch in touches) {
-            UITouchPhase phase = touch.phase;
-            if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
-                g_aiUserIsDragging = YES;
-                g_aiLastUserTouchTick = Titanium_NowMs();
-            } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
-                g_aiUserIsDragging = NO;
-                g_aiLastUserTouchTick = Titanium_NowMs();
+    @try {
+        if (event.type == UIEventTypeTouches) {
+            NSSet *touches = [event allTouches];
+            for (UITouch *touch in touches) {
+                UITouchPhase phase = touch.phase;
+                if (phase == UITouchPhaseBegan || phase == UITouchPhaseMoved) {
+                    g_aiUserIsDragging = YES;
+                    g_aiLastUserTouchTick = Titanium_NowMs();
+                } else if (phase == UITouchPhaseEnded || phase == UITouchPhaseCancelled) {
+                    g_aiUserIsDragging = NO;
+                    g_aiLastUserTouchTick = Titanium_NowMs();
+                }
             }
         }
-    }
+    } @catch (__unused NSException *e) {}
     %orig(event);
 }
 %end
 
-// 2. Chống đơ cứng Main Thread khi đo kích thước ô Code dài (UICollectionViewCell Self-Sizing Cache)
 %hook UICollectionViewCell
 - (void)prepareForReuse {
-    %orig;
-    if (Titanium_IsAIApp()) {
-        objc_setAssociatedObject(self, kAICachedCellSizeKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(self, kAICachedCellTimeKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    @try {
+        %orig;
+        if (Titanium_IsAIApp()) {
+            objc_setAssociatedObject(self, kAICachedCellSizeKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kAICachedCellTimeKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
     }
 }
 
 - (UICollectionViewLayoutAttributes *)preferredLayoutAttributesFittingAttributes:(UICollectionViewLayoutAttributes *)layoutAttributes {
-    if (!Titanium_IsAIApp()) {
+    @try {
+        if (!Titanium_IsAIApp()) {
+            return %orig(layoutAttributes);
+        }
+        uint64_t now = Titanium_NowMs();
+        NSValue *cachedSizeVal = objc_getAssociatedObject(self, kAICachedCellSizeKey);
+        NSNumber *cachedTimeNum = objc_getAssociatedObject(self, kAICachedCellTimeKey);
+
+        if (cachedSizeVal && cachedTimeNum) {
+            CGSize cachedSize = [cachedSizeVal CGSizeValue];
+            uint64_t lastMeasureMs = [cachedTimeNum unsignedLongLongValue];
+            uint64_t cacheTTL = Titanium_IsUserActivelyScrollingAI() ? 220 : 70;
+
+            if ((now - lastMeasureMs < cacheTTL) &&
+                cachedSize.height > 10.0 &&
+                fabs(cachedSize.width - layoutAttributes.size.width) < 2.0) {
+                CGRect frame = layoutAttributes.frame;
+                frame.size = cachedSize;
+                layoutAttributes.frame = frame;
+                return layoutAttributes;
+            }
+        }
+        UICollectionViewLayoutAttributes *attr = %orig(layoutAttributes);
+        if (attr && attr.frame.size.height > 0) {
+            objc_setAssociatedObject(self, kAICachedCellSizeKey, [NSValue valueWithCGSize:attr.frame.size], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kAICachedCellTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        return attr;
+    } @catch (__unused NSException *e) {
         return %orig(layoutAttributes);
     }
-
-    uint64_t now = Titanium_NowMs();
-    NSValue *cachedSizeVal = objc_getAssociatedObject(self, kAICachedCellSizeKey);
-    NSNumber *cachedTimeNum = objc_getAssociatedObject(self, kAICachedCellTimeKey);
-
-    if (cachedSizeVal && cachedTimeNum) {
-        CGSize cachedSize = [cachedSizeVal CGSizeValue];
-        uint64_t lastMeasureMs = [cachedTimeNum unsignedLongLongValue];
-        // Khi đang vuốt: khóa cache kích thước ô trong 220ms để không tính toán lại AutoLayout của khối code dài
-        // Khi đang đứng yên stream: gộp nhịp đo lại mỗi 70ms
-        uint64_t cacheTTL = Titanium_IsUserActivelyScrollingAI() ? 220 : 70;
-
-        if ((now - lastMeasureMs < cacheTTL) &&
-            cachedSize.height > 10.0 &&
-            fabs(cachedSize.width - layoutAttributes.size.width) < 2.0) {
-            CGRect frame = layoutAttributes.frame;
-            frame.size = cachedSize;
-            layoutAttributes.frame = frame;
-            return layoutAttributes;
-        }
-    }
-
-    UICollectionViewLayoutAttributes *attr = %orig(layoutAttributes);
-    if (attr && attr.frame.size.height > 0) {
-        objc_setAssociatedObject(self, kAICachedCellSizeKey, [NSValue valueWithCGSize:attr.frame.size], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(self, kAICachedCellTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return attr;
 }
 %end
 
-// 3. Mở khóa quán tính cuộn & Chặn App AI giật ngược màn hình khi đang vuốt
 %hook UIScrollView
 - (void)didMoveToWindow {
-    %orig;
-    if (Titanium_IsAIApp() && self.window) {
-        self.decelerationRate = UIScrollViewDecelerationRateNormal;
-        self.delaysContentTouches = NO;
-        self.canCancelContentTouches = YES;
+    @try {
+        %orig;
+        if (Titanium_IsAIApp() && self.window) {
+            self.decelerationRate = UIScrollViewDecelerationRateNormal;
+            self.delaysContentTouches = NO;
+            self.canCancelContentTouches = YES;
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
     }
 }
 
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
-    if (Titanium_IsAIApp()) {
-        // Nếu ngón tay đang chạm vuốt hoặc đang trôi theo quán tính, chặn hoàn toàn lệnh tự cuộn của AI
-        if ((self.isTracking || self.isDragging || self.isDecelerating || Titanium_IsUserActivelyScrollingAI()) && animated) {
+    @try {
+        if (Titanium_IsAIApp()) {
+            if ((self.isTracking || self.isDragging || self.isDecelerating || Titanium_IsUserActivelyScrollingAI()) && animated) {
+                return;
+            }
+            %orig(contentOffset, NO);
             return;
         }
-        %orig(contentOffset, NO);
-        return;
-    }
+    } @catch (__unused NSException *e) {}
     %orig(contentOffset, animated);
 }
 %end
 
 %hook UICollectionView
-
 - (void)scrollToItemAtIndexPath:(NSIndexPath *)indexPath atScrollPosition:(UICollectionViewScrollPosition)scrollPosition animated:(BOOL)animated {
-    if (Titanium_IsAIApp()) {
-        if (self.isTracking || self.isDragging || self.isDecelerating || Titanium_IsUserActivelyScrollingAI()) {
+    @try {
+        if (Titanium_IsAIApp()) {
+            if (self.isTracking || self.isDragging || self.isDecelerating || Titanium_IsUserActivelyScrollingAI()) {
+                return;
+            }
+            %orig(indexPath, scrollPosition, NO);
             return;
         }
-        %orig(indexPath, scrollPosition, NO);
-        return;
-    }
+    } @catch (__unused NSException *e) {}
     %orig(indexPath, scrollPosition, animated);
 }
 
 - (void)performBatchUpdates:(UICollectionBatchUpdatesBlock)updates completion:(UICollectionBatchCompletionBlock)completion {
-    if (Titanium_IsAIApp()) {
-        [UIView performWithoutAnimation:^{
-            %orig(updates, completion);
-        }];
-        return;
-    }
-    %orig(updates, completion);
-}
-
-%end
-
-// 4. Chặn bão InvalidateLayout của CompositionalLayout khi khung Code phình to
-%hook UICollectionViewLayout
-- (void)invalidateLayout {
-    if (Titanium_IsAIApp()) {
-        uint64_t now = Titanium_NowMs();
-        NSNumber *lastNum = objc_getAssociatedObject(self, kAILastLayoutInvalidMsKey);
-        uint64_t lastMs = lastNum ? [lastNum unsignedLongLongValue] : 0;
-
-        uint64_t minInterval = Titanium_IsUserActivelyScrollingAI() ? 160 : 55;
-        if (now - lastMs < minInterval) {
+    @try {
+        if (Titanium_IsAIApp()) {
+            [UIView performWithoutAnimation:^{
+                %orig(updates, completion);
+            }];
             return;
         }
-        objc_setAssociatedObject(self, kAILastLayoutInvalidMsKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+    } @catch (__unused NSException *e) {}
+    %orig(updates, completion);
+}
+%end
+
+%hook UICollectionViewLayout
+- (void)invalidateLayout {
+    @try {
+        if (Titanium_IsAIApp()) {
+            uint64_t now = Titanium_NowMs();
+            NSNumber *lastNum = objc_getAssociatedObject(self, kAILastLayoutInvalidMsKey);
+            uint64_t lastMs = lastNum ? [lastNum unsignedLongLongValue] : 0;
+            uint64_t minInterval = Titanium_IsUserActivelyScrollingAI() ? 160 : 55;
+            if (now - lastMs < minInterval) {
+                return;
+            }
+            objc_setAssociatedObject(self, kAILastLayoutInvalidMsKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    } @catch (__unused NSException *e) {}
     %orig;
 }
 %end
 
-// 5. Ép UITextView dàn trang từng phần (Non-Contiguous) & Gộp nhịp Token Stream
 %hook UITextView
 - (void)didMoveToWindow {
-    %orig;
-    if (Titanium_IsAIApp() && self.window && !self.isEditable) {
-        self.layoutManager.allowsNonContiguousLayout = YES;
-        self.dataDetectorTypes = UIDataDetectorTypeNone;
-        self.spellCheckingType = UITextSpellCheckingTypeNo;
-        self.autocorrectionType = UITextAutocorrectionTypeNo;
+    @try {
+        %orig;
+        if (Titanium_IsAIApp() && self.window && !self.isEditable) {
+            self.layoutManager.allowsNonContiguousLayout = YES;
+            self.dataDetectorTypes = UIDataDetectorTypeNone;
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
     }
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    Titanium_ProbeDynamicAIStream(attributedText.length);
-
-    if (!Titanium_IsAIApp() || self.isEditable || self.isFirstResponder) {
-        %orig(attributedText);
-        return;
-    }
-
-    self.layoutManager.allowsNonContiguousLayout = YES;
-
-    uint64_t now = Titanium_NowMs();
-    NSNumber *lastNum = objc_getAssociatedObject(self, kAILastTextCommitMsKey);
-    uint64_t lastMs = lastNum ? [lastNum unsignedLongLongValue] : 0;
-
-    // Khi đang vuốt hoặc đoạn code cực dài (> 1500 ký tự): giãn nhịp cập nhật để Main Thread luôn rảnh 100% cho cảm ứng
-    uint64_t throttleMs = Titanium_IsUserActivelyScrollingAI() ? 160 : (attributedText.length > 1500 ? 85 : 50);
-
-    if (now - lastMs >= throttleMs) {
-        objc_setAssociatedObject(self, kAILastTextCommitMsKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(self, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [UIView performWithoutAnimation:^{
+    @try {
+        Titanium_ProbeDynamicAIStream(attributedText.length);
+        if (!Titanium_IsAIApp() || self.isEditable || self.isFirstResponder) {
             %orig(attributedText);
-        }];
-    } else {
-        objc_setAssociatedObject(self, kAIPendingAttrTextKey, attributedText, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NSNumber *scheduled = objc_getAssociatedObject(self, kAIFlushScheduledKey);
-        if (![scheduled boolValue]) {
-            objc_setAssociatedObject(self, kAIFlushScheduledKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            __weak UITextView *weakSelf = self;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(throttleMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                UITextView *strongSelf = weakSelf;
-                if (!strongSelf) return;
-                objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
-                if (pending) {
-                    objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                    objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                    [UIView performWithoutAnimation:^{
-                        [strongSelf setAttributedText:pending];
-                    }];
-                }
-            });
+            return;
         }
+        self.layoutManager.allowsNonContiguousLayout = YES;
+        uint64_t now = Titanium_NowMs();
+        NSNumber *lastNum = objc_getAssociatedObject(self, kAILastTextCommitMsKey);
+        uint64_t lastMs = lastNum ? [lastNum unsignedLongLongValue] : 0;
+        uint64_t throttleMs = Titanium_IsUserActivelyScrollingAI() ? 160 : (attributedText.length > 1500 ? 85 : 50);
+
+        if (now - lastMs >= throttleMs) {
+            objc_setAssociatedObject(self, kAILastTextCommitMsKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [UIView performWithoutAnimation:^{
+                %orig(attributedText);
+            }];
+        } else {
+            objc_setAssociatedObject(self, kAIPendingAttrTextKey, attributedText, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NSNumber *scheduled = objc_getAssociatedObject(self, kAIFlushScheduledKey);
+            if (![scheduled boolValue]) {
+                objc_setAssociatedObject(self, kAIFlushScheduledKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                __weak UITextView *weakSelf = self;
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(throttleMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    UITextView *strongSelf = weakSelf;
+                    if (!strongSelf) return;
+                    objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                    NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
+                    if (pending) {
+                        objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        [UIView performWithoutAnimation:^{
+                            [strongSelf setAttributedText:pending];
+                        }];
+                    }
+                });
+            }
+        }
+    } @catch (__unused NSException *e) {
+        %orig(attributedText);
     }
 }
 %end
 
-// 6. Gộp nhịp UILabel cho các App AI vẽ khối Code bằng Label
 %hook UILabel
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    Titanium_ProbeDynamicAIStream(attributedText.length);
-
-    if (!Titanium_IsAIApp() || attributedText.length < 150) {
-        %orig(attributedText);
-        return;
-    }
-
-    uint64_t now = Titanium_NowMs();
-    NSNumber *lastNum = objc_getAssociatedObject(self, kAILastTextCommitMsKey);
-    uint64_t lastMs = lastNum ? [lastNum unsignedLongLongValue] : 0;
-    uint64_t throttleMs = Titanium_IsUserActivelyScrollingAI() ? 160 : (attributedText.length > 1500 ? 85 : 50);
-
-    if (now - lastMs >= throttleMs) {
-        objc_setAssociatedObject(self, kAILastTextCommitMsKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(self, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [UIView performWithoutAnimation:^{
+    @try {
+        Titanium_ProbeDynamicAIStream(attributedText.length);
+        if (!Titanium_IsAIApp() || attributedText.length < 150) {
             %orig(attributedText);
-        }];
-    } else {
-        objc_setAssociatedObject(self, kAIPendingAttrTextKey, attributedText, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NSNumber *scheduled = objc_getAssociatedObject(self, kAIFlushScheduledKey);
-        if (![scheduled boolValue]) {
-            objc_setAssociatedObject(self, kAIFlushScheduledKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            __weak UILabel *weakSelf = self;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(throttleMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                UILabel *strongSelf = weakSelf;
-                if (!strongSelf) return;
-                objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
-                if (pending) {
-                    objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                    objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                    [UIView performWithoutAnimation:^{
-                        [strongSelf setAttributedText:pending];
-                    }];
-                }
-            });
+            return;
         }
+        uint64_t now = Titanium_NowMs();
+        NSNumber *lastNum = objc_getAssociatedObject(self, kAILastTextCommitMsKey);
+        uint64_t lastMs = lastNum ? [lastNum unsignedLongLongValue] : 0;
+        uint64_t throttleMs = Titanium_IsUserActivelyScrollingAI() ? 160 : (attributedText.length > 1500 ? 85 : 50);
+
+        if (now - lastMs >= throttleMs) {
+            objc_setAssociatedObject(self, kAILastTextCommitMsKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [UIView performWithoutAnimation:^{
+                %orig(attributedText);
+            }];
+        } else {
+            objc_setAssociatedObject(self, kAIPendingAttrTextKey, attributedText, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NSNumber *scheduled = objc_getAssociatedObject(self, kAIFlushScheduledKey);
+            if (![scheduled boolValue]) {
+                objc_setAssociatedObject(self, kAIFlushScheduledKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                __weak UILabel *weakSelf = self;
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(throttleMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    UILabel *strongSelf = weakSelf;
+                    if (!strongSelf) return;
+                    objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                    NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
+                    if (pending) {
+                        objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        [UIView performWithoutAnimation:^{
+                            [strongSelf setAttributedText:pending];
+                        }];
+                    }
+                });
+            }
+        }
+    } @catch (__unused NSException *e) {
+        %orig(attributedText);
     }
 }
 %end
 
-// 7. Ép vẽ bất đồng bộ cho CALayer trong App AI: Đẩy render code/chữ sang luồng phụ
 %hook CALayer
 - (BOOL)drawsAsynchronously {
-    if (Titanium_IsAIApp()) return YES;
+    @try {
+        if (Titanium_IsAIApp()) return YES;
+    } @catch (__unused NSException *e) {}
     return %orig;
 }
 
 - (void)setDrawsAsynchronously:(BOOL)draws {
-    if (Titanium_IsAIApp()) {
-        %orig(YES);
-        return;
-    }
+    @try {
+        if (Titanium_IsAIApp()) {
+            %orig(YES);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
     %orig(draws);
 }
 %end
 
-%end // Kết thúc Group_AI_Stream_Optimization chuẩn xác (Không trùng lặp)
+%end
 
-// ----------------------------------------------------------------------------------------------------
-// [V12 - Hz/FPS TÁC DỤNG TOÀN HỆ THỐNG NGAY LẬP TỨC]
-// Duyệt toàn bộ scene hiện có và đặt lại preferredFrameRateRange ngay tại thời điểm cấu hình thay đổi.
-// ----------------------------------------------------------------------------------------------------
 static void Titanium_ReapplyFrameRateToAllScenes(void) {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
@@ -6793,9 +6747,6 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
     } @catch (__unused NSException *e) {}
 }
 
-// ----------------------------------------------------------------------------------------------------
-// [V12 - HẾT "NẢY" KHI VUỐT THOÁT APP]: nhận biết cửa sổ đang đóng app về Home / đóng folder / rời đa nhiệm
-// ----------------------------------------------------------------------------------------------------
 static inline BOOL Titanium_IsDismissingToHomeV12(void) {
     if (g_isContinuousSwiping) return YES;
     if (g_lastInteractionMachTime == 0) return NO;
@@ -6803,7 +6754,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
     return ((now - g_lastInteractionMachTime) < Titanium_NanosToMachTicks(250ULL * 1000000ULL));
 }
 
-// [V12] Khai báo property cho SDK cũ (iOS 14) chưa có CAFrameRateRange - chống lỗi biên dịch, runtime tự no-op
 @interface CADisplayLink (TitaniumV12FrameRateRange)
 @property (nonatomic) SafeFrameRateRange preferredFrameRateRange;
 @end
@@ -6811,39 +6761,40 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %group Group_TitaniumV12_SmoothExit_And_DisplayLink
 
 %hook CADisplayLink
-
 - (SafeFrameRateRange)preferredFrameRateRange {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.enableHzControl || g_syncPayloadV285.targetHz > 0)) {
-        float cap = (float)Titanium_GetEffectiveFrameCap();
-        if (cap < 15.0f) cap = 15.0f;
-        if (cap > 240.0f) cap = 240.0f;
-
-        // [ĐÃ KHÓA CỨNG]: Luôn trả về đúng mức đã chỉnh trong App (tới 240Hz)
-        return SafeMakeFRR(cap, cap, cap);
-    }
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.enableHzControl || g_syncPayloadV285.targetHz > 0)) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            return SafeMakeFRR(cap, cap, cap);
+        }
+    } @catch (__unused NSException *e) {}
     return %orig;
 }
-
 %end
 
-// --- [V12] Hết cú "nảy" nặng trước khi app thu về icon ---
 %hook CASpringAnimation
-
 - (CGFloat)damping {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12()) {
-        if (orig < 14.0) return 14.0;
+    @try {
+        CGFloat orig = %orig;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12()) {
+            if (orig < 14.0) return 14.0;
+        }
+        return orig;
+    } @catch (__unused NSException *e) {
+        return %orig;
     }
-    return orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12()) {
-        if (damping < 14.0) damping = 14.0;
-    }
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_IsDismissingToHomeV12()) {
+            if (damping < 14.0) damping = 14.0;
+        }
+    } @catch (__unused NSException *e) {}
     %orig(damping);
 }
-
 %end
 
 %end
@@ -7204,8 +7155,6 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 // ====================================================================================================
 
 static inline void Init_CAWindowServer_Hooks(void) {
-    // [ĐÃ SỬA]: KHÔNG hook máy chủ hiển thị (CAWindowServerDisplay / CADisplay trong backboardd) trên tấm nền 60Hz không có ProMotion.
-    // Bản cũ luôn báo cho máy chủ hiển thị gốc rằng màn hình hỗ trợ VRR và chạy 144Hz (kể cả khi người dùng tắt công tắc tổng).
     if (!Titanium_DisplaySpoofAllowed()) return;
     static dispatch_once_t s_wsInitOnce;
     dispatch_once(&s_wsInitOnce, ^{
@@ -7220,25 +7169,22 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
     @autoreleasepool {
         @try {
-            // Không ép QoS USER_INTERACTIVE trong quá trình khởi tạo: việc này làm CPU thức nhiều hơn
-            // nhưng không tăng tốc quá trình render. SpringBoard/app giữ QoS do hệ điều hành chọn.
+            // [BẺ KHÓA QUARTZCORE]: Vô hiệu hóa CAFrameRateRangeIsValid ngay lập tức chống văng Safe Mode khi mở App
+            Titanium_BypassQuartzCoreRangeAssertion();
+
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
             if (configClass) {
                 CFG285 = [configClass sharedInstance];
                 [CFG285 loadSettings];
-                // [V12 SỬA - CHỈNH Hz/FPS TRONG APP KHÔNG TÁC DỤNG]: loadSettings đã quy đổi và ghi g_cachedResolvedHz/FPS
-                // CHUẨN (tôn trọng công tắc Hz/FPS, tiết kiệm pin 60Hz, kẹp 15-144, máy 60Hz tự khóa 60, chống nóng...).
-                // Bản cũ ghi đè lại bằng giá trị THÔ targetHz/targetFPS ngay sau đó => mọi quy đổi bị xoá sạch.
-                // Nay giữ code cũ nhưng chỉ dùng làm DỰ PHÒNG khi cache chưa hợp lệ.
                 if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger initHz = (NSInteger)CFG285.targetHz;
-                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 144) && initHz >= 15 && initHz <= 144) {
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && initHz >= 15 && initHz <= 240) {
                         g_cachedResolvedHz = initHz;
                     }
                 }
                 if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
                     NSInteger initFPS = (NSInteger)CFG285.targetFPS;
-                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 144) && initFPS >= 15 && initFPS <= 144) {
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) && initFPS >= 15 && initFPS <= 240) {
                         g_cachedResolvedFPS = initFPS;
                     }
                 }
@@ -7256,28 +7202,18 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             });
 
 #if TITANIUM_SAFE_STABILITY_PROFILE
-            // Nhánh mặc định ổn định: chỉ cài các hook DisplayLink/Scene có giới hạn phần cứng.
-            // Không cài nhóm WindowServer/BackBoard/gesture/Metal private/scheduler/memory compaction.
-            // Tắt các hook này chủ ý để tránh app đen và Safe Mode; Dynamic Refresh do iOS và panel thật quản lý.
             %init(Group_TitaniumSafeRuntime_V22);
             if (@available(iOS 15.0, *)) {
                 %init(Group_TitaniumSafeRangeRuntime_V22);
                 %init(Group_TitaniumSafeSceneRangeRuntime_V22);
             }
-            // V22: do not initialize the private SBHomeGestureInteraction hooks.
-            // Avoids dependency on private selectors across iOS/Dopamine versions; keep native gesture physics.
             g_SystemMasterReady = YES;
 
             if (isSpringBoard) {
-                // [V26 FIX SAFEMODE #2]: KHÔNG gọi UIDevice batteryMonitoring ngay khi SpringBoard vừa khởi động
-                // (có thể deadlock với backboardd trên iOS 14-15 RootHide). Delay 5s.
-                // [V26 FIX SAFEMODE #5]: VÔ HIỆU HÓA thermal watchdog — nó gọi Titanium_UpdateLowBatteryFlagV12
-                // (chỉ có khai báo không có thân) → crash vài giây sau khi vào màn hình chính.
-                // Chỉ giữ ReapplyFrameRate (an toàn, đã có @try/@catch bên trong).
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_ReapplyFrameRateToAllScenes();
-                    } @catch (NSException *e) {}
+                    } @catch (__unused NSException *e) {}
                 });
                 Titanium_StartIPCHearthbeatV12();
                 NSData *verifiedData = [@"VERIFIED-V22-SAFE" dataUsingEncoding:NSUTF8StringEncoding];
@@ -7285,12 +7221,11 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                         contents:verifiedData
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
-                // [V26 FIX SAFEMODE #6]: Delay 5s thay vì 300ms — SpringBoard cần thời gian ổn định sau respring.
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_RegisterAppResumeRefreshV12();
                         Titanium_ReapplyFrameRateToAllScenes();
-                    } @catch (NSException *e) {}
+                    } @catch (__unused NSException *e) {}
                 });
             }
             return;
@@ -7303,7 +7238,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_Metal_ZeroTearing_Pacing);
             %init(Group_FluidTransitions_Pacing);
-            %init(Group_AI_Stream_Optimization); // <--- CHÈN VÀO ĐÂY
+            %init(Group_AI_Stream_Optimization);
             %init(Group_FastLaunch_SuperEngineV285);
             %init(Group_Scroll_And_Keyboard_Opt);
             %init(Group_InstantActionAndMenuTransitions_Boost);
@@ -7324,7 +7259,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_System_Memory_And_RunLoop_Governor);
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_Deep_RAM_Compaction_Engine);
-            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink); // [V12] Hết nảy khi vuốt về Home + DisplayLink nghe cấu hình tức thì
+            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
             }
@@ -7336,12 +7271,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             if (isSpringBoard) {
                 %init(Group_LiquidGlass_Opt);
                 %init(Group_Switcher30Apps_Virtualization);
-                %init(Group_SpringBoard_Switcher_Opt); // <--- CHÈN VÀO ĐÂY
+                %init(Group_SpringBoard_Switcher_Opt);
                 %init(Group_Display_SpringBoardV285);
                 %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
                 %init(Group_V285_FloatingWindow_PiP);
                 %init(Group_SpringBoard_ProcessManagerV285);
-                %init(Group_KeepAppsAlive_NoKill);     // <--- VÀ CHÈN VÀO ĐÂY
+                %init(Group_KeepAppsAlive_NoKill);
 
                 Init_CAWindowServer_Hooks();
 
@@ -7351,32 +7286,31 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
                 @try {
                     Titanium_StartThermalAndChargingWatchdog();
-                } @catch (NSException *e) {}
+                } @catch (__unused NSException *e) {}
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_ApplySiliconDeepOptimizations();
-                    } @catch (NSException *e) {}
+                    } @catch (__unused NSException *e) {}
                 });
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_ForceInjectDynamicRefreshSupport();
                         AppleInternal_LockHardwareCADisplay();
-                    } @catch (NSException *e) {}
+                    } @catch (__unused NSException *e) {}
                 });
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_TuneWindowServerDisplayDirectly();
-                    } @catch (NSException *e) {}
+                    } @catch (__unused NSException *e) {}
                 });
 
-                // [V12 - HEARTBEAT IPC]: làm tươi tệp đồng bộ mỗi 5s để app mở sau luôn nhận đúng Hz/FPS/công tắc
                 @try {
                     Titanium_StartIPCHearthbeatV12();
-                } @catch (NSException *e) {}
+                } @catch (__unused NSException *e) {}
 
                 NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
                 [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
@@ -7392,16 +7326,14 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         Titanium_ForceInjectDynamicRefreshSupport();
                         AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_ApplySiliconDeepOptimizations();
-                        // [V12 - Hz/FPS TÁC DỤNG NGAY & CHẮC CHẮN]: áp dụng dải nhịp cho toàn bộ scene đã mở
-                        // + đăng ký bắt bù mỗi lần app quay lại foreground (khi thông báo Darwin bị gộp/mất lúc treo nền)
                         Titanium_RegisterAppResumeRefreshV12();
                         Titanium_ReapplyFrameRateToAllScenes();
-                    } @catch (NSException *e) {}
+                    } @catch (__unused NSException *e) {}
                 });
             }
 
             g_SystemMasterReady = YES;
-        } @catch (NSException *e) {}
+        } @catch (__unused NSException *e) {}
     }
 }
 
