@@ -2823,9 +2823,9 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             [self setDisplaySyncEnabled:(targetCap <= 60)];
         }
 
-        // 4. Giải nghẽn luồng render
+        // 4. Giải nghẽn luồng render: BẮT BUỘC ĐỂ YES ĐỂ NHẢ FRAME ĐẦU TIÊN, CHỐNG ĐEN MÀN LÚC MỞ APP
         if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-            self.allowsNextDrawableTimeout = NO;
+            self.allowsNextDrawableTimeout = YES;
         }
 
         // 5. Bật chế độ trễ thấp phần cứng Apple Silicon
@@ -2833,9 +2833,8 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             self.lowLatencyMode = YES;
         }
 
-        // 6. Tối ưu xuất hình cho game Metal
+        // 6. Tối ưu xuất hình cho game Metal (Giữ nguyên presentsWithTransaction gốc lúc khởi tạo để tránh đen màn)
         if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
-            self.presentsWithTransaction = NO;
             self.framebufferOnly = YES;
         }
     }
@@ -5287,17 +5286,12 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 // ============================================================================
 // [A20-STYLE SILICON PIPELINE EMULATION FOR LEGACY SOC (A9-A12)]
-// Mô phỏng Display Engine phần cứng & Dynamic Memory Caching của chip đời mới
 // ============================================================================
 
 %hook CALayer
 
 - (void)setDrawsAsynchronously:(BOOL)draws {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-        %orig(YES);
-        return;
-    }
-    %orig(draws);
+    %orig(draws); // Giữ nguyên theo app để không lỗi backing store gây đen layer
 }
 
 - (void)setCornerRadius:(CGFloat)cornerRadius {
@@ -5328,20 +5322,14 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)didMoveToWindow {
     %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && !Titanium_IsSpringBoard()) {
-        self.layer.drawsAsynchronously = YES;
-    }
 }
 
 %end
 
 // ============================================================================
 // [ZERO-DELAY APP-TO-APP SWITCH + INSTANT COLD-BOOT LOADER (0.0MS)]
-// Triệt tiêu độ trễ chuyển App/File & Nạp sẵn RAM/GPU chống Safe Mode tuyệt đối
 // ============================================================================
 
-// 1. Cướp quyền CPU Real-Time, Nạp trước Assets/GPU & Max Disk I/O khi khởi động hoặc chuyển App
-// (Gọi trong _runWithMainScene thay vì -init để không bị đệ quy NSProcessInfo gây Safe Mode lúc Respring)
 %hook UIApplication
 
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
@@ -5389,7 +5377,6 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
-// 2. Mở bảng chia sẻ File / "Mở bằng..." (UIDocumentInteractionController) tức thì 0.0ms
 %hook UIDocumentInteractionController
 
 - (BOOL)presentOpenInMenuFromRect:(CGRect)rect inView:(UIView *)view animated:(BOOL)animated {
@@ -5418,42 +5405,32 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
-// 3. Phá bỏ hàng rào chờ GPU (Fence Wait) khi chuyển cảnh giữa 2 App
+// 3. Giữ nguyên rào cản GPU (Fence Wait) để đợi render xong khung đầu tiên, chống mở màn hình đen
 %hook UIApplicationSceneTransitionContext
 
 - (BOOL)waitForFence {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return NO;
-    }
     return %orig;
 }
 
 - (void)setWaitForFence:(BOOL)wait {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(NO);
-        return;
-    }
     %orig(wait);
 }
 
 %end
 
-// 4. Tăng tốc nạp ViewController đầu tiên (Bỏ qua hoạt ảnh phụ lúc đang mở App)
+// 4. Kích xung khi mở ViewController mà không ngắt Transition Coordinator của app
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && Titanium_IsInColdBootTurboWindow()) {
-        [UIView performWithoutAnimation:^{
-            %orig(NO);
-        }];
-        return;
+        Titanium_TriggerInstantTouchBurst();
     }
     %orig(animated);
 }
 
 %end
 
-// 5. Phá khóa bóp xung nhiệt độ & Chế độ nguồn điện thấp (Giữ 100% công suất phần cứng, không hook -init)
+// 5. Phá khóa bóp xung nhiệt độ & Chế độ nguồn điện thấp
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState API_AVAILABLE(ios(11.0)) {
@@ -5473,6 +5450,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %end
 
 %end // Kết thúc Group_Silicon_Hardware_Pipeline_Overdrive
+
 
 // ====================================================================================================
 // NHÓM 1: VÔ HIỆU HÓA WATCHDOG (CHẾ ĐỘ ĐÃ ÉP AN TOÀN - CHỐNG SAFE MODE 100%)
@@ -6179,9 +6157,6 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 %hook CALayer
 
 - (BOOL)drawsAsynchronously {
-    if (!Titanium_IsSpringBoard()) {
-        return NO;
-    }
     return %orig;
 }
 
@@ -6195,7 +6170,7 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 
 - (BOOL)allowsNextDrawableTimeout {
     if (!Titanium_IsSpringBoard()) {
-        return NO;
+        return YES; // Bắt buộc trả về YES để nhả khung hình đầu tiên, chống treo đen màn hình
     }
     return %orig;
 }
@@ -7543,13 +7518,8 @@ static void SpringBoardBootstrapTrigger(void) {
                 SpringBoardBootstrapTrigger();
             });
         } else {
-            // [V12 SỬA - HẾT ĐƠ 1 LÚC RỒI VĂNG APP SAU KHI RESPRING - ROOTHIDE]:
-            // Bản cũ chạy runCoreTweak ĐỒNG BỘ ngay trong %ctor của app (đọc plist + CFPreferences + hook ~20 nhóm
-            // trên chính luồng nạp dylib). Sau respring, mọi app mở lại đều bị chặn ở bước này => app "đơ một lúc
-            // rồi văng" (FrontBoard launch watchdog giết tiến trình khởi động chậm).
-            // Nay: khởi tạo được đưa sang hàng đợi utility để giảm chặn lúc nạp dylib.
-            // Safe profile chỉ cài các nhóm API hiển thị công khai đã chọn; vẫn cần build và thử trên từng bản iOS/jailbreak.
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            // Đưa về Main Queue để khởi tạo an toàn, chống Race Condition gây đen màn hình khi mở App
+            dispatch_async(dispatch_get_main_queue(), ^{
                 runCoreTweak(NO, bundleID, progName);
             });
         }
