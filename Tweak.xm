@@ -2530,7 +2530,6 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
 
     // Ép thẳng luồng chính vào cụm nhân hiệu năng cao P-Core mà không làm nổ Mach IPC của SpringBoard
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-}
 
     mach_timebase_info_data_t tb;
     if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.denom == 0) return;
@@ -2538,7 +2537,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     thread_port_t selfThread = mach_thread_self();
     if (selfThread == MACH_PORT_NULL) return;
 
-    // 2. Nâng độ ưu tiên luồng trong giới hạn an toàn của Userland (31 thay vì 63 để không khóa chết IPC của backboardd)
+    // 2. Nâng độ ưu tiên luồng trong giới hạn an toàn của Userland
     thread_precedence_policy_data_t precPolicy;
     precPolicy.importance = 47;
     thread_policy_set(selfThread,
@@ -2546,7 +2545,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
                       (thread_policy_t)&precPolicy,
                       THREAD_PRECEDENCE_POLICY_COUNT);
 
-    // 3. Tắt giới hạn điều tiết luồng cấp Kernel (Unthrottled) thay vì bóp khung 1.87ms gây sập khi mở App
+    // 3. Tắt giới hạn điều tiết luồng cấp Kernel (Unthrottled)
     thread_throttle_policy_data_t throttlePolicy;
     throttlePolicy.pset_limit = 0;
     thread_policy_set(selfThread,
@@ -7573,7 +7572,7 @@ static void SpringBoardBootstrapTrigger(void) {
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
 
-        %init;
+%init;
 
         if (isSpringBoard) {
             dispatch_async(dispatch_get_main_queue(), ^{
