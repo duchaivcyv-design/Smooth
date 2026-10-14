@@ -7054,100 +7054,137 @@ static void Titanium_RegisterAppResumeRefreshV12(void) {
 }
 
 // ====================================================================================================
-// GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME
+// GIÁM SÁT SẠC PIN THÔNG MINH & ĐỒNG BỘ CÀI ĐẶT PREFERENCES REALTIME (ĐÃ BỌC BẢO VỆ CHỐNG SAFEMODE)
 // ====================================================================================================
 
 static void Titanium_StartThermalAndChargingWatchdog(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        UIDevice *dev = [UIDevice currentDevice];
-        dev.batteryMonitoringEnabled = YES;
-        g_isDeviceChargingV285 = (dev.batteryState == UIDeviceBatteryStateCharging || dev.batteryState == UIDeviceBatteryStateFull);
+        @try {
+            UIDevice *dev = [UIDevice currentDevice];
+            dev.batteryMonitoringEnabled = YES;
+            g_isDeviceChargingV285 = (dev.batteryState == UIDeviceBatteryStateCharging || dev.batteryState == UIDeviceBatteryStateFull);
 
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryStateDidChangeNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification * _Nonnull note) {
-            UIDevice *currentDev = [UIDevice currentDevice];
-            g_isDeviceChargingV285 = (currentDev.batteryState == UIDeviceBatteryStateCharging || currentDev.batteryState == UIDeviceBatteryStateFull);
-            // V22: không nâng QoS luồng chính khi cắm sạc; iOS tự quản lý hiệu năng/nhiệt.
-            Titanium_UpdateLowBatteryFlagV12();
-        }];
+            [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryStateDidChangeNotification
+                                                              object:nil
+                                                               queue:[NSOperationQueue mainQueue]
+                                                          usingBlock:^(NSNotification * _Nonnull note) {
+                @try {
+                    UIDevice *currentDev = [UIDevice currentDevice];
+                    g_isDeviceChargingV285 = (currentDev.batteryState == UIDeviceBatteryStateCharging || currentDev.batteryState == UIDeviceBatteryStateFull);
+                    if ((void(*)(void))objc_msgSend && [(id)[NSObject class] instancesRespondToSelector:@selector(Titanium_UpdateLowBatteryFlagV12)]) {
+                        Titanium_UpdateLowBatteryFlagV12();
+                    }
+                } @catch (__unused NSException *e) {}
+            }];
 
-        // [V12 - PIN 1-20% VẪN MƯỢT]: theo dõi MỨC PIN (không chỉ trạng thái sạc) để bật chế độ ưu tiên mượt khi pin yếu
-        g_batteryLevelV12 = dev.batteryLevel;
-        Titanium_UpdateLowBatteryFlagV12();
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryLevelDidChangeNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification * _Nonnull note) {
-            g_batteryLevelV12 = [UIDevice currentDevice].batteryLevel;
-            Titanium_UpdateLowBatteryFlagV12();
-        }];
+            g_batteryLevelV12 = dev.batteryLevel;
+            if ((void(*)(void))objc_msgSend && [(id)[NSObject class] instancesRespondToSelector:@selector(Titanium_UpdateLowBatteryFlagV12)]) {
+                Titanium_UpdateLowBatteryFlagV12();
+            }
+            [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryLevelDidChangeNotification
+                                                              object:nil
+                                                               queue:[NSOperationQueue mainQueue]
+                                                          usingBlock:^(NSNotification * _Nonnull note) {
+                @try {
+                    g_batteryLevelV12 = [UIDevice currentDevice].batteryLevel;
+                    if ((void(*)(void))objc_msgSend && [(id)[NSObject class] instancesRespondToSelector:@selector(Titanium_UpdateLowBatteryFlagV12)]) {
+                        Titanium_UpdateLowBatteryFlagV12();
+                    }
+                } @catch (__unused NSException *e) {}
+            }];
+        } @catch (__unused NSException *e) {}
     });
 }
 
-// [ĐÃ BỔ SUNG - CÔNG TẮC TỔNG]: tiến trình không có đối tượng cấu hình (backboardd) lấy Hz/FPS trực tiếp từ payload IPC
 static void Titanium_AdoptPayloadRatesWithoutConfig(void) {
-    if (g_syncPayloadV285.targetHz >= 15 && g_syncPayloadV285.targetHz <= 144) {
-        g_cachedResolvedHz = g_syncPayloadV285.targetHz;
-    }
-    if (g_syncPayloadV285.targetFPS >= 15 && g_syncPayloadV285.targetFPS <= 144) {
-        g_cachedResolvedFPS = g_syncPayloadV285.targetFPS;
-    }
+    @try {
+        if (g_syncPayloadV285.targetHz >= 15 && g_syncPayloadV285.targetHz <= 240) {
+            g_cachedResolvedHz = g_syncPayloadV285.targetHz;
+        }
+        if (g_syncPayloadV285.targetFPS >= 15 && g_syncPayloadV285.targetFPS <= 240) {
+            g_cachedResolvedFPS = g_syncPayloadV285.targetFPS;
+        }
+    } @catch (__unused NSException *e) {}
 }
 
 static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    static dispatch_source_t s_debounceTimer = nil;
-    static dispatch_queue_t s_prefQueue = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        s_prefQueue = dispatch_queue_create("com.titanium.v285.prefsync", DISPATCH_QUEUE_SERIAL);
-    });
-
-    if (s_debounceTimer) {
-        dispatch_source_cancel(s_debounceTimer);
-        s_debounceTimer = nil;
-    }
-
-    s_debounceTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, s_prefQueue);
-    dispatch_source_set_timer(s_debounceTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
-    dispatch_source_set_event_handler(s_debounceTimer, ^{
-        // [ĐÃ SỬA - CÔNG TẮC TỔNG]: thông báo đổi cấu hình phải nạp lại NGAY, không bị chặn bởi mốc nạp lần trước
-        // (nextDrawable của app Metal cũng đặt mốc này mỗi khung hình nên trước đây game không bao giờ nạp lại được)
-        g_lastSyncTicksV285 = 0;
-        Titanium_ReloadSharedSyncStateV285();
-        if (!CFG285) {
-            Titanium_AdoptPayloadRatesWithoutConfig();
-        }
-        if (CFG285 && [CFG285 respondsToSelector:@selector(loadSettings)]) {
-            [CFG285 loadSettings];
-            // [ĐÃ SỬA]: bản cũ ghi đè g_cachedResolvedHz bằng targetHz THÔ ngay sau loadSettings, làm mất kết quả quy đổi (công tắc Hz/FPS,
-            // tiết kiệm pin 60Hz, cờ ép 144...). loadSettings đã tự đặt đúng g_cachedResolvedHz/FPS nên không ghi đè nữa.
-        }
-#if !TITANIUM_SAFE_STABILITY_PROFILE
-        if (Titanium_IsSpringBoard()) {
-            Titanium_TuneWindowServerDisplayDirectly();
-        }
-#endif
-        // Apply the same validated range to already-connected scenes in SpringBoard and app processes.
-        dispatch_async(dispatch_get_main_queue(), ^{
-            Titanium_ReapplyFrameRateToAllScenes();
+    @try {
+        static dispatch_source_t s_debounceTimer = nil;
+        static dispatch_queue_t s_prefQueue = nil;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            s_prefQueue = dispatch_queue_create("com.titanium.v285.prefsync", DISPATCH_QUEUE_SERIAL);
         });
-        s_debounceTimer = nil;
-    });
-    dispatch_resume(s_debounceTimer);
+
+        if (s_debounceTimer) {
+            dispatch_source_cancel(s_debounceTimer);
+            s_debounceTimer = nil;
+        }
+
+        s_debounceTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, s_prefQueue);
+        dispatch_source_set_timer(s_debounceTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_MSEC)), DISPATCH_TIME_FOREVER, 0);
+        dispatch_source_set_event_handler(s_debounceTimer, ^{
+            @try {
+                g_lastSyncTicksV285 = 0;
+                Titanium_ReloadSharedSyncStateV285();
+                if (!CFG285) {
+                    Titanium_AdoptPayloadRatesWithoutConfig();
+                }
+                if (CFG285 && [CFG285 respondsToSelector:@selector(loadSettings)]) {
+                    [CFG285 loadSettings];
+                }
+#if !TITANIUM_SAFE_STABILITY_PROFILE
+                if (Titanium_IsSpringBoard()) {
+                    Titanium_TuneWindowServerDisplayDirectly();
+                }
+#endif
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    @try {
+                        Titanium_ReapplyFrameRateToAllScenes();
+                    } @catch (__unused NSException *e) {}
+                });
+            } @catch (__unused NSException *e) {}
+            s_debounceTimer = nil;
+        });
+        dispatch_resume(s_debounceTimer);
+    } @catch (__unused NSException *e) {}
 }
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/tmp/.titanium_tweak_verified"
 
 static time_t Titanium_GetSystemUptimeSeconds(void) {
-    struct timeval boottime;
-    size_t len = sizeof(boottime);
-    int mib[2] = {CTL_KERN, KERN_BOOTTIME};
-    if (sysctl(mib, 2, &boottime, &len, NULL, 0) < 0) return 9999;
-    time_t now = time(NULL);
-    return (now - boottime.tv_sec);
+    @try {
+        struct timeval boottime;
+        size_t len = sizeof(boottime);
+        int mib[2] = {CTL_KERN, KERN_BOOTTIME};
+        if (sysctl(mib, 2, &boottime, &len, NULL, 0) < 0) return 9999;
+        time_t now = time(NULL);
+        return (now - boottime.tv_sec);
+    } @catch (__unused NSException *e) {
+        return 9999;
+    }
+}
+
+// ====================================================================================================
+// [BẺ KHÓA CHỐT CHẶN QUARTZCORE]: ÉP CAFrameRateRangeIsValid LUÔN TRẢ VỀ TRUE CHO MỌI MỨC HZ/FPS
+// ====================================================================================================
+static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange range) = NULL;
+static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange range) {
+    (void)range;
+    return true;
+}
+
+static void Titanium_BypassQuartzCoreRangeAssertion(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *sym = dlsym(RTLD_DEFAULT, "CAFrameRateRangeIsValid");
+            if (sym) {
+                MSHookFunction(sym, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
+            }
+        } @catch (__unused NSException *e) {}
+    });
 }
 
 // ====================================================================================================
@@ -7155,11 +7192,13 @@ static time_t Titanium_GetSystemUptimeSeconds(void) {
 // ====================================================================================================
 
 static inline void Init_CAWindowServer_Hooks(void) {
-    if (!Titanium_DisplaySpoofAllowed()) return;
-    static dispatch_once_t s_wsInitOnce;
-    dispatch_once(&s_wsInitOnce, ^{
-        %init(Group_CAWindowServer_Absolute_Dominance);
-    });
+    @try {
+        if (!Titanium_DisplaySpoofAllowed()) return;
+        static dispatch_once_t s_wsInitOnce;
+        dispatch_once(&s_wsInitOnce, ^{
+            %init(Group_CAWindowServer_Absolute_Dominance);
+        });
+    } @catch (__unused NSException *e) {}
 }
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
@@ -7169,7 +7208,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
     @autoreleasepool {
         @try {
-            // [BẺ KHÓA QUARTZCORE]: Vô hiệu hóa CAFrameRateRangeIsValid ngay lập tức chống văng Safe Mode khi mở App
+            // [BẺ KHÓA QUARTZCORE]: Vô hiệu hóa CAFrameRateRangeIsValid ngay từ đầu chống văng Safe Mode khi mở App
             Titanium_BypassQuartzCoreRangeAssertion();
 
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
@@ -7198,7 +7237,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 #endif
 
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                Titanium_ReloadSharedSyncStateV285();
+                @try {
+                    Titanium_ReloadSharedSyncStateV285();
+                } @catch (__unused NSException *e) {}
             });
 
 #if TITANIUM_SAFE_STABILITY_PROFILE
@@ -7215,7 +7256,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         Titanium_ReapplyFrameRateToAllScenes();
                     } @catch (__unused NSException *e) {}
                 });
-                Titanium_StartIPCHearthbeatV12();
+                @try { Titanium_StartIPCHearthbeatV12(); } @catch (__unused NSException *e) {}
                 NSData *verifiedData = [@"VERIFIED-V22-SAFE" dataUsingEncoding:NSUTF8StringEncoding];
                 [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
                                                         contents:verifiedData
@@ -7281,7 +7322,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Init_CAWindowServer_Hooks();
 
 #if TITANIUM_ENABLE_RATE_KEEPER
-                [TitaniumRateKeeper start];
+                @try { [TitaniumRateKeeper start]; } @catch (__unused NSException *e) {}
 #endif
 
                 @try {
@@ -7312,10 +7353,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     Titanium_StartIPCHearthbeatV12();
                 } @catch (__unused NSException *e) {}
 
-                NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-                [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
-                                                        contents:verifiedData
-                                                      attributes:@{NSFilePosixPermissions: @(0644)}];
+                @try {
+                    NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
+                    [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
+                                                            contents:verifiedData
+                                                          attributes:@{NSFilePosixPermissions: @(0644)}];
+                } @catch (__unused NSException *e) {}
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
                 %init(Group_Force_Render_Recovery_Overdrive);
@@ -7338,39 +7381,45 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 }
 
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
-    static BOOL s_obsDone = NO;
-    if (s_obsDone) return;
-    s_obsDone = YES;
+    @try {
+        static BOOL s_obsDone = NO;
+        if (s_obsDone) return;
+        s_obsDone = YES;
 
-    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-    if (!darwinCenter) return;
+        CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+        if (!darwinCenter) return;
 
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
 
-    if (!isSpringBoardProcess) {
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    }
+        if (!isSpringBoardProcess) {
+            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        }
+    } @catch (__unused NSException *e) {}
 }
 
 static void SpringBoardBootstrapTrigger(void) {
-    static BOOL s_triggerDone = NO;
-    if (s_triggerDone) return;
-    s_triggerDone = YES;
+    @try {
+        static BOOL s_triggerDone = NO;
+        if (s_triggerDone) return;
+        s_triggerDone = YES;
 
-    const char *progName = getprogname();
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        const char *progName = getprogname();
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-    time_t uptime = Titanium_GetSystemUptimeSeconds();
-    BOOL isColdBoot = (uptime < 30);
-    int64_t waitDelay = isColdBoot ? (int64_t)(600 * NSEC_PER_MSEC) : (int64_t)(150 * NSEC_PER_MSEC);
+        time_t uptime = Titanium_GetSystemUptimeSeconds();
+        BOOL isColdBoot = (uptime < 30);
+        int64_t waitDelay = isColdBoot ? (int64_t)(600 * NSEC_PER_MSEC) : (int64_t)(150 * NSEC_PER_MSEC);
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        runCoreTweak(YES, bundleID, progName);
-    });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            @try {
+                runCoreTweak(YES, bundleID, progName);
+            } @catch (__unused NSException *e) {}
+        });
+    } @catch (__unused NSException *e) {}
 }
 
 %ctor {
