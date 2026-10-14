@@ -7289,7 +7289,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_System_Memory_And_RunLoop_Governor);
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_Deep_RAM_Compaction_Engine);
-            // %init(Group_TitaniumV12_SmoothExit_And_DisplayLink); // Đã tắt do trùng hook CADisplayLink với Group_FluidTransitions_Pacing
+            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
             }
