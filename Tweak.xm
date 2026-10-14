@@ -5954,6 +5954,38 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
+// V26 stability fix: resolve the private MobileGestalt symbol at runtime instead of creating
+// a hard undefined-symbol dependency that can terminate the process in dyld before hooks initialize.
+typedef CFPropertyListRef (*TitaniumMGCopyAnswerFunctionV26)(CFStringRef property);
+static TitaniumMGCopyAnswerFunctionV26 g_origMGCopyAnswerV26 = NULL;
+
+static CFPropertyListRef Titanium_HookedMGCopyAnswerV26(CFStringRef property) {
+    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+        if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
+            CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
+            CFEqual(property, CFSTR("pVRR")) ||
+            CFEqual(property, CFSTR("pro-motion")) ||
+            CFEqual(property, CFSTR("DeviceSupports120Hz")) ||
+            CFEqual(property, CFSTR("DeviceSupportsProMotion"))) {
+            return CFRetain(kCFBooleanTrue);
+        }
+    }
+    return g_origMGCopyAnswerV26 ? g_origMGCopyAnswerV26(property) : NULL;
+}
+
+static void Titanium_InstallMGCopyAnswerHookV26(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        void *symbol = dlsym(RTLD_DEFAULT, "MGCopyAnswer");
+        if (symbol) {
+            MSHookFunction(symbol, (void *)Titanium_HookedMGCopyAnswerV26,
+                           (void **)&g_origMGCopyAnswerV26);
+        }
+        // If the symbol is unavailable on this iOS build, skip the optional spoof hook.
+        // No direct MGCopyAnswer reference is left for dyld to resolve at process startup.
+    });
+}
+
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN: ÉP PHẦN CỨNG NHẬN DIỆN & CHẠY PROMOTION THẬT (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN)
 // (KẾT NỐI: Ép Xung ProMotion Cố Định + Tăng Tần Số Lấy Mẫu Cảm Ứng 1000Hz + Ổ Khóa App)
@@ -5962,22 +5994,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %group Group_Hardware_ProMotion_Overclock
 
-extern "C" CFPropertyListRef MGCopyAnswer(CFStringRef property);
-
-// [ĐÃ ÉP TOÀN DIỆN]: Ép toàn bộ cờ Variable Refresh Rate & ProMotion của Apple qua MobileGestalt cho mọi máy
-%hookf(CFPropertyListRef, MGCopyAnswer, CFStringRef property) {
-    if (property && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        if (CFEqual(property, CFSTR("SupportsVariableRefreshRate")) ||
-            CFEqual(property, CFSTR("supports-variable-refresh-rate")) ||
-            CFEqual(property, CFSTR("pVRR")) ||
-            CFEqual(property, CFSTR("pro-motion")) ||
-            CFEqual(property, CFSTR("DeviceSupports120Hz")) ||
-            CFEqual(property, CFSTR("DeviceSupportsProMotion"))) {
-            return CFRetain(kCFBooleanTrue); // CFRetain bắt buộc để tuân thủ quy tắc Copy Rule chống Crash
-        }
-    }
-    return %orig(property);
-}
+// MGCopyAnswer spoofing is installed conditionally via dlsym above; the IOHID hook remains in this group.
 
 %hook IOHIDEventSystemClient
 
@@ -7269,6 +7286,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
             if (Titanium_DisplaySpoofAllowed()) {
                 %init(Group_Hardware_ProMotion_Overclock);
+                Titanium_InstallMGCopyAnswerHookV26();
             }
             %init(Group_Apple_Native_ColdBoot_Overdrive);
 
