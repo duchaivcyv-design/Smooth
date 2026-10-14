@@ -1908,8 +1908,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                         if (read(fd, &pRead, sizeof(ApexV285ProPayload)) == sizeof(ApexV285ProPayload)) {
                             if (pRead.magic == APEX_SYNC_MAGIC_V285) {
                                 self.enabled = (pRead.masterEnabled != 0);
-                                self.targetHz = (pRead.targetHz >= 15 && pRead.targetHz <= 144) ? pRead.targetHz : 144;
-                                self.targetFPS = (pRead.targetFPS >= 15 && pRead.targetFPS <= 144) ? pRead.targetFPS : 144;
+                                self.targetHz = (pRead.targetHz >= 15 && pRead.targetHz <= 240) ? pRead.targetHz : 240;
+                                self.targetFPS = (pRead.targetFPS >= 15 && pRead.targetFPS <= 240) ? pRead.targetFPS : 240;
                                 self.forceOverclock144Hz = (pRead.forceOverclock != 0);
                                 self.touchResponseBoost = (pRead.zeroLatencyTouch != 0);
                                 self.antiThermalThrottling = (pRead.thermalShield != 0);
@@ -2066,36 +2066,33 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         // [ĐÃ SỬA - CÔNG TẮC TỔNG]: áp dụng kết quả loại trừ đã tính ở trên (đặt g_isCurrentAppBlacklisted + tắt payload của tiến trình này)
         ApplyExclusion();
 
-        // ==============================================================================================
-        // [ĐÃ ÉP TOÀN DIỆN]: KHÓA CỨNG MỨC CHỈNH TỪ 15HZ ĐẾN 144HZ VÀO CACHE NGUYÊN THỦY (0NS RENDER LOOP)
+// ==============================================================================================
+        // [ĐÃ ÉP TOÀN DIỆN]: KHÓA CỨNG MỨC CHỈNH TỪ 15HZ ĐẾN 240HZ VÀO CACHE NGUYÊN THỦY (0NS RENDER LOOP)
         // ==============================================================================================
         NSInteger safeHz = self.targetHz;
         if (safeHz < 15) safeHz = 15;
-        if (safeHz > 144) safeHz = 144;
+        if (safeHz > 240) safeHz = 240;
 
         if (!self.enabled || !self.enableHzControl) {
             g_cachedResolvedHz = 60;
         } else if (self.powerSaveMode || self.batterySaver60Hz) {
             g_cachedResolvedHz = 60;
-        } else if (safeHz >= 144) {
-            // [ĐÃ SỬA - CHỈNH Hz KHÔNG CÓ TÁC DỤNG]: bản cũ "forceOverclock144Hz || ..." - cờ này được lưu lại từ lần chọn 144 và KHÔNG tự tắt
-            // khi bạn chọn giá trị thấp hơn nên luôn ép về 144 bất kể lựa chọn. Nay chỉ khi giá trị chọn >= 144 mới lấy 144.
-            g_cachedResolvedHz = 144;
+        } else if (safeHz >= 240) {
+            g_cachedResolvedHz = 240;
         } else {
             g_cachedResolvedHz = safeHz;
         }
 
         NSInteger safeFPS = self.targetFPS;
         if (safeFPS < 15) safeFPS = 15;
-        if (safeFPS > 144) safeFPS = 144;
+        if (safeFPS > 240) safeFPS = 240;
 
         if (!self.enabled || !self.enableFPSControl) {
             g_cachedResolvedFPS = 60;
         } else if (self.powerSaveMode || self.batterySaver60Hz) {
             g_cachedResolvedFPS = 60;
-        } else if (safeFPS >= 144) {
-            // [ĐÃ SỬA - CHỈNH FPS KHÔNG CÓ TÁC DỤNG]: xem ghi chú ở nhánh Hz (cờ ForceOverclock144Hz đã lưu không được đè lựa chọn thấp hơn)
-            g_cachedResolvedFPS = 144;
+        } else if (safeFPS >= 240) {
+            g_cachedResolvedFPS = 240;
         } else {
             g_cachedResolvedFPS = safeFPS;
         }
@@ -2522,46 +2519,41 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 // THIẾT LẬP CHU KỲ REALTIME TOÀN HỆ THỐNG (CHẠY TRÊN CẢ SPRINGBOARD VÀ TẤT CẢ ỨNG DỤNG THỨ BA)
 // ====================================================================================================
 
-// [ĐÃ KÍCH HOẠT CƯỠNG BỨC PHẦN CỨNG 100%]: Ép nhân Mach XNU cấp quyền Real-Time (THREAD_TIME_CONSTRAINT_POLICY)
-// và độ ưu tiên tuyệt đối (Importance = 63) cho Main Thread lên tới 240Hz mà không bị Kernel Watchdog kill khi mở App
+// [ĐÃ KÍCH HOẠT CƯỠNG BỨC PHẦN CỨNG 100%]: Ép nhân Mach XNU cấp quyền ưu tiên P-Core
+// và chu kỳ thời gian thực an toàn cho Main Thread lên tới 240Hz mà không bị Kernel Watchdog kill khi mở App
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (![NSThread isMainThread]) return;
-    if (targetHz < 60) targetHz = 60;
+    if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
 
     static int s_lastAppliedHz = 0;
     if (s_lastAppliedHz == targetHz) return; // Chỉ gọi kernel khi thay đổi mức Hz để tránh tốn syscall
     s_lastAppliedHz = targetHz;
 
+    // 1. Khóa cứng QoS User-Interactive để ép nhân XNU đẩy luồng vào cụm P-Core
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
     mach_timebase_info_data_t tb;
     if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.denom == 0) return;
-
-    double msToAbs = ((double)tb.denom / (double)tb.numer) * 1000000.0;
-    double framePeriodMs = 1000.0 / (double)targetHz; // 4.16ms cho 240Hz, 6.94ms cho 144Hz, 8.33ms cho 120Hz
 
     thread_port_t selfThread = mach_thread_self();
     if (selfThread == MACH_PORT_NULL) return;
 
-    // 1. Nâng độ ưu tiên luồng lên mức kịch trần của nhân Mach (Importance = 63)
+    // 2. Nâng độ ưu tiên luồng trong giới hạn an toàn của Userland (31 thay vì 63 để không khóa chết IPC của backboardd)
     thread_precedence_policy_data_t precPolicy;
-    precPolicy.importance = 63;
+    precPolicy.importance = 47;
     thread_policy_set(selfThread,
                       THREAD_PRECEDENCE_POLICY,
                       (thread_policy_t)&precPolicy,
                       THREAD_PRECEDENCE_POLICY_COUNT);
 
-    // 2. Cấp phát băng thông thời gian thực cứng theo tỷ lệ chu kỳ khung hình (computation = 45%, constraint = 75%)
-    // Luôn đảm bảo computation < constraint ở mọi mức Hz (120/144/240Hz), chặn đứng lỗi Kernel kill SpringBoard khi bấm mở App!
-    thread_time_constraint_policy_data_t timePolicy;
-    timePolicy.period      = (uint32_t)(framePeriodMs * msToAbs);
-    timePolicy.computation = (uint32_t)((framePeriodMs * 0.45) * msToAbs);
-    timePolicy.constraint  = (uint32_t)((framePeriodMs * 0.75) * msToAbs);
-    timePolicy.preemptible = TRUE;
-
+    // 3. Tắt giới hạn điều tiết luồng cấp Kernel (Unthrottled) thay vì bóp khung 1.87ms gây sập khi mở App
+    thread_throttle_policy_data_t throttlePolicy;
+    throttlePolicy.pset_limit = 0;
     thread_policy_set(selfThread,
-                      THREAD_TIME_CONSTRAINT_POLICY,
-                      (thread_policy_t)&timePolicy,
-                      THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+                      THREAD_THROTTLE_POLICY,
+                      (thread_policy_t)&throttlePolicy,
+                      1);
 
     mach_port_deallocate(mach_task_self(), selfThread);
 }
@@ -7297,7 +7289,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_System_Memory_And_RunLoop_Governor);
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_Deep_RAM_Compaction_Engine);
-            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
+            // %init(Group_TitaniumV12_SmoothExit_And_DisplayLink); // Đã tắt do trùng hook CADisplayLink với Group_FluidTransitions_Pacing
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
             }
@@ -7359,7 +7351,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
                 %init(Group_Force_Render_Recovery_Overdrive);
-                %init(Group_Window_Level_Overdrive);
+                // %init(Group_Window_Level_Overdrive); // Đã tắt do trùng hook UIWindowScene với nhóm khác
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
@@ -7411,7 +7403,7 @@ static void SpringBoardBootstrapTrigger(void) {
         BOOL isColdBoot = (uptime < 30);
         int64_t waitDelay = isColdBoot ? (int64_t)(600 * NSEC_PER_MSEC) : (int64_t)(150 * NSEC_PER_MSEC);
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_main_queue(), ^{
             @try {
                 runCoreTweak(YES, bundleID, progName);
             } @catch (__unused NSException *e) {}
