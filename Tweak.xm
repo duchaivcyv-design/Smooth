@@ -7327,8 +7327,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
-                        Titanium_ForceInjectDynamicRefreshSupport();
                         AppleInternal_LockHardwareCADisplay();
+                        Titanium_ForceInjectDynamicRefreshSupport();
                     } @catch (__unused NSException *e) {}
                 });
 
@@ -7351,7 +7351,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
                 %init(Group_Force_Render_Recovery_Overdrive);
-                // %init(Group_Window_Level_Overdrive); // Đã tắt do trùng hook UIWindowScene với nhóm khác
+                %init(Group_Window_Level_Overdrive); // Đã mở lại init chuẩn, không còn lỗi non-initialized
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
