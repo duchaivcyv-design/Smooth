@@ -6379,7 +6379,6 @@ static inline uint64_t Titanium_NowMs(void) {
 static inline BOOL Titanium_IsAIApp(void) {
     if (g_DynamicAIStreamDetected) return YES;
 
-    static BOOL sStaticChecked = NO;
     static BOOL sIsStaticAI = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -6391,7 +6390,6 @@ static inline BOOL Titanium_IsAIApp(void) {
 
         // Không kích hoạt nhầm trên SpringBoard hoặc app hệ thống Apple
         if ([bundleID hasPrefix:@"com.apple."]) {
-            sStaticChecked = YES;
             return;
         }
 
@@ -6464,7 +6462,6 @@ static inline BOOL Titanium_IsAIApp(void) {
                 break;
             }
         }
-        sStaticChecked = YES;
     });
     return sIsStaticAI || g_DynamicAIStreamDetected;
 }
@@ -7027,11 +7024,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 %end
-
-// Cập nhật cờ ưu tiên mượt khi pin yếu (1% - 20%)
-static void Titanium_UpdateLowBatteryFlagV12(void) {
-    g_lowBatterySmoothBoostV12 = (!g_isDeviceChargingV285 && g_batteryLevelV12 >= 0.0f && g_batteryLevelV12 <= 0.20f);
-}
 
 // ----------------------------------------------------------------------------------------------------
 // [V12 - HEARTBEAT IPC]: SpringBoard làm tươi tệp đồng bộ + heartbeat mỗi 30s (KHÔNG phát thông báo để
