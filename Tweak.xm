@@ -7015,10 +7015,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 } @catch (__unused NSException *e) {}
             });
 
-            if (TITANIUM_ENABLE_WATCHDOG_IMMUNITY) {
-                %init(Group_AntiWatchdog_Immunity);
-            }
-
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_Metal_ZeroTearing_Pacing);
             %init(Group_FluidTransitions_Pacing);
