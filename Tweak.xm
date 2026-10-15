@@ -7104,19 +7104,17 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 }
 %end
 
-%hook SBFluidSwitcherItemContainer
+ SBFluidSwitcherItemContainer
+
 - (void)setShadowStyle:(long long)style {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            if (g_isInteracting || g_isScrollingActive) {
-                ((void (*)(id, SEL, long long))objc_msgSend)(self, @selector(setShadowStyle:), 0);
-                return;
-            }
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        // Chặn ngoại lệ phòng hộ, đảm bảo SpringBoard không bao giờ bị kill
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)
+        && Titanium_IsSpringBoard()
+        && (g_isInteracting || g_isScrollingActive)) {
+        %orig(0);
+        return;
     }
+
+    %orig;
 }
 %end
 
