@@ -1738,11 +1738,8 @@ static inline BOOL Titanium_ShouldApplyEcoFrameCapV19(void) {
 // [ĐÃ ÉP TOÀN DIỆN]: ĐIỀU PHỐI WINDOWSERVER TỨC THÌ (KHÓA DẢI 15 - 144HZ, CHỐNG CO VIEWPORT & CHỐNG ĐEN APP)
 static void Titanium_TuneWindowServerDisplayDirectly(void) {
 #if TITANIUM_SAFE_STABILITY_PROFILE
-    // Không gọi private CAWindowServer setters trong profile an toàn: một giá trị sai có thể làm
-    // WindowServer/BackBoard đàm phán refresh không hợp lệ và gây đứng màn hình sau respring.
     return;
 #else
-    // [ĐÃ SỬA]: không can thiệp thông số máy chủ hiển thị trên tấm nền 60Hz không có ProMotion
     if (!Titanium_DisplaySpoofAllowed()) return;
     @try {
         Class wsClass = NSClassFromString(@"CAWindowServer");
@@ -1751,36 +1748,81 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         SEL selServer = sel_registerName("server");
         if (![wsClass respondsToSelector:selServer]) return;
         
-        id (*getServer)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
-        id server = getServer(wsClass, selServer);
+        id server = nil;
+        @try {
+            server = [wsClass performSelector:selServer];
+        } @catch (__unused NSException *e) {
+            return;
+        }
         if (!server) return;
 
         SEL selDisplays = sel_registerName("displays");
         if (![server respondsToSelector:selDisplays]) return;
 
-        NSArray *displays = ((NSArray *(*)(id, SEL))objc_msgSend)(server, selDisplays);
-        if (displays && displays.count > 0) {
+        NSArray *displays = nil;
+        @try {
+            displays = [server performSelector:selDisplays];
+        } @catch (__unused NSException *e) {
+            return;
+        }
+
+        if (displays && [displays isKindOfClass:[NSArray class]] && displays.count > 0) {
             id mainDisp = displays[0];
+            if (!mainDisp) return;
             
             NSInteger currentHz = g_cachedResolvedHz;
             if (currentHz < 15) currentHz = 15;
-            if (currentHz > 144) currentHz = 144;
+            if (currentHz > 240) currentHz = 240;
 
             double minDuration = 1.0 / (double)currentHz;
+            double targetHzDouble = (double)currentHz;
 
-            if ([mainDisp respondsToSelector:sel_registerName("setMinimumFrameDuration:")]) {
-                ((void (*)(id, SEL, double))objc_msgSend)(mainDisp, sel_registerName("setMinimumFrameDuration:"), minDuration);
-            }
-            if ([mainDisp respondsToSelector:sel_registerName("setMaximumRefreshRate:")]) {
-                ((void (*)(id, SEL, double))objc_msgSend)(mainDisp, sel_registerName("setMaximumRefreshRate:"), (double)currentHz);
-            }
-            if ([mainDisp respondsToSelector:sel_registerName("setIdealRefreshRate:")]) {
-                ((void (*)(id, SEL, double))objc_msgSend)(mainDisp, sel_registerName("setIdealRefreshRate:"), (double)currentHz);
-            }
+            // 1. Ép thời gian hiển thị khung hình tối thiểu
+            @try {
+                SEL selMinDur = sel_registerName("setMinimumFrameDuration:");
+                if ([mainDisp respondsToSelector:selMinDur]) {
+                    NSMethodSignature *sig = [mainDisp methodSignatureForSelector:selMinDur];
+                    if (sig && strcmp([sig getArgumentTypeAtIndex:2], "d") == 0) {
+                        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+                        [inv setSelector:selMinDur];
+                        [inv setTarget:mainDisp];
+                        [inv setArgument:&minDuration atIndex:2];
+                        [inv invoke];
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            // 2. Ép tần số quét tối đa
+            @try {
+                SEL selMaxRate = sel_registerName("setMaximumRefreshRate:");
+                if ([mainDisp respondsToSelector:selMaxRate]) {
+                    NSMethodSignature *sig = [mainDisp methodSignatureForSelector:selMaxRate];
+                    if (sig && strcmp([sig getArgumentTypeAtIndex:2], "d") == 0) {
+                        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+                        [inv setSelector:selMaxRate];
+                        [inv setTarget:mainDisp];
+                        [inv setArgument:&targetHzDouble atIndex:2];
+                        [inv invoke];
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            // 3. Ép tần số quét lý tưởng
+            @try {
+                SEL selIdealRate = sel_registerName("setIdealRefreshRate:");
+                if ([mainDisp respondsToSelector:selIdealRate]) {
+                    NSMethodSignature *sig = [mainDisp methodSignatureForSelector:selIdealRate];
+                    if (sig && strcmp([sig getArgumentTypeAtIndex:2], "d") == 0) {
+                        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+                        [inv setSelector:selIdealRate];
+                        [inv setTarget:mainDisp];
+                        [inv setArgument:&targetHzDouble atIndex:2];
+                        [inv invoke];
+                    }
+                }
+            } @catch (__unused NSException *e) {}
         }
-    } @catch (NSException *e) {
-        // Bỏ qua an toàn tuyệt đối nếu SDK không hỗ trợ selector
-    }
+    } @catch (__unused NSException *e) {}
 #endif
 }
 
@@ -3277,7 +3319,11 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setFrameInterval:(NSInteger)interval {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig(1);
+        @try {
+            %orig(1);
+        } @catch (__unused NSException *e) {
+            %orig(interval);
+        }
         return;
     }
     %orig(interval);
@@ -3305,7 +3351,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setAllowsVirtualModes:(BOOL)allows {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(YES);
+        @try {
+            %orig(YES);
+        } @catch (__unused NSException *e) {}
         return;
     }
     %orig(allows);
@@ -3318,7 +3366,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setLatency:(double)latency {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(0.0);
+        @try {
+            %orig(0.0);
+        } @catch (__unused NSException *e) {}
         return;
     }
     %orig(latency);
@@ -3327,24 +3377,27 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (CFTimeInterval)minimumFrameDuration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 15) cap = 120;
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
         return (1.0 / (double)cap);
     }
     return %orig;
 }
 
+// [ĐÃ SỬA]: Trả về đúng tần số Hz thay vì duration
 - (double)refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return (cap > 0) ? (1.0 / (double)cap) : %orig;
+        return (cap > 0) ? (double)cap : %orig;
     }
     return %orig;
 }
 
+// [ĐÃ SỬA]: Trả về đúng tần số Hz thay vì duration
 - (double)heartbeatRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return (cap > 0) ? (1.0 / (double)cap) : %orig;
+        return (cap > 0) ? (double)cap : %orig;
     }
     return %orig;
 }
@@ -3399,19 +3452,21 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     return %orig;
 }
 
+// [ĐÃ SỬA]: Trả về đúng số Hz thay vì duration
 - (CGFloat)_refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return (cap > 0) ? (1.0 / (CGFloat)cap) : %orig;
+        return (cap > 0) ? (CGFloat)cap : %orig;
     }
     return %orig;
 }
 
+// [ĐÃ SỬA]: Gán đúng số Hz thay vì duration
 - (void)_setTargetRefreshRate:(CGFloat)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
         @try {
-            %orig((cap > 0) ? (1.0 / (CGFloat)cap) : rate);
+            %orig((cap > 0) ? (CGFloat)cap : rate);
         } @catch (__unused NSException *e) {}
         return;
     }
@@ -3628,25 +3683,26 @@ static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
 }
 
 static void Titanium_ForceInjectDynamicRefreshSupport(void) {
-    // [ĐÃ SỬA]: không tiêm "hỗ trợ dynamic refresh" vào UIScreen trên tấm nền 60Hz không có ProMotion
     if (!Titanium_DisplaySpoofAllowed()) return;
-    Class screenCls = objc_getClass("UIScreen");
-    if (!screenCls) return;
+    @try {
+        Class screenCls = objc_getClass("UIScreen");
+        if (!screenCls) return;
 
-    SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
-    SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
+        SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
+        SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
 
-    if (class_getInstanceMethod(screenCls, sel1)) {
-        class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    } else {
-        class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    }
+        if (class_getInstanceMethod(screenCls, sel1)) {
+            class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
+        } else {
+            class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
+        }
 
-    if (class_getInstanceMethod(screenCls, sel2)) {
-        class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    } else {
-        class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "c@:");
-    }
+        if (class_getInstanceMethod(screenCls, sel2)) {
+            class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
+        } else {
+            class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
+        }
+    } @catch (__unused NSException *e) {}
 }
 
 // ====================================================================================================
@@ -6009,11 +6065,16 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 
 // [ĐÃ ÉP TOÀN DIỆN]: Ép tần số lấy mẫu cảm ứng phần cứng lên 1000Hz (0.001s polling interval)
 - (void)setProperty:(id)property forKey:(NSString *)key {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch) && key) {
-        if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-            %orig(@(1000), key);
-            return;
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch) && key) {
+            if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
+                %orig(@(1000), key);
+                return;
+            }
         }
+    } @catch (__unused NSException *e) {
+        %orig;
+        return;
     }
     %orig;
 }
@@ -6274,6 +6335,18 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
 - (void)makeKeyAndVisible {
     %orig;
     if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+        if (@available(iOS 15.0, *)) {
+            @try {
+                UIWindowScene *scene = self.windowScene;
+                if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float targetHz = (float)Titanium_GetEffectiveFrameCap();
+                    if (targetHz < 15.0f) targetHz = 15.0f;
+                    if (targetHz > 240.0f) targetHz = 240.0f;
+                    [(id)scene setPreferredFrameRateRange:SafeMakeFRR(targetHz, targetHz, targetHz)];
+                }
+            } @catch (__unused NSException *e) {}
+        }
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
             if (@available(iOS 15.0, *)) {
                 @try {
@@ -6290,6 +6363,23 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
     }
 }
 
+- (void)didMoveToWindowScene {
+    %orig;
+    if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+        if (@available(iOS 15.0, *)) {
+            @try {
+                UIWindowScene *scene = self.windowScene;
+                if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float targetHz = (float)Titanium_GetEffectiveFrameCap();
+                    if (targetHz < 15.0f) targetHz = 15.0f;
+                    if (targetHz > 240.0f) targetHz = 240.0f;
+                    [(id)scene setPreferredFrameRateRange:SafeMakeFRR(targetHz, targetHz, targetHz)];
+                }
+            } @catch (__unused NSException *e) {}
+        }
+    }
+}
+
 %end
 
 %hook UIScene
@@ -6299,15 +6389,6 @@ static volatile uint64_t g_processLaunchTimestampTicks = 0;
     if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
         Titanium_TriggerInstantTouchBurst();
     }
-}
-
-%end
-
-%hook FBApplicationProcess
-
-// Bỏ khóa luồng tại _finishInit để SpringBoard không bị kẹt assertion lúc bàn giao tiến trình
-- (void)_finishInit {
-    %orig;
 }
 
 %end
@@ -7435,9 +7516,8 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        time_t uptime = Titanium_GetSystemUptimeSeconds();
-        BOOL isColdBoot = (uptime < 30);
-        int64_t waitDelay = isColdBoot ? (int64_t)(600 * NSEC_PER_MSEC) : (int64_t)(150 * NSEC_PER_MSEC);
+        // Ép delay an toàn 2.5 giây cho cả respring lẫn khởi động để SpringBoard dựng xong giao diện
+        int64_t waitDelay = (int64_t)(2500 * NSEC_PER_MSEC);
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, waitDelay), dispatch_get_main_queue(), ^{
             @try {
