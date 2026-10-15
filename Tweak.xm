@@ -1127,6 +1127,10 @@ static BOOL g_SystemMasterReady = YES;
 // [V12] BIẾN TOÀN CỤC & KHAI BÁO TRƯỚC
 // ====================================================================================================
 
+// Biến cache nguyên thủy: Mặc định 240, tự động cập nhật theo bất kỳ mức 15 - 240 nào người dùng chỉnh trong App
+static volatile NSInteger g_cachedResolvedHz = 240;
+static volatile NSInteger g_cachedResolvedFPS = 240;
+static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
 static NSString *Titanium_ResolveEffectiveLanguage(void);
@@ -1680,11 +1684,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
 
 static BoostConfigV285Pro *CFG285 = nil;
 #define IS_ACTIVE (CFG285 && CFG285.enabled)
-
-// Biến cache nguyên thủy: Mặc định 240, tự động cập nhật theo bất kỳ mức 15 - 240 nào người dùng chỉnh trong App
-static volatile NSInteger g_cachedResolvedHz = 240;
-static volatile NSInteger g_cachedResolvedFPS = 240;
-static volatile BOOL g_thermalSeriousV285 = NO;
 
 static inline BOOL Titanium_ShouldApplyEcoFrameCapV19(void) {
     if (g_thermalSeriousV285) return YES;
