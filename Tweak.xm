@@ -7024,7 +7024,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_InstantActionAndMenuTransitions_Boost);
             %init(Group_Global_Thread_Governor_Unthrottled);
 
-            %init(Group_Universal_InApp_Animations);
             %init(Group_Apple_Internal_ProMotion_Apex);
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
 
