@@ -1812,6 +1812,39 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     return self;
 }
 
+// ====================================================================================================
+// BỘ ĐÓNG GÓI BITMASK IPC ĐỒNG BỘ 100% CÔNG TẮC CHO APP THỨ BA & GAME
+// ====================================================================================================
+#define IPC_FLAG_FLAT_BLUR          (1U << 0)
+#define IPC_FLAG_DEVICE_SPOOFER     (1U << 1)
+#define IPC_FLAG_GAME_STABILIZER    (1U << 2)
+#define IPC_FLAG_CPU_GPU_OPT        (1U << 3)
+#define IPC_FLAG_REALTIME_SCHED     (1U << 4)
+#define IPC_FLAG_IO_SCHEDULER       (1U << 5)
+#define IPC_FLAG_SYS_PROC_OPT       (1U << 6)
+#define IPC_FLAG_QUANTUM_SYNC       (1U << 7)
+#define IPC_FLAG_SMART_THERMAL      (1U << 8)
+#define IPC_FLAG_DYN_THERMAL        (1U << 9)
+#define IPC_FLAG_HEAVY_COOLING      (1U << 10)
+#define IPC_FLAG_BG_PACING          (1U << 11)
+#define IPC_FLAG_AUTO_KILL_BG       (1U << 12)
+#define IPC_FLAG_CHARGER_RIPPLE     (1U << 13)
+#define IPC_FLAG_ANTI_BLACK_LAUNCH  (1U << 14)
+#define IPC_FLAG_REDUCE_MULTITASK   (1U << 15)
+#define IPC_FLAG_HYPER_MEM_GUARD    (1U << 16)
+#define IPC_FLAG_ZERO_LAG_NEURAL    (1U << 17)
+#define IPC_FLAG_RATE_LOCKED        (1U << 18)
+
+static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *p) {
+    uint32_t flags = 0;
+    memcpy(&flags, &p->reserved[32], sizeof(uint32_t));
+    return flags;
+}
+
+static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *p, uint32_t flags) {
+    memcpy(&p->reserved[32], &flags, sizeof(uint32_t));
+}
+
 - (void)loadSettings {
     @autoreleasepool {
         NSString *prefPath = Titanium_ResolvePrefPath();
@@ -1853,6 +1886,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             }
         };
 
+        // ==============================================================================================
+        // CƠ CHẾ CHO APP THỨ 3 / GAME: ĐỌC ĐỦ 100% CÔNG TẮC TỪ FILE IPC (KHÔNG BỎ SÓT BẤT KỲ CÔNG TẮC NÀO)
+        // ==============================================================================================
         if (!diskDict || diskDict.count == 0) {
             NSArray *checkFiles = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
             for (NSString *sf in checkFiles) {
@@ -1866,11 +1902,56 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                                 self.targetHz = (pRead.targetHz >= 15 && pRead.targetHz <= 240) ? pRead.targetHz : 240;
                                 self.targetFPS = (pRead.targetFPS >= 15 && pRead.targetFPS <= 240) ? pRead.targetFPS : 240;
                                 self.forceOverclock144Hz = (pRead.forceOverclock != 0);
+                                self.proMotionEngineBeta7 = (pRead.dynamicInterpolation != 0);
+                                self.colorOs17SmoothEngine = (pRead.dynamicInterpolation != 0);
                                 self.touchResponseBoost = (pRead.zeroLatencyTouch != 0);
+                                self.ultraResponsiveness = self.touchResponseBoost;
+                                self.ultraResponsivenessPro = self.touchResponseBoost;
+                                self.ultraResponsivenessProEngineOfficial = self.touchResponseBoost;
+                                self.keyboardZeroLagV24 = (pRead.keyboardZeroLagV3 != 0);
+                                self.keyboardZeroLagV3 = self.keyboardZeroLagV24;
+                                self.metalHexBuffering = (pRead.smartBufferingLevel > 0 || pRead.metalPacingEnabled != 0);
+                                self.neuralBufferOpt = self.metalHexBuffering;
+                                self.fixAppExitStutter = (pRead.antiStutterExit != 0);
+                                self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
+                                self.quantumRenderShield = self.fixAppExitStutter;
                                 self.antiThermalThrottling = (pRead.thermalShield != 0);
+                                self.antiThermalThrottle = self.antiThermalThrottling;
                                 self.turboAppLaunch = (pRead.fastAppLaunch != 0);
+                                self.turboLaunch = self.turboAppLaunch;
+                                self.aggressiveRamClean = (pRead.aggressiveRamCleaner != 0);
+                                self.periodicRamClean = self.aggressiveRamClean;
+                                self.machVMPurgeRam = self.aggressiveRamClean;
+                                self.antiGhostTouch = (pRead.antiGhostTouch != 0);
                                 self.powerSaveMode = (pRead.powerSaveModeActive != 0);
                                 self.batterySaver60Hz = self.powerSaveMode;
+
+                                // Giải mã 19 cờ công tắc mở rộng qua IPC Payload
+                                uint32_t exFlags = Titanium_GetIPCExtraFlags(&pRead);
+                                self.flatTintBlur          = (exFlags & IPC_FLAG_FLAT_BLUR) != 0;
+                                self.fakeFullBatteryState  = (exFlags & IPC_FLAG_DEVICE_SPOOFER) != 0;
+                                self.gameFPSStabilizer     = (exFlags & IPC_FLAG_GAME_STABILIZER) != 0;
+                                self.lockHighIdleFloor     = (exFlags & IPC_FLAG_CPU_GPU_OPT) != 0;
+                                self.pCoreRealtimePriority = (exFlags & IPC_FLAG_REALTIME_SCHED) != 0;
+                                self.schedulerGovernor     = (exFlags & IPC_FLAG_IO_SCHEDULER) != 0;
+                                self.iopolVipPriority      = (exFlags & IPC_FLAG_SYS_PROC_OPT) != 0;
+                                self.quantumCoreSync       = (exFlags & IPC_FLAG_QUANTUM_SYNC) != 0;
+                                self.lock30FpsOnOverheat   = (exFlags & IPC_FLAG_SMART_THERMAL) != 0;
+                                self.dynamicThermalEngine  = (exFlags & IPC_FLAG_DYN_THERMAL) != 0;
+                                self.coolDownHeavyLoad     = (exFlags & IPC_FLAG_HEAVY_COOLING) != 0;
+                                self.backgroundPacingDaemon= (exFlags & IPC_FLAG_BG_PACING) != 0;
+                                self.autoKillBackground    = (exFlags & IPC_FLAG_AUTO_KILL_BG) != 0;
+                                self.autoCloseBackgroundApp= self.autoKillBackground;
+                                self.chargerRippleRejection= (exFlags & IPC_FLAG_CHARGER_RIPPLE) != 0;
+                                self.fixAppLaunchBlackScreen = (exFlags & IPC_FLAG_ANTI_BLACK_LAUNCH) != 0;
+                                self.syncModuleDelay       = self.fixAppLaunchBlackScreen;
+                                self.isolateRenderPipeline = self.fixAppLaunchBlackScreen;
+                                self.antiBlackScreenLaunch = self.fixAppLaunchBlackScreen;
+                                self.reduceMultitaskLag    = (exFlags & IPC_FLAG_REDUCE_MULTITASK) != 0;
+                                self.reduceMultiTaskLag    = self.reduceMultitaskLag;
+                                self.hyperMemoryGuardian   = (exFlags & IPC_FLAG_HYPER_MEM_GUARD) != 0;
+                                self.zeroLagNeural         = (exFlags & IPC_FLAG_ZERO_LAG_NEURAL) != 0;
+                                g_isRateLockedV285         = (exFlags & IPC_FLAG_RATE_LOCKED) != 0;
 
                                 g_cachedResolvedHz = self.targetHz;
                                 g_cachedResolvedFPS = self.targetFPS;
@@ -1888,36 +1969,6 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                     }
                 }
             }
-
-            self.enabled = YES;
-            self.enableHzControl = YES;
-            self.enableFPSControl = YES;
-            self.targetHz = 240;
-            self.targetFPS = 240;
-            self.forceOverclock144Hz = YES;
-            self.touchResponseBoost = YES;
-            self.metalHexBuffering = YES;
-            self.vsyncAdaptiveBuffer = YES;
-            self.fixAppLaunchBlackScreen = YES;
-            self.turboAppLaunch = YES;
-            self.turboLaunch = YES;
-            self.proMotionEngineBeta7 = YES;
-            self.antiThermalThrottling = YES;
-            self.powerSaveMode = NO;
-            self.batterySaver60Hz = NO;
-            g_cachedResolvedHz = 240;
-            g_cachedResolvedFPS = 240;
-            pthread_mutex_lock(&g_syncLockV285);
-            memset(&g_syncPayloadV285, 0, sizeof(g_syncPayloadV285));
-            g_syncPayloadV285.magic = APEX_SYNC_MAGIC_V285;
-            g_syncPayloadV285.masterEnabled = 1;
-            g_syncPayloadV285.targetHz = 240;
-            g_syncPayloadV285.targetFPS = 240;
-            g_syncPayloadV285.forceOverclock = 1;
-            g_syncPayloadV285.zeroLatencyTouch = 1;
-            g_syncPayloadV285.fastAppLaunch = 1;
-            g_syncPayloadV285.dynamicInterpolation = 1;
-            pthread_mutex_unlock(&g_syncLockV285);
             ApplyExclusion();
             return;
         }
@@ -1972,7 +2023,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.fixAppExitStutter = GetLiveBool(@"FixAppExitStutter", YES);
         self.vsyncAdaptiveBuffer = self.fixAppExitStutter;
         self.quantumRenderShield = self.fixAppExitStutter;
-        self.autoCloseBackgroundApp = self.fixAppExitStutter;
+        self.autoCloseBackgroundApp = GetLiveBool(@"AutoCloseBackgroundApp", NO);
         self.fixAppLaunchBlackScreen = GetLiveBool(@"FixAppLaunchBlackScreen", YES);
         self.syncModuleDelay = self.fixAppLaunchBlackScreen;
         self.isolateRenderPipeline = self.fixAppLaunchBlackScreen;
@@ -2008,7 +2059,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.ultraResponsivenessPro = GetLiveBool(@"UltraResponsiveness", YES);
         self.coolDownHeavyLoad = GetLiveBool(@"HeavyLoadCooling", YES);
         self.backgroundPacingDaemon = GetLiveBool(@"BackgroundPacingDaemon", YES);
-        self.autoKillBackground = GetLiveBool(@"AutoCloseBackgroundApp", NO);
+        self.autoKillBackground = self.autoCloseBackgroundApp;
         self.hyperMemoryGuardian = GetLiveBool(@"HyperMemoryGuardian", YES);
 
         g_isRateLockedV285 = GetLiveBool(@"IsRateLocked", NO);
@@ -2018,6 +2069,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         NSInteger safeHz = self.targetHz;
         if (safeHz < 15) safeHz = 15;
         if (safeHz > 240) safeHz = 240;
+        if (!self.forceOverclock144Hz && safeHz > 120) {
+            safeHz = 120;
+        }
 
         if (!self.enabled || !self.enableHzControl) {
             g_cachedResolvedHz = 60;
@@ -2030,6 +2084,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         NSInteger safeFPS = self.targetFPS;
         if (safeFPS < 15) safeFPS = 15;
         if (safeFPS > 240) safeFPS = 240;
+        if (!self.forceOverclock144Hz && safeFPS > 120) {
+            safeFPS = 120;
+        }
 
         if (!self.enabled || !self.enableFPSControl) {
             g_cachedResolvedFPS = 60;
@@ -2046,30 +2103,55 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.masterEnabled = self.enabled ? 1 : 0;
             p.targetHz = (int32_t)g_cachedResolvedHz;
             p.targetFPS = (int32_t)g_cachedResolvedFPS;
-            p.forceOverclock = (g_cachedResolvedHz > 60) ? 1 : 0;
+            p.forceOverclock = self.forceOverclock144Hz ? 1 : 0;
             p.pipSyncEnabled = 1;
             p.thermalShield = self.antiThermalThrottling ? 1 : 0;
             p.antiStutterExit = self.fixAppExitStutter ? 1 : 0;
-            p.smartBufferingLevel = 3;
+            p.smartBufferingLevel = self.metalHexBuffering ? 3 : 0;
+            p.metalPacingEnabled = self.metalHexBuffering ? 1 : 0;
             p.zeroLatencyTouch = self.touchResponseBoost ? 1 : 0;
-            p.shaderOptimization = 1;
-            p.dynamicInterpolation = self.proMotionEngineBeta7 ? 1 : 0;
+            p.shaderOptimization = self.gameFPSStabilizer ? 1 : 0;
+            p.dynamicInterpolation = (self.proMotionEngineBeta7 || self.colorOs17SmoothEngine) ? 1 : 0;
             p.fastAppLaunch = self.turboAppLaunch ? 1 : 0;
             p.keyboardZeroLagV3 = self.keyboardZeroLagV24 ? 1 : 0;
             p.aggressiveRamCleaner = self.aggressiveRamClean ? 1 : 0;
-            p.lockFixedFpsWhenThermal = self.antiThermalThrottling ? 1 : 0;
+            p.lockFixedFpsWhenThermal = self.lock30FpsOnOverheat ? 1 : 0;
             p.antiGhostTouch = self.antiGhostTouch ? 1 : 0;
-            p.diskIOPriorityBoost = 1;
-            p.rawTouchDirectDelivery = 1;
+            p.diskIOPriorityBoost = self.schedulerGovernor ? 1 : 0;
+            p.rawTouchDirectDelivery = self.ultraResponsivenessPro ? 1 : 0;
             p.powerSaveModeActive = (self.powerSaveMode || self.batterySaver60Hz) ? 1 : 0;
+
+            uint32_t exFlags = 0;
+            if (self.flatTintBlur)           exFlags |= IPC_FLAG_FLAT_BLUR;
+            if (self.fakeFullBatteryState)   exFlags |= IPC_FLAG_DEVICE_SPOOFER;
+            if (self.gameFPSStabilizer)      exFlags |= IPC_FLAG_GAME_STABILIZER;
+            if (self.lockHighIdleFloor)      exFlags |= IPC_FLAG_CPU_GPU_OPT;
+            if (self.pCoreRealtimePriority)  exFlags |= IPC_FLAG_REALTIME_SCHED;
+            if (self.schedulerGovernor)      exFlags |= IPC_FLAG_IO_SCHEDULER;
+            if (self.iopolVipPriority)       exFlags |= IPC_FLAG_SYS_PROC_OPT;
+            if (self.quantumCoreSync)        exFlags |= IPC_FLAG_QUANTUM_SYNC;
+            if (self.lock30FpsOnOverheat)    exFlags |= IPC_FLAG_SMART_THERMAL;
+            if (self.dynamicThermalEngine)   exFlags |= IPC_FLAG_DYN_THERMAL;
+            if (self.coolDownHeavyLoad)      exFlags |= IPC_FLAG_HEAVY_COOLING;
+            if (self.backgroundPacingDaemon) exFlags |= IPC_FLAG_BG_PACING;
+            if (self.autoKillBackground)     exFlags |= IPC_FLAG_AUTO_KILL_BG;
+            if (self.chargerRippleRejection) exFlags |= IPC_FLAG_CHARGER_RIPPLE;
+            if (self.fixAppLaunchBlackScreen)exFlags |= IPC_FLAG_ANTI_BLACK_LAUNCH;
+            if (self.reduceMultitaskLag)     exFlags |= IPC_FLAG_REDUCE_MULTITASK;
+            if (self.hyperMemoryGuardian)    exFlags |= IPC_FLAG_HYPER_MEM_GUARD;
+            if (self.zeroLagNeural)          exFlags |= IPC_FLAG_ZERO_LAG_NEURAL;
+            if (g_isRateLockedV285)          exFlags |= IPC_FLAG_RATE_LOCKED;
+
             {
                 const char *langCodeV12 = Titanium_ResolveEffectiveLanguage().UTF8String;
                 if (langCodeV12) {
                     p.reserved[0] = 'L'; p.reserved[1] = 'G'; p.reserved[2] = ':';
-                    strncpy(&p.reserved[3], langCodeV12, sizeof(p.reserved) - 4);
-                    p.reserved[sizeof(p.reserved) - 1] = '\0';
+                    strncpy(&p.reserved[3], langCodeV12, 24);
+                    p.reserved[27] = '\0';
                 }
             }
+            Titanium_SetIPCExtraFlags(&p, exFlags);
+
             p.updateSeq = Titanium_IPCSequenceNowV25();
             p.lastHeartbeat = p.updateSeq;
 
