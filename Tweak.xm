@@ -1750,7 +1750,10 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         
         id server = nil;
         @try {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
             server = [wsClass performSelector:selServer];
+#pragma clang diagnostic pop
         } @catch (__unused NSException *e) {
             return;
         }
@@ -1761,7 +1764,10 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
         NSArray *displays = nil;
         @try {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
             displays = [server performSelector:selDisplays];
+#pragma clang diagnostic pop
         } @catch (__unused NSException *e) {
             return;
         }
