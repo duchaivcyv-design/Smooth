@@ -7038,6 +7038,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     s_coreInitDone = YES;
 
     @autoreleasepool {
+        // ═══ FIX: 3 group V22 phải %init ở đây (ngoài @try) để Theos trace được ═══
+        %init(Group_TitaniumSafeRuntime_V22);
+        %init(Group_TitaniumSafeRangeRuntime_V22);
+        %init(Group_TitaniumSafeSceneRangeRuntime_V22);
+        // ═══════════════════════════════════════════════════════════════════════
+
         @try {
             Titanium_BypassQuartzCoreRangeAssertion();
 
@@ -7172,7 +7178,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         } @catch (__unused NSException *e) {}
     }
 }
-
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
     @try {
         static BOOL s_obsDone = NO;
