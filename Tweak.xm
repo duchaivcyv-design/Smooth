@@ -195,31 +195,6 @@ extern "C" {
 #define G_IS_RATE_LOCKED_DEFINED
 static volatile BOOL g_isRateLockedV285 = NO;
 #endif
-
-// ====================================================================================================
-// STRUCT PAYLOAD CÓ TẤT CẢ CÁC CÔNG TẮC ĐỂ BẬT/TẮT TỪNG NHÓM (CHỈ THÊM SWITCH - KHÔNG SỬA CODE KHÁC)
-// ====================================================================================================
-
-typedef struct {
-    uint32_t pset_limit;
-} thread_throttle_policy_data_t;
-
-typedef uint32_t IOPMAssertionID;
-#define kIOPMNullAssertionID 0
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-    kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
-    const char *getprogname(void);
-    extern char **environ;
-    int setiopolicy_np(int iotype, int scope, int policy);
-    kern_return_t IOPMAssertionCreateWithName(CFStringRef assertionType, uint32_t assertionLevel, CFStringRef assertionName, IOPMAssertionID *assertionID);
-    kern_return_t IOPMAssertionRelease(IOPMAssertionID assertionID);
-#ifdef __cplusplus
-}
-#endif
-
 // ====================================================================================================
 // CẤU TRÚC PAYLOAD APEX V285 PRO - CÓ THÊM TẤT CẢ CÁC CÔNG TẮC ĐIỀU KHIỂN NHÓM
 // ====================================================================================================
