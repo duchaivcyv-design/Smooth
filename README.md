@@ -1,4 +1,4 @@
-#  Apple-Compatible Service Gateway
+#  Apple-Compatible Service
 
 <p align="center">
   <strong>Secure Backend Infrastructure for iOS Tweaks</strong>
