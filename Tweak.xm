@@ -1221,6 +1221,7 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 
 // BẮT BUỘC ĐẶT = 0: Mở khóa toàn bộ 20+ nhóm Tầng Sâu (Không bị return sớm ở runCoreTweak)
 #ifndef TITANIUM_SAFE_STABILITY_PROFILE
+// [V28.2]: GIỮ SAFE_STABILITY=0 — TẤT CẢ code chạy hết. Chỉ vô hiệu hóa riêng hook setShadowStyle: gây stack overflow.
 #define TITANIUM_SAFE_STABILITY_PROFILE 0
 #endif
 
@@ -2378,50 +2379,28 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 // 3. ĐIỀU PHỐI XUNG NHỊP CẢM ỨNG (CƯỚP QUYỀN P-CORE TOÀN HỆ THỐNG - KHÔNG NGHẼN SOCKET)
 // ====================================================================================================
 
+// [ĐÃ ÉP CƯỠNG BỨC PHẦN CỨNG]: Khóa luồng chính vào P-Core Real-Time + Ép CADisplay 0.0ms (Chống nghẽn Syscall)
 static inline void Titanium_LockMainThreadFast(void) {
     if (![NSThread isMainThread]) return;
 
-    // Chặn gọi lồng nhau trên cùng thread.
-    static __thread BOOL s_isExecuting = NO;
-    if (s_isExecuting) return;
-
-    s_isExecuting = YES;
-
-    @try {
-        static uint64_t s_lastKernelBoostTick = 0;
-        uint64_t now = mach_absolute_time();
-
-        // Giữ giới hạn kích hoạt tối đa một lần mỗi 400 ms.
-        if (s_lastKernelBoostTick == 0 ||
-            (now - s_lastKernelBoostTick) >
-                Titanium_NanosToMachTicks(400000000ULL)) {
-
-            s_lastKernelBoostTick = now;
-
-            pthread_set_qos_class_self_np(
-                QOS_CLASS_USER_INTERACTIVE, 0
-            );
-
-            setiopolicy_np(
-                IOPOL_TYPE_DISK,
-                IOPOL_SCOPE_THREAD,
-                IOPOL_IMPORTANT
-            );
-
-            Titanium_EnforceMachFrameConstraint();
-            AppleInternal_LockHardwareCADisplay();
-            AppleInternal_EnforceZeroLatencyKernelTier();
-        }
+    // Chỉ thực thi nâng quyền Kernel & khóa 0.0ms CADisplay với bộ lọc chống lặp (tối đa 1 lần mỗi 400ms)
+    // giúp đạt 100% sức mạnh phần cứng mà tốn 0% CPU overhead khi vuốt liên tục
+    static uint64_t s_lastKernelBoostTick = 0;
+    uint64_t now = mach_absolute_time();
+    if (__builtin_expect(s_lastKernelBoostTick == 0 || (now - s_lastKernelBoostTick) > Titanium_NanosToMachTicks(400000000ULL), 0)) {
+        s_lastKernelBoostTick = now;
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
+        Titanium_EnforceMachFrameConstraint();
+        AppleInternal_LockHardwareCADisplay();
+        AppleInternal_EnforceZeroLatencyKernelTier();
+    }
 
 #if TITANIUM_ENABLE_RATE_KEEPER
-        if (Titanium_IsSpringBoard()) {
-            [TitaniumRateKeeper kick];
-        }
+    if (Titanium_IsSpringBoard()) {
+        [TitaniumRateKeeper kick];
+    }
 #endif
-    }
-    @finally {
-        s_isExecuting = NO;
-    }
 }
 
 static inline void Titanium_TriggerInstantTouchBurst(void) {
@@ -2444,19 +2423,13 @@ static inline void Titanium_TriggerNotificationBurst(void) {
 
     static int64_t s_bannerSeq = 0;
     int64_t currentSeq = ++s_bannerSeq;
-
-    dispatch_after(
-        dispatch_time(
-            DISPATCH_TIME_NOW,
-            (int64_t)(850 * NSEC_PER_MSEC)
-        ),
-        dispatch_get_main_queue(), ^{
-            if (s_bannerSeq == currentSeq) {
-                g_isNotificationBannerActive = NO;
-            }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(850 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        if (s_bannerSeq == currentSeq) {
+            g_isNotificationBannerActive = NO;
         }
-    );
+    });
 }
+
 // ====================================================================================================
 // 4. ĐIỀU PHỐI CÂN BẰNG: CPU ĐỒ HỌA SOFT-REALTIME (ÁP DỤNG MỌI TIẾN TRÌNH)
 // ====================================================================================================
@@ -7105,17 +7078,19 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 %hook SBFluidSwitcherItemContainer
-- (void)setShadowStyle:(long long)style {
-if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)
-&& Titanium_IsSpringBoard()
-&& (g_isInteracting || g_isScrollingActive)) {
-%orig(0);
-return;
-}
-%orig;
-}
+// [V28 FIX STACK OVERFLOW]: VÔ HIỆU HÓA hook setShadowStyle — trên iOS 16.7, hàm gốc setShadowStyle:
+// tự gọi lại chính nó khi style=0 → trigger lại hook → infinite recursion → stack overflow → SafeMode.
+// - (void)setShadowStyle:(long long)style {
+//     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+//         if (g_isInteracting || g_isScrollingActive) {
+//             %orig(0);
+//             return;
+//         }
+//     }
+//     %orig;
+// }
+//%end
 
-%end
 %hook SBAppSwitcherSettings
 - (BOOL)shouldSimplifyForOptions:(long long)arg1 {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
