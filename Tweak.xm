@@ -7081,13 +7081,13 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
             if (g_isInteracting || g_isScrollingActive) {
-                %orig(0);
+                ((void (*)(id, SEL, long long))objc_msgSend)(self, @selector(setShadowStyle:), 0);
                 return;
             }
         }
         %orig;
     } @catch (__unused NSException *e) {
-        // Bắt và nuốt ngoại lệ do giá trị 0 gây ra, ngăn SpringBoard sập Safe Mode
+        // Chặn ngoại lệ phòng hộ, đảm bảo SpringBoard không bao giờ bị kill
     }
 }
 %end
