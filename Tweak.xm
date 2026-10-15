@@ -2378,28 +2378,50 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 // 3. ĐIỀU PHỐI XUNG NHỊP CẢM ỨNG (CƯỚP QUYỀN P-CORE TOÀN HỆ THỐNG - KHÔNG NGHẼN SOCKET)
 // ====================================================================================================
 
-// [ĐÃ ÉP CƯỠNG BỨC PHẦN CỨNG]: Khóa luồng chính vào P-Core Real-Time + Ép CADisplay 0.0ms (Chống nghẽn Syscall)
 static inline void Titanium_LockMainThreadFast(void) {
     if (![NSThread isMainThread]) return;
 
-    // Chỉ thực thi nâng quyền Kernel & khóa 0.0ms CADisplay với bộ lọc chống lặp (tối đa 1 lần mỗi 400ms)
-    // giúp đạt 100% sức mạnh phần cứng mà tốn 0% CPU overhead khi vuốt liên tục
-    static uint64_t s_lastKernelBoostTick = 0;
-    uint64_t now = mach_absolute_time();
-    if (__builtin_expect(s_lastKernelBoostTick == 0 || (now - s_lastKernelBoostTick) > Titanium_NanosToMachTicks(400000000ULL), 0)) {
-        s_lastKernelBoostTick = now;
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-        Titanium_EnforceMachFrameConstraint();
-        AppleInternal_LockHardwareCADisplay();
-        AppleInternal_EnforceZeroLatencyKernelTier();
-    }
+    // Chặn gọi lồng nhau trên cùng thread.
+    static __thread BOOL s_isExecuting = NO;
+    if (s_isExecuting) return;
+
+    s_isExecuting = YES;
+
+    @try {
+        static uint64_t s_lastKernelBoostTick = 0;
+        uint64_t now = mach_absolute_time();
+
+        // Giữ giới hạn kích hoạt tối đa một lần mỗi 400 ms.
+        if (s_lastKernelBoostTick == 0 ||
+            (now - s_lastKernelBoostTick) >
+                Titanium_NanosToMachTicks(400000000ULL)) {
+
+            s_lastKernelBoostTick = now;
+
+            pthread_set_qos_class_self_np(
+                QOS_CLASS_USER_INTERACTIVE, 0
+            );
+
+            setiopolicy_np(
+                IOPOL_TYPE_DISK,
+                IOPOL_SCOPE_THREAD,
+                IOPOL_IMPORTANT
+            );
+
+            Titanium_EnforceMachFrameConstraint();
+            AppleInternal_LockHardwareCADisplay();
+            AppleInternal_EnforceZeroLatencyKernelTier();
+        }
 
 #if TITANIUM_ENABLE_RATE_KEEPER
-    if (Titanium_IsSpringBoard()) {
-        [TitaniumRateKeeper kick];
-    }
+        if (Titanium_IsSpringBoard()) {
+            [TitaniumRateKeeper kick];
+        }
 #endif
+    }
+    @finally {
+        s_isExecuting = NO;
+    }
 }
 
 static inline void Titanium_TriggerInstantTouchBurst(void) {
@@ -2422,13 +2444,19 @@ static inline void Titanium_TriggerNotificationBurst(void) {
 
     static int64_t s_bannerSeq = 0;
     int64_t currentSeq = ++s_bannerSeq;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(850 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        if (s_bannerSeq == currentSeq) {
-            g_isNotificationBannerActive = NO;
-        }
-    });
-}
 
+    dispatch_after(
+        dispatch_time(
+            DISPATCH_TIME_NOW,
+            (int64_t)(850 * NSEC_PER_MSEC)
+        ),
+        dispatch_get_main_queue(), ^{
+            if (s_bannerSeq == currentSeq) {
+                g_isNotificationBannerActive = NO;
+            }
+        }
+    );
+}
 // ====================================================================================================
 // 4. ĐIỀU PHỐI CÂN BẰNG: CPU ĐỒ HỌA SOFT-REALTIME (ÁP DỤNG MỌI TIẾN TRÌNH)
 // ====================================================================================================
