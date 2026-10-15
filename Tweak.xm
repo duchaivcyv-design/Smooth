@@ -163,9 +163,12 @@ typedef NS_ENUM(NSInteger, UIWindowSceneActivationState) {
 };
 #endif
 
+#ifndef THREAD_THROTTLE_POLICY_DATA_T_DEFINED
+#define THREAD_THROTTLE_POLICY_DATA_T_DEFINED
 typedef struct {
     uint32_t pset_limit;
 } thread_throttle_policy_data_t;
+#endif
 
 typedef uint32_t IOPMAssertionID;
 #define kIOPMNullAssertionID 0
@@ -184,21 +187,81 @@ extern "C" {
 #endif
 
 // ====================================================================================================
-// MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC NGUYÊN TỬ
+// MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC NGUYÊN TỬ (ĐÃ BỔ SUNG ĐẦY ĐỦ)
 // ====================================================================================================
+
+#ifndef APEX_SYNC_MAGIC_V285
+#define APEX_SYNC_MAGIC_V285 0x41505837
+#endif
+
+#ifndef PREF_DOMAIN
+#define PREF_DOMAIN          CFSTR("com.taojb.boostiphone6s")
+#endif
+
+#ifndef SHARED_SYNC_FILE
+#define SHARED_SYNC_FILE     @"/tmp/.boost_hz_sync"
+#endif
+
+#ifndef PRIMARY_SYNC_FILE
+#define PRIMARY_SYNC_FILE    @"/tmp/.boost_hz_sync"
+#endif
 
 #ifndef SECONDARY_SYNC_FILE
 #define SECONDARY_SYNC_FILE  @"/var/jb/tmp/.boost_hz_sync"
+#endif
+
+#ifndef BOOT_GUARD_FILE
+#define BOOT_GUARD_FILE      @"/tmp/.titanium_boot_guard"
+#endif
+
+#ifndef NOTIFY_RELOAD
+#define NOTIFY_RELOAD           "com.taojb.boostiphone6s/ReloadPrefs"
+#define NOTIFY_UIKIT_RELOAD     "com.taojb.boostiphone6s/ReloadUIKitPrefs"
+#define NOTIFY_HARDWARE_SYNC    "com.taojb.boostiphone6s/HardwareSync"
+#define NOTIFY_FPS_CHANGED      "com.taojb.boostiphone6s/FPSChanged"
+#define NOTIFY_TITANIUM_CHANGED "com.titanium.v285.prefschanged"
+#define NOTIFY_PAYLOAD_WRITTEN  "com.taojb.boostiphone6s/PayloadWritten"
+#endif
+
+#ifndef APPS_SYNC_FILE_PRIMARY
+#define APPS_SYNC_FILE_PRIMARY   @"/tmp/.boost_hz_apps"
+#define APPS_SYNC_FILE_SECONDARY @"/var/jb/tmp/.boost_hz_apps"
 #endif
 
 #ifndef G_IS_RATE_LOCKED_DEFINED
 #define G_IS_RATE_LOCKED_DEFINED
 static volatile BOOL g_isRateLockedV285 = NO;
 #endif
+
+// ====================================================================================================
+// BỘ ĐÓNG GÓI BITMASK IPC ĐIỀU KHIỂN TOÀN BỘ CÔNG TẮC (ĐỒNG BỘ SANG APP THỨ BA)
+// ====================================================================================================
+#define IPC_FLAG_FLAT_BLUR          (1U << 0)
+#define IPC_FLAG_DEVICE_SPOOFER     (1U << 1)
+#define IPC_FLAG_GAME_STABILIZER    (1U << 2)
+#define IPC_FLAG_CPU_GPU_OPT        (1U << 3)
+#define IPC_FLAG_REALTIME_SCHED     (1U << 4)
+#define IPC_FLAG_IO_SCHEDULER       (1U << 5)
+#define IPC_FLAG_SYS_PROC_OPT       (1U << 6)
+#define IPC_FLAG_QUANTUM_SYNC       (1U << 7)
+#define IPC_FLAG_SMART_THERMAL      (1U << 8)
+#define IPC_FLAG_DYN_THERMAL        (1U << 9)
+#define IPC_FLAG_HEAVY_COOLING      (1U << 10)
+#define IPC_FLAG_BG_PACING          (1U << 11)
+#define IPC_FLAG_AUTO_KILL_BG       (1U << 12)
+#define IPC_FLAG_CHARGER_RIPPLE     (1U << 13)
+#define IPC_FLAG_ANTI_BLACK_LAUNCH  (1U << 14)
+#define IPC_FLAG_REDUCE_MULTITASK   (1U << 15)
+#define IPC_FLAG_HYPER_MEM_GUARD    (1U << 16)
+#define IPC_FLAG_ZERO_LAG_NEURAL    (1U << 17)
+#define IPC_FLAG_RATE_LOCKED        (1U << 18)
+
 // ====================================================================================================
 // CẤU TRÚC PAYLOAD APEX V285 PRO - CÓ THÊM TẤT CẢ CÁC CÔNG TẮC ĐIỀU KHIỂN NHÓM
 // ====================================================================================================
 
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -225,51 +288,31 @@ typedef struct __attribute__((packed)) {
     uint32_t rawTouchDirectDelivery;
     uint32_t powerSaveModeActive;
     
-    // ====== CÁC CÔNG TẮC ĐIỀU KHIỂN NHÓM (CHỈ THÊM VÀO - DÙNG ĐỂ BẬT/TẮT CÁC NHÓM) ======
-    
-    // Nhóm ProMotion & Touch
+    // ====== 34 CÔNG TẮC ĐIỀU KHIỂN NHÓM ======
     uint32_t enableAppleInternalProMotion;        // Group_Apple_Internal_ProMotion_Apex
     uint32_t enableZeroLatencyTouch;              // Group_ZeroLatency_Touch_Opt
-    
-    // Nhóm Metal & GPU
     uint32_t enableMetalZeroTearing;              // Group_Metal_ZeroTearing_Pacing
     uint32_t enableFluidTransitions;              // Group_FluidTransitions_Pacing
     uint32_t enableTitaniumGameMetalOverdrive;    // Group_Titanium_Game_Metal_Overdrive
-    
-    // Nhóm AI & Performance
     uint32_t enableAIStreamOptimization;          // Group_AI_Stream_Optimization
     uint32_t enableFastLaunchSuperEngine;         // Group_FastLaunch_SuperEngineV285
-    
-    // Nhóm Interaction & Scrolling
     uint32_t enableScrollAndKeyboard;             // Group_Scroll_And_Keyboard_Opt
     uint32_t enableInstantActionTransitions;      // Group_InstantActionAndMenuTransitions_Boost
-    
-    // Nhóm Kernel & Thread
     uint32_t enableGlobalThreadGovernor;          // Group_Global_Thread_Governor_Unthrottled
     uint32_t enableSiliconSchedulerTouch;         // Group_Silicon_Scheduler_Touch_Governor
-    
-    // Nhóm Rendering & Animation
     uint32_t enableCoreAnimationRenderServer;     // Group_CoreAnimation_RenderServer_Governor
     uint32_t enableCAWindowServerDominance;       // Group_CAWindowServer_Absolute_Dominance
     uint32_t enableForceRenderRecovery;           // Group_Force_Render_Recovery_Overdrive
     uint32_t enableWindowLevelOverdrive;          // Group_Window_Level_Overdrive
-    
-    // Nhóm Memory & System
     uint32_t enableSystemMemoryGovernor;          // Group_System_Memory_And_RunLoop_Governor
     uint32_t enableThermalCryoPacing;             // Group_Thermal_CryoPacing_ZeroDrop
     uint32_t enableDeepRamCompaction;             // Group_Deep_RAM_Compaction_Engine
     uint32_t enableWebKitRamOptimizer;            // Group_WebKit_RAM_Optimizer
-    
-    // Nhóm Hardware & Silicon
     uint32_t enableSiliconHardwarePipeline;       // Group_Silicon_Hardware_Pipeline_Overdrive
     uint32_t enableHardwareProMotionOverclock;    // Group_Hardware_ProMotion_Overclock
     uint32_t enableNeuralTouchEdgeZeroLatency;    // Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285
-    
-    // Nhóm Boot & Startup
     uint32_t enableNativeColdBootOverdrive;       // Group_Apple_Native_ColdBoot_Overdrive
     uint32_t enableTitaniumV12SmoothExit;         // Group_TitaniumV12_SmoothExit_And_DisplayLink
-    
-    // Nhóm SpringBoard (CHỈ DÙNG TRÊN SPRINGBOARD)
     uint32_t enableDisplaySpringBoard;            // Group_Display_SpringBoardV285
     uint32_t enableLiquidGlassOpt;                // Group_LiquidGlass_Opt
     uint32_t enableSwitcher30Apps;                // Group_Switcher30Apps_Virtualization
@@ -279,108 +322,23 @@ typedef struct __attribute__((packed)) {
     uint32_t enableSpringBoardProcessManager;     // Group_SpringBoard_ProcessManagerV285
     uint32_t enableKeepAppsAlive;                 // Group_KeepAppsAlive_NoKill
     uint32_t enableTitaniumV10LayoutBoost;        // Group_TitaniumV10_SpringBoard_Layout_Boost
-    
-    // Nhóm UIKit (CHỈ DÙNG TRÊN APP THƯỜNG)
     uint32_t enableUIKitThirdPartyIsolated;       // Group_UIKit_ThirdParty_IsolatedV285
     
     uint64_t updateSeq;
     uint64_t lastHeartbeat;
-    char     reserved[200];  // Mở rộng reserved để chứa thêm công tắc
+    char     reserved[200];
 } ApexV285ProPayload;
 #endif
 
-// [COPY TOÀN BỘ CODE CÒN LẠI TỪ FILE GỐC TẠI ĐÂY - CHỈ THÊM STRUCT PAYLOAD TRÊN]
-// MỌI HOOK, HÀM, %GROUP, %INIT ĐỀU GỮ NGUYÊN - KHÔNG THAY ĐỔI
+static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *p) {
+    uint32_t flags = 0;
+    memcpy(&flags, &p->reserved[32], sizeof(uint32_t));
+    return flags;
+}
 
-// ====================================================================================================
-// HƯỚ NG DẪN SỬ DỤNG CÁC CÔNG TẮC MỚI:
-// ====================================================================================================
-/*
- * Để bật/tắt một nhóm hook cụ thể, thay vì chỉnh sửa code lệnh %init, bây giờ chỉ cần:
- *
- * CÁCH 1: Sửa giá trị công tắc trong g_syncPayloadV285 (dòng ~1065):
- *    g_syncPayloadV285.enableZeroLatencyTouch = 1;      // Bật
- *    g_syncPayloadV285.enableZeroLatencyTouch = 0;      // Tắt
- *
- * CÁCH 2: Thêm điều kiện kiểm tra vào hàm runCoreTweak() trước lệnh %init:
- *    if (g_syncPayloadV285.enableZeroLatencyTouch) {
- *        %init(Group_ZeroLatency_Touch_Opt);
- *    }
- *
- * CÁCH 3: Dùng macro để kiểm tra:
- *    #define ENABLED_ZeroLatencyTouch (g_syncPayloadV285.enableZeroLatencyTouch == 1)
- *    if (ENABLED_ZeroLatencyTouch) %init(Group_ZeroLatency_Touch_Opt);
- *
- * LỢI ÍCH:
- *    - Không cần sửa code logic lệnh %init
- *    - Dễ dàng bật/tắt từng nhóm mà không làm lỗi build
- *    - Có thể cấu hình động qua file config
- *    - Tất cả công tắc đã được thêm vào struct - sẵn sàng sử dụng
- */
-
-// ====================================================================================================
-// CẤU TRÚC CÔNG TẮC HOÀN CHỈNH (TỔNG 34 CÔNG TẮC CHO 34 NHÓM HOOK):
-// ====================================================================================================
-/*
- NHÓM TOUCH & RESPONSIVENESS (3):
- ✓ enableZeroLatencyTouch              - Group_ZeroLatency_Touch_Opt
- ✓ enableNeuralTouchEdgeZeroLatency    - Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285
- ✓ enableSiliconSchedulerTouch         - Group_Silicon_Scheduler_Touch_Governor
- 
- NHÓM RENDERING & DISPLAY (8):
- ✓ enableAppleInternalProMotion        - Group_Apple_Internal_ProMotion_Apex
- ✓ enableHardwareProMotionOverclock    - Group_Hardware_ProMotion_Overclock
- ✓ enableMetalZeroTearing              - Group_Metal_ZeroTearing_Pacing
- ✓ enableFluidTransitions              - Group_FluidTransitions_Pacing
- ✓ enableCAWindowServerDominance       - Group_CAWindowServer_Absolute_Dominance
- ✓ enableForceRenderRecovery           - Group_Force_Render_Recovery_Overdrive
- ✓ enableWindowLevelOverdrive          - Group_Window_Level_Overdrive
- ✓ enableCoreAnimationRenderServer     - Group_CoreAnimation_RenderServer_Governor
- 
- NHÓM PERFORMANCE & SPEED (6):
- ✓ enableFastLaunchSuperEngine         - Group_FastLaunch_SuperEngineV285
- ✓ enableInstantActionTransitions      - Group_InstantActionAndMenuTransitions_Boost
- ✓ enableScrollAndKeyboard             - Group_Scroll_And_Keyboard_Opt
- ✓ enableAIStreamOptimization          - Group_AI_Stream_Optimization
- ✓ enableNativeColdBootOverdrive       - Group_Apple_Native_ColdBoot_Overdrive
- ✓ enableTitaniumV12SmoothExit         - Group_TitaniumV12_SmoothExit_And_DisplayLink
- 
- NHÓM KERNEL & THREAD (2):
- ✓ enableGlobalThreadGovernor          - Group_Global_Thread_Governor_Unthrottled
- ✓ enableTitaniumGameMetalOverdrive    - Group_Titanium_Game_Metal_Overdrive
- 
- NHÓM MEMORY & SYSTEM (4):
- ✓ enableSystemMemoryGovernor          - Group_System_Memory_And_RunLoop_Governor
- ✓ enableThermalCryoPacing             - Group_Thermal_CryoPacing_ZeroDrop
- ✓ enableDeepRamCompaction             - Group_Deep_RAM_Compaction_Engine
- ✓ enableWebKitRamOptimizer            - Group_WebKit_RAM_Optimizer
- 
- NHÓM HARDWARE (1):
- ✓ enableSiliconHardwarePipeline       - Group_Silicon_Hardware_Pipeline_Overdrive
- 
- NHÓM SPRINGBOARD CHỈ (9):
- ✓ enableDisplaySpringBoard            - Group_Display_SpringBoardV285
- ✓ enableLiquidGlassOpt                - Group_LiquidGlass_Opt
- ✓ enableSwitcher30Apps                - Group_Switcher30Apps_Virtualization
- ✓ enableSpringBoardSwitcherOpt        - Group_SpringBoard_Switcher_Opt
- ✓ enableFloatingWindowPiP             - Group_V285_FloatingWindow_PiP
- ✓ enableHardwareSegregationHome       - Group_HardwareSegregation_ClassicHomeV285
- ✓ enableSpringBoardProcessManager     - Group_SpringBoard_ProcessManagerV285
- ✓ enableKeepAppsAlive                 - Group_KeepAppsAlive_NoKill
- ✓ enableTitaniumV10LayoutBoost        - Group_TitaniumV10_SpringBoard_Layout_Boost
- 
- NHÓM UIKIT CHỈ (1):
- ✓ enableUIKitThirdPartyIsolated       - Group_UIKit_ThirdParty_IsolatedV285
- 
- TỔNG CỘNG: 34 NHÓM × 1 CÔNG TẮC = 34 CÔNG TẮC ĐIỀU KHIỂN
-*/
-
-// ====================================================================================================
-// [NHẬP TOÀN BỘ CODE GỐC TỪ DÒNG 246 ĐẾN HẾT FILE]
-// KHÔNG THAY ĐỔI BẤT KỲ HÀM NÀO - CHỈ COPY LẠI SẢN SÀN
-// ====================================================================================================
-
-#endif
+static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *p, uint32_t flags) {
+    memcpy(&p->reserved[32], &flags, sizeof(uint32_t));
+}
 
 static inline BOOL Titanium_IsAIApp(void);
 static ApexV285ProPayload g_livePayload;
@@ -1224,6 +1182,40 @@ static ApexV285ProPayload g_syncPayloadV285 = {
     .diskIOPriorityBoost = 1,
     .rawTouchDirectDelivery = 1,
     .powerSaveModeActive = 0,
+    .enableAppleInternalProMotion = 1,
+    .enableZeroLatencyTouch = 1,
+    .enableMetalZeroTearing = 1,
+    .enableFluidTransitions = 1,
+    .enableTitaniumGameMetalOverdrive = 1,
+    .enableAIStreamOptimization = 1,
+    .enableFastLaunchSuperEngine = 1,
+    .enableScrollAndKeyboard = 1,
+    .enableInstantActionTransitions = 1,
+    .enableGlobalThreadGovernor = 1,
+    .enableSiliconSchedulerTouch = 1,
+    .enableCoreAnimationRenderServer = 1,
+    .enableCAWindowServerDominance = 1,
+    .enableForceRenderRecovery = 1,
+    .enableWindowLevelOverdrive = 1,
+    .enableSystemMemoryGovernor = 1,
+    .enableThermalCryoPacing = 1,
+    .enableDeepRamCompaction = 1,
+    .enableWebKitRamOptimizer = 1,
+    .enableSiliconHardwarePipeline = 1,
+    .enableHardwareProMotionOverclock = 1,
+    .enableNeuralTouchEdgeZeroLatency = 1,
+    .enableNativeColdBootOverdrive = 1,
+    .enableTitaniumV12SmoothExit = 1,
+    .enableDisplaySpringBoard = 1,
+    .enableLiquidGlassOpt = 1,
+    .enableSwitcher30Apps = 1,
+    .enableSpringBoardSwitcherOpt = 1,
+    .enableFloatingWindowPiP = 1,
+    .enableHardwareSegregationHome = 1,
+    .enableSpringBoardProcessManager = 1,
+    .enableKeepAppsAlive = 1,
+    .enableTitaniumV10LayoutBoost = 1,
+    .enableUIKitThirdPartyIsolated = 1,
     .updateSeq = 1,
     .lastHeartbeat = 1,
     .reserved = {0}
@@ -1713,7 +1705,6 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         return YES;
     }
 }
-
 // ====================================================================================================
 // BOOST CONFIGURATION ENGINE (V28.7 PRO MAX - CHUẨN DẢI TÙY CHỈNH 15HZ - 240HZ TRONG APP)
 // ====================================================================================================
