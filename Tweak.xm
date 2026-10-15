@@ -6687,6 +6687,64 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
+// NHÓM 2: BẢO VỆ CHỐNG NÓNG, CHỐNG GIẬT CC/NC & TRIỆT TIÊU BLUR ĐỘNG (LIQUID GLASS OPT)
+// ====================================================================================================
+
+%group Group_LiquidGlass_Opt
+
+%hook CAFilter
+
+- (void)setValue:(id)value forKey:(NSString *)key {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur && key && [key isEqualToString:@"inputRadius"]) {
+            if ([value isKindOfClass:[NSNumber class]] && [value floatValue] > 14.0f) {
+                value = @(14.0f);
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(value, key);
+}
+
+%end
+
+%hook CABackdropLayer
+
+- (void)setDisablesOccludedBackdropBlurs:(BOOL)flag {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        %orig(YES);
+        return;
+    }
+    %orig(flag);
+}
+
+- (BOOL)disablesOccludedBackdropBlurs {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        return YES;
+    }
+    return %orig;
+}
+
+%end
+
+%hook UIVisualEffectView
+
+- (void)layoutSubviews {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        @try {
+            UIView *v = (UIView *)self;
+            if (v && v.layer != nil) {
+                v.layer.allowsGroupOpacity = YES;
+            }
+        } @catch (__unused NSException *e) {}
+    }
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM MỚI TỰ TẠO: TỐI ƯU CỬ CHỈ ĐA NHIỆM & ÉP CỨNG SHADOW = 0 TẦNG SÂU (KHÔNG LẶP ĐỆ QUY)
 // ====================================================================================================
 
