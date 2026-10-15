@@ -1129,8 +1129,6 @@ static BOOL g_SystemMasterReady = YES;
 
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
-static volatile NSInteger g_cachedResolvedHz = 240;
-static volatile NSInteger g_cachedResolvedFPS = 240;
 static NSString *Titanium_ResolveEffectiveLanguage(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_StartIPCHearthbeatV12(void);
