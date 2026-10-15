@@ -7078,13 +7078,17 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %hook SBFluidSwitcherItemContainer
 - (void)setShadowStyle:(long long)style {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-        if (g_isInteracting || g_isScrollingActive) {
-            %orig(0);
-            return;
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+            if (g_isInteracting || g_isScrollingActive) {
+                %orig(0);
+                return;
+            }
         }
+        %orig;
+    } @catch (__unused NSException *e) {
+        // Bắt và nuốt ngoại lệ do giá trị 0 gây ra, ngăn SpringBoard sập Safe Mode
     }
-    %orig;
 }
 %end
 
