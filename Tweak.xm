@@ -330,16 +330,6 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
-static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *p) {
-    uint32_t flags = 0;
-    memcpy(&flags, &p->reserved[32], sizeof(uint32_t));
-    return flags;
-}
-
-static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *p, uint32_t flags) {
-    memcpy(&p->reserved[32], &flags, sizeof(uint32_t));
-}
-
 static inline BOOL Titanium_IsAIApp(void);
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
