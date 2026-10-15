@@ -7251,6 +7251,7 @@ static inline void Init_CAWindowServer_Hooks(void) {
     } @catch (__unused NSException *e) {}
 }
 
+
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
@@ -7266,19 +7267,22 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 [CFG285 loadSettings];
                 if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger initHz = (NSInteger)CFG285.targetHz;
-                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && initHz >= 15 && initHz <= 240) {
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) &&
+                        initHz >= 15 && initHz <= 240) {
                         g_cachedResolvedHz = initHz;
                     }
                 }
                 if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
                     NSInteger initFPS = (NSInteger)CFG285.targetFPS;
-                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) && initFPS >= 15 && initFPS <= 240) {
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) &&
+                        initFPS >= 15 && initFPS <= 240) {
                         g_cachedResolvedFPS = initFPS;
                     }
                 }
             }
 
-            if (!isSpringBoard && (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
+            if (!isSpringBoard &&
+                (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
                 g_SystemMasterReady = YES;
                 return;
             }
@@ -7305,10 +7309,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Universal_InApp_Animations);
             %init(Group_Apple_Internal_ProMotion_Apex);
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+
             if (Titanium_DisplaySpoofAllowed()) {
                 %init(Group_Hardware_ProMotion_Overclock);
                 Titanium_InstallMGCopyAnswerHookV26();
             }
+
             %init(Group_Apple_Native_ColdBoot_Overdrive);
 
             %init(Group_Titanium_Game_Metal_Overdrive);
@@ -7319,6 +7325,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_Deep_RAM_Compaction_Engine);
             %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
+
+            // Các nhóm Safe Runtime V22 được bổ sung
+            %init(Group_TitaniumSafeRuntime_V22);
+            %init(Group_TitaniumSafeRangeRuntime_V22);
+            %init(Group_TitaniumSafeSceneRangeRuntime_V22);
+
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
             }
@@ -7340,9 +7352,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Init_CAWindowServer_Hooks();
 
 #if TITANIUM_ENABLE_RATE_KEEPER
-                @try { [TitaniumRateKeeper start]; } @catch (__unused NSException *e) {}
+                @try {
+                    [TitaniumRateKeeper start];
+                } @catch (__unused NSException *e) {}
 #endif
-
                 @try {
                     Titanium_StartThermalAndChargingWatchdog();
                 } @catch (__unused NSException *e) {}
