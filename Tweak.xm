@@ -7104,20 +7104,18 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 }
 %end
 
- SBFluidSwitcherItemContainer
-
+%hook SBFluidSwitcherItemContainer
 - (void)setShadowStyle:(long long)style {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)
-        && Titanium_IsSpringBoard()
-        && (g_isInteracting || g_isScrollingActive)) {
-        %orig(0);
-        return;
-    }
-
-    %orig;
+if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)
+&& Titanium_IsSpringBoard()
+&& (g_isInteracting || g_isScrollingActive)) {
+%orig(0);
+return;
 }
-%end
+%orig;
+}
 
+%end
 %hook SBAppSwitcherSettings
 - (BOOL)shouldSimplifyForOptions:(long long)arg1 {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
