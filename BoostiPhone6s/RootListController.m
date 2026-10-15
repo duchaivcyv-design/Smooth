@@ -55,6 +55,9 @@ extern char **environ;
 #define TI_FREE_SERVER_PING_URL_KEY @"ti_free_server_ping_url_v1"
 #define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
 #define TI_THEME_MODE_KEY          @"ti_theme_mode_v25" // system | light | dark
+#define TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY @"ti_hzfps_warning_suppress_until_v1"
+#define TI_CREDITS_SHOWN_KEY @"ti_credits_shown_v1"
+#define TI_APP_CATEGORY_KEY @"ti_app_category_v1"
 #define TI_ADMIN_TOKEN_SERVICE     @"com.taojb.boostiphone6s.admin-session"
 #define TI_ADMIN_TOKEN_ACCOUNT     @"server-access-token"
 
@@ -2341,9 +2344,11 @@ static inline NSString *Titanium_DetectJailbreakTypeForUI(void) {
     if (dladdr((const void *)Titanium_DetectJailbreakTypeForUI, &info) && info.dli_fname) {
         NSString *imagePath = [NSString stringWithUTF8String:info.dli_fname];
         if ([imagePath containsString:@"/var/jb/"]) {
-            // A /var/jb image path identifies a rootless-style layout, but cannot reliably
-            // distinguish RootHide from ordinary rootless on every bootstrap version.
-            return @"RootHide / Rootless";
+            // Best-effort bootstrap classification. RootHide and ordinary rootless can share
+            // the same prefix, so use marker paths when visible and otherwise report rootless.
+            BOOL rootHideMarker = (access("/var/jb/basebin", F_OK) == 0 ||
+                                   access("/var/jb/.procursus_strapped", F_OK) == 0);
+            return rootHideMarker ? @"RootHide (dấu hiệu bootstrap)" : @"Rootless (/var/jb)";
         }
         if ([imagePath containsString:@"/Library/MobileSubstrate/DynamicLibraries/"] ||
             [imagePath containsString:@"/usr/lib/TweakInject/"] ||
@@ -2847,6 +2852,19 @@ static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_
     [self setupMainTableView];
     NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     self.customTableView.userInteractionEnabled = ([initialServerChoice isEqualToString:@"free"] || _isAdminServer);
+    NSUserDefaults *creditsDefaults = [NSUserDefaults standardUserDefaults];
+    if (![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY]) {
+        [creditsDefaults setBool:YES forKey:TI_CREDITS_SHOWN_KEY];
+        [creditsDefaults synchronize];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (self.presentedViewController) return;
+            UIAlertController *credits = [UIAlertController alertControllerWithTitle:@"Tác giả & hỗ trợ"
+                message:@"Tác giả tweak: TaoJB, NoNo, NoJB\nTác giả code: ABI, JBAP, MAD, SIJB\nHỗ trợ phần cứng: APIjb, BruhJB, LOLJB, DBB\n\nThông tin này cũng có trong mục Cài đặt."
+                preferredStyle:UIAlertControllerStyleAlert];
+            [credits addAction:[UIAlertAction actionWithTitle:@"Tiếp tục" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:credits animated:YES completion:nil];
+        });
+    }
     [self setupLiquidGlassLens];
     [self applyThemePreferenceAnimated:NO];
     [self refreshBottomTabsAvailability];
@@ -3043,7 +3061,29 @@ static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_
 }
 
 - (void)detectTweakDeletionIfNeeded {
-    return;
+    // A reinstall marker lives in the tweak preferences. If it is missing, treat this as a
+    // fresh install: reset tweak switches/rates and first-run UI state, but retain Free server.
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *marker = @"ti_install_marker_v1";
+    BOOL hasMarker = [defaults boolForKey:marker];
+    if (!hasMarker) {
+        NSString *server = [defaults stringForKey:TI_SELECTED_SERVER_KEY];
+        NSMutableDictionary *settings = [NSMutableDictionary dictionaryWithDictionary:
+            [NSDictionary dictionaryWithContentsOfFile:Titanium_ResolvePrefPath()] ?: @{}];
+        settings[@"TargetRefreshRate"] = @60;
+        settings[@"TargetFPSRate"] = @60;
+        settings[@"IsRateLocked"] = @NO;
+        settings[@"FeatureActivationComplete"] = @NO;
+        settings[@"IsKernelExploited"] = @NO;
+        [settings writeToFile:Titanium_ResolvePrefPath() atomically:YES];
+        [defaults removeObjectForKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
+        [defaults removeObjectForKey:TI_CREDITS_SHOWN_KEY];
+        [defaults removeObjectForKey:TI_APP_CATEGORY_KEY];
+        [defaults setBool:YES forKey:marker];
+        if ([server isEqualToString:@"free"]) [defaults setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
+        else [defaults removeObjectForKey:TI_SELECTED_SERVER_KEY];
+        [defaults synchronize];
+    }
 }
 
 #pragma mark - Server state helpers
@@ -4960,7 +5000,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 1) {
         if (indexPath.section == 0) {
-            title = @"Hz/FPS mục tiêu từ 60 đến 240MAX cho CADisplayLink/CoreAnimation. Tweak.xm ép vượt giới hạn phần cứng. Nhấn Áp Dụng để đồng bộ toàn hệ thống.";
+            title = @"Chọn mức Hz/FPS mục tiêu. Hiệu quả thực tế phụ thuộc màn hình, iOS và ứng dụng; mức chọn không tự nâng giới hạn phần cứng.";
         } else if (indexPath.section == 1) {
             LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Tần Số (Hz)", @"Khung Hình (FPS)"]];
             seg.selectedSegmentIndex = _currentHzFpsSubTab;
@@ -5349,6 +5389,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             else if (indexPath.row == 0) [self presentIndependentDocument:@"Môi trường Jailbreak" text:Titanium_DetectJailbreakTypeForUI()];
             else if (indexPath.row == 1) [self presentIndependentDocument:@"Prefix Bootstrap" text:(Titanium_DetectedBootstrapPrefixForUI() ?: @"Không xác định (chưa phát hiện)")];
             else if (indexPath.row == 3) [self presentIndependentDocument:@"IPC" text:Titanium_IPCDiagnosticForUI()];
+            else if (indexPath.row == 4) [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"Tác giả tweak: TaoJB, NoNo, NoJB\nTác giả code: ABI, JBAP, MAD, SIJB\nHỗ trợ phần cứng: APIjb, BruhJB, LOLJB, DBB"];
             return;
         }
         if (serverAPISettingsRow) { [self showServerAPIURLEditor]; return; }
@@ -5389,11 +5430,27 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         else if (indexPath.row == 4) targetRate = 240;
         else { [self showCustomRateInputAlertForHz:isHz]; return; }
 
-        [self applyRateValue:targetRate isDynamic:NO isFPS:!isHz];
-        [self applyDeepSpringBoardAndUIKitTweaks];
-        UIImpactFeedbackGenerator *rateFb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-        [rateFb impactOccurred];
-        [self smoothReloadTable];
+        NSTimeInterval suppressUntil = [[NSUserDefaults standardUserDefaults] doubleForKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
+        void (^applySelectedRate)(void) = ^{
+            [self applyRateValue:targetRate isDynamic:NO isFPS:!isHz];
+            [self applyDeepSpringBoardAndUIKitTweaks];
+            UIImpactFeedbackGenerator *rateFb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+            [rateFb impactOccurred];
+            [self smoothReloadTable];
+        };
+        if (suppressUntil > NSDate.date.timeIntervalSince1970) { applySelectedRate(); return; }
+        NSString *kind = isHz ? @"Hz" : @"FPS";
+        UIAlertController *warning = [UIAlertController alertControllerWithTitle:@"Cảnh báo Hz/FPS"
+            message:[NSString stringWithFormat:@"Bạn chọn mức mục tiêu %ld %@. Đây là yêu cầu cấu hình, không phải bảo đảm màn hình/game sẽ đạt mức đó. Tăng mức có thể làm máy nóng và hao pin.", (long)targetRate, kind]
+            preferredStyle:UIAlertControllerStyleAlert];
+        [warning addAction:[UIAlertAction actionWithTitle:@"X / Để sau" style:UIAlertActionStyleCancel handler:nil]];
+        [warning addAction:[UIAlertAction actionWithTitle:@"Tắt nhắc 3 tiếng" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            [[NSUserDefaults standardUserDefaults] setDouble:(NSDate.date.timeIntervalSince1970 + 3.0 * 60.0 * 60.0) forKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            applySelectedRate();
+        }]];
+        [warning addAction:[UIAlertAction actionWithTitle:@"Tiếp tục" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { applySelectedRate(); }]];
+        [self presentViewController:warning animated:YES completion:nil];
     } else if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
         if (!_isAdminServer && !([self isServerStateOK])) { [self showPersistentServerStateAlert]; return; }
         NSInteger cc = Titanium_GetCrashCount();
