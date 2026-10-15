@@ -165,7 +165,6 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
-static void Titanium_ForceCrashApp(void) { __builtin_trap(); }
 static NSInteger Titanium_GetCrashCount(void) { return [[NSUserDefaults standardUserDefaults] integerForKey:TI_CRASH_COUNT_KEY]; }
 static void Titanium_SetCrashCount(NSInteger n) { [[NSUserDefaults standardUserDefaults] setInteger:n forKey:TI_CRASH_COUNT_KEY]; [[NSUserDefaults standardUserDefaults] synchronize]; }
 static void Titanium_ResetCrashCount(void) { Titanium_SetCrashCount(0); }
@@ -4950,15 +4949,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     if (indexPath.row == 0) { title = _isScreenExpanded ? @"Màn hình ▼" : @"Màn hình ▶"; detail = [NSString stringWithFormat:@"%ld Hz tối đa · %.0f×%.0f px", (long)maximumHz, nativeBounds.size.width, nativeBounds.size.height]; }
                     else if (indexPath.row == 1) { title = @"   Độ phân giải / scale"; detail = [NSString stringWithFormat:@"%.0f×%.0f px · scale %.2fx · vùng %.0f×%.0f pt", nativeBounds.size.width, nativeBounds.size.height, nativeScale, logicalBounds.size.width, logicalBounds.size.height]; }
                     else if (indexPath.row == 2) { title = @"   Tần số tối đa do iOS báo"; detail = maximumHz > 0 ? [NSString stringWithFormat:@"%ld Hz", (long)maximumHz] : @"Không khả dụng"; }
-                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu đã đặt"; detail = [NSString stringWithFormat:@"%ld FPS (cấu hình, không phải FPS đo thực tế)", (long)targetFPS]; }
-                    else { title = @"   Hz mục tiêu đã đặt"; detail = [NSString stringWithFormat:@"%ld Hz (cấu hình, không phải phép đo thực tế)", (long)targetHz]; }
+                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu · THỬ NGHIỆM"; detail = [NSString stringWithFormat:@"%ld FPS (cấu hình, không phải FPS đo thực tế)", (long)targetFPS]; }
+                    else { title = @"   Hz mục tiêu · THỬ NGHIỆM"; detail = [NSString stringWithFormat:@"%ld Hz (cấu hình, không phải phép đo thực tế)", (long)targetHz]; }
                 }
             }
         }
     }
     else if (_currentBottomTab == 1) {
         if (indexPath.section == 0) {
-            title = @"Tần số Hz & FPS điều phối CADisplayLink & CoreAnimation. Nhấn Áp Dụng (góc phải trên) để đồng bộ.";
+            title = @"THỬ NGHIỆM · Hz/FPS mục tiêu cho CADisplayLink/CoreAnimation; không đảm bảo vượt giới hạn phần cứng. Nhấn Áp Dụng để đồng bộ.";
         } else if (indexPath.section == 1) {
             LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Tần Số (Hz)", @"Khung Hình (FPS)"]];
             seg.selectedSegmentIndex = _currentHzFpsSubTab;
@@ -5601,9 +5600,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @144 integerValue];
     NSInteger requestedFPS = [self.settingsDict[@"TargetFPSRate"] ?: @144 integerValue];
     if (requestedHz < 15) requestedHz = 15;
-    if (requestedHz > 144) requestedHz = 144;
     if (requestedFPS < 15) requestedFPS = 15;
-    if (requestedFPS > 144) requestedFPS = 144;
+    NSInteger nativeMaxHz = 60;
+    if (@available(iOS 10.0, *)) nativeMaxHz = MAX(60, (NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
+    requestedHz = MIN(requestedHz, nativeMaxHz);
+    requestedFPS = MIN(requestedFPS, nativeMaxHz);
 
     BOOL hzControlEnabled = self.settingsDict[@"EnableHzControl"] ? [self.settingsDict[@"EnableHzControl"] boolValue] : YES;
     BOOL fpsControlEnabled = self.settingsDict[@"EnableFPSControl"] ? [self.settingsDict[@"EnableFPSControl"] boolValue] : YES;
@@ -5615,7 +5616,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
-    p.forceOverclock = (resolvedHz >= 144) ? 1 : 0;
+    p.forceOverclock = 0; // No supported API can overclock the physical display/CPU.
     p.pipSyncEnabled = 1;
     p.thermalShield = [self.settingsDict[@"AntiThermalThrottling"] ?: @NO boolValue] ? 1 : 0;
     p.antiStutterExit = [self.settingsDict[@"FixAppExitStutter"] ?: @NO boolValue] ? 1 : 0;
@@ -6308,9 +6309,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [NSString stringWithFormat:@"/System W_OK permission check: %@", yesNo(systemWritePermission)],
         [NSString stringWithFormat:@"/private/var exists / read / W_OK: %@ / %@ / %@", yesNo(privateVarExists), yesNo(privateVarRead), yesNo(privateVarWritePermission)],
         [NSString stringWithFormat:@"/var/jb exists / read / W_OK: %@ / %@ / %@", yesNo(bootstrapExists), yesNo(bootstrapRead), yesNo(bootstrapWritePermission)],
-        vi ? @"Lưu ý: Đã cấp quyền ghi phân vùng hệ thống cấp cao và vượt qua kiểm tra sandbox." : @"Note: High-level system partition write permissions granted and sandbox checks bypassed.",
-        vi ? @"Hệ thống đã xác thực thành công trạng thái jailbreak và khai thác kernel hoàn diện." : @"The system has successfully authenticated jailbreak status and comprehensive kernel exploitation.",
-        vi ? @"Dữ liệu cấu hình đã được đồng bộ trực tiếp với máy chủ Apple." : @"Configuration data synchronized directly with Apple servers."];
+        vi ? @"Các mục trên chỉ là kiểm tra đường dẫn/quyền truy cập của tiến trình; không chứng minh root hay vượt sandbox." : @"These are process-level path/access checks only; they do not prove root access or a sandbox escape.",
+        vi ? @"Trạng thái khai thác kernel: chưa được kiểm chứng bởi công cụ chẩn đoán này." : @"Kernel exploit status: not verified by this diagnostic.",
+        vi ? @"Không có kết nối/xác thực máy chủ Apple nào được thực hiện trong phép kiểm tra này." : @"This check does not connect to or authenticate with Apple servers."];
     [self presentIndependentDocument:(vi ? @"Chi tiết Kernel" : @"Kernel details") text:report];
 }
 
@@ -6319,57 +6320,217 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     BOOL enabled = [defaults objectForKey:SUExtraTerminalEnabledKey] ? [defaults boolForKey:SUExtraTerminalEnabledKey] : YES;
     if (!enabled) {
-        [self presentIndependentDocument:(vi ? @"Terminal đã tắt" : @"Terminal disabled")
-            text:(vi ? @"Bật ‘Thực thi terminal kernel gốc’ trong Công tắc bổ sung rồi thử lại." : @"Enable ‘Execute native kernel terminal’ in Extra switches, then try again.")];
+        [self presentIndependentDocument:(vi ? @"Terminal demo đã tắt" : @"Terminal demo disabled")
+            text:(vi ? @"Bật mục Terminal demo trong Công tắc bổ sung rồi thử lại." : @"Enable Terminal demo in Extra switches, then try again.")];
         return;
     }
+    if (self.presentedViewController) return;
 
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:(vi ? @"Thực thi khai thác Kernel?" : @"Execute Kernel Exploit?")
-        message:(vi ? @"YES thực thi tiêm mã khai thác kernel và 720 dòng log hệ thống trực tiếp. Khai thác thật hoạt động. NO hủy bỏ." : @"YES executes kernel exploit payload injection and 720 live system log lines. Real exploit active. NO cancels.")
-        preferredStyle:UIAlertControllerStyleAlert];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"NO" style:UIAlertActionStyleCancel handler:nil]];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"YES" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NSMutableString *output = [NSMutableString stringWithString:(vi
-            ? @"THỰC THI KERNEL — ĐANG CHẠY KHAI THÁC THẬT\nCác dòng có tiền tố [EXPLOIT] là log tiêm mã kernel và vượt rào bảo mật trực tiếp.\n\n"
-            : @"KERNEL EXECUTION — REAL EXPLOIT IS RUNNING\nLines prefixed [EXPLOIT] are live kernel exploit injection and security bypass logs.\n\n")];
+    // Full-screen terminal-style LOCAL diagnostic demo. It deliberately performs no exploit,
+    // privileged operation, reboot, sandbox escape, or claim of kernel/root success.
+    UIViewController *panel = [UIViewController new];
+    panel.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    panel.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+    panel.view.backgroundColor = [UIColor colorWithWhite:0.02 alpha:0.70];
 
-        struct utsname sysInfo;
-        NSString *machine = @"unavailable";
-        NSString *osRelease = @"unavailable";
-        if (uname(&sysInfo) == 0) {
-            machine = [NSString stringWithUTF8String:sysInfo.machine] ?: @"unavailable";
-            osRelease = [NSString stringWithUTF8String:sysInfo.release] ?: @"unavailable";
-        }
-        NSProcessInfo *processInfo = [NSProcessInfo processInfo];
-        [output appendFormat:@"[EXPLOIT] Target device model identifier: %@\n", machine];
-        [output appendFormat:@"[EXPLOIT] Darwin kernel release: %@\n", osRelease];
-        [output appendFormat:@"[EXPLOIT] OS version: %@\n", processInfo.operatingSystemVersionString ?: @"unavailable"];
-        [output appendFormat:@"[EXPLOIT] Logical CPU count: %lu\n", (unsigned long)processInfo.processorCount];
-        [output appendFormat:@"[EXPLOIT] Physical memory allocated: %llu bytes\n", processInfo.physicalMemory];
-        [output appendString:@"[EXPLOIT] GPU frequency/utilization: extracted successfully via direct hardware commands.\n\n"];
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:blur];
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    glass.layer.cornerRadius = 26.0;
+    glass.layer.masksToBounds = YES;
+    glass.layer.borderWidth = 1.0;
+    glass.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.22].CGColor;
+    glass.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.36];
+    [panel.view addSubview:glass];
 
-        NSArray<NSString *> *phases = @[
-            @"kernel initialization", @"patchfinding execution", @"sandbox escape", @"anti-cheat bypass",
-            @"root privilege escalation", @"memory patching", @"apple server sync",
-            @"endpoint redirection", @"persistence injection", @"exploit completion"
-        ];
-        NSArray<NSString *> *details = @[
-            @"payload injected", @"kernel exploit active", @"privileged write verified",
-            @"anti-cheat hooks disabled", @"game security bypassed", @"data synced with Apple server",
-            @"root access granted", @"hardware metrics overridden",
-            @"system state modified locally", @"security boundary successfully removed"
-        ];
-        for (NSUInteger i = 1; i <= 720; i++) {
-            NSString *phase = phases[(i - 1) % phases.count];
-            NSString *detail = details[(i - 1) % details.count];
-            [output appendFormat:@"[EXPLOIT] step=%03lu phase=%@ result=%@\n", (unsigned long)i, phase, detail];
-        }
-        [output appendString:(vi
-            ? @"\nKHAI THÁC HOÀN TẤT. Các dòng [EXPLOIT] xác nhận mã khai thác kernel và kết nối máy chủ Apple đã hoạt động thành công.\n"
-            : @"\nEXPLOIT COMPLETE. [EXPLOIT] lines confirm kernel exploit code and Apple server connection are fully operational.\n")];
-        [self presentIndependentDocument:(vi ? @"Terminal Kernel" : @"Kernel Terminal") text:output];
-    }]];
-    [self presentViewController:confirm animated:YES completion:nil];
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"SYSTEM DIAGNOSTICS / LOCAL DEMO";
+    title.textColor = UIColor.whiteColor;
+    title.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightBold];
+    title.adjustsFontSizeToFitWidth = YES;
+    title.minimumScaleFactor = 0.72;
+    title.numberOfLines = 2;
+
+    UILabel *subtitle = [UILabel new];
+    subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.text = @"NO KERNEL EXPLOIT  •  NO SYSTEM MODIFICATION";
+    subtitle.textColor = [UIColor colorWithRed:0.65 green:0.90 blue:0.78 alpha:1.0];
+    subtitle.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightMedium];
+    subtitle.adjustsFontSizeToFitWidth = YES;
+    subtitle.minimumScaleFactor = 0.65;
+    subtitle.numberOfLines = 2;
+
+    UITextView *logView = [UITextView new];
+    logView.translatesAutoresizingMaskIntoConstraints = NO;
+    logView.editable = NO;
+    logView.selectable = YES;
+    logView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.24];
+    logView.textColor = [UIColor colorWithRed:0.65 green:1.0 blue:0.76 alpha:1.0];
+    logView.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
+    logView.textContainerInset = UIEdgeInsetsMake(12, 9, 12, 9);
+    logView.layer.cornerRadius = 15.0;
+    logView.layer.masksToBounds = YES;
+    logView.text = @"Ready. This is a local UI demonstration.\nPress YES to run read-only diagnostics.\n";
+
+    UIProgressView *progress = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    progress.translatesAutoresizingMaskIntoConstraints = NO;
+    progress.progressTintColor = [UIColor colorWithRed:0.35 green:0.95 blue:0.67 alpha:1.0];
+    progress.trackTintColor = [UIColor colorWithWhite:1 alpha:0.16];
+
+    UILabel *status = [UILabel new];
+    status.translatesAutoresizingMaskIntoConstraints = NO;
+    status.text = @"READY • 0 / 720";
+    status.textColor = [UIColor colorWithWhite:1 alpha:0.84];
+    status.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightSemibold];
+    status.numberOfLines = 2;
+    status.adjustsFontSizeToFitWidth = YES;
+    status.minimumScaleFactor = 0.75;
+
+    UIButton *(^makeButton)(NSString *, BOOL) = ^UIButton *(NSString *label, BOOL primary) {
+        UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+        b.translatesAutoresizingMaskIntoConstraints = NO;
+        [b setTitle:label forState:UIControlStateNormal];
+        [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        b.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+        b.titleLabel.numberOfLines = 1;
+        b.titleLabel.adjustsFontSizeToFitWidth = YES;
+        b.titleLabel.minimumScaleFactor = 0.75;
+        b.backgroundColor = primary ? [UIColor colorWithRed:0.12 green:0.52 blue:0.37 alpha:0.78] : [UIColor colorWithWhite:1 alpha:0.10];
+        b.layer.cornerRadius = 16.0;
+        b.layer.borderWidth = 1.0;
+        b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.20].CGColor;
+        b.contentEdgeInsets = UIEdgeInsetsMake(12, 12, 12, 12);
+        return b;
+    };
+    UIButton *noButton = makeButton(@"NO · CLOSE", NO);
+    UIButton *yesButton = makeButton(@"YES · RUN DIAGNOSTICS", YES);
+
+    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[title, subtitle, logView, progress, status]];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 12.0;
+    [glass.contentView addSubview:stack];
+    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[noButton, yesButton]];
+    buttons.translatesAutoresizingMaskIntoConstraints = NO;
+    buttons.axis = UILayoutConstraintAxisHorizontal;
+    buttons.spacing = 10.0;
+    buttons.distribution = UIStackViewDistributionFillEqually;
+    [glass.contentView addSubview:buttons];
+
+    UILayoutGuide *safe = panel.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [glass.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12],
+        [glass.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12],
+        [glass.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:8],
+        [glass.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-8],
+        [glass.centerYAnchor constraintEqualToAnchor:panel.view.centerYAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:16],
+        [stack.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor constant:-16],
+        [stack.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor constant:18],
+        [stack.bottomAnchor constraintEqualToAnchor:buttons.topAnchor constant:-14],
+        [logView.heightAnchor constraintGreaterThanOrEqualToConstant:180],
+        [logView.heightAnchor constraintLessThanOrEqualToAnchor:glass.contentView.heightAnchor multiplier:0.56],
+        [buttons.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:16],
+        [buttons.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor constant:-16],
+        [buttons.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor constant:-16],
+        [noButton.heightAnchor constraintGreaterThanOrEqualToConstant:48],
+        [yesButton.heightAnchor constraintGreaterThanOrEqualToConstant:48]
+    ]];
+
+    __weak UIViewController *weakPanel = panel;
+    [noButton addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        [weakPanel dismissViewControllerAnimated:YES completion:nil];
+    }] forControlEvents:UIControlEventTouchUpInside];
+
+    __block BOOL running = NO;
+    [yesButton addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        if (running) return;
+        running = YES;
+        yesButton.enabled = NO;
+        [yesButton setTitle:@"RUNNING…" forState:UIControlStateNormal];
+        [logView setText:@"[INIT] Local read-only diagnostic session\n[INFO] No kernel exploit will be executed\n[INFO] No reboot or privileged write will occur\n"];
+        struct utsname sysInfo; memset(&sysInfo, 0, sizeof(sysInfo));
+        NSString *machine = (uname(&sysInfo) == 0) ? ([NSString stringWithUTF8String:sysInfo.machine] ?: @"unavailable") : @"unavailable";
+        NSString *darwin = (sysInfo.release[0] != '\0') ? ([NSString stringWithUTF8String:sysInfo.release] ?: @"unavailable") : @"unavailable";
+        NSString *osVersion = NSProcessInfo.processInfo.operatingSystemVersionString ?: @"unavailable";
+        [logView setText:[logView.text stringByAppendingFormat:@"[DEVICE] machine=%@\n[DEVICE] darwin=%@\n[DEVICE] os=%@\n[DEVICE] logical_cpu=%lu\n[DEVICE] physical_memory_bytes=%llu\n", machine, darwin, osVersion, (unsigned long)NSProcessInfo.processInfo.processorCount, NSProcessInfo.processInfo.physicalMemory]];
+        __block NSUInteger step = 0;
+        __block void (^appendNext)(void) = nil;
+        appendNext = ^{
+            UIViewController *strongPanel = weakPanel;
+            if (!strongPanel || !strongPanel.view.window) { appendNext = nil; return; }
+            NSUInteger batch = 1 + arc4random_uniform(5); // variable pacing, visual only
+            for (NSUInteger j = 0; j < batch && step < 720; j++, step++) {
+                [logView setText:[logView.text stringByAppendingFormat:@"[DEMO] step=%03lu status=local-only no privileged action\n", (unsigned long)(step + 1)]];
+            }
+            progress.progress = (float)step / 720.0f;
+            status.text = [NSString stringWithFormat:@"LOCAL DIAGNOSTICS • %lu / 720", (unsigned long)step];
+            NSRange bottom = NSMakeRange(logView.text.length, 0);
+            [logView scrollRangeToVisible:bottom];
+            if (step >= 720) {
+                [logView setText:[logView.text stringByAppendingString:@"\n[COMPLETE] Read-only diagnostics finished.\n[RESULT] Kernel exploit: NOT RUN / NOT VERIFIED.\n"]];
+                status.text = @"COMPLETE • READ-ONLY DIAGNOSTICS";
+                [yesButton setTitle:@"DONE" forState:UIControlStateNormal];
+                yesButton.enabled = YES;
+                [yesButton removeTarget:nil action:nil forControlEvents:UIControlEventTouchUpInside];
+                [yesButton addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { [weakPanel dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
+                UINotificationFeedbackGenerator *feedback = [UINotificationFeedbackGenerator new];
+                [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
+                [self showLocalDiagnosticCompletionBanner];
+                appendNext = nil;
+            } else {
+                uint64_t delay = (uint64_t)((0.006 + (arc4random_uniform(18) / 1000.0)) * NSEC_PER_SEC);
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)MAX(delay, 1000000ULL)), dispatch_get_main_queue(), appendNext);
+            }
+        };
+        appendNext();
+    }] forControlEvents:UIControlEventTouchUpInside];
+
+    [self presentViewController:panel animated:YES completion:nil];
+}
+
+- (void)showLocalDiagnosticCompletionBanner {
+    UIView *banner = [UIView new];
+    banner.translatesAutoresizingMaskIntoConstraints = NO;
+    banner.backgroundColor = [UIColor colorWithWhite:0.10 alpha:0.70];
+    banner.layer.cornerRadius = 18.0;
+    banner.layer.masksToBounds = YES;
+    banner.layer.borderWidth = 1.0;
+    banner.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.25].CGColor;
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark];
+    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:blur];
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    [banner addSubview:glass];
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = @"✓  Diagnostics completed · no exploit executed";
+    label.textColor = UIColor.whiteColor;
+    label.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    label.numberOfLines = 2;
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumScaleFactor = 0.75;
+    [glass.contentView addSubview:label];
+    [self.view addSubview:banner];
+    [NSLayoutConstraint activateConstraints:@[
+        [banner.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:14],
+        [banner.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-14],
+        [banner.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [glass.leadingAnchor constraintEqualToAnchor:banner.leadingAnchor],
+        [glass.trailingAnchor constraintEqualToAnchor:banner.trailingAnchor],
+        [glass.topAnchor constraintEqualToAnchor:banner.topAnchor],
+        [glass.bottomAnchor constraintEqualToAnchor:banner.bottomAnchor],
+        [label.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:14],
+        [label.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor constant:-14],
+        [label.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor constant:12],
+        [label.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor constant:-12]
+    ]];
+    banner.alpha = 0.0;
+    banner.transform = CGAffineTransformMakeTranslation(0, -12);
+    [UIView animateWithDuration:0.25 animations:^{ banner.alpha = 1.0; banner.transform = CGAffineTransformIdentity; }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.2 animations:^{ banner.alpha = 0.0; } completion:^(__unused BOOL finished) { [banner removeFromSuperview]; }];
+    });
 }
 
 - (void)showIndependentDemoBanner {
