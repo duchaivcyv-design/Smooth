@@ -7076,8 +7076,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
     return size;
 }
 %end
-
-%hook SBFluidSwitcherItemContainer
+ 
+//%hook SBFluidSwitcherItemContainer
 // [V28 FIX STACK OVERFLOW]: VÔ HIỆU HÓA hook setShadowStyle — trên iOS 16.7, hàm gốc setShadowStyle:
 // tự gọi lại chính nó khi style=0 → trigger lại hook → infinite recursion → stack overflow → SafeMode.
 // - (void)setShadowStyle:(long long)style {
