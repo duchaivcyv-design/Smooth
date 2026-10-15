@@ -2123,6 +2123,10 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
     }
 }
 
+// ====================================================================================================
+// BIẾN TOÀN CỤC & HÀM ĐIỀU PHỐI (CHỈ KHAI BÁO 1 LẦN DUY NHẤT)
+// ====================================================================================================
+
 static volatile BOOL g_isContinuousSwiping = NO;
 static volatile BOOL g_isUserTouchingScreen = NO;
 static volatile BOOL g_isVolumeHoldingV285 = NO;
@@ -2229,330 +2233,6 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 
     return ((now - g_lastInteractionMachTime) < limitTicks);
 }
-
-static inline void Titanium_LockMainThreadFast(void) {
-    if (![NSThread isMainThread]) return;
-
-    static uint64_t s_lastKernelBoostTick = 0;
-    uint64_t now = mach_absolute_time();
-    if (__builtin_expect(s_lastKernelBoostTick == 0 || (now - s_lastKernelBoostTick) > Titanium_NanosToMachTicks(400000000ULL), 0)) {
-        s_lastKernelBoostTick = now;
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-        Titanium_EnforceMachFrameConstraint();
-        AppleInternal_LockHardwareCADisplay();
-        AppleInternal_EnforceZeroLatencyKernelTier();
-    }
-
-#if TITANIUM_ENABLE_RATE_KEEPER
-    if (Titanium_IsSpringBoard()) {
-        [TitaniumRateKeeper kick];
-    }
-#endif
-}
-
-static inline void Titanium_TriggerInstantTouchBurst(void) {
-    if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
-        Titanium_InitUnifiedMachTimebase();
-    }
-
-    g_lastInteractionMachTime = mach_absolute_time();
-    Titanium_LockMainThreadFast();
-}
-
-static inline void Titanium_TriggerNotificationBurst(void) {
-    if (__builtin_expect(g_bannerDurationMachTicks == 0, 0)) {
-        Titanium_InitUnifiedMachTimebase();
-    }
-
-    g_lastBannerMachTime = mach_absolute_time();
-    g_isNotificationBannerActive = YES;
-    Titanium_LockMainThreadFast();
-
-    static int64_t s_bannerSeq = 0;
-    int64_t currentSeq = ++s_bannerSeq;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(850 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        if (s_bannerSeq == currentSeq) {
-            g_isNotificationBannerActive = NO;
-        }
-    });
-}
-
-static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
-    if (![NSThread isMainThread]) return;
-    if (!Titanium_ShouldLockTargetRate()) return;
-
-    Titanium_LockMainThreadFast();
-}
-
-typedef NS_ENUM(NSInteger, TitaniumDisplayTier) {
-    TitaniumTier_BypassGame = 0,
-    TitaniumTier_DeepIdle   = 60,
-    TitaniumTier_VideoSync  = 60,
-    TitaniumTier_TextRead   = 80,
-    TitaniumTier_ApexPeak   = 144
-};
-
-static inline BOOL Titanium_IsCurrentAppAGame(void) {
-    if (Titanium_IsSpringBoard()) return NO;
-    return g_isMetalGameProcess;
-}
-
-static inline NSInteger Titanium_CalculateAdaptiveProMaxTier(void) {
-    if (Titanium_IsCurrentAppAGame()) {
-        return TitaniumTier_BypassGame;
-    }
-
-    if (g_isRateLockedV285) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
-    }
-
-    if (Titanium_IsPassiveVideoPlayback()) {
-        return TitaniumTier_VideoSync;
-    }
-
-    if (Titanium_ShouldLockTargetRate()) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
-    }
-
-    if (g_isUserTouchingScreen || g_isScrollingActive) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
-    }
-
-    return TitaniumTier_DeepIdle;
-}
-
-static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        #ifdef TASK_LATENCY_QOS_POLICY
-        task_latency_qos_policy_data_t latencyPolicy;
-        latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
-        task_policy_set(mach_task_self(), TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
-        #endif
-
-        #ifdef TASK_THROUGHPUT_QOS_POLICY
-        task_throughput_qos_policy_data_t throughputPolicy;
-        throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0;
-        task_policy_set(mach_task_self(), TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
-        #endif
-    });
-}
-
-static void AppleInternal_LockHardwareCADisplay(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        Class caDisplayClass = objc_getClass("CADisplay");
-        if (!caDisplayClass) return;
-
-        SEL selMainDisplay = sel_registerName("mainDisplay");
-        if (![caDisplayClass respondsToSelector:selMainDisplay]) return;
-
-        id (*getMainDisplay)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
-        id display = getMainDisplay(caDisplayClass, selMainDisplay);
-        if (!display) return;
-
-        SEL selLatency = sel_registerName("setLatency:");
-        if ([display respondsToSelector:selLatency]) {
-            void (*setLatency)(id, SEL, double) = (void (*)(id, SEL, double))objc_msgSend;
-            setLatency(display, selLatency, 0.0);
-        }
-
-        SEL selVirtual = sel_registerName("setAllowsVirtualModes:");
-        if ([display respondsToSelector:selVirtual]) {
-            void (*setVirtual)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))objc_msgSend;
-            setVirtual(display, selVirtual, YES);
-        }
-    });
-}
-
-static BOOL Titanium_IsLegacyA9toA12(void) {
-    static BOOL s_isLegacy = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        struct utsname sysInfo;
-        if (uname(&sysInfo) == 0) {
-            NSString *machine = [NSString stringWithCString:sysInfo.machine encoding:NSUTF8StringEncoding];
-            if (machine) {
-                s_isLegacy = ([machine hasPrefix:@"iPhone8,"]  ||
-                              [machine hasPrefix:@"iPhone9,"]  ||
-                              [machine hasPrefix:@"iPhone10,"] ||
-                              [machine hasPrefix:@"iPhone11,"] ||
-                              [machine hasPrefix:@"iPad6,"]    || 
-                              [machine hasPrefix:@"iPad7,"]);
-            }
-        }
-    });
-    return s_isLegacy;
-}
-
-static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
-    if (![NSThread isMainThread]) return;
-    if (targetHz < 15) targetHz = 15;
-    if (targetHz > 240) targetHz = 240;
-
-    static int s_lastAppliedHz = 0;
-    if (s_lastAppliedHz == targetHz) return;
-    s_lastAppliedHz = targetHz;
-
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-
-    mach_timebase_info_data_t tb;
-    if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.denom == 0) return;
-
-    thread_port_t selfThread = mach_thread_self();
-    if (selfThread == MACH_PORT_NULL) return;
-
-    thread_precedence_policy_data_t precPolicy;
-    precPolicy.importance = 47;
-    thread_policy_set(selfThread,
-                      THREAD_PRECEDENCE_POLICY,
-                      (thread_policy_t)&precPolicy,
-                      THREAD_PRECEDENCE_POLICY_COUNT);
-
-    thread_throttle_policy_data_t throttlePolicy;
-    throttlePolicy.pset_limit = 0;
-    thread_policy_set(selfThread,
-                      THREAD_THROTTLE_POLICY,
-                      (thread_policy_t)&throttlePolicy,
-                      1);
-
-    mach_port_deallocate(mach_task_self(), selfThread);
-}
-
-static inline void Titanium_EnforceMachFrameConstraint(void) {
-    int targetHz = (int)(g_syncPayloadV285.targetHz > 0 ? g_syncPayloadV285.targetHz : (g_cachedResolvedHz > 0 ? g_cachedResolvedHz : 120));
-    Titanium_EnforceMachFrameConstraintDynamic(targetHz);
-}
-
-// ====================================================================================================
-// KHAI BÁO BIẾN TOÀN CỤC & ĐIỀU PHỐI HỆ THỐNG TITANIUM (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN & AN TOÀN ĐA LUỒNG)
-// (AN TOÀN TUYỆT ĐỐI: ĐỒNG BỘ 100% VỚI Ổ KHÓA CỦA APP, KHÔNG ĐEN MÀN HÌNH, KHÔNG TREO RESPRING)
-// ====================================================================================================
-
-#include <stdatomic.h>
-
-static volatile BOOL g_isContinuousSwiping = NO;
-static volatile BOOL g_isUserTouchingScreen = NO;
-static volatile BOOL g_isVolumeHoldingV285 = NO;
-static volatile BOOL g_isVideoPlayingActive = NO;
-static volatile BOOL g_isNotificationBannerActive = NO;
-static volatile BOOL g_isScrollingActive = NO;
-static volatile int32_t g_activeAnimationCount = 0;
-static volatile BOOL g_isMetalGameProcess = NO;
-
-static volatile uint64_t g_lastInteractionMachTime = 0;
-static uint64_t g_burstDurationMachTicks = 0;
-static uint64_t g_burstDurationChargingMachTicks = 0;
-
-static volatile uint64_t g_lastBannerMachTime = 0;
-static uint64_t g_bannerDurationMachTicks = 0;
-
-static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz);
-static inline void Titanium_EnforceMachFrameConstraint(void);
-static void AppleInternal_LockHardwareCADisplay(void);
-static void AppleInternal_EnforceZeroLatencyKernelTier(void);
-
-// ====================================================================================================
-// 1. BỘ KHỞI TẠO MACH TIMEBASE THỐNG NHẤT (CHỐNG CRASH CHIA CHO 0 & CẤP ĐỦ TICKS TRONG 1 LẦN GỌI)
-// ====================================================================================================
-
-static inline void Titanium_InitUnifiedMachTimebase(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        mach_timebase_info_data_t tb;
-        if (mach_timebase_info(&tb) == KERN_SUCCESS && tb.numer > 0 && tb.denom > 0) {
-            g_burstDurationMachTicks = (900ULL * 1000000ULL * tb.denom) / tb.numer;
-            g_burstDurationChargingMachTicks = (650ULL * 1000000ULL * tb.denom) / tb.numer;
-            g_bannerDurationMachTicks = (950ULL * 1000000ULL * tb.denom) / tb.numer;
-        }
-    });
-}
-
-static inline void Titanium_EnsureMachTimebaseInit(void) {
-    Titanium_InitUnifiedMachTimebase();
-}
-
-static inline void Titanium_InitTouchMachTimebase(void) {
-    Titanium_InitUnifiedMachTimebase();
-}
-
-static inline void Titanium_InitBannerMachTimebase(void) {
-    Titanium_InitUnifiedMachTimebase();
-}
-
-static inline BOOL Titanium_IsNotificationBannerActive(void) {
-    if (g_lastBannerMachTime == 0) return NO;
-    return ((mach_absolute_time() - g_lastBannerMachTime) < g_bannerDurationMachTicks);
-}
-
-static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
-    return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isVolumeHoldingV285 && !g_isScrollingActive && g_activeAnimationCount == 0);
-}
-
-// ====================================================================================================
-// 2. BỘ ĐIỀU PHỐI KHÓA TARGET RATE DYNAMIC (ATOMIC TICKS - CÓ TIMEOUT CHỐNG KẸT PEAK VĨNH VIỄN)
-// ====================================================================================================
-
-static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    if (g_isRateLockedV285) return YES;
-
-    if (g_isNotificationBannerActive || Titanium_IsNotificationBannerActive()) return YES;
-
-    static uint64_t s_animStartTick = 0;
-    if (g_activeAnimationCount > 0) {
-        uint64_t nowTick = mach_absolute_time();
-        if (s_animStartTick == 0) {
-            s_animStartTick = nowTick;
-            return YES;
-        } else if ((nowTick - s_animStartTick) < Titanium_NanosToMachTicks(1500000000ULL)) {
-            return YES;
-        } else {
-            g_activeAnimationCount = 0;
-            s_animStartTick = 0;
-        }
-    } else {
-        s_animStartTick = 0;
-    }
-
-    if (g_isInteracting || g_isVolumeHoldingV285 || g_isUserTouchingScreen || g_isContinuousSwiping || g_isScrollingActive) {
-        static uint64_t s_staleFlagTicks = 0;
-        if (s_staleFlagTicks == 0) {
-            s_staleFlagTicks = Titanium_NanosToMachTicks(1600000000ULL);
-        }
-        
-        uint64_t nowFlag = mach_absolute_time();
-        uint64_t lastTick = (g_lastInteractiveTick > g_lastInteractionMachTime) ? g_lastInteractiveTick : g_lastInteractionMachTime;
-
-        if (lastTick != 0 && (nowFlag - lastTick) < s_staleFlagTicks) {
-            return YES;
-        }
-
-        g_isInteracting = NO;
-        g_isVolumeHoldingV285 = NO;
-        g_isUserTouchingScreen = NO;
-        g_isContinuousSwiping = NO;
-        g_isScrollingActive = NO;
-    }
-
-    if (g_lastInteractionMachTime == 0) return NO;
-
-    if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
-        Titanium_InitUnifiedMachTimebase();
-    }
-
-    uint64_t now = mach_absolute_time();
-    uint64_t limitTicks = g_isDeviceChargingV285 ? g_burstDurationChargingMachTicks : g_burstDurationMachTicks;
-
-    return ((now - g_lastInteractionMachTime) < limitTicks);
-}
-
-// ====================================================================================================
-// 3. ĐIỀU PHỐI XUNG NHỊP CẢM ỨNG (CƯỚP QUYỀN P-CORE TOÀN HỆ THỐNG - KHÔNG NGHẼN SOCKET)
-// ====================================================================================================
 
 static inline void Titanium_LockMainThreadFast(void) {
     if (![NSThread isMainThread]) return;
@@ -2618,11 +2298,11 @@ static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
 // ====================================================================================================
 
 typedef NS_ENUM(NSInteger, TitaniumDisplayTier) {
-    TitaniumTier_BypassGame = 0,
-    TitaniumTier_DeepIdle   = 60,
-    TitaniumTier_VideoSync  = 60,
-    TitaniumTier_TextRead   = 80,
-    TitaniumTier_ApexPeak   = 144
+    TitaniumTier_BypassGame = 0,    // Bypass nhịp gốc của Game
+    TitaniumTier_DeepIdle   = 60,   // Màn hình tĩnh hoàn toàn
+    TitaniumTier_VideoSync  = 60,   // Video / PiP
+    TitaniumTier_TextRead   = 80,   // Đọc báo, cuộn chậm
+    TitaniumTier_ApexPeak   = 240   // Kịch trần tối đa dải nhịp (240Hz)
 };
 
 static inline BOOL Titanium_IsCurrentAppAGame(void) {
@@ -2635,9 +2315,12 @@ static inline NSInteger Titanium_CalculateAdaptiveProMaxTier(void) {
         return TitaniumTier_BypassGame;
     }
 
+    NSInteger configuredTarget = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
+    if (configuredTarget < 15) configuredTarget = 15;
+    if (configuredTarget > 240) configuredTarget = 240;
+
     if (g_isRateLockedV285) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
+        return configuredTarget;
     }
 
     if (Titanium_IsPassiveVideoPlayback()) {
@@ -2645,13 +2328,11 @@ static inline NSInteger Titanium_CalculateAdaptiveProMaxTier(void) {
     }
 
     if (Titanium_ShouldLockTargetRate()) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
+        return configuredTarget;
     }
 
     if (g_isUserTouchingScreen || g_isScrollingActive) {
-        NSInteger target = g_cachedResolvedHz > 0 ? g_cachedResolvedHz : (NSInteger)g_syncPayloadV285.targetHz;
-        return target > 0 ? target : TitaniumTier_ApexPeak;
+        return configuredTarget;
     }
 
     return TitaniumTier_DeepIdle;
@@ -2734,8 +2415,8 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
 
-    static int s_lastAppliedHz = 0;
-    if (s_lastAppliedHz == targetHz) return;
+    static __thread int s_lastAppliedHz = 0;
+    if (__builtin_expect(s_lastAppliedHz == targetHz, 1)) return;
     s_lastAppliedHz = targetHz;
 
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -2787,7 +2468,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
     }
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         g_lastInteractionMachTime = mach_absolute_time();
-        // Ép toàn lực CPU P-Core và mở đường ống kết xuất độ trễ 0ms
         EnforceMaxCPUPower();
         Titanium_EnableZeroLatencyPipeline();
     }
@@ -2829,7 +2509,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
         g_lastInteractiveTick = now;
         g_isInteracting = YES;
 
-        // Cưỡng bức luồng sự kiện HID phần cứng chạy ở mức ưu tiên cao nhất
+        // Cưỡng bức luồng sự kiện HID phần cứng chạy ở mức ưu tiên cao nhất (không lặp syscall)
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         Titanium_DisableKernelThreadThrottling();
     }
@@ -2941,11 +2621,10 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             if (shouldTriggerBoost) {
                 static uint64_t s_lastWindowTouchTick = 0;
                 uint64_t now = mach_absolute_time();
-                if (now - s_lastWindowTouchTick > Titanium_NanosToMachTicks(25ULL * 1000000ULL)) {
+                if (now - s_lastWindowTouchTick > Titanium_NanosToMachTicks(35ULL * 1000000ULL)) {
                     s_lastWindowTouchTick = now;
                     g_lastInteractionMachTime = now;
                     
-                    // ÉP CỨNG MAX XUNG P-CORE & GỠ BỎ THROTTLE KERNEL NGAY KHI CHẠM
                     EnforceMaxCPUPower();
                     Titanium_EnforceThreadVIPPolicy();
                     
@@ -2957,14 +2636,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 }
             }
         }
-    }
-    %orig(event);
-}
-
-- (void)_sendTouchesForEvent:(UIEvent *)event {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        EnforceMaxCPUPower();
     }
     %orig(event);
 }
