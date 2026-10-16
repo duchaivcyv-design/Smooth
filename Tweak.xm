@@ -419,7 +419,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)_forcePanGestureToEndImmediately;
 - (CGPoint)_touchPositionForTouches:(id)touches;
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view;
-- (void)_scrollViewAnimationEnded:(id)1 finished:(BOOL)2;
+- (void)_scrollViewAnimationEnded:(id)arg1 finished:(BOOL)arg2;
 - (BOOL)isDragging;
 - (BOOL)isDecelerating;
 - (CGFloat)decelerationRate;
@@ -443,7 +443,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 
 @interface UIEventFetcher : NSObject
 - (void)_receiveHIDEvent:(void *)event;
-- (void)displayLinkDidFire:(id)1;
+- (void)displayLinkDidFire:(id)arg1;
 @end
 
 @interface _UIEventFetcher : NSObject
@@ -479,7 +479,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)setAutomaticMinimizationEnabled:(BOOL)flag;
 - (void)setInputMode:(id)inputMode;
 - (void)setDelegate:(id)delegate;
-- (void)textChanged:(id)1;
+- (void)textChanged:(id)arg1;
 - (void)deleteFromInput;
 - (void)showKeyboard;
 - (void)hideKeyboard;
@@ -727,7 +727,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)_handleApplicationProcessExited:(id)processDescription;
 - (void)handleApplicationLaunch:(id)application;
 - (void)handleApplicationSuspended:(id)application;
-- (void)_handleDismissOverlaysGesture:(id)1;
+- (void)_handleDismissOverlaysGesture:(id)arg1;
 @end
 
 @interface SBWindowScene : NSObject
@@ -744,7 +744,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @end
 
 @interface SBPIPController : NSObject
-- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)1;
+- (void)setPictureInPictureWindowMargin:(UIEdgeInsets)arg1;
 - (void)_updatePictureInPictureWindowMargin;
 - (UIEdgeInsets)pictureInPictureWindowMargin;
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion;
@@ -985,7 +985,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @interface SpringBoard : UIApplication
 - (id)_accessibilityFrontMostApplication;
 - (BOOL)isLocked;
-- (void)_reboot:(BOOL)1;
+- (void)_reboot:(BOOL)arg1;
 - (void)_relaunchSpringBoardNow;
 @end
 
@@ -998,13 +998,13 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @interface SBAppSwitcherSnapshotImageCache : NSObject
 - (void)reloadImagesForAllItems;
 - (void)_purgeAllSnapshots;
-- (id)_requestImageForAppLayout:(id)1 displayIdentity:(id)2 isLowQuality:(BOOL)3 async:(BOOL)4 withCompletion:(id)5;
+- (id)_requestImageForAppLayout:(id)arg1 displayIdentity:(id)arg2 isLowQuality:(BOOL)arg3 async:(BOOL)arg4 withCompletion:(id)arg5;
 @end
 
 @interface SBAppLaunchSettings : NSObject
 @property (nonatomic, assign) double zoomDuration;
 @property (nonatomic, assign) double launchDuration;
-@property (nonatomic, assign) delayBeforeAppLaunch;
+@property (nonatomic, assign) double delayBeforeAppLaunch;
 @end
 
 @interface SBSplashBoardController : NSObject
@@ -1084,9 +1084,9 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @end
 
 @interface SBFluidSwitcherGestureManager : NSObject
-- (void)fluidSwitcherGestureManager:(id)1 didBeginGesture:(id)2;
-- (void)fluidSwitcherGestureManager:(id)1 didUpdateGesture:(id)2;
-- (void)fluidSwitcherGestureManager:(id)1 didEndGesture:(id)2;
+- (void)fluidSwitcherGestureManager:(id)arg1 didBeginGesture:(id)arg2;
+- (void)fluidSwitcherGestureManager:(id)arg1 didUpdateGesture:(id)arg2;
+- (void)fluidSwitcherGestureManager:(id)arg1 didEndGesture:(id)arg2;
 @end
 
 @interface FBProcessWatchdog : NSObject
