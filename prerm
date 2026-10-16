@@ -2,22 +2,24 @@
 set -e
 
 # ====================================================================================================
-# SCRIPT PRERM: DỌN SẠCH TOÀN BỘ CẤU HÌNH & TRẢ VỀ MẶC ĐỊNH APPLE (CHẾ ĐỘ ÉP TOÀN DIỆN)
+# SCRIPT PRERM: DỌN SẠCH TOÀN BỘ CẤU HÌNH & TRẢ VỀ MẶC ĐỊNH APPLE
 # (HỖ TRỢ: ROOTLESS, ROOTHIDE, PALERA1N, DOPAMINE, XINA & STANDARD JAILBREAK)
-# (AN TOÀN TUYỆT ĐỐI: KHÔNG TREO DPKG, KHÔNG LỖI SUBPROCESS, CHUẨN POSIX 100%)
+# (AN TOÀN TUYỆT ĐỐI: CHUẨN POSIX 100%, KHÔNG LỖI SUBPROCESS DPKG)
 # ====================================================================================================
 
-# 1. [ÉP TOÀN DIỆN]: QUÉT TẬN GỐC PHÂN VÙNG HỆ THỐNG JAILBREAK (ĐỘ SÂU MAXDEPTH 4)
+# 1. XÁC ĐỊNH GỐC JAILBREAK (ƯU TIÊN BIẾN MÔI TRƯỜNG PROCURSUS/DOPAMINE)
 JB_ROOT=""
-if [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
+if [ -n "$JBROOT" ] && [ -d "$JBROOT" ]; then
+    JB_ROOT="$JBROOT"
+elif [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
     JB_ROOT="$ROOTLESS_PATH"
 elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
     JB_ROOT="$JB_ROOT_PATH"
 elif [ -L "/var/jb" ] || [ -d "/var/jb" ]; then
     JB_ROOT="/var/jb"
 else
-    # Quét sâu toàn bộ thư mục RootHide ngẫu nhiên trên phân vùng /private/preboot
-    ROOTHIDE_DIR=$(find /private/preboot -maxdepth 4 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    # Quét nhanh thư mục RootHide ngẫu nhiên trên phân vùng /private/preboot
+    ROOTHIDE_DIR=$(find /private/preboot -maxdepth 3 -type d -name "jb-*" 2>/dev/null | head -n 1)
     if [ -z "$ROOTHIDE_DIR" ]; then
         ROOTHIDE_DIR=$(find /var -maxdepth 2 -type d -name "jb-*" 2>/dev/null | head -n 1)
     fi
@@ -29,7 +31,7 @@ else
     fi
 fi
 
-# 2. [ÉP TOÀN DIỆN]: XÓA TOÀN BỘ BUNDLE & FILTER PLIST PREFERENCELOADER
+# 2. XÓA BUNDLE & FILTER PLIST PREFERENCELOADER
 rm -f "$JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist" 2>/dev/null || true
 rm -f "$JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist" 2>/dev/null || true
 rm -f "$JB_ROOT/Library/PreferenceLoader/BoostiPhone6sPrefs.plist" 2>/dev/null || true
@@ -44,42 +46,50 @@ rm -f /Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist 2>/dev/null
 rm -f /Library/PreferenceLoader/Preferences/BoostiPhone6s.plist 2>/dev/null || true
 rm -f /Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist 2>/dev/null || true
 
-# 3. [ÉP TOÀN DIỆN]: DỌN SẠCH BỘ NHỚ CHIA SẺ IPC & TOÀN BỘ CỜ BẢO VỆ BOOTLOOP
-rm -f /tmp/.boost_hz_sync 2>/dev/null || true
-rm -f /tmp/.boost_hz_sync.tmp 2>/dev/null || true
+# 3. DỌN SẠCH BỘ NHỚ CHIA SẺ IPC, CỜ AN TOÀN & BLACKLIST ỨNG DỤNG
+rm -f /tmp/.boost_hz_sync* 2>/dev/null || true
+rm -f /tmp/.boost_hz_apps* 2>/dev/null || true
 rm -f /tmp/.boost_boot_counter 2>/dev/null || true
 rm -f /tmp/.titanium_tweak_verified 2>/dev/null || true
 rm -f /tmp/.titanium_boot_guard 2>/dev/null || true
 rm -f /tmp/.titanium_8p_reboot_staged 2>/dev/null || true
 rm -f /tmp/.titanium_sync_payload 2>/dev/null || true
 
-rm -f "$JB_ROOT/tmp/.boost_hz_sync" 2>/dev/null || true
-rm -f "$JB_ROOT/tmp/.boost_boot_counter" 2>/dev/null || true
-rm -f "$JB_ROOT/tmp/.titanium_tweak_verified" 2>/dev/null || true
-rm -f /var/jb/tmp/.boost_hz_sync 2>/dev/null || true
+if [ -n "$JB_ROOT" ]; then
+    rm -f "$JB_ROOT/tmp/.boost_hz_sync"* 2>/dev/null || true
+    rm -f "$JB_ROOT/tmp/.boost_hz_apps"* 2>/dev/null || true
+    rm -f "$JB_ROOT/tmp/.boost_boot_counter" 2>/dev/null || true
+    rm -f "$JB_ROOT/tmp/.titanium_tweak_verified" 2>/dev/null || true
+fi
+
+rm -f /var/jb/tmp/.boost_hz_sync* 2>/dev/null || true
+rm -f /var/jb/tmp/.boost_hz_apps* 2>/dev/null || true
 rm -f /var/jb/tmp/.boost_boot_counter 2>/dev/null || true
 
-# 4. [ÉP TOÀN DIỆN]: TIÊU HỦY CACHE VÀ CẤU HÌNH TWEAK CỦA NGƯỜI DÙNG
+# 4. TIÊU HỦY CACHE VÀ CẤU HÌNH TWEAK
 rm -rf /var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
-rm -rf "$JB_ROOT/var/mobile/Library/Caches/com.taojb.boostiphone6s" 2>/dev/null || true
+if [ -n "$JB_ROOT" ]; then
+    rm -rf "$JB_ROOT/var/mobile/Library/Caches/com.taojb.boostiphone6s" 2>/dev/null || true
+    rm -f "$JB_ROOT/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
+    rm -f "$JB_ROOT/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
+fi
 rm -rf /var/jb/var/mobile/Library/Caches/com.taojb.boostiphone6s 2>/dev/null || true
 
 defaults delete com.taojb.boostiphone6s 2>/dev/null || true
 rm -f /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
-rm -f "$JB_ROOT/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
-rm -f "$JB_ROOT/Library/Preferences/com.taojb.boostiphone6s.plist" 2>/dev/null || true
 rm -f /var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 rm -f /var/jb/Library/Preferences/com.taojb.boostiphone6s.plist 2>/dev/null || true
 
-# 5. [ÉP TOÀN DIỆN]: PHÁT TÍN HIỆU DARWIN NOTIFY ÉP NHẢ HOOK TỨC THÌ
+# 5. PHÁT TÍN HIỆU NOTIFY BUỘC NHẢ HOOK VÀ HOÀN TRẢ TRẠNG THÁI GỐC
 if command -v notifyutil >/dev/null 2>&1; then
     notifyutil -p com.taojb.boostiphone6s/ReloadPrefs >/dev/null 2>&1 || true
     notifyutil -p com.taojb.boostiphone6s/ReloadUIKitPrefs >/dev/null 2>&1 || true
+    notifyutil -p com.taojb.boostiphone6s/HardwareSync >/dev/null 2>&1 || true
     notifyutil -p com.taojb.boostiphone6s/FPSChanged >/dev/null 2>&1 || true
     notifyutil -p com.titanium.v285.prefschanged >/dev/null 2>&1 || true
 fi
 
-# 6. [ÉP TOÀN DIỆN]: DIỆT CFPREFSD ÉP ĐỒNG BỘ TRẠNG THÁI HỆ THỐNG
+# 6. DIỆT CFPREFSD ĐỂ ĐỒNG BỘ LẠI BỘ NHỚ ĐỆM PREFERENCES
 killall -9 cfprefsd 2>/dev/null || true
 
 exit 0
