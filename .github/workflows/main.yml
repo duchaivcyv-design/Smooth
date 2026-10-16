@@ -78,17 +78,16 @@ jobs:
           
           open_braces = 0
           for i, line in enumerate(lines, 1):
-              # Loại bỏ các đoạn chú thích kiểu // hoặc bên trong chuỗi đơn giản để tránh đếm nhầm
               clean_line = line.split('//')[0]
               opens = clean_line.count('{')
               closes = clean_line.count('}')
               open_braces += opens - closes
               
               if open_braces < 0:
-                  print(f'🚨 LỆCH NGOẶC TẠI DÒNG {i}: Thừa dấu đóng } -> {line.strip()}')
+                  print('🚨 LỆCH NGOẶC TẠI DÒNG ' + str(i) + ': Thừa dấu đóng } -> ' + line.strip())
                   open_braces = 0
           
-          print(f'Số lượng ngoặc mở lệch cuối file: {open_braces} (Nếu > 0 nghĩa là đang bị thiếu dấu đóng ở đâu đó)')
+          print('Số lượng ngoặc mở lệch cuối file: ' + str(open_braces))
           "
           echo "=== Hoàn tất kiểm tra ngoặc ==="
 
