@@ -1965,16 +1965,6 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 #define IPC_FLAG_ZERO_LAG_NEURAL    (1U << 17)
 #define IPC_FLAG_RATE_LOCKED        (1U << 18)
 
-static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *p) {
-    uint32_t flags = 0;
-    memcpy(&flags, &p->reserved[32], sizeof(uint32_t));
-    return flags;
-}
-
-static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *p, uint32_t flags) {
-    memcpy(&p->reserved[32], &flags, sizeof(uint32_t));
-}
-
 - (void)loadSettings {
     @autoreleasepool {
         NSString *prefPath = Titanium_ResolvePrefPath();
