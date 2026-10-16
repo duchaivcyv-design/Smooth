@@ -2892,42 +2892,18 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
                 self.maximumDrawableCount = 3;
             }
 
-            // SỬA: Ép về NO để ngăn chặn GPU timeout ở khung hình đầu tiên, triệt tiêu 100% lỗi đen màn hình
+            // CHUẨN XÁC: Phải để YES để nếu frame đầu chưa sẵn sàng, Main Thread không bị treo chết (Deadlock đen màn hình)
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-                self.allowsNextDrawableTimeout = NO;
+                self.allowsNextDrawableTimeout = YES;
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
                 self.lowLatencyMode = YES;
             }
-
-            // Preserve the app's own CAMetalLayer framebufferOnly setting.
-            // Overriding it here can break pipelines that sample or read back drawable textures.
         }
     } @catch (__unused NSException *e) {
         %orig;
     }
-}
-
-// BỔ SUNG: Khóa cứng getter không cho hệ thống bật lại timeout lúc khởi động
-- (BOOL)allowsNextDrawableTimeout {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return NO;
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
-// BỔ SUNG: Chặn không cho bất kỳ mã nội bộ nào ép timeout = YES
-- (void)setAllowsNextDrawableTimeout:(BOOL)allow {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO);
-            return;
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(allow);
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
@@ -3008,14 +2984,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 - (void)setDesiredDynamicRange:(float)range {
     @try {
-        if (TITANIUM_LITE_MODE) {
-            %orig(range);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(1.0f);
-            return;
-        }
+        // Giữ nguyên dải màu gốc của app để tránh lỗi lệch Pixel Format gây đen màn hình
         %orig(range);
     } @catch (__unused NSException *e) {
         %orig(range);
@@ -3041,7 +3010,6 @@ static void Titanium_BypassQuartzCoreRangeAssertion(void) {
         @try {
             void *sym = dlsym(RTLD_DEFAULT, "CAFrameRateRangeIsValid");
             if (sym) {
-                // Bẻ gãy vùng nhớ bảo vệ chỉ đọc của phân vùng text code
                 Titanium_KernelForceWriteProtectBypass(sym, (const void *)sym, 1);
                 MSHookFunction(sym, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
             }
@@ -3383,19 +3351,24 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (CFTimeInterval)duration {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        CFTimeInterval origDur = %orig;
+        // Chỉ ghi đè khi CADisplayLink đã thực sự bắt đầu chạy (origDur > 0)
+        if (origDur > 0.0 && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
             if (cap > 0) return (1.0 / (double)cap);
         }
+        return origDur;
     } @catch (__unused NSException *e) {}
     return %orig;
 }
 
 - (CFTimeInterval)targetTimestamp {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        CFTimeInterval ts = self.timestamp;
+        // CHUẨN XÁC: Nếu ts <= 0 (khung hình đầu tiên chưa khớp V-Sync), phải trả về %orig để không làm lệch clock gây skip frame đen màn hình
+        if (ts > 0.0 && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap > 0) return (self.timestamp + (1.0 / (double)cap));
+            if (cap > 0) return (ts + (1.0 / (double)cap));
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -3595,7 +3568,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 %end
 
-// PHÁ KHÓA CỨNG 60HZ & BẢO VỆ RAM JETSAM (CACHE DICTIONARY AN TOÀN 1000%)
+// PHÁ KHÓA CỨNG 60HZ & BẢO VỆ RAM JETSAM (KHÔNG ÉP HDR KHIẾN LỆCH PIXEL FORMAT GÂY ĐEN APP)
 static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %hook NSBundle
@@ -3604,8 +3577,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && key) {
             if ([key isEqualToString:@"CADisableMinimumFrameDuration"] ||
-                [key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"] ||
-                [key isEqualToString:@"UIApplicationSupportsHDR"]) {
+                [key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"]) {
                 return @YES;
             }
         }
@@ -3801,9 +3773,6 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
         %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
             Titanium_EnableZeroLatencyPipeline();
-            
-            // Do not force a redraw/transaction flush on every layer layout.
-            // UIKit/CoreAnimation will schedule drawing through its normal pipeline.
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -3890,7 +3859,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %end
 
 // ====================================================================================================
-// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (AN TOÀN TUYỆT ĐỐI 1000%)
+// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (ĐÃ BỎ GHI ĐÈ VM_PROTECT LÀM LỖI UISCREEN)
 // ====================================================================================================
 
 static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
@@ -3906,26 +3875,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
         SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
 
-        Method m1 = class_getInstanceMethod(screenCls, sel1);
-        if (m1) {
-            Titanium_KernelForceWriteProtectBypass((void *)m1, (const void *)m1, sizeof(Method));
-            class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        } else {
-            class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        }
-
-        Method m2 = class_getInstanceMethod(screenCls, sel2);
-        if (m2) {
-            Titanium_KernelForceWriteProtectBypass((void *)m2, (const void *)m2, sizeof(Method));
-            class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        } else {
-            class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        }
+        // Sử dụng trực tiếp class_replaceMethod chuẩn của Runtime (tránh khóa Read-Only làm hỏng UIScreen)
+        class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
+        class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
     } @catch (__unused NSException *e) {}
 }
 
 // ====================================================================================================
-// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT & CỬ CHỈ NGẮT LIÊN HOÀN (BẢO VỆ CHỐNG LỖI CON TRỎ AN TOÀN 1000%)
+// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT & CỬ CHỈ NGẮT LIÊN HOÀN (GIỮ SNAPSHOT CHỐNG ĐEN MÀN HÌNH LÚC MỞ APP)
 // ====================================================================================================
 
 %group Group_Switcher30Apps_Virtualization
@@ -4060,8 +4017,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %hook SBAppSwitcherSettings
 
+// SỬA QUAN TRỌNG: Phải trả về YES (hoặc %orig) để giữ ảnh đệm hiển thị lúc mở app, tránh bị khung đen trống rỗng!
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    return NO;
+    return YES;
 }
 
 - (BOOL)shouldSimplifyForOptions:(long long)options {
@@ -4193,7 +4151,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 static inline void Titanium_EnforceMachFrameConstraint(void) {
     @try {
-        // Cưỡng bức phân vùng khung hình và luồng render đạt hiệu năng tối đa an toàn 1000%
         if ([NSThread isMainThread]) {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         }
@@ -4209,7 +4166,9 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBAppLaunchSettings
 
 - (double)delayBeforeAppLaunch {
-    // Tùy chọn: Giữ nguyên %orig để an toàn tuyệt đối, hoặc trả về 0.0 nếu muốn bỏ hoàn toàn độ trễ khởi động
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return 0.0;
+    } @catch (__unused NSException *e) {}
     return %orig;
 }
 
@@ -4226,7 +4185,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    // Giữ nguyên %orig để app kịp dựng scene, kết hợp với Group_Apple_Native_ColdBoot_Overdrive để bung trần ngay sau đó
     return %orig;
 }
 
@@ -4245,7 +4203,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 %hook UIApplication
 
-// Sửa kiểu trả về từ double thành id (vì _runWithMainScene trả về đối tượng tiến trình/scene thay vì kiểu số nguyên/thực)
 - (id)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     id origRet = %orig(scene, context, completion);
 
@@ -4254,8 +4211,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
-        } else {
-            /* V22: leave QoS scheduling to iOS to reduce sustained heat and contention. */
         }
     }
     return origRet;
@@ -6115,14 +6070,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
-// SỬA: Xé bỏ rào cản Fence đồng bộ của TransitionContext để render ngay lập tức không bị chờ đen màn hình
 %hook UIApplicationSceneTransitionContext
 
 - (BOOL)waitForFence {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            return NO;
-        }
+        // Để nguyên %orig cho khung hình đầu tiên khởi tạo an toàn, không ép cứng NO gây mất đồng bộ render
         return %orig;
     } @catch (__unused NSException *e) {
         return NO;
@@ -6131,14 +6083,8 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)setWaitForFence:(BOOL)wait {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            %orig(NO);
-            return;
-        }
         %orig(wait);
-    } @catch (__unused NSException *e) {
-        %orig(wait);
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
