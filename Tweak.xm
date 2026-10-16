@@ -6807,21 +6807,15 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %end
 
-// ====================================================================================================
-// TẦNG SÂU AN TOÀN: BẢO VỆ GIAO DỊCH RENDER & HÀNG ĐỢI ẢNH (TRÁNH DEADLOCK KHUNG HÌNH ĐẦU)
-// ====================================================================================================
-
 %hook CATransaction
-
 + (void)commit {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_EnableZeroLatencyPipeline();
+            Titanium_EnableZeroLatencyPipeline(); // Chỉ kích hoạt LowLatency hợp lệ, không phá vỡ giao dịch frame 0
         }
     } @catch (__unused NSException *e) {}
     %orig;
 }
-
 %end
 
 %hook CAImageQueue
