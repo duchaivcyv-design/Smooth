@@ -5331,16 +5331,11 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 Titanium_EnforceThreadVIPPolicy();
                 Titanium_EnableZeroLatencyPipeline();
                 
-                // ===== CƯỠNG BỨC XẢ BỘ ĐỆM RENDER NGAY LẬP TỨC TRÁNH ĐEN MÀN HÌNH LÚC ĐẦU =====
+                // Let UIKit/Core Animation schedule the initial window render normally.
                 @try {
                     [self setNeedsLayout];
                     [self layoutIfNeeded];
-                    [self.layer setNeedsDisplay];
-                    if ([CATransaction respondsToSelector:@selector(flush)]) {
-                        [CATransaction flush];
-                    }
                 } @catch (__unused NSException *subEx) {}
-                // ============================================================================
 
 
             }
