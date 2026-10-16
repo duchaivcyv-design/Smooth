@@ -6855,7 +6855,6 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %end
 
-%end
 
 // ====================================================================================================
 // TẦNG SÂU CỰC HẠN: KHÓA CỨNG GIAO DỊCH RENDER & HÀNG ĐỢI ẢNH (CHẶN ĐỨNG THAO TÁC ÉP XUỐNG 60HZ)
