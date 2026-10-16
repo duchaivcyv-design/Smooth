@@ -11,7 +11,7 @@ LIBRARY_NAME = BoostiPhone6sCore
 
 BoostiPhone6sCore_INSTALL_PATH = $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
-# Vá lỗi ngắt dòng bằng dấu gạch chéo ngược (\) chính xác
+# Khai báo file nguồn chuẩn cú pháp có gạch chéo ngược (\)
 BoostiPhone6sCore_FILES = Tweak.xm \
                           TitaniumKernelOverdrive.m
                           
@@ -57,26 +57,46 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
-# Trỏ chuẩn xác vào file entitlements đầy đủ đặc quyền chống văng app
+# Trỏ cờ codesign vào đúng tên file entitlements
 BoostiPhone6sCore_CODESIGN_FLAGS = -SBoostiPhone6sCore.entitlements
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# Quản lý subproject App (nếu có)
+# Quản lý subproject App
 SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
-# Kiểm tra sự tồn tại của file entitlements tối thượng trước khi build
+# Tự động kiểm tra file entitlements ở thư mục gốc hoặc tạo mới nếu hoàn toàn chưa có
 before-all::
-	@if [ ! -f "BoostiPhone6sCore.entitlements" ]; then \
+	@if [ ! -f "BoostiPhone6sCore.entitlements" ] && [ ! -f "BoostiPhone6s/BoostiPhone6sCore.entitlements" ]; then \
 		echo ""; \
-		echo "  [CẢNH BÁO] Không tìm thấy file BoostiPhone6sCore.entitlements ở thư mục gốc!"; \
-		echo "  Vui lòng đặt file entitlements chuẩn vào đây để tránh văng tweak!"; \
-		exit 1; \
+		echo "=== [BoostiPhone6sCore] Khởi tạo BoostiPhone6sCore.entitlements mặc định ở thư mục gốc ==="; \
+		printf '%s\n' \
+			'<?xml version="1.0" encoding="UTF-8"?>' \
+			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+			'<plist version="1.0">' \
+			'<dict>' \
+			'	<key>platform-application</key>' \
+			'	<true/>' \
+			'	<key>com.apple.private.skip-library-validation</key>' \
+			'	<true/>' \
+			'	<key>com.apple.private.security.no-sandbox</key>' \
+			'	<true/>' \
+			'	<key>com.apple.private.security.no-container</key>' \
+			'	<true/>' \
+			'	<key>get-task-allow</key>' \
+			'	<true/>' \
+			'	<key>task_for_pid-allow</key>' \
+			'	<true/>' \
+			'	<key>com.apple.private.memorystatus</key>' \
+			'	<true/>' \
+			'</dict>' \
+			'</plist>' > BoostiPhone6sCore.entitlements; \
+		echo "  [OK] Đã tự động tạo file entitlements chuẩn!"; \
 	else \
-		echo "=== [BoostiPhone6sCore] Đã tìm thấy file BoostiPhone6sCore.entitlements chuẩn ==="; \
+		echo "=== [BoostiPhone6sCore] Đã tìm thấy file entitlements ==="; \
 	fi
 
 after-stage::
