@@ -3655,7 +3655,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 - (SafeFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             if (maxTarget < 15.0f) maxTarget = 15.0f;
             if (maxTarget > 240.0f) maxTarget = 240.0f;
