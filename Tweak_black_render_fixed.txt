@@ -3637,7 +3637,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     @try {
         if (@available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_IsSpringBoard()) {
                 float maxTarget = (float)Titanium_GetEffectiveFrameCap();
                 if (maxTarget < 15.0f) maxTarget = 15.0f;
                 if (maxTarget > 240.0f) maxTarget = 240.0f;
@@ -3673,7 +3673,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     @try {
         if (@available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_IsSpringBoard()) {
                 float maxTarget = (float)Titanium_GetEffectiveFrameCap();
                 if (maxTarget < 15.0f) maxTarget = 15.0f;
                 if (maxTarget > 240.0f) maxTarget = 240.0f;
@@ -3708,7 +3708,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && anim) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && anim && Titanium_IsSpringBoard()) {
             if (@available(iOS 15.0, *)) {
                 if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
