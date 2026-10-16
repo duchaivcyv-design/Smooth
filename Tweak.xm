@@ -1255,6 +1255,7 @@ static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfo
 
 static BOOL g_SystemMasterReady = YES;
 
+// [V29.4]: GIỮ NGUYÊN 240Hz mặc định — người dùng đã ép được. Logic 60Hz trong 0.8s đầu xử lý ở makeKeyAndVisible.
 static volatile NSInteger g_cachedResolvedHz = 240;
 static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
@@ -5393,8 +5394,20 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                             float targetHz = (float)Titanium_GetEffectiveFrameCap();
                             if (targetHz < 15.0f) targetHz = 15.0f;
                             if (targetHz > 240.0f) targetHz = 240.0f;
-                            float floorRate = Titanium_RangeFloorForCap(targetHz);
-                            [scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, targetHz, targetHz)];
+
+                            // [V29.4 FIX ĐEN APP FRAME ĐẦU]: 60Hz trong 0.8s ĐẦU TIÊN để nạp khung hình đầu tiên
+                            // mượt mà, không bị đen do ép 240Hz quá sớm. Sau 0.8s mới BUNG TOÀN BỘ Hz/FPS cho app.
+                            [scene setPreferredFrameRateRange:SafeMakeFRR(60.0f, 60.0f, 60.0f)];
+
+                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                                @try {
+                                    float finalHz = (float)Titanium_GetEffectiveFrameCap();
+                                    if (finalHz < 15.0f) finalHz = 15.0f;
+                                    if (finalHz > 240.0f) finalHz = 240.0f;
+                                    float floorRate = Titanium_RangeFloorForCap(finalHz);
+                                    [scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, finalHz, finalHz)];
+                                } @catch (__unused NSException *subEx) {}
+                            });
                         }
                     } @catch (__unused NSException *e) {}
                 }
@@ -6307,9 +6320,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
-            // [V29 FIX ĐEN APP FRAME ĐẦU]: Delay EnforceMaxCPUPower/LockMainThreadFast 150ms
+            // [V29 FIX ĐEN APP FRAME ĐẦU #7]: Delay EnforceMaxCPUPower/LockMainThreadFast 500ms
             // để scene hiển thị frame đầu tiên trước, không bị block bởi syscall Mach → ĐEN.
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                 @try {
                     EnforceMaxCPUPower();
                     if (Titanium_IsSpringBoard()) {
