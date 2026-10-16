@@ -2888,17 +2888,19 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = bundleID && ([bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"]);
-            if (!isTikTok) {
+
+            // [V29 FIX ĐEN APP FRAME ĐẦU #3]: CHỈ ép 3 buffer + lowLatency cho GAME THẬT SỰ (layer >=70% màn hình).
+            // App video/UI có Metal layer nhỏ bị ép 3 buffer + lowLatency → GPU không hỗ trợ → render sai frame đầu → ĐEN.
+            if (g_isMetalGameProcess && !isTikTok) {
                 self.maximumDrawableCount = 3;
+                if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
+                    self.lowLatencyMode = YES;
+                }
             }
 
             // CHUẨN XÁC: Phải để YES để nếu frame đầu chưa sẵn sàng, Main Thread không bị treo chết (Deadlock đen màn hình)
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
                 self.allowsNextDrawableTimeout = YES;
-            }
-
-            if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES;
             }
         }
     } @catch (__unused NSException *e) {
@@ -2916,7 +2918,8 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 - (NSUInteger)maximumDrawableCount {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        // [V29 FIX ĐEN APP FRAME ĐẦU #4]: CHỈ ép 3 buffer cho GAME THẬT SỰ. App video/UI giữ nguyên giá trị gốc.
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && (g_isMetalGameProcess || Titanium_IsCurrentAppAGame())) {
             return 3;
         }
     } @catch (__unused NSException *e) {}
@@ -2925,7 +2928,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && (g_isMetalGameProcess || Titanium_IsCurrentAppAGame())) {
             %orig(3);
             return;
         }
@@ -2935,7 +2938,9 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 - (id)nextDrawable {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        // [V29 FIX ĐEN APP FRAME ĐẦU #5]: CHỈ gọi EnforceMaxCPUPower cho GAME THẬT SỰ.
+        // App video/UI gọi EnforceMaxCPUPower mỗi frame → set QoS liên tục → block luồng render → frame đầu chậm → ĐEN.
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && (g_isMetalGameProcess || Titanium_IsCurrentAppAGame())) {
             g_lastInteractionMachTime = mach_absolute_time();
             EnforceMaxCPUPower();
         }
