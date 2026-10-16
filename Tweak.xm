@@ -4180,7 +4180,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBAppLaunchSettings
 
 - (double)delayBeforeAppLaunch {
-    // Không xóa khoảng chuẩn bị của FrontBoard; giữ timing gốc giúp scene hoàn tất trước khi bỏ splash.
+    // Tùy chọn: Giữ nguyên %orig để an toàn tuyệt đối, hoặc trả về 0.0 nếu muốn bỏ hoàn toàn độ trễ khởi động
     return %orig;
 }
 
@@ -4197,7 +4197,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    // Splash screen tồn tại tới khi app sẵn sàng; không ép về 0 vì dễ lộ frame đen khi app tải chậm.
+    // Giữ nguyên %orig để app kịp dựng scene, kết hợp với Group_Apple_Native_ColdBoot_Overdrive để bung trần ngay sau đó
     return %orig;
 }
 
@@ -4216,9 +4216,9 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 %hook UIApplication
 
-// Loại bỏ hoàn toàn vòng lặp setNeedsDisplay cưỡng bức; giữ luồng User-Interactive thông suốt
-- (double)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
-    %orig;
+// Sửa kiểu trả về từ double thành id (vì _runWithMainScene trả về đối tượng tiến trình/scene thay vì kiểu số nguyên/thực)
+- (id)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
+    id origRet = %orig(scene, context, completion);
 
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.turboAppLaunch || CFG285.fixAppLaunchBlackScreen || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
         g_lastInteractionMachTime = mach_absolute_time();
@@ -4229,6 +4229,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             /* V22: leave QoS scheduling to iOS to reduce sustained heat and contention. */
         }
     }
+    return origRet;
 }
 
 - (void)_applicationWillEnterForeground {
