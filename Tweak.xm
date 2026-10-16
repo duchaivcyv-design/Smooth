@@ -330,12 +330,23 @@ typedef struct __attribute__((packed)) {
 } ApexV285ProPayload;
 #endif
 
+static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *p) {
+    uint32_t flags = 0;
+    memcpy(&flags, &p->reserved[32], sizeof(uint32_t));
+    return flags;
+}
+
+static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *p, uint32_t flags) {
+    memcpy(&p->reserved[32], &flags, sizeof(uint32_t));
+}
+
 static inline BOOL Titanium_IsAIApp(void);
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
+
 
 // --- UIKIT CORE & DISPATCHER ---
 @interface UIEvent (TitaniumApexPrivate)
@@ -1695,6 +1706,7 @@ static BOOL Titanium_CheckAndPreventBootloopUniversal(void) {
         return YES;
     }
 }
+
 // ====================================================================================================
 // BOOST CONFIGURATION ENGINE (V28.7 PRO MAX - CHUẨN DẢI TÙY CHỈNH 15HZ - 240HZ TRONG APP)
 // ====================================================================================================
@@ -1952,16 +1964,6 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 #define IPC_FLAG_HYPER_MEM_GUARD    (1U << 16)
 #define IPC_FLAG_ZERO_LAG_NEURAL    (1U << 17)
 #define IPC_FLAG_RATE_LOCKED        (1U << 18)
-
-static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *p) {
-    uint32_t flags = 0;
-    memcpy(&flags, &p->reserved[32], sizeof(uint32_t));
-    return flags;
-}
-
-static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *p, uint32_t flags) {
-    memcpy(&p->reserved[32], &flags, sizeof(uint32_t));
-}
 
 - (void)loadSettings {
     @autoreleasepool {
@@ -2871,12 +2873,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             self.maximumDrawableCount = 3;
         }
 
-        // Bỏ trần V-Sync theo mức Hz đã cấu hình
-        if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
-            NSInteger targetCap = Titanium_GetEffectiveFrameCap();
-            [self setDisplaySyncEnabled:(targetCap <= 60)];
-        }
-
         if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
             self.allowsNextDrawableTimeout = YES;
         }
@@ -2892,11 +2888,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-        NSInteger targetCap = Titanium_GetEffectiveFrameCap();
-        %orig(targetCap <= 60 ? YES : NO);
-        return;
-    }
     %orig(enabled);
 }
 
@@ -2947,19 +2938,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %hook UIPanGestureRecognizer
 
 - (CGPoint)translationInView:(UIView *)view {
-    CGPoint original = %orig(view);
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        UIGestureRecognizerState st = self.state;
-        if (st == UIGestureRecognizerStateChanged || st == UIGestureRecognizerStateBegan) {
-            CGPoint velocity = [self velocityInView:view];
-            if (isfinite(velocity.x) && isfinite(velocity.y)) {
-                const CGFloat kLeadFactor = 0.0f;
-                original.x += velocity.x * kLeadFactor;
-                original.y += velocity.y * kLeadFactor;
-            }
-        }
-    }
-    return original;
+    return %orig(view);
 }
 
 %end
@@ -3245,25 +3224,12 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ/FPS THEO APP (15 - 240HZ) + ÉP DỰNG HÌNH 0.0MS + BƠM XUNG THỰC CADISPLAYLINK
+// NHÓM 3: KHÓA CỨNG HZ/FPS THEO APP (15 - 240HZ) + ÉP DỰNG HÌNH 0.0MS (ZERO-CRASH, AN TOÀN ĐA LUỒNG)
 // ====================================================================================================
-
-static const void *kTitaniumLinkTargetKey = &kTitaniumLinkTargetKey;
-static const void *kTitaniumLinkSelKey    = &kTitaniumLinkSelKey;
-static const void *kTitaniumLinkPumpKey   = &kTitaniumLinkPumpKey;
 
 %group Group_FluidTransitions_Pacing
 
 %hook CADisplayLink
-
-+ (CADisplayLink *)displayLinkWithTarget:(id)target selector:(SEL)sel {
-    CADisplayLink *link = %orig(target, sel);
-    if (link && target && sel) {
-        objc_setAssociatedObject(link, kTitaniumLinkTargetKey, target, OBJC_ASSOCIATION_ASSIGN);
-        objc_setAssociatedObject(link, kTitaniumLinkSelKey, [NSValue valueWithPointer:(const void *)sel], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return link;
-}
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
     %orig(runLoop, mode);
@@ -3280,52 +3246,7 @@ static const void *kTitaniumLinkPumpKey   = &kTitaniumLinkPumpKey;
                 }
             }
         } @catch (__unused NSException *e) {}
-
-        // Kích hoạt bộ bơm nhịp độc lập giúp các Tweak đo FPS chuyên sâu đo chuẩn xác dải tần số đã chọn
-        if (cap > 60 && runLoop == [NSRunLoop mainRunLoop] && !objc_getAssociatedObject(self, kTitaniumLinkPumpKey)) {
-            id target = objc_getAssociatedObject(self, kTitaniumLinkTargetKey);
-            NSValue *selVal = objc_getAssociatedObject(self, kTitaniumLinkSelKey);
-            if (target && selVal) {
-                NSString *targetCls = NSStringFromClass([target class]) ?: @"";
-                if ([targetCls containsString:@"FPS"] || [targetCls containsString:@"Hud"] ||
-                    [targetCls containsString:@"HUD"] || [targetCls containsString:@"Monitor"] ||
-                    [targetCls containsString:@"Meter"] || [targetCls containsString:@"Label"] ||
-                    [targetCls containsString:@"Scroll"] || [targetCls containsString:@"Display"]) {
-                    SEL actionSel = (SEL)[selVal pointerValue];
-                    __weak CADisplayLink *weakLink = self;
-                    __weak id weakTarget = target;
-                    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, DISPATCH_TIMER_STRICT, dispatch_get_main_queue());
-                    uint64_t intervalNs = (uint64_t)(1000000000.0 / (double)cap);
-                    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, intervalNs), intervalNs, 0);
-                    dispatch_source_set_event_handler(timer, ^{
-                        CADisplayLink *strongLink = weakLink;
-                        id strongTarget = weakTarget;
-                        if (!strongLink || !strongTarget) {
-                            dispatch_source_cancel(timer);
-                            return;
-                        }
-                        if (!strongLink.isPaused && [strongTarget respondsToSelector:actionSel]) {
-                            NSInteger liveCap = Titanium_GetEffectiveFrameCap();
-                            if (liveCap > 60) {
-                                ((void (*)(id, SEL, id))objc_msgSend)(strongTarget, actionSel, strongLink);
-                            }
-                        }
-                    });
-                    objc_setAssociatedObject(self, kTitaniumLinkPumpKey, timer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                    dispatch_resume(timer);
-                }
-            }
-        }
     }
-}
-
-- (void)invalidate {
-    dispatch_source_t timer = objc_getAssociatedObject(self, kTitaniumLinkPumpKey);
-    if (timer) {
-        dispatch_source_cancel(timer);
-        objc_setAssociatedObject(self, kTitaniumLinkPumpKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    %orig;
 }
 
 - (NSInteger)preferredFramesPerSecond {
@@ -3813,8 +3734,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isContinuousSwiping = YES;
         g_isInteracting = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         #if TITANIUM_ENABLE_RATE_KEEPER
@@ -3828,8 +3750,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isContinuousSwiping = YES;
         g_isInteracting = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
     %orig;
 }
@@ -3838,8 +3761,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isContinuousSwiping = NO;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -3847,8 +3771,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isContinuousSwiping = NO;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -3866,8 +3791,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_begin {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -3888,14 +3814,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (double)deckSwipeSpeedFactor {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.reduceMultiTaskLag) {
-        return 1.35;
+        return 1.25;
     }
     return %orig;
 }
 
 - (double)cardFlyInDuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.fixAppExitStutter || g_syncPayloadV285.antiStutterExit)) {
-        return 0.20;
+        return 0.22;
     }
     return %orig;
 }
@@ -3906,7 +3832,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBAppSwitcherSettings
 
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    // Luôn trả về NO để giải phóng VRAM GPU, triệt tiêu 100% lỗi JetsamEvent tràn RAM khi lướt đa nhiệm
     return NO;
 }
 
@@ -3933,8 +3858,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         #if TITANIUM_ENABLE_RATE_KEEPER
@@ -3962,8 +3888,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         #if TITANIUM_ENABLE_RATE_KEEPER
@@ -3987,8 +3914,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4025,7 +3953,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (double)zoomDuration {
     double orig = %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return (orig > 0.18) ? (orig * 0.72) : orig;
+        return (orig > 0.18) ? (orig * 0.75) : orig;
     }
     return orig;
 }
@@ -4033,7 +3961,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (double)launchDuration {
     double orig = %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return (orig > 0.18) ? (orig * 0.72) : orig;
+        return (orig > 0.18) ? (orig * 0.75) : orig;
     }
     return orig;
 }
@@ -4057,8 +3985,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         #if TITANIUM_ENABLE_RATE_KEEPER
@@ -4082,8 +4011,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         Titanium_EnableZeroLatencyPipeline();
@@ -4093,8 +4023,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_applicationWillEnterForeground {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         Titanium_ReapplyFrameRateToAllScenes();
@@ -4192,8 +4123,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)pushViewController:(UIViewController *)viewController animated:(BOOL)animated {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         Titanium_TriggerInstantTouchBurst();
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4203,8 +4135,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (UIViewController *)popViewControllerAnimated:(BOOL)animated {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         Titanium_TriggerInstantTouchBurst();
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4213,7 +4146,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 5. TỐI ƯU CHUYỂN CẢNH & HIỂN THỊ POPUP/QUẢNG CÁO TỨC THÌ (BẺ KHÓA CPU ĐẦU VÀO)
+// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (CHUẨN HÓA KHÔNG CAN THIỆP LAYER SPEED GÂY TREO VIDEO VÀ BẢNG CHIA SẺ)
 %hook UIViewController
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
@@ -4226,18 +4159,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         Titanium_EnforceThreadVIPPolicy();
         Titanium_TriggerInstantTouchBurst();
 
-        if (flag && viewControllerToPresent) {
-            viewControllerToPresent.view.layer.speed = 1.6f;
-        }
-
-        __weak UIViewController *weakTarget = viewControllerToPresent;
         void (^safeCompletion)(void) = ^{
-            if (weakTarget && weakTarget.isViewLoaded) {
-                weakTarget.view.layer.speed = 1.0f;
-            }
             g_isInteracting = NO;
             g_lastInteractiveTick = mach_absolute_time();
-
             if (completion) {
                 completion();
             }
@@ -4245,9 +4169,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(450 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
             if (g_isInteracting) {
-                if (weakTarget && weakTarget.isViewLoaded) {
-                    weakTarget.view.layer.speed = 1.0f;
-                }
                 g_isInteracting = NO;
                 g_lastInteractiveTick = mach_absolute_time();
             }
@@ -4268,10 +4189,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
         Titanium_TriggerInstantTouchBurst();
-
-        if (flag && self.isViewLoaded) {
-            self.view.layer.speed = 1.6f;
-        }
 
         void (^safeDismissCompletion)(void) = ^{
             g_isInteracting = NO;
@@ -4494,7 +4411,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG HỆ THỐNG (BẺ KHÓA HIỆU NĂNG TOÀN DIỆN)
+// NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG HỆ THỐNG (BẺ KHÓA HIỆU NĂNG TOÀN DIỆN & ZERO-LATENCY)
 // ====================================================================================================
 
 %group Group_Display_SpringBoardV285
@@ -4505,8 +4422,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)handleFluidSwitcherGesture:(id)gesture {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4519,8 +4437,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)saveScreenshotsWithCompletion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
     }
     %orig;
@@ -4533,8 +4452,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)increaseVolume {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isVolumeHoldingV285 = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
     }
     %orig;
@@ -4543,8 +4463,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)decreaseVolume {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isVolumeHoldingV285 = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
     }
     %orig;
@@ -4553,8 +4474,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)changeVolumeByDelta:(float)delta {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isVolumeHoldingV285 = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
     }
     %orig;
@@ -4564,31 +4486,37 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isVolumeHoldingV285 = NO;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 %end
 
-// ==================== CONTROL CENTER & NOTIFICATION CENTER ====================
+// ==================== CONTROL CENTER & NOTIFICATION CENTER (TRIỆT TIÊU DELAY 1-2S) ====================
 
 %hook SBControlCenterController
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
     %orig;
 }
 
 - (void)dismissAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4601,18 +4529,23 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
     %orig;
 }
 
 - (void)dismissAnimated:(BOOL)animated completion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4621,7 +4554,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// ==================== CUỘN MÀN HÌNH CHÍNH & TRANG ICON ====================
+// ==================== CUỘN MÀN HÌNH CHÍNH, TRANG ICON & WIDGET TODAY VIEW ====================
 
 %hook SBIconScrollView
 
@@ -4643,8 +4576,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isScrollingActive = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -4652,8 +4586,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isScrollingActive = YES;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -4663,8 +4598,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4673,13 +4609,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// ==================== THƯ MỤC (FOLDER) - TỐC ĐỘ COLOROS SIÊU MƯỢT ====================
+// ==================== THƯ MỤC (FOLDER) - ĐỒNG BỘ CHUYỂN CẢNH MƯỢT TỨC THÌ ====================
 
 %hook SBFolderControllerAnimationSettings
 
 - (double)duration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
-        return 0.20;
+        return 0.18;
     }
     return %orig;
 }
@@ -4690,10 +4626,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)prepareToOpen {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
     %orig;
 }
@@ -4701,8 +4641,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)didClose {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -4712,18 +4653,23 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)openFolderAnimated:(BOOL)animated withCompletion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
     %orig;
 }
 
 - (void)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4738,7 +4684,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (double)delayBeforeOpening {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.zeroLatencyTouch)) {
-        return 0.04;
+        return 0.02;
     }
     return %orig;
 }
@@ -4751,8 +4697,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4762,8 +4709,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)viewDidDisappear:(BOOL)animated {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -4773,8 +4721,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4787,8 +4736,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)willActivate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -4817,16 +4767,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)_updatePreferredContentSize {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 - (void)startPictureInPicture {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
         }
@@ -4836,8 +4788,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)stopPictureInPictureAnimated:(BOOL)animated {
     %orig(animated);
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
         }
@@ -4851,8 +4804,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
     %orig(pid, sceneId, animated, completion);
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_LockMainThreadFast();
     }
 }
@@ -4864,8 +4818,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)startPictureInPicture {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
@@ -4873,8 +4828,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)stopPictureInPicture {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
@@ -4893,8 +4849,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)performSinglePressAction {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
     }
@@ -4903,8 +4860,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)performDoublePressAction {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
     }
@@ -4925,8 +4883,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)handleApplicationLaunch:(id)application {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_LockMainThreadFast();
     }
     %orig(application);
@@ -4946,8 +4905,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_sendWillEnterForegroundCallbacks {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
@@ -4963,8 +4923,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)makeKeyAndVisible {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
 
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
@@ -4993,8 +4954,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
@@ -5006,8 +4968,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
         }
@@ -5022,8 +4985,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (BOOL)animateAlongsideTransition:(void (^)(id context))animation
                         completion:(void (^)(id context))completion {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
@@ -5041,8 +5005,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                                   state:(NSInteger)state 
                             transition:(id)transition {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
@@ -5058,8 +5023,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)presentationTransitionWillBegin {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
@@ -5071,8 +5037,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)dismissalTransitionWillBegin {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         if (!Titanium_IsSpringBoard()) {
             EnforceMaxCPUPower();
             Titanium_EnableZeroLatencyPipeline();
@@ -5092,8 +5059,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                  animations:(void (^)(void))animations
                  completion:(void (^)(BOOL finished))completion {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_EnableZeroLatencyPipeline();
         options |= UIViewAnimationOptionAllowUserInteraction;
     }
@@ -5108,35 +5076,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                  animations:(void (^)(void))animations
                  completion:(void (^)(BOOL finished))completion {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_EnableZeroLatencyPipeline();
         options |= UIViewAnimationOptionAllowUserInteraction;
     }
     %orig(duration, delay, dampingRatio, velocity, options, animations, completion);
-}
-
-%end
-
-// GIA TỐC DISPLAYLINK VÀ VẼ BẤT ĐỒNG BỘ CHO APP THỨ BA
-%hook CADisplayLink
-
-- (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
-    %orig(runLoop, mode);
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 15) cap = 15;
-        if (cap > 240) cap = 240;
-        @try {
-            self.preferredFramesPerSecond = cap;
-            if (@available(iOS 15.0, *)) {
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float fCap = (float)cap;
-                    self.preferredFrameRateRange = SafeMakeFRR(fCap, fCap, fCap);
-                }
-            }
-        } @catch (__unused NSException *e) {}
-    }
 }
 
 %end
@@ -5183,8 +5129,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         %orig;
     }
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5197,8 +5144,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         %orig;
     } @catch (__unused NSException *e) {}
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
     }
 }
@@ -5227,8 +5175,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         %orig;
     }
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5247,7 +5196,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (NSProcessInfoThermalState)thermalState {
     NSProcessInfoThermalState real = %orig;
     g_thermalSeriousV285 = (real >= NSProcessInfoThermalStateSerious);
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        ((CFG285 && CFG285.antiThermalThrottling) || g_syncPayloadV285.thermalShield)) {
         if (real >= NSProcessInfoThermalStateCritical) {
             return real;
         }
@@ -5258,7 +5208,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (BOOL)isLowPowerModeEnabled {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        if (CFG285.batterySaver60Hz || g_syncPayloadV285.powerSaveModeActive) {
+        if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
             return YES;
         }
         return NO;
@@ -5271,7 +5221,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 14: ĐỘNG CƠ METAL GAME OVERDRIVE (ĐÃ VIẾT ĐỦ THÂN HÀM VÀ MỞ KHÓA LUỒNG)
+// NHÓM 14: ĐỘNG CƠ METAL GAME OVERDRIVE
 // ====================================================================================================
 
 %group Group_Titanium_Game_Metal_Overdrive
@@ -5291,7 +5241,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (BẺ KHÓA TOÀN LỰC KERNEL EL1 & MỞ KHÓA BĂNG THÔNG GPU)
+// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (TỐI ƯU HÓA TẦNG SÂU CHIP A11 & GIẢI PHÓNG AUDIO/3D)
 // ====================================================================================================
 
 #ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
@@ -5404,24 +5354,15 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
+// BỎ CAN THIỆP SPAM MAIN THREAD VÀO ENQUEUE/COMMIT ĐỂ CHỐNG NGHẼN CPU & TRIỆT TIÊU RÈ TIẾNG ÂM THANH GAME 3D
 %hook _MTLCommandBuffer
 
 - (void)enqueue {
     %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
-        EnforceMaxCPUPower();
-    }
 }
 
 - (void)commit {
     %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
-        EnforceMaxCPUPower();
-    }
 }
 
 %end
@@ -5459,15 +5400,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
+// BỎ LỆNH TẮT RĂNG CƯA allowsEdgeAntialiasing = NO ĐỂ TRIỆT TIÊU LỖI TÁCH ĐÔI CHỮ KHI CUỘN
 %hook CALayer
 
 - (void)setCornerRadius:(CGFloat)cornerRadius {
     %orig(cornerRadius);
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && cornerRadius > 0.0f) {
-        if (g_isInteracting || g_isScrollingActive) {
-            self.allowsEdgeAntialiasing = NO;
-        }
-    }
 }
 
 %end
@@ -5492,8 +5429,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_TriggerInstantTouchBurst();
         EnforceMaxCPUPower();
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
@@ -5505,8 +5443,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_TriggerInstantTouchBurst();
         EnforceMaxCPUPower();
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
@@ -5522,8 +5461,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         g_isInteracting = YES;
         g_activeAnimationCount++;
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         Titanium_TriggerInstantTouchBurst();
         EnforceMaxCPUPower();
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
@@ -5601,8 +5541,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 - (id)predictedTouchesForTouch:(UITouch *)touch {
     id predicted = %orig(touch);
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || CFG285.zeroLagNeural || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnableZeroLatencyPipeline();
     }
@@ -5611,8 +5552,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)addTouch:(UITouch *)touch fromEvent:(UIEvent *)event {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || CFG285.zeroLagNeural || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
     }
     %orig(touch, event);
@@ -5624,8 +5566,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)_updateGesturesForEvent:(UIEvent *)event {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_EnforceThreadVIPPolicy();
     }
@@ -5638,8 +5581,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (BOOL)_shouldTryToBeginWithEvent:(UIEvent *)event {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         Titanium_TriggerInstantTouchBurst();
         Titanium_LockMainThreadFast();
@@ -5700,11 +5644,6 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook NSRunLoop
 
 - (BOOL)runMode:(NSRunLoopMode)mode beforeDate:(NSDate *)limitDate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        if (g_isInteracting || g_isScrollingActive || g_isUserTouchingScreen) {
-            EnforceMaxCPUPower();
-        }
-    }
     return %orig(mode, limitDate);
 }
 
@@ -5713,7 +5652,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook CALayer
 
 - (BOOL)drawsAsynchronously {
-    return %orig; // Giữ nguyên luồng gốc để hình ảnh và chữ không bị vỡ hạt khi cuộn
+    return %orig;
 }
 
 %end
@@ -5722,8 +5661,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)updateSettings:(id)settings withTransitionContext:(id)context {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
@@ -5747,8 +5687,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 - (void)_readySceneForDisplay {
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        g_lastInteractionMachTime = mach_absolute_time();
-        g_lastInteractiveTick = g_lastInteractionMachTime;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
         EnforceMaxCPUPower();
         if (Titanium_IsSpringBoard()) {
             Titanium_LockMainThreadFast();
@@ -5894,8 +5835,6 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 // ====================================================================================================
 // BẺ KHÓA PHẦN CỨNG TẦNG SÂU (MỞ KHÓA NÚT 90FPS/120FPS/240FPS TRONG MỌI GAME & ỨNG DỤNG)
-// Giả lập sysctl MIB + sysctlbyname + uname + Apple A17 Pro GPU (iPhone16,2)
-// AN TOÀN 100%: KHÔNG HOOK MGCOPYANSWER TRÊN SPRINGBOARD ĐỂ TRIỆT TIÊU LỖI SIGILL!
 // ====================================================================================================
 
 static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
@@ -6049,7 +5988,7 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 
 - (unsigned long long)physicalMemory {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-        return 8ULL * 1024ULL * 1024ULL * 1024ULL; // Báo 8GB RAM mở khóa Ultra FPS trong Game
+        return 8ULL * 1024ULL * 1024ULL * 1024ULL;
     }
     return %orig;
 }
@@ -6301,7 +6240,7 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE (ĐÃ HỢP NHẤT KHÔNG TRÙNG HOOK VỚI NHÓM KHÁC) ███
+// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE ███
 // ====================================================================================================
 
 static NSString *Titanium_ResolveEffectiveLanguage(void) {
@@ -6700,18 +6639,23 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
          andReport:(BOOL)report 
    withDescription:(id)description 
         completion:(id)completion {
-    if (reason == 1 || [description containsString:@"background"] || [description containsString:@"idle"]) {
-        if (completion) {
-            void (^compBlock)(void) = (void (^)(void))completion;
-            compBlock();
+    if (CFG285 && !CFG285.autoKillBackground) {
+        if (reason == 1 || [description containsString:@"background"] || [description containsString:@"idle"]) {
+            if (completion) {
+                void (^compBlock)(void) = (void (^)(void))completion;
+                compBlock();
+            }
+            return;
         }
-        return;
     }
     %orig;
 }
 
 - (BOOL)isPendingExit {
-    return NO;
+    if (CFG285 && !CFG285.autoKillBackground) {
+        return NO;
+    }
+    return %orig;
 }
 
 %end
@@ -6720,6 +6664,9 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 - (void)handleApplicationSuspended:(id)application {
     %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285 && CFG285.autoKillBackground) {
+        Titanium_BackgroundPurgeMemory();
+    }
 }
 
 %end
@@ -7272,7 +7219,8 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "akd") != NULL ||
             strcasestr(progName, "identityservicesd") != NULL ||
             strcasestr(progName, "imagent") != NULL ||
-            strcasestr(progName, "bluetoothd") != NULL) {
+            strcasestr(progName, "bluetoothd") != NULL ||
+            strcasestr(progName, "profiled") != NULL) {
             return;
         }
 
