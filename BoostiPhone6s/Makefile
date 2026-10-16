@@ -38,6 +38,8 @@ BoostiPhone6sApp_CFLAGS = -fobjc-arc \
 # LINKER FLAGS
 BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip
 
+BoostiPhone6sCore_CODESIGN_FLAGS = -Sentitlements.plist
+
 include $(THEOS_MAKE_PATH)/application.mk
 
 # ĐẢM BẢO QUYỀN THỰC THI CHO BINARY VÀ GÓI APP
