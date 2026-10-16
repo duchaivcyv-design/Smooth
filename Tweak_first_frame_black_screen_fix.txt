@@ -5371,7 +5371,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             if (!Titanium_IsSpringBoard()) {
                 EnforceMaxCPUPower();
                 Titanium_EnforceThreadVIPPolicy();
-                // Keep the platform's default latency mode until the first frame is presented.
+                // Keep native CoreAnimation latency mode while the first frame is prepared.
                 
                 // Let UIKit/CoreAnimation schedule the initial layout and first frame normally.
 
