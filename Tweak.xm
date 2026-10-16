@@ -2900,9 +2900,8 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
                 self.lowLatencyMode = YES;
             }
 
-            if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
-                self.framebufferOnly = YES;
-            }
+            // Preserve the app's own CAMetalLayer framebufferOnly setting.
+            // Overriding it here can break pipelines that sample or read back drawable textures.
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -3781,14 +3780,8 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
             Titanium_EnableZeroLatencyPipeline();
             
-            // ===== CƯỠNG BỨC XẢ BỘ ĐỆM RENDER CHỐNG ĐEN MÀN HÌNH LÚC ĐẦU =====
-            @try {
-                [self setNeedsDisplay];
-                if ([CATransaction respondsToSelector:@selector(flush)]) {
-                    [CATransaction flush];
-                }
-            } @catch (__unused NSException *subEx) {}
-            // ======================================================================
+            // Do not force a redraw/transaction flush on every layer layout.
+            // UIKit/CoreAnimation will schedule drawing through its normal pipeline.
         }
     } @catch (__unused NSException *e) {
         %orig;
