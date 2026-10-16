@@ -3780,6 +3780,15 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
         %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
             Titanium_EnableZeroLatencyPipeline();
+            
+            // ===== CƯỠNG BỨC XẢ BỘ ĐỆM RENDER CHỐNG ĐEN MÀN HÌNH LÚC ĐẦU =====
+            @try {
+                [self setNeedsDisplay];
+                if ([CATransaction respondsToSelector:@selector(flush)]) {
+                    [CATransaction flush];
+                }
+            } @catch (__unused NSException *subEx) {}
+            // ======================================================================
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -5380,6 +5389,8 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 
 - (void)makeKeyAndVisible {
     @try {
+        %orig; // Thực thi lệnh gốc trước để cửa sổ khởi tạo hoàn tất cấu trúc thô
+        
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
@@ -5390,6 +5401,17 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 Titanium_EnforceThreadVIPPolicy();
                 Titanium_EnableZeroLatencyPipeline();
                 
+                // ===== CƯỠNG BỨC XẢ BỘ ĐỆM RENDER NGAY LẬP TỨC TRÁNH ĐEN MÀN HÌNH LÚC ĐẦU =====
+                @try {
+                    [self setNeedsLayout];
+                    [self layoutIfNeeded];
+                    [self.layer setNeedsDisplay];
+                    if ([CATransaction respondsToSelector:@selector(flush)]) {
+                        [CATransaction flush];
+                    }
+                } @catch (__unused NSException *subEx) {}
+                // ============================================================================
+
                 if (@available(iOS 15.0, *)) {
                     @try {
                         UIWindowScene *scene = self.windowScene;
@@ -5404,7 +5426,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 }
             }
         }
-        %orig;
     } @catch (__unused NSException *e) {
         %orig;
     }
