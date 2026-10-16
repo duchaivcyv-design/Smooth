@@ -5371,10 +5371,9 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             if (!Titanium_IsSpringBoard()) {
                 EnforceMaxCPUPower();
                 Titanium_EnforceThreadVIPPolicy();
+                // Keep the platform's default latency mode until the first frame is presented.
                 
-                // Avoid changing CoreAnimation latency mode before the app's first frame.
-                // Leave first-frame layout scheduling to UIKit/CoreAnimation.
-                // Do not inject an extra layout pass during app startup.
+                // Let UIKit/CoreAnimation schedule the initial layout and first frame normally.
 
                 if (@available(iOS 15.0, *)) {
                     @try {
@@ -6764,8 +6763,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %end
 
-// CATransaction commit is left untouched so the app's initial CoreAnimation
-// transaction can complete using the platform's default scheduling.
+// CATransaction commit is intentionally left unhooked to preserve native first-frame scheduling.
 
 %hook CAImageQueue
 
@@ -7036,8 +7034,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
                 } @catch (__unused NSException *e) {}
             }
 
-            // Leave the first drawable/display cycle to UIKit/CoreAnimation.
-            // No forced setNeedsDisplay or latency-mode change during scene attachment.
+            // Let UIKit/CoreAnimation schedule the first display cycle after scene attachment.
         }
     } @catch (__unused NSException *e) {
         %orig;
