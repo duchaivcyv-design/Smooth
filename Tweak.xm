@@ -2605,23 +2605,23 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                 Titanium_WriteDisabledAppsFile(disabledJoined);
                 CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
             });
-        } // Đóng ngoặc cho if (diskDict)
-    } // Đóng ngoặc cho phương thức loadSettings / sync
-} // Đóng ngoặc cho @implementation BoostConfigV285Pro
+        } 
+    } 
 
-- (NSInteger)resolvedTargetHz {
-    return g_cachedResolvedHz;
-}
+    // Đưa các phương thức này NẰM BÊN TRONG @implementation
+    - (NSInteger)resolvedTargetHz {
+        return g_cachedResolvedHz;
+    }
 
-- (NSInteger)resolvedTargetFPS {
-    return g_cachedResolvedFPS;
-}
+    - (NSInteger)resolvedTargetFPS {
+        return g_cachedResolvedFPS;
+    }
 
-- (NSInteger)resolvedFrameInterval {
-    return 1;
-}
+    - (NSInteger)resolvedFrameInterval {
+        return 1;
+    }
 
-@end
+@end // Đóng @implementation MỘT LẦN DUY NHẤT ở đây
 
 static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     if (CFG285) {
