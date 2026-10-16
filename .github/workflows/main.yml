@@ -18,7 +18,6 @@ on:
           - rootful
           - roothide
 
-# Tự động hủy ngay các bản build cũ đang bị kẹt hàng đợi khi bạn lưu code mới
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -70,13 +69,12 @@ jobs:
           brew install ldid make
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: Pre-check & Static Code Lint (Quét lỗi cú pháp trước khi Build)
+      - name: Pre-check & Static Code Lint (Chỉ quét file nguồn gốc, loại bỏ template theos)
         run: |
-          echo "=== Đang quét lỗi cú pháp mã nguồn C/Obj-C ==="
-          find . -name "*.m" -o -name "*.mm" | while read file; do
-            echo "Linting: $file"
-            clang -fsyntax-only -fobjc-arc -IHeaders -I. "$file" || true
-          done
+          echo "=== Đang quét lỗi cú pháp file TitaniumKernelOverdrive.m ==="
+          if [ -f "TitaniumKernelOverdrive.m" ]; then
+            clang -fsyntax-only -fobjc-arc -IHeaders -I. "TitaniumKernelOverdrive.m" || echo "Cảnh báo cú pháp trong TitaniumKernelOverdrive.m"
+          fi
           echo "=== Hoàn tất quét sơ bộ ==="
 
       - name: build rootless
