@@ -57,8 +57,6 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
-BoostiPhone6sCore_CODESIGN_FLAGS = -Sentitlements.plist
-
 include $(THEOS_MAKE_PATH)/library.mk
 
 # Quản lý subproject App
