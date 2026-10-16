@@ -1328,7 +1328,7 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_ENABLE_WATCHDOG_IMMUNITY 0
 
 #undef TITANIUM_ENABLE_METAL_ENV_TWEAKS
-#define TITANIUM_ENABLE_METAL_ENV_TWEAKS 1
+#define TITANIUM_ENABLE_METAL_ENV_TWEAKS 0
 
 #undef TITANIUM_LITE_MODE
 #define TITANIUM_LITE_MODE 0
@@ -1343,7 +1343,7 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_ENABLE_RATE_KEEPER 1
 
 #undef TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES
-#define TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES 1
+#define TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES 0
 
 #undef TITANIUM_ENABLE_TASK_QOS_TIER
 #define TITANIUM_ENABLE_TASK_QOS_TIER 1
@@ -1352,7 +1352,8 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 0
 
 static inline BOOL Titanium_DisplaySpoofAllowed(void) {
-    return YES;
+    NSString *processName = [[NSProcessInfo processInfo] processName];
+    return processName && [processName isEqualToString:@"SpringBoard"];
 }
 
 static inline BOOL Titanium_IsClassicHomeButtonDevice(void) {
@@ -1426,6 +1427,9 @@ static inline uint64_t Titanium_NanosToMachTicks(uint64_t nanos) {
 // ====================================================================================================
 
 static inline void Titanium_EnableZeroLatencyPipeline(void) {
+    // The private CoreAnimation low-latency transaction override is reserved
+    // for SpringBoard; third-party apps retain the native rendering pipeline.
+    if (!Titanium_IsSpringBoard()) return;
     if ([CATransaction respondsToSelector:@selector(_setLowLatency:)]) {
         [CATransaction _setLowLatency:YES];
     }
@@ -1506,8 +1510,6 @@ static void Titanium_ApplySiliconDeepOptimizations(void) {
     setenv("MTL_FORCE_PARALLEL_ENCODE", "1", 1);
 #endif
     setenv("CA_DEBUG_TRANSACTIONS", "0", 1);
-    setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
-    setenv("CA_DISABLE_FRAME_RATE_LIMIT", "1", 1);
 
     Titanium_DisableKernelThreadThrottling();
 }
@@ -2886,22 +2888,8 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
                 g_isMetalGameProcess = YES;
             }
 
-            NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-            BOOL isTikTok = bundleID && ([bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"]);
-            if (!isTikTok) {
-                self.maximumDrawableCount = 3;
-            }
-
-            if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-                self.allowsNextDrawableTimeout = YES;
-            }
-
-            if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES;
-            }
-
-            // Preserve the app's own CAMetalLayer framebufferOnly setting.
-            // Overriding it here can break pipelines that sample or read back drawable textures.
+            // Preserve the app's native drawable count, timeout, latency mode,
+            // and framebuffer configuration. Do not force CAMetalLayer properties.
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -2914,25 +2902,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
     } @catch (__unused NSException *e) {
         %orig(enabled);
     }
-}
-
-- (NSUInteger)maximumDrawableCount {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return 3;
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
-- (void)setMaximumDrawableCount:(NSUInteger)count {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(3);
-            return;
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(count);
 }
 
 - (id)nextDrawable {
@@ -5394,29 +5363,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 Titanium_EnforceThreadVIPPolicy();
                 Titanium_EnableZeroLatencyPipeline();
                 
-                // ===== CƯỠNG BỨC XẢ BỘ ĐỆM RENDER NGAY LẬP TỨC TRÁNH ĐEN MÀN HÌNH LÚC ĐẦU =====
-                @try {
-                    [self setNeedsLayout];
-                    [self layoutIfNeeded];
-                    [self.layer setNeedsDisplay];
-                    if ([CATransaction respondsToSelector:@selector(flush)]) {
-                        [CATransaction flush];
-                    }
-                } @catch (__unused NSException *subEx) {}
-                // ============================================================================
-
-                if (@available(iOS 15.0, *)) {
-                    @try {
-                        UIWindowScene *scene = self.windowScene;
-                        if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                            float targetHz = (float)Titanium_GetEffectiveFrameCap();
-                            if (targetHz < 15.0f) targetHz = 15.0f;
-                            if (targetHz > 240.0f) targetHz = 240.0f;
-                            float floorRate = Titanium_RangeFloorForCap(targetHz);
-                            [scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, targetHz, targetHz)];
-                        }
-                    } @catch (__unused NSException *e) {}
-                }
             }
         }
     } @catch (__unused NSException *e) {
@@ -5944,15 +5890,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook CAMetalDrawable
 
 - (void)presentAfterMinimumDuration:(CFTimeInterval)duration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
-            %orig(0.0);
-            return;
-        }
-        %orig(duration);
-    } @catch (__unused NSException *e) {
-        %orig(duration);
-    }
+    %orig(duration);
 }
 
 %end
@@ -6773,18 +6711,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %hook CATransaction
 
-// Ép buộc mọi giao dịch render hệ thống từ khung hình đầu tiên phải tuân thủ mức Hz tối đa tuyệt đối
 + (void)commit {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (@available(iOS 15.0, *)) {
-                @try {
-                    // Buộc các giao dịch CoreAnimation không bị hạ thấp biên độ dải khung hình
-                    [self setValue:@(YES) forKey:@"CATransactionDisableLowLatencyThrottle"];
-                } @catch (__unused NSException *subEx) {}
-            }
-        }
-    } @catch (__unused NSException *e) {}
     %orig;
 }
 
@@ -6808,23 +6735,6 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 // Đảm bảo mọi layer khởi tạo từ khung hình đầu tiên đều bị khóa cứng biên độ dải Hz tối đa, không cho phép hệ thống ghi đè
 - (void)setPresentationTime:(CFTimeInterval)time {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (@available(iOS 15.0, *)) {
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    if (maxTarget < 15.0f) maxTarget = 60.0f;
-                    if (maxTarget > 240.0f) maxTarget = 240.0f;
-                    float floorRate = Titanium_RangeFloorForCap(maxTarget);
-                    @try {
-                     [(id)self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
-
-                    } @catch (__unused NSException *subEx) {}
-                }
-            }
-        }
-    } @catch (__unused NSException *e) {}
-    
     %orig(time);
 }
 
@@ -7422,6 +7332,8 @@ static void Titanium_ReapplyFrameRateToAllScenes(void) {
             dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
             return;
         }
+        // Leave per-app scene refresh ranges to the OS-native display pipeline.
+        if (!Titanium_IsSpringBoard()) return;
         if (g_isCurrentAppBlacklisted) return;
         if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
         @try {
@@ -7957,7 +7869,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
         @autoreleasepool {
             @try {
-                Titanium_BypassQuartzCoreRangeAssertion();
+                if (isSpringBoard) {
+                    Titanium_BypassQuartzCoreRangeAssertion();
+                }
 
                 Class configClass = NSClassFromString(@"BoostConfigV285Pro");
                 if (configClass) {
@@ -7993,7 +7907,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
                 %init(Group_ZeroLatency_Touch_Opt);
                 %init(Group_Metal_ZeroTearing_Pacing);
-                %init(Group_FluidTransitions_Pacing);
+                if (isSpringBoard) {
+                    %init(Group_FluidTransitions_Pacing);
+                }
                 %init(Group_AI_Stream_Optimization);
                 %init(Group_FastLaunch_SuperEngineV285);
                 %init(Group_Scroll_And_Keyboard_Opt);
@@ -8071,13 +7987,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     Titanium_A20PrewarmAssetsAndGPU();
                     %init(Group_UIKit_ThirdParty_IsolatedV285);
                     %init(Group_Force_Render_Recovery_Overdrive);
-                    %init(Group_Window_Level_Overdrive);
-                    Init_CAWindowServer_Hooks();
 
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                         @try {
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            AppleInternal_LockHardwareCADisplay();
                             AppleInternal_EnforceZeroLatencyKernelTier();
                             Titanium_ApplySiliconDeepOptimizations();
                             Titanium_RegisterAppResumeRefreshV12();
