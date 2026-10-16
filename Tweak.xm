@@ -1173,6 +1173,11 @@ static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, c
 + (void)tick:(id)link;
 @end
 
+@interface CALayer (TitaniumPreferredRange)
+- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range;
+- (SafeFrameRateRange)preferredRefFrameRateRange;
+@end
+
 // ====================================================================================================
 // ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (DUY NHẤT - KHÔNG TRÙNG LẶP)
 // ====================================================================================================
@@ -6798,7 +6803,8 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
                     if (maxTarget > 240.0f) maxTarget = 240.0f;
                     float floorRate = Titanium_RangeFloorForCap(maxTarget);
                     @try {
-                        [self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
+                     [(id)self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
+
                     } @catch (__unused NSException *subEx) {}
                 }
             }
