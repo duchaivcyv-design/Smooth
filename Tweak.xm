@@ -2963,7 +2963,9 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             %orig;
             return;
         }
-        // Preserve CoreAnimation's original display scheduling.
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+            Titanium_EnableZeroLatencyPipeline();
+        }
         %orig;
     } @catch (__unused NSException *e) {
         %orig;
@@ -3775,7 +3777,9 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 - (void)setNeedsLayout {
     @try {
         %orig;
-        // Preserve UIKit/CoreAnimation's normal layout scheduling.
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+            Titanium_EnableZeroLatencyPipeline();
+        }
     } @catch (__unused NSException *e) {
         %orig;
     }
@@ -5371,9 +5375,17 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             if (!Titanium_IsSpringBoard()) {
                 EnforceMaxCPUPower();
                 Titanium_EnforceThreadVIPPolicy();
-                // Keep native CoreAnimation latency mode while the first frame is prepared.
+                Titanium_EnableZeroLatencyPipeline();
                 
-                // Let UIKit/CoreAnimation schedule the initial layout and first frame normally.
+                // ===== [V29 FIX ĐEN APP FRAME ĐẦU]: KHÔNG ép setNeedsDisplay + CATransaction flush quá sớm.
+                // Ép flush trước khi app chuẩn bị xong frame đầu tiên → render frame rỗng → MÀN HÌNH ĐEN.
+                // Chỉ setNeedsLayout, delay 100ms để iOS tự render frame đầu một cách tự nhiên. =====
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    @try {
+                        [self setNeedsLayout];
+                    } @catch (__unused NSException *subEx) {}
+                });
+                // ====================================================================================
 
                 if (@available(iOS 15.0, *)) {
                     @try {
@@ -6763,7 +6775,18 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %end
 
-// CATransaction commit is intentionally left unhooked to preserve native first-frame scheduling.
+%hook CATransaction
+
++ (void)commit {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            Titanium_EnableZeroLatencyPipeline(); // Kích hoạt LowLatency hợp lệ, không phá vỡ transaction frame 0
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+%end
 
 %hook CAImageQueue
 
@@ -6970,7 +6993,9 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 - (void)setNeedsDisplay {
     @try {
         %orig;
-        // Preserve CoreAnimation's original display scheduling.
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+            Titanium_EnableZeroLatencyPipeline();
+        }
     } @catch (__unused NSException *e) {
         %orig;
     }
@@ -7034,7 +7059,8 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
                 } @catch (__unused NSException *e) {}
             }
 
-            // Let UIKit/CoreAnimation schedule the first display cycle after scene attachment.
+            // Do not force a layer redraw at scene attachment.
+            // Let UIKit/CoreAnimation schedule the first frame naturally.
         }
     } @catch (__unused NSException *e) {
         %orig;
