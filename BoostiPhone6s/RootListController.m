@@ -5939,8 +5939,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     __weak UILabel *wperc = percentLbl;
     __weak UIView *woverlay = overlay;
     __weak typeof(self) weakSelf = self;
-    dispatch_block_t ticker = nil;
-    __block dispatch_block_t tickerRef = nil;
+    __block void (^tickerRef)(void) = nil;
     tickerRef = ^{
         tick++;
         float progress = (float)tick / 50.0f;
@@ -5964,7 +5963,6 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
             });
         }
     };
-    (void)ticker;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), tickerRef);
 }
 
@@ -5992,7 +5990,6 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     __weak UIView *wflash = flash;
     __weak UILabel *wicon = appleIcon;
     __weak typeof(self) weakSelf = self;
-    void (^doFlash)(NSInteger) = nil;
     __block void (^doFlashRef)(NSInteger) = nil;
     doFlashRef = ^(NSInteger count) {
         if (count <= 0) {
@@ -6018,7 +6015,6 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
             }];
         }];
     };
-    (void)doFlash;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         doFlashRef(3);
     });
