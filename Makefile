@@ -11,7 +11,8 @@ LIBRARY_NAME = BoostiPhone6sCore
 
 BoostiPhone6sCore_INSTALL_PATH = $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
-BoostiPhone6sCore_FILES = Tweak.xm
+# Thêm trực tiếp TitaniumKernelOverdrive.m vào danh sách biên dịch
+BoostiPhone6sCore_FILES = Tweak.xm TitaniumKernelOverdrive.m
                           
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
@@ -47,7 +48,6 @@ BoostiPhone6sCore_FRAMEWORKS = UIKit \
                                Accelerate \
                                CoreServices
 
-# ĐÃ LOẠI BỎ BackBoardServices (Tránh lỗi thiếu stub SDK trên GitHub Actions)
 BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
 BoostiPhone6sCore_LIBRARIES = substrate
@@ -56,7 +56,7 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
-# Ký Entitlements đặc quyền cao cho SpringBoard & backboardd
+# Ký Entitlements cho thư viện
 BoostiPhone6sCore_CODESIGN_FLAGS = -SBoostiPhone6sCore.entitlements
 
 include $(THEOS_MAKE_PATH)/library.mk
@@ -67,23 +67,26 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
+# Chỉ tạo file mẫu nếu file BoostiPhone6sCore.entitlements chưa tồn tại, tránh ghi đè file quyền cao
 before-all::
-	@echo ""
-	@echo "=== [BoostiPhone6sCore] Tự động khởi tạo file Entitlements đặc quyền ==="
-	@printf '%s\n' \
-		'<?xml version="1.0" encoding="UTF-8"?>' \
-		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
-		'<plist version="1.0">' \
-		'<dict>' \
-		'	<key>com.apple.private.hid.client.event-filter</key>' \
-		'	<true/>' \
-		'	<key>com.apple.private.iokit.system-nvram-allow</key>' \
-		'	<true/>' \
-		'	<key>com.apple.backboardd.launchapplications</key>' \
-		'	<true/>' \
-		'</dict>' \
-		'</plist>' > BoostiPhone6sCore.entitlements
-	@echo "  [OK] Đã tạo BoostiPhone6sCore.entitlements!"
+	@if [ ! -f "BoostiPhone6sCore.entitlements" ]; then \
+		echo ""; \
+		echo "=== [BoostiPhone6sCore] Khởi tạo BoostiPhone6sCore.entitlements mặc định ==="; \
+		printf '%s\n' \
+			'<?xml version="1.0" encoding="UTF-8"?>' \
+			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+			'<plist version="1.0">' \
+			'<dict>' \
+			'	<key>com.apple.private.security.no-sandbox</key>' \
+			'	<true/>' \
+			'	<key>platform-application</key>' \
+			'	<true/>' \
+			'</dict>' \
+			'</plist>' > BoostiPhone6sCore.entitlements; \
+		echo "  [OK] Đã tạo file entitlements!"; \
+	else \
+		echo "=== [BoostiPhone6sCore] Giữ nguyên BoostiPhone6sCore.entitlements hiện có ==="; \
+	fi
 
 after-stage::
 	@echo ""
@@ -102,6 +105,7 @@ after-stage::
 		'			<string>com.apple.backboardd</string>' \
 		'			<string>com.apple.Preferences</string>' \
 		'			<string>com.apple.UIKit</string>' \
+		'			<string>com.apple.UIKitCore</string>' \
 		'		</array>' \
 		'		<key>Executables</key>' \
 		'		<array>' \
