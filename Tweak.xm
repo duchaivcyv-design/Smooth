@@ -2605,9 +2605,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                 Titanium_WriteDisabledAppsFile(disabledJoined);
                 CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
             });
-        }
-    }
-}
+        } // Đóng ngoặc cho if (diskDict)
+    } // Đóng ngoặc cho phương thức loadSettings / sync
+} // Đóng ngoặc cho @implementation BoostConfigV285Pro
 
 - (NSInteger)resolvedTargetHz {
     return g_cachedResolvedHz;
