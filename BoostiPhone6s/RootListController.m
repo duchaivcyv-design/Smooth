@@ -2728,6 +2728,20 @@ static NSString * const SUExtraGlowEnabledKey        = @"su_extra_glow_enabled_v
 static NSString * const SUExtraDiagnosticsEnabledKey = @"su_extra_diagnostics_enabled_v1";
 static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_enabled_v1";
 
+
+static NSArray<NSNumber *> *TIExpandedRateValues(void) {
+    static NSArray<NSNumber *> *values;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSMutableOrderedSet<NSNumber *> *set = [NSMutableOrderedSet orderedSet];
+        for (NSInteger v = 15; v <= 235; v += 5) [set addObject:@(v)];
+        for (NSNumber *v in @[@20,@25,@30,@35,@40,@50,@70,@80,@85,@95,@100,@105,@110,@115,@125,@130,@135,@145,@150,@160]) [set addObject:v];
+        [set addObject:@240];
+        values = set.array;
+    });
+    return values;
+}
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -3061,27 +3075,12 @@ static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_
 }
 
 - (void)detectTweakDeletionIfNeeded {
-    // A reinstall marker lives in the tweak preferences. If it is missing, treat this as a
-    // fresh install: reset tweak switches/rates and first-run UI state, but retain Free server.
+    // App launches, foregrounding, and dismissing the app from the app switcher are
+    // not evidence that the tweak was removed. Never reset user preferences here.
+    // Installation/removal state must be handled by the package lifecycle, not the UI.
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *marker = @"ti_install_marker_v1";
-    BOOL hasMarker = [defaults boolForKey:marker];
-    if (!hasMarker) {
-        NSString *server = [defaults stringForKey:TI_SELECTED_SERVER_KEY];
-        NSMutableDictionary *settings = [NSMutableDictionary dictionaryWithDictionary:
-            [NSDictionary dictionaryWithContentsOfFile:Titanium_ResolvePrefPath()] ?: @{}];
-        settings[@"TargetRefreshRate"] = @60;
-        settings[@"TargetFPSRate"] = @60;
-        settings[@"IsRateLocked"] = @NO;
-        settings[@"FeatureActivationComplete"] = @NO;
-        settings[@"IsKernelExploited"] = @NO;
-        [settings writeToFile:Titanium_ResolvePrefPath() atomically:YES];
-        [defaults removeObjectForKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
-        [defaults removeObjectForKey:TI_CREDITS_SHOWN_KEY];
-        [defaults removeObjectForKey:TI_APP_CATEGORY_KEY];
-        [defaults setBool:YES forKey:marker];
-        if ([server isEqualToString:@"free"]) [defaults setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
-        else [defaults removeObjectForKey:TI_SELECTED_SERVER_KEY];
+    if (![defaults boolForKey:@"ti_install_marker_v1"]) {
+        [defaults setBool:YES forKey:@"ti_install_marker_v1"];
         [defaults synchronize];
     }
 }
@@ -4827,7 +4826,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else if (_currentBottomTab == 1) {
         if (section == 0) return 1;
         if (section == 1) return 1;
-        return 6;
+        return (NSInteger)TIExpandedRateValues().count + 1;
     } else if (_currentBottomTab == 2) {
         if (section == 0) return 1;
         switch (_currentSwitchSubTab) {
@@ -5017,28 +5016,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         } else {
             BOOL isHz = (_currentHzFpsSubTab == 0);
             NSInteger cur = isHz ? [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue] : [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
-            // Nhãn mô tả trải nghiệm từng mức Hz/FPS
-            NSArray *rates = @[@60, @90, @120, @144];
-            NSArray *rateLabels = @[
-                @"Mặc định iOS (ổn định nhất)",
-                @"Mượt mà · nhẹ hơn",
-                @"Mượt cao · gây ấm nhẹ",
-                @"Nhanh · gây nóng trung bình"
-            ];
+            NSArray<NSNumber *> *rates = TIExpandedRateValues();
             NSInteger applied = isHz ? _lastAppliedHz : _lastAppliedFPS;
-            if (indexPath.row < 4) {
-                NSInteger r = [rates[indexPath.row] integerValue];
-                NSString *lbl = rateLabels[indexPath.row];
-                title = [NSString stringWithFormat:@"%ld %@ — %@", (long)r, isHz ? @"Hz" : @"FPS", lbl];
-                if (cur == r) { detail = @"✓"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
+            if (indexPath.row < (NSInteger)rates.count) {
+                NSInteger r = rates[indexPath.row].integerValue;
+                NSString *heading = (r == 240) ? [NSString stringWithFormat:@"%ld %@ MAX", (long)r, isHz ? @"Hz" : @"FPS"] : [NSString stringWithFormat:@"%ld %@", (long)r, isHz ? @"Hz" : @"FPS"];
+                NSString *description = (r <= 60) ? @"Mức mục tiêu thấp; hiệu quả tùy thiết bị và ứng dụng." : (r <= 120 ? @"Mức mục tiêu trung bình; theo dõi nhiệt độ và pin." : (r < 240 ? @"Mức mục tiêu cao; thiết bị có thể không đạt được." : @"Mức yêu cầu 240; không bảo đảm phần cứng đạt mức này."));
+                title = [NSString stringWithFormat:@"%@ — %@", heading, description];
+                if (cur == r) { detail = @"✓ Đang chọn"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
                 else if (applied == r) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
-            } else if (indexPath.row == 4) {
-                title = [NSString stringWithFormat:@"240 %@ MAX — Hiệu suất tối đa · gây nóng cao", isHz ? @"Hz" : @"FPS"];
-                if (cur == 240) { detail = @"✓"; accent = [UIColor colorWithRed:1.0 green:0.55 blue:0.15 alpha:1.0]; }
-                else if (applied == 240) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
             } else {
-                title = @"Nhập Tùy Chỉnh (60-240)...";
-                detail = [NSString stringWithFormat:@"Hiện: %ld", (long)cur];
+                title = @"Nhập mức tùy chỉnh (15–240)…";
+                detail = [NSString stringWithFormat:@"Đang chọn: %ld", (long)cur];
             }
         }
     }
@@ -5424,10 +5413,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             return;
         }
         BOOL isHz = (_currentHzFpsSubTab == 0);
-        NSArray *rates = @[@60, @90, @120, @144];
+        NSArray<NSNumber *> *rates = TIExpandedRateValues();
         NSInteger targetRate = 0;
-        if (indexPath.row < 4) targetRate = [rates[indexPath.row] integerValue];
-        else if (indexPath.row == 4) targetRate = 240;
+        if (indexPath.row < (NSInteger)rates.count) targetRate = rates[indexPath.row].integerValue;
         else { [self showCustomRateInputAlertForHz:isHz]; return; }
 
         NSTimeInterval suppressUntil = [[NSUserDefaults standardUserDefaults] doubleForKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
@@ -5583,15 +5571,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
     NSString *unit = isHz ? @"Hz" : @"FPS";
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"NHẬP %@", unit] message:[NSString stringWithFormat:@"60 - 240 %@", unit] preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"NHẬP %@", unit] message:[NSString stringWithFormat:@"15 - 240 %@", unit] preferredStyle:UIAlertControllerStyleAlert];
     [a addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull tf) {
         tf.keyboardType = UIKeyboardTypeNumberPad;
-        tf.placeholder = [NSString stringWithFormat:@"60 - 240 %@", unit];
+        tf.placeholder = [NSString stringWithFormat:@"15 - 240 %@", unit];
     }];
     [a addAction:[UIAlertAction actionWithTitle:@"Khóa Ngay" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         UITextField *tf = a.textFields.firstObject;
         NSInteger val = [tf.text integerValue];
-        if (val < 60) val = 60;
+        if (val < 15) val = 15;
         if (val > 240) val = 240;
         [self applyRateValue:val isDynamic:NO isFPS:!isHz];
         [self applyDeepSpringBoardAndUIKitTweaks];
@@ -5602,15 +5590,16 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
-    if (rate < 60) rate = 60;
-    if (rate > 240) rate = 240;
-    self.settingsDict[@"TargetRefreshRate"] = @(rate);
-    self.settingsDict[@"TargetFPSRate"] = @(rate);
-    self.settingsDict[@"EnableHzControl"] = @YES;
-    self.settingsDict[@"EnableFPSControl"] = @YES;
-    self.settingsDict[@"ForceOverclock144Hz"] = @(rate >= 144);
-    self->_lastAppliedHz = rate;
-    self->_lastAppliedFPS = rate;
+    rate = MAX(15, MIN(240, rate));
+    if (isFPS) {
+        self.settingsDict[@"TargetFPSRate"] = @(rate);
+        self.settingsDict[@"EnableFPSControl"] = @YES;
+        self->_lastAppliedFPS = rate;
+    } else {
+        self.settingsDict[@"TargetRefreshRate"] = @(rate);
+        self.settingsDict[@"EnableHzControl"] = @YES;
+        self->_lastAppliedHz = rate;
+    }
     [self saveSettingsDataAndSync];
 }
 
@@ -5675,9 +5664,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
     NSInteger requestedFPS = [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
-    if (requestedHz < 60) requestedHz = 60;
+    if (requestedHz < 15) requestedHz = 15;
     if (requestedHz > 240) requestedHz = 240;
-    if (requestedFPS < 60) requestedFPS = 60;
+    if (requestedFPS < 15) requestedFPS = 15;
     if (requestedFPS > 240) requestedFPS = 240;
     // Không clamp theo nativeMaxHz — Tweak.xm ép vượt trần phần cứng với TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL
 
