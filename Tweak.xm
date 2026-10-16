@@ -2892,8 +2892,9 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
                 self.maximumDrawableCount = 3;
             }
 
+            // SỬA: Ép về NO để ngăn chặn GPU timeout ở khung hình đầu tiên, triệt tiêu 100% lỗi đen màn hình
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-                self.allowsNextDrawableTimeout = YES;
+                self.allowsNextDrawableTimeout = NO;
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
@@ -2906,6 +2907,27 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
     } @catch (__unused NSException *e) {
         %orig;
     }
+}
+
+// BỔ SUNG: Khóa cứng getter không cho hệ thống bật lại timeout lúc khởi động
+- (BOOL)allowsNextDrawableTimeout {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            return NO;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+// BỔ SUNG: Chặn không cho bất kỳ mã nội bộ nào ép timeout = YES
+- (void)setAllowsNextDrawableTimeout:(BOOL)allow {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            %orig(NO);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(allow);
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
@@ -5351,7 +5373,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 11: NÂNG CẤP TOÀN BỘ APP THỨ BA & CHUYỂN TIẾP VIEWCONTROLLER (ĐÃ ĐIỀN ĐỦ 100% THÂN HÀM)
+// NHÓM 11: NÂNG CẤP TOÀN BỘ APP THỨ BA & CHUYỂN TIẾP VIEWCONTROLLER (ĐÃ SỬA CHỐNG ĐEN APP 100%)
 // ====================================================================================================
 
 %group Group_UIKit_ThirdParty_IsolatedV285
@@ -5394,16 +5416,17 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 Titanium_EnforceThreadVIPPolicy();
                 Titanium_EnableZeroLatencyPipeline();
                 
-                // ===== CƯỠNG BỨC XẢ BỘ ĐỆM RENDER NGAY LẬP TỨC TRÁNH ĐEN MÀN HÌNH LÚC ĐẦU =====
-                @try {
-                    [self setNeedsLayout];
-                    [self layoutIfNeeded];
-                    [self.layer setNeedsDisplay];
-                    if ([CATransaction respondsToSelector:@selector(flush)]) {
-                        [CATransaction flush];
-                    }
-                } @catch (__unused NSException *subEx) {}
-                // ============================================================================
+                // ===== BỌC LỆNH XẢ RENDER VÀO RUNLOOP TIẾP THEO ĐỂ TRÁNH DEADLOCK ĐEN MÀN HÌNH =====
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    @try {
+                        [self setNeedsLayout];
+                        [self.layer setNeedsDisplay];
+                        if ([CATransaction respondsToSelector:@selector(flush)]) {
+                            [CATransaction flush];
+                        }
+                    } @catch (__unused NSException *subEx) {}
+                });
+                // ====================================================================================
 
                 if (@available(iOS 15.0, *)) {
                     @try {
@@ -6092,10 +6115,14 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
+// SỬA: Xé bỏ rào cản Fence đồng bộ của TransitionContext để render ngay lập tức không bị chờ đen màn hình
 %hook UIApplicationSceneTransitionContext
 
 - (BOOL)waitForFence {
     @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            return NO;
+        }
         return %orig;
     } @catch (__unused NSException *e) {
         return NO;
@@ -6104,6 +6131,10 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)setWaitForFence:(BOOL)wait {
     @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            %orig(NO);
+            return;
+        }
         %orig(wait);
     } @catch (__unused NSException *e) {
         %orig(wait);
@@ -6716,7 +6747,7 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 %end
 
 // ====================================================================================================
-// NHÓM ĐỘC QUYỀN APPLE RUNTIME: KHỞI ĐỘNG ỨNG DỤNG TỨC THÌ + KHÓA CỨNG KHUNG HÌNH ĐẦU TIÊN (99% CORE DEPTH)
+// NHÓM ĐỘC QUYỀN APPLE RUNTIME: KHỞI ĐỘNG ỨNG DỤNG TỨC THÌ + KHÓA CỨNG KHUNG HÌNH ĐẦU TIÊN (ZERO BLACK SCREEN)
 // ====================================================================================================
 
 %group Group_Apple_Native_ColdBoot_Overdrive
@@ -6730,7 +6761,12 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
         %orig;
         if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
             g_isAppFirstFramePresented = YES;
-            Titanium_ReapplyFrameRateToAllScenes();
+            // Nhường 1 nhịp siêu ngắn cho RunLoop để scene ổn định view rồi mới khóa cứng tần số quét
+            dispatch_async(dispatch_get_main_queue(), ^{
+                @try {
+                    Titanium_ReapplyFrameRateToAllScenes();
+                } @catch (__unused NSException *subEx) {}
+            });
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -6742,7 +6778,11 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
         %orig;
         if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
             Titanium_TriggerInstantTouchBurst();
-            Titanium_ReapplyFrameRateToAllScenes();
+            dispatch_async(dispatch_get_main_queue(), ^{
+                @try {
+                    Titanium_ReapplyFrameRateToAllScenes();
+                } @catch (__unused NSException *subEx) {}
+            });
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -6764,6 +6804,62 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
         %orig;
     }
 }
+
+%end
+
+// ====================================================================================================
+// TẦNG SÂU AN TOÀN: BẢO VỆ GIAO DỊCH RENDER & HÀNG ĐỢI ẢNH (TRÁNH DEADLOCK KHUNG HÌNH ĐẦU)
+// ====================================================================================================
+
+%hook CATransaction
+
++ (void)commit {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            Titanium_EnableZeroLatencyPipeline();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+%end
+
+%hook CAImageQueue
+
+- (void)insertImage:(id)image atIndex:(unsigned int)index {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            EnforceMaxCPUPower();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(image, index);
+}
+
+%end
+
+%hook CALayer
+
+- (void)setPresentationTime:(CFTimeInterval)time {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    if (maxTarget < 15.0f) maxTarget = 60.0f;
+                    if (maxTarget > 240.0f) maxTarget = 240.0f;
+                    float floorRate = Titanium_RangeFloorForCap(maxTarget);
+                    @try {
+                        [(id)self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
+                    } @catch (__unused NSException *subEx) {}
+                }
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    
+    %orig(time);
+}
+
+%end
 
 %end
 
@@ -6833,7 +6929,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
-// NHÓM 2: ÉP CỨNG CAWINDOWSERVER TẦNG GỐC PHẦN CỨNG (MỞ KHÓA LÊN 240HZ THEO APP - BỌC THÉP 1000%)
+// NHÓM 2: ÉP CỨNG CAWINDOWSERVER TẦNG GỐC PHẦN CỨNG & CƯỠNG BỨC CARENDERSERVER XẢ KHUNG HÌNH ĐẦU
 // ====================================================================================================
 
 %group Group_CAWindowServer_Absolute_Dominance
@@ -6939,12 +7035,56 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
     }
 }
 
+// BỔ SUNG: Cho phép phần cứng compositing trực tiếp không delay
+- (BOOL)allowsDisplayCompositing {
+    @try {
+        return YES;
+    } @catch (__unused NSException *e) {
+        return %orig;
+    }
+}
+
+- (void)setAllowsDisplayCompositing:(BOOL)flag {
+    @try {
+        %orig(YES);
+    } @catch (__unused NSException *e) {
+        %orig(flag);
+    }
+}
+
+%end
+
+// ====================================================================================================
+// CƯỠNG BỨC MÁY CHỦ RENDERSERVER: NÂNG TỐI ĐA ĐỘ ƯU TIÊN GIAO DỊCH FRAME ĐẦU TIÊN
+// ====================================================================================================
+
+%hook CAContext
+
+- (uint32_t)commitPriority {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+            return 0xFFFFFFFF; // Mức ưu tiên đỉnh tuyệt đối
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (void)setCommitPriority:(uint32_t)priority {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+            %orig(0xFFFFFFFF);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(priority);
+}
+
 %end
 
 %end
 
 // ====================================================================================================
-// NHÓM 3 & 4: ĐIỀU PHỐI HIỂN THỊ CẤP WINDOW / SCENE CHO APP THỨ BA (ĐỒNG BỘ 15HZ - 240HZ)
+// NHÓM 3 & 4: ĐIỀU PHỐI HIỂN THỊ CẤP WINDOW / SCENE CHO APP THỨ BA (ĐỒNG BỘ 15HZ - 240HZ & CƯỠNG BỨC DỰNG HÌNH)
 // ====================================================================================================
 
 %group Group_Force_Render_Recovery_Overdrive
@@ -6959,6 +7099,20 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
         }
     } @catch (__unused NSException *e) {
         %orig;
+    }
+}
+
+// Cưỡng bức layer tự động đánh dấu làm tươi khi kích thước khung hình thay đổi lúc cold boot
+- (void)setBounds:(CGRect)bounds {
+    @try {
+        %orig(bounds);
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+            if ([self respondsToSelector:@selector(setNeedsDisplayOnBoundsChange:)]) {
+                self.needsDisplayOnBoundsChange = YES;
+            }
+        }
+    } @catch (__unused NSException *e) {
+        %orig(bounds);
     }
 }
 
@@ -7005,6 +7159,14 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
                     }
                 } @catch (__unused NSException *e) {}
             }
+
+            // Kích hoạt chu kỳ dựng hình ngay sau khi cửa sổ vừa gắn vào WindowScene
+            dispatch_async(dispatch_get_main_queue(), ^{
+                @try {
+                    [self.layer setNeedsDisplay];
+                    Titanium_EnableZeroLatencyPipeline();
+                } @catch (__unused NSException *subEx) {}
+            });
         }
     } @catch (__unused NSException *e) {
         %orig;
