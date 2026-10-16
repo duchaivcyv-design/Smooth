@@ -2617,6 +2617,8 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
     dispatch_source_t _hudTimer;
     NSInteger _currentBottomTab;
     NSInteger _currentHzFpsSubTab;
+    BOOL _expandedHzFPS;
+    NSInteger _appCategoryIndex; // 0=all apps, 1=system/default, 2=hidden/disabled
     NSInteger _currentSwitchSubTab;
     BOOL _isRateLocked;
     BOOL _isFeatureActivated;
@@ -2629,6 +2631,7 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
     BOOL _hasPlayedEntranceAnimation;
     BOOL _activationFlowPresenting;
     BOOL _hasStartedAppScan;
+    NSTimer *_appScanTimer;
     uint64_t _searchUpdateGeneration;
     uint64_t _v20TableTransitionGeneration;
     NSInteger _v20LongPressPreviewTab;
@@ -2729,15 +2732,21 @@ static NSString * const SUExtraDiagnosticsEnabledKey = @"su_extra_diagnostics_en
 static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_enabled_v1";
 
 
+static NSArray<NSNumber *> *TIStandardRateValues(void) {
+    return @[@60, @90, @120, @144, @240];
+}
+
 static NSArray<NSNumber *> *TIExpandedRateValues(void) {
     static NSArray<NSNumber *> *values;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSMutableOrderedSet<NSNumber *> *set = [NSMutableOrderedSet orderedSet];
+        NSMutableSet<NSNumber *> *set = [NSMutableSet set];
         for (NSInteger v = 15; v <= 235; v += 5) [set addObject:@(v)];
         for (NSNumber *v in @[@20,@25,@30,@35,@40,@50,@70,@80,@85,@95,@100,@105,@110,@115,@125,@130,@135,@145,@150,@160]) [set addObject:v];
         [set addObject:@240];
-        values = set.array;
+        values = [[set allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
+            return [a compare:b];
+        }];
     });
     return values;
 }
@@ -2777,6 +2786,8 @@ static NSArray<NSNumber *> *TIExpandedRateValues(void) {
     _v20LastNavLayoutSize = CGSizeZero;
     _v20LastNavFrame = CGRectNull;
     _currentHzFpsSubTab = 0;
+    _expandedHzFPS = NO;
+    _appCategoryIndex = 0;
     _currentSwitchSubTab = 0;
 
     _isCpuExpanded = NO; _isGpuExpanded = NO; _isRamExpanded = NO;
@@ -2936,6 +2947,15 @@ static NSArray<NSNumber *> *TIExpandedRateValues(void) {
         _liquidNavBarContainer.alpha = 1.0;
     }
     [self refreshBottomTabsAvailability];
+    if (!_appScanTimer) {
+        __weak typeof(self) weakScanSelf = self;
+        _appScanTimer = [NSTimer scheduledTimerWithTimeInterval:8.0 repeats:YES block:^(NSTimer *timer) {
+            __strong typeof(weakScanSelf) strongScanSelf = weakScanSelf;
+            if (!strongScanSelf || !strongScanSelf.isViewLoaded || !strongScanSelf.view.window) return;
+            [strongScanSelf loadInstalledAppsAsync];
+        }];
+    }
+    [self loadInstalledAppsAsync];
     // Read-only hardware metrics are independent of the tweak activation flow.
     if (_currentBottomTab == 0 && [self.settingsDict[@"EnableSystemMonitoring"] boolValue] && !_chipErrorActive) {
         [self startContinuousHardwareHUD];
@@ -3066,6 +3086,8 @@ static NSArray<NSNumber *> *TIExpandedRateValues(void) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [_appScanTimer invalidate];
+    _appScanTimer = nil;
     [self v20StopBackgroundMotion];
     [self cancelChipErrorRandom];
     [self stopContinuousHardwareHUD];
@@ -4824,9 +4846,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 4) return _isBatteryExpanded ? 6 : 1;
         return _isScreenExpanded ? 5 : 1;
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return 1;
-        if (section == 1) return 1;
-        return (NSInteger)TIExpandedRateValues().count + 1;
+        if (section == 0) return 1; // standard / expanded selector
+        if (section == 1) return 1; // Hz / FPS selector
+        return (NSInteger)(_expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues()).count + 1;
     } else if (_currentBottomTab == 2) {
         if (section == 0) return 1;
         switch (_currentSwitchSubTab) {
@@ -4859,9 +4881,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 4) return @"PIN";
         return @"MÀN HÌNH";
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return @"NGUYÊN LÝ";
-        if (section == 1) return @"CHỌN CHẾ ĐỘ";
-        return (_currentHzFpsSubTab == 0) ? @"KHÓA HZ" : @"KHÓA FPS";
+        if (section == 0) return @"MỨC THƯỜNG / MỞ RỘNG";
+        if (section == 1) return @"CHỌN Hz / FPS";
+        return (_currentHzFpsSubTab == 0) ? (_expandedHzFPS ? @"Hz MỞ RỘNG" : @"Hz THƯỜNG") : (_expandedHzFPS ? @"FPS MỞ RỘNG" : @"FPS THƯỜNG");
     } else if (_currentBottomTab == 2) {
         if (section == 0) return @"CHỌN NHÓM";
         switch (_currentSwitchSubTab) {
@@ -4999,9 +5021,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 1) {
         if (indexPath.section == 0) {
-            title = @"Chọn mức Hz/FPS mục tiêu. Hiệu quả thực tế phụ thuộc màn hình, iOS và ứng dụng; mức chọn không tự nâng giới hạn phần cứng.";
+            LGCustomSegment *modeSeg = [[LGCustomSegment alloc] initWithItems:@[@"Thường", @"Hz/FPS mở rộng"]];
+            modeSeg.selectedSegmentIndex = _expandedHzFPS ? 1 : 0;
+            __weak typeof(self) weakModeSelf = self;
+            modeSeg.valueChangedBlock = ^(NSInteger index) {
+                __strong typeof(weakModeSelf) strongSelf = weakModeSelf;
+                if (!strongSelf) return;
+                strongSelf->_expandedHzFPS = (index == 1);
+                [strongSelf smoothReloadTable];
+            };
+            accessory = modeSeg;
+            title = @"Chọn danh sách mức thường hoặc danh sách mở rộng";
         } else if (indexPath.section == 1) {
-            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Tần Số (Hz)", @"Khung Hình (FPS)"]];
+            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Hz", @"FPS"]];
             seg.selectedSegmentIndex = _currentHzFpsSubTab;
             __weak typeof(self) wS = self;
             seg.valueChangedBlock = ^(NSInteger index) {
@@ -5016,7 +5048,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         } else {
             BOOL isHz = (_currentHzFpsSubTab == 0);
             NSInteger cur = isHz ? [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue] : [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
-            NSArray<NSNumber *> *rates = TIExpandedRateValues();
+            NSArray<NSNumber *> *rates = _expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues();
             NSInteger applied = isHz ? _lastAppliedHz : _lastAppliedFPS;
             if (indexPath.row < (NSInteger)rates.count) {
                 NSInteger r = rates[indexPath.row].integerValue;
@@ -5026,7 +5058,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if (cur == r) { detail = @"✓ Đang chọn"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
                 else if (applied == r) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
             } else {
-                title = @"Nhập mức tùy chỉnh (15–240)…";
+                title = _expandedHzFPS ? @"Nhập mức tùy chỉnh (15–240)…" : @"Nhập mức tùy chỉnh (15–240)…";
                 detail = [NSString stringWithFormat:@"Đang chọn: %ld", (long)cur];
             }
         }
@@ -5103,31 +5135,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 3) {
         if (indexPath.section == 0) {
-            title = @"Bật Tất Cả Ứng Dụng";
-            BOOL allOn = YES;
-            if (_appTweakStates.count == 0) {
-                allOn = NO;
-            } else {
-                for (NSString *bid in _appTweakStates) {
-                    if (![_appTweakStates[bid] boolValue]) { allOn = NO; break; }
-                }
-            }
-            LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
-            s.on = allOn;
-            __weak typeof(self) wS = self;
-            s.valueChangedBlock = ^(BOOL isOn) {
-                __strong typeof(wS) sS = wS;
-                if (!sS) return;
-                NSArray<NSString *> *keys = [sS->_appTweakStates allKeys];
-                for (NSString *bid in keys) {
-                    sS->_appTweakStates[bid] = @(isOn);
-                }
-                sS.settingsDict[@"AppTweakStates"] = sS->_appTweakStates;
-                [sS saveSettingsDataAndSync];
-                [sS applyDeepSpringBoardAndUIKitTweaks];
-                [sS.customTableView reloadData];
+            title = @"Danh mục";
+            LGCustomSegment *categorySeg = [[LGCustomSegment alloc] initWithItems:@[@"Ứng dụng", @"Mặc định", @"Ứng dụng ẩn"]];
+            categorySeg.selectedSegmentIndex = _appCategoryIndex;
+            __weak typeof(self) weakCategorySelf = self;
+            categorySeg.valueChangedBlock = ^(NSInteger index) {
+                __strong typeof(weakCategorySelf) strongSelf = weakCategorySelf;
+                if (!strongSelf) return;
+                strongSelf->_appCategoryIndex = index;
+                [strongSelf applyAppFilter];
+                [strongSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationNone];
             };
-            accessory = s;
+            accessory = categorySeg;
         } else if (indexPath.section == 1) {
             UITextField *searchField = [[UITextField alloc] init];
             searchField.placeholder = @"Tìm app...";
@@ -5148,8 +5167,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             accessory = searchField;
         } else {
             if (_filteredAppsList.count == 0) {
-                title = _scannedAppsList.count == 0 ? @"Đang quét..." : @"Không có app khớp";
-                [cell configureWithTitle:title detail:@"" accessory:nil accent:[UIColor colorWithWhite:0.6 alpha:1.0]];
+                title = _scannedAppsList.count == 0 ? @"Đang quét ứng dụng đã cài…" : @"Không có ứng dụng khớp";
+                [cell configureWithTitle:title detail:@"Danh sách được làm mới định kỳ khi màn này mở." accessory:nil accent:[UIColor colorWithWhite:0.6 alpha:1.0]];
                 cell.userInteractionEnabled = NO;
                 cell.alpha = 0.6;
                 return cell;
@@ -5157,18 +5176,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             NSDictionary *appInfo = _filteredAppsList[indexPath.row];
             title = appInfo[@"name"];
             detail = appInfo[@"bundleID"];
-            LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
-            s.on = [_appTweakStates[appInfo[@"bundleID"]] boolValue];
-            __weak typeof(self) wS = self;
-            s.valueChangedBlock = ^(BOOL isOn) {
-                __strong typeof(wS) sS = wS;
-                if (!sS) return;
-                sS->_appTweakStates[appInfo[@"bundleID"]] = @(isOn);
-                sS.settingsDict[@"AppTweakStates"] = sS->_appTweakStates;
-                [sS saveSettingsDataAndSync];
-                [sS applyDeepSpringBoardAndUIKitTweaks];
+            LiquidCapsuleSwitch *appSwitch = [[LiquidCapsuleSwitch alloc] init];
+            appSwitch.on = [_appTweakStates[appInfo[@"bundleID"]] boolValue];
+            __weak typeof(self) weakAppSelf = self;
+            NSString *bundleID = appInfo[@"bundleID"];
+            appSwitch.valueChangedBlock = ^(BOOL isOn) {
+                __strong typeof(weakAppSelf) strongSelf = weakAppSelf;
+                if (!strongSelf || bundleID.length == 0) return;
+                strongSelf->_appTweakStates[bundleID] = @(isOn);
+                strongSelf.settingsDict[@"AppTweakStates"] = strongSelf->_appTweakStates;
+                [strongSelf saveSettingsDataAndSync];
+                [strongSelf applyDeepSpringBoardAndUIKitTweaks];
             };
-            accessory = s;
+            accessory = appSwitch;
         }
     }
     else {
@@ -5413,7 +5433,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             return;
         }
         BOOL isHz = (_currentHzFpsSubTab == 0);
-        NSArray<NSNumber *> *rates = TIExpandedRateValues();
+        NSArray<NSNumber *> *rates = _expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues();
         NSInteger targetRate = 0;
         if (indexPath.row < (NSInteger)rates.count) targetRate = rates[indexPath.row].integerValue;
         else { [self showCustomRateInputAlertForHz:isHz]; return; }
@@ -5507,18 +5527,20 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)applyAppFilter {
     [_filteredAppsList removeAllObjects];
-    if (_appSearchQuery.length == 0) {
-        [_filteredAppsList addObjectsFromArray:_scannedAppsList];
-    } else {
-        NSString *q = Titanium_NormalizeAppSearchText(_appSearchQuery);
-        for (NSDictionary *app in _scannedAppsList) {
-            if (![app isKindOfClass:[NSDictionary class]]) continue;
-            id rawName = app[@"name"];
-            id rawBundleID = app[@"bundleID"];
-            NSString *name = Titanium_NormalizeAppSearchText([rawName isKindOfClass:[NSString class]] ? (NSString *)rawName : @"");
-            NSString *bid = Titanium_NormalizeAppSearchText([rawBundleID isKindOfClass:[NSString class]] ? (NSString *)rawBundleID : @"");
-            if ([name containsString:q] || [bid containsString:q]) [_filteredAppsList addObject:app];
-        }
+    NSString *q = Titanium_NormalizeAppSearchText(_appSearchQuery ?: @"");
+    NSDictionary *hiddenMap = [self.settingsDict[@"HiddenApps"] isKindOfClass:[NSDictionary class]] ? self.settingsDict[@"HiddenApps"] : @{};
+    for (NSDictionary *app in _scannedAppsList) {
+        if (![app isKindOfClass:[NSDictionary class]]) continue;
+        NSString *name = Titanium_NormalizeAppSearchText([app[@"name"] isKindOfClass:[NSString class]] ? app[@"name"] : @"");
+        NSString *bidRaw = [app[@"bundleID"] isKindOfClass:[NSString class]] ? app[@"bundleID"] : @"";
+        NSString *bid = Titanium_NormalizeAppSearchText(bidRaw);
+        NSString *path = [app[@"path"] isKindOfClass:[NSString class]] ? app[@"path"] : @"";
+        BOOL isDefault = [bidRaw hasPrefix:@"com.apple."] || [path containsString:@"/System/Applications/"] || [path containsString:@"/System/Library/CoreServices/"];
+        BOOL isHidden = [hiddenMap[bidRaw] boolValue] || [app[@"isHidden"] boolValue];
+        if (_appCategoryIndex == 1 && !isDefault) continue;
+        if (_appCategoryIndex == 2 && !isHidden) continue;
+        if (q.length && ![name containsString:q] && ![bid containsString:q]) continue;
+        [_filteredAppsList addObject:app];
     }
 }
 
@@ -5939,7 +5961,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     __weak UILabel *wperc = percentLbl;
     __weak UIView *woverlay = overlay;
     __weak typeof(self) weakSelf = self;
-    __block void (^tickerRef)(void) = nil;
+    dispatch_block_t ticker = nil;
+    __block dispatch_block_t tickerRef = nil;
     tickerRef = ^{
         tick++;
         float progress = (float)tick / 50.0f;
@@ -5963,6 +5986,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
             });
         }
     };
+    (void)ticker;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), tickerRef);
 }
 
@@ -5990,6 +6014,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     __weak UIView *wflash = flash;
     __weak UILabel *wicon = appleIcon;
     __weak typeof(self) weakSelf = self;
+    void (^doFlash)(NSInteger) = nil;
     __block void (^doFlashRef)(NSInteger) = nil;
     doFlashRef = ^(NSInteger count) {
         if (count <= 0) {
@@ -6015,6 +6040,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
             }];
         }];
     };
+    (void)doFlash;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         doFlashRef(3);
     });
@@ -6183,23 +6209,35 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     _appTweakStates = saved ? [saved mutableCopy] : [NSMutableDictionary dictionary];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         NSMutableArray<NSDictionary *> *temp = [NSMutableArray array];
-        NSArray *dirs = @[@"/Applications", @"/var/jb/Applications"];
+        NSArray *dirs = @[@"/Applications", @"/var/jb/Applications", @"/System/Applications", @"/System/Library/CoreServices", @"/var/containers/Bundle/Application", @"/private/var/containers/Bundle/Application"];
         NSFileManager *fm = [NSFileManager defaultManager];
+        NSMutableSet<NSString *> *visitedPaths = [NSMutableSet set];
         for (NSString *d in dirs) {
-            if ([fm fileExistsAtPath:d]) {
-                NSArray *items = [fm contentsOfDirectoryAtPath:d error:nil];
-                for (NSString *item in items) {
-                    if ([item hasSuffix:@".app"]) {
-                        NSString *full = [d stringByAppendingPathComponent:item];
-                        NSString *info = [full stringByAppendingPathComponent:@"Info.plist"];
-                        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:info];
-                        NSString *name = dict[@"CFBundleDisplayName"] ?: dict[@"CFBundleName"] ?: [item stringByDeletingPathExtension];
-                        NSString *bid = dict[@"CFBundleIdentifier"] ?: item;
-                        [temp addObject:@{@"name": name, @"bundleID": bid, @"path": full}];
-                    }
-                }
+            BOOL isDir = NO;
+            if (![fm fileExistsAtPath:d isDirectory:&isDir] || !isDir) continue;
+            NSDirectoryEnumerator *enumerator = [fm enumeratorAtPath:d];
+            NSString *relative = nil;
+            while ((relative = [enumerator nextObject])) {
+                if (![relative hasSuffix:@".app"]) continue;
+                NSString *full = [d stringByAppendingPathComponent:relative];
+                if ([visitedPaths containsObject:full]) { [enumerator skipDescendants]; continue; }
+                [visitedPaths addObject:full];
+                [enumerator skipDescendants];
+                NSString *info = [full stringByAppendingPathComponent:@"Info.plist"];
+                NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:info];
+                if (![dict isKindOfClass:[NSDictionary class]]) continue;
+                NSString *name = dict[@"CFBundleDisplayName"] ?: dict[@"CFBundleName"] ?: [full.lastPathComponent stringByDeletingPathExtension];
+                NSString *bid = dict[@"CFBundleIdentifier"];
+                if (![name isKindOfClass:[NSString class]] || ![bid isKindOfClass:[NSString class]] || bid.length == 0) continue;
+                [temp addObject:@{@"name": name, @"bundleID": bid, @"path": full}];
             }
         }
+        NSMutableDictionary<NSString *, NSDictionary *> *uniqueApps = [NSMutableDictionary dictionary];
+        for (NSDictionary *app in temp) {
+            NSString *bid = app[@"bundleID"];
+            if (bid.length && !uniqueApps[bid]) uniqueApps[bid] = app;
+        }
+        temp = [uniqueApps.allValues mutableCopy];
         [temp sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
             return [(NSString *)a[@"name"] localizedCaseInsensitiveCompare:(NSString *)b[@"name"]];
         }];
