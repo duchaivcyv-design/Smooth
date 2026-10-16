@@ -4172,7 +4172,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 }
 
 // ====================================================================================================
-// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (ĐÃ GỠ BỎ HOOK UIApplication GÂY ĐEN MÀN HÌNH - BỌC THÉP 1000%)
+// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC - ÉP VƯỢT KHUNG HÌNH ĐẦU TIÊN (ZERO BLACK SCREEN)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -4180,36 +4180,16 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBAppLaunchSettings
 
 - (double)delayBeforeAppLaunch {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    // Không xóa khoảng chuẩn bị của FrontBoard; giữ timing gốc giúp scene hoàn tất trước khi bỏ splash.
     return %orig;
 }
 
 - (double)zoomDuration {
-    @try {
-        double orig = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return (orig > 0.18) ? (orig * 0.75) : orig;
-        }
-        return orig;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    return %orig;
 }
 
 - (double)launchDuration {
-    @try {
-        double orig = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return (orig > 0.18) ? (orig * 0.75) : orig;
-        }
-        return orig;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    return %orig;
 }
 
 %end
@@ -4217,11 +4197,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    // Splash screen tồn tại tới khi app sẵn sàng; không ép về 0 vì dễ lộ frame đen khi app tải chậm.
     return %orig;
 }
 
@@ -4230,34 +4206,41 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %hook SBUIAnimationController
 
 - (void)_willBeginAnimation {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            if (Titanium_IsSpringBoard()) [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
+        g_lastInteractionMachTime = mach_absolute_time();
     }
 }
 
-- (void)_didCompleteAnimation {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-            g_isInteracting = NO;
+%end
+
+%hook UIApplication
+
+// Loại bỏ hoàn toàn vòng lặp setNeedsDisplay cưỡng bức; giữ luồng User-Interactive thông suốt
+- (double)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
+    %orig;
+
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.turboAppLaunch || CFG285.fixAppLaunchBlackScreen || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
+        g_lastInteractionMachTime = mach_absolute_time();
+
+        if (Titanium_IsSpringBoard()) {
+            Titanium_LockMainThreadFast();
+        } else {
+            /* V22: leave QoS scheduling to iOS to reduce sustained heat and contention. */
         }
-    } @catch (__unused NSException *e) {
-        %orig;
+    }
+}
+
+- (void)_applicationWillEnterForeground {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_lastInteractionMachTime = mach_absolute_time();
+
+        if (Titanium_IsSpringBoard()) {
+            Titanium_LockMainThreadFast();
+        } else {
+            Titanium_BoostRenderWithoutStarvingNetwork();
+        }
     }
 }
 
