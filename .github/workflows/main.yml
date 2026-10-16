@@ -26,7 +26,6 @@ concurrency:
 jobs:
   build:
     name: build (${{ github.event.inputs.scheme || 'all' }})
-    # Đổi macos-latest sang macos-14 và chạy trên 1 máy duy nhất để không bao giờ bị kẹt hàng đợi
     runs-on: macos-14
 
     env:
@@ -71,43 +70,76 @@ jobs:
           brew install ldid make
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
+      - name: Pre-check & Static Code Lint (Quét lỗi cú pháp trước khi Build)
+        run: |
+          echo "=== Đang quét lỗi cú pháp mã nguồn C/Obj-C ==/n"
+          # Kiểm tra nhanh các lỗi ngoặc nhọn hoặc file thiếu định nghĩa bằng clang syntax-only
+          # (Chỉ check các file .m / .xm / .h nếu có trong thư mục)
+          find . -name "*.m" -o -name "*.mm" | while read file; do
+            echo "Linting: $file"
+            clang -fsyntax-only -fobjc-arc -IHeaders -I. "$file" || true
+          done
+          echo "=== Hoàn tất quét sơ bộ ==="
+
       - name: build rootless
         if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
         run: |
           mkdir -p ./all-packages/rootless
           make clean
+          # Sử dụng pipefail để bắt lỗi chính xác dòng lệnh make nếu thất bại
+          set -o pipefail
           make package -j$(sysctl -n hw.ncpu) \
             ARCHS="arm64 arm64e" \
             TARGET="$DEVICE_TARGET" \
             FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=rootless
+            THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee build_rootless.log || {
+              echo "======================================================="
+              echo " [LỖI BIÊN DỊCH ROOTLESS] - CHI TIẾT LỖI VÀ DÒNG CODE:"
+              echo "======================================================="
+              cat build_rootless.log
+              exit 1
+            }
           mv packages/*.deb ./all-packages/rootless/
-          rm -rf packages .theos
+          rm -rf packages .theos build_rootless.log
 
       - name: build rootful
         if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootful' }}
         run: |
           mkdir -p ./all-packages/rootful
           make clean
+          set -o pipefail
           make package -j$(sysctl -n hw.ncpu) \
             ARCHS="arm64 arm64e" \
             TARGET="$DEVICE_TARGET" \
-            FINALPACKAGE=1
+            FINALPACKAGE=1 2>&1 | tee build_rootful.log || {
+              echo "======================================================="
+              echo " [LỖI BIÊN DỊCH ROOTFUL] - CHI TIẾT LỖI VÀ DÒNG CODE:"
+              echo "======================================================="
+              cat build_rootful.log
+              exit 1
+            }
           mv packages/*.deb ./all-packages/rootful/
-          rm -rf packages .theos
+          rm -rf packages .theos build_rootful.log
 
       - name: build roothide
         if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'roothide' }}
         run: |
           mkdir -p ./all-packages/roothide
           make clean
+          set -o pipefail
           make package -j$(sysctl -n hw.ncpu) \
             ARCHS="arm64 arm64e" \
             TARGET="$DEVICE_TARGET" \
             FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=roothide
+            THEOS_PACKAGE_SCHEME=roothide 2>&1 | tee build_roothide.log || {
+              echo "======================================================="
+              echo " [LỖI BIÊN DỊCH ROOTHIDE] - CHI TIẾT LỖI VÀ DÒNG CODE:"
+              echo "======================================================="
+              cat build_roothide.log
+              exit 1
+            }
           mv packages/*.deb ./all-packages/roothide/
-          rm -rf packages .theos
+          rm -rf packages .theos build_roothide.log
 
       - name: upload rootless-package
         if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
@@ -133,6 +165,7 @@ jobs:
   release:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on-latest: ubuntu-latest
     runs-on: ubuntu-latest
     permissions:
       contents: write
