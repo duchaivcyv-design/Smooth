@@ -4172,7 +4172,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 }
 
 // ====================================================================================================
-// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (ĐIỀN ĐỦ THÂN HÀM RỖNG - GIA TỐC MỞ APP 0MS - BỌC THÉP 1000%)
+// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (ĐÃ GỠ BỎ HOOK UIApplication GÂY ĐEN MÀN HÌNH - BỌC THÉP 1000%)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -4256,42 +4256,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             if (g_activeAnimationCount > 0) g_activeAnimationCount--;
             g_isInteracting = NO;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
-}
-
-%end
-
-%hook UIApplication
-
-- (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            Titanium_EnableZeroLatencyPipeline();
-        }
-        %orig(scene, context, completion);
-    } @catch (__unused NSException *e) {
-        %orig(scene, context, completion);
-    }
-}
-
-- (void)_applicationWillEnterForeground {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            Titanium_ReapplyFrameRateToAllScenes();
-        }
-        %orig;
     } @catch (__unused NSException *e) {
         %orig;
     }
