@@ -57,8 +57,7 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
-# Trỏ cờ codesign vào đúng tên file entitlements
-BoostiPhone6sCore_CODESIGN_FLAGS = -SBoostiPhone6sCore.entitlements
+BoostiPhone6sCore_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/library.mk
 
