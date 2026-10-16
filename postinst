@@ -7,17 +7,19 @@ set -e
 # (AN TOÀN TUYỆT ĐỐI: CHUẨN POSIX 100%, PHÂN QUYỀN MOBILE/ROOT CHÍNH XÁC)
 # ====================================================================================================
 
-# 1. [ÉP TOÀN DIỆN]: TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ĐỘ SÂU MAXDEPTH 4)
+# 1. TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ƯU TIÊN BIẾN MÔI TRƯỜNG)
 JB_ROOT=""
-if [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
+if [ -n "$JBROOT" ] && [ -d "$JBROOT" ]; then
+    JB_ROOT="$JBROOT"
+elif [ -n "$ROOTLESS_PATH" ] && [ -d "$ROOTLESS_PATH" ]; then
     JB_ROOT="$ROOTLESS_PATH"
 elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
     JB_ROOT="$JB_ROOT_PATH"
 elif [ -L "/var/jb" ] || [ -d "/var/jb" ]; then
     JB_ROOT="/var/jb"
 else
-    # Quét sâu toàn bộ thư mục RootHide ngẫu nhiên trên phân vùng /private/preboot
-    ROOTHIDE_DIR=$(find /private/preboot -maxdepth 4 -type d -name "jb-*" 2>/dev/null | head -n 1)
+    # Quét nhanh thư mục RootHide ngẫu nhiên trên phân vùng /private/preboot
+    ROOTHIDE_DIR=$(find /private/preboot -maxdepth 3 -type d -name "jb-*" 2>/dev/null | head -n 1)
     if [ -z "$ROOTHIDE_DIR" ]; then
         ROOTHIDE_DIR=$(find /var -maxdepth 2 -type d -name "jb-*" 2>/dev/null | head -n 1)
     fi
@@ -29,12 +31,12 @@ else
     fi
 fi
 
-# 2. [ÉP TOÀN DIỆN]: PHÂN QUYỀN CHUẨN CHO BUNDLE CÀI ĐẶT & THƯ VIỆN NHỊ PHÂN (ROOT:WHEEL 755)
+# 2. PHÂN QUYỀN CHUẨN CHO BUNDLE CÀI ĐẶT & THƯ VIỆN NHỊ PHÂN (ROOT:WHEEL 755 / 644)
 BUNDLE_PATHS="
 $JB_ROOT/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 $JB_ROOT/Library/PreferenceBundles/BoostiPhone6s.bundle
-/var/jb/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
-/var/jb/Library/PreferenceBundles/BoostiPhone6s.bundle
+/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
+/Library/PreferenceBundles/BoostiPhone6s.bundle
 "
 
 for B_PATH in $BUNDLE_PATHS; do
@@ -50,8 +52,8 @@ $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6s.dylib
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6s.plist
-/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
-/var/jb/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
+/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
+/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
 "
 
 for D_PATH in $DYLIB_PATHS; do
@@ -61,13 +63,13 @@ for D_PATH in $DYLIB_PATHS; do
     fi
 done
 
-# 3. [ÉP TOÀN DIỆN]: PHÂN QUYỀN ENTRY PLIST PREFERENCELOADER (644 root:wheel)
+# 3. PHÂN QUYỀN ENTRY PLIST PREFERENCELOADER (644 root:wheel)
 PLIST_PATHS="
 $JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
 $JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist
 $JB_ROOT/Library/PreferenceLoader/BoostiPhone6sPrefs.plist
-/var/jb/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
-/var/jb/Library/PreferenceLoader/BoostiPhone6sPrefs.plist
+/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
+/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist
 "
 
 for P_PATH in $PLIST_PATHS; do
@@ -77,11 +79,10 @@ for P_PATH in $PLIST_PATHS; do
     fi
 done
 
-# 4. [ÉP TOÀN DIỆN]: KHỞI TẠO THƯ MỤC CẤU HÌNH MOBILE & CẤP QUYỀN MOBILE:MOBILE (755)
+# 4. KHỞI TẠO THƯ MỤC CẤU HÌNH & PHÂN QUYỀN MOBILE:MOBILE (755 / 644)
 PREF_DIR_LIST="
 /var/mobile/Library/Preferences
 $JB_ROOT/var/mobile/Library/Preferences
-/var/jb/var/mobile/Library/Preferences
 "
 
 for P_DIR in $PREF_DIR_LIST; do
@@ -94,11 +95,10 @@ for P_DIR in $PREF_DIR_LIST; do
     fi
 done
 
-# Nếu file cấu hình đã tồn tại: Ép quyền mobile:mobile 644 để Settings ghi đọc thoải mái
 PREF_FILE_LIST="
 /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist
 $JB_ROOT/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist
-/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist
+$JB_ROOT/Library/Preferences/com.taojb.boostiphone6s.plist
 "
 
 for PF in $PREF_FILE_LIST; do
@@ -108,21 +108,41 @@ for PF in $PREF_FILE_LIST; do
     fi
 done
 
-# 5. [ÉP TOÀN DIỆN]: DỌN CỜ AN TOÀN/SAFE MODE CŨ VÀ ĐẶT LẠI TRẠNG THÁI KHỞI CHẠY MỚI
+# 5. ĐĂNG KÝ ICON ỨNG DỤNG BẰNG UICACHE (NẾU GÓI CÓ CHỨA APP UI)
+APP_PATHS="
+$JB_ROOT/Applications/BoostiPhone6s.app
+$JB_ROOT/Applications/BoostiPhone6sApp.app
+/Applications/BoostiPhone6s.app
+"
+
+if command -v uicache >/dev/null 2>&1; then
+    for A_PATH in $APP_PATHS; do
+        if [ -d "$A_PATH" ]; then
+            chmod -R 755 "$A_PATH" 2>/dev/null || true
+            chown -R root:wheel "$A_PATH" 2>/dev/null || true
+            uicache -p "$A_PATH" >/dev/null 2>&1 || true
+        fi
+    done
+fi
+
+# 6. DỌN SẠCH CỜ AN TOÀN/SAFE MODE CŨ VÀ RESET BỘ ĐẾM KHỞI CHẠY
 defaults delete com.taojb.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
 defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
 
 rm -f /tmp/.boost_boot_counter 2>/dev/null || true
 rm -f /tmp/.titanium_boot_guard 2>/dev/null || true
-rm -f "$JB_ROOT/tmp/.boost_boot_counter" 2>/dev/null || true
-rm -f /var/jb/tmp/.boost_boot_counter 2>/dev/null || true
+if [ -n "$JB_ROOT" ]; then
+    rm -f "$JB_ROOT/tmp/.boost_boot_counter" 2>/dev/null || true
+    rm -f "$JB_ROOT/tmp/.titanium_boot_guard" 2>/dev/null || true
+fi
 
-# 6. [ÉP TOÀN DIỆN]: LÀM SẠCH DAEMON CFPREFSD & GỬI TÍN HIỆU DARWIN KÍCH HOẠT TỨC THÌ
+# 7. LÀM SẠCH DAEMON CFPREFSD & GỬI TÍN HIỆU DARWIN KÍCH HOẠT ĐỒNG BỘ
 killall -9 cfprefsd 2>/dev/null || true
 
 if command -v notifyutil >/dev/null 2>&1; then
     notifyutil -p com.taojb.boostiphone6s/ReloadPrefs >/dev/null 2>&1 || true
     notifyutil -p com.taojb.boostiphone6s/ReloadUIKitPrefs >/dev/null 2>&1 || true
+    notifyutil -p com.taojb.boostiphone6s/HardwareSync >/dev/null 2>&1 || true
     notifyutil -p com.taojb.boostiphone6s/FPSChanged >/dev/null 2>&1 || true
     notifyutil -p com.titanium.v285.prefschanged >/dev/null 2>&1 || true
 fi
