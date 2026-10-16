@@ -2963,9 +2963,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             %orig;
             return;
         }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
+        // Preserve CoreAnimation's original display scheduling.
         %orig;
     } @catch (__unused NSException *e) {
         %orig;
@@ -3777,9 +3775,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 - (void)setNeedsLayout {
     @try {
         %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
+        // Preserve UIKit/CoreAnimation's normal layout scheduling.
     } @catch (__unused NSException *e) {
         %orig;
     }
@@ -6993,9 +6989,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 - (void)setNeedsDisplay {
     @try {
         %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
+        // Preserve CoreAnimation's original display scheduling.
     } @catch (__unused NSException *e) {
         %orig;
     }
