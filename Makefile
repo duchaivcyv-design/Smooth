@@ -11,8 +11,9 @@ LIBRARY_NAME = BoostiPhone6sCore
 
 BoostiPhone6sCore_INSTALL_PATH = $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
-# Thêm trực tiếp TitaniumKernelOverdrive.m vào danh sách biên dịch
-BoostiPhone6sCore_FILES = Tweak.xm TitaniumKernelOverdrive.m
+# Vá lỗi ngắt dòng bằng dấu gạch chéo ngược (\) chính xác
+BoostiPhone6sCore_FILES = Tweak.xm \
+                          TitaniumKernelOverdrive.m
                           
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -O3 \
@@ -56,36 +57,26 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
                             -lpthread
 
-# Ký Entitlements cho thư viện
+# Trỏ chuẩn xác vào file entitlements đầy đủ đặc quyền chống văng app
 BoostiPhone6sCore_CODESIGN_FLAGS = -SBoostiPhone6sCore.entitlements
 
 include $(THEOS_MAKE_PATH)/library.mk
 
-# Quản lý subproject App
+# Quản lý subproject App (nếu có)
 SUBPROJECTS += BoostiPhone6s
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
-# Chỉ tạo file mẫu nếu file BoostiPhone6sCore.entitlements chưa tồn tại, tránh ghi đè file quyền cao
+# Kiểm tra sự tồn tại của file entitlements tối thượng trước khi build
 before-all::
 	@if [ ! -f "BoostiPhone6sCore.entitlements" ]; then \
 		echo ""; \
-		echo "=== [BoostiPhone6sCore] Khởi tạo BoostiPhone6sCore.entitlements mặc định ==="; \
-		printf '%s\n' \
-			'<?xml version="1.0" encoding="UTF-8"?>' \
-			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
-			'<plist version="1.0">' \
-			'<dict>' \
-			'	<key>com.apple.private.security.no-sandbox</key>' \
-			'	<true/>' \
-			'	<key>platform-application</key>' \
-			'	<true/>' \
-			'</dict>' \
-			'</plist>' > BoostiPhone6sCore.entitlements; \
-		echo "  [OK] Đã tạo file entitlements!"; \
+		echo "  [CẢNH BÁO] Không tìm thấy file BoostiPhone6sCore.entitlements ở thư mục gốc!"; \
+		echo "  Vui lòng đặt file entitlements chuẩn vào đây để tránh văng tweak!"; \
+		exit 1; \
 	else \
-		echo "=== [BoostiPhone6sCore] Giữ nguyên BoostiPhone6sCore.entitlements hiện có ==="; \
+		echo "=== [BoostiPhone6sCore] Đã tìm thấy file BoostiPhone6sCore.entitlements chuẩn ==="; \
 	fi
 
 after-stage::
