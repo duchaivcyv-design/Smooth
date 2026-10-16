@@ -5371,17 +5371,9 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
             if (!Titanium_IsSpringBoard()) {
                 EnforceMaxCPUPower();
                 Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
+                // Keep native CoreAnimation latency mode while the first frame is prepared.
                 
-                // ===== [V29 FIX ĐEN APP FRAME ĐẦU]: KHÔNG ép setNeedsDisplay + CATransaction flush quá sớm.
-                // Ép flush trước khi app chuẩn bị xong frame đầu tiên → render frame rỗng → MÀN HÌNH ĐEN.
-                // Chỉ setNeedsLayout, delay 100ms để iOS tự render frame đầu một cách tự nhiên. =====
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                    @try {
-                        [self setNeedsLayout];
-                    } @catch (__unused NSException *subEx) {}
-                });
-                // ====================================================================================
+                // Let UIKit/CoreAnimation schedule the initial layout and first frame normally.
 
                 if (@available(iOS 15.0, *)) {
                     @try {
@@ -6771,18 +6763,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %end
 
-%hook CATransaction
-
-+ (void)commit {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_EnableZeroLatencyPipeline(); // Kích hoạt LowLatency hợp lệ, không phá vỡ transaction frame 0
-        }
-    } @catch (__unused NSException *e) {}
-    %orig;
-}
-
-%end
+// CATransaction commit is intentionally left unhooked to preserve native first-frame scheduling.
 
 %hook CAImageQueue
 
@@ -7053,13 +7034,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
                 } @catch (__unused NSException *e) {}
             }
 
-            // Kích hoạt chu kỳ dựng hình ngay sau khi cửa sổ vừa gắn vào WindowScene
-            dispatch_async(dispatch_get_main_queue(), ^{
-                @try {
-                    [self.layer setNeedsDisplay];
-                    Titanium_EnableZeroLatencyPipeline();
-                } @catch (__unused NSException *subEx) {}
-            });
+            // Let UIKit/CoreAnimation schedule the first display cycle after scene attachment.
         }
     } @catch (__unused NSException *e) {
         %orig;
