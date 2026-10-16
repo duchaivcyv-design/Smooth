@@ -5371,14 +5371,12 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
                 Titanium_EnforceThreadVIPPolicy();
                 Titanium_EnableZeroLatencyPipeline();
                 
-                // ===== BỌC LỆNH XẢ RENDER VÀO RUNLOOP TIẾP THEO ĐỂ TRÁNH DEADLOCK ĐEN MÀN HÌNH =====
-                dispatch_async(dispatch_get_main_queue(), ^{
+                // ===== [V29 FIX ĐEN APP FRAME ĐẦU]: KHÔNG ép setNeedsDisplay + CATransaction flush quá sớm.
+                // Ép flush trước khi app chuẩn bị xong frame đầu tiên → render frame rỗng → MÀN HÌNH ĐEN.
+                // Chỉ setNeedsLayout, delay 100ms để iOS tự render frame đầu một cách tự nhiên. =====
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
                         [self setNeedsLayout];
-                        [self.layer setNeedsDisplay];
-                        if ([CATransaction respondsToSelector:@selector(flush)]) {
-                            [CATransaction flush];
-                        }
                     } @catch (__unused NSException *subEx) {}
                 });
                 // ====================================================================================
@@ -6304,10 +6302,16 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            if (Titanium_IsSpringBoard()) {
-                Titanium_LockMainThreadFast();
-            }
+            // [V29 FIX ĐEN APP FRAME ĐẦU]: Delay EnforceMaxCPUPower/LockMainThreadFast 150ms
+            // để scene hiển thị frame đầu tiên trước, không bị block bởi syscall Mach → ĐEN.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                @try {
+                    EnforceMaxCPUPower();
+                    if (Titanium_IsSpringBoard()) {
+                        Titanium_LockMainThreadFast();
+                    }
+                } @catch (__unused NSException *subEx) {}
+            });
         }
     } @catch (__unused NSException *e) {
         %orig;
