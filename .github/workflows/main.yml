@@ -69,13 +69,28 @@ jobs:
           brew install ldid make
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: Pre-check & Static Code Lint (Chỉ quét file nguồn gốc, loại bỏ template theos)
+      - name: Pre-check & Bracket Mismatch Finder in Tweak.xm
         run: |
-          echo "=== Đang quét lỗi cú pháp file TitaniumKernelOverdrive.m ==="
-          if [ -f "TitaniumKernelOverdrive.m" ]; then
-            clang -fsyntax-only -fobjc-arc -IHeaders -I. "TitaniumKernelOverdrive.m" || echo "Cảnh báo cú pháp trong TitaniumKernelOverdrive.m"
-          fi
-          echo "=== Hoàn tất quét sơ bộ ==="
+          echo "=== Đang kiểm tra tính cân bằng ngoặc nhọn trong Tweak.xm ==="
+          python3 -c "
+          with open('Tweak.xm', 'r', encoding='utf-8') as f:
+              lines = f.readlines()
+          
+          open_braces = 0
+          for i, line in enumerate(lines, 1):
+              # Loại bỏ các đoạn chú thích kiểu // hoặc bên trong chuỗi đơn giản để tránh đếm nhầm
+              clean_line = line.split('//')[0]
+              opens = clean_line.count('{')
+              closes = clean_line.count('}')
+              open_braces += opens - closes
+              
+              if open_braces < 0:
+                  print(f'🚨 LỆCH NGOẶC TẠI DÒNG {i}: Thừa dấu đóng } -> {line.strip()}')
+                  open_braces = 0
+          
+          print(f'Số lượng ngoặc mở lệch cuối file: {open_braces} (Nếu > 0 nghĩa là đang bị thiếu dấu đóng ở đâu đó)')
+          "
+          echo "=== Hoàn tất kiểm tra ngoặc ==="
 
       - name: build rootless
         if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
