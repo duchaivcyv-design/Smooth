@@ -6808,14 +6808,16 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 %hook CATransaction
+
 + (void)commit {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_EnableZeroLatencyPipeline(); // Chỉ kích hoạt LowLatency hợp lệ, không phá vỡ giao dịch frame 0
+            Titanium_EnableZeroLatencyPipeline(); // Kích hoạt LowLatency hợp lệ, không phá vỡ transaction frame 0
         }
     } @catch (__unused NSException *e) {}
     %orig;
 }
+
 %end
 
 %hook CAImageQueue
@@ -6844,70 +6846,6 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
                     float floorRate = Titanium_RangeFloorForCap(maxTarget);
                     @try {
                         [(id)self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
-                    } @catch (__unused NSException *subEx) {}
-                }
-            }
-        }
-    } @catch (__unused NSException *e) {}
-    
-    %orig(time);
-}
-
-%end
-
-
-// ====================================================================================================
-// TẦNG SÂU CỰC HẠN: KHÓA CỨNG GIAO DỊCH RENDER & HÀNG ĐỢI ẢNH (CHẶN ĐỨNG THAO TÁC ÉP XUỐNG 60HZ)
-// ====================================================================================================
-
-%hook CATransaction
-
-// Ép buộc mọi giao dịch render hệ thống từ khung hình đầu tiên phải tuân thủ mức Hz tối đa tuyệt đối
-+ (void)commit {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (@available(iOS 15.0, *)) {
-                @try {
-                    // Buộc các giao dịch CoreAnimation không bị hạ thấp biên độ dải khung hình
-                    [self setValue:@(YES) forKey:@"CATransactionDisableLowLatencyThrottle"];
-                } @catch (__unused NSException *subEx) {}
-            }
-        }
-    } @catch (__unused NSException *e) {}
-    %orig;
-}
-
-%end
-
-%hook CAImageQueue
-
-// Chặn không cho hàng đợi hình ảnh của tiến trình render bị bóp nghẽn băng thông ở khung hình đầu
-- (void)insertImage:(id)image atIndex:(unsigned int)index {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            EnforceMaxCPUPower();
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(image, index);
-}
-
-%end
-
-%hook CALayer
-
-// Đảm bảo mọi layer khởi tạo từ khung hình đầu tiên đều bị khóa cứng biên độ dải Hz tối đa, không cho phép hệ thống ghi đè
-- (void)setPresentationTime:(CFTimeInterval)time {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (@available(iOS 15.0, *)) {
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    if (maxTarget < 15.0f) maxTarget = 60.0f;
-                    if (maxTarget > 240.0f) maxTarget = 240.0f;
-                    float floorRate = Titanium_RangeFloorForCap(maxTarget);
-                    @try {
-                     [(id)self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
-
                     } @catch (__unused NSException *subEx) {}
                 }
             }
