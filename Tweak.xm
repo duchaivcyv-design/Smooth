@@ -6790,17 +6790,20 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 - (void)setPresentationTime:(CFTimeInterval)time {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-if (@available(iOS 15.0, *)) {
-    if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-        if (maxTarget < 15.0f) maxTarget = 60.0f;
-        if (maxTarget > 240.0f) maxTarget = 240.0f;
-        float floorRate = Titanium_RangeFloorForCap(maxTarget);
-        @try {
-            [self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
-        } @catch (__unused NSException *subEx) {}
-    }
-} @catch (__unused NSException *e) {}
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    if (maxTarget < 15.0f) maxTarget = 60.0f;
+                    if (maxTarget > 240.0f) maxTarget = 240.0f;
+                    float floorRate = Titanium_RangeFloorForCap(maxTarget);
+                    @try {
+                        [self setPreferredFrameRateRange:SafeMakeFRR(floorRate, maxTarget, maxTarget)];
+                    } @catch (__unused NSException *subEx) {}
+                }
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    
     %orig(time);
 }
 
