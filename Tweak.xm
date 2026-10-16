@@ -649,6 +649,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 
 @interface CAWindowServerDisplay : NSObject
 - (void)setMinimumFrameDuration:(double)duration;
+- (double)maximumRefreshRate;
 - (void)setMaximumRefreshRate:(double)rate;
 - (void)setIdealRefreshRate:(double)rate;
 - (void)setAllowsVirtualModes:(BOOL)flag;
