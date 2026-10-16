@@ -72,9 +72,7 @@ jobs:
 
       - name: Pre-check & Static Code Lint (Quét lỗi cú pháp trước khi Build)
         run: |
-          echo "=== Đang quét lỗi cú pháp mã nguồn C/Obj-C ==/n"
-          # Kiểm tra nhanh các lỗi ngoặc nhọn hoặc file thiếu định nghĩa bằng clang syntax-only
-          # (Chỉ check các file .m / .xm / .h nếu có trong thư mục)
+          echo "=== Đang quét lỗi cú pháp mã nguồn C/Obj-C ==="
           find . -name "*.m" -o -name "*.mm" | while read file; do
             echo "Linting: $file"
             clang -fsyntax-only -fobjc-arc -IHeaders -I. "$file" || true
@@ -86,7 +84,6 @@ jobs:
         run: |
           mkdir -p ./all-packages/rootless
           make clean
-          # Sử dụng pipefail để bắt lỗi chính xác dòng lệnh make nếu thất bại
           set -o pipefail
           make package -j$(sysctl -n hw.ncpu) \
             ARCHS="arm64 arm64e" \
@@ -165,7 +162,6 @@ jobs:
   release:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on-latest: ubuntu-latest
     runs-on: ubuntu-latest
     permissions:
       contents: write
