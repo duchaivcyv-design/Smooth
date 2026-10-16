@@ -7219,7 +7219,8 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "akd") != NULL ||
             strcasestr(progName, "identityservicesd") != NULL ||
             strcasestr(progName, "imagent") != NULL ||
-            strcasestr(progName, "bluetoothd") != NULL) {
+            strcasestr(progName, "bluetoothd") != NULL)
+            strcasestr(progName, "profiled") != NULL || {
             return;
         }
 
