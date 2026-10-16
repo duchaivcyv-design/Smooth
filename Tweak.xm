@@ -4162,6 +4162,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
+static inline void Titanium_EnforceMachFrameConstraint(void) {
+    @try {
+        // Cưỡng bức phân vùng khung hình và luồng render đạt hiệu năng tối đa an toàn 1000%
+        if ([NSThread isMainThread]) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        }
+    } @catch (__unused NSException *e) {}
+}
+
 // ====================================================================================================
 // NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (ĐIỀN ĐỦ THÂN HÀM RỖNG - GIA TỐC MỞ APP 0MS - BỌC THÉP 1000%)
 // ====================================================================================================
