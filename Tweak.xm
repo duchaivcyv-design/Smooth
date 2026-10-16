@@ -2612,7 +2612,52 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 }
 
 // ====================================================================================================
-// NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (BẺ KHÓA CPU/GPU 100% & ZERO-LATENCY - AN TOÀN TUYỆT ĐỐI 1000%)
+// THIẾT LẬP CHU KỲ REALTIME TOÀN HỆ THỐNG
+// ====================================================================================================
+
+static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
+    if (![NSThread isMainThread]) return;
+    if (targetHz < 15) targetHz = 15;
+    if (targetHz > 240) targetHz = 240;
+
+    static __thread int s_lastAppliedHz = 0;
+    if (__builtin_expect(s_lastAppliedHz == targetHz, 1)) return;
+    s_lastAppliedHz = targetHz;
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    mach_timebase_info_data_t tb;
+    if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.denom == 0) return;
+
+    thread_port_t selfThread = mach_thread_self();
+    if (selfThread == MACH_PORT_NULL) return;
+
+    thread_precedence_policy_data_t precPolicy;
+    precPolicy.importance = 63;
+    Titanium_KernelForceWriteProtectBypass(&precPolicy, &precPolicy, sizeof(precPolicy));
+    thread_policy_set(selfThread,
+                      THREAD_PRECEDENCE_POLICY,
+                      (thread_policy_t)&precPolicy,
+                      THREAD_PRECEDENCE_POLICY_COUNT);
+
+    thread_throttle_policy_data_t throttlePolicy;
+    throttlePolicy.pset_limit = 0;
+    Titanium_KernelForceWriteProtectBypass(&throttlePolicy, &throttlePolicy, sizeof(throttlePolicy));
+    thread_policy_set(selfThread,
+                      THREAD_THROTTLE_POLICY,
+                      (thread_policy_t)&throttlePolicy,
+                      1);
+
+    mach_port_deallocate(mach_task_self(), selfThread);
+}
+
+static inline void Titanium_EnforceMachFrameConstraint(void) {
+    int targetHz = (int)(g_syncPayloadV285.targetHz > 0 ? g_syncPayloadV285.targetHz : (g_cachedResolvedHz > 0 ? g_cachedResolvedHz : 120));
+    Titanium_EnforceMachFrameConstraintDynamic(targetHz);
+}
+
+// ====================================================================================================
+// NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (BẺ KHÓA CPU/GPU 100% & ZERO-LATENCY)
 // ====================================================================================================
 
 %group Group_Apple_Internal_ProMotion_Apex
@@ -2620,28 +2665,20 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook _UIUpdateCycle
 
 - (BOOL)isPerformingUpdate {
-    @try {
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return NO;
-    }
+    return %orig;
 }
 
 - (void)performUpdateWithInfo:(void *)info {
-    @try {
-        if (TITANIUM_LITE_MODE) {
-            %orig(info);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-            Titanium_EnableZeroLatencyPipeline();
-        }
+    if (TITANIUM_LITE_MODE) {
         %orig(info);
-    } @catch (__unused NSException *e) {
-        // Nuốt toàn bộ ngoại lệ ngầm, bảo vệ tuyệt đối hệ thống
+        return;
     }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(info);
 }
 
 %end
@@ -2649,19 +2686,15 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook _UIUpdateSequenceItem
 
 - (void)performItem {
-    @try {
-        if (TITANIUM_LITE_MODE) {
-            %orig;
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-        }
+    if (TITANIUM_LITE_MODE) {
         %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+        return;
     }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+    }
+    %orig;
 }
 
 %end
@@ -2669,7 +2702,7 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 1: CẢM ỨNG 0MS NỘI BỘ APPLE (BẺ KHÓA HIỆU NĂNG PHẦN CỨNG & CHỐNG NHIỄU SẠC - BỌC THÉP CHỐNG NULL)
+// NHÓM 1: CẢM ỨNG 0MS NỘI BỘ APPLE (BẺ KHÓA HIỆU NĂNG PHẦN CỨNG & CHỐNG NHIỄU SẠC)
 // ====================================================================================================
 
 %group Group_ZeroLatency_Touch_Opt
@@ -2677,25 +2710,17 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook UIEventFetcher
 
 - (void)_receiveHIDEvent:(void *)event {
-    @try {
-        if (!event) {
-            %orig(event);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            g_isInteracting = YES;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        g_isInteracting = YES;
 
-            // Cưỡng bức luồng sự kiện HID phần cứng chạy ở mức ưu tiên cao nhất
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            Titanium_DisableKernelThreadThrottling();
-        }
-        %orig(event);
-    } @catch (__unused NSException *e) {
-        %orig(event);
+        // Cưỡng bức luồng sự kiện HID phần cứng chạy ở mức ưu tiên cao nhất
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        Titanium_DisableKernelThreadThrottling();
     }
+    %orig(event);
 }
 
 %end
@@ -2703,15 +2728,11 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook _UIEventDispatcher
 
 - (void)dispatchEvent:(UIEvent *)event toTarget:(id)target {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && event) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-        }
-        %orig(event, target);
-    } @catch (__unused NSException *e) {
-        %orig(event, target);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
     }
+    %orig(event, target);
 }
 
 %end
@@ -2719,50 +2740,36 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook SBIconView
 
 - (double)highlightDelay {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        return 0.0;
+    }
     return %orig;
 }
 
 - (void)setHighlighted:(BOOL)highlighted {
-    @try {
-        if (highlighted && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-        }
-        %orig(highlighted);
-    } @catch (__unused NSException *e) {
-        %orig(highlighted);
+    if (highlighted && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+        Titanium_TriggerInstantTouchBurst();
     }
+    %orig(highlighted);
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-        }
-        %orig(touches, event);
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+        Titanium_TriggerInstantTouchBurst();
     }
+    %orig(touches, event);
 }
 
 - (void)setTouchDownInIcon:(BOOL)touchDown {
-    @try {
-        if (touchDown && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-        }
-        %orig(touchDown);
-    } @catch (__unused NSException *e) {
-        %orig(touchDown);
+    if (touchDown && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
     }
+    %orig(touchDown);
 }
 
 %end
@@ -2770,25 +2777,19 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook UIControl
 
 - (NSTimeInterval)_touchDelayThreshold {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        return 0.0;
+    }
     return %orig;
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-        }
-        %orig(touches, event);
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+        Titanium_TriggerInstantTouchBurst();
     }
+    %orig(touches, event);
 }
 
 %end
@@ -2796,63 +2797,54 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %hook UIWindow
 
 - (BOOL)_shouldDelayTouchForCancelEvents {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            if (g_activeAnimationCount > 0 || g_isScrollingActive) {
-                return %orig;
-            }
-            return NO;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        if (g_activeAnimationCount > 0 || g_isScrollingActive) {
+            return %orig;
         }
-    } @catch (__unused NSException *e) {}
+        return NO;
+    }
     return %orig;
 }
 
 - (void)sendEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && event) {
-            if (event.type == 0) { // UIEventTypeTouches
-                BOOL shouldTriggerBoost = YES;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && event) {
+        if (event.type == 0) { // UIEventTypeTouches
+            BOOL shouldTriggerBoost = YES;
 
-                @try {
-                    if ((CFG285.antiGhostTouch || g_syncPayloadV285.antiGhostTouch) && g_isDeviceChargingV285) {
-                        NSSet *allTouches = [event allTouches];
-                        UITouch *touch = [allTouches anyObject];
-                        if (touch && touch.phase == UITouchPhaseMoved) {
-                            CGPoint currentLoc = [touch locationInView:nil];
-                            CGPoint prevLoc = [touch previousLocationInView:nil];
-                            CGFloat deltaX = currentLoc.x - prevLoc.x;
-                            CGFloat deltaY = currentLoc.y - prevLoc.y;
-                            if ((deltaX * deltaX + deltaY * deltaY) < 4.0) {
-                                shouldTriggerBoost = NO;
-                            }
-                        }
+            if ((CFG285.antiGhostTouch || g_syncPayloadV285.antiGhostTouch) && g_isDeviceChargingV285) {
+                NSSet *allTouches = [event allTouches];
+                UITouch *touch = [allTouches anyObject];
+                if (touch && touch.phase == UITouchPhaseMoved) {
+                    CGPoint currentLoc = [touch locationInView:nil];
+                    CGPoint prevLoc = [touch previousLocationInView:nil];
+                    CGFloat deltaX = currentLoc.x - prevLoc.x;
+                    CGFloat deltaY = currentLoc.y - prevLoc.y;
+                    if ((deltaX * deltaX + deltaY * deltaY) < 4.0) {
+                        shouldTriggerBoost = NO;
                     }
-                } @catch (__unused NSException *subEx) {}
+                }
+            }
 
-                if (shouldTriggerBoost) {
-                    static uint64_t s_lastWindowTouchTick = 0;
-                    uint64_t now = mach_absolute_time();
-                    if (now - s_lastWindowTouchTick > Titanium_NanosToMachTicks(35ULL * 1000000ULL)) {
-                        s_lastWindowTouchTick = now;
-                        g_lastInteractionMachTime = now;
-                        
-                        EnforceMaxCPUPower();
-                        Titanium_EnforceThreadVIPPolicy();
-                        
-                        if (Titanium_IsSpringBoard()) {
-                            Titanium_LockMainThreadFast();
-                        } else {
-                            Titanium_BoostRenderWithoutStarvingNetwork();
-                        }
+            if (shouldTriggerBoost) {
+                static uint64_t s_lastWindowTouchTick = 0;
+                uint64_t now = mach_absolute_time();
+                if (now - s_lastWindowTouchTick > Titanium_NanosToMachTicks(35ULL * 1000000ULL)) {
+                    s_lastWindowTouchTick = now;
+                    g_lastInteractionMachTime = now;
+                    
+                    EnforceMaxCPUPower();
+                    Titanium_EnforceThreadVIPPolicy();
+                    
+                    if (Titanium_IsSpringBoard()) {
+                        Titanium_LockMainThreadFast();
+                    } else {
+                        Titanium_BoostRenderWithoutStarvingNetwork();
                     }
                 }
             }
         }
-        %orig(event);
-    } @catch (__unused NSException *exception) {
-        // Nuốt trọn toàn bộ ngoại lệ vùng nhớ ngầm, bảo vệ an toàn tuyệt đối 1000% không Safe Mode
-        %orig(event);
     }
+    %orig(event);
 }
 
 %end
@@ -2860,7 +2852,7 @@ static BOOL Titanium_IsLegacyA9toA12(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS - PHÁ KHÓA V-SYNC, MỞ TRẦN 240FPS & TRIPLE BUFFERING GPU (BẢO VỆ AN TOÀN)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS - PHÁ KHÓA V-SYNC, MỞ TRẦN 240FPS & TRIPLE BUFFERING GPU
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -2870,74 +2862,60 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %hook CAMetalLayer
 
 - (void)didMoveToWindow {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
-            CGSize scrSize = [UIScreen mainScreen].bounds.size;
-            CGFloat scrArea = scrSize.width * scrSize.height;
-            CGRect layerBounds = self.bounds;
-            CGFloat layerArea = layerBounds.size.width * layerBounds.size.height;
-            if (scrArea > 0.0 && (layerArea / scrArea) >= 0.70) {
-                g_isMetalGameProcess = YES;
-            }
-
-            NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-            BOOL isTikTok = bundleID && ([bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"]);
-            if (!isTikTok) {
-                self.maximumDrawableCount = 3;
-            }
-
-            if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-                self.allowsNextDrawableTimeout = YES;
-            }
-
-            if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES;
-            }
-
-            if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
-                self.framebufferOnly = YES;
-            }
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
+        CGSize scrSize = [UIScreen mainScreen].bounds.size;
+        CGFloat scrArea = scrSize.width * scrSize.height;
+        CGRect layerBounds = self.bounds;
+        CGFloat layerArea = layerBounds.size.width * layerBounds.size.height;
+        if (scrArea > 0.0 && (layerArea / scrArea) >= 0.70) {
+            g_isMetalGameProcess = YES;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
+
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
+        if (!isTikTok) {
+            self.maximumDrawableCount = 3;
+        }
+
+        if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+            self.allowsNextDrawableTimeout = YES;
+        }
+
+        if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
+            self.lowLatencyMode = YES;
+        }
+
+        if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
+            self.framebufferOnly = YES;
+        }
     }
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    @try {
-        %orig(enabled);
-    } @catch (__unused NSException *e) {
-        %orig(enabled);
-    }
+    %orig(enabled);
 }
 
 - (NSUInteger)maximumDrawableCount {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return 3;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        return 3;
+    }
     return %orig;
 }
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(3);
-            return;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        %orig(3);
+        return;
+    }
     %orig(count);
 }
 
 - (id)nextDrawable {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+    }
     return %orig;
 }
 
@@ -2946,22 +2924,18 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %hook CALayer
 
 - (void)display {
-    @try {
-        if (TITANIUM_LITE_MODE) {
-            %orig;
-            return;
-        }
-        if (Titanium_IsAIApp()) {
-            %orig;
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
+    if (TITANIUM_LITE_MODE) {
         %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+        return;
     }
+    if (Titanium_IsAIApp()) {
+        %orig;
+        return;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig;
 }
 
 %end
@@ -2969,11 +2943,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %hook UIPanGestureRecognizer
 
 - (CGPoint)translationInView:(UIView *)view {
-    @try {
-        return %orig(view);
-    } @catch (__unused NSException *e) {
-        return CGPointZero;
-    }
+    return %orig(view);
 }
 
 %end
@@ -2981,19 +2951,15 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %hook CAContext
 
 - (void)setDesiredDynamicRange:(float)range {
-    @try {
-        if (TITANIUM_LITE_MODE) {
-            %orig(range);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(1.0f);
-            return;
-        }
+    if (TITANIUM_LITE_MODE) {
         %orig(range);
-    } @catch (__unused NSException *e) {
-        %orig(range);
+        return;
     }
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(1.0f);
+        return;
+    }
+    %orig(range);
 }
 
 %end
@@ -3001,7 +2967,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %end
 
 // ====================================================================================================
-// [BẺ KHÓA CHỐT CHẶN QUARTZCORE]: ÉP CAFrameRateRangeIsValid LUÔN TRẢ VỀ TRUE (BẺ KHOÁ AN TOÀN 1000%)
+// [BẺ KHÓA CHỐT CHẶN QUARTZCORE]: ÉP CAFrameRateRangeIsValid LUÔN TRẢ VỀ TRUE CHO MỌI MỨC HZ/FPS
 // ====================================================================================================
 static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange range) = NULL;
 static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange range) {
@@ -3144,12 +3110,10 @@ static dispatch_source_t s_keeperPoller = nil;
     s_keeperPoller = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(s_keeperPoller, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(50 * NSEC_PER_MSEC)), (uint64_t)(50 * NSEC_PER_MSEC), (uint64_t)(10 * NSEC_PER_MSEC));
     dispatch_source_set_event_handler(s_keeperPoller, ^{
-        @try {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
-                (Titanium_ShouldLockTargetRate() || g_activeAnimationCount > 0 || Titanium_IsInDynamicMorphWindow())) {
-                [TitaniumRateKeeper kick];
-            }
-        } @catch (__unused NSException *e) {}
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+            (Titanium_ShouldLockTargetRate() || g_activeAnimationCount > 0 || Titanium_IsInDynamicMorphWindow())) {
+            [TitaniumRateKeeper kick];
+        }
     });
     dispatch_resume(s_keeperPoller);
 }
@@ -3166,35 +3130,31 @@ static dispatch_source_t s_keeperPoller = nil;
     if (targetHz < 15.0f) targetHz = 15.0f;
     if (targetHz > 240.0f) targetHz = 240.0f;
 
-    @try {
-        if (!s_keeperLink) {
-            s_keeperLink = [CADisplayLink displayLinkWithTarget:[TitaniumRateKeeper class] selector:@selector(tick:)];
-            [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-            [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:UITrackingRunLoopMode];
-        }
-        if (@available(iOS 15.0, *)) {
-            @try {
-                float floorRate = Titanium_RangeFloorForCap(targetHz);
-                s_keeperLink.preferredFrameRateRange = SafeMakeFRR(floorRate, targetHz, targetHz);
-            } @catch (__unused NSException *e) {}
-        }
-        s_keeperLink.preferredFramesPerSecond = (NSInteger)targetHz;
-        s_keeperIdleFrames = 0;
-        s_keeperLink.paused = NO;
-    } @catch (__unused NSException *e) {}
+    if (!s_keeperLink) {
+        s_keeperLink = [CADisplayLink displayLinkWithTarget:[TitaniumRateKeeper class] selector:@selector(tick:)];
+        [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+        [s_keeperLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:UITrackingRunLoopMode];
+    }
+    if (@available(iOS 15.0, *)) {
+        @try {
+            float floorRate = Titanium_RangeFloorForCap(targetHz);
+            s_keeperLink.preferredFrameRateRange = SafeMakeFRR(floorRate, targetHz, targetHz);
+        } @catch (__unused NSException *e) {}
+    }
+    s_keeperLink.preferredFramesPerSecond = (NSInteger)targetHz;
+    s_keeperIdleFrames = 0;
+    s_keeperLink.paused = NO;
 }
 
 + (void)tick:(CADisplayLink *)link {
-    @try {
-        if (Titanium_ShouldLockTargetRate() || g_activeAnimationCount > 0 || g_isInteracting || Titanium_IsInDynamicMorphWindow()) {
-            s_keeperIdleFrames = 0;
-        } else {
-            s_keeperIdleFrames++;
-            if (s_keeperIdleFrames > 90) {
-                link.paused = YES;
-            }
+    if (Titanium_ShouldLockTargetRate() || g_activeAnimationCount > 0 || g_isInteracting || Titanium_IsInDynamicMorphWindow()) {
+        s_keeperIdleFrames = 0;
+    } else {
+        s_keeperIdleFrames++;
+        if (s_keeperIdleFrames > 90) {
+            link.paused = YES;
         }
-    } @catch (__unused NSException *e) {}
+    }
 }
 
 @end
@@ -3274,7 +3234,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3: KHÓA CỨNG HZ/FPS THEO APP (15 - 240HZ) + ÉP DỰNG HÌNH 0.0MS (BẢO VỆ AN TOÀN TUYỆT ĐỐI 1000%)
+// NHÓM 3: KHÓA CỨNG HZ/FPS THEO APP (15 - 240HZ) + ÉP DỰNG HÌNH 0.0MS (ZERO-CRASH, AN TOÀN ĐA LUỒNG)
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3282,110 +3242,90 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CADisplayLink
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
-    @try {
-        %orig(runLoop, mode);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap < 15) cap = 15;
-            if (cap > 240) cap = 240;
-            @try {
-                self.preferredFramesPerSecond = cap;
-                if (@available(iOS 15.0, *)) {
-                    if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        float fCap = (float)cap;
-                        float floorRate = Titanium_RangeFloorForCap(fCap);
-                        self.preferredFrameRateRange = SafeMakeFRR(floorRate, fCap, fCap);
-                    }
+    %orig(runLoop, mode);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        @try {
+            self.preferredFramesPerSecond = cap;
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float fCap = (float)cap;
+                    float floorRate = Titanium_RangeFloorForCap(fCap);
+                    self.preferredFrameRateRange = SafeMakeFRR(floorRate, fCap, fCap);
                 }
-            } @catch (__unused NSException *e) {}
-        }
-    } @catch (__unused NSException *e) {
-        %orig(runLoop, mode);
+            }
+        } @catch (__unused NSException *e) {}
     }
 }
 
 - (NSInteger)preferredFramesPerSecond {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            return Titanium_GetEffectiveFrameCap();
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return Titanium_GetEffectiveFrameCap();
+    }
     return %orig;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            @try {
-                %orig(Titanium_GetEffectiveFrameCap());
-            } @catch (__unused NSException *e) {}
-            return;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        @try {
+            %orig(Titanium_GetEffectiveFrameCap());
+        } @catch (__unused NSException *e) {}
+        return;
+    }
     %orig(fps);
 }
 
 - (SafeFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            if (maxTarget < 15.0f) maxTarget = 15.0f;
-            if (maxTarget > 240.0f) maxTarget = 240.0f;
-            float floorRate = Titanium_RangeFloorForCap(maxTarget);
-            return SafeMakeFRR(floorRate, maxTarget, maxTarget);
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        if (maxTarget < 15.0f) maxTarget = 15.0f;
+        if (maxTarget > 240.0f) maxTarget = 240.0f;
+        float floorRate = Titanium_RangeFloorForCap(maxTarget);
+        return SafeMakeFRR(floorRate, maxTarget, maxTarget);
+    }
     return %orig;
 }
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            if (maxTarget < 15.0f) maxTarget = 15.0f;
-            if (maxTarget > 240.0f) maxTarget = 240.0f;
-            float floorRate = Titanium_RangeFloorForCap(maxTarget);
-            range = SafeMakeFRR(floorRate, maxTarget, maxTarget);
-        }
-        @try {
-            %orig(range);
-        } @catch (__unused NSException *e) {}
-    } @catch (__unused NSException *e) {
-        %orig(range);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        if (maxTarget < 15.0f) maxTarget = 15.0f;
+        if (maxTarget > 240.0f) maxTarget = 240.0f;
+        float floorRate = Titanium_RangeFloorForCap(maxTarget);
+        range = SafeMakeFRR(floorRate, maxTarget, maxTarget);
     }
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (CFTimeInterval)duration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap > 0) return (1.0 / (double)cap);
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap > 0) return (1.0 / (double)cap);
+    }
     return %orig;
 }
 
 - (CFTimeInterval)targetTimestamp {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap > 0) return (self.timestamp + (1.0 / (double)cap));
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap > 0) return (self.timestamp + (1.0 / (double)cap));
+    }
     return %orig;
 }
 
 - (void)setFrameInterval:(NSInteger)interval {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            @try {
-                %orig(1);
-            } @catch (__unused NSException *e) {
-                %orig(interval);
-            }
-            return;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        @try {
+            %orig(1);
+        } @catch (__unused NSException *e) {
+            %orig(interval);
         }
-    } @catch (__unused NSException *e) {}
+        return;
+    }
     %orig(interval);
 }
 
@@ -3394,11 +3334,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CADisplayMode
 
 - (double)refreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return (double)Titanium_GetEffectiveFrameCap();
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return (double)Titanium_GetEffectiveFrameCap();
+    }
     return %orig;
 }
 
@@ -3407,118 +3345,90 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CADisplay
 
 - (BOOL)allowsVirtualModes {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     return %orig;
 }
 
 - (void)setAllowsVirtualModes:(BOOL)allows {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            @try {
-                %orig(YES);
-            } @catch (__unused NSException *e) {}
-            return;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        @try {
+            %orig(YES);
+        } @catch (__unused NSException *e) {}
+        return;
+    }
     %orig(allows);
 }
 
 - (double)latency {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return 0.0;
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return 0.0;
     return %orig;
 }
 
 - (void)setLatency:(double)latency {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            @try {
-                %orig(0.0);
-            } @catch (__unused NSException *e) {}
-            return;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        @try {
+            %orig(0.0);
+        } @catch (__unused NSException *e) {}
+        return;
+    }
     %orig(latency);
 }
 
 - (CFTimeInterval)minimumFrameDuration {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap < 15) cap = 15;
-            if (cap > 240) cap = 240;
-            return (1.0 / (double)cap);
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        return (1.0 / (double)cap);
+    }
     return %orig;
 }
 
 - (double)refreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            return (cap > 0) ? (double)cap : %orig;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        return (cap > 0) ? (double)cap : %orig;
+    }
     return %orig;
 }
 
 - (double)heartbeatRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            return (cap > 0) ? (double)cap : %orig;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        return (cap > 0) ? (double)cap : %orig;
+    }
     return %orig;
 }
 
 - (NSInteger)preferredFPS {
-    @try {
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return %orig;
-        return Titanium_GetEffectiveFrameCap();
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return %orig;
+    return Titanium_GetEffectiveFrameCap();
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    @try {
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) {
-            %orig(fps);
-            return;
-        }
-        @try {
-            %orig(Titanium_GetEffectiveFrameCap());
-        } @catch (__unused NSException *e) {}
-    } @catch (__unused NSException *e) {
+    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) {
         %orig(fps);
+        return;
     }
+    @try {
+        %orig(Titanium_GetEffectiveFrameCap());
+    } @catch (__unused NSException *e) {}
 }
 
 - (NSInteger)minimumFPS {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return Titanium_GetEffectiveFrameCap();
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return Titanium_GetEffectiveFrameCap();
+    }
     return %orig;
 }
 
 - (BOOL)supportsDynamicRefresh {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     return %orig;
 }
 
 - (BOOL)hasDynamicDisplayMode {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     return %orig;
 }
 
@@ -3527,89 +3437,73 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook UIScreen
 
 - (NSInteger)maximumFramesPerSecond {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return Titanium_GetEffectiveFrameCap();
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return Titanium_GetEffectiveFrameCap();
+    }
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return Titanium_GetEffectiveFrameCap();
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return Titanium_GetEffectiveFrameCap();
+    }
     return %orig;
 }
 
 - (CGFloat)_refreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            return (cap > 0) ? (CGFloat)cap : %orig;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        return (cap > 0) ? (CGFloat)cap : %orig;
+    }
     return %orig;
 }
 
 - (void)_setTargetRefreshRate:(CGFloat)rate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            @try {
-                %orig((cap > 0) ? (CGFloat)cap : rate);
-            } @catch (__unused NSException *e) {}
-            return;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        @try {
+            %orig((cap > 0) ? (CGFloat)cap : rate);
+        } @catch (__unused NSException *e) {}
+        return;
+    }
     %orig(rate);
 }
 
 %end
 
-// PHÁ KHÓA CỨNG 60HZ & BẢO VỆ RAM JETSAM (CACHE DICTIONARY AN TOÀN 1000%)
+// PHÁ KHÓA CỨNG 60HZ & BẢO VỆ RAM JETSAM (CACHE DICTIONARY KHÔNG TẠO RÁC BỘ NHỚ)
 static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %hook NSBundle
 
 - (id)objectForInfoDictionaryKey:(NSString *)key {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && key) {
-            if ([key isEqualToString:@"CADisableMinimumFrameDuration"] ||
-                [key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"] ||
-                [key isEqualToString:@"UIApplicationSupportsHDR"]) {
-                return @YES;
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && key) {
+        if ([key isEqualToString:@"CADisableMinimumFrameDuration"] ||
+            [key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"] ||
+            [key isEqualToString:@"UIApplicationSupportsHDR"]) {
+            return @YES;
         }
-    } @catch (__unused NSException *e) {}
+    }
     return %orig(key);
 }
 
 - (NSDictionary *)infoDictionary {
-    @try {
-        NSDictionary *dict = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && dict) {
-            if ([dict[@"CADisableMinimumFrameDurationOnPhone"] boolValue]) {
-                return dict;
-            }
-            NSDictionary *cached = objc_getAssociatedObject(self, kTitaniumCachedInfoDictKey);
-            if (cached) return cached;
-
-            NSMutableDictionary *mDict = [dict mutableCopy];
-            if (mDict) {
-                mDict[@"CADisableMinimumFrameDuration"] = @YES;
-                mDict[@"CADisableMinimumFrameDurationOnPhone"] = @YES;
-                NSDictionary *immutableCopy = [mDict copy];
-                objc_setAssociatedObject(self, kTitaniumCachedInfoDictKey, immutableCopy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                return immutableCopy;
-            }
+    NSDictionary *dict = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && dict) {
+        if ([dict[@"CADisableMinimumFrameDurationOnPhone"] boolValue]) {
+            return dict;
         }
-        return dict;
-    } @catch (__unused NSException *e) {
-        return %orig;
+        NSDictionary *cached = objc_getAssociatedObject(self, kTitaniumCachedInfoDictKey);
+        if (cached) return cached;
+
+        NSMutableDictionary *mDict = [dict mutableCopy];
+        mDict[@"CADisableMinimumFrameDuration"] = @YES;
+        mDict[@"CADisableMinimumFrameDurationOnPhone"] = @YES;
+        NSDictionary *immutableCopy = [mDict copy];
+        objc_setAssociatedObject(self, kTitaniumCachedInfoDictKey, immutableCopy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return immutableCopy;
     }
+    return dict;
 }
 
 %end
@@ -3617,43 +3511,35 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && configuration) {
-            NSInteger targetCap = Titanium_GetEffectiveFrameCap();
-            NSString *js = Titanium_BuildWebFPSOverdriveScript(targetCap);
-            if (js) {
-                WKUserScript *script = [[WKUserScript alloc] initWithSource:js
-                                                              injectionTime:WKUserScriptInjectionTimeAtDocumentStart
-                                                           forMainFrameOnly:NO];
-                if (!configuration.userContentController) {
-                    configuration.userContentController = [[WKUserContentController alloc] init];
-                }
-                [configuration.userContentController addUserScript:script];
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && configuration) {
+        NSInteger targetCap = Titanium_GetEffectiveFrameCap();
+        NSString *js = Titanium_BuildWebFPSOverdriveScript(targetCap);
+        WKUserScript *script = [[WKUserScript alloc] initWithSource:js
+                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                                                   forMainFrameOnly:NO];
+        if (!configuration.userContentController) {
+            configuration.userContentController = [[WKUserContentController alloc] init];
         }
-        WKWebView *webView = %orig(frame, configuration);
-        if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        return webView;
-    } @catch (__unused NSException *e) {
-        return %orig(frame, configuration);
+        [configuration.userContentController addUserScript:script];
     }
+    WKWebView *webView = %orig(frame, configuration);
+    if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+        objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return webView;
 }
 
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger currentCap = Titanium_GetEffectiveFrameCap();
-            NSNumber *lastSynced = objc_getAssociatedObject(self, kTitaniumWebLastSyncFPSKey);
-            if (!lastSynced || [lastSynced integerValue] != currentCap) {
-                objc_setAssociatedObject(self, kTitaniumWebLastSyncFPSKey, @(currentCap), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NSString *updateJS = [NSString stringWithFormat:@"window.__titaniumTargetFPS = %ld; if (!window.__titaniumRAFInstalled) { %@ }",
-                                      (long)currentCap, Titanium_BuildWebFPSOverdriveScript(currentCap)];
-                [self evaluateJavaScript:updateJS completionHandler:nil];
-            }
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger currentCap = Titanium_GetEffectiveFrameCap();
+        NSNumber *lastSynced = objc_getAssociatedObject(self, kTitaniumWebLastSyncFPSKey);
+        if (!lastSynced || [lastSynced integerValue] != currentCap) {
+            objc_setAssociatedObject(self, kTitaniumWebLastSyncFPSKey, @(currentCap), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NSString *updateJS = [NSString stringWithFormat:@"window.__titaniumTargetFPS = %ld; if (!window.__titaniumRAFInstalled) { %@ }",
+                                  (long)currentCap, Titanium_BuildWebFPSOverdriveScript(currentCap)];
+            [self evaluateJavaScript:updateJS completionHandler:nil];
         }
-    } @catch (__unused NSException *e) {}
+    }
     return %orig(point, event);
 }
 
@@ -3662,34 +3548,28 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    @try {
-        if (@available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                if (maxTarget < 15.0f) maxTarget = 15.0f;
-                if (maxTarget > 240.0f) maxTarget = 240.0f;
-                float floorRate = Titanium_RangeFloorForCap(maxTarget);
-                range = SafeMakeFRR(floorRate, maxTarget, maxTarget);
-            }
-        }
-        @try {
-            %orig(range);
-        } @catch (__unused NSException *e) {}
-    } @catch (__unused NSException *e) {
-        %orig(range);
-    }
-}
-
-- (SafeFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
-    @try {
+    if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             if (maxTarget < 15.0f) maxTarget = 15.0f;
             if (maxTarget > 240.0f) maxTarget = 240.0f;
             float floorRate = Titanium_RangeFloorForCap(maxTarget);
-            return SafeMakeFRR(floorRate, maxTarget, maxTarget);
+            range = SafeMakeFRR(floorRate, maxTarget, maxTarget);
         }
+    }
+    @try {
+        %orig(range);
     } @catch (__unused NSException *e) {}
+}
+
+- (SafeFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        if (maxTarget < 15.0f) maxTarget = 15.0f;
+        if (maxTarget > 240.0f) maxTarget = 240.0f;
+        float floorRate = Titanium_RangeFloorForCap(maxTarget);
+        return SafeMakeFRR(floorRate, maxTarget, maxTarget);
+    }
     return %orig;
 }
 
@@ -3698,35 +3578,27 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook CASpringAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    @try {
-        if (@available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                if (maxTarget < 15.0f) maxTarget = 15.0f;
-                if (maxTarget > 240.0f) maxTarget = 240.0f;
-                float floorRate = Titanium_RangeFloorForCap(maxTarget);
-                range = SafeMakeFRR(floorRate, maxTarget, maxTarget);
-            }
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+            if (maxTarget < 15.0f) maxTarget = 15.0f;
+            if (maxTarget > 240.0f) maxTarget = 240.0f;
+            float floorRate = Titanium_RangeFloorForCap(maxTarget);
+            range = SafeMakeFRR(floorRate, maxTarget, maxTarget);
         }
-        @try {
-            %orig(range);
-        } @catch (__unused NSException *e) {}
-    } @catch (__unused NSException *e) {
-        %orig(range);
     }
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (void)setSettlingDuration:(CFTimeInterval)duration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            Titanium_MarkDynamicMorphBurst();
-        }
-        @try {
-            %orig(duration);
-        } @catch (__unused NSException *e) {}
-    } @catch (__unused NSException *e) {
-        %orig(duration);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        Titanium_MarkDynamicMorphBurst();
     }
+    @try {
+        %orig(duration);
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -3734,50 +3606,39 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook CALayer
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && anim) {
-            if (@available(iOS 15.0, *)) {
-                if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    if (maxTarget < 15.0f) maxTarget = 60.0f;
-                    if (maxTarget > 240.0f) maxTarget = 240.0f;
-                    float floorRate = Titanium_RangeFloorForCap(maxTarget);
-                    @try {
-                        anim.preferredFrameRateRange = SafeMakeFRR(floorRate, maxTarget, maxTarget);
-                    } @catch (__unused NSException *e) {}
-                }
-            }
-
-            if (Titanium_IsSpringBoard()) {
-                Titanium_MarkDynamicMorphBurst();
-                EnforceMaxCPUPower();
-                #if TITANIUM_ENABLE_RATE_KEEPER
-                [TitaniumRateKeeper kick];
-                #endif
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && anim) {
+        if (@available(iOS 15.0, *)) {
+            if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                if (maxTarget < 15.0f) maxTarget = 60.0f;
+                if (maxTarget > 240.0f) maxTarget = 240.0f;
+                float floorRate = Titanium_RangeFloorForCap(maxTarget);
+                @try {
+                    anim.preferredFrameRateRange = SafeMakeFRR(floorRate, maxTarget, maxTarget);
+                } @catch (__unused NSException *e) {}
             }
         }
-        %orig(anim, key);
-    } @catch (__unused NSException *e) {
-        %orig(anim, key);
+
+        if (Titanium_IsSpringBoard()) {
+            Titanium_MarkDynamicMorphBurst();
+            EnforceMaxCPUPower();
+            #if TITANIUM_ENABLE_RATE_KEEPER
+            [TitaniumRateKeeper kick];
+            #endif
+        }
     }
+    %orig(anim, key);
 }
 
+// Giữ nguyên kích thước hiển thị Retina tự nhiên, không ép contentsScale gây vỡ hạt chữ khi cuộn
 - (void)setBounds:(CGRect)bounds {
-    @try {
-        %orig(bounds);
-    } @catch (__unused NSException *e) {
-        %orig(bounds);
-    }
+    %orig(bounds);
 }
 
 - (void)setNeedsLayout {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+        Titanium_EnableZeroLatencyPipeline();
     }
 }
 
@@ -3786,22 +3647,18 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook UIView
 
 - (void)didMoveToWindow {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && Titanium_IsSpringBoard()) {
-            @try {
-                NSString *clsName = NSStringFromClass([self class]);
-                if (clsName && Titanium_IsDynamicIslandOrMusicMorphClass(clsName)) {
-                    Titanium_MarkDynamicMorphBurst();
-                    EnforceMaxCPUPower();
-                    #if TITANIUM_ENABLE_RATE_KEEPER
-                    [TitaniumRateKeeper kick];
-                    #endif
-                }
-            } @catch (__unused NSException *e) {}
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && Titanium_IsSpringBoard()) {
+        @try {
+            NSString *clsName = NSStringFromClass([self class]);
+            if (Titanium_IsDynamicIslandOrMusicMorphClass(clsName)) {
+                Titanium_MarkDynamicMorphBurst();
+                EnforceMaxCPUPower();
+                #if TITANIUM_ENABLE_RATE_KEEPER
+                [TitaniumRateKeeper kick];
+                #endif
+            }
+        } @catch (__unused NSException *e) {}
     }
 }
 
@@ -3810,14 +3667,10 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            g_isVideoPlayingActive = (rate > 0.0f);
-        }
-        %orig(rate);
-    } @catch (__unused NSException *e) {
-        %orig(rate);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        g_isVideoPlayingActive = (rate > 0.0f);
     }
+    %orig(rate);
 }
 
 %end
@@ -3825,34 +3678,28 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %hook UIApplication
 
 - (void)_applicationDidBecomeActive:(id)arg1 {
-    @try {
-        %orig(arg1);
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            Titanium_MarkDynamicMorphBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
+    %orig(arg1);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        Titanium_MarkDynamicMorphBurst();
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
 
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            if (Titanium_IsSpringBoard()) {
-                [TitaniumRateKeeper kick];
-            }
-            #endif
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(550 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-                    g_isInteracting = NO;
-                    g_lastInteractiveTick = mach_absolute_time();
-                } @catch (__unused NSException *e) {}
-            });
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        if (Titanium_IsSpringBoard()) {
+            [TitaniumRateKeeper kick];
         }
-    } @catch (__unused NSException *e) {
-        %orig(arg1);
+        #endif
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(550 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+            g_isInteracting = NO;
+            g_lastInteractiveTick = mach_absolute_time();
+        });
     }
 }
 
@@ -3861,7 +3708,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %end
 
 // ====================================================================================================
-// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (AN TOÀN TUYỆT ĐỐI 1000%)
+// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
 // ====================================================================================================
 
 static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
@@ -3877,6 +3724,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
         SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
 
+        // Bẻ gãy vùng nhớ chỉ đọc trước khi thay đổi bảng phương thức Runtime
         Method m1 = class_getInstanceMethod(screenCls, sel1);
         if (m1) {
             Titanium_KernelForceWriteProtectBypass((void *)m1, (const void *)m1, sizeof(Method));
@@ -3896,139 +3744,113 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 // ====================================================================================================
-// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT & CỬ CHỈ NGẮT LIÊN HOÀN (BẢO VỆ CHỐNG LỖI CON TRỎ AN TOÀN 1000%)
+// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT & CỬ CHỈ NGẮT LIÊN HOÀN (BẺ KHÓA CPU/GPU 100% & CHỐNG TRÀN RAM JETSAM)
 // ====================================================================================================
 
 %group Group_Switcher30Apps_Virtualization
 
+// 1. CỬ CHỈ HOME: BÁM DÍNH NGÓN TAY TỨC THÌ, BẺ KHÓA LUỒNG REALTIME
 %hook SBHomeGestureInteraction
 
 - (void)_handleGestureBegan:(id)gesture {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = YES;
-            g_isInteracting = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isContinuousSwiping = YES;
+        g_isInteracting = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)_handleGestureChanged:(id)gesture {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = YES;
-            g_isInteracting = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isContinuousSwiping = YES;
+        g_isInteracting = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
+    %orig;
 }
 
 - (void)_handleGestureEnded:(id)gesture {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = NO;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isContinuousSwiping = NO;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 - (void)_handleGestureCancelled:(id)gesture {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = NO;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isContinuousSwiping = NO;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 %end
 
+// 2. GIAO DỊCH ĐA NHIỆM: ÉP MỞ KHÓA NGẮT CHUYỂN CẢNH TRONG 0MS
 %hook SBFluidSwitcherGestureWorkspaceTransaction
 
 - (BOOL)canInterruptActiveGesture {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.reduceMultiTaskLag || g_isRateLockedV285)) {
-            if (g_isContinuousSwiping) return YES;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.reduceMultiTaskLag || g_isRateLockedV285)) {
+        if (g_isContinuousSwiping) return YES;
+    }
     return %orig;
 }
 
 - (void)_begin {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 - (void)_didComplete {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = NO;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isContinuousSwiping = NO;
     }
 }
 
 %end
 
+// 3. TỐC ĐỘ BAY VÀ QUÁN TÍNH THẺ ĐA NHIỆM
 %hook SBFluidSwitcherAnimationSettings
 
 - (double)deckSwipeSpeedFactor {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.reduceMultiTaskLag) {
-            return 1.25;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.reduceMultiTaskLag) {
+        return 1.25;
+    }
     return %orig;
 }
 
 - (double)cardFlyInDuration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.fixAppExitStutter || g_syncPayloadV285.antiStutterExit)) {
-            return 0.22;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.fixAppExitStutter || g_syncPayloadV285.antiStutterExit)) {
+        return 0.22;
+    }
     return %orig;
 }
 
 %end
 
+// 4. QUẢN LÝ BỘ NHỚ VÀ QUÁN TÍNH APP SWITCHER (CHỐNG JETSAM KILL)
 %hook SBAppSwitcherSettings
 
 - (BOOL)shouldKeepAppSnapshotsInMemory {
@@ -4036,58 +3858,47 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (BOOL)shouldSimplifyForOptions:(long long)options {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return YES;
+    }
     return %orig(options);
 }
 
 - (CGFloat)decelerationRate {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.reduceMultiTaskLag) {
-            return 0.994;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.reduceMultiTaskLag) {
+        return 0.994;
+    }
     return %orig;
 }
 
 %end
 
+// 5. GIAO DỊCH THOÁT VÀ MỞ ỨNG DỤNG TỪ HOME (ĐỒNG BỘ 15HZ - 240HZ KHÔNG DROP KHUNG HÌNH)
 %hook SBAppToHomeWorkspaceTransaction
 
 - (void)_willBegin {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)_didComplete {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-            g_isContinuousSwiping = NO;
-            g_isUserTouchingScreen = NO;
-            g_isInteracting = NO;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+        g_isContinuousSwiping = NO;
+        g_isUserTouchingScreen = NO;
+        g_isInteracting = NO;
     }
 }
 
@@ -4096,34 +3907,26 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBHomeToAppWorkspaceTransaction
 
 - (void)_willBegin {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)_didComplete {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-            g_isInteracting = NO;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+        g_isInteracting = NO;
     }
 }
 
@@ -4132,29 +3935,21 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBAppSwitcherController
 
 - (void)viewWillAppear:(BOOL)animated {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isUserTouchingScreen = NO;
-            g_isContinuousSwiping = NO;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isUserTouchingScreen = NO;
+        g_isContinuousSwiping = NO;
     }
 }
 
@@ -4163,7 +3958,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (ĐIỀN ĐỦ THÂN HÀM RỖNG - GIA TỐC MỞ APP 0MS - BỌC THÉP 1000%)
+// NHÓM 5: KHỞI CHẠY ỨNG DỤNG SIÊU TỐC (ĐIỀN ĐỦ THÂN HÀM RỖNG - GIA TỐC MỞ APP 0MS)
 // ====================================================================================================
 
 %group Group_FastLaunch_SuperEngineV285
@@ -4171,36 +3966,26 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBAppLaunchSettings
 
 - (double)delayBeforeAppLaunch {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
+        return 0.0;
+    }
     return %orig;
 }
 
 - (double)zoomDuration {
-    @try {
-        double orig = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return (orig > 0.18) ? (orig * 0.75) : orig;
-        }
-        return orig;
-    } @catch (__unused NSException *e) {
-        return %orig;
+    double orig = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
+        return (orig > 0.18) ? (orig * 0.75) : orig;
     }
+    return orig;
 }
 
 - (double)launchDuration {
-    @try {
-        double orig = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return (orig > 0.18) ? (orig * 0.75) : orig;
-        }
-        return orig;
-    } @catch (__unused NSException *e) {
-        return %orig;
+    double orig = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
+        return (orig > 0.18) ? (orig * 0.75) : orig;
     }
+    return orig;
 }
 
 %end
@@ -4208,11 +3993,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
+        return 0.0;
+    }
     return %orig;
 }
 
@@ -4221,34 +4004,26 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBUIAnimationController
 
 - (void)_willBeginAnimation {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            if (Titanium_IsSpringBoard()) [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        if (Titanium_IsSpringBoard()) [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)_didCompleteAnimation {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-            g_isInteracting = NO;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+        g_isInteracting = NO;
     }
 }
 
@@ -4257,35 +4032,27 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIApplication
 
 - (void)_runWithMainScene:(id)scene transitionContext:(id)context completion:(id)completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            Titanium_EnableZeroLatencyPipeline();
-        }
-        %orig(scene, context, completion);
-    } @catch (__unused NSException *e) {
-        %orig(scene, context, completion);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        Titanium_EnableZeroLatencyPipeline();
     }
+    %orig(scene, context, completion);
 }
 
 - (void)_applicationWillEnterForeground {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            Titanium_ReapplyFrameRateToAllScenes();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        Titanium_ReapplyFrameRateToAllScenes();
     }
+    %orig;
 }
 
 %end
@@ -4293,7 +4060,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY & ĐỒNG BỘ ANIMATION UIVIEW (BỌC THÉP 1000%)
+// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY & ĐỒNG BỘ ANIMATION UIVIEW
 // ====================================================================================================
 
 %group Group_Scroll_And_Keyboard_Opt
@@ -4302,11 +4069,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIInputViewAnimationStyle
 
 - (double)duration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-            return 0.12;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
+        return 0.12;
+    }
     return %orig;
 }
 
@@ -4316,25 +4081,19 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIKeyboardImpl
 
 + (NSTimeInterval)suppressionIntervalForTouchesOnKeyboard {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
+        return 0.0;
+    }
     return %orig;
 }
 
 - (void)showKeyboard {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -4343,14 +4102,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIControl
 
 - (void)sendAction:(SEL)action to:(id)target forEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_TriggerInstantTouchBurst();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        Titanium_TriggerInstantTouchBurst();
     }
+    %orig;
 }
 
 %end
@@ -4358,29 +4113,21 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UITabBarController
 
 - (void)setSelectedIndex:(NSUInteger)index {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 - (void)setSelectedViewController:(UIViewController *)selectedViewController {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -4389,127 +4136,99 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UINavigationController
 
 - (void)viewDidAppear:(BOOL)animated {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.interactivePopGestureRecognizer) {
-            self.interactivePopGestureRecognizer.delaysTouchesBegan = NO;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.interactivePopGestureRecognizer) {
+        self.interactivePopGestureRecognizer.delaysTouchesBegan = NO;
     }
 }
 
 - (void)pushViewController:(UIViewController *)viewController animated:(BOOL)animated {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_TriggerInstantTouchBurst();
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        Titanium_TriggerInstantTouchBurst();
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 - (UIViewController *)popViewControllerAnimated:(BOOL)animated {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_TriggerInstantTouchBurst();
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        Titanium_TriggerInstantTouchBurst();
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    return %orig;
 }
 
 %end
 
-// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (AN TOÀN TUYỆT ĐỐI)
+// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (CHUẨN HÓA KHÔNG CAN THIỆP LAYER SPEED GÂY TREO VIDEO VÀ BẢNG CHIA SẺ)
 %hook UIViewController
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            g_isInteracting = YES;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            Titanium_TriggerInstantTouchBurst();
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        g_isInteracting = YES;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        Titanium_TriggerInstantTouchBurst();
 
-            void (^safeCompletion)(void) = ^{
-                @try {
-                    g_isInteracting = NO;
-                    g_lastInteractiveTick = mach_absolute_time();
-                    if (completion) {
-                        completion();
-                    }
-                } @catch (__unused NSException *subEx) {}
-            };
+        void (^safeCompletion)(void) = ^{
+            g_isInteracting = NO;
+            g_lastInteractiveTick = mach_absolute_time();
+            if (completion) {
+                completion();
+            }
+        };
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(450 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    if (g_isInteracting) {
-                        g_isInteracting = NO;
-                        g_lastInteractiveTick = mach_absolute_time();
-                    }
-                } @catch (__unused NSException *subEx) {}
-            });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(450 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (g_isInteracting) {
+                g_isInteracting = NO;
+                g_lastInteractiveTick = mach_absolute_time();
+            }
+        });
 
-            %orig(viewControllerToPresent, flag, safeCompletion);
-            return;
-        }
-        %orig(viewControllerToPresent, flag, completion);
-    } @catch (__unused NSException *e) {
-        %orig(viewControllerToPresent, flag, completion);
+        %orig(viewControllerToPresent, flag, safeCompletion);
+        return;
     }
+    %orig(viewControllerToPresent, flag, completion);
 }
 
 - (void)dismissViewControllerAnimated:(BOOL)flag completion:(void (^)(void))completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            g_isInteracting = YES;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            Titanium_TriggerInstantTouchBurst();
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        g_isInteracting = YES;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        Titanium_TriggerInstantTouchBurst();
 
-            void (^safeDismissCompletion)(void) = ^{
-                @try {
-                    g_isInteracting = NO;
-                    g_lastInteractiveTick = mach_absolute_time();
-                    if (completion) {
-                        completion();
-                    }
-                } @catch (__unused NSException *subEx) {}
-            };
+        void (^safeDismissCompletion)(void) = ^{
+            g_isInteracting = NO;
+            g_lastInteractiveTick = mach_absolute_time();
+            if (completion) {
+                completion();
+            }
+        };
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    g_isInteracting = NO;
-                    g_lastInteractiveTick = mach_absolute_time();
-                } @catch (__unused NSException *subEx) {}
-            });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            g_isInteracting = NO;
+            g_lastInteractiveTick = mach_absolute_time();
+        });
 
-            %orig(flag, safeDismissCompletion);
-            return;
-        }
-        %orig(flag, completion);
-    } @catch (__unused NSException *e) {
-        %orig(flag, completion);
+        %orig(flag, safeDismissCompletion);
+        return;
     }
+    %orig(flag, completion);
 }
 
 %end
@@ -4518,29 +4237,25 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIPanGestureRecognizer
 
 - (void)setState:(UIGestureRecognizerState)state {
-    @try {
-        %orig(state);
+    %orig(state);
 
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            if (state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) {
-                g_isUserTouchingScreen = YES;
-                g_isScrollingActive = YES;
-                g_isInteracting = YES;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-                EnforceMaxCPUPower();
-                Titanium_TriggerInstantTouchBurst();
-            } else if (state == UIGestureRecognizerStateEnded || state == UIGestureRecognizerStateCancelled) {
-                g_isUserTouchingScreen = NO;
-                g_isScrollingActive = NO;
-                g_isInteracting = NO;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        if (state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) {
+            g_isUserTouchingScreen = YES;
+            g_isScrollingActive = YES;
+            g_isInteracting = YES;
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            EnforceMaxCPUPower();
+            Titanium_TriggerInstantTouchBurst();
+        } else if (state == UIGestureRecognizerStateEnded || state == UIGestureRecognizerStateCancelled) {
+            g_isUserTouchingScreen = NO;
+            g_isScrollingActive = NO;
+            g_isInteracting = NO;
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
         }
-    } @catch (__unused NSException *e) {
-        %orig(state);
     }
 }
 
@@ -4550,220 +4265,166 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIScrollView
 
 - (UIPanGestureRecognizer *)panGestureRecognizer {
-    @try {
-        UIPanGestureRecognizer *pan = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard() && pan) {
-            pan.delaysTouchesBegan = NO;
-        }
-        return pan;
-    } @catch (__unused NSException *e) {
-        return %orig;
+    UIPanGestureRecognizer *pan = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard() && pan) {
+        pan.delaysTouchesBegan = NO;
     }
+    return pan;
 }
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) return YES;
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) return YES;
     return %orig;
 }
 
 - (BOOL)delaysContentTouches {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) return NO;
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) return NO;
     return %orig;
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = YES;
-            g_isInteracting = YES;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-        }
-        %orig(touches, event);
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_isUserTouchingScreen = YES;
+        g_isInteracting = YES;
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_TriggerInstantTouchBurst();
     }
+    %orig(touches, event);
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = YES;
-            g_isInteracting = YES;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-        %orig(touches, event);
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_isUserTouchingScreen = YES;
+        g_isInteracting = YES;
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
+    %orig(touches, event);
 }
 
 - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        %orig(touches, event);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = NO;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
+    %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_isUserTouchingScreen = NO;
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    if (!g_isUserTouchingScreen && !self.isDecelerating) {
-                        g_isScrollingActive = NO;
-                        g_isInteracting = NO;
-                    }
-                } @catch (__unused NSException *subEx) {}
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (!g_isUserTouchingScreen && !self.isDecelerating) {
+                g_isScrollingActive = NO;
+                g_isInteracting = NO;
+            }
+        });
     }
 }
 
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        %orig(touches, event);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = NO;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
+    %orig(touches, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_isUserTouchingScreen = NO;
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    if (!g_isUserTouchingScreen && !self.isDecelerating) {
-                        g_isScrollingActive = NO;
-                        g_isInteracting = NO;
-                    }
-                } @catch (__unused NSException *subEx) {}
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (!g_isUserTouchingScreen && !self.isDecelerating) {
+                g_isScrollingActive = NO;
+                g_isInteracting = NO;
+            }
+        });
     }
 }
 
 - (void)_scrollViewWillBeginDragging {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isScrollingActive = YES;
-            g_isUserTouchingScreen = YES;
-            g_isInteracting = YES;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_isScrollingActive = YES;
+        g_isUserTouchingScreen = YES;
+        g_isInteracting = YES;
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_TriggerInstantTouchBurst();
     }
+    %orig;
 }
 
 - (void)_notifyDidScroll {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = YES;
-                g_isInteracting = YES;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
+            uint64_t now = mach_absolute_time();
+            g_isScrollingActive = YES;
+            g_isInteracting = YES;
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
         }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
     }
+    %orig;
 }
 
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = YES;
-                g_isInteracting = YES;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
-            if (!self.isPagingEnabled && self.isDecelerating) {
-                self.decelerationRate = 0.994f;
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
+            uint64_t now = mach_absolute_time();
+            g_isScrollingActive = YES;
+            g_isInteracting = YES;
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
         }
-        %orig(timestamp);
-    } @catch (__unused NSException *e) {
-        %orig(timestamp);
+        if (!self.isPagingEnabled && self.isDecelerating) {
+            self.decelerationRate = 0.994f;
+        }
     }
+    %orig(timestamp);
 }
 
 - (CGFloat)decelerationRate {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
-            if (self.isPagingEnabled) return %orig;
-            return 0.994f;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
+        if (self.isPagingEnabled) return %orig;
+        return 0.994f;
+    }
     return %orig;
 }
 
 - (void)_stopScrollDecelerationNotify:(BOOL)notify {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (!g_isUserTouchingScreen) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = NO;
-                g_isInteracting = NO;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
-}
-
-- (void)_scrollViewDidEndDecelerating {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (!g_isUserTouchingScreen) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = NO;
-                g_isInteracting = NO;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
-}
-
-- (void)_scrollViewDidEndDraggingForChildScrollView:(id)view {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.isDecelerating && !g_isUserTouchingScreen) {
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (!g_isUserTouchingScreen) {
             uint64_t now = mach_absolute_time();
             g_isScrollingActive = NO;
             g_isInteracting = NO;
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
+    }
+}
+
+- (void)_scrollViewDidEndDecelerating {
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (!g_isUserTouchingScreen) {
+            uint64_t now = mach_absolute_time();
+            g_isScrollingActive = NO;
+            g_isInteracting = NO;
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+        }
+    }
+}
+
+- (void)_scrollViewDidEndDraggingForChildScrollView:(id)view {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.isDecelerating && !g_isUserTouchingScreen) {
+        uint64_t now = mach_absolute_time();
+        g_isScrollingActive = NO;
+        g_isInteracting = NO;
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -4782,18 +4443,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBFluidSwitcherViewController
 
 - (void)handleFluidSwitcherGesture:(id)gesture {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -4801,17 +4458,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBScreenshotManager
 
 - (void)saveScreenshotsWithCompletion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
     }
+    %orig;
 }
 
 %end
@@ -4819,101 +4472,77 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBVolumeControl
 
 - (void)increaseVolume {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isVolumeHoldingV285 = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
     }
+    %orig;
 }
 
 - (void)decreaseVolume {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isVolumeHoldingV285 = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
     }
+    %orig;
 }
 
 - (void)changeVolumeByDelta:(float)delta {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isVolumeHoldingV285 = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
     }
+    %orig;
 }
 
 - (void)cancelVolumeEvent {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isVolumeHoldingV285 = NO;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isVolumeHoldingV285 = NO;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 %end
 
-// ==================== CONTROL CENTER & NOTIFICATION CENTER (TRIỆT TIÊU DELAY) ====================
+// ==================== CONTROL CENTER & NOTIFICATION CENTER (TRIỆT TIÊU DELAY 1-2S) ====================
 
 %hook SBControlCenterController
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)dismissAnimated:(BOOL)animated completion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -4921,36 +4550,28 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBNotificationCenterController
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)dismissAnimated:(BOOL)animated completion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -4960,48 +4581,36 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBIconScrollView
 
 - (BOOL)delaysContentTouches {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
-            return NO;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
+        return NO;
+    }
     return %orig;
 }
 
 - (BOOL)touchesShouldCancelInContentView:(UIView *)view {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
+        return YES;
+    }
     return %orig;
 }
 
 - (void)_notifyDidScroll {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isScrollingActive = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isScrollingActive = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isScrollingActive = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isScrollingActive = YES;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5010,18 +4619,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBIconController
 
 - (void)scrollToIconListAtIndex:(NSInteger)index animate:(BOOL)animate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -5031,11 +4636,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBFolderControllerAnimationSettings
 
 - (double)duration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
-            return 0.18;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.dynamicInterpolation)) {
+        return 0.18;
+    }
     return %orig;
 }
 
@@ -5044,33 +4647,25 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBFolderView
 
 - (void)prepareToOpen {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)didClose {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5079,36 +4674,28 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBFolderController
 
 - (void)openFolderAnimated:(BOOL)animated withCompletion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-            #if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper kick];
-            #endif
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        [TitaniumRateKeeper kick];
+        #endif
     }
+    %orig;
 }
 
 - (void)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -5118,11 +4705,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBIconForceTouchSettings
 
 - (double)delayBeforeOpening {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.zeroLatencyTouch)) {
-            return 0.02;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.colorOs17SmoothEngine || g_syncPayloadV285.zeroLatencyTouch)) {
+        return 0.02;
+    }
     return %orig;
 }
 
@@ -5133,30 +4718,22 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook CSCoverSheetViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5165,18 +4742,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBHomeScreenViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 %end
@@ -5184,26 +4757,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBApplication
 
 - (void)willActivate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig;
 }
 
 - (BOOL)shouldPrewarmOnLaunch {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
+        return YES;
+    }
     return %orig;
 }
 
@@ -5212,7 +4779,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 8: PIPELINE CHO PICTURE-IN-PICTURE (ĐỒNG BỘ VIDEO 60FPS & GIỮ TRỌN 15HZ - 240HZ CHO MÀN HÌNH CHÍNH - BỌC THÉP 1000%)
+// NHÓM 8: PIPELINE CHO PICTURE-IN-PICTURE (ĐỒNG BỘ VIDEO 60FPS & GIỮ TRỌN 15HZ - 240HZ CHO MÀN HÌNH CHÍNH)
 // ====================================================================================================
 
 %group Group_V285_FloatingWindow_PiP
@@ -5220,47 +4787,35 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook PGPictureInPictureRemoteObject
 
 - (void)_updatePreferredContentSize {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
 - (void)startPictureInPicture {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (Titanium_IsSpringBoard()) {
-                Titanium_LockMainThreadFast();
-            }
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (Titanium_IsSpringBoard()) {
+            Titanium_LockMainThreadFast();
         }
-    } @catch (__unused NSException *e) {
-        %orig;
     }
 }
 
 - (void)stopPictureInPictureAnimated:(BOOL)animated {
-    @try {
-        %orig(animated);
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (Titanium_IsSpringBoard()) {
-                Titanium_LockMainThreadFast();
-            }
+    %orig(animated);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (Titanium_IsSpringBoard()) {
+            Titanium_LockMainThreadFast();
         }
-    } @catch (__unused NSException *e) {
-        %orig(animated);
     }
 }
 
@@ -5269,16 +4824,12 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBPIPController
 
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
-    @try {
-        %orig(pid, sceneId, animated, completion);
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_LockMainThreadFast();
-        }
-    } @catch (__unused NSException *e) {
-        %orig(pid, sceneId, animated, completion);
+    %orig(pid, sceneId, animated, completion);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_LockMainThreadFast();
     }
 }
 
@@ -5287,30 +4838,22 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook AVPictureInPictureController
 
 - (void)startPictureInPicture {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_BoostRenderWithoutStarvingNetwork();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
 - (void)stopPictureInPicture {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_BoostRenderWithoutStarvingNetwork();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_BoostRenderWithoutStarvingNetwork();
     }
 }
 
@@ -5319,7 +4862,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 9: PHÂN TÁCH PHẦN CỨNG (HOME BUTTON VẬT LÝ - PHẢN HỒI 0MS - BỌC THÉP 1000%)
+// NHÓM 9: PHÂN TÁCH PHẦN CỨNG (HOME BUTTON VẬT LÝ - PHẢN HỒI 0MS)
 // ====================================================================================================
 
 %group Group_HardwareSegregation_ClassicHomeV285
@@ -5327,33 +4870,25 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBHomeHardwareButtonActions
 
 - (void)performSinglePressAction {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_TriggerInstantTouchBurst();
-            Titanium_LockMainThreadFast();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_LockMainThreadFast();
     }
+    %orig;
 }
 
 - (void)performDoublePressAction {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_TriggerInstantTouchBurst();
-            Titanium_LockMainThreadFast();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_LockMainThreadFast();
     }
+    %orig;
 }
 
 %end
@@ -5361,7 +4896,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 10: QUẢN LÝ TIẾN TRÌNH & BẢO VỆ JETSAM (KHỞI TẠO APP 0MS - BỌC THÉP 1000%)
+// NHÓM 10: QUẢN LÝ TIẾN TRÌNH & BẢO VỆ JETSAM (KHỞI TẠO APP 0MS)
 // ====================================================================================================
 
 %group Group_SpringBoard_ProcessManagerV285
@@ -5369,17 +4904,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBMainWorkspace
 
 - (void)handleApplicationLaunch:(id)application {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_LockMainThreadFast();
-        }
-        %orig(application);
-    } @catch (__unused NSException *e) {
-        %orig(application);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_isRateLockedV285 || g_syncPayloadV285.fastAppLaunch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_LockMainThreadFast();
     }
+    %orig(application);
 }
 
 %end
@@ -5395,21 +4926,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIApplication
 
 - (void)_sendWillEnterForegroundCallbacks {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+            Titanium_EnableZeroLatencyPipeline();
         }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
     }
+    %orig;
 }
 
 %end
@@ -5417,35 +4944,31 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIWindow
 
 - (void)makeKeyAndVisible {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
 
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
-                
-                if (@available(iOS 15.0, *)) {
-                    @try {
-                        UIWindowScene *scene = self.windowScene;
-                        if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                            float targetHz = (float)Titanium_GetEffectiveFrameCap();
-                            if (targetHz < 15.0f) targetHz = 15.0f;
-                            if (targetHz > 240.0f) targetHz = 240.0f;
-                            float floorRate = Titanium_RangeFloorForCap(targetHz);
-                            [scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, targetHz, targetHz)];
-                        }
-                    } @catch (__unused NSException *e) {}
-                }
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+            Titanium_EnableZeroLatencyPipeline();
+            
+            if (@available(iOS 15.0, *)) {
+                @try {
+                    UIWindowScene *scene = self.windowScene;
+                    if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                        float targetHz = (float)Titanium_GetEffectiveFrameCap();
+                        if (targetHz < 15.0f) targetHz = 15.0f;
+                        if (targetHz > 240.0f) targetHz = 240.0f;
+                        float floorRate = Titanium_RangeFloorForCap(targetHz);
+                        [scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, targetHz, targetHz)];
+                    }
+                } @catch (__unused NSException *e) {}
             }
         }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
     }
+    %orig;
 }
 
 %end
@@ -5453,37 +4976,29 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+            Titanium_EnableZeroLatencyPipeline();
         }
-        %orig(animated);
-    } @catch (__unused NSException *e) {
-        %orig(animated);
     }
+    %orig(animated);
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
         }
-        %orig(animated);
-    } @catch (__unused NSException *e) {
-        %orig(animated);
     }
+    %orig(animated);
 }
 
 %end
@@ -5492,21 +5007,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (BOOL)animateAlongsideTransition:(void (^)(id context))animation
                         completion:(void (^)(id context))completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+            Titanium_EnableZeroLatencyPipeline();
         }
-        return %orig(animation, completion);
-    } @catch (__unused NSException *e) {
-        return %orig(animation, completion);
     }
+    return %orig(animation, completion);
 }
 
 %end
@@ -5516,21 +5027,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)__runLifecycleForViewController:(UIViewController *)vc 
                                   state:(NSInteger)state 
                             transition:(id)transition {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+            Titanium_EnableZeroLatencyPipeline();
         }
-        %orig(vc, state, transition);
-    } @catch (__unused NSException *e) {
-        %orig(vc, state, transition);
     }
+    %orig(vc, state, transition);
 }
 
 %end
@@ -5538,38 +5045,30 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIPresentationController
 
 - (void)presentationTransitionWillBegin {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-                Titanium_EnableZeroLatencyPipeline();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+            Titanium_EnableZeroLatencyPipeline();
         }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
     }
+    %orig;
 }
 
 - (void)dismissalTransitionWillBegin {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            if (!Titanium_IsSpringBoard()) {
-                EnforceMaxCPUPower();
-                Titanium_EnableZeroLatencyPipeline();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        if (!Titanium_IsSpringBoard()) {
+            EnforceMaxCPUPower();
+            Titanium_EnableZeroLatencyPipeline();
         }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
     }
+    %orig;
 }
 
 %end
@@ -5582,18 +5081,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                     options:(UIViewAnimationOptions)options
                  animations:(void (^)(void))animations
                  completion:(void (^)(BOOL finished))completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_EnableZeroLatencyPipeline();
-            options |= UIViewAnimationOptionAllowUserInteraction;
-        }
-        %orig(duration, delay, options, animations, completion);
-    } @catch (__unused NSException *e) {
-        %orig(duration, delay, options, animations, completion);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_EnableZeroLatencyPipeline();
+        options |= UIViewAnimationOptionAllowUserInteraction;
     }
+    %orig(duration, delay, options, animations, completion);
 }
 
 + (void)animateWithDuration:(NSTimeInterval)duration
@@ -5603,18 +5098,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                     options:(UIViewAnimationOptions)options
                  animations:(void (^)(void))animations
                  completion:(void (^)(BOOL finished))completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_EnableZeroLatencyPipeline();
-            options |= UIViewAnimationOptionAllowUserInteraction;
-        }
-        %orig(duration, delay, dampingRatio, velocity, options, animations, completion);
-    } @catch (__unused NSException *e) {
-        %orig(duration, delay, dampingRatio, velocity, options, animations, completion);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_EnableZeroLatencyPipeline();
+        options |= UIViewAnimationOptionAllowUserInteraction;
     }
+    %orig(duration, delay, dampingRatio, velocity, options, animations, completion);
 }
 
 %end
@@ -5622,14 +5113,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UITableView
 
 - (void)didMoveToWindow {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
-            self.delaysContentTouches = NO;
-            self.canCancelContentTouches = YES;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
+        self.delaysContentTouches = NO;
+        self.canCancelContentTouches = YES;
     }
 }
 
@@ -5638,15 +5125,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UICollectionView
 
 - (void)didMoveToWindow {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
-            self.delaysContentTouches = NO;
-            self.canCancelContentTouches = YES;
-            self.prefetchingEnabled = YES;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
+        self.delaysContentTouches = NO;
+        self.canCancelContentTouches = YES;
+        self.prefetchingEnabled = YES;
     }
 }
 
@@ -5655,7 +5138,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 12: BÀN PHÍM STREAM TEXT & CẢM ỨNG NÚT BẤM (0MS TOUCH - BỌC THÉP 1000%)
+// NHÓM 12: BÀN PHÍM STREAM TEXT & CẢM ỨNG NÚT BẤM (0MS TOUCH)
 // ====================================================================================================
 
 %group Group_InstantActionAndMenuTransitions_Boost
@@ -5665,13 +5148,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)performTask:(id)task {
     @try {
         %orig(task);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
     } @catch (__unused NSException *e) {
         %orig;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5682,13 +5165,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)callShowKeyboard {
     @try {
         %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-        }
     } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.keyboardZeroLagV24 || g_syncPayloadV285.keyboardZeroLagV3)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+    }
 }
 
 %end
@@ -5711,13 +5194,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     @try {
         %orig(touches, event);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
     } @catch (__unused NSException *e) {
         %orig;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
     }
 }
 
@@ -5734,31 +5217,25 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState {
-    @try {
-        NSProcessInfoThermalState real = %orig;
-        g_thermalSeriousV285 = (real >= NSProcessInfoThermalStateSerious);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
-            ((CFG285 && CFG285.antiThermalThrottling) || g_syncPayloadV285.thermalShield)) {
-            if (real >= NSProcessInfoThermalStateCritical) {
-                return real;
-            }
-            return NSProcessInfoThermalStateNominal;
+    NSProcessInfoThermalState real = %orig;
+    g_thermalSeriousV285 = (real >= NSProcessInfoThermalStateSerious);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        ((CFG285 && CFG285.antiThermalThrottling) || g_syncPayloadV285.thermalShield)) {
+        if (real >= NSProcessInfoThermalStateCritical) {
+            return real;
         }
-        return real;
-    } @catch (__unused NSException *e) {
-        return %orig;
+        return NSProcessInfoThermalStateNominal;
     }
+    return real;
 }
 
 - (BOOL)isLowPowerModeEnabled {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
-                return YES;
-            }
-            return NO;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) {
+            return YES;
         }
-    } @catch (__unused NSException *e) {}
+        return NO;
+    }
     return %orig;
 }
 
@@ -5775,19 +5252,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook CAMetalLayer
 
 - (BOOL)serverPresentsWithTransaction {
-    @try {
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return NO;
-    }
+    return %orig;
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
-    @try {
-        %orig(serverPresents);
-    } @catch (__unused NSException *e) {
-        %orig(serverPresents);
-    }
+    %orig(serverPresents);
 }
 
 %end
@@ -5795,7 +5264,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (TỐI ƯU HÓA TẦNG SÂU CHIP A11 & GIẢI PHÓNG AUDIO/3D - BỌC THÉP 1000%)
+// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (TỐI ƯU HÓA TẦNG SÂU CHIP A11 & GIẢI PHÓNG AUDIO/3D)
 // ====================================================================================================
 
 #ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
@@ -5895,43 +5364,31 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook _MTLCommandQueue
 
 - (void)setStatOptions:(NSUInteger)options {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
-            %orig(0);
-            return;
-        }
-        %orig(options);
-    } @catch (__unused NSException *e) {
-        %orig(options);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
+        %orig(0);
+        return;
     }
+    %orig(options);
 }
 
 - (BOOL)executionEnabled {
-    @try {
 #if TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
 #endif
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return YES;
-    }
+    return %orig;
 }
 
 %end
 
-// BỎ CAN THIỆP SPAM MAIN THREAD VÀO ENQUEUE/COMMIT ĐỂ CHỐNG NGHẼN CPU & TRIỆT TIẾU RÈ TIẾNG ÂM THANH GAME 3D
+// BỎ CAN THIỆP SPAM MAIN THREAD VÀO ENQUEUE/COMMIT ĐỂ CHỐNG NGHẼN CPU & TRIỆT TIÊU RÈ TIẾNG ÂM THANH GAME 3D
 %hook _MTLCommandBuffer
 
 - (void)enqueue {
-    @try {
-        %orig;
-    } @catch (__unused NSException *e) {}
+    %orig;
 }
 
 - (void)commit {
-    @try {
-        %orig;
-    } @catch (__unused NSException *e) {}
+    %orig;
 }
 
 %end
@@ -5939,28 +5396,20 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook MTLTextureDescriptor
 
 - (BOOL)allowGPUOptimizedContents {
-    @try {
 #if TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
 #endif
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return YES;
-    }
+    return %orig;
 }
 
 - (void)setAllowGPUOptimizedContents:(BOOL)flag {
-    @try {
 #if TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(YES);
-            return;
-        }
-#endif
-        %orig(flag);
-    } @catch (__unused NSException *e) {
-        %orig(flag);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(YES);
+        return;
     }
+#endif
+    %orig(flag);
 }
 
 %end
@@ -5968,27 +5417,20 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook CAMetalDrawable
 
 - (void)presentAfterMinimumDuration:(CFTimeInterval)duration {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
-            %orig(0.0);
-            return;
-        }
-        %orig(duration);
-    } @catch (__unused NSException *e) {
-        %orig(duration);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isMetalGameProcess) {
+        %orig(0.0);
+        return;
     }
+    %orig(duration);
 }
 
 %end
 
+// BỎ LỆNH TẮT RĂNG CƯA allowsEdgeAntialiasing = NO ĐỂ TRIỆT TIÊU LỖI TÁCH ĐÔI CHỮ KHI CUỘN
 %hook CALayer
 
 - (void)setCornerRadius:(CGFloat)cornerRadius {
-    @try {
-        %orig(cornerRadius);
-    } @catch (__unused NSException *e) {
-        %orig(cornerRadius);
-    }
+    %orig(cornerRadius);
 }
 
 %end
@@ -5996,17 +5438,13 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIPanGestureRecognizer
 
 - (CGPoint)velocityInView:(UIView *)view {
-    @try {
-        CGPoint vel = %orig(view);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && isfinite(vel.x) && isfinite(vel.y) && (fabs(vel.y) > 250.0 || fabs(vel.x) > 250.0)) {
-            g_isScrollingActive = YES;
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-        }
-        return vel;
-    } @catch (__unused NSException *e) {
-        return %orig(view);
+    CGPoint vel = %orig(view);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && isfinite(vel.x) && isfinite(vel.y) && (fabs(vel.y) > 250.0 || fabs(vel.x) > 250.0)) {
+        g_isScrollingActive = YES;
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
     }
+    return vel;
 }
 
 %end
@@ -6014,39 +5452,31 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIApplication
 
 - (BOOL)openURL:(NSURL *)url {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-        }
-        return %orig(url);
-    } @catch (__unused NSException *e) {
-        return %orig(url);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
+    return %orig(url);
 }
 
 - (void)openURL:(NSURL *)url options:(NSDictionary *)options completionHandler:(void (^)(BOOL success))completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-        }
-        %orig(url, options, completion);
-    } @catch (__unused NSException *e) {
-        %orig(url, options, completion);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
+    %orig(url, options, completion);
 }
 
 %end
@@ -6054,21 +5484,17 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIScene
 
 - (void)openURL:(NSURL *)url options:(id)options completionHandler:(void (^)(BOOL success))completion {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isInteracting = YES;
-            g_activeAnimationCount++;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-        }
-        %orig(url, options, completion);
-    } @catch (__unused NSException *e) {
-        %orig(url, options, completion);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
+    %orig(url, options, completion);
 }
 
 %end
@@ -6076,42 +5502,30 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIDocumentInteractionController
 
 - (BOOL)presentOpenInMenuFromRect:(CGRect)rect inView:(UIView *)view animated:(BOOL)animated {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-        }
-        return %orig(rect, view, animated);
-    } @catch (__unused NSException *e) {
-        return %orig(rect, view, animated);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
+    return %orig(rect, view, animated);
 }
 
 - (BOOL)presentOpenInMenuFromBarButtonItem:(UIBarButtonItem *)item animated:(BOOL)animated {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-        }
-        return %orig(item, animated);
-    } @catch (__unused NSException *e) {
-        return %orig(item, animated);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
+    return %orig(item, animated);
 }
 
 - (BOOL)presentOptionsMenuFromRect:(CGRect)rect inView:(UIView *)view animated:(BOOL)animated {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-        }
-        return %orig(rect, view, animated);
-    } @catch (__unused NSException *e) {
-        return %orig(rect, view, animated);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
     }
+    return %orig(rect, view, animated);
 }
 
 %end
@@ -6119,19 +5533,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIApplicationSceneTransitionContext
 
 - (BOOL)waitForFence {
-    @try {
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return NO;
-    }
+    return %orig;
 }
 
 - (void)setWaitForFence:(BOOL)wait {
-    @try {
-        %orig(wait);
-    } @catch (__unused NSException *e) {
-        %orig(wait);
-    }
+    %orig(wait);
 }
 
 %end
@@ -6139,15 +5545,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && Titanium_IsInColdBootTurboWindow()) {
-            Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-        }
-        %orig(animated);
-    } @catch (__unused NSException *e) {
-        %orig(animated);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && Titanium_IsInColdBootTurboWindow()) {
+        Titanium_TriggerInstantTouchBurst();
+        EnforceMaxCPUPower();
     }
+    %orig(animated);
 }
 
 %end
@@ -6155,7 +5557,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 4: BỘ NÃO DỰ ĐOÁN TỌA ĐỘ NEURAL & CỬ CHỈ MÉP 0MS (BẺ KHÓA CPU/GPU 100% & BÁM TAY 1:1 - BỌC THÉP 1000%)
+// NHÓM 4: BỘ NÃO DỰ ĐOÁN TỌA ĐỘ NEURAL & CỬ CHỈ MÉP 0MS (BẺ KHÓA CPU/GPU 100% & BÁM TAY 1:1)
 // ====================================================================================================
 
 %group Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285
@@ -6163,33 +5565,25 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook _UITouchPredictor
 
 - (id)predictedTouchesForTouch:(UITouch *)touch {
-    @try {
-        id predicted = %orig(touch);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || CFG285.zeroLagNeural || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnableZeroLatencyPipeline();
-        }
-        return predicted;
-    } @catch (__unused NSException *e) {
-        return %orig(touch);
+    id predicted = %orig(touch);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || CFG285.zeroLagNeural || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnableZeroLatencyPipeline();
     }
+    return predicted;
 }
 
 - (void)addTouch:(UITouch *)touch fromEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || CFG285.zeroLagNeural || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-        }
-        %orig(touch, event);
-    } @catch (__unused NSException *e) {
-        %orig(touch, event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || CFG285.zeroLagNeural || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
     }
+    %orig(touch, event);
 }
 
 %end
@@ -6197,18 +5591,14 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook _UIGestureEnvironment
 
 - (void)_updateGesturesForEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig(event);
-    } @catch (__unused NSException *e) {
-        %orig(event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig(event);
 }
 
 %end
@@ -6216,19 +5606,15 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook SBScreenEdgePanGestureRecognizer
 
 - (BOOL)_shouldTryToBeginWithEvent:(UIEvent *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-            Titanium_LockMainThreadFast();
-        }
-        return %orig(event);
-    } @catch (__unused NSException *e) {
-        return %orig(event);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.touchResponseBoost || g_syncPayloadV285.zeroLatencyTouch)) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_LockMainThreadFast();
     }
+    return %orig(event);
 }
 
 %end
@@ -6236,7 +5622,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 16: SILICON CPU SCHEDULER & FLUID INTERRUPTIBLE ENGINE (CHIẾM QUYỀN P-CORE REALTIME - BỌC THÉP 1000%)
+// NHÓM 16: SILICON CPU SCHEDULER & FLUID INTERRUPTIBLE ENGINE (CHIẾM QUYỀN P-CORE REALTIME)
 // ====================================================================================================
 
 %group Group_Silicon_Scheduler_Touch_Governor
@@ -6244,23 +5630,19 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook _UIEventFetcher
 
 - (void)_receiveHIDEvent:(void *)event {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            static uint64_t s_lastPcoreBurst = 0;
-            uint64_t now = mach_absolute_time();
-            if (now - s_lastPcoreBurst > Titanium_NanosToMachTicks(30ULL * 1000000ULL)) {
-                s_lastPcoreBurst = now;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-                
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        static uint64_t s_lastPcoreBurst = 0;
+        uint64_t now = mach_absolute_time();
+        if (now - s_lastPcoreBurst > Titanium_NanosToMachTicks(30ULL * 1000000ULL)) {
+            s_lastPcoreBurst = now;
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
         }
-        %orig(event);
-    } @catch (__unused NSException *e) {
-        %orig(event);
     }
+    %orig(event);
 }
 
 %end
@@ -6268,15 +5650,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook _UIInteractiveHighlightEnvironment
 
 - (void)applyHighlightWithAnimation:(BOOL)animated completion:(id)completion {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            %orig(NO, completion);
-            return;
-        }
-        %orig(animated, completion);
-    } @catch (__unused NSException *e) {
-        %orig(animated, completion);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        %orig(NO, completion);
+        return;
     }
+    %orig(animated, completion);
 }
 
 %end
@@ -6292,11 +5670,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook NSRunLoop
 
 - (BOOL)runMode:(NSRunLoopMode)mode beforeDate:(NSDate *)limitDate {
-    @try {
-        return %orig(mode, limitDate);
-    } @catch (__unused NSException *e) {
-        return NO;
-    }
+    return %orig(mode, limitDate);
 }
 
 %end
@@ -6304,11 +5678,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook CALayer
 
 - (BOOL)drawsAsynchronously {
-    @try {
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return NO;
-    }
+    return %orig;
 }
 
 %end
@@ -6316,20 +5686,16 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook FBScene
 
 - (void)updateSettings:(id)settings withTransitionContext:(id)context {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            if (Titanium_IsSpringBoard()) {
-                Titanium_LockMainThreadFast();
-            }
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        if (Titanium_IsSpringBoard()) {
+            Titanium_LockMainThreadFast();
         }
-        %orig(settings, context);
-    } @catch (__unused NSException *e) {
-        %orig(settings, context);
     }
+    %orig(settings, context);
 }
 
 %end
@@ -6345,19 +5711,15 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIWindowScene
 
 - (void)_readySceneForDisplay {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            if (Titanium_IsSpringBoard()) {
-                Titanium_LockMainThreadFast();
-            }
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        EnforceMaxCPUPower();
+        if (Titanium_IsSpringBoard()) {
+            Titanium_LockMainThreadFast();
         }
-    } @catch (__unused NSException *e) {
-        %orig;
     }
 }
 
@@ -6366,14 +5728,10 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook MTMaterialView
 
 - (void)didMoveToWindow {
-    @try {
-        %orig;
-        if (TITANIUM_LITE_MODE) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && self.layer != nil) {
-            self.layer.allowsGroupOpacity = YES;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (TITANIUM_LITE_MODE) return;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && self.layer != nil) {
+        self.layer.allowsGroupOpacity = YES;
     }
 }
 
@@ -6390,24 +5748,21 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook CALayer
 
 - (void)setShadowRadius:(CGFloat)radius {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && radius > 0.0) {
-            if (!self.shadowPath && self.bounds.size.width > 0.0 && self.bounds.size.height > 0.0) {
-                CGPathRef path = CGPathCreateWithRect(self.bounds, NULL);
-                if (path) {
-                    self.shadowPath = path;
-                    CGPathRelease(path);
-                }
-            }
-            if (radius > 8.0) {
-                %orig(8.0);
-                return;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && radius > 0.0) {
+        // Tránh tạo path đè liên tục khi bounds rỗng hoặc đang animate biến đổi để không drop FPS
+        if (!self.shadowPath && self.bounds.size.width > 0.0 && self.bounds.size.height > 0.0) {
+            CGPathRef path = CGPathCreateWithRect(self.bounds, NULL);
+            if (path) {
+                self.shadowPath = path;
+                CGPathRelease(path);
             }
         }
-        %orig(radius);
-    } @catch (__unused NSException *e) {
-        %orig(radius);
+        if (radius > 8.0) {
+            %orig(8.0);
+            return;
+        }
     }
+    %orig(radius);
 }
 
 %end
@@ -6415,15 +5770,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook CATransaction
 
 + (void)flush {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            if (g_isInteracting || g_isScrollingActive || g_isUserTouchingScreen) {
-                EnforceMaxCPUPower();
-            }
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        if (g_isInteracting || g_isScrollingActive || g_isUserTouchingScreen) {
+            EnforceMaxCPUPower();
         }
-    } @catch (__unused NSException *e) {
-        %orig;
     }
 }
 
@@ -6432,7 +5783,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 20: DEEP RAM COMPACTION & MACH VM PURGABLE ENGINE (CHỐNG JETSAM KILL - BỌC THÉP 1000%)
+// NHÓM 20: DEEP RAM COMPACTION & MACH VM PURGABLE ENGINE (CHỐNG JETSAM KILL)
 // ====================================================================================================
 
 %group Group_Deep_RAM_Compaction_Engine
@@ -6440,17 +5791,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIApplication
 
 - (void)_applicationDidEnterBackground {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                @try {
-                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                } @catch (__unused NSException *subEx) {}
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        });
     }
 }
 
@@ -6459,14 +5804,10 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook SBAppSwitcherSnapshotImageCache
 
 - (void)reloadImagesForAllItems {
-    @try {
-        %orig;
-        if (TITANIUM_LITE_MODE) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner)) {
-            Titanium_BackgroundPurgeMemory();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (TITANIUM_LITE_MODE) return;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner)) {
+        Titanium_BackgroundPurgeMemory();
     }
 }
 
@@ -6475,17 +5816,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook UIWindow
 
 - (void)didReceiveMemoryWarning {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner)) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                @try {
-                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                } @catch (__unused NSException *subEx) {}
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner)) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        });
     }
 }
 
@@ -6502,36 +5837,24 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %hook WKWebView
 
 - (void)didMoveToWindow {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window) {
-            NSInteger currentCap = Titanium_GetEffectiveFrameCap();
-            NSString *js = Titanium_BuildWebFPSOverdriveScript(currentCap);
-            if (js) {
-                [self evaluateJavaScript:js completionHandler:nil];
-            }
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window) {
+        NSInteger currentCap = Titanium_GetEffectiveFrameCap();
+        NSString *js = Titanium_BuildWebFPSOverdriveScript(currentCap);
+        [self evaluateJavaScript:js completionHandler:nil];
     }
 }
 
 - (void)_didReceiveMemoryWarning {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            WKProcessPool *pool = [NSThread isMainThread] ? self.configuration.processPool : nil;
-            if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
-                [pool _clearMemoryCache];
-            }
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                @try {
-                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                } @catch (__unused NSException *subEx) {}
-            });
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        WKProcessPool *pool = [NSThread isMainThread] ? self.configuration.processPool : nil;
+        if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
+            [pool _clearMemoryCache];
         }
-    } @catch (__unused NSException *e) {
-        %orig;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        });
     }
 }
 
@@ -6540,94 +5863,86 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 %end
 
 // ====================================================================================================
-// BẺ KHÓA PHẦN CỨNG TẦNG SÂU (MỞ KHÓA NÚT 90FPS/120FPS/240FPS TRONG MỌI GAME & ỨNG DỤNG - BỌC THÉP 1000%)
+// BẺ KHÓA PHẦN CỨNG TẦNG SÂU (MỞ KHÓA NÚT 90FPS/120FPS/240FPS TRONG MỌI GAME & ỨNG DỤNG)
 // ====================================================================================================
 
 static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
 static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    @try {
-        if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
-                const char *spoofModel = "iPhone16,2";
-                size_t len = strlen(spoofModel) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofModel, len);
-                        *oldlenp = len;
-                        return 0;
-                    }
-                } else if (!oldp && oldlenp) {
+    if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
+            const char *spoofModel = "iPhone16,2";
+            size_t len = strlen(spoofModel) + 1;
+            if (oldp && oldlenp) {
+                if (*oldlenp >= len) {
+                    memcpy(oldp, spoofModel, len);
                     *oldlenp = len;
                     return 0;
                 }
-            } else if (strcmp(name, "hw.model") == 0) {
-                const char *spoofBoard = "D84AP";
-                size_t len = strlen(spoofBoard) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofBoard, len);
-                        *oldlenp = len;
-                        return 0;
-                    }
-                } else if (!oldp && oldlenp) {
+            } else if (!oldp && oldlenp) {
+                *oldlenp = len;
+                return 0;
+            }
+        } else if (strcmp(name, "hw.model") == 0) {
+            const char *spoofBoard = "D84AP";
+            size_t len = strlen(spoofBoard) + 1;
+            if (oldp && oldlenp) {
+                if (*oldlenp >= len) {
+                    memcpy(oldp, spoofBoard, len);
                     *oldlenp = len;
                     return 0;
                 }
+            } else if (!oldp && oldlenp) {
+                *oldlenp = len;
+                return 0;
             }
         }
-    } @catch (__unused NSException *e) {}
+    }
     return orig_sysctlbyname_spoof(name, oldp, oldlenp, newp, newlen);
 }
 
 static int (*orig_sysctl_spoof)(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
 static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    @try {
-        if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
-            !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            if (name[1] == HW_MACHINE) {
-                const char *spoofModel = "iPhone16,2";
-                size_t len = strlen(spoofModel) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofModel, len);
-                        *oldlenp = len;
-                        return 0;
-                    }
-                } else if (!oldp && oldlenp) {
+    if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        if (name[1] == HW_MACHINE) {
+            const char *spoofModel = "iPhone16,2";
+            size_t len = strlen(spoofModel) + 1;
+            if (oldp && oldlenp) {
+                if (*oldlenp >= len) {
+                    memcpy(oldp, spoofModel, len);
                     *oldlenp = len;
                     return 0;
                 }
-            } else if (name[1] == HW_MODEL) {
-                const char *spoofBoard = "D84AP";
-                size_t len = strlen(spoofBoard) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofBoard, len);
-                        *oldlenp = len;
-                        return 0;
-                    }
-                } else if (!oldp && oldlenp) {
+            } else if (!oldp && oldlenp) {
+                *oldlenp = len;
+                return 0;
+            }
+        } else if (name[1] == HW_MODEL) {
+            const char *spoofBoard = "D84AP";
+            size_t len = strlen(spoofBoard) + 1;
+            if (oldp && oldlenp) {
+                if (*oldlenp >= len) {
+                    memcpy(oldp, spoofBoard, len);
                     *oldlenp = len;
                     return 0;
                 }
+            } else if (!oldp && oldlenp) {
+                *oldlenp = len;
+                return 0;
             }
         }
-    } @catch (__unused NSException *e) {}
+    }
     return orig_sysctl_spoof(name, namelen, oldp, oldlenp, newp, newlen);
 }
 
 static int (*orig_uname_spoof)(struct utsname *name) = NULL;
 static int hooked_uname_spoof(struct utsname *name) {
-    @try {
-        int ret = orig_uname_spoof(name);
-        if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            strncpy(name->machine, "iPhone16,2", sizeof(name->machine) - 1);
-            name->machine[sizeof(name->machine) - 1] = '\0';
-        }
-        return ret;
-    } @catch (__unused NSException *e) {
-        return orig_uname_spoof(name);
+    int ret = orig_uname_spoof(name);
+    if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        strncpy(name->machine, "iPhone16,2", sizeof(name->machine) - 1);
+        name->machine[sizeof(name->machine) - 1] = '\0';
     }
+    return ret;
 }
 
 static NSString *fake_MTLDeviceName(id self, SEL _cmd) {
@@ -6641,44 +5956,42 @@ static BOOL fake_MTLSupportsFamily(id self, SEL _cmd, NSInteger family) {
 static void Titanium_InstallMGCopyAnswerHookV26(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        @try {
-            if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-                void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
-                if (sysSym) {
-                    Titanium_KernelForceWriteProtectBypass(sysSym, (const void *)sysSym, 1);
-                    MSHookFunction(sysSym, (void *)hooked_sysctlbyname_spoof, (void **)&orig_sysctlbyname_spoof);
-                }
-                void *sysctlMibSym = dlsym(RTLD_DEFAULT, "sysctl");
-                if (sysctlMibSym) {
-                    Titanium_KernelForceWriteProtectBypass(sysctlMibSym, (const void *)sysctlMibSym, 1);
-                    MSHookFunction(sysctlMibSym, (void *)hooked_sysctl_spoof, (void **)&orig_sysctl_spoof);
-                }
-                void *unameSym = dlsym(RTLD_DEFAULT, "uname");
-                if (unameSym) {
-                    Titanium_KernelForceWriteProtectBypass(unameSym, (const void *)unameSym, 1);
-                    MSHookFunction(unameSym, (void *)hooked_uname_spoof, (void **)&orig_uname_spoof);
-                }
-
-                @try {
-                    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
-                    if (dev) {
-                        Class gpuCls = [dev class];
-                        SEL nameSel = @selector(name);
-                        Method mName = class_getInstanceMethod(gpuCls, nameSel);
-                        if (mName) {
-                            Titanium_KernelForceWriteProtectBypass((void *)mName, (const void *)mName, sizeof(Method));
-                            class_replaceMethod(gpuCls, nameSel, (IMP)fake_MTLDeviceName, "@@:");
-                        }
-                        SEL famSel = sel_registerName("supportsFamily:");
-                        Method mFam = class_getInstanceMethod(gpuCls, famSel);
-                        if (mFam) {
-                            Titanium_KernelForceWriteProtectBypass((void *)mFam, (const void *)mFam, sizeof(Method));
-                            class_replaceMethod(gpuCls, famSel, (IMP)fake_MTLSupportsFamily, "B@:q");
-                        }
-                    }
-                } @catch (__unused NSException *subEx) {}
+        if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+            void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
+            if (sysSym) {
+                Titanium_KernelForceWriteProtectBypass(sysSym, (const void *)sysSym, 1);
+                MSHookFunction(sysSym, (void *)hooked_sysctlbyname_spoof, (void **)&orig_sysctlbyname_spoof);
             }
-        } @catch (__unused NSException *e) {}
+            void *sysctlMibSym = dlsym(RTLD_DEFAULT, "sysctl");
+            if (sysctlMibSym) {
+                Titanium_KernelForceWriteProtectBypass(sysctlMibSym, (const void *)sysctlMibSym, 1);
+                MSHookFunction(sysctlMibSym, (void *)hooked_sysctl_spoof, (void **)&orig_sysctl_spoof);
+            }
+            void *unameSym = dlsym(RTLD_DEFAULT, "uname");
+            if (unameSym) {
+                Titanium_KernelForceWriteProtectBypass(unameSym, (const void *)unameSym, 1);
+                MSHookFunction(unameSym, (void *)hooked_uname_spoof, (void **)&orig_uname_spoof);
+            }
+
+            @try {
+                id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
+                if (dev) {
+                    Class gpuCls = [dev class];
+                    SEL nameSel = @selector(name);
+                    Method mName = class_getInstanceMethod(gpuCls, nameSel);
+                    if (mName) {
+                        Titanium_KernelForceWriteProtectBypass((void *)mName, (const void *)mName, sizeof(Method));
+                        class_replaceMethod(gpuCls, nameSel, (IMP)fake_MTLDeviceName, "@@:");
+                    }
+                    SEL famSel = sel_registerName("supportsFamily:");
+                    Method mFam = class_getInstanceMethod(gpuCls, famSel);
+                    if (mFam) {
+                        Titanium_KernelForceWriteProtectBypass((void *)mFam, (const void *)mFam, sizeof(Method));
+                        class_replaceMethod(gpuCls, famSel, (IMP)fake_MTLSupportsFamily, "B@:q");
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+        }
     });
 }
 
@@ -6698,10 +6011,11 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
                 return;
             }
         }
-        %orig(property, key);
     } @catch (__unused NSException *e) {
         %orig(property, key);
+        return;
     }
+    %orig(property, key);
 }
 
 %end
@@ -6709,29 +6023,23 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 %hook NSProcessInfo
 
 - (unsigned long long)physicalMemory {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            return 8ULL * 1024ULL * 1024ULL * 1024ULL;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        return 8ULL * 1024ULL * 1024ULL * 1024ULL;
+    }
     return %orig;
 }
 
 - (NSUInteger)processorCount {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            return 6;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        return 6;
+    }
     return %orig;
 }
 
 - (NSUInteger)activeProcessorCount {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            return 6;
-        }
-    } @catch (__unused NSException *e) {}
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        return 6;
+    }
     return %orig;
 }
 
@@ -6750,26 +6058,18 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook UIScene
 
 - (void)_activationCompleted {
-    @try {
-        %orig;
-        if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
-            g_isAppFirstFramePresented = YES;
-            Titanium_ReapplyFrameRateToAllScenes();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+        g_isAppFirstFramePresented = YES;
+        Titanium_ReapplyFrameRateToAllScenes();
     }
 }
 
 - (void)_didBecomeActive {
-    @try {
-        %orig;
-        if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
-            Titanium_TriggerInstantTouchBurst();
-            Titanium_ReapplyFrameRateToAllScenes();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+        Titanium_TriggerInstantTouchBurst();
+        Titanium_ReapplyFrameRateToAllScenes();
     }
 }
 
@@ -6778,14 +6078,10 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook FBApplicationProcess
 
 - (void)_finishInit {
-    @try {
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_EnforceThreadVIPPolicy();
-            EnforceMaxCPUPower();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_EnforceThreadVIPPolicy();
+        EnforceMaxCPUPower();
     }
 }
 
@@ -6794,7 +6090,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
-// NHÓM 2: ÉP CỨNG CAWINDOWSERVER TẦNG GỐC PHẦN CỨNG (MỞ KHÓA LÊN 240HZ THEO APP - BỌC THÉP 1000%)
+// NHÓM 2: ÉP CỨNG CAWINDOWSERVER TẦNG GỐC PHẦN CỨNG (MỞ KHÓA LÊN 240HZ THEO APP)
 // ====================================================================================================
 
 %group Group_CAWindowServer_Absolute_Dominance
@@ -6802,102 +6098,66 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook CAWindowServerDisplay
 
 - (double)minimumFrameDuration {
-    @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return (1.0 / targetHz);
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
+    return (1.0 / targetHz);
 }
 
 - (void)setMinimumFrameDuration:(double)duration {
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
     @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        @try {
-            %orig(1.0 / targetHz);
-        } @catch (__unused NSException *subEx) {}
-    } @catch (__unused NSException *e) {
-        %orig(duration);
-    }
+        %orig(1.0 / targetHz);
+    } @catch (__unused NSException *e) {}
 }
 
 - (double)maximumRefreshRate {
-    @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return targetHz;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
+    return targetHz;
 }
 
 - (void)setMaximumRefreshRate:(double)rate {
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
     @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        @try {
-            %orig(targetHz);
-        } @catch (__unused NSException *subEx) {}
-    } @catch (__unused NSException *e) {
-        %orig(rate);
-    }
+        %orig(targetHz);
+    } @catch (__unused NSException *e) {}
 }
 
 - (double)idealRefreshRate {
-    @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return targetHz;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
+    return targetHz;
 }
 
 - (void)setIdealRefreshRate:(double)rate {
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
     @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        @try {
-            %orig(targetHz);
-        } @catch (__unused NSException *subEx) {}
-    } @catch (__unused NSException *e) {
-        %orig(rate);
-    }
+        %orig(targetHz);
+    } @catch (__unused NSException *e) {}
 }
 
 - (double)minimumRefreshRate {
-    @try {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return targetHz;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    double targetHz = (double)Titanium_GetEffectiveFrameCap();
+    if (targetHz < 15.0) targetHz = 15.0;
+    if (targetHz > 240.0) targetHz = 240.0;
+    return targetHz;
 }
 
 - (BOOL)supportsVariableRefreshRate {
-    @try {
-        return YES;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    return YES;
 }
 
 - (BOOL)allowsVirtualModes {
-    @try {
-        return YES;
-    } @catch (__unused NSException *e) {
-        return %orig;
-    }
+    return YES;
 }
 
 %end
@@ -6913,13 +6173,9 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook CALayer
 
 - (void)setNeedsDisplay {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+        Titanium_EnableZeroLatencyPipeline();
     }
 }
 
@@ -6932,18 +6188,14 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook UIWindowScene
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    @try {
-        if (@available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                range = Titanium_NormalizeFrameRateRange(range, Titanium_IsSpringBoard());
-            }
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            range = Titanium_NormalizeFrameRateRange(range, Titanium_IsSpringBoard());
         }
-        @try {
-            %orig(range);
-        } @catch (__unused NSException *subEx) {}
-    } @catch (__unused NSException *e) {
-        %orig(range);
     }
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -6951,24 +6203,20 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook UIWindow
 
 - (void)didMoveToWindowScene {
-    @try {
-        %orig;
-        if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
-            if (@available(iOS 15.0, *)) {
-                @try {
-                    UIWindowScene *scene = self.windowScene;
-                    if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        float targetHz = (float)Titanium_GetEffectiveFrameCap();
-                        if (targetHz < 15.0f) targetHz = 15.0f;
-                        if (targetHz > 240.0f) targetHz = 240.0f;
-                        float floorRate = Titanium_RangeFloorForCap(targetHz);
-                        [(id)scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, targetHz, targetHz)];
-                    }
-                } @catch (__unused NSException *e) {}
-            }
+    %orig;
+    if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
+        if (@available(iOS 15.0, *)) {
+            @try {
+                UIWindowScene *scene = self.windowScene;
+                if (scene && [scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float targetHz = (float)Titanium_GetEffectiveFrameCap();
+                    if (targetHz < 15.0f) targetHz = 15.0f;
+                    if (targetHz > 240.0f) targetHz = 240.0f;
+                    float floorRate = Titanium_RangeFloorForCap(targetHz);
+                    [(id)scene setPreferredFrameRateRange:SafeMakeFRR(floorRate, targetHz, targetHz)];
+                }
+            } @catch (__unused NSException *e) {}
         }
-    } @catch (__unused NSException *e) {
-        %orig;
     }
 }
 
@@ -6977,111 +6225,89 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
-// NHÓM V10: BOOST LAYOUT SPRINGBOARD & ĐA NHIỆM & MÀN HÌNH CHÍNH (BỌC THÉP 1000%)
+// NHÓM V10: BOOST LAYOUT SPRINGBOARD & ĐA NHIỆM & MÀN HÌNH CHÍNH
 // ====================================================================================================
 %group Group_TitaniumV10_SpringBoard_Layout_Boost
 
 static inline void Titanium_V10_PinMainThreadHigh(void) {
-    @try {
-        if (![NSThread isMainThread]) return;
-        static __thread int s_v10LayoutQos = -1;
-        if (s_v10LayoutQos != (int)QOS_CLASS_USER_INTERACTIVE) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            s_v10LayoutQos = (int)QOS_CLASS_USER_INTERACTIVE;
-        }
-    } @catch (__unused NSException *e) {}
+    if (![NSThread isMainThread]) return;
+    static __thread int s_v10LayoutQos = -1;
+    if (s_v10LayoutQos != (int)QOS_CLASS_USER_INTERACTIVE) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        s_v10LayoutQos = (int)QOS_CLASS_USER_INTERACTIVE;
+    }
 }
 
 %hook SBIconListView
 - (void)layoutSubviews {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
-            Titanium_V10_PinMainThreadHigh();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
+        Titanium_V10_PinMainThreadHigh();
     }
+    %orig;
 }
 %end
 
 %hook SBFolderView
 - (void)layoutSubviews {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
-            Titanium_V10_PinMainThreadHigh();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (g_isUserTouchingScreen || g_isScrollingActive || g_isContinuousSwiping)) {
+        Titanium_V10_PinMainThreadHigh();
     }
+    %orig;
 }
 %end
 
 %hook SBFluidSwitcherViewController
 - (void)viewWillLayoutSubviews {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_V10_PinMainThreadHigh();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_V10_PinMainThreadHigh();
     }
+    %orig;
 }
 %end
 
 %hook SBMainDisplaySceneLayoutViewController
 - (void)viewWillLayoutSubviews {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_V10_PinMainThreadHigh();
-        }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_V10_PinMainThreadHigh();
     }
+    %orig;
 }
 %end
 
 %end
 
 // ====================================================================================================
-// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE & AI STREAM OPTIMIZATION (BỌC THÉP 1000%) ███
+// ███ KHỐI V12 - SIÊU MƯỢT ROOTHIDE ███
 // ====================================================================================================
 
 static NSString *Titanium_ResolveEffectiveLanguage(void) {
-    @try {
-        NSString *sel = nil;
-        if (CFG285 && [CFG285 respondsToSelector:@selector(selectedLanguage)]) {
-            sel = CFG285.selectedLanguage;
+    NSString *sel = nil;
+    if (CFG285 && [CFG285 respondsToSelector:@selector(selectedLanguage)]) {
+        sel = CFG285.selectedLanguage;
+    }
+    if (sel.length > 0 && ![sel isEqualToString:@"auto"]) {
+        return sel;
+    }
+    NSString *pref = [[NSLocale preferredLanguages] firstObject];
+    if (pref.length > 0) {
+        NSString *base = [[[pref componentsSeparatedByString:@"-"] firstObject] lowercaseString];
+        static NSSet *s_knownLangsV12 = nil;
+        static dispatch_once_t s_langOnceV12;
+        dispatch_once(&s_langOnceV12, ^{
+            s_knownLangsV12 = [[NSSet alloc] initWithObjects:@"vi", @"en", @"zh", @"ja", @"ko", @"fr", @"de",
+                                                             @"es", @"pt", @"ru", @"th", @"id", @"hi", @"ar", nil];
+        });
+        if ([s_knownLangsV12 containsObject:base]) {
+            return base;
         }
-        if (sel.length > 0 && ![sel isEqualToString:@"auto"]) {
-            return sel;
-        }
-        NSString *pref = [[NSLocale preferredLanguages] firstObject];
-        if (pref.length > 0) {
-            NSString *base = [[[pref componentsSeparatedByString:@"-"] firstObject] lowercaseString];
-            static NSSet *s_knownLangsV12 = nil;
-            static dispatch_once_t s_langOnceV12;
-            dispatch_once(&s_langOnceV12, ^{
-                s_knownLangsV12 = [[NSSet alloc] initWithObjects:@"vi", @"en", @"zh", @"ja", @"ko", @"fr", @"de",
-                                                                 @"es", @"pt", @"ru", @"th", @"id", @"hi", @"ar", nil];
-            });
-            if ([s_knownLangsV12 containsObject:base]) {
-                return base;
-            }
-            return @"en";
-        }
-        const char *res = (const char *)g_syncPayloadV285.reserved;
-        if (res[0] == 'L' && res[1] == 'G' && res[2] == ':') {
-            NSString *code = [NSString stringWithUTF8String:&res[3]];
-            if (code.length > 0) return code;
-        }
-        return @"en";
-    } @catch (__unused NSException *e) {
         return @"en";
     }
+    const char *res = (const char *)g_syncPayloadV285.reserved;
+    if (res[0] == 'L' && res[1] == 'G' && res[2] == ':') {
+        NSString *code = [NSString stringWithUTF8String:&res[3]];
+        if (code.length > 0) return code;
+    }
+    return @"en";
 }
 
 static inline NSString *Titanium_TrV12(NSString *viText, NSString *enText) {
@@ -7102,57 +6328,53 @@ static inline BOOL Titanium_IsAIApp(void) {
     static BOOL sIsStaticAI = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        @try {
-            NSBundle *mainBundle = [NSBundle mainBundle];
-            NSString *bundleID = [[mainBundle bundleIdentifier] lowercaseString] ?: @"";
-            NSString *execName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleExecutable"] lowercaseString] ?: @"";
-            NSString *dispName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] lowercaseString] ?: @"";
-            NSString *bundName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleName"] lowercaseString] ?: @"";
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        NSString *bundleID = [[mainBundle bundleIdentifier] lowercaseString] ?: @"";
+        NSString *execName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleExecutable"] lowercaseString] ?: @"";
+        NSString *dispName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleDisplayName"] lowercaseString] ?: @"";
+        NSString *bundName = [[mainBundle objectForInfoDictionaryKey:@"CFBundleName"] lowercaseString] ?: @"";
 
-            if ([bundleID hasPrefix:@"com.apple."]) {
-                return;
+        if ([bundleID hasPrefix:@"com.apple."]) {
+            return;
+        }
+
+        NSString *combined = [NSString stringWithFormat:@"%@ %@ %@ %@", bundleID, execName, dispName, bundName];
+        NSArray<NSString *> *aiKeywords = @[
+            @"bard", @"gemini", @"googlemobile", @"openai", @"chatgpt", @"claude", @"anthropic",
+            @"grok", @"xai", @"deepseek", @"perplexity", @"poe", @"copilot", @"kimi", @"moonshot",
+            @"doubao", @"cici", @"qwen", @"tongyi", @"aliyun", @"yuanbao", @"hunyuan", @"ernie",
+            @"yiyan", @"zhipu", @"chatglm", @"mistral", @"lechat", @"meta.ai", @"character",
+            @"chai", @"monica", @"sider", @"merlin", @"you.com", @"phind", @"cursor", @"windsurf",
+            @"codeium", @"tabnine", @"blackbox", @"replit", @"ollama", @"enchanted", @"palchat",
+            @"chatbox", @"opencat", @"chathub", @"lobechat", @"nextchat", @"dify", @"coze",
+            @"notability", @"goodnotes", @"aichat", @"chatbot", @"gpt", @"llm"
+        ];
+
+        for (NSString *kw in aiKeywords) {
+            if ([combined containsString:kw]) {
+                sIsStaticAI = YES;
+                break;
             }
-
-            NSString *combined = [NSString stringWithFormat:@"%@ %@ %@ %@", bundleID, execName, dispName, bundName];
-            NSArray<NSString *> *aiKeywords = @[
-                @"bard", @"gemini", @"googlemobile", @"openai", @"chatgpt", @"claude", @"anthropic",
-                @"grok", @"xai", @"deepseek", @"perplexity", @"poe", @"copilot", @"kimi", @"moonshot",
-                @"doubao", @"cici", @"qwen", @"tongyi", @"aliyun", @"yuanbao", @"hunyuan", @"ernie",
-                @"yiyan", @"zhipu", @"chatglm", @"mistral", @"lechat", @"meta.ai", @"character",
-                @"chai", @"monica", @"sider", @"merlin", @"you.com", @"phind", @"cursor", @"windsurf",
-                @"codeium", @"tabnine", @"blackbox", @"replit", @"ollama", @"enchanted", @"palchat",
-                @"chatbox", @"opencat", @"chathub", @"lobechat", @"nextchat", @"dify", @"coze",
-                @"notability", @"goodnotes", @"aichat", @"chatbot", @"gpt", @"llm"
-            ];
-
-            for (NSString *kw in aiKeywords) {
-                if ([combined containsString:kw]) {
-                    sIsStaticAI = YES;
-                    break;
-                }
-            }
-        } @catch (__unused NSException *e) {}
+        }
     });
     return sIsStaticAI || g_DynamicAIStreamDetected;
 }
 
 static inline void Titanium_ProbeDynamicAIStream(NSUInteger textLength) {
-    @try {
-        if (g_DynamicAIStreamDetected || textLength < 40) return;
-        static uint64_t sWindowStartMs = 0;
-        static uint32_t sRapidMutationCount = 0;
+    if (g_DynamicAIStreamDetected || textLength < 40) return;
+    static uint64_t sWindowStartMs = 0;
+    static uint32_t sRapidMutationCount = 0;
 
-        uint64_t now = Titanium_NowMs();
-        if (now - sWindowStartMs <= 380) {
-            sRapidMutationCount++;
-            if (sRapidMutationCount >= 6) {
-                g_DynamicAIStreamDetected = YES;
-            }
-        } else {
-            sWindowStartMs = now;
-            sRapidMutationCount = 1;
+    uint64_t now = Titanium_NowMs();
+    if (now - sWindowStartMs <= 380) {
+        sRapidMutationCount++;
+        if (sRapidMutationCount >= 6) {
+            g_DynamicAIStreamDetected = YES;
         }
-    } @catch (__unused NSException *e) {}
+    } else {
+        sWindowStartMs = now;
+        sRapidMutationCount = 1;
+    }
 }
 
 static inline BOOL Titanium_IsUserActivelyScrollingAI(void) {
@@ -7281,6 +6503,7 @@ typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     @try {
+        // Chỉ kích hoạt lọc trên app thực sự là AI và không đang chỉnh sửa
         if (!Titanium_IsAIApp() || self.isEditable || self.isFirstResponder) {
             %orig(attributedText);
             return;
@@ -7305,19 +6528,17 @@ typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
                 objc_setAssociatedObject(self, kAIFlushScheduledKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                 __weak UITextView *weakSelf = self;
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(throttleMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                    @try {
-                        UITextView *strongSelf = weakSelf;
-                        if (!strongSelf) return;
-                        objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                        NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
-                        if (pending) {
-                            objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                            objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                            [UIView performWithoutAnimation:^{
-                                [strongSelf setAttributedText:pending];
-                            }];
-                        }
-                    } @catch (__unused NSException *subEx) {}
+                    UITextView *strongSelf = weakSelf;
+                    if (!strongSelf) return;
+                    objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                    NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
+                    if (pending) {
+                        objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        [UIView performWithoutAnimation:^{
+                            [strongSelf setAttributedText:pending];
+                        }];
+                    }
                 });
             }
         }
@@ -7330,6 +6551,7 @@ typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
 %hook UILabel
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     @try {
+        // Bảo vệ triệt để: không bao giờ chặn UILabel trong hộp thoại hệ thống hoặc app thường
         if (!Titanium_IsAIApp() || attributedText.length < 150) {
             %orig(attributedText);
             return;
@@ -7353,19 +6575,17 @@ typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
                 objc_setAssociatedObject(self, kAIFlushScheduledKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                 __weak UILabel *weakSelf = self;
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(throttleMs * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                    @try {
-                        UILabel *strongSelf = weakSelf;
-                        if (!strongSelf) return;
-                        objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                        NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
-                        if (pending) {
-                            objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                            objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                            [UIView performWithoutAnimation:^{
-                                [strongSelf setAttributedText:pending];
-                            }];
-                        }
-                    } @catch (__unused NSException *subEx) {}
+                    UILabel *strongSelf = weakSelf;
+                    if (!strongSelf) return;
+                    objc_setAssociatedObject(strongSelf, kAIFlushScheduledKey, @(NO), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                    NSAttributedString *pending = objc_getAssociatedObject(strongSelf, kAIPendingAttrTextKey);
+                    if (pending) {
+                        objc_setAssociatedObject(strongSelf, kAIPendingAttrTextKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        objc_setAssociatedObject(strongSelf, kAILastTextCommitMsKey, @(Titanium_NowMs()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                        [UIView performWithoutAnimation:^{
+                            [strongSelf setAttributedText:pending];
+                        }];
+                    }
                 });
             }
         }
@@ -7378,51 +6598,45 @@ typedef void (^UICollectionBatchCompletionBlock)(BOOL finished);
 %end
 
 static void Titanium_ReapplyFrameRateToAllScenes(void) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
+        return;
+    }
+    if (g_isCurrentAppBlacklisted) return;
+    if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
     @try {
-        if (![NSThread isMainThread]) {
-            dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
-            return;
-        }
-        if (g_isCurrentAppBlacklisted) return;
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
-        @try {
-            UIApplication *app = [UIApplication sharedApplication];
-            if (!app) return;
-            if (@available(iOS 13.0, *)) {
-                NSSet *scenes = app.connectedScenes;
-                for (UIScene *scene in scenes) {
-                    if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-                    if (@available(iOS 15.0, *)) {
-                        UIWindowScene *winScene = (UIWindowScene *)scene;
-                        if (![winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) continue;
+        UIApplication *app = [UIApplication sharedApplication];
+        if (!app) return;
+        if (@available(iOS 13.0, *)) {
+            NSSet *scenes = app.connectedScenes;
+            for (UIScene *scene in scenes) {
+                if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+                if (@available(iOS 15.0, *)) {
+                    UIWindowScene *winScene = (UIWindowScene *)scene;
+                    if (![winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) continue;
 
-                        SafeFrameRateRange current = winScene.preferredFrameRateRange;
-                        SafeFrameRateRange normalized = Titanium_NormalizeFrameRateRange(current, Titanium_IsSpringBoard());
-                        BOOL changed = !isfinite(current.minimum) || !isfinite(current.maximum) || !isfinite(current.preferred) ||
-                                       fabsf(current.minimum - normalized.minimum) > 0.5f ||
-                                       fabsf(current.maximum - normalized.maximum) > 0.5f ||
-                                       fabsf(current.preferred - normalized.preferred) > 0.5f;
-                        if (changed) {
-                            @try {
-                                [winScene setPreferredFrameRateRange:normalized];
-                            } @catch (__unused NSException *e) {}
-                        }
+                    SafeFrameRateRange current = winScene.preferredFrameRateRange;
+                    SafeFrameRateRange normalized = Titanium_NormalizeFrameRateRange(current, Titanium_IsSpringBoard());
+                    BOOL changed = !isfinite(current.minimum) || !isfinite(current.maximum) || !isfinite(current.preferred) ||
+                                   fabsf(current.minimum - normalized.minimum) > 0.5f ||
+                                   fabsf(current.maximum - normalized.maximum) > 0.5f ||
+                                   fabsf(current.preferred - normalized.preferred) > 0.5f;
+                    if (changed) {
+                        @try {
+                            [winScene setPreferredFrameRateRange:normalized];
+                        } @catch (__unused NSException *e) {}
                     }
                 }
             }
-        } @catch (__unused NSException *e) {}
+        }
     } @catch (__unused NSException *e) {}
 }
 
 static inline BOOL Titanium_IsDismissingToHomeV12(void) {
-    @try {
-        if (g_isContinuousSwiping) return YES;
-        if (g_lastInteractionMachTime == 0) return NO;
-        uint64_t now = mach_absolute_time();
-        return ((now - g_lastInteractionMachTime) < Titanium_NanosToMachTicks(250ULL * 1000000ULL));
-    } @catch (__unused NSException *e) {
-        return NO;
-    }
+    if (g_isContinuousSwiping) return YES;
+    if (g_lastInteractionMachTime == 0) return NO;
+    uint64_t now = mach_absolute_time();
+    return ((now - g_lastInteractionMachTime) < Titanium_NanosToMachTicks(250ULL * 1000000ULL));
 }
 
 // ====================================================================================================
@@ -7434,26 +6648,18 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %hook CASpringAnimation
 
 - (CGFloat)damping {
-    @try {
-        CGFloat orig = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (orig > 0.0 && orig < 18.0) return orig * 1.08;
-        }
-        return orig;
-    } @catch (__unused NSException *e) {
-        return %orig;
+    CGFloat orig = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (orig > 0.0 && orig < 18.0) return orig * 1.08;
     }
+    return orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (damping > 0.0 && damping < 18.0) damping *= 1.08;
-        }
-        %orig(damping);
-    } @catch (__unused NSException *e) {
-        %orig(damping);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (damping > 0.0 && damping < 18.0) damping *= 1.08;
     }
+    %orig(damping);
 }
 
 %end
@@ -7472,31 +6678,23 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
          andReport:(BOOL)report 
    withDescription:(id)description 
         completion:(id)completion {
-    @try {
-        if (CFG285 && !CFG285.autoKillBackground) {
-            if (reason == 1 || [description containsString:@"background"] || [description containsString:@"idle"]) {
-                if (completion) {
-                    void (^compBlock)(void) = (void (^)(void))completion;
-                    compBlock();
-                }
-                return;
+    if (CFG285 && !CFG285.autoKillBackground) {
+        if (reason == 1 || [description containsString:@"background"] || [description containsString:@"idle"]) {
+            if (completion) {
+                void (^compBlock)(void) = (void (^)(void))completion;
+                compBlock();
             }
+            return;
         }
-        %orig;
-    } @catch (__unused NSException *e) {
-        %orig;
     }
+    %orig;
 }
 
 - (BOOL)isPendingExit {
-    @try {
-        if (CFG285 && !CFG285.autoKillBackground) {
-            return NO;
-        }
-        return %orig;
-    } @catch (__unused NSException *e) {
+    if (CFG285 && !CFG285.autoKillBackground) {
         return NO;
     }
+    return %orig;
 }
 
 %end
@@ -7504,13 +6702,9 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %hook SBMainWorkspace
 
 - (void)handleApplicationSuspended:(id)application {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285 && CFG285.autoKillBackground) {
-            Titanium_BackgroundPurgeMemory();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285 && CFG285.autoKillBackground) {
+        Titanium_BackgroundPurgeMemory();
     }
 }
 
@@ -7533,10 +6727,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
                 value = @(14.0f);
             }
         }
-        %orig(value, key);
-    } @catch (__unused NSException *e) {
-        %orig(value, key);
-    }
+    } @catch (__unused NSException *e) {}
+    %orig(value, key);
 }
 
 %end
@@ -7544,26 +6736,18 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %hook CABackdropLayer
 
 - (void)setDisablesOccludedBackdropBlurs:(BOOL)flag {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
-            %orig(YES);
-            return;
-        }
-        %orig(flag);
-    } @catch (__unused NSException *e) {
-        %orig(flag);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        %orig(YES);
+        return;
     }
+    %orig(flag);
 }
 
 - (BOOL)disablesOccludedBackdropBlurs {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
-            return YES;
-        }
-        return %orig;
-    } @catch (__unused NSException *e) {
-        return NO;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        return YES;
     }
+    return %orig;
 }
 
 %end
@@ -7571,18 +6755,14 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %hook UIVisualEffectView
 
 - (void)layoutSubviews {
-    @try {
-        %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
-            @try {
-                UIView *v = (UIView *)self;
-                if (v && v.layer != nil) {
-                    v.layer.allowsGroupOpacity = YES;
-                }
-            } @catch (__unused NSException *subEx) {}
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        @try {
+            UIView *v = (UIView *)self;
+            if (v && v.layer != nil) {
+                v.layer.allowsGroupOpacity = YES;
+            }
+        } @catch (__unused NSException *e) {}
     }
 }
 
@@ -7598,97 +6778,73 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %hook _UIScreenEdgePanGestureRecognizer
 - (BOOL)delaysTouchesBegan {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return NO;
-        }
-        return %orig;
-    } @catch (__unused NSException *e) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
         return NO;
     }
+    return %orig;
 }
 
 - (double)_edgeRegionSize {
-    @try {
-        double size = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return (size > 0.0) ? (size * 1.2) : 20.0;
-        }
-        return size;
-    } @catch (__unused NSException *e) {
-        return 20.0;
+    double size = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        return (size > 0.0) ? (size * 1.2) : 20.0;
     }
+    return size;
 }
 %end
 
 %hook SBFluidSwitcherItemContainer
 - (void)setShadowStyle:(long long)style {
-    @try {
-        static __thread BOOL s_lockShadowRecursion = NO;
-        if (s_lockShadowRecursion) {
-            %orig(style);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            s_lockShadowRecursion = YES;
-            %orig(0);
-            @try {
-                Ivar ivar = class_getInstanceVariable([self class], "_shadowStyle");
-                if (ivar) {
-                    *((long long *)((uint8_t *)(__bridge void *)self + ivar_getOffset(ivar))) = 0;
-                }
-                UIView *shadowView = [self valueForKey:@"_pageShadowView"];
-                if (shadowView) {
-                    shadowView.alpha = 0.0;
-                    shadowView.hidden = YES;
-                }
-                self.layer.shadowOpacity = 0.0f;
-                self.layer.shadowRadius = 0.0f;
-            } @catch (__unused NSException *subEx) {}
-            s_lockShadowRecursion = NO;
-            return;
-        }
+    static __thread BOOL s_lockShadowRecursion = NO;
+    if (s_lockShadowRecursion) {
         %orig(style);
-    } @catch (__unused NSException *e) {
-        %orig(style);
+        return;
     }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        s_lockShadowRecursion = YES;
+        %orig(0);
+        @try {
+            Ivar ivar = class_getInstanceVariable([self class], "_shadowStyle");
+            if (ivar) {
+                *((long long *)((uint8_t *)(__bridge void *)self + ivar_getOffset(ivar))) = 0;
+            }
+            UIView *shadowView = [self valueForKey:@"_pageShadowView"];
+            if (shadowView) {
+                shadowView.alpha = 0.0;
+                shadowView.hidden = YES;
+            }
+            self.layer.shadowOpacity = 0.0f;
+            self.layer.shadowRadius = 0.0f;
+        } @catch (__unused NSException *e) {}
+        s_lockShadowRecursion = NO;
+        return;
+    }
+    %orig(style);
 }
 
 - (long long)shadowStyle {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return 0;
-        }
-        return %orig;
-    } @catch (__unused NSException *e) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
         return 0;
     }
+    return %orig;
 }
 %end
 
 %hook SBFluidSwitcherModifier
 - (double)shadowOpacityForIndex:(unsigned long long)index {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return 0.0;
-        }
-        return %orig(index);
-    } @catch (__unused NSException *e) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
         return 0.0;
     }
+    return %orig(index);
 }
 %end
 
 %hook SBAppSwitcherSettings
 - (BOOL)shouldSimplifyForOptions:(long long)arg1 {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return YES;
-        }
-        return %orig(arg1);
-    } @catch (__unused NSException *e) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
         return YES;
     }
+    return %orig(arg1);
 }
 
 - (BOOL)shouldKeepAppSnapshotsInMemory {
@@ -7698,15 +6854,11 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %hook SBMainWorkspace
 - (void)_handleDismissOverlaysGesture:(id)arg1 {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
-        }
-        %orig(arg1);
-    } @catch (__unused NSException *e) {
-        %orig(arg1);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
     }
+    %orig(arg1);
 }
 %end
 
@@ -7716,117 +6868,103 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 // [V12 - HEARTBEAT IPC]: SpringBoard làm tươi tệp đồng bộ + heartbeat mỗi 30s
 // ----------------------------------------------------------------------------------------------------
 static void Titanium_StartIPCHearthbeatV12(void) {
-    @try {
-        if (!Titanium_IsSpringBoard()) return;
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            dispatch_source_t hb = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
-            dispatch_source_set_timer(hb, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), (uint64_t)(30 * NSEC_PER_SEC), (uint64_t)(5 * NSEC_PER_SEC));
-            dispatch_source_set_event_handler(hb, ^{
-                @try {
-                    static time_t s_bootTimestamp = 0;
-                    if (s_bootTimestamp == 0) s_bootTimestamp = time(NULL);
-                    BOOL earlyBoot = (time(NULL) - s_bootTimestamp) < 60;
+    if (!Titanium_IsSpringBoard()) return;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dispatch_source_t hb = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+        dispatch_source_set_timer(hb, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), (uint64_t)(30 * NSEC_PER_SEC), (uint64_t)(5 * NSEC_PER_SEC));
+        dispatch_source_set_event_handler(hb, ^{
+            static time_t s_bootTimestamp = 0;
+            if (s_bootTimestamp == 0) s_bootTimestamp = time(NULL);
+            BOOL earlyBoot = (time(NULL) - s_bootTimestamp) < 60;
 
-                    ApexV285ProPayload snapshot;
-                    pthread_mutex_lock(&g_syncLockV285);
-                    snapshot = g_syncPayloadV285;
-                    pthread_mutex_unlock(&g_syncLockV285);
-                    if (snapshot.magic == APEX_SYNC_MAGIC_V285) {
-                        if (earlyBoot) {
-                            @try {
-                                Titanium_WriteAtomicIPCFile(PRIMARY_SYNC_FILE, &snapshot, sizeof(snapshot));
-                                CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                                                       CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
-                            } @catch (__unused NSException *subEx) {}
-                        } else {
-                            Titanium_WriteSyncPayloadV285(&snapshot);
-                        }
-                    }
-                } @catch (__unused NSException *subEx) {}
-            });
-            dispatch_resume(hb);
+            ApexV285ProPayload snapshot;
+            pthread_mutex_lock(&g_syncLockV285);
+            snapshot = g_syncPayloadV285;
+            pthread_mutex_unlock(&g_syncLockV285);
+            if (snapshot.magic == APEX_SYNC_MAGIC_V285) {
+                if (earlyBoot) {
+                    @try {
+                        Titanium_WriteAtomicIPCFile(PRIMARY_SYNC_FILE, &snapshot, sizeof(snapshot));
+                        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                                               CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
+                    } @catch (NSException *e) {}
+                } else {
+                    Titanium_WriteSyncPayloadV285(&snapshot);
+                }
+            }
         });
-    } @catch (__unused NSException *e) {}
+        dispatch_resume(hb);
+    });
 }
 
 static void Titanium_RegisterAppResumeRefreshV12(void) {
-    @try {
-        if (Titanium_IsSpringBoard()) return;
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+    if (Titanium_IsSpringBoard()) return;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            g_lastSyncTicksV285 = 0;
+            Titanium_ReloadSharedSyncStateV285();
+            Titanium_ReapplyFrameRateToAllScenes();
+        }];
+        if (@available(iOS 9.0, *)) {
+            [[NSNotificationCenter defaultCenter] addObserverForName:NSProcessInfoPowerStateDidChangeNotification
+                                                              object:nil
+                                                               queue:[NSOperationQueue mainQueue]
+                                                          usingBlock:^(NSNotification * _Nonnull note) {
+                Titanium_ReapplyFrameRateToAllScenes();
+            }];
+        }
+        if (@available(iOS 11.0, *)) {
+            NSProcessInfo *processInfo = [NSProcessInfo processInfo];
+            g_thermalSeriousV285 = (processInfo.thermalState >= NSProcessInfoThermalStateSerious);
+            [[NSNotificationCenter defaultCenter] addObserverForName:NSProcessInfoThermalStateDidChangeNotification
+                                                              object:nil
+                                                               queue:[NSOperationQueue mainQueue]
+                                                          usingBlock:^(NSNotification * _Nonnull note) {
+                NSProcessInfo *currentInfo = [NSProcessInfo processInfo];
+                g_thermalSeriousV285 = (currentInfo.thermalState >= NSProcessInfoThermalStateSerious);
+                Titanium_ReapplyFrameRateToAllScenes();
+            }];
+        }
+    });
+}
+
+static void Titanium_StartThermalAndChargingWatchdog(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            UIDevice *dev = [UIDevice currentDevice];
+            dev.batteryMonitoringEnabled = YES;
+            g_isDeviceChargingV285 = (dev.batteryState == UIDeviceBatteryStateCharging || dev.batteryState == UIDeviceBatteryStateFull);
+
+            [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryStateDidChangeNotification
                                                               object:nil
                                                                queue:[NSOperationQueue mainQueue]
                                                           usingBlock:^(NSNotification * _Nonnull note) {
                 @try {
-                    g_lastSyncTicksV285 = 0;
-                    Titanium_ReloadSharedSyncStateV285();
-                    Titanium_ReapplyFrameRateToAllScenes();
-                } @catch (__unused NSException *subEx) {}
+                    UIDevice *currentDev = [UIDevice currentDevice];
+                    g_isDeviceChargingV285 = (currentDev.batteryState == UIDeviceBatteryStateCharging || currentDev.batteryState == UIDeviceBatteryStateFull);
+                    Titanium_UpdateLowBatteryFlagV12();
+                } @catch (__unused NSException *e) {}
             }];
-            if (@available(iOS 9.0, *)) {
-                [[NSNotificationCenter defaultCenter] addObserverForName:NSProcessInfoPowerStateDidChangeNotification
-                                                                  object:nil
-                                                                   queue:[NSOperationQueue mainQueue]
-                                                              usingBlock:^(NSNotification * _Nonnull note) {
-                    @try {
-                        Titanium_ReapplyFrameRateToAllScenes();
-                    } @catch (__unused NSException *subEx) {}
-                }];
-            }
-            if (@available(iOS 11.0, *)) {
-                NSProcessInfo *processInfo = [NSProcessInfo processInfo];
-                g_thermalSeriousV285 = (processInfo.thermalState >= NSProcessInfoThermalStateSerious);
-                [[NSNotificationCenter defaultCenter] addObserverForName:NSProcessInfoThermalStateDidChangeNotification
-                                                                  object:nil
-                                                                   queue:[NSOperationQueue mainQueue]
-                                                              usingBlock:^(NSNotification * _Nonnull note) {
-                    @try {
-                        NSProcessInfo *currentInfo = [NSProcessInfo processInfo];
-                        g_thermalSeriousV285 = (currentInfo.thermalState >= NSProcessInfoThermalStateSerious);
-                        Titanium_ReapplyFrameRateToAllScenes();
-                    } @catch (__unused NSException *subEx) {}
-                }];
-            }
-        });
-    } @catch (__unused NSException *e) {}
-}
 
-static void Titanium_StartThermalAndChargingWatchdog(void) {
-    @try {
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            @try {
-                UIDevice *dev = [UIDevice currentDevice];
-                dev.batteryMonitoringEnabled = YES;
-                g_isDeviceChargingV285 = (dev.batteryState == UIDeviceBatteryStateCharging || dev.batteryState == UIDeviceBatteryStateFull);
-
-                [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryStateDidChangeNotification
-                                                                  object:nil
-                                                                   queue:[NSOperationQueue mainQueue]
-                                                              usingBlock:^(NSNotification * _Nonnull note) {
-                    @try {
-                        UIDevice *currentDev = [UIDevice currentDevice];
-                        g_isDeviceChargingV285 = (currentDev.batteryState == UIDeviceBatteryStateCharging || currentDev.batteryState == UIDeviceBatteryStateFull);
-                        Titanium_UpdateLowBatteryFlagV12();
-                    } @catch (__unused NSException *e) {}
-                }];
-
-                g_batteryLevelV12 = dev.batteryLevel;
-                Titanium_UpdateLowBatteryFlagV12();
-                [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryLevelDidChangeNotification
-                                                                  object:nil
-                                                                   queue:[NSOperationQueue mainQueue]
-                                                              usingBlock:^(NSNotification * _Nonnull note) {
-                    @try {
-                        g_batteryLevelV12 = [UIDevice currentDevice].batteryLevel;
-                        Titanium_UpdateLowBatteryFlagV12();
-                    } @catch (__unused NSException *e) {}
-                }];
-            } @catch (__unused NSException *e) {}
-        });
-    } @catch (__unused NSException *e) {}
+            g_batteryLevelV12 = dev.batteryLevel;
+            Titanium_UpdateLowBatteryFlagV12();
+            [[NSNotificationCenter defaultCenter] addObserverForName:UIDeviceBatteryLevelDidChangeNotification
+                                                              object:nil
+                                                               queue:[NSOperationQueue mainQueue]
+                                                          usingBlock:^(NSNotification * _Nonnull note) {
+                @try {
+                    g_batteryLevelV12 = [UIDevice currentDevice].batteryLevel;
+                    Titanium_UpdateLowBatteryFlagV12();
+                } @catch (__unused NSException *e) {}
+            }];
+        } @catch (__unused NSException *e) {}
+    });
 }
 
 static void Titanium_AdoptPayloadRatesWithoutConfig(void) {
@@ -7907,150 +7045,148 @@ static inline void Init_CAWindowServer_Hooks(void) {
 }
 
 // ====================================================================================================
-// HÀM KHỞI TẠO DUY NHẤT: KHỚP 100% VỚI CÁC %GROUP, KHÔNG TRÙNG HOOK, KHÔNG LỖI BUILD THEOS (BỌC THÉP 1000%)
+// HÀM KHỞI TẠO DUY NHẤT: KHỚP 100% VỚI CÁC %GROUP, KHÔNG TRÙNG HOOK, KHÔNG LỖI BUILD THEOS
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
-    @try {
-        static BOOL s_coreInitDone = NO;
-        if (s_coreInitDone) return;
-        s_coreInitDone = YES;
+    static BOOL s_coreInitDone = NO;
+    if (s_coreInitDone) return;
+    s_coreInitDone = YES;
 
-        @autoreleasepool {
-            @try {
-                Titanium_BypassQuartzCoreRangeAssertion();
+    @autoreleasepool {
+        @try {
+            Titanium_BypassQuartzCoreRangeAssertion();
 
-                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-                if (configClass) {
-                    CFG285 = [configClass sharedInstance];
-                    [CFG285 loadSettings];
-                    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                        NSInteger initHz = (NSInteger)CFG285.targetHz;
-                        if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) &&
-                            initHz >= 15 && initHz <= 240) {
-                            g_cachedResolvedHz = initHz;
-                        }
-                    }
-                    if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                        NSInteger initFPS = (NSInteger)CFG285.targetFPS;
-                        if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) &&
-                            initFPS >= 15 && initFPS <= 240) {
-                            g_cachedResolvedFPS = initFPS;
-                        }
+            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+            if (configClass) {
+                CFG285 = [configClass sharedInstance];
+                [CFG285 loadSettings];
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                    NSInteger initHz = (NSInteger)CFG285.targetHz;
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) &&
+                        initHz >= 15 && initHz <= 240) {
+                        g_cachedResolvedHz = initHz;
                     }
                 }
-
-                if (!isSpringBoard &&
-                    (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
-                    g_SystemMasterReady = YES;
-                    return;
+                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                    NSInteger initFPS = (NSInteger)CFG285.targetFPS;
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) &&
+                        initFPS >= 15 && initFPS <= 240) {
+                        g_cachedResolvedFPS = initFPS;
+                    }
                 }
+            }
 
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+            if (!isSpringBoard &&
+                (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
+                g_SystemMasterReady = YES;
+                return;
+            }
+
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                @try {
+                    Titanium_ReloadSharedSyncStateV285();
+                } @catch (__unused NSException *e) {}
+            });
+
+            %init(Group_ZeroLatency_Touch_Opt);
+            %init(Group_Metal_ZeroTearing_Pacing);
+            %init(Group_FluidTransitions_Pacing);
+            %init(Group_AI_Stream_Optimization);
+            %init(Group_FastLaunch_SuperEngineV285);
+            %init(Group_Scroll_And_Keyboard_Opt);
+            %init(Group_InstantActionAndMenuTransitions_Boost);
+            %init(Group_Global_Thread_Governor_Unthrottled);
+
+            %init(Group_Apple_Internal_ProMotion_Apex);
+            %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+
+            if (Titanium_DisplaySpoofAllowed()) {
+                %init(Group_Hardware_ProMotion_Overclock);
+                Titanium_InstallMGCopyAnswerHookV26();
+            }
+
+            %init(Group_Apple_Native_ColdBoot_Overdrive);
+            %init(Group_Titanium_Game_Metal_Overdrive);
+            %init(Group_Silicon_Hardware_Pipeline_Overdrive);
+            %init(Group_Silicon_Scheduler_Touch_Governor);
+            %init(Group_CoreAnimation_RenderServer_Governor);
+            %init(Group_System_Memory_And_RunLoop_Governor);
+            %init(Group_Thermal_CryoPacing_ZeroDrop);
+            %init(Group_Deep_RAM_Compaction_Engine);
+            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
+
+            if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
+                %init(Group_WebKit_RAM_Optimizer);
+            }
+
+            if (Titanium_IsClassicHomeButtonDevice()) {
+                %init(Group_HardwareSegregation_ClassicHomeV285);
+            }
+
+            if (isSpringBoard) {
+                %init(Group_LiquidGlass_Opt);
+                %init(Group_Switcher30Apps_Virtualization);
+                %init(Group_SpringBoard_Switcher_Opt);
+                %init(Group_Display_SpringBoardV285);
+                %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
+                %init(Group_V285_FloatingWindow_PiP);
+                %init(Group_SpringBoard_ProcessManagerV285);
+                %init(Group_KeepAppsAlive_NoKill);
+
+                Init_CAWindowServer_Hooks();
+
+#if TITANIUM_ENABLE_RATE_KEEPER
+                @try {
+                    [TitaniumRateKeeper start];
+                } @catch (__unused NSException *e) {}
+#endif
+                @try {
+                    Titanium_StartThermalAndChargingWatchdog();
+                } @catch (__unused NSException *e) {}
+
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
-                        Titanium_ReloadSharedSyncStateV285();
+                        AppleInternal_EnforceZeroLatencyKernelTier();
+                        Titanium_ApplySiliconDeepOptimizations();
+                        AppleInternal_LockHardwareCADisplay();
+                        Titanium_ForceInjectDynamicRefreshSupport();
+                        Titanium_TuneWindowServerDisplayDirectly();
                     } @catch (__unused NSException *e) {}
                 });
 
-                %init(Group_ZeroLatency_Touch_Opt);
-                %init(Group_Metal_ZeroTearing_Pacing);
-                %init(Group_FluidTransitions_Pacing);
-                %init(Group_AI_Stream_Optimization);
-                %init(Group_FastLaunch_SuperEngineV285);
-                %init(Group_Scroll_And_Keyboard_Opt);
-                %init(Group_InstantActionAndMenuTransitions_Boost);
-                %init(Group_Global_Thread_Governor_Unthrottled);
+                @try {
+                    Titanium_StartIPCHearthbeatV12();
+                } @catch (__unused NSException *e) {}
 
-                %init(Group_Apple_Internal_ProMotion_Apex);
-                %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+                @try {
+                    NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
+                    [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
+                                                            contents:verifiedData
+                                                          attributes:@{NSFilePosixPermissions: @(0644)}];
+                } @catch (__unused NSException *e) {}
+            } else {
+                Titanium_A20PrewarmAssetsAndGPU();
+                %init(Group_UIKit_ThirdParty_IsolatedV285);
+                %init(Group_Force_Render_Recovery_Overdrive);
+                %init(Group_Window_Level_Overdrive);
+                Init_CAWindowServer_Hooks();
 
-                if (Titanium_DisplaySpoofAllowed()) {
-                    %init(Group_Hardware_ProMotion_Overclock);
-                    Titanium_InstallMGCopyAnswerHookV26();
-                }
-
-                %init(Group_Apple_Native_ColdBoot_Overdrive);
-                %init(Group_Titanium_Game_Metal_Overdrive);
-                %init(Group_Silicon_Hardware_Pipeline_Overdrive);
-                %init(Group_Silicon_Scheduler_Touch_Governor);
-                %init(Group_CoreAnimation_RenderServer_Governor);
-                %init(Group_System_Memory_And_RunLoop_Governor);
-                %init(Group_Thermal_CryoPacing_ZeroDrop);
-                %init(Group_Deep_RAM_Compaction_Engine);
-                %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
-
-                if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
-                    %init(Group_WebKit_RAM_Optimizer);
-                }
-
-                if (Titanium_IsClassicHomeButtonDevice()) {
-                    %init(Group_HardwareSegregation_ClassicHomeV285);
-                }
-
-                if (isSpringBoard) {
-                    %init(Group_LiquidGlass_Opt);
-                    %init(Group_Switcher30Apps_Virtualization);
-                    %init(Group_SpringBoard_Switcher_Opt);
-                    %init(Group_Display_SpringBoardV285);
-                    %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
-                    %init(Group_V285_FloatingWindow_PiP);
-                    %init(Group_SpringBoard_ProcessManagerV285);
-                    %init(Group_KeepAppsAlive_NoKill);
-
-                    Init_CAWindowServer_Hooks();
-
-#if TITANIUM_ENABLE_RATE_KEEPER
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     @try {
-                        [TitaniumRateKeeper start];
+                        Titanium_ForceInjectDynamicRefreshSupport();
+                        AppleInternal_LockHardwareCADisplay();
+                        AppleInternal_EnforceZeroLatencyKernelTier();
+                        Titanium_ApplySiliconDeepOptimizations();
+                        Titanium_RegisterAppResumeRefreshV12();
+                        Titanium_ReapplyFrameRateToAllScenes();
                     } @catch (__unused NSException *e) {}
-#endif
-                    @try {
-                        Titanium_StartThermalAndChargingWatchdog();
-                    } @catch (__unused NSException *e) {}
+                });
+            }
 
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            AppleInternal_EnforceZeroLatencyKernelTier();
-                            Titanium_ApplySiliconDeepOptimizations();
-                            AppleInternal_LockHardwareCADisplay();
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            Titanium_TuneWindowServerDisplayDirectly();
-                        } @catch (__unused NSException *e) {}
-                    });
-
-                    @try {
-                        Titanium_StartIPCHearthbeatV12();
-                    } @catch (__unused NSException *e) {}
-
-                    @try {
-                        NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-                        [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
-                                                                contents:verifiedData
-                                                              attributes:@{NSFilePosixPermissions: @(0644)}];
-                    } @catch (__unused NSException *e) {}
-                } else {
-                    Titanium_A20PrewarmAssetsAndGPU();
-                    %init(Group_UIKit_ThirdParty_IsolatedV285);
-                    %init(Group_Force_Render_Recovery_Overdrive);
-                    %init(Group_Window_Level_Overdrive);
-                    Init_CAWindowServer_Hooks();
-
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            AppleInternal_LockHardwareCADisplay();
-                            AppleInternal_EnforceZeroLatencyKernelTier();
-                            Titanium_ApplySiliconDeepOptimizations();
-                            Titanium_RegisterAppResumeRefreshV12();
-                            Titanium_ReapplyFrameRateToAllScenes();
-                        } @catch (__unused NSException *e) {}
-                    });
-                }
-
-                g_SystemMasterReady = YES;
-            } @catch (__unused NSException *e) {}
-        }
-    } @catch (__unused NSException *e) {}
+            g_SystemMasterReady = YES;
+        } @catch (__unused NSException *e) {}
+    }
 }
 
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
@@ -8093,111 +7229,110 @@ static void SpringBoardBootstrapTrigger(void) {
 
 %ctor {
     @autoreleasepool {
-        @try {
-            const char *progName = getprogname();
-            if (!progName) return;
+        const char *progName = getprogname();
+        if (!progName) return;
 
-            if (strcasestr(progName, "smooth") != NULL ||
-                strcasestr(progName, "boosti") != NULL ||
-                strcasestr(progName, "liquid") != NULL) {
+        if (strcasestr(progName, "smooth") != NULL ||
+            strcasestr(progName, "boosti") != NULL ||
+            strcasestr(progName, "liquid") != NULL) {
+            return;
+        }
+
+        if (strcasestr(progName, "networkd") != NULL ||
+            strcasestr(progName, "trustd") != NULL ||
+            strcasestr(progName, "configd") != NULL ||
+            strcasestr(progName, "wifid") != NULL ||
+            strcasestr(progName, "CommCenter") != NULL ||
+            strcasestr(progName, "mDNSResponder") != NULL ||
+            strcasestr(progName, "nsurlsessiond") != NULL ||
+            strcasestr(progName, "nsurlstoraged") != NULL ||
+            strcasestr(progName, "WebKit") != NULL ||
+            strcasestr(progName, "WebContent") != NULL ||
+            strcasestr(progName, "GPUProcess") != NULL ||
+            strcasestr(progName, "Networking") != NULL ||
+            strcasestr(progName, "neagent") != NULL ||
+            strcasestr(progName, "nesessionmanager") != NULL ||
+            strcasestr(progName, "apsd") != NULL ||
+            strcasestr(progName, "cloudd") != NULL ||
+            strcasestr(progName, "geod") != NULL ||
+            strcasestr(progName, "akd") != NULL ||
+            strcasestr(progName, "identityservicesd") != NULL ||
+            strcasestr(progName, "imagent") != NULL ||
+            strcasestr(progName, "bluetoothd") != NULL ||
+            strcasestr(progName, "profiled") != NULL) {
+            return;
+        }
+
+        if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
+            strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
+            strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
+            strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
+            strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
+            strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
+            strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
+            strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
+            strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
+            strcasestr(progName, "passd")) {
+            return;
+        }
+
+        if (strcasestr(progName, "backboardd") != NULL) {
+            return;
+        }
+
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        NSString *bundleID = [mainBundle bundleIdentifier];
+
+        if (bundleID) {
+            if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
                 return;
             }
+        }
 
-            if (strcasestr(progName, "networkd") != NULL ||
-                strcasestr(progName, "trustd") != NULL ||
-                strcasestr(progName, "configd") != NULL ||
-                strcasestr(progName, "wifid") != NULL ||
-                strcasestr(progName, "CommCenter") != NULL ||
-                strcasestr(progName, "mDNSResponder") != NULL ||
-                strcasestr(progName, "nsurlsessiond") != NULL ||
-                strcasestr(progName, "nsurlstoraged") != NULL ||
-                strcasestr(progName, "WebKit") != NULL ||
-                strcasestr(progName, "WebContent") != NULL ||
-                strcasestr(progName, "GPUProcess") != NULL ||
-                strcasestr(progName, "Networking") != NULL ||
-                strcasestr(progName, "neagent") != NULL ||
-                strcasestr(progName, "nesessionmanager") != NULL ||
-                strcasestr(progName, "apsd") != NULL ||
-                strcasestr(progName, "cloudd") != NULL ||
-                strcasestr(progName, "geod") != NULL ||
-                strcasestr(progName, "akd") != NULL ||
-                strcasestr(progName, "identityservicesd") != NULL ||
-                strcasestr(progName, "imagent") != NULL ||
-                strcasestr(progName, "bluetoothd") != NULL ||
-                strcasestr(progName, "profiled") != NULL) {
-                return;
-            }
+        BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
 
-            if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
-                strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
-                strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
-                strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
-                strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
-                strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
-                strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
-                strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
-                strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
-                strcasestr(progName, "passd")) {
-                return;
-            }
+        if (isSpringBoard) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    (void)Titanium_CheckAndPreventBootloopUniversal();
+                } @catch (NSException *e) {}
+            });
+        }
 
-            if (strcasestr(progName, "backboardd") != NULL) {
-                return;
-            }
-
-            NSBundle *mainBundle = [NSBundle mainBundle];
-            NSString *bundleID = [mainBundle bundleIdentifier];
-
-            if (bundleID) {
-                if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-                    return;
-                }
-            }
-
-            BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
-
-            if (isSpringBoard) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-                    @try {
-                        (void)Titanium_CheckAndPreventBootloopUniversal();
-                    } @catch (__unused NSException *e) {}
-                });
-            }
-
-            if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
-                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-                if (configClass) {
-                    CFG285 = [configClass sharedInstance];
-                    [CFG285 loadSettings];
-                    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                        NSInteger prefHz = (NSInteger)CFG285.targetHz;
-                        if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
-                            g_cachedResolvedHz = prefHz;
-                        }
-                    }
-                    if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                        NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
-                        if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) && prefFPS >= 15 && prefFPS <= 240) {
-                            g_cachedResolvedFPS = prefFPS;
-                        }
+        if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
+            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+            if (configClass) {
+                CFG285 = [configClass sharedInstance];
+                [CFG285 loadSettings];
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                    NSInteger prefHz = (NSInteger)CFG285.targetHz;
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
+                        g_cachedResolvedHz = prefHz;
                     }
                 }
-                return;
+                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                    NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) && prefFPS >= 15 && prefFPS <= 240) {
+                        g_cachedResolvedFPS = prefFPS;
+                    }
+                }
             }
+            return;
+        }
 
-            Titanium_RegisterPrefsObservers(isSpringBoard);
+        Titanium_RegisterPrefsObservers(isSpringBoard);
 
-            if (isSpringBoard) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    SpringBoardBootstrapTrigger();
-                });
-            } else {
-                runCoreTweak(NO, bundleID, progName);
-            }
-        } @catch (__unused NSException *e) {}
+        // KHỞI TẠO HOÀN TẤT ĐỒNG BỘ: Chống hoàn toàn lỗi "realizeClassWithoutSwift" (SIGBUS) trên các app thứ 3
+        if (isSpringBoard) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                SpringBoardBootstrapTrigger();
+            });
+        } else {
+            runCoreTweak(NO, bundleID, progName);
+        }
     }
 }
