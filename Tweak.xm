@@ -2661,6 +2661,50 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
     Titanium_EnforceMachFrameConstraintDynamic(targetHz);
 }
 
+// ====================================================================================================
+// NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (BẺ KHÓA CPU/GPU 100% & ZERO-LATENCY)
+// ====================================================================================================
+
+%group Group_Apple_Internal_ProMotion_Apex
+
+%hook _UIUpdateCycle
+
+- (BOOL)isPerformingUpdate {
+    return %orig;
+}
+
+- (void)performUpdateWithInfo:(void *)info {
+    if (TITANIUM_LITE_MODE) {
+        %orig(info);
+        return;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(info);
+}
+
+%end
+
+%hook _UIUpdateSequenceItem
+
+- (void)performItem {
+    if (TITANIUM_LITE_MODE) {
+        %orig;
+        return;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        g_lastInteractionMachTime = mach_absolute_time();
+        EnforceMaxCPUPower();
+    }
+    %orig;
+}
+
+%end
+
+%end
 
 // ====================================================================================================
 // NHÓM 1: CẢM ỨNG 0MS NỘI BỘ APPLE (BẺ KHÓA HIỆU NĂNG PHẦN CỨNG & CHỐNG NHIỄU SẠC)
