@@ -7087,7 +7087,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Apple_Internal_ProMotion_Apex);
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
 
-            // Kích hoạt nhóm ép phần cứng IOKit & CARenderServer tầng sâu tối thượng
+            // Kích hoạt nhóm ép phần cứng IOKit & CARenderServer tầng sâu tối thượng (Duy nhất 1 lần)
             %init(Group_Hardware_Deep_Core_Bypass);
 
             if (Titanium_DisplaySpoofAllowed()) {
