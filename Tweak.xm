@@ -2503,9 +2503,9 @@ static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
 
 typedef NS_ENUM(NSInteger, TitaniumDisplayTier) {
     TitaniumTier_BypassGame = 0,
-    TitaniumTier_DeepIdle   = 60,
+    TitaniumTier_DeepIdle   = 120,
     TitaniumTier_VideoSync  = 60,
-    TitaniumTier_TextRead   = 80,
+    TitaniumTier_TextRead   = 120,
     TitaniumTier_ApexPeak   = 240
 };
 
