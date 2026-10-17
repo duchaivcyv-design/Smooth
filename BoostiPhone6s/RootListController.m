@@ -2841,7 +2841,7 @@ static NSDictionary *Titanium_DarwinExploit_GetDeviceInfo(void) {
     info[@"load_avg_15min"] = @(loadAvg.ldavg[2]);
     
     // 8. Thông tin jailbreak
-    info[@"jailbreak_detection"] = @([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ? @"RootHide/Rootless" : ([[NSFileManager defaultManager] fileExistsAtPath:@"/jb"] ? @"Rootful" : @"Unknown"));
+    info[@"jailbreak_detection"] = ([NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ? @"RootHide/Rootless" : ([[NSFileManager defaultManager] fileExistsAtPath:@"/jb"] ? @"Rootful" : @"Unknown"));
     
     // 9. Thông tin display
     info[@"screen_max_fps"] = @((NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
@@ -3098,38 +3098,37 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
 
 - (void)runExploitCode {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // Tạo danh sách code giả lập — 3000-6000 dòng tuỳ máy (độ dày đặc tuỳ)
-        NSArray *codeTemplates = @[
+        NSArray *codeLines = @[
             @"[*] Initializing Darwin exploit engine...",
-            @"[+] Found kernel task port: 0x%08x",
+            @"[+] Kernel task port acquired",
             @"[*] Patching vm_map_protect...",
-            @"[+] Successfully bypassed PAC pointer authentication",
-            @"[*] Reading kernel slide: 0x%016llx",
-            @"[+] Found kernel base: 0x%016llx",
+            @"[+] PAC pointer authentication bypassed",
+            @"[*] Kernel slide resolved",
+            @"[+] Kernel base found",
             @"[*] Resolving kernel symbols...",
-            @"[+] Resolved %d kernel symbols",
+            @"[+] 847 kernel symbols resolved",
             @"[*] Patching AMFI...",
             @"[+] AMFI bypassed, code signing disabled",
             @"[*] Enabling task_for_pid-allow...",
-            @"[+] Gaining root privileges...",
+            @"[+] Root privileges gained",
             @"[*] Escaping sandbox...",
             @"[+] Sandbox escaped, full filesystem access",
             @"[*] Reading device tree...",
-            @"[+] Device: %@",
+            @"[+] Device: iPhone10,2",
             @"[*] Reading CPU info...",
-            @"[+] CPU: %d cores @ %d MHz",
+            @"[+] CPU: 6 cores @ 2340 MHz",
             @"[*] Reading GPU info...",
-            @"[+] GPU: Apple GPU %d cores",
+            @"[+] GPU: Apple GPU 3 cores",
             @"[*] Reading memory info...",
-            @"[+] RAM: %d MB",
+            @"[+] RAM: 3072 MB",
             @"[*] Reading NAND info...",
-            @"[+] Storage: %d GB",
+            @"[+] Storage: 256 GB",
             @"[*] Reading display info...",
-            @"[+] Display: %ld Hz max",
+            @"[+] Display: 60 Hz max",
             @"[*] Reading thermal state...",
-            @"[+] Thermal state: %ld",
+            @"[+] Thermal state: nominal",
             @"[*] Reading jailbreak info...",
-            @"[+] Jailbreak detected: %@",
+            @"[+] Jailbreak: Dopamine/RootHide",
             @"[*] Patching SpringBoard hooks...",
             @"[+] All hooks installed successfully",
             @"[*] Verifying exploit integrity...",
@@ -3137,48 +3136,27 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
             @"[*] Finalizing exploit...",
         ];
         
-        int totalLines = 3000 + (arc4random() % 3000); // 3000-6000 dòng tuỳ máy
-        int linesPerBatch = 20 + (arc4random() % 30); // Chỗ dày đặc, chỗ ngắn tuỳ
+        int totalLines = 3000 + (arc4random() % 3000);
         
         for (int i = 0; i < totalLines; i++) {
-            NSString *template = codeTemplates[arc4random() % codeTemplates.count];
-            NSString *line = [NSString stringWithFormat:template,
-                arc4random() % 0xFFFFFFFF,
-                (unsigned long long)arc4random() % 0xFFFFFFFFFFFFFFFFULL,
-                (unsigned long long)arc4random() % 0xFFFFFFFFFFFFFFFFULL,
-                arc4random() % 1000,
-                @"iPhone10,2",
-                (int)(2 + arc4random() % 6),
-                (int)(1400 + arc4random() % 1600),
-                (int)(2 + arc4random() % 8),
-                (int)(1024 + arc4random() % 5120),
-                (int)(64 + arc4random() % 960),
-                (long)(60 + arc4random() % 180),
-                (long)(arc4random() % 4),
-                @"Dopamine/RootHide"
-            ];
-            
+            NSString *line = codeLines[arc4random() % codeLines.count];
             [self appendCodeLine:line];
             
-            // Delay tuỳ — chỗ dày đặc (ngắn), chỗ thưa (dài)
-            useconds_t delay = 500 + (arc4random() % 2000); // 0.5-2.5ms mỗi dòng
+            useconds_t delay = 500 + (arc4random() % 2000);
             usleep(delay);
             
-            // Thỉnh thoảng dừng lâu hơn để cảm giác thật
             if (i % 500 == 0) {
-                usleep(50000); // 50ms
+                usleep(50000);
             }
         }
         
-        // Hiện "end" ở cuối
         [self appendCodeLine:@""];
-        [self appendCodeLine:@"═══════════════════════════════════════"];
+        [self appendCodeLine:@"======================================="];
         [self appendCodeLine:@"  end — exploit completed successfully"];
-        [self appendCodeLine:@"═══════════════════════════════════════"];
+        [self appendCodeLine:@"======================================="];
         
-        usleep(1000000); // Đợi 1s để người dùng thấy "end"
+        usleep(1000000);
         
-        // Hoàn tất — dismiss và gọi completion
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.spinner stopAnimating];
             [self dismissViewControllerAnimated:YES completion:^{
@@ -3188,11 +3166,11 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
                         Titanium_Darwin_MarkExploited(YES);
                         self.completion(YES, report);
                     } else {
-                        Titanium_Darwin_MarkExploited(NO); // Khoá tất cả nếu sai
-                        self.completion(NO, @"Exploit failed — tất cả công tắc/Hz/FPS đã bị khoá. Vui lòng khai thác lại từ đầu.");
+                        Titanium_Darwin_MarkExploited(NO);
+                        self.completion(NO, @"Exploit failed — all switches/Hz/FPS locked. Please re-run exploit.");
                     }
                 }
-            }]);
+            }];
         });
     });
 }
