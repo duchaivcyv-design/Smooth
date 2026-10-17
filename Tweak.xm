@@ -1154,6 +1154,10 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 + (void)tick:(id)link;
 @end
 
+@interface CARenderServer : NSObject
++ (void)renderServerThread;
+@end
+
 // ====================================================================================================
 // ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (KHÔNG LẶP LẠI)
 // ====================================================================================================
