@@ -2841,7 +2841,7 @@ static NSDictionary *Titanium_DarwinExploit_GetDeviceInfo(void) {
     info[@"load_avg_15min"] = @(loadAvg.ldavg[2]);
     
     // 8. Thông tin jailbreak
-    info[@"jailbreak_detection"] = ([NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ? @"RootHide/Rootless" : ([[NSFileManager defaultManager] fileExistsAtPath:@"/jb"] ? @"Rootful" : @"Unknown"));
+info[@"jailbreak_detection"] = ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ? @"RootHide/Rootless" :([[NSFileManager defaultManager] fileExistsAtPath:@"/jb"] ? @"Rootful" : @"Unknown"));
     
     // 9. Thông tin display
     info[@"screen_max_fps"] = @((NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
