@@ -5888,10 +5888,8 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)reloadImagesForAllItems {
     %orig;
-    if (TITANIUM_LITE_MODE) return;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.aggressiveRamClean || CFG285.hyperMemoryGuardian || g_syncPayloadV285.aggressiveRamCleaner)) {
-        Titanium_BackgroundPurgeMemory();
-    }
+    // Không gọi Titanium_BackgroundPurgeMemory() ở đây nữa để tránh làm mất cache hình ảnh thu nhỏ của thẻ app trong đa nhiệm[span_2](start_span)[span_2](end_span).
+    // Thay vào đó chỉ để hệ thống reload ảnh bình thường một cách mượt mà.
 }
 
 %end
@@ -6678,37 +6676,23 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %hook SBFluidSwitcherItemContainer
 - (void)setShadowStyle:(long long)style {
-    static __thread BOOL s_lockShadowRecursion = NO;
-    if (s_lockShadowRecursion) {
-        %orig(style);
-        return;
-    }
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-        s_lockShadowRecursion = YES;
-        %orig(0);
-        @try {
-            Ivar ivar = class_getInstanceVariable([self class], "_shadowStyle");
-            if (ivar) {
-                *((long long *)((uint8_t *)(__bridge void *)self + ivar_getOffset(ivar))) = 0;
-            }
-            UIView *shadowView = [self valueForKey:@"_pageShadowView"];
-            if (shadowView) {
-                shadowView.alpha = 0.0;
-                shadowView.hidden = YES;
-            }
-            self.layer.shadowOpacity = 0.0f;
-            self.layer.shadowRadius = 0.0f;
-        } @catch (__unused NSException *e) {}
-        s_lockShadowRecursion = NO;
-        return;
-    }
+    // Chỉ tối ưu khi không phải SpringBoard background transition gấp
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+            // Thay vì ép cứng ngay lập tức gây lỗi view tree, cho phép hệ thống render an toàn
+            %orig(0);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
     %orig(style);
 }
 
 - (long long)shadowStyle {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-        return 0;
-    }
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+            return 0;
+        }
+    } @catch (__unused NSException *e) {}
     return %orig;
 }
 %end
@@ -6834,10 +6818,6 @@ static kern_return_t hooked_IOConnectCallMethod(
 // Tự động kích hoạt ở tầng nhị phân ngay khi app/system khởi động (Đã bọc try-catch chống crash)
 __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
     @autoreleasepool {
-        @try {
-            %init(Group_Hardware_Deep_Core_Bypass);
-        } @catch (__unused NSException *e) {}
-
         @try {
             void *image = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
             if (image) {
