@@ -2342,7 +2342,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 #define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
 #define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
 
-static ApexV285ProPayload *g_sharedPayloadPtr = MAP_FAILED;
+static ApexV285ProPayload *g_sharedPayloadPtr = (ApexV285ProPayload *)MAP_FAILED;
 static int g_shmFd = -1;
 
 static volatile BOOL g_isContinuousSwiping = NO;
