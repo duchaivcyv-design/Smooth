@@ -7588,292 +7588,265 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @autoreleasepool {
-            @try {
-                Titanium_BypassQuartzCoreRangeAssertion();
+            Titanium_BypassQuartzCoreRangeAssertion();
 
-                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-                if (configClass) {
-                    CFG285 = [configClass sharedInstance];
-                    [CFG285 loadSettings];
-                    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                        NSInteger initHz = (NSInteger)CFG285.targetHz;
-                        if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) &&
-                            initHz >= 15 && initHz <= 240) {
-                            g_cachedResolvedHz = initHz;
-                        }
-                    }
-                    if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                        NSInteger initFPS = (NSInteger)CFG285.targetFPS;
-                        if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) &&
-                            initFPS >= 15 && initFPS <= 240) {
-                            g_cachedResolvedFPS = initFPS;
-                        }
+            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+            if (configClass) {
+                CFG285 = [configClass sharedInstance];
+                [CFG285 loadSettings];
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                    NSInteger initHz = (NSInteger)CFG285.targetHz;
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) &&
+                        initHz >= 15 && initHz <= 240) {
+                        g_cachedResolvedHz = initHz;
                     }
                 }
-
-                if (!isSpringBoard &&
-                    (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
-                    g_SystemMasterReady = YES;
-                    return;
+                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                    NSInteger initFPS = (NSInteger)CFG285.targetFPS;
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) &&
+                        initFPS >= 15 && initFPS <= 240) {
+                        g_cachedResolvedFPS = initFPS;
+                    }
                 }
+            }
 
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                    @try {
-                        Titanium_ReloadSharedSyncStateV285();
-                    } @catch (__unused NSException *e) {}
-                });
+            if (!isSpringBoard &&
+                (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
+                g_SystemMasterReady = YES;
+                return;
+            }
 
-                %init(Group_ZeroLatency_Touch_Opt);
-                %init(Group_Metal_ZeroTearing_Pacing);
-                %init(Group_FluidTransitions_Pacing);
-                %init(Group_AI_Stream_Optimization);
-                %init(Group_FastLaunch_SuperEngineV285);
-                %init(Group_Scroll_And_Keyboard_Opt);
-                %init(Group_InstantActionAndMenuTransitions_Boost);
-                %init(Group_Global_Thread_Governor_Unthrottled);
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                Titanium_ReloadSharedSyncStateV285();
+            });
 
-                %init(Group_Apple_Internal_ProMotion_Apex);
-                %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
-                %init(Group_Hardware_Deep_Core_Bypass);
-                %init(Group_Safari_And_Animation_Safety);
+            %init(Group_ZeroLatency_Touch_Opt);
+            %init(Group_Metal_ZeroTearing_Pacing);
+            %init(Group_FluidTransitions_Pacing);
+            %init(Group_AI_Stream_Optimization);
+            %init(Group_FastLaunch_SuperEngineV285);
+            %init(Group_Scroll_And_Keyboard_Opt);
+            %init(Group_InstantActionAndMenuTransitions_Boost);
+            %init(Group_Global_Thread_Governor_Unthrottled);
 
-                %init(Group_Aggressive_RAM_Purge);
+            %init(Group_Apple_Internal_ProMotion_Apex);
+            %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+            %init(Group_Hardware_Deep_Core_Bypass);
+            %init(Group_Safari_And_Animation_Safety);
 
-                if (Titanium_DisplaySpoofAllowed()) {
-                    %init(Group_Hardware_ProMotion_Overclock);
-                    Titanium_InstallMGCopyAnswerHookV26();
-                }
+            %init(Group_Aggressive_RAM_Purge);
 
-                %init(Group_Apple_Native_ColdBoot_Overdrive);
-                %init(Group_Titanium_Game_Metal_Overdrive);
-                %init(Group_Silicon_Hardware_Pipeline_Overdrive);
-                %init(Group_Silicon_Scheduler_Touch_Governor);
-                %init(Group_CoreAnimation_RenderServer_Governor);
-                %init(Group_System_Memory_And_RunLoop_Governor);
-                
-                %init(Group_Thermal_CryoPacing_ZeroDrop);
-                %init(Group_CryoQuantum_Thermal_Bypass);
-                %init(Group_UltimateDevice_And_OS_Spoofing);
+            if (Titanium_DisplaySpoofAllowed()) {
+                %init(Group_Hardware_ProMotion_Overclock);
+                Titanium_InstallMGCopyAnswerHookV26();
+            }
 
-                %init(Group_Deep_RAM_Compaction_Engine);
-                %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
+            %init(Group_Apple_Native_ColdBoot_Overdrive);
+            %init(Group_Titanium_Game_Metal_Overdrive);
+            %init(Group_Silicon_Hardware_Pipeline_Overdrive);
+            %init(Group_Silicon_Scheduler_Touch_Governor);
+            %init(Group_CoreAnimation_RenderServer_Governor);
+            %init(Group_System_Memory_And_RunLoop_Governor);
+            
+            %init(Group_Thermal_CryoPacing_ZeroDrop);
+            %init(Group_CryoQuantum_Thermal_Bypass);
+            %init(Group_UltimateDevice_And_OS_Spoofing);
 
-                if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
-                    %init(Group_WebKit_RAM_Optimizer);
-                }
+            %init(Group_Deep_RAM_Compaction_Engine);
+            %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
 
-                if (Titanium_IsClassicHomeButtonDevice()) {
-                    %init(Group_HardwareSegregation_ClassicHomeV285);
-                }
+            if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
+                %init(Group_WebKit_RAM_Optimizer);
+            }
 
-                if (isSpringBoard) {
-                    %init(Group_LiquidGlass_Opt);
-                    %init(Group_Switcher30Apps_Virtualization);
-                    %init(Group_SpringBoard_Switcher_Opt);
-                    %init(Group_Display_SpringBoardV285);
-                    %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
-                    %init(Group_V285_FloatingWindow_PiP);
-                    %init(Group_SpringBoard_ProcessManagerV285);
-                    %init(Group_KeepAppsAlive_NoKill);
-                    %init(Group_CAWindowServer_Absolute_Dominance);
+            if (Titanium_IsClassicHomeButtonDevice()) {
+                %init(Group_HardwareSegregation_ClassicHomeV285);
+            }
 
-                    Init_CAWindowServer_Hooks();
+            if (isSpringBoard) {
+                %init(Group_LiquidGlass_Opt);
+                %init(Group_Switcher30Apps_Virtualization);
+                %init(Group_SpringBoard_Switcher_Opt);
+                %init(Group_Display_SpringBoardV285);
+                %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
+                %init(Group_V285_FloatingWindow_PiP);
+                %init(Group_SpringBoard_ProcessManagerV285);
+                %init(Group_KeepAppsAlive_NoKill);
+                %init(Group_CAWindowServer_Absolute_Dominance);
+
+                Init_CAWindowServer_Hooks();
 
 #if TITANIUM_ENABLE_RATE_KEEPER
-                    @try {
-                        [TitaniumRateKeeper start];
-                    } @catch (__unused NSException *e) {}
+                [TitaniumRateKeeper start];
 #endif
 
-                    @try {
-                        Titanium_StartThermalAndChargingWatchdog();
-                    } @catch (__unused NSException *e) {}
+                Titanium_StartThermalAndChargingWatchdog();
 
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            AppleInternal_EnforceZeroLatencyKernelTier();
-                            Titanium_ApplySiliconDeepOptimizations();
-                            AppleInternal_LockHardwareCADisplay();
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            Titanium_TuneWindowServerDisplayDirectly();
-                        } @catch (__unused NSException *e) {}
-                    });
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    AppleInternal_EnforceZeroLatencyKernelTier();
+                    Titanium_ApplySiliconDeepOptimizations();
+                    AppleInternal_LockHardwareCADisplay();
+                    Titanium_ForceInjectDynamicRefreshSupport();
+                    Titanium_TuneWindowServerDisplayDirectly();
+                });
 
-                    @try {
-                        Titanium_StartIPCHearthbeatV12();
-                    } @catch (__unused NSException *e) {}
+                Titanium_StartIPCHearthbeatV12();
 
-                    @try {
-                        NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-                        [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
-                                                                contents:verifiedData
-                                                              attributes:@{NSFilePosixPermissions: @(0644)}];
-                    } @catch (__unused NSException *e) {}
-                } else {
-                    Titanium_A20PrewarmAssetsAndGPU();
-                    %init(Group_UIKit_ThirdParty_IsolatedV285);
-                    %init(Group_Force_Render_Recovery_Overdrive);
-                    %init(Group_Window_Level_Overdrive);
-                    Init_CAWindowServer_Hooks();
+                NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
+                [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
+                                                        contents:verifiedData
+                                                      attributes:@{NSFilePosixPermissions: @(0644)}];
+            } else {
+                %init(Group_UIKit_ThirdParty_IsolatedV285);
+                %init(Group_Force_Render_Recovery_Overdrive);
+                %init(Group_Window_Level_Overdrive);
+                Init_CAWindowServer_Hooks();
 
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(200 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        @try {
-                            Titanium_ForceInjectDynamicRefreshSupport();
-                            AppleInternal_LockHardwareCADisplay();
-                            AppleInternal_EnforceZeroLatencyKernelTier();
-                            Titanium_ApplySiliconDeepOptimizations();
-                            Titanium_RegisterAppResumeRefreshV12();
-                            Titanium_ReapplyFrameRateToAllScenes();
-                        } @catch (__unused NSException *e) {}
-                    });
-                }
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(200 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    Titanium_ForceInjectDynamicRefreshSupport();
+                    AppleInternal_LockHardwareCADisplay();
+                    AppleInternal_EnforceZeroLatencyKernelTier();
+                    Titanium_ApplySiliconDeepOptimizations();
+                    Titanium_RegisterAppResumeRefreshV12();
+                    Titanium_ReapplyFrameRateToAllScenes();
+                });
+            }
 
-                g_SystemMasterReady = YES;
-            } @catch (__unused NSException *e) {}
+            g_SystemMasterReady = YES;
         }
     });
 }
 
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
-    @try {
-        static BOOL s_obsDone = NO;
-        if (s_obsDone) return;
-        s_obsDone = YES;
+    static BOOL s_obsDone = NO;
+    if (s_obsDone) return;
+    s_obsDone = YES;
 
-        CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-        if (!darwinCenter) return;
+    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+    if (!darwinCenter) return;
 
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_UIKIT_RELOAD), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_HARDWARE_SYNC), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_FPS_CHANGED), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_TITANIUM_CHANGED), NULL, CFNotificationSuspensionBehaviorCoalesce);
 
-        if (!isSpringBoardProcess) {
-            CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        }
-    } @catch (__unused NSException *e) {}
+    if (!isSpringBoardProcess) {
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    }
 }
 
 static void SpringBoardBootstrapTrigger(void) {
-    @try {
-        static BOOL s_triggerDone = NO;
-        if (s_triggerDone) return;
-        s_triggerDone = YES;
+    static BOOL s_triggerDone = NO;
+    if (s_triggerDone) return;
+    s_triggerDone = YES;
 
-        const char *progName = getprogname();
-        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    const char *progName = getprogname();
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            @try {
-                runCoreTweak(YES, bundleID, progName);
-            } @catch (__unused NSException *e) {}
-        });
-    } @catch (__unused NSException *e) {}
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        runCoreTweak(YES, bundleID, progName);
+    });
 }
 
 %ctor {
     @autoreleasepool {
-        @try {
-            const char *progName = getprogname();
-            if (!progName) return;
+        const char *progName = getprogname();
+        if (!progName) return;
 
-            if (strcasestr(progName, "smooth") != NULL ||
-                strcasestr(progName, "boosti") != NULL ||
-                strcasestr(progName, "liquid") != NULL) {
+        if (strcasestr(progName, "smooth") != NULL ||
+            strcasestr(progName, "boosti") != NULL ||
+            strcasestr(progName, "liquid") != NULL) {
+            return;
+        }
+
+        if (strcasestr(progName, "networkd") != NULL ||
+            strcasestr(progName, "trustd") != NULL ||
+            strcasestr(progName, "configd") != NULL ||
+            strcasestr(progName, "wifid") != NULL ||
+            strcasestr(progName, "CommCenter") != NULL ||
+            strcasestr(progName, "mDNSResponder") != NULL ||
+            strcasestr(progName, "nsurlsessiond") != NULL ||
+            strcasestr(progName, "GPUProcess") != NULL ||
+            strcasestr(progName, "Networking") != NULL ||
+            strcasestr(progName, "neagent") != NULL ||
+            strcasestr(progName, "nesessionmanager") != NULL ||
+            strcasestr(progName, "apsd") != NULL ||
+            strcasestr(progName, "cloudd") != NULL ||
+            strcasestr(progName, "geod") != NULL ||
+            strcasestr(progName, "akd") != NULL ||
+            strcasestr(progName, "identityservicesd") != NULL ||
+            strcasestr(progName, "imagent") != NULL ||
+            strcasestr(progName, "bluetoothd") != NULL ||
+            strcasestr(progName, "profiled") != NULL) {
+            return;
+        }
+
+        if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
+            strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
+            strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
+            strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
+            strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
+            strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
+            strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
+            strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
+            strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
+            strcasestr(progName, "passd")) {
+            return;
+        }
+
+        NSBundle *mainBundle = [NSBundle mainBundle];
+        NSString *bundleID = [mainBundle bundleIdentifier];
+
+        if (bundleID) {
+            if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
                 return;
             }
+        }
 
-            if (strcasestr(progName, "networkd") != NULL ||
-                strcasestr(progName, "trustd") != NULL ||
-                strcasestr(progName, "configd") != NULL ||
-                strcasestr(progName, "wifid") != NULL ||
-                strcasestr(progName, "CommCenter") != NULL ||
-                strcasestr(progName, "mDNSResponder") != NULL ||
-                strcasestr(progName, "nsurlsessiond") != NULL ||
-                strcasestr(progName, "GPUProcess") != NULL ||
-                strcasestr(progName, "Networking") != NULL ||
-                strcasestr(progName, "neagent") != NULL ||
-                strcasestr(progName, "nesessionmanager") != NULL ||
-                strcasestr(progName, "apsd") != NULL ||
-                strcasestr(progName, "cloudd") != NULL ||
-                strcasestr(progName, "geod") != NULL ||
-                strcasestr(progName, "akd") != NULL ||
-                strcasestr(progName, "identityservicesd") != NULL ||
-                strcasestr(progName, "imagent") != NULL ||
-                strcasestr(progName, "bluetoothd") != NULL ||
-                strcasestr(progName, "profiled") != NULL) {
-                return;
-            }
+        BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
 
-            if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
-                strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
-                strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
-                strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
-                strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
-                strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
-                strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
-                strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
-                strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
-                strcasestr(progName, "passd")) {
-                return;
-            }
+        if (isSpringBoard) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                (void)Titanium_CheckAndPreventBootloopUniversal();
+            });
+        }
 
-            NSBundle *mainBundle = [NSBundle mainBundle];
-            NSString *bundleID = [mainBundle bundleIdentifier];
-
-            if (bundleID) {
-                if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                    [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-                    return;
-                }
-            }
-
-            BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
-
-            if (isSpringBoard) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    @try {
-                        (void)Titanium_CheckAndPreventBootloopUniversal();
-                    } @catch (NSException *e) {}
-                });
-            }
-
-            if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
-                Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-                if (configClass) {
-                    CFG285 = [configClass sharedInstance];
-                    [CFG285 loadSettings];
-                    if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                        NSInteger prefHz = (NSInteger)CFG285.targetHz;
-                        if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
-                            g_cachedResolvedHz = prefHz;
-                        }
-                    }
-                    if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                        NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
-                        if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) && prefFPS >= 15 && prefFPS <= 240) {
-                            g_cachedResolvedFPS = prefFPS;
-                        }
+        if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
+            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
+            if (configClass) {
+                CFG285 = [configClass sharedInstance];
+                [CFG285 loadSettings];
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
+                    NSInteger prefHz = (NSInteger)CFG285.targetHz;
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
+                        g_cachedResolvedHz = prefHz;
                     }
                 }
-                return;
+                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
+                    NSInteger prefFPS = (NSInteger)CFG285.targetFPS;
+                    if ((g_cachedResolvedFPS < 15 || g_cachedResolvedFPS > 240) && prefFPS >= 15 && prefFPS <= 240) {
+                        g_cachedResolvedFPS = prefFPS;
+                    }
+                }
             }
+            return;
+        }
 
-            Titanium_RegisterPrefsObservers(isSpringBoard);
+        Titanium_RegisterPrefsObservers(isSpringBoard);
 
-            if (isSpringBoard) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    SpringBoardBootstrapTrigger();
-                });
-            } else {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    runCoreTweak(NO, bundleID, progName);
-                });
-            }
-        } @catch (__unused NSException *e) {}
+        if (isSpringBoard) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                SpringBoardBootstrapTrigger();
+            });
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                runCoreTweak(NO, bundleID, progName);
+            });
+        }
     }
 }
