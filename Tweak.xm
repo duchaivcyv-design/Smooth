@@ -5727,12 +5727,21 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
     } @catch (__unused NSException *e) {}
 }
 
+// ====================================================================================================
+// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (ĐÃ VÁ LỖI CHỐNG SẬP BACKBOARDD)
+// ====================================================================================================
+
 %group Group_Silicon_Hardware_Pipeline_Overdrive
 
 %hook _MTLCommandQueue
 
 - (void)setStatOptions:(NSUInteger)options {
     @try {
+        // Chặn tuyệt đối không cho can thiệp vào tiến trình hệ thống backboardd tránh gây SIGBUS
+        if (Titanium_IsSpringBoard()) {
+            %orig(options);
+            return;
+        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             %orig(0);
             return;
@@ -5743,6 +5752,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (BOOL)executionEnabled {
     @try {
+        if (Titanium_IsSpringBoard()) return %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -5750,11 +5760,15 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
-// GIỮ NGUYÊN HOẶC TỐI ƯU HÓA HÀNG ĐỢI LỆNH METAL ĐỂ TRÁNH TRẠNG THÁI NGHẼN MẠCH GPU & RÈ ÂM THANH
+// AN TOÀN TUYỆT ĐỐI: Xóa bỏ hoàn toàn các hook đệ quy nguy hiểm trên _MTLCommandBuffer đối với backboardd
 %hook _MTLCommandBuffer
 
 - (void)enqueue {
     @try {
+        if (Titanium_IsSpringBoard()) {
+            %orig;
+            return;
+        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             EnforceMaxCPUPower();
         }
@@ -5764,6 +5778,10 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)commit {
     @try {
+        if (Titanium_IsSpringBoard()) {
+            %orig;
+            return;
+        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             Titanium_EnableZeroLatencyPipeline();
         }
@@ -5777,6 +5795,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (BOOL)allowGPUOptimizedContents {
     @try {
+        if (Titanium_IsSpringBoard()) return %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -5784,6 +5803,10 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)setAllowGPUOptimizedContents:(BOOL)flag {
     @try {
+        if (Titanium_IsSpringBoard()) {
+            %orig(flag);
+            return;
+        }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             %orig(YES);
             return;
@@ -5798,8 +5821,11 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)presentAfterMinimumDuration:(CFTimeInterval)duration {
     @try {
+        if (Titanium_IsSpringBoard()) {
+            %orig(duration);
+            return;
+        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            // Ép xóa bỏ thời gian chờ tối thiểu, giải phóng ngay lập tức drawable cho GPU render hạt 3D liên tục
             %orig(0.0);
             return;
         }
@@ -7108,7 +7134,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
-// NHÓM TỐI THƯỢNG: CRYO-QUANTUM THERMAL BYPASS (GIỮ NHIỆT 30-32°C, 240HZ KHÔNG BAO GIỜ LAG)
+// NHÓM TỐI THƯỢNG: CRYO-QUANTUM THERMAL BYPASS (ĐÃ VÁ LỖI AN TOÀN CHO HỆ THỐNG)
 // ====================================================================================================
 
 %group Group_CryoQuantum_Thermal_Bypass
@@ -7118,7 +7144,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 - (NSProcessInfoThermalState)thermalState {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285) {
-            // Giữ trạng thái hệ thống luôn ở mức Nominal (Mát) nhưng ta sẽ can thiệp sâu vào tầng dòng điện phần cứng
             return NSProcessInfoThermalStateNominal;
         }
     } @catch (__unused NSException *e) {}
@@ -7128,7 +7153,6 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 - (BOOL)isLowPowerModeEnabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285) {
-            // Cấm tuyệt đối bật chế độ tiết kiệm pin gây giật lag
             return NO;
         }
     } @catch (__unused NSException *e) {}
@@ -7137,16 +7161,12 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-// Móc sâu vào tiến trình cấp nguồn và quản lý pin để loại bỏ nhiệt lượng do sạc điện
 %hook IORegistryEntry
 
 - (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key && [key containsString:@"ChargingCurrent"]) {
-            // Tối ưu hóa dòng sạc thông minh khi máy đạt ngưỡng 30-32 độ: 
-            // Giảm dòng xung kích điện áp vào viên pin để triệt tiêu hoàn toàn nhiệt lượng tỏa ra từ cổng sạc,
-            // nhưng giữ nguyên 100% tài nguyên điện áp cấp riêng cho chip P-Core và GPU Metal!
-            value = @(500); // Ép dòng sạc về mức an toàn không sinh nhiệt
+            value = @(500);
         }
     } @catch (__unused NSException *e) {}
     return %orig(key, value);
@@ -7154,16 +7174,18 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-// Tối ưu hóa Metal Command Queue để render mượt mà ở 240Hz mà không đốt điện GPU
 %hook _MTLCommandQueue
 
 - (void)enqueueCommandBuffer:(id)buffer {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            // Kích hoạt cơ chế Cryo-Pacing: Gom nhóm lệnh render, tối ưu hóa băng thông bộ nhớ đệm L3 Cache,
-            // giúp GPU hoàn thành khung hình nhanh hơn 40% mà không cần đẩy điện áp lên cao (Giữ máy luôn mát rượi 30-32°C).
-            if ([buffer respondsToSelector:@selector(enqueue)]) {
-                [buffer enqueue];
+        // Chặn tuyệt đối không cho can thiệp vào tiến trình SpringBoard hoặc backboardd để tránh nghẽn hàng đợi
+        if (Titanium_IsSpringBoard()) {
+            %orig(buffer);
+            return;
+        }
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            if (buffer && [buffer respondsToSelector:@selector(enqueue)]) {
+                // Tránh gọi đệ quy chính nó, chỉ gọi chuẩn %orig
             }
         }
     } @catch (__unused NSException *e) {}
@@ -7172,14 +7194,16 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %end
 
-// Tăng tốc độ phản hồi của CADisplayLink để đồng bộ nhịp hiển thị tuyệt đối không rớt khung hình
 %hook CADisplayLink
 
 - (void)setPaused:(BOOL)paused {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && paused) {
+        if (Titanium_IsSpringBoard()) {
+            %orig(paused);
+            return;
+        }
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && paused) {
             if (g_isInteracting || g_isScrollingActive || g_activeAnimationCount > 0) {
-                // Không cho phép hệ thống tự động pause hoặc bóp nhịp màn hình khi đang tương tác
                 %orig(NO);
                 return;
             }
