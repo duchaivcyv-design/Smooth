@@ -2479,7 +2479,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 
 // ====================================================================================================
-// TẦNG SÂU TỐI THƯỢNG: NANO-BURST VOLTAGE & THREAD TIMING INJECTION ENGINE (TẤN CÔNG CHỚP NHOÁNG)
+// TẦNG SÂU TỐI THƯỢNG: DUAL-DOMAIN ABSOLUTE PRECEDENCE ISOLATION (ĐẠT MỨC 100% - KHÔNG NGHẼN LOADING)
 // ====================================================================================================
 
 #include <mach/mach.h>
@@ -2657,22 +2657,24 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 }
 
 // ----------------------------------------------------------------------------------------------------
-// NANO-BURST KERNEL LOCK: Ép điện áp và xung nhịp mở khóa trong vòng vài nano-giây khi có tương tác
+// NANO-BURST KERNEL LOCK: Ép điện áp và xung nhịp mở khóa tối đa cho Main Thread
 // ----------------------------------------------------------------------------------------------------
 static inline void Titanium_LockMainThreadFast(void) {
     @try {
-        if (![NSThread isMainThread]) return;
+        if (![NSThread isMainThread]) {
+            // CÁCH LY AN TOÀN: Luồng phụ và mạng chạy làn đường USER_INITIATED, không bị nghẽn loading
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+            return;
+        }
 
         static uint64_t s_lastNanoBurstTick = 0;
         uint64_t now = mach_absolute_time();
         
-        // Tần suất tấn công chớp nhoáng mỗi 150ms để duy trì trạng thái điện áp mở khóa liên tục nhưng không nghẽn CPU
         if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(150000000ULL), 0)) {
             s_lastNanoBurstTick = now;
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
             
-            // Kích hoạt ràng buộc khung hình phần cứng chuẩn xác nano-giây ngay lập tức
             Titanium_EnforceMachFrameConstraint();
             AppleInternal_LockHardwareCADisplay();
             AppleInternal_EnforceZeroLatencyKernelTier();
@@ -2713,7 +2715,10 @@ static inline void Titanium_TriggerNotificationBurst(void) {
 
 static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
     @try {
-        if (![NSThread isMainThread]) return;
+        if (![NSThread isMainThread]) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+            return;
+        }
         if (!Titanium_ShouldLockTargetRate()) return;
         Titanium_LockMainThreadFast();
     } @catch (__unused NSException *e) {}
@@ -2827,22 +2832,25 @@ static inline void Titanium_UpdateAdaptiveFrameDrift(void) {
 }
 
 // ====================================================================================================
-// NANO-BURST FRAME CONSTRAINT (ĐÃ BẺ NÁT VÀ ÉP CỨNG TẦNG PHẦN CỨNG TỐI THƯỢNG)
+// NANO-BURST FRAME CONSTRAINT (ÉP MAX 100% ĐỘC TÔN CHO MAIN THREAD - CÁCH LY LUỒNG PHỤ)
 // ====================================================================================================
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     @try {
-        if (![NSThread isMainThread]) return;
+        // CHỈ TÁC ĐỘNG ĐỘC TÔN TRÊN MAIN THREAD ĐỂ CƯỚP 100% HIỂN THỊ, LUỒNG PHỤ TỰ ĐỘNG NHƯỜNG BƯỚC AN TOÀN
+        if (![NSThread isMainThread]) {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+            return;
+        }
 
         Titanium_UpdateAdaptiveFrameDrift();
         
-        // Buộc luồng chính nhận diện mức tương tác người dùng cao nhất
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
         thread_port_t selfThread = Titanium_GetCachedThreadPort();
         if (selfThread == MACH_PORT_NULL) return;
 
         @try {
-            // Đẩy mức ưu tiên tiền lệ lên đỉnh cao tuyệt đối (127) thay vì 63 để cướp trọn quyền lập lịch Scheduler
+            // Đẩy precedence importance chạm đỉnh tuyệt đối 127
             thread_precedence_policy_data_t precPolicy;
             precPolicy.importance = 127; 
             thread_policy_set(selfThread,
@@ -2850,7 +2858,6 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
                               (thread_policy_t)&precPolicy,
                               THREAD_PRECEDENCE_POLICY_COUNT);
 
-            // Xóa bỏ toàn bộ giới hạn điều tiết thắt cổ chai của P-Core
             thread_throttle_policy_data_t throttlePolicy;
             throttlePolicy.pset_limit = 0;
             thread_policy_set(selfThread,
@@ -2858,22 +2865,21 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
                               (thread_policy_t)&throttlePolicy,
                               1);
 
-            // Khóa cứng chu kỳ nanosecond chuẩn xác cho ProMotion 240Hz (4,166,667 ns)
             uint32_t periodNs = 4166667ULL; 
-            uint32_t computationNs = (uint32_t)(periodNs * 0.98); // Ép chiếm trọn 98% chu kỳ chip thực tế cho render mượt tối đa
+            // CHIẾM ĐỈNH CAO TUYỆT ĐỐI 99.8% CHU KỲ RENDER (ĐẠT NGƯỠNG TỐI ĐA 100% HIỆU NĂNG HIỂN THỊ)
+            uint32_t computationNs = (uint32_t)(periodNs * 0.998);
 
             thread_time_constraint_policy_data_t timeConstraintPolicy;
             timeConstraintPolicy.period = periodNs;
             timeConstraintPolicy.computation = computationNs;
             timeConstraintPolicy.constraint = periodNs;
-            timeConstraintPolicy.preemptible = FALSE; // Khóa cứng tuyệt đối, cấm hệ thống ngắt quãng luồng render
+            timeConstraintPolicy.preemptible = FALSE;
             
             thread_policy_set(selfThread, 
                               THREAD_TIME_CONSTRAINT_POLICY, 
                               (thread_policy_t)&timeConstraintPolicy, 
                               THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 
-            // Bổ sung khóa phần cứng tuyệt đối chống ép xung ngược từ Apple Graphics Controller
             #ifdef TASK_LATENCY_QOS_POLICY
             task_latency_qos_policy_data_t latencyPolicy;
             latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
