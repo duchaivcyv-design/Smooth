@@ -6596,6 +6596,126 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
+// NHÓM TỐI THƯỢNG: BẺ NÁT MỌI TẦNG CHECK OS & THIẾT BỊ (APP STORE, CLAUDE, CHATGPT, API C-LEVEL)
+// ====================================================================================================
+
+#include <sys/utsname.h>
+#include <CoreFoundation/CoreFoundation.h>
+
+%group Group_UltimateDevice_And_OS_Spoofing
+
+%hook UIDevice
+
+- (NSString *)systemVersion {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return @"19.0"; // Ép chuẩn iOS 19 cho toàn bộ hệ thống
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSString *)model {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return @"iPhone";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSString *)systemName {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return @"iOS";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+%hook NSProcessInfo
+
+- (NSOperatingSystemVersion)operatingSystemVersion {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            NSOperatingSystemVersion spoofedVersion;
+            spoofedVersion.majorVersion = 19; // Ép Major lên 19 qua mặt mọi app
+            spoofedVersion.minorVersion = 0;
+            spoofedVersion.patchVersion = 0;
+            return spoofedVersion;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (BOOL)isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion)version {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return YES; // Chấp mọi câu lệnh check version trả về YES tuyệt đối
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSString *)operatingSystemVersionString {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return @"Version 19.0 (Build 23A344)";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+// BẺ KHÓA TẦNG THẤP: BẮT ỨNG DỤNG BỎ QUA KIỂM TRA Info.plist MinimumOSVersion
+%hook NSBundle
+
+- (id)objectForInfoDictionaryKey:(NSString *)key {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key) {
+            if ([key isEqualToString:@"MinimumOSVersion"] || [key isEqualToString:@"LSMinimumSystemVersion"]) {
+                return @"15.0"; // Đánh lừa Info.plist rằng app hỗ trợ từ iOS 15 trở lên, App Store cho phép tải bất chấp
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig(key);
+}
+
+- (NSDictionary *)infoDictionary {
+    NSDictionary *dict = %orig;
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && dict) {
+            NSMutableDictionary *mutableDict = [dict mutableCopy];
+            if (mutableDict[@"MinimumOSVersion"]) {
+                mutableDict[@"MinimumOSVersion"] = @"15.0";
+                return mutableDict;
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return dict;
+}
+
+%end
+
+// BẺ KHOÁ TẦNG UNIX C-API (UNAME) CHO IPHONE 17,2
+%hookf(int, uname, struct utsname *info) {
+    int result = %orig(info);
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && result == 0 && info != NULL) {
+            strlcpy(info->machine, "iPhone17,2", sizeof(info->machine)); // Giả lập phần cứng đời mới Pro / Pro Max
+            strlcpy(info->sysname, "Darwin", sizeof(info->sysname));
+            strlcpy(info->release, "24.0.0", sizeof(info->release));
+        }
+    } @catch (__unused NSException *e) {}
+    return result;
+}
+
+%end
+
+// ====================================================================================================
 // TẦNG SÂU TỐI THƯỢNG: TỐI ƯU HÓA HỆ THỐNG GỐC & QUẢN LÝ TIẾN TRÌNH IPC
 // ====================================================================================================
 
