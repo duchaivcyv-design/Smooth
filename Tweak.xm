@@ -3221,7 +3221,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 // [BẺ KHÓA CHỐT CHẶN QUARTZCORE]: ÉP CAFrameRateRangeIsValid LUÔN TRẢ VỀ TRUE CHO MỌI MỨC HZ/FPS (BỌC THÉP)
 // ====================================================================================================
 #import <dlfcn.h>
-#import <substitute.h>
 
 typedef struct {
     float minimum;
