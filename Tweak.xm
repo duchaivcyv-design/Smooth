@@ -7369,9 +7369,7 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 
 %end
 
-%end // <--- Đóng trọn vẹn Group_UltimateDevice_And_OS_Spoofing ở đây
-
-// Đẩy %hookf ra ngoài group vì đây là hàm C hệ thống chạy toàn cục
+// Đặt %hookf nằm gọn bên trong group luôn để thuộc quyền quản lý của Group_UltimateDevice_And_OS_Spoofing
 %hookf(int, uname, struct utsname *info) {
     int result = %orig(info);
     @try {
@@ -7383,6 +7381,8 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
     } @catch (__unused NSException *e) {}
     return result;
 }
+
+%end // Đóng duy nhất Group_UltimateDevice_And_OS_Spoofing tại đây
 
 // ====================================================================================================
 // TẦNG SÂU TỐI THƯỢNG: ÉP IOKIT & HARDWARE DISPLAY DRIVER (QUANTUM BYPASS ENGINE)
