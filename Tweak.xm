@@ -1341,6 +1341,7 @@ static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_StartIPCHearthbeatV12(void);
 static void Titanium_RegisterAppResumeRefreshV12(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
+static inline void Titanium_A20PrewarmAssetsAndGPU(void);
 
 // Triển khai thực tế hàm kernel write-protect bypass để triệt tiêu hoàn toàn cảnh báo biên dịch
 static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize) {
