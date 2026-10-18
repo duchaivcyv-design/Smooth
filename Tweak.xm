@@ -2898,7 +2898,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
         @try {
             // Đẩy precedence importance chạm đỉnh tuyệt đối 127
             thread_precedence_policy_data_t precPolicy;
-            precPolicy.importance = 127; 
+            precPolicy.importance = 95; 
             thread_policy_set(selfThread,
                               THREAD_PRECEDENCE_POLICY,
                               (thread_policy_t)&precPolicy,
