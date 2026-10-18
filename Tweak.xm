@@ -3242,19 +3242,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 %end
 
-// Ép sâu toàn cục cho lớp khởi tạo CAFrameRateRange ẩn tầng thấp để không một app hay game nào lách luật được
-%hook CAFrameRateRange
-
-- (instancetype)initWithMinimum:(float)minimum maximum:(float)maximum preferred:(float)preferred {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-        return %orig(maxTarget, maxTarget, maxTarget);
-    }
-    return %orig(minimum, maximum, preferred);
-}
-
-%end
-
 %hook CALayer
 
 - (void)display {
