@@ -2044,28 +2044,6 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 }
 
 // ====================================================================================================
-// BỘ HỖ TRỢ GIẢI MÃ & MÃ HÓA BITMASK IPC MỞ RỘNG (ĐÃ BẺ NÁT & ÉP CỨNG TỐI THƯỢNG)
-// ====================================================================================================
-
-static inline uint32_t Titanium_GetIPCExtraFlags(const ApexV285ProPayload *payload) {
-    @try {
-        if (!payload) return 0;
-        // Đọc vùng bitmask mở rộng được lưu trữ an toàn trong các byte dự phòng (reserved từ vị trí 28 trở đi)
-        uint32_t flags = 0;
-        memcpy(&flags, &payload->reserved[28], sizeof(uint32_t));
-        return flags;
-    } @catch (__unused NSException *e) {}
-    return 0;
-}
-
-static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *payload, uint32_t flags) {
-    @try {
-        if (!payload) return;
-        memcpy(&payload->reserved[28], &flags, sizeof(uint32_t));
-    } @catch (__unused NSException *e) {}
-}
-
-// ====================================================================================================
 // TRIỂN KHAI INIT & LOAD SETTINGS CỦA BOOST CONFIGURATION ENGINE (V28.7 PRO MAX)
 // ====================================================================================================
 
@@ -7738,7 +7716,7 @@ static inline void Titanium_EnforceDiskAndProcessOverdriveNew(void) {
     %orig;
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_EnforceDiskAndProcessOverdryveNew(); // Hoặc hàm Direct ở trên
+            // Sửa chữ 'y' thành 'i' cho đúng chuẩn xác:
             Titanium_EnforceDiskAndProcessOverdriveNew();
         }
     } @catch (__unused NSException *e) {}
