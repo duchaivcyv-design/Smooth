@@ -7308,7 +7308,6 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 - (NSString *)systemVersion {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // Giả lập phiên bản hệ điều hành mới nhất (ví dụ: iOS 26.0)
             return @"26.0";
         }
     } @catch (__unused NSException *e) {}
@@ -7318,7 +7317,6 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 - (NSString *)model {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // Giả lập dòng iPhone cao cấp nhất hiện tại
             return @"iPhone";
         }
     } @catch (__unused NSException *e) {}
@@ -7342,7 +7340,7 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSOperatingSystemVersion spoofedVersion;
-            spoofedVersion.majorVersion = 26; // Ép nhận phiên bản lớn 26
+            spoofedVersion.majorVersion = 26;
             spoofedVersion.minorVersion = 0;
             spoofedVersion.patchVersion = 0;
             return spoofedVersion;
@@ -7354,7 +7352,6 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 - (BOOL)isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion)version {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // Trả về YES tuyệt đối cho mọi điều kiện check phiên bản từ app hoặc server
             return YES;
         }
     } @catch (__unused NSException *e) {}
@@ -7372,12 +7369,13 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 
 %end
 
-// Móc hàm hệ thống uname để đánh lừa các app kiểm tra tên mã phần cứng kernel trực tiếp
+%end // <--- Đóng trọn vẹn Group_UltimateDevice_And_OS_Spoofing ở đây
+
+// Đẩy %hookf ra ngoài group vì đây là hàm C hệ thống chạy toàn cục
 %hookf(int, uname, struct utsname *info) {
     int result = %orig(info);
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && result == 0 && info != NULL) {
-            // Giả lập chuỗi máy thành dòng iPhone cao cấp đời mới nhất
             strlcpy(info->machine, "iPhone17,2", sizeof(info->machine));
             strlcpy(info->sysname, "Darwin", sizeof(info->sysname));
             strlcpy(info->release, "24.0.0", sizeof(info->release));
@@ -7385,10 +7383,6 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
     } @catch (__unused NSException *e) {}
     return result;
 }
-
-%end
-
-%end
 
 // ====================================================================================================
 // TẦNG SÂU TỐI THƯỢNG: ÉP IOKIT & HARDWARE DISPLAY DRIVER (QUANTUM BYPASS ENGINE)
