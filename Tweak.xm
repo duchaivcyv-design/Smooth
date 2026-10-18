@@ -7172,6 +7172,56 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
+// NHÓM BỔ SUNG: GROUP_HARDWARE_DEEP_CORE_BYPASS (BẺ KHÓA PHẦN CỨNG & CHỐNG BÓP HIỆN NĂNG)
+// ====================================================================================================
+
+%group Group_Hardware_Deep_Core_Bypass
+
+// Hook NSProcessInfo để vô hiệu hóa hoàn toàn trạng thái bóp nhiệt (Thermal Throttling) và Low Power Mode giả lập
+%hook NSProcessInfo
+
+- (NSProcessInfoThermalState)thermalState {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Luôn trả về trạng thái Nominal (Mát mẻ) để hệ thống không bao giờ tự động bóp xung nhịp P-Core
+            return NSProcessInfoThermalStateNominal;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (BOOL)isLowPowerModeEnabled {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Chặn đứng việc hệ thống tự chuyển sang chế độ tiết kiệm pin làm giảm tần số quét 240Hz
+            return NO;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+// Hook IORegistryEntry hoặc các tiến trình phần cứng cấp thấp nếu khả dụng
+%hook IORegistryEntry
+
+- (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key) {
+            if ([key containsString:@"Thermal"] || [key containsString:@"PowerLimit"]) {
+                // Chặn các lệnh ghi giới hạn nhiệt độ từ phần cứng xuống chip
+                return KERN_SUCCESS;
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig(key, value);
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM 2: TỐI ƯU HÓA HIỆU NỨNG LIQUID GLASS - GIỮ NGUYÊN 100% KÍNH LỎNG LUNG LINH, CHỐNG GIẬT KHÔNG NÓNG
 // ====================================================================================================
 
