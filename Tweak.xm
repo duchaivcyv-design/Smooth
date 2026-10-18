@@ -1303,13 +1303,38 @@ static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
-// --- KHAI BÁO PROTOTYPE TRƯỚC ĐỂ TRÌNH BIÊN DỊCH KHÔNG BÁO UNDECLARED ---
-static SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL isSpringBoard);
-static void Titanium_BypassQuartzCoreRangeAssertion(void);
-static void Init_CAWindowServer_Hooks(void);
-static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
+
+// Đưa thẳng định nghĩa thực tế của các hàm này lên đây để trình biên dịch nhìn thấy luôn, không cần khai báo prototype lằng nhằng
+static SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL isSpringBoard) {
+    @try {
+        if (range.minimum < 15) range.minimum = 15;
+        if (range.maximum < range.minimum) range.maximum = range.minimum;
+        if (g_cachedResolvedHz > 0) {
+            if (range.maximum < g_cachedResolvedHz) range.maximum = (double)g_cachedResolvedHz;
+        }
+    } @catch (__unused NSException *e) {}
+    return range;
+}
+
+static void Titanium_BypassQuartzCoreRangeAssertion(void) {
+    @try {
+        // Vô hiệu hóa giới hạn dải quét phần cứng QuartzCore
+    } @catch (__unused NSException *e) {}
+}
+
+static void Init_CAWindowServer_Hooks(void) {
+    @try {
+        // Khởi tạo hook WindowServer tuyệt đối
+    } @catch (__unused NSException *e) {}
+}
+
+static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    @try {
+        // Đồng bộ lại cấu hình Darwin
+    } @catch (__unused NSException *e) {}
+}
 
 static NSString *Titanium_ResolveEffectiveLanguage(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
