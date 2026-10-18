@@ -7294,19 +7294,8 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 %group Group_Aggressive_RAM_Purge
 
-%hook Caches
-
-// Tự động ép dọn dẹp các phân vùng cache tạm thời khi bộ nhớ đệm phình to
-+ (void)clearCaches {
-    %orig;
-}
-
-%end
-
 // Can thiệp vào tiến trình phân bổ bộ nhớ hệ thống để ngăn việc nén RAM quá mức (Compressed RAM)
-%tool
-
-void Titanium_PerformAggressiveRAMPurge(void) {
+static inline void Titanium_PerformAggressiveRAMPurge(void) {
     @autoreleasepool {
         @try {
             // Ép giải phóng áp lực vùng nhớ mặc định của malloc zone
@@ -7320,8 +7309,6 @@ void Titanium_PerformAggressiveRAMPurge(void) {
         } @catch (__unused NSException *e) {}
     }
 }
-
-%end
 
 // Móc vào các giao dịch chuyển app để tự động xả sạch RAM rác ngay lập tức, giữ máy luôn ở trạng thái nhẹ nhất
 %hook SBMainWorkspace
