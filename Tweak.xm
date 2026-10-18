@@ -1402,6 +1402,10 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
     return 240;
 }
 
+// ====================================================================================================
+// TITANIUM V285 PRO — CẤU HÌNH MACRO & TẦNG ẨN KHỞI TẠO TOÀN CỤC
+// ====================================================================================================
+
 #undef TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL
 #define TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL 0
 
@@ -1431,6 +1435,16 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 
 #undef TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS
 #define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 1
+
+// BỔ SUNG CỜ BẬT CHO CÁC NHÓM SÂU ĐỂ KHÔNG BAO GIỜ BỊ BỎ SÓT KHI BIÊN DỊCH
+#undef TITANIUM_ENABLE_DEVICE_AND_OS_SPOOFING
+#define TITANIUM_ENABLE_DEVICE_AND_OS_SPOOFING 1
+
+#undef TITANIUM_ENABLE_DEEP_HARDWARE_BYPASS
+#define TITANIUM_ENABLE_DEEP_HARDWARE_BYPASS 1
+
+#undef TITANIUM_ENABLE_SPRINGBOARD_LIQUID_GLASS_OPT
+#define TITANIUM_ENABLE_SPRINGBOARD_LIQUID_GLASS_OPT 1
 
 static inline BOOL Titanium_DisplaySpoofAllowed(void) {
     return YES;
