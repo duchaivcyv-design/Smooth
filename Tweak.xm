@@ -6956,7 +6956,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_SpringBoard_ProcessManagerV285);
                     %init(Group_KeepAppsAlive_NoKill);
 
-                    // ĐÃ BỔ SUNG XỬ LÝ DỨT ĐIỂM LỖI NON-INITIALIZED CHO NHÓM NÀY
+                    // KHỞI TẠO DUY NHẤT TẠI ĐÂY (TRÁNH LỖI RE-INIT)
                     %init(Group_CAWindowServer_Absolute_Dominance);
 
                     Init_CAWindowServer_Hooks();
@@ -6997,7 +6997,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_UIKit_ThirdParty_IsolatedV285);
                     %init(Group_Force_Render_Recovery_Overdrive);
                     %init(Group_Window_Level_Overdrive);
-                    %init(Group_CAWindowServer_Absolute_Dominance); // Đồng bộ luôn cho cả app ngoài nếu cần thiết
+                    // Đã loại bỏ dòng %init trùng lặp của Group_CAWindowServer_Absolute_Dominance ở đây
                     Init_CAWindowServer_Hooks();
 
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
