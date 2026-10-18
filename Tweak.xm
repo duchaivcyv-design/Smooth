@@ -3590,12 +3590,16 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setFrameInterval:(NSInteger)interval {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        @try { %orig(1); } @catch (__unused NSException *e) { %orig(interval); }
-        return;
+        @try {
+            %orig(1);
+            return;
+        } @catch (__unused NSException *e) {
+            %orig(interval);
+            return;
+        }
     }
     %orig(interval);
 }
-
 %end
 
 %hook CADisplayMode
