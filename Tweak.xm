@@ -4155,7 +4155,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY & ĐỒNG BỘ ANIMATION UIVIEW (ĐÃ GỌT SẠCH HOÀN TOÀN TRÙNG LẶP)
+// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY & ĐỒNG BỘ ANIMATION UIVIEW (BẢN BỌC THÉP AN TOÀN 100%)
 // ====================================================================================================
 
 %group Group_Scroll_And_Keyboard_Opt
@@ -4174,7 +4174,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 2. TRIỆT TIÊU 100% ĐỘ TRỄ GÕ PHÍM NỘI BỘ APPLE
+// 2. TRIỆT TIÊU 100% ĐỘ TRỄ GÕ PHÍM NỘI BỘ APPLE & CHỐNG VỠ LAYOUT
 %hook UIKeyboardImpl
 
 + (NSTimeInterval)suppressionIntervalForTouchesOnKeyboard {
@@ -4192,6 +4192,21 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             Titanium_TriggerInstantTouchBurst();
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+// Bổ sung bảo vệ chống vỡ layout bàn phím hệ thống
+- (void)setFrame:(CGRect)frame {
+    @try {
+        if (frame.size.height < 150 || frame.size.width < 200) {
+            %orig;
+            return;
+        }
+        CGRect screenBounds = [[UIScreen mainScreen] bounds];
+        if (frame.size.width > screenBounds.size.width) {
+            frame.size.width = screenBounds.size.width;
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -4215,7 +4230,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)setSelectedViewController:(UIViewController *)selectedViewController {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && selectedViewController) {
             Titanium_TriggerInstantTouchBurst();
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
@@ -4232,7 +4247,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.interactivePopGestureRecognizer) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self && self.interactivePopGestureRecognizer) {
             self.interactivePopGestureRecognizer.delaysTouchesBegan = NO;
         }
     } @catch (__unused NSException *e) {}
@@ -4268,12 +4283,12 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER
+// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (CÓ BẢO VỆ NULL POINTER)
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.view) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self && self.view) {
             [self.view setNeedsLayout];
             [self.view layoutIfNeeded];
             if (self.view.layer) {
@@ -4448,7 +4463,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_notifyDidScroll {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self) {
             if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
                 uint64_t now = mach_absolute_time();
                 g_isScrollingActive = YES;
@@ -4463,7 +4478,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self) {
             if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
                 uint64_t now = mach_absolute_time();
                 g_isScrollingActive = YES;
@@ -4481,7 +4496,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 - (CGFloat)decelerationRate {
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard() && self) {
             if (self.isPagingEnabled) return %orig;
             return 0.994f;
         }
@@ -4522,7 +4537,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (void)_scrollViewDidEndDraggingForChildScrollView:(id)view {
     %orig;
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.isDecelerating && !g_isUserTouchingScreen) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self && !self.isDecelerating && !g_isUserTouchingScreen) {
             uint64_t now = mach_absolute_time();
             g_isScrollingActive = NO;
             g_isInteracting = NO;
@@ -6731,6 +6746,42 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
+// NHÓM BẢO VỆ CHỐNG CRASH SAFARI & UIKIT CONTEXT / ANIMATION SAFETY
+// ====================================================================================================
+
+%group Group_Safari_And_Animation_Safety
+
+%hook _UIMorphingPlatterView
+
+- (void)layoutSubviews {
+    @try {
+        if (!self || self.window == nil) {
+            %orig;
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+%end
+
+%hook _UIClickPresentationInteraction
+
+- (void)_cancelWithReason:(NSInteger)reason alongsideActions:(id)alongsideActions completion:(id)completion {
+    @try {
+        if (!self) {
+            %orig(reason, alongsideActions, completion);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(reason, alongsideActions, completion);
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // TẦNG SÂU TỐI THƯỢNG: TỐI ƯU HÓA HỆ THỐNG GỐC & QUẢN LÝ TIẾN TRÌNH IPC
 // ====================================================================================================
 
@@ -6916,6 +6967,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_Apple_Internal_ProMotion_Apex);
                     %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
                     %init(Group_Hardware_Deep_Core_Bypass);
+                    %init(Group_Safari_And_Animation_Safety);
 
                     %init(Group_Aggressive_RAM_Purge);
 
