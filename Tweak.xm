@@ -2149,10 +2149,10 @@ static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *payload, uint32
         }
 
         if (!diskDict) {
-            CFPreferencesAppSynchronize((CFStringRef)PREF_DOMAIN);
-            CFArrayRef keyList = CFPreferencesCopyKeyList((CFStringRef)PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            CFPreferencesAppSynchronize(PREF_DOMAIN);
+            CFArrayRef keyList = CFPreferencesCopyKeyList(PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
             if (keyList) {
-                diskDict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(keyList, (CFStringRef)PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+                diskDict = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(keyList, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
                 CFRelease(keyList);
             }
         }
@@ -2270,7 +2270,7 @@ static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *payload, uint32
 
         BOOL (^GetLiveBool)(NSString *, BOOL) = ^BOOL(NSString *k, BOOL d) {
             if (diskDict && diskDict[k] != nil) return [diskDict[k] boolValue];
-            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, (__bridge CFStringRef)PREF_DOMAIN);
+            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
                 BOOL b = CFBooleanGetValue((CFBooleanRef)val);
                 CFRelease(val);
@@ -2281,7 +2281,7 @@ static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *payload, uint32
 
         NSInteger (^GetLiveInt)(NSString *, NSInteger) = ^NSInteger(NSString *k, NSInteger d) {
             if (diskDict && diskDict[k] != nil) return [diskDict[k] integerValue];
-            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, (__bridge CFStringRef)PREF_DOMAIN);
+            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
                 int n = 0;
                 CFNumberGetValue((CFNumberRef)val, kCFNumberIntType, &n);
@@ -2293,7 +2293,7 @@ static inline void Titanium_SetIPCExtraFlags(ApexV285ProPayload *payload, uint32
 
         NSString * (^GetLiveString)(NSString *, NSString *) = ^NSString *(NSString *k, NSString *d) {
             if (diskDict && diskDict[k] != nil) return (NSString *)diskDict[k];
-            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, (__bridge CFStringRef)PREF_DOMAIN);
+            CFPropertyListRef val = CFPreferencesCopyAppValue((__bridge CFStringRef)k, PREF_DOMAIN);
             if (val) {
                 NSString *str = (__bridge_transfer NSString *)val;
                 return str;
@@ -6705,6 +6705,10 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 
 %group Group_CAWindowServer_Absolute_Dominance
 
+// ====================================================================================================
+// HOOK CAWINDOWSERVER: ÉP XUNG NHỊP HIỂN THỊ TẦNG HỆ THỐNG
+// ====================================================================================================
+
 %hook CAWindowServer
 
 - (NSArray *)displays {
@@ -6713,11 +6717,41 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && displays) {
             // Ép toàn bộ các cổng hiển thị (Display ports) trong danh sách WindowServer nhận mức tối đa
             for (id display in displays) {
-                if ([display respondsToSelector:@selector(setPreferredRefreshRate:)]) {
-                    NSInteger cap = Titanium_GetEffectiveFrameCap();
-                    if (cap < 15) cap = 15; if (cap > 240) cap = 240;
-                    [display setPreferredRefreshRate:(double)cap];
-                }
+                if (!display) continue;
+                
+                NSInteger cap = g_cachedResolvedHz;
+                if (cap < 15) cap = 15; 
+                if (cap > 240) cap = 240;
+                double targetRate = (double)cap;
+
+                // Sử dụng NSInvocation an toàn để tương thích mọi phiên bản iOS mà không sợ crash selector
+                @try {
+                    SEL selMaxRate = sel_registerName("setMaximumRefreshRate:");
+                    if ([display respondsToSelector:selMaxRate]) {
+                        NSMethodSignature *sig = [display methodSignatureForSelector:selMaxRate];
+                        if (sig && strcmp([sig getArgumentTypeAtIndex:2], "d") == 0) {
+                            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+                            [inv setSelector:selMaxRate];
+                            [inv setTarget:display];
+                            [inv setArgument:&targetRate atIndex:2];
+                            [inv invoke];
+                        }
+                    }
+                } @catch (__unused NSException *e) {}
+
+                @try {
+                    SEL selIdealRate = sel_registerName("setIdealRefreshRate:");
+                    if ([display respondsToSelector:selIdealRate]) {
+                        NSMethodSignature *sig = [display methodSignatureForSelector:selIdealRate];
+                        if (sig && strcmp([sig getArgumentTypeAtIndex:2], "d") == 0) {
+                            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+                            [inv setSelector:selIdealRate];
+                            [inv setTarget:display];
+                            [inv setArgument:&targetRate atIndex:2];
+                            [inv invoke];
+                        }
+                    }
+                } @catch (__unused NSException *e) {}
             }
         }
     } @catch (__unused NSException *e) {}
@@ -6728,9 +6762,8 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
     id server = %orig;
     @try {
         if (server && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            if ([server respondsToSelector:@selector(setDisplays:)]) {
-                // Buộc WindowServer server đẩy nhịp render tối đa
-            }
+            // Buộc WindowServer server đẩy nhịp render tối đa thông qua tối ưu hóa hiển thị ngầm
+            Titanium_TuneWindowServerDisplayDirectly();
         }
     } @catch (__unused NSException *e) {}
     return server;
@@ -7471,7 +7504,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 - (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
     @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled && key) {
+         if (IS_ACTIVE || (g_syncPayloadV285.masterEnabled && key)) {
             // Chặn tuyệt đối mọi từ khóa bóp hiệu năng, giới hạn điện áp hoặc ép hạ xung ngầm từ kernel
             if ([key rangeOfString:@"PerformanceLimit" options:NSCaseInsensitiveSearch].location != NSNotFound ||
                 [key rangeOfString:@"CPUPowerConstraint" options:NSCaseInsensitiveSearch].location != NSNotFound ||
@@ -7693,9 +7726,9 @@ static inline void Titanium_EnforceDiskAndProcessOverdriveNew(void) {
         // Nâng giới hạn file descriptors tối đa cho tiến trình
         struct rlimit limit;
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
-            limit.cur = limit.max;
-            setrlimit(RLIMIT_NOFILE, &limit);
-        }
+         limit.rlim_cur = limit.rlim_max; // Sửa 'cur' và 'max' thành 'rlim_cur' và 'rlim_max'
+          setrlimit(RLIMIT_NOFILE, &limit);
+       }
     } @catch (__unused NSException *e) {}
 }
 
