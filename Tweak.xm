@@ -3509,6 +3509,9 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 }
 
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
+static inline void Titanium_BypassQuartzCoreRangeAssertion(void) {
+    // Đã bẻ khóa trực tiếp qua CADisplayLink và CAFrameRateRangeMake
+}
 
 %hook CADisplayLink
 
