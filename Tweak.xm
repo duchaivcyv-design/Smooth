@@ -7661,19 +7661,20 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     } @catch (__unused NSException *e) {}
                 });
 
-                %init(Group_ZeroLatency_Touch_Opt);
-                %init(Group_Metal_ZeroTearing_Pacing);
-                %init(Group_FluidTransitions_Pacing);
-                %init(Group_AI_Stream_Optimization);
-                %init(Group_FastLaunch_SuperEngineV285);
-                %init(Group_Scroll_And_Keyboard_Opt);
-                %init(Group_InstantActionAndMenuTransitions_Boost);
-                %init(Group_Global_Thread_Governor_Unthrottled);
+                    %init(Group_ZeroLatency_Touch_Opt);
+                    %init(Group_Metal_ZeroTearing_Pacing);
+                    %init(Group_FluidTransitions_Pacing);
+                    %init(Group_AI_Stream_Optimization);
+                    %init(Group_FastLaunch_SuperEngineV285);
+                    %init(Group_Scroll_And_Keyboard_Opt);
+                    %init(Group_InstantActionAndMenuTransitions_Boost);
+                    %init(Group_Global_Thread_Governor_Unthrottled);
 
-                %init(Group_Apple_Internal_ProMotion_Apex);
-                %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+                    %init(Group_Apple_Internal_ProMotion_Apex);
+                    %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
+                    %init(Group_Hardware_Deep_Core_Bypass);
 
-                %init(Group_Hardware_Deep_Core_Bypass);
+                    %init(Group_Aggressive_RAM_Purge);
 
                 if (Titanium_DisplaySpoofAllowed()) {
                     %init(Group_Hardware_ProMotion_Overclock);
