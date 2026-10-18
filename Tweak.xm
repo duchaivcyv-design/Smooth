@@ -2913,6 +2913,11 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 }
 
 // ====================================================================================================
+// KHAI BÁO NGUYÊN MẪU HÀM HỆ THỐNG (CHỐNG LỖI CHƯA KHAI BÁO)
+// ====================================================================================================
+extern "C" void MTLReportFailure(void *c, unsigned long long val, const char *msg, ...);
+
+// ====================================================================================================
 // NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (BẺ KHÓA CPU/GPU 100% & ZERO-LATENCY) - ĐÃ BỌC THÉP
 // ====================================================================================================
 
@@ -3160,7 +3165,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
             
-            // Ép cố định mức 2 buffer (Double Buffering tối ưu) để chống dồn hiệu ứng 3D và không bị giật khung hình
             if (!isTikTok) {
                 self.maximumDrawableCount = 2;
             }
@@ -3170,14 +3174,13 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES; // Kích hoạt chế độ độ trễ thấp phần cứng Metal
+                self.lowLatencyMode = YES;
             }
 
             if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
                 self.framebufferOnly = YES;
             }
 
-            // Ép khóa cứng dải khung hình trực tiếp ngay tại tầng Metal Layer, triệt tiêu hoàn toàn lệnh bóp ngầm
             if (@available(iOS 15.0, *)) {
                 if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
@@ -3191,7 +3194,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO); // TẮT V-SYNC ẨN SÂU: Vô hiệu hóa hoàn toàn V-Sync phần cứng, thả lỏng khung hình chạm trần tối đa theo Hz đã chọn
+            %orig(NO);
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -3221,7 +3224,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            // Ép cứng phẳng lỳ dải khung hình của Metal, cấm driver tự ý hạ xuống 60Hz hay bất kỳ mốc thấp nào
             range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
         }
     }
@@ -3287,6 +3289,13 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 }
 
 %end
+
+// Hook an toàn chặn lỗi abort/crash Metal trên chip cũ (A11)
+%hookf(void, MTLReportFailure, void *c, unsigned long long val, const char *msg, ...) {
+    @try {
+        return;
+    } @catch (__unused NSException *e) {}
+}
 
 %end
 
