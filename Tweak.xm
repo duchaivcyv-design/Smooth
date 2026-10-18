@@ -3591,6 +3591,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (void)setFrameInterval:(NSInteger)interval {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         @try {
+            // Ép tốc độ mượt mà bằng cách giữ nguyên luồng gốc nhưng override tối ưu hóa
             %orig(1);
             return;
         } @catch (__unused NSException *e) {
