@@ -3988,26 +3988,6 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %end
 
-%hook CAFrameRateRange
-
-- (instancetype)initWithMinimum:(float)minimum maximum:(float)maximum preferred:(float)preferred {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-        if (maxTarget < 15.0f) maxTarget = 15.0f;
-        if (maxTarget > 240.0f) maxTarget = 240.0f;
-        return %orig(maxTarget, maxTarget, maxTarget);
-    }
-    return %orig(minimum, maximum, preferred);
-}
-
-%end
-
-%hookf(void, MTLReportFailure, void *c, unsigned long long val, const char *msg, ...) {
-    @try {
-        return; // Vô hiệu hóa lệnh abort() của Metal trên chip cũ
-    } @catch (__unused NSException *e) {}
-}
-
 %end
 
 // ====================================================================================================
