@@ -4437,7 +4437,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
-    %orig;
+    %orig(viewController, animated);
 }
 
 - (UIViewController *)popViewControllerAnimated:(BOOL)animated {
@@ -4451,18 +4451,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return %orig(animated);
 }
 
 %end
 
-// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (ÉP RENDER SẴN KHUNG HÌNH CHỐNG CHỚP XÁM)
+// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (ÉP RENDER SẴN KHUNG HÌNH CHỐNG CHỚP XÁM & BẬT RA NHANH)
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.view) {
-            // Ép layout và render ngay lập tức trước khi xuất hiện để triệt tiêu hoàn toàn màn hình xám
             [self.view setNeedsLayout];
             [self.view layoutIfNeeded];
             if (self.view.layer) {
@@ -4556,7 +4555,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
-// BẺ KHÓA: Ép buộc hủy bỏ hoàn toàn độ trễ nội dung cảm ứng để ngón tay chạm đến đâu feed chạy tức thì đến đó
 - (BOOL)delaysContentTouches {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
@@ -5311,7 +5309,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 11: NÂNG CẤP TOÀN BỘ APP THỨ BA & CHUYỂN TIẾP VIEWCONTROLLER (ĐÃ FIX LỖI CRASH SHARE SHEET)
+// NHÓM 11: NÂNG CẤP TOÀN BỘ APP THỨ BA & CHUYỂN TIẾP VIEWCONTROLLER (ĐÃ TÍCH HỢP P-CORE BOOSTER CHO UIView)
 // ====================================================================================================
 
 %group Group_UIKit_ThirdParty_IsolatedV285
@@ -5392,6 +5390,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 %hook UIView
+
+- (void)didMoveToWindow {
+    %orig;
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
+            // Đánh thức P-Core và giữ luồng VIP ngay khi UIView hiển thị lên app để triệt tiêu giật lag ban đầu
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+        }
+    } @catch (__unused NSException *e) {}
+}
 
 + (void)animateWithDuration:(NSTimeInterval)duration
                       delay:(NSTimeInterval)delay
@@ -7074,7 +7083,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 %end
 
 // ====================================================================================================
-// NHÓM ĐA NHIỆM: TỐI ƯU CỬ CHỈ & GIỮ LẠI SNAPSHOT (BẢO VỆ AN TOÀN - ẨN SHADOW GIẢM TẢI GPU)
+// NHÓM ĐA NHIỆM & SPRINGBOARD: TỐI ƯU CỬ CHỈ, GIỮ SNAPSHOT, MỞ THƯ MỤC / DOCK & ĐA NHIỆM LIỀN MẠCH (0 LAG)
 // ====================================================================================================
 
 %group Group_SpringBoard_Switcher_Opt
@@ -7098,6 +7107,29 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
         return size;
     } @catch (__unused NSException *e) {}
     return %orig;
+}
+%end
+
+%hook SBFolderControllerAnimationSettings
+- (double)duration {
+    // Ép tốc độ mở/đóng thư mục ở Dock và màn hình chính mượt mà, không bị khựng hình
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.20; 
+    }
+    return %orig;
+}
+%end
+
+%hook SBIconView
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Đánh thức ngay lập tức cụm P-Core khi vừa chạm vào icon trên Dock để mở app lập tức
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(touches, event);
 }
 %end
 
@@ -7158,6 +7190,49 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
         }
     } @catch (__unused NSException *e) {}
     %orig(arg1);
+}
+%end
+
+// --- BỔ SUNG: TỐI ƯU CHUYỂN ĐỔI KHUNG HÌNH VÀ TƯƠNG TÁC ĐA NHIỆM ---
+
+%hook SBFluidSwitcherViewController
+- (void)cardInteractiveTransitionDidEnd:(id)arg1 {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(arg1);
+}
+%end
+
+%hook SBFluidSwitcherAnimationSettings
+- (double)switcherScaleTransitionDuration {
+    // Tối ưu tốc độ phóng to/thu nhỏ khung hình khi chuyển đổi giữa đa nhiệm và ứng dụng (0.18s)
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.18;
+    }
+    return %orig;
+}
+
+- (double)slideInDuration {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.18;
+    }
+    return %orig;
+}
+%end
+
+%hook SBAppSwitcherPageView
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            EnforceMaxCPUPower();
+            Titanium_EnforceThreadVIPPolicy();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(touches, event);
 }
 %end
 
@@ -7308,7 +7383,8 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 - (NSString *)systemVersion {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return @"26.0";
+            // Ép phiên bản hiển thị thành iOS 26.0.1
+            return @"26.0.1";
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -7340,9 +7416,9 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSOperatingSystemVersion spoofedVersion;
-            spoofedVersion.majorVersion = 26;
-            spoofedVersion.minorVersion = 0;
-            spoofedVersion.patchVersion = 0;
+            spoofedVersion.majorVersion = 26; // Major: 26
+            spoofedVersion.minorVersion = 0;  // Minor: 0
+            spoofedVersion.patchVersion = 1;  // Patch: 1 -> Cấu thành iOS 26.0.1 chính xác tuyệt đối
             return spoofedVersion;
         }
     } @catch (__unused NSException *e) {}
@@ -7361,7 +7437,7 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 - (NSString *)operatingSystemVersionString {
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return @"Version 26.0 (Build 23A344)";
+            return @"Version 26.0.1 (Build 23A405)";
         }
     } @catch (__unused NSException *e) {}
     return %orig;
