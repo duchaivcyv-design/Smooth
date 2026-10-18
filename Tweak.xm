@@ -3136,7 +3136,7 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC, GIỮ 2 BUFFER MƯỢT MÀ KHÔNG XÉ HÌNH HAY TRỄ LỆNH
+// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC ẨN SÂU, ÉP KHÓA HZ/FPS TẦNG CAMETALLAYER & CAFRAME-RATE
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -3160,7 +3160,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
             
-            // Ép cố định mức 2 buffer (Double Buffering tối ưu) để chống dồn hiệu ứng 3D và không bị giật khung hình gần
+            // Ép cố định mức 2 buffer (Double Buffering tối ưu) để chống dồn hiệu ứng 3D và không bị giật khung hình
             if (!isTikTok) {
                 self.maximumDrawableCount = 2;
             }
@@ -3176,6 +3176,14 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
                 self.framebufferOnly = YES;
             }
+
+            // Ép khóa cứng dải khung hình trực tiếp ngay tại tầng Metal Layer, triệt tiêu hoàn toàn lệnh bóp ngầm
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    self.preferredFrameRateRange = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+                }
+            }
         }
     } @catch (__unused NSException *e) {}
 }
@@ -3183,7 +3191,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO); // Tắt V-Sync hoàn toàn để phá bỏ giới hạn cứng, đạt tốc độ khung hình thuần túy theo Hz đã chọn
+            %orig(NO); // TẮT V-SYNC ẨN SÂU: Vô hiệu hóa hoàn toàn V-Sync phần cứng, thả lỏng khung hình chạm trần tối đa theo Hz đã chọn
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -3193,7 +3201,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (NSUInteger)maximumDrawableCount {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return 2; // Giữ đúng 2 buffer giúp chuyển động mượt qua từng khung hình mà không bị nghẽn lệnh vẽ
+            return 2; 
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -3209,6 +3217,19 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
     %orig(count);
 }
 
+- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+            // Ép cứng phẳng lỳ dải khung hình của Metal, cấm driver tự ý hạ xuống 60Hz hay bất kỳ mốc thấp nào
+            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+        }
+    }
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
+}
+
 - (id)nextDrawable {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
@@ -3217,6 +3238,19 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
         }
     } @catch (__unused NSException *e) {}
     return %orig;
+}
+
+%end
+
+// Ép sâu toàn cục cho lớp khởi tạo CAFrameRateRange ẩn tầng thấp để không một app hay game nào lách luật được
+%hook CAFrameRateRange
+
+- (instancetype)initWithMinimum:(float)minimum maximum:(float)maximum preferred:(float)preferred {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        return %orig(maxTarget, maxTarget, maxTarget);
+    }
+    return %orig(minimum, maximum, preferred);
 }
 
 %end
@@ -3513,7 +3547,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3: ĐỒNG BỘ TUYỆT ĐỐI HZ/FPS TOÀN HỆ THỐNG - KHÓA CỨNG KHÔNG TRANH CHẤP (15 - 240HZ)
+// NHÓM 3: ĐỒNG BỘ TUYỆT ĐỐI HZ/FPS TOÀN HỆ THỐNG - KHÓA CỨNG CHỐNG BỚP NGẦM (15 - 240HZ)
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3708,6 +3742,25 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     return %orig;
 }
 
+// BẺ GÃY HOÀN TOÀN CƠ CHẾ TỰ ĐỘNG HẠ 60HZ CỦA APPLE TẦNG PHẦN CỨNG (IOGPU / CADISPLAY)
+- (void)setCurrentMode:(CADisplayMode *)mode {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        @try {
+            %orig(mode);
+        } @catch (__unused NSException *e) {}
+        return;
+    }
+    %orig(mode);
+}
+
+- (void)overrideMinimumFrameDuration:(CFTimeInterval)duration {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(0.0);
+        return;
+    }
+    %orig(duration);
+}
+
 %end
 
 %hook UIScreen
@@ -3743,6 +3796,15 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         return;
     }
     %orig(rate);
+}
+
+- (void)_setActualFramesPerSecond:(NSInteger)fps {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger targetCap = Titanium_GetEffectiveFrameCap();
+        %orig(targetCap);
+        return;
+    }
+    %orig(fps);
 }
 
 %end
@@ -3822,7 +3884,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %end
 
-// Ép buộc toàn bộ Animation nhận chính xác mức khung hình cố định
+// Ép buộc toàn bộ Animation nhận chính xác mức khung hình cố định (Tuyệt đối không bóp xuống 60Hz)
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
