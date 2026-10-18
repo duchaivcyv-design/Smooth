@@ -3547,7 +3547,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3: ĐỒNG BỘ TUYỆT ĐỐI HZ/FPS TOÀN HỆ THỐNG - KHÓA CỨNG CHỐNG BỚP NGẦM (15 - 240HZ)
+// NHÓM 3 (TỐI THƯỢNG - TÍCH HỢP HOÀN CHỈNH HZ/FPS & CÁC HOOK ẨN TẦNG SÂU CHƯA CÔNG BỐ CỦA APPLE):
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3742,7 +3742,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     return %orig;
 }
 
-// BẺ GÃY HOÀN TOÀN CƠ CHẾ TỰ ĐỘNG HẠ 60HZ CỦA APPLE TẦNG PHẦN CỨNG (IOGPU / CADISPLAY)
 - (void)setCurrentMode:(CADisplayMode *)mode {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         @try {
@@ -3759,6 +3758,40 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         return;
     }
     %orig(duration);
+}
+
+%end
+
+// ====================================================================================================
+// CÁC HOOK ẨN SÂU TẦNG THẤP CHƯA CÔNG BỐ (CAWINDOWSERVER & CARENDEROGRES / IOGPU ARBITRATION)
+// ====================================================================================================
+
+%hook CAWindowServerDisplay
+
+- (void)setTargetDisplayRefreshRate:(unsigned int)rate {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        @try {
+            %orig((unsigned int)cap);
+        } @catch (__unused NSException *e) {}
+        return;
+    }
+    %orig(rate);
+}
+
+- (unsigned int)targetDisplayRefreshRate {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return (unsigned int)Titanium_GetEffectiveFrameCap();
+    }
+    return %orig;
+}
+
+- (void)setAllowsVirtualModes:(BOOL)modes {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(YES);
+        return;
+    }
+    %orig(modes);
 }
 
 %end
@@ -3884,7 +3917,6 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %end
 
-// Ép buộc toàn bộ Animation nhận chính xác mức khung hình cố định (Tuyệt đối không bóp xuống 60Hz)
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
@@ -3959,6 +3991,26 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 }
 
 %end
+
+%hook CAFrameRateRange
+
+- (instancetype)initWithMinimum:(float)minimum maximum:(float)maximum preferred:(float)preferred {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        if (maxTarget < 15.0f) maxTarget = 15.0f;
+        if (maxTarget > 240.0f) maxTarget = 240.0f;
+        return %orig(maxTarget, maxTarget, maxTarget);
+    }
+    return %orig(minimum, maximum, preferred);
+}
+
+%end
+
+%hookf(void, MTLReportFailure, void *c, unsigned long long val, const char *msg, ...) {
+    @try {
+        return; // Vô hiệu hóa lệnh abort() của Metal trên chip cũ
+    } @catch (__unused NSException *e) {}
+}
 
 %end
 
