@@ -6755,7 +6755,7 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 
 - (void)layoutSubviews {
     @try {
-        if (!self || self.window == nil) {
+       if (!self || [(UIView *)self window] == nil) {
             %orig;
             return;
         }
