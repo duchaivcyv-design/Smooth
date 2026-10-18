@@ -3222,17 +3222,28 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 // ====================================================================================================
 #import <dlfcn.h>
 
+#ifndef SAFE_FRAME_RATE_RANGE_STRUCT_DEFINED
+#define SAFE_FRAME_RATE_RANGE_STRUCT_DEFINED
+// Sử dụng chuẩn tương thích đa tầng SDK (Tránh hoàn toàn xung đột với CAFrameRateRange của Apple)
+#if __has_include(<QuartzCore/CAFrameRateRange.h>)
+// Nếu SDK có sẵn, ép SafeFrameRateRange trỏ thẳng vào CAFrameRateRange chuẩn
+typedef CAFrameRateRange SafeFrameRateRange_t;
+#define SafeFRRTarget SafeFrameRateRange_t
+#else
 typedef struct {
     float minimum;
     float maximum;
     float preferred;
-} SafeFrameRateRange;
+} SafeFrameRateRange_t;
+#define SafeFRRTarget SafeFrameRateRange_t
+#endif
+#endif
 
-static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange range) = NULL;
+static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange_t range) = NULL;
 
-static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange range) {
+static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange_t range) {
     (void)range;
-    return true; // Bẻ gãy mọi giới hạn kiểm định dải tần số của Apple
+    return true; // Bẻ gãy mọi giới hạn kiểm định dải tần số của Apple, ép nhận mọi dải Hz tùy ý
 }
 
 static inline void Titanium_BypassQuartzCoreRangeAssertion(void) {
@@ -3345,6 +3356,10 @@ static CADisplayLink *s_keeperLink = nil;
 @implementation TitaniumRateKeeper
 
 + (void)start {}
+
++ (void)kick {
+    [self kickForDynamicIsland];
+}
 
 + (void)kickForDynamicIsland {
     @try {
