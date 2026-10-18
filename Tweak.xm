@@ -1244,6 +1244,10 @@ static ApexV285ProPayload g_syncPayloadV285 = {
     .reserved = {0}
 };
 
+// ====================================================================================================
+// KHAI BÁO BIẾN TOÀN CỤC, TRẠNG THÁI IPC VÀ KERNEL WRITE-PROTECT BYPASS CHUẨN XNU
+// ====================================================================================================
+
 static pthread_mutex_t g_syncLockV285 = PTHREAD_MUTEX_INITIALIZER;
 static volatile uint64_t g_lastSyncTicksV285 = 0;
 static BOOL g_isDeviceChargingV285 = NO;
@@ -1258,13 +1262,27 @@ static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
+
 static NSString *Titanium_ResolveEffectiveLanguage(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_StartIPCHearthbeatV12(void);
 static void Titanium_RegisterAppResumeRefreshV12(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
 
-static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize);
+// Triển khai thực tế hàm kernel write-protect bypass để triệt tiêu hoàn toàn cảnh báo biên dịch
+static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize) {
+    @try {
+        if (!targetAddress || !sourceBytes || dataSize == 0) return false;
+        vm_address_t page = (vm_address_t)targetAddress & ~PAGE_MASK;
+        int prot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+        kern_return_t kr = vm_protect(mach_task_self(), page, PAGE_SIZE, 0, prot);
+        if (kr == KERN_SUCCESS) {
+            memcpy(targetAddress, sourceBytes, dataSize);
+            return true;
+        }
+    } @catch (__unused NSException *e) {}
+    return false;
+}
 
 static void Titanium_UpdateLowBatteryFlagV12_Impl(void) {
     @try {
@@ -1272,6 +1290,7 @@ static void Titanium_UpdateLowBatteryFlagV12_Impl(void) {
     } @catch (__unused NSException *e) {}
 }
 #define Titanium_UpdateLowBatteryFlagV12 Titanium_UpdateLowBatteryFlagV12_Impl
+
 
 // ====================================================================================================
 // HARDWARE DETECTION & RUNTIME PATH RESOLUTION (BẺ KHÓA ROOTHIDE & ROOTLESS)
