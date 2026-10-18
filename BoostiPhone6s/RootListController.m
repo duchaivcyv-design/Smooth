@@ -3320,7 +3320,14 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             UIAlertController *credits = [UIAlertController alertControllerWithTitle:@"Tác giả & hỗ trợ"
                 message:@"Tác giả tweak: TaoJB, NoNo, NoJB\nTác giả code: ABI, JBAP, MAD, SIJB\nHỗ trợ phần cứng: APIjb, BruhJB, LOLJB, DBB\n\nThông tin này cũng có trong mục Cài đặt."
                 preferredStyle:UIAlertControllerStyleAlert];
-            [credits addAction:[UIAlertAction actionWithTitle:@"Tiếp tục" style:UIAlertActionStyleDefault handler:nil]];
+            // The one-time flag is written before presentation so dismissing the dialog
+            // never causes it to reappear on every app launch.
+            [credits addAction:[UIAlertAction actionWithTitle:@"× Đóng" style:UIAlertActionStyleCancel handler:nil]];
+            [credits addAction:[UIAlertAction actionWithTitle:@"Ẩn vĩnh viễn" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                [defaults setBool:YES forKey:TI_CREDITS_SHOWN_KEY];
+                [defaults synchronize];
+            }]];
             [self presentViewController:credits animated:YES completion:nil];
         });
     }
@@ -6627,6 +6634,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [sensorDefaults setBool:YES forKey:sensorMigrationKey];
         [sensorDefaults synchronize];
     }
+    // Preserve user-selected values: defaults are applied only when keys are absent.
+    // Closing the app from the switcher must not reset these persisted settings.
     if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @240;
     if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @240;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
