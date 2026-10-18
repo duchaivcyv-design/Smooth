@@ -3143,6 +3143,14 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 %group Group_Metal_ZeroTearing_Pacing
 
+// ====================================================================================================
+// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC, GIỮ 2 BUFFER MƯỢT MÀ KHÔNG XÉ HÌNH HAY TRỄ LỆNH
+// ====================================================================================================
+
+static inline NSInteger Titanium_GetEffectiveFrameCap(void);
+
+%group Group_Metal_ZeroTearing_Pacing
+
 %hook CAMetalLayer
 
 - (void)didMoveToWindow {
@@ -3932,7 +3940,6 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %end
 
 %end
-
 
 // ====================================================================================================
 // TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
