@@ -57,6 +57,7 @@ extern char **environ;
 #define TI_THEME_MODE_KEY          @"ti_theme_mode_v25" // system | light | dark
 #define TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY @"ti_hzfps_warning_suppress_until_v1"
 #define TI_CREDITS_SHOWN_KEY @"ti_credits_shown_v1"
+#define TI_CREDITS_HIDDEN_KEY @"ti_credits_hidden_permanently_v1"
 #define TI_APP_CATEGORY_KEY @"ti_app_category_v1"
 #define TI_ADMIN_TOKEN_SERVICE     @"com.taojb.boostiphone6s.admin-session"
 #define TI_ADMIN_TOKEN_ACCOUNT     @"server-access-token"
@@ -194,9 +195,9 @@ static NSArray<NSArray<NSString *> *> *Titanium_LinkedPreferenceGroups(void) {
             @[@"lock30FpsOnOverheat", @"SmartThermalDispatch"],
             @[@"flatTintBlur", @"QuantumRenderShield"],
             @[@"powerSaveMode", @"batterySaver60Hz", @"PowerSaveMode"],
-            @[@"MetalHexBuffering", @"neuralBufferOpt"],
-            @[@"FixAppExitStutter", @"vsyncAdaptiveBuffer"],
-            @[@"FixAppLaunchBlackScreen", @"IsolateRenderPipeline"],
+            @[@"neuralBufferOpt", @"MetalHexBuffering"],
+            @[@"vsyncAdaptiveBuffer", @"FixAppExitStutter"],
+            @[@"IsolateRenderPipeline", @"FixAppLaunchBlackScreen"],
             @[@"periodicRamClean", @"machVMPurgeRam", @"aggressiveRamClean", @"AggressiveRamClean"]
         ];
     });
@@ -211,8 +212,9 @@ static void Titanium_SynchronizeLinkedPreferences(NSMutableDictionary *settings,
             if ([group containsObject:changedKey] && settings[changedKey] != nil) sourceKey = changedKey;
             else continue;
         } else {
-            // The first key in each group is the controller-facing key; use it when present.
-            for (NSString *key in group) {
+            // On load, prefer the last (canonical Tweak.xm) key so stale UI aliases
+            // cannot overwrite a newer value after relaunch or jailbreak-mode changes.
+            for (NSString *key in [group reverseObjectEnumerator]) {
                 if (settings[key] != nil) { sourceKey = key; break; }
             }
         }
@@ -3312,20 +3314,22 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     self.customTableView.userInteractionEnabled = ([initialServerChoice isEqualToString:@"free"] || _isAdminServer);
     NSUserDefaults *creditsDefaults = [NSUserDefaults standardUserDefaults];
-    if (![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY]) {
-        [creditsDefaults setBool:YES forKey:TI_CREDITS_SHOWN_KEY];
-        [creditsDefaults synchronize];
+    if (![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY] &&
+        ![creditsDefaults boolForKey:TI_CREDITS_HIDDEN_KEY]) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.presentedViewController) return;
-            UIAlertController *credits = [UIAlertController alertControllerWithTitle:@"Tác giả & hỗ trợ"
-                message:@"Tác giả tweak: TaoJB, NoNo, NoJB\nTác giả code: ABI, JBAP, MAD, SIJB\nHỗ trợ phần cứng: APIjb, BruhJB, LOLJB, DBB\n\nThông tin này cũng có trong mục Cài đặt."
+            UIAlertController *credits = [UIAlertController alertControllerWithTitle:@"Thông báo tác giả"
+                message:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\n\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\n\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb"
                 preferredStyle:UIAlertControllerStyleAlert];
-            // The one-time flag is written before presentation so dismissing the dialog
-            // never causes it to reappear on every app launch.
-            [credits addAction:[UIAlertAction actionWithTitle:@"× Đóng" style:UIAlertActionStyleCancel handler:nil]];
+            [credits addAction:[UIAlertAction actionWithTitle:@"× Đóng" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+                NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+                [defaults setBool:YES forKey:TI_CREDITS_SHOWN_KEY];
+                [defaults synchronize];
+            }]];
             [credits addAction:[UIAlertAction actionWithTitle:@"Ẩn vĩnh viễn" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                 NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
                 [defaults setBool:YES forKey:TI_CREDITS_SHOWN_KEY];
+                [defaults setBool:YES forKey:TI_CREDITS_HIDDEN_KEY];
                 [defaults synchronize];
             }]];
             [self presentViewController:credits animated:YES completion:nil];
@@ -5849,7 +5853,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             else if (indexPath.row == 0) [self presentIndependentDocument:@"Môi trường Jailbreak" text:Titanium_DetectJailbreakTypeForUI()];
             else if (indexPath.row == 1) [self presentIndependentDocument:@"Prefix Bootstrap" text:(Titanium_DetectedBootstrapPrefixForUI() ?: @"Không xác định (chưa phát hiện)")];
             else if (indexPath.row == 3) [self presentIndependentDocument:@"IPC" text:Titanium_IPCDiagnosticForUI()];
-            else if (indexPath.row == 4) [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"Tác giả tweak: TaoJB, NoNo, NoJB\nTác giả code: ABI, JBAP, MAD, SIJB\nHỗ trợ phần cứng: APIjb, BruhJB, LOLJB, DBB"];
+            else if (indexPath.row == 4) [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb"];
             return;
         }
         if (serverAPISettingsRow) { [self showServerAPIURLEditor]; return; }
@@ -6583,6 +6587,17 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     BOOL didWritePreferences = [self.settingsDict writeToFile:p atomically:YES];
     if (didWritePreferences) {
         chmod([p UTF8String], 0600);
+        // Tweak.xm reads the same domain through CFPreferences. Write the complete
+        // dictionary there too; plist-only writes can leave its cached domain stale.
+        CFPreferencesSetMultiple((__bridge CFDictionaryRef)self.settingsDict,
+                                 NULL, PREF_DOMAIN,
+                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        notify_post(NOTIFY_RELOAD);
+        notify_post(NOTIFY_UIKIT_RELOAD);
+        notify_post(NOTIFY_HARDWARE_SYNC);
+        notify_post(NOTIFY_FPS_CHANGED);
+        notify_post(NOTIFY_TITANIUM_CHANGED);
     } else {
         NSLog(@"[V26 Pro Max VIP] Không ghi được preferences plist tại %@", p);
     }
@@ -6623,8 +6638,11 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     ];
     for (NSString *k in keys) {
         if (!self.settingsDict[k]) {
-            // The read-only sensor panel should work on first launch; feature tweaks stay off by default.
-            self.settingsDict[k] = [k isEqualToString:@"EnableSystemMonitoring"] ? @YES : @NO;
+            // Seed missing keys only. Hz/FPS controls default ON; feature toggles remain OFF.
+            BOOL defaultOn = [k isEqualToString:@"EnableSystemMonitoring"] ||
+                             [k isEqualToString:@"EnableHzControl"] ||
+                             [k isEqualToString:@"EnableFPSControl"];
+            self.settingsDict[k] = @(defaultOn);
         }
     }
     NSUserDefaults *sensorDefaults = [NSUserDefaults standardUserDefaults];
@@ -6655,6 +6673,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         self.settingsDict[@"SelectedLanguage"] = self.settingsDict[@"AppLanguage"] ?: @"auto";
     }
     if (!self.settingsDict[@"IsAdminServer"])    self.settingsDict[@"IsAdminServer"]    = @NO;
+    Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
 }
 
 - (void)loadInstalledAppsAsync {
@@ -6900,8 +6919,11 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 - (void)independentSwitchChanged:(UISwitch *)sender {
     NSString *key = sender.accessibilityIdentifier;
     if (key.length == 0) return;
+    // Keep the extra-switch UI, plist and the preference domain consumed by Tweak.xm aligned.
+    self.settingsDict[key] = @(sender.isOn);
     [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:key];
     [[NSUserDefaults standardUserDefaults] synchronize];
+    [self saveSettingsDataAndSync];
 }
 
 - (void)showIndependentSwitches {
