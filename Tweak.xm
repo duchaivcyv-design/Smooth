@@ -1303,6 +1303,13 @@ static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
+// --- KHAI BÁO PROTOTYPE TRƯỚC ĐỂ TRÌNH BIÊN DỊCH KHÔNG BÁO UNDECLARED ---
+static SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL isSpringBoard);
+static void Titanium_BypassQuartzCoreRangeAssertion(void);
+static void Init_CAWindowServer_Hooks(void);
+static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+
+#define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
 
 static NSString *Titanium_ResolveEffectiveLanguage(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
@@ -4503,37 +4510,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 %end
-
-// ====================================================================================================
-// TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
-// ====================================================================================================
-
-static BOOL fake_supportsDynamicRefreshRate(id self, SEL _cmd) {
-    return YES;
-}
-
-static void Titanium_ForceInjectDynamicRefreshSupport(void) {
-    if (!Titanium_DisplaySpoofAllowed()) return;
-    @try {
-        Class screenCls = objc_getClass("UIScreen");
-        if (!screenCls) return;
-
-        SEL sel1 = sel_registerName("supportsDynamicRefreshRate");
-        SEL sel2 = sel_registerName("_supportsDynamicRefreshRate");
-
-        if (class_getInstanceMethod(screenCls, sel1)) {
-            class_replaceMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        } else {
-            class_addMethod(screenCls, sel1, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        }
-
-        if (class_getInstanceMethod(screenCls, sel2)) {
-            class_replaceMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        } else {
-            class_addMethod(screenCls, sel2, (IMP)fake_supportsDynamicRefreshRate, "B@:");
-        }
-    } @catch (__unused NSException *e) {}
-}
 
 // ====================================================================================================
 // NHÓM 7: SPRINGBOARD - TOÀN BỘ HIỆU ỨNG HỆ THỐNG (ĐÃ LỌC SẠCH TRÙNG LẶP HOÀN TOÀN)
