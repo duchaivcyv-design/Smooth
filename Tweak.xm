@@ -3160,7 +3160,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
             
-            // Ép cố định mức 2 buffer (Double Buffering tối ưu) để chống dồn hiệu ứng 3D và không bị giật khung hình gần
             if (!isTikTok) {
                 self.maximumDrawableCount = 2;
             }
@@ -3170,11 +3169,18 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES; // Kích hoạt chế độ độ trễ thấp phần cứng Metal
+                self.lowLatencyMode = YES;
             }
 
             if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
                 self.framebufferOnly = YES;
+            }
+
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    self.preferredFrameRateRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                }
             }
         }
     } @catch (__unused NSException *e) {}
@@ -3183,7 +3189,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO); // Tắt V-Sync hoàn toàn để phá bỏ giới hạn cứng, đạt tốc độ khung hình thuần túy theo Hz đã chọn
+            %orig(NO); // Tắt V-Sync hoàn toàn để bẻ gãy gông cùm 60Hz ngầm
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -3193,7 +3199,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (NSUInteger)maximumDrawableCount {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return 2; // Giữ đúng 2 buffer giúp chuyển động mượt qua từng khung hình mà không bị nghẽn lệnh vẽ
+            return 2; 
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -3207,6 +3213,24 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
         }
     } @catch (__unused NSException *e) {}
     %orig(count);
+}
+
+- (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+    }
+    return %orig;
+}
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+        range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+    }
+    @try {
+        %orig(range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (id)nextDrawable {
@@ -3270,49 +3294,10 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %end
 
 // ====================================================================================================
-// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & WEBGL HARDWARE OVERDRIVE (GỘP TRỌN GÓI 15 - 240HZ - FULL)
+// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & BẺ TẬN GỐC PROMOTION ẨN (15 - 240HZ - FULL)
 // ====================================================================================================
 
-#import <dlfcn.h>
-
-#ifndef SAFE_FRAME_RATE_RANGE_STRUCT_DEFINED
-#define SAFE_FRAME_RATE_RANGE_STRUCT_DEFINED
-#if __has_include(<QuartzCore/CAFrameRateRange.h>)
-typedef CAFrameRateRange SafeFrameRateRange_t;
-#define SafeFRRTarget SafeFrameRateRange_t
-#else
-typedef struct {
-    float minimum;
-    float maximum;
-    float preferred;
-} SafeFrameRateRange_t;
-#define SafeFRRTarget SafeFrameRateRange_t
-#endif
-#endif
-
-static bool (*orig_CAFrameRateRangeIsValid)(SafeFrameRateRange_t range) = NULL;
-
-static bool hooked_CAFrameRateRangeIsValid(SafeFrameRateRange_t range) {
-    (void)range;
-    return true; // Bẻ gãy hoàn toàn giới hạn dải tần số của Apple, ép nhận mọi mức Hz tùy ý
-}
-
-static inline void Titanium_BypassQuartzCoreRangeAssertion(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            void *sym = dlsym(RTLD_DEFAULT, "CAFrameRateRangeIsValid");
-            if (__builtin_expect(sym != NULL, 1)) {
-                if (g_sharedPayloadPtr != MAP_FAILED) {
-                    @try {
-                        Titanium_KernelForceWriteProtectBypass(sym, (const void *)sym, sizeof(void *));
-                    } @catch (__unused NSException *innerE) {}
-                }
-                MSHookFunction(sym, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
-            }
-        } @catch (NSException *e) {}
-    });
-}
+%group Group_FluidTransitions_Pacing
 
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     @try {
@@ -3354,23 +3339,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
         return (fpsCap > 0) ? fpsCap : hzCap;
     } @catch (__unused NSException *e) {}
     return 240;
-}
-
-static inline float Titanium_RangeFloorForCap(float cap) {
-    return cap;
-}
-
-static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL systemUI) {
-    (void)systemUI;
-    (void)range;
-    @try {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 15) cap = 15;
-        if (cap > 240) cap = 240;
-        float target = (float)cap;
-        return SafeMakeFRR(target, target, target);
-    } @catch (__unused NSException *e) {}
-    return SafeMakeFRR(240.0f, 240.0f, 240.0f);
 }
 
 static volatile BOOL g_isDynamicMorphActive = NO;
@@ -3437,7 +3405,7 @@ static CADisplayLink *s_keeperLink = nil;
         }
         @try {
             if (@available(iOS 15.0, *)) {
-                s_keeperLink.preferredFrameRateRange = SafeMakeFRR(targetHz, targetHz, targetHz);
+                s_keeperLink.preferredFrameRateRange = CAFrameRateRangeMake(targetHz, targetHz, targetHz);
             }
         } @catch (__unused NSException *e) {}
         s_keeperLink.preferredFramesPerSecond = (NSInteger)targetHz;
@@ -3512,12 +3480,6 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
-// ====================================================================================================
-// NHÓM 3: ÉP XUNG VẬT LÝ THỰC TẾ & KHÓA CỨNG HZ/FPS THẬT (15 - 240HZ) - ĐÃ TÍCH HỢP P-CORE BURST
-// ====================================================================================================
-
-%group Group_FluidTransitions_Pacing
-
 %hook CADisplayLink
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
@@ -3527,7 +3489,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (cap < 15) cap = 15;
         if (cap > 240) cap = 240;
         @try {
-            // Đánh thức P-Core ngay lập tức khi DisplayLink được nạp vào RunLoop để chống tụt frame đầu
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
 
@@ -3535,7 +3496,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             if (@available(iOS 15.0, *)) {
                 if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float fCap = (float)cap;
-                    self.preferredFrameRateRange = SafeMakeFRR(fCap, fCap, fCap);
+                    self.preferredFrameRateRange = CAFrameRateRangeMake(fCap, fCap, fCap);
                 }
             }
         } @catch (__unused NSException *e) {}
@@ -3559,22 +3520,22 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     %orig(fps);
 }
 
-- (SafeFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
+- (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         float maxTarget = (float)Titanium_GetEffectiveFrameCap();
         if (maxTarget < 15.0f) maxTarget = 15.0f;
         if (maxTarget > 240.0f) maxTarget = 240.0f;
-        return SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+        return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
     }
     return %orig;
 }
 
-- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         float maxTarget = (float)Titanium_GetEffectiveFrameCap();
         if (maxTarget < 15.0f) maxTarget = 15.0f;
         if (maxTarget > 240.0f) maxTarget = 240.0f;
-        range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+        range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
     }
     @try {
         %orig(range);
@@ -3825,11 +3786,11 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %hook CAAnimation
 
-- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
     }
     @try {
@@ -3837,10 +3798,10 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
     } @catch (__unused NSException *e) {}
 }
 
-- (SafeFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
+- (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-        return SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+        return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
     }
     return %orig;
 }
@@ -3849,11 +3810,11 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %hook CASpringAnimation
 
-- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
     }
     @try {
@@ -3880,7 +3841,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
             if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                 float maxTarget = (float)Titanium_GetEffectiveFrameCap();
                 @try {
-                    anim.preferredFrameRateRange = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
+                    anim.preferredFrameRateRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
                 } @catch (__unused NSException *e) {}
             }
         }
@@ -3971,6 +3932,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 %end
 
 %end
+
 
 // ====================================================================================================
 // TIÊM RUNTIME ÉP MÁY NHẬN DYNAMIC REFRESH RATE (CHỐNG SAFE MODE 100% VÀ KHÔNG ĐEN MÀN HÌNH)
@@ -6394,6 +6356,9 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
         } @catch (__unused NSException *e) {}
     });
 }
+
+// Khai báo nguyên mẫu để nhóm này đặt ở bất kỳ đâu cũng không bị lỗi thiếu hàm
+static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN: TỐI ƯU HÓA PHẦN CỨNG TẦNG SÂU & ÉP NHẬN HZ/FPS CAO TUYỆT ĐỐI
