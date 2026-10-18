@@ -3349,6 +3349,52 @@ static inline SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateR
 // [BỘ NHẬN DIỆN & LÀM MƯỢT DYNAMIC ISLAND TWEAK / NHẠC CHẠY NỀN HÚT LÊN ĐẢO]
 // ====================================================================================================
 
+// ====================================================================================================
+// KHAI BÁO TIỆN ÍCH DYNAMIC ISLAND & RATE KEEPER (ĐẶT LÊN ĐẦU FILE)
+// ====================================================================================================
+
+static volatile BOOL g_isDynamicMorphActive = NO;
+static volatile uint64_t g_lastDynamicMorphTick = 0;
+
+static inline BOOL Titanium_IsInDynamicMorphWindow(void) {
+    @try {
+        if (!g_isDynamicMorphActive) return NO;
+        uint64_t now = mach_absolute_time();
+        uint64_t limit = Titanium_NanosToMachTicks(1200ULL * 1000000ULL); // 1.2 giây
+        if ((now - g_lastDynamicMorphTick) > limit) {
+            g_isDynamicMorphActive = NO;
+            return NO;
+        }
+        return YES;
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
+
+static inline void Titanium_MarkDynamicMorphBurst(void) {
+    @try {
+        g_isDynamicMorphActive = YES;
+        g_lastDynamicMorphTick = mach_absolute_time();
+        g_lastInteractionMachTime = g_lastDynamicMorphTick;
+        if (Titanium_IsSpringBoard()) {
+            [TitaniumRateKeeper kick];
+        }
+    } @catch (__unused NSException *e) {}
+}
+
+static inline BOOL Titanium_IsDynamicIslandOrMusicMorphClass(NSString *className) {
+    @try {
+        if (!className) return NO;
+        return ([className containsString:@"SBLiveActivity"] ||
+                [className containsString:@"Banner"] ||
+                [className containsString:@"Morph"] ||
+                [className containsString:@"SystemAperture"] ||
+                [className containsString:@"UIWindowScene"] ||
+                [className containsString:@"Music"] ||
+                [className containsString:@"Capsule"]);
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
+
 #if TITANIUM_ENABLE_RATE_KEEPER
 
 static CADisplayLink *s_keeperLink = nil;
