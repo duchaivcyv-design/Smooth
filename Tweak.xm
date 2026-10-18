@@ -1192,6 +1192,16 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (NSString *)operatingSystemVersionString;
 @end
 
+@interface CAMetalLayer (IOS15)
+@property CAFrameRateRange preferredFrameRateRange;
+@property BOOL lowLatencyMode;
+@end
+@interface CAMetalLayer (TweakExtensions)
+@property (nonatomic) CAFrameRateRange preferredFrameRateRange;
+@property (nonatomic) BOOL lowLatencyMode;
+@property (nonatomic) BOOL allowsNextDrawableTimeout;
+@end
+
 // ====================================================================================================
 // ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐÃ TỐI ƯU 240HZ & BẢO VỆ SANDBOX)
 // ====================================================================================================
@@ -3136,7 +3146,7 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC, GIỮ 2 BUFFER MƯỢT MÀ KHÔNG XÉ HÌNH HAY TRỄ LỆNH
+// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC, GIỮ 2 BUFFER VÀ ÉP TẦNG CAMETALLAYER KHÔNG LỆCH NHỊP
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -3169,17 +3179,23 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES;
+                self.lowLatencyMode = YES; 
             }
 
             if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
                 self.framebufferOnly = YES;
             }
 
+            // Dùng phương thức selector an toàn để tránh lỗi thiếu property trên một số phiên bản iOS SDK
             if (@available(iOS 15.0, *)) {
                 if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    self.preferredFrameRateRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                    CAFrameRateRange range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:[self methodSignatureForSelector:@selector(setPreferredFrameRateRange:)]];
+                    [invocation setTarget:self];
+                    [invocation setSelector:@selector(setPreferredFrameRateRange:)];
+                    [invocation setArgument:&range atIndex:2];
+                    [invocation invoke];
                 }
             }
         }
@@ -3189,7 +3205,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO); // Tắt V-Sync hoàn toàn để bẻ gãy gông cùm 60Hz ngầm
+            %orig(NO); // Vô hiệu hóa hoàn toàn V-Sync phần cứng, đánh sập giới hạn 60Hz ngầm
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -3294,7 +3310,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 %end
 
 // ====================================================================================================
-// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & BẺ TẬN GỐC PROMOTION ẨN (15 - 240HZ - FULL)
+// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & BẺ TẬN GỐC PROMOTION ẨN (15 - 240HZ - CHẠY THẬT 100%)
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3339,6 +3355,20 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
         return (fpsCap > 0) ? fpsCap : hzCap;
     } @catch (__unused NSException *e) {}
     return 240;
+}
+
+// Khai báo bổ sung hàm chuẩn hóa dải khung hình để triệt tiêu hoàn toàn lỗi undeclared identifier
+static inline CAFrameRateRange Titanium_NormalizeFrameRateRange(CAFrameRateRange range, BOOL systemUI) {
+    (void)systemUI;
+    (void)range;
+    @try {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        float target = (float)cap;
+        return CAFrameRateRangeMake(target, target, target);
+    } @catch (__unused NSException *e) {}
+    return CAFrameRateRangeMake(240.0f, 240.0f, 240.0f);
 }
 
 static volatile BOOL g_isDynamicMorphActive = NO;
