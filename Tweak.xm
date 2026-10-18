@@ -2913,11 +2913,6 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 }
 
 // ====================================================================================================
-// KHAI BÁO NGUYÊN MẪU HÀM HỆ THỐNG (CHỐNG LỖI CHƯA KHAI BÁO)
-// ====================================================================================================
-extern "C" void MTLReportFailure(void *c, unsigned long long val, const char *msg, ...);
-
-// ====================================================================================================
 // NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (BẺ KHÓA CPU/GPU 100% & ZERO-LATENCY) - ĐÃ BỌC THÉP
 // ====================================================================================================
 
@@ -3141,7 +3136,7 @@ extern "C" void MTLReportFailure(void *c, unsigned long long val, const char *ms
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC ẨN SÂU, ÉP KHÓA HZ/FPS TẦNG CAMETALLAYER & CAFRAME-RATE
+// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC, GIỮ 2 BUFFER MƯỢT MÀ KHÔNG XÉ HÌNH HAY TRỄ LỆNH
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -3165,6 +3160,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
             
+            // Ép cố định mức 2 buffer (Double Buffering tối ưu) để chống dồn hiệu ứng 3D và không bị giật khung hình gần
             if (!isTikTok) {
                 self.maximumDrawableCount = 2;
             }
@@ -3174,18 +3170,11 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES;
+                self.lowLatencyMode = YES; // Kích hoạt chế độ độ trễ thấp phần cứng Metal
             }
 
             if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
                 self.framebufferOnly = YES;
-            }
-
-            if (@available(iOS 15.0, *)) {
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    self.preferredFrameRateRange = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
-                }
             }
         }
     } @catch (__unused NSException *e) {}
@@ -3194,7 +3183,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO);
+            %orig(NO); // Tắt V-Sync hoàn toàn để phá bỏ giới hạn cứng, đạt tốc độ khung hình thuần túy theo Hz đã chọn
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -3204,7 +3193,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (NSUInteger)maximumDrawableCount {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return 2; 
+            return 2; // Giữ đúng 2 buffer giúp chuyển động mượt qua từng khung hình mà không bị nghẽn lệnh vẽ
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -3218,18 +3207,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
         }
     } @catch (__unused NSException *e) {}
     %orig(count);
-}
-
-- (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    if (@available(iOS 15.0, *)) {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            range = SafeMakeFRR(maxTarget, maxTarget, maxTarget);
-        }
-    }
-    @try {
-        %orig(range);
-    } @catch (__unused NSException *e) {}
 }
 
 - (id)nextDrawable {
@@ -3289,13 +3266,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 }
 
 %end
-
-// Hook an toàn chặn lỗi abort/crash Metal trên chip cũ (A11)
-%hookf(void, MTLReportFailure, void *c, unsigned long long val, const char *msg, ...) {
-    @try {
-        return;
-    } @catch (__unused NSException *e) {}
-}
 
 %end
 
@@ -3543,7 +3513,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3 (TỐI THƯỢNG - TÍCH HỢP HOÀN CHỈNH HZ/FPS & CÁC HOOK ẨN TẦNG SÂU CHƯA CÔNG BỐ CỦA APPLE):
+// NHÓM 3: ÉP XUNG VẬT LÝ THỰC TẾ & KHÓA CỨNG HZ/FPS THẬT (15 - 240HZ) - ĐÃ TÍCH HỢP P-CORE BURST
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3557,6 +3527,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (cap < 15) cap = 15;
         if (cap > 240) cap = 240;
         @try {
+            // Đánh thức P-Core ngay lập tức khi DisplayLink được nạp vào RunLoop để chống tụt frame đầu
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
 
@@ -3738,58 +3709,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     return %orig;
 }
 
-- (void)setCurrentMode:(CADisplayMode *)mode {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        @try {
-            %orig(mode);
-        } @catch (__unused NSException *e) {}
-        return;
-    }
-    %orig(mode);
-}
-
-- (void)overrideMinimumFrameDuration:(CFTimeInterval)duration {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(0.0);
-        return;
-    }
-    %orig(duration);
-}
-
-%end
-
-// ====================================================================================================
-// CÁC HOOK ẨN SÂU TẦNG THẤP CHƯA CÔNG BỐ (CAWINDOWSERVER & CARENDEROGRES / IOGPU ARBITRATION)
-// ====================================================================================================
-
-%hook CAWindowServerDisplay
-
-- (void)setTargetDisplayRefreshRate:(unsigned int)rate {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
-        @try {
-            %orig((unsigned int)cap);
-        } @catch (__unused NSException *e) {}
-        return;
-    }
-    %orig(rate);
-}
-
-- (unsigned int)targetDisplayRefreshRate {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return (unsigned int)Titanium_GetEffectiveFrameCap();
-    }
-    return %orig;
-}
-
-- (void)setAllowsVirtualModes:(BOOL)modes {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(YES);
-        return;
-    }
-    %orig(modes);
-}
-
 %end
 
 %hook UIScreen
@@ -3825,15 +3744,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         return;
     }
     %orig(rate);
-}
-
-- (void)_setActualFramesPerSecond:(NSInteger)fps {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        NSInteger targetCap = Titanium_GetEffectiveFrameCap();
-        %orig(targetCap);
-        return;
-    }
-    %orig(fps);
 }
 
 %end
@@ -3984,6 +3894,78 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
         }
     }
     %orig(anim, key);
+}
+
+- (void)setBounds:(CGRect)bounds {
+    %orig(bounds);
+}
+
+- (void)setNeedsLayout {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
+        Titanium_EnableZeroLatencyPipeline();
+    }
+}
+
+%end
+
+%hook UIView
+
+- (void)didMoveToWindow {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && Titanium_IsSpringBoard()) {
+        @try {
+            NSString *clsName = NSStringFromClass([self class]);
+            if (Titanium_IsDynamicIslandOrMusicMorphClass(clsName)) {
+                Titanium_MarkDynamicMorphBurst();
+                EnforceMaxCPUPower();
+                #if TITANIUM_ENABLE_RATE_KEEPER
+                [TitaniumRateKeeper kick];
+                #endif
+            }
+        } @catch (__unused NSException *e) {}
+    }
+}
+
+%end
+
+%hook AVPlayer
+
+- (void)setRate:(float)rate {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+        g_isVideoPlayingActive = (rate > 0.0f);
+    }
+    %orig(rate);
+}
+
+%end
+
+%hook UIApplication
+
+- (void)_applicationDidBecomeActive:(id)arg1 {
+    %orig(arg1);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        uint64_t now = mach_absolute_time();
+        g_lastInteractionMachTime = now;
+        g_lastInteractiveTick = now;
+        g_isInteracting = YES;
+        g_activeAnimationCount++;
+        Titanium_MarkDynamicMorphBurst();
+        EnforceMaxCPUPower();
+        Titanium_EnforceThreadVIPPolicy();
+
+        #if TITANIUM_ENABLE_RATE_KEEPER
+        if (Titanium_IsSpringBoard()) {
+            [TitaniumRateKeeper kick];
+        }
+        #endif
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(550 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
+            g_isInteracting = NO;
+            g_lastInteractiveTick = mach_absolute_time();
+        });
+    }
 }
 
 %end
