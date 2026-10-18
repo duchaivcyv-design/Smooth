@@ -6409,40 +6409,76 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         });
     }
 
-    // Animate progress bar over phaseDuration
-    NSTimeInterval tickInterval = phaseDuration / 50.0;
-    __block NSInteger tick = 0;
+    // Animate progress bar without a self-capturing recursive block.
     __weak UIProgressView *wprog = prog;
     __weak UILabel *wperc = percentLbl;
     __weak UIView *woverlay = overlay;
-    __weak typeof(self) weakSelf = self;
-    dispatch_block_t ticker = nil;
-    __block dispatch_block_t tickerRef = nil;
-    tickerRef = ^{
-        tick++;
-        float progress = (float)tick / 50.0f;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            wprog.progress = progress;
-            wperc.text = [NSString stringWithFormat:@"%.0f%%", progress * 100.0f];
-        });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [self scheduleExploitProgressTick:1
+                             tickInterval:(phaseDuration / 50.0)
+                                    phase:phase
+                             totalExecuted:newTotal
+                              progressView:wprog
+                              percentLabel:wperc
+                                   overlay:woverlay];
+    });
+}
+
+- (void)scheduleExploitProgressTick:(NSInteger)tick
+                       tickInterval:(NSTimeInterval)tickInterval
+                              phase:(NSInteger)phase
+                      totalExecuted:(NSInteger)newTotal
+                       progressView:(UIProgressView *)progressView
+                        percentLabel:(UILabel *)percentLabel
+                             overlay:(UIView *)overlay {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        UIProgressView *progress = progressView;
+        UILabel *percent = percentLabel;
+        UIView *currentOverlay = overlay;
+        if (!progress || !percent || !currentOverlay) return;
+
+        float value = MIN((float)tick / 50.0f, 1.0f);
+        progress.progress = value;
+        percent.text = [NSString stringWithFormat:@"%.0f%%", value * 100.0f];
         if (tick < 50) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), tickerRef);
-        } else {
-            // Pha xong — xóa overlay và chuyển pha tiếp
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [UIView animateWithDuration:0.18 animations:^{ woverlay.alpha = 0.0; } completion:^(BOOL f) {
-                    [woverlay removeFromSuperview];
-                    __strong typeof(weakSelf) sS = weakSelf;
-                    if (sS) {
-                        [sS runFullExploitSequenceWithPhase:phase + 1 totalCodeExecuted:newTotal];
-                    }
-                }];
-            });
+            [self scheduleExploitProgressTick:tick + 1 tickInterval:tickInterval phase:phase
+                                totalExecuted:newTotal progressView:progress percentLabel:percent overlay:currentOverlay];
+            return;
         }
-    };
-    (void)ticker;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), tickerRef);
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.18 animations:^{ currentOverlay.alpha = 0.0; }
+                             completion:^(BOOL finished) {
+                [currentOverlay removeFromSuperview];
+                [self runFullExploitSequenceWithPhase:phase + 1 totalCodeExecuted:newTotal];
+            }];
+        });
+    });
+}
+
+- (void)performAppleFlashStep:(NSInteger)count flash:(UIView *)flash icon:(UILabel *)icon {
+    if (!flash || !icon) {
+        [self finalizeExploitActivation];
+        return;
+    }
+    if (count <= 0) {
+        [UIView animateWithDuration:0.3 animations:^{ flash.alpha = 0.0; icon.alpha = 0.0; }
+                         completion:^(BOOL finished) {
+            [flash removeFromSuperview];
+            [self finalizeExploitActivation];
+        }];
+        return;
+    }
+    [UIView animateWithDuration:0.15 animations:^{ flash.alpha = 0.85; icon.alpha = 1.0; }
+                     completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.15 animations:^{ flash.alpha = 0.0; icon.alpha = 0.3; }
+                         completion:^(BOOL finishedAgain) {
+            [self performAppleFlashStep:count - 1 flash:flash icon:icon];
+        }];
+    }];
 }
 
 - (void)runAppleTadaAnimation {
@@ -6465,39 +6501,12 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     appleIcon.alpha = 0.0;
     [flash addSubview:appleIcon];
 
-    // Nhấp nháy 3 lần
+    // Nhấp nháy 3 lần; recursion is handled by a method to avoid block retain cycles.
     __weak UIView *wflash = flash;
     __weak UILabel *wicon = appleIcon;
-    __weak typeof(self) weakSelf = self;
-    void (^doFlash)(NSInteger) = nil;
-    __block void (^doFlashRef)(NSInteger) = nil;
-    doFlashRef = ^(NSInteger count) {
-        if (count <= 0) {
-            [UIView animateWithDuration:0.3 animations:^{
-                wflash.alpha = 0.0;
-                wicon.alpha = 0.0;
-            } completion:^(BOOL f) {
-                [wflash removeFromSuperview];
-                __strong typeof(weakSelf) sS = weakSelf;
-                if (sS) [sS finalizeExploitActivation];
-            }];
-            return;
-        }
-        [UIView animateWithDuration:0.15 animations:^{
-            wflash.alpha = 0.85;
-            wicon.alpha = 1.0;
-        } completion:^(BOOL f) {
-            [UIView animateWithDuration:0.15 animations:^{
-                wflash.alpha = 0.0;
-                wicon.alpha = 0.3;
-            } completion:^(BOOL f2) {
-                doFlashRef(count - 1);
-            }];
-        }];
-    };
-    (void)doFlash;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        doFlashRef(3);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [self performAppleFlashStep:3 flash:wflash icon:wicon];
     });
 }
 
