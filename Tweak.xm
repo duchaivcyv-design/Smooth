@@ -3513,7 +3513,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 // ====================================================================================================
-// NHÓM 3: ÉP XUNG VẬT LÝ THỰC TẾ & KHÓA CỨNG HZ/FPS THẬT (15 - 240HZ) - ĐÃ TÍCH HỢP P-CORE BURST
+// NHÓM 3: ĐỒNG BỘ TUYỆT ĐỐI HZ/FPS TOÀN HỆ THỐNG - KHÓA CỨNG KHÔNG TRANH CHẤP (15 - 240HZ)
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3527,7 +3527,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (cap < 15) cap = 15;
         if (cap > 240) cap = 240;
         @try {
-            // Đánh thức P-Core ngay lập tức khi DisplayLink được nạp vào RunLoop để chống tụt frame đầu
             EnforceMaxCPUPower();
             Titanium_EnforceThreadVIPPolicy();
 
@@ -3600,7 +3599,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setFrameInterval:(NSInteger)interval {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig; // Giữ nguyên bản %orig thuần túy chống lỗi preprocessor của Theos
+        %orig; 
         return;
     }
     %orig(interval);
@@ -3823,6 +3822,7 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
 
 %end
 
+// Ép buộc toàn bộ Animation nhận chính xác mức khung hình cố định
 %hook CAAnimation
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
@@ -3894,78 +3894,6 @@ static const void *kTitaniumCachedInfoDictKey = &kTitaniumCachedInfoDictKey;
         }
     }
     %orig(anim, key);
-}
-
-- (void)setBounds:(CGRect)bounds {
-    %orig(bounds);
-}
-
-- (void)setNeedsLayout {
-    %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-        Titanium_EnableZeroLatencyPipeline();
-    }
-}
-
-%end
-
-%hook UIView
-
-- (void)didMoveToWindow {
-    %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && Titanium_IsSpringBoard()) {
-        @try {
-            NSString *clsName = NSStringFromClass([self class]);
-            if (Titanium_IsDynamicIslandOrMusicMorphClass(clsName)) {
-                Titanium_MarkDynamicMorphBurst();
-                EnforceMaxCPUPower();
-                #if TITANIUM_ENABLE_RATE_KEEPER
-                [TitaniumRateKeeper kick];
-                #endif
-            }
-        } @catch (__unused NSException *e) {}
-    }
-}
-
-%end
-
-%hook AVPlayer
-
-- (void)setRate:(float)rate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-        g_isVideoPlayingActive = (rate > 0.0f);
-    }
-    %orig(rate);
-}
-
-%end
-
-%hook UIApplication
-
-- (void)_applicationDidBecomeActive:(id)arg1 {
-    %orig(arg1);
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        uint64_t now = mach_absolute_time();
-        g_lastInteractionMachTime = now;
-        g_lastInteractiveTick = now;
-        g_isInteracting = YES;
-        g_activeAnimationCount++;
-        Titanium_MarkDynamicMorphBurst();
-        EnforceMaxCPUPower();
-        Titanium_EnforceThreadVIPPolicy();
-
-        #if TITANIUM_ENABLE_RATE_KEEPER
-        if (Titanium_IsSpringBoard()) {
-            [TitaniumRateKeeper kick];
-        }
-        #endif
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(550 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            if (g_activeAnimationCount > 0) g_activeAnimationCount--;
-            g_isInteracting = NO;
-            g_lastInteractiveTick = mach_absolute_time();
-        });
-    }
 }
 
 %end
