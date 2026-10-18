@@ -1177,6 +1177,22 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @end
 
 // ====================================================================================================
+// KHAI BÁO @INTERFACE CHO NHÓM GIẢ LẬP HỆ ĐIỀU HÀNH & THIẾT BỊ ĐỜI MỚI
+// ====================================================================================================
+
+@interface UIDevice (TitaniumSpoofing)
+- (NSString *)systemVersion;
+- (NSString *)model;
+- (NSString *)systemName;
+@end
+
+@interface NSProcessInfo (TitaniumSpoofing)
+- (NSOperatingSystemVersion)operatingSystemVersion;
+- (BOOL)isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion)version;
+- (NSString *)operatingSystemVersionString;
+@end
+
+// ====================================================================================================
 // ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐÃ TỐI ƯU 240HZ & BẢO VỆ SANDBOX)
 // ====================================================================================================
 
@@ -7151,6 +7167,101 @@ static inline void Titanium_PerformAggressiveRAMPurge(void) {
 %end
 
 // ====================================================================================================
+// NHÓM TỐI THƯỢNG: GIẢ LẬP THIẾT BỊ ĐỜI MỚI & HỆ ĐIỀU HÀNH MỚI NHẤT (QUA MẶT MỌI CHECK SERVER / APP)
+// ====================================================================================================
+
+#include <sys/utsname.h>
+
+%group Group_UltimateDevice_And_OS_Spoofing
+
+%hook UIDevice
+
+- (NSString *)systemVersion {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Giả lập phiên bản hệ điều hành mới nhất (ví dụ: iOS 26.0)
+            return @"26.0";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSString *)model {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Giả lập dòng iPhone cao cấp nhất hiện tại
+            return @"iPhone";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSString *)systemName {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return @"iOS";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+%hook NSProcessInfo
+
+- (NSOperatingSystemVersion)operatingSystemVersion {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            NSOperatingSystemVersion spoofedVersion;
+            spoofedVersion.majorVersion = 26; // Ép nhận phiên bản lớn 26
+            spoofedVersion.minorVersion = 0;
+            spoofedVersion.patchVersion = 0;
+            return spoofedVersion;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (BOOL)isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion)version {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Trả về YES tuyệt đối cho mọi điều kiện check phiên bản từ app hoặc server
+            return YES;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSString *)operatingSystemVersionString {
+    @try {
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return @"Version 26.0 (Build 23A344)";
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+// Móc hàm hệ thống uname để đánh lừa các app kiểm tra tên mã phần cứng kernel trực tiếp
+%hookf(int, uname, struct utsname *info) {
+    int result = %orig(info);
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && result == 0 && info != NULL) {
+            // Giả lập chuỗi máy thành dòng iPhone cao cấp đời mới nhất
+            strlcpy(info->machine, "iPhone17,2", sizeof(info->machine));
+            strlcpy(info->sysname, "Darwin", sizeof(info->sysname));
+            strlcpy(info->release, "24.0.0", sizeof(info->release));
+        }
+    } @catch (__unused NSException *e) {}
+    return result;
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // TẦNG SÂU TỐI THƯỢNG: ÉP IOKIT & HARDWARE DISPLAY DRIVER (QUANTUM BYPASS ENGINE)
 // ====================================================================================================
 
@@ -7438,7 +7549,7 @@ static inline void Init_CAWindowServer_Hooks(void) {
 }
 
 // ====================================================================================================
-// HÀM KHỞI TẠO DUY NHẤT: BẺ GÃY WATCHDOG, TÍCH HỢP ĐẦY ĐỦ NHÓM CHỐNG NÓNG CỰC ĐOAN (GIỮ MÁT 30-32°C, 240HZ)
+// HÀM KHỞI TẠO DUY NHẤT: BẺ GÃY WATCHDOG, TÍCH HỢP ĐẦY ĐỦ NHÓM CHỐNG NÓNG & GIẢ LẬP OS ĐỜI CAO
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
@@ -7511,9 +7622,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_CoreAnimation_RenderServer_Governor);
                 %init(Group_System_Memory_And_RunLoop_Governor);
                 
-                // KÍCH HOẠT ĐỒNG BỘ NHÓM CHỐNG NÓNG CỰC ĐOAN & CHỐNG BÓP LINH TRÌNH PIN YẾU (1% ĐẾN 100% MƯỢT NHƯ NHAU)
+                // KÍCH HOẠT NHÓM CHỐNG NÓNG CỰC ĐOAN & GIẢ LẬP HỆ ĐIỀU HÀNH / THIẾT BỊ ĐỜI MỚI NHẤT
                 %init(Group_Thermal_CryoPacing_ZeroDrop);
                 %init(Group_CryoQuantum_Thermal_Bypass);
+                %init(Group_UltimateDevice_And_OS_Spoofing);
 
                 %init(Group_Deep_RAM_Compaction_Engine);
                 %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
@@ -7679,9 +7791,7 @@ static void SpringBoardBootstrapTrigger(void) {
             return;
         }
 
-        // Cho phép backboardd đi qua an toàn để đồng bộ hóa cảm ứng và hiển thị, không bị chặn đứng thô bạo
         if (strcasestr(progName, "backboardd") != NULL) {
-            // Chỉ bỏ qua xử lý logic app nặng, để nguyên vòng đời hệ thống giao tiếp
         }
 
         NSBundle *mainBundle = [NSBundle mainBundle];
