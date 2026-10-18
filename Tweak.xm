@@ -6956,6 +6956,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_SpringBoard_ProcessManagerV285);
                     %init(Group_KeepAppsAlive_NoKill);
 
+                    // ĐÃ BỔ SUNG XỬ LÝ DỨT ĐIỂM LỖI NON-INITIALIZED CHO NHÓM NÀY
+                    %init(Group_CAWindowServer_Absolute_Dominance);
+
                     Init_CAWindowServer_Hooks();
 
 #if TITANIUM_ENABLE_RATE_KEEPER
@@ -6994,6 +6997,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                     %init(Group_UIKit_ThirdParty_IsolatedV285);
                     %init(Group_Force_Render_Recovery_Overdrive);
                     %init(Group_Window_Level_Overdrive);
+                    %init(Group_CAWindowServer_Absolute_Dominance); // Đồng bộ luôn cho cả app ngoài nếu cần thiết
                     Init_CAWindowServer_Hooks();
 
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
