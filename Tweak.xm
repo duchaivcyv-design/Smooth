@@ -3105,7 +3105,7 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS - PHÁ KHÓA V-SYNC, MỞ TRẦN 240FPS & TRIPLE BUFFERING GPU (NÂNG CẤP CAO CẤP)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS - TẮT V-SYNC, GIỮ 2 BUFFER MƯỢT MÀ KHÔNG XÉ HÌNH HAY TRỄ LỆNH
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -3128,8 +3128,10 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
+            
+            // Ép cố định mức 2 buffer (Double Buffering tối ưu) để chống dồn hiệu ứng 3D và không bị giật khung hình gần
             if (!isTikTok) {
-                self.maximumDrawableCount = 3;
+                self.maximumDrawableCount = 2;
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
@@ -3137,7 +3139,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
             }
 
             if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES;
+                self.lowLatencyMode = YES; // Kích hoạt chế độ độ trễ thấp phần cứng Metal
             }
 
             if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
@@ -3150,7 +3152,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(NO); // Vô hiệu hóa V-Sync thuần túy để giải phóng trần khung hình tối đa
+            %orig(NO); // Tắt V-Sync hoàn toàn để phá bỏ giới hạn cứng, đạt tốc độ khung hình thuần túy theo Hz đã chọn
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -3160,7 +3162,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (NSUInteger)maximumDrawableCount {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            return 3;
+            return 2; // Giữ đúng 2 buffer giúp chuyển động mượt qua từng khung hình mà không bị nghẽn lệnh vẽ
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -3169,7 +3171,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            %orig(3);
+            %orig(2);
             return;
         }
     } @catch (__unused NSException *e) {}
@@ -5380,7 +5382,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     @try {
                         UIWindow *strongSelf = weakSelf;
-                        if (strongSelf && !strongSelf.hidden && strongSelf.layer) {
+                        // Kiểm tra kỹ thêm rootViewController vàảm bảo vùng nhớ không bị trỏ về 0x0
+                        if (strongSelf && !strongSelf.hidden && strongSelf.layer && strongSelf.rootViewController) {
                             [strongSelf setNeedsLayout];
                             [strongSelf.layer setNeedsDisplay];
                         }
@@ -5732,7 +5735,7 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 }
 
 // ====================================================================================================
-// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (ĐÃ VÁ LỖI CHỐNG SẬP BACKBOARDD)
+// NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (ĐÃ VÁ LỖI TRIỆT ĐỂ CHỐNG CRASH TIKTOK / METAL)
 // ====================================================================================================
 
 %group Group_Silicon_Hardware_Pipeline_Overdrive
@@ -5741,7 +5744,6 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)setStatOptions:(NSUInteger)options {
     @try {
-        // Chặn tuyệt đối không cho can thiệp vào tiến trình hệ thống backboardd tránh gây SIGBUS
         if (Titanium_IsSpringBoard()) {
             %orig(options);
             return;
@@ -5764,17 +5766,14 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
-// AN TOÀN TUYỆT ĐỐI: Xóa bỏ hoàn toàn các hook đệ quy nguy hiểm trên _MTLCommandBuffer đối với backboardd
+// Vá lỗi triệt để: Không can thiệp thô bạo vào enqueue/commit của commandBuffer để tránh gây MTLReleaseAssertionFailure trên TikTok
 %hook _MTLCommandBuffer
 
 - (void)enqueue {
     @try {
-        if (Titanium_IsSpringBoard()) {
+        if (Titanium_IsSpringBoard() || g_isCurrentAppBlacklisted) {
             %orig;
             return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            EnforceMaxCPUPower();
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -5782,12 +5781,9 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 - (void)commit {
     @try {
-        if (Titanium_IsSpringBoard()) {
+        if (Titanium_IsSpringBoard() || g_isCurrentAppBlacklisted) {
             %orig;
             return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_EnableZeroLatencyPipeline();
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -5821,19 +5817,10 @@ static inline void Titanium_A20PrewarmAssetsAndGPU(void) {
 
 %end
 
+// Giữ nguyên bản phần trình bày drawable để tránh làm sập luồng VOutle2-V2 của TikTok
 %hook CAMetalDrawable
 
 - (void)presentAfterMinimumDuration:(CFTimeInterval)duration {
-    @try {
-        if (Titanium_IsSpringBoard()) {
-            %orig(duration);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            %orig(0.0);
-            return;
-        }
-    } @catch (__unused NSException *e) {}
     %orig(duration);
 }
 
@@ -6431,7 +6418,7 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 }
 
 // ====================================================================================================
-// NHÓM ĐẶC QUYỀN: TỐI ƯU HÓA PHẦN CỨNG TẦNG SÂU & CHỐNG DROP FRAME TUYỆT ĐỐI
+// NHÓM ĐẶC QUYỀN: TỐI ƯU HÓA PHẦN CỨNG TẦNG SÂU & ÉP NHẬN HZ/FPS CAO TUYỆT ĐỐI
 // ====================================================================================================
 
 %group Group_Hardware_ProMotion_Overclock
@@ -6479,6 +6466,77 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
             return 6;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+// BỔ SUNG: Ép trực tiếp UIScreen trả về mức khung hình tối đa để game tự động mở khóa tùy chọn FPS Cực Cao / Rất Cao
+%hook UIScreen
+
+- (NSInteger)maximumFramesPerSecond {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            return (cap >= 15 && cap <= 240) ? cap : 240;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (NSInteger)_maximumFramesPerSecond {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            return (cap >= 15 && cap <= 240) ? cap : 240;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (CGFloat)_refreshRate {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            return (cap >= 15 && cap <= 240) ? (CGFloat)cap : 240.0f;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+// BỔ SUNG: Ép CADisplay nhận dải tần số quét thực tế, không cho phép game tự hạ về 60Hz ngầm
+%hook CADisplay
+
+- (NSInteger)preferredFPS {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            return (cap >= 15 && cap <= 240) ? cap : 240;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (void)setPreferredFPS:(NSInteger)fps {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            %orig((cap >= 15 && cap <= 240) ? cap : 240);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(fps);
+}
+
+- (double)refreshRate {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            return (cap >= 15 && cap <= 240) ? (double)cap : 240.0;
         }
     } @catch (__unused NSException *e) {}
     return %orig;
