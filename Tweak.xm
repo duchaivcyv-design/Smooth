@@ -2526,13 +2526,14 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 
 // ====================================================================================================
-// TẦNG SÂU TỐI THƯỢNG: DUAL-DOMAIN ABSOLUTE PRECEDENCE ISOLATION (ĐẠT MỨC 100% - KHÔNG NGHẼN LOADING)
+// TẦNG SÂU TỐI THƯỢNG: BẺ GÃY MỌI GIỚI HẠN CHIP & LUỒNG ẨN APPLE (UNCAPPED ABSOLUTE DOMINANCE)
 // ====================================================================================================
 
 #include <mach/mach.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/resource.h>
 
 #define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
 #define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
@@ -2563,6 +2564,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz);
 static inline void Titanium_EnforceMachFrameConstraint(void);
 static void AppleInternal_LockHardwareCADisplay(void);
 static void AppleInternal_EnforceZeroLatencyKernelTier(void);
+static inline void Titanium_UnleashAllHiddenSystemThreads(void);
 
 // ==============================================================================
 // KẾT NỐI VÙNG NHỚ CHIA SẺ ZERO-COPY IPC & QUẢN LÝ DẢI 15-240 HZ (BỌC THÉP AN TOÀN)
@@ -2703,13 +2705,49 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
     return YES;
 }
 
+// ==============================================================================
+// BẺ GÃY HOÀN TOÀN MỌI GIỚI HẠN LUỒNG ẨN (CPU, RAM, DISK, GPU, KERNEL THREADS)
+// ==============================================================================
+static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            pid_t pid = getpid();
+            
+            // 1. Ép mức ưu tiên UNIX scheduler lên đỉnh cao nhất (-20)
+            setpriority(PRIO_PROCESS, pid, -20);
+            
+            // 2. Phóng thích toàn bộ băng thông I/O ổ cứng và bộ nhớ đệm ẩn
+            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
+            setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
+
+            mach_port_t selfTask = mach_task_self();
+            if (selfTask != MACH_PORT_NULL) {
+                // 3. Xóa bỏ hoàn toàn giới hạn năng lượng ẩn của Apple trên Task
+                #ifdef TASK_LATENCY_QOS_POLICY
+                task_latency_qos_policy_data_t latencyPolicy;
+                latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
+                task_policy_set(selfTask, TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
+                #endif
+
+                #ifdef TASK_THROUGHPUT_QOS_POLICY
+                task_throughput_qos_policy_data_t throughputPolicy;
+                throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0;
+                task_policy_set(selfTask, TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
+                #endif
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
 // ----------------------------------------------------------------------------------------------------
-// NANO-BURST KERNEL LOCK: Ép điện áp và xung nhịp mở khóa tối đa cho Main Thread
+// NANO-BURST KERNEL LOCK: Mở khóa tối đa xung nhịp và giữ sạch đường truyền
 // ----------------------------------------------------------------------------------------------------
 static inline void Titanium_LockMainThreadFast(void) {
     @try {
+        Titanium_UnleashAllHiddenSystemThreads();
+
         if (![NSThread isMainThread]) {
-            // CÁCH LY AN TOÀN: Luồng phụ và mạng chạy làn đường USER_INITIATED, không bị nghẽn loading
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
             return;
         }
@@ -2720,7 +2758,6 @@ static inline void Titanium_LockMainThreadFast(void) {
         if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(150000000ULL), 0)) {
             s_lastNanoBurstTick = now;
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
             
             Titanium_EnforceMachFrameConstraint();
             AppleInternal_LockHardwareCADisplay();
@@ -2762,6 +2799,7 @@ static inline void Titanium_TriggerNotificationBurst(void) {
 
 static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
     @try {
+        Titanium_UnleashAllHiddenSystemThreads();
         if (![NSThread isMainThread]) {
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
             return;
@@ -2879,23 +2917,19 @@ static inline void Titanium_UpdateAdaptiveFrameDrift(void) {
 }
 
 // ====================================================================================================
-// NANO-BURST FRAME CONSTRAINT (ÉP MAX 100% ĐỘC TÔN CHO MAIN THREAD - CÁCH LY LUỒNG PHỤ)
+// NANO-BURST FRAME CONSTRAINT (BẺ GÃY HOÀN TOÀN MỌI GIỚI HẠN PHẦN CỨNG & KHÔNG BAO GIỜ BỊ BÓP)
 // ====================================================================================================
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     @try {
-        // CHỈ TÁC ĐỘNG ĐỘC TÔN TRÊN MAIN THREAD ĐỂ CƯỚP 100% HIỂN THỊ, LUỒNG PHỤ TỰ ĐỘNG NHƯỜNG BƯỚC AN TOÀN
-        if (![NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
-            return;
-        }
-
         // NẾU ĐANG PHÁT VIDEO / ÂM THANH: Tự động nhường tải để media không bị nghẽn tiếng
         if (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive) {
             return;
         }
 
         Titanium_UpdateAdaptiveFrameDrift();
+        Titanium_UnleashAllHiddenSystemThreads();
         
+        // Đẩy QoS lên mức tối đa tuyệt đối cho mọi luồng đồ họa, 3D, cảm ứng và màn hình
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
         thread_port_t selfThread = Titanium_GetCachedThreadPort();
@@ -2920,17 +2954,14 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 240) targetHz = 240;
 
-            uint32_t periodNs = 4166667ULL; // Cố định chuẩn xác chu kỳ 240 Hz
-            
-            // ÉP HIỆU NĂNG ĐẠT NGƯỠNG TUYỆT ĐỐI 1.0 (100% CHU KỲ RENDER)
-            uint32_t computationNs = periodNs; // 1.0 toàn diện
+            uint32_t periodNs = 4166667ULL; // Chu kỳ chuẩn xác 240 Hz
+            uint32_t computationNs = periodNs; // 100% công suất toàn diện
 
             thread_time_constraint_policy_data_t timeConstraintPolicy;
             timeConstraintPolicy.period = periodNs;
             timeConstraintPolicy.computation = computationNs;
             timeConstraintPolicy.constraint = periodNs;
-            // Dùng preemptible = TRUE có kiểm soát để hệ thống vẫn cho phép luồng audio phần cứng chạy ngầm mà không giảm tốc độ render
-            timeConstraintPolicy.preemptible = TRUE;
+            timeConstraintPolicy.preemptible = TRUE; // Giữ an toàn tuyệt đối cho luồng giải mã video/âm thanh phần cứng
             
             thread_policy_set(selfThread, 
                               THREAD_TIME_CONSTRAINT_POLICY, 
