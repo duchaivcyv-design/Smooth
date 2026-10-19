@@ -3246,7 +3246,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
         %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
-                // Ép hạ bộ đệm drawable xuống 1 để đạt tốc độ phản hồi tức thì, không có độ trễ khung hình
                 self.maximumDrawableCount = 1;
             }
 
@@ -3301,7 +3300,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            count = 1; // Ép buộc giới hạn buffer là 1 để tối đa hóa tốc độ render không độ trễ
+            count = 1; 
         }
     });
     return count;
@@ -3315,7 +3314,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockCount = 1; // Ép buộc giới hạn buffer là 1
+            __blockCount = 1; 
         }
     });
     %orig(__blockCount);
