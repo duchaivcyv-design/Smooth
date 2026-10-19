@@ -3248,7 +3248,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
-                self.maximumDrawableCount = 1;
+                self.maximumDrawableCount = 2;
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
