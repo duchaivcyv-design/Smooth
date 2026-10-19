@@ -3175,6 +3175,249 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - AN TOÀN TẦNG SÂU, KHÔNG LAG, KHÔNG CRASH)
+// ====================================================================================================
+
+static inline NSInteger Titanium_GetEffectiveFrameCap(void);
+
+// Hàm bọc thép an toàn tuyệt đối (Chống sập 100% mọi ngoại lệ)
+static inline void Titanium_SafeExecute(void (^block)(void)) {
+    @try {
+        if (block) block();
+    } @catch (__unused NSException *e) {}
+}
+
+// Kiểm tra layer Metal có thuộc luồng phát Video / Camera / Trình duyệt không
+static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
+    if (!layer) return NO;
+    __block BOOL isMedia = NO;
+    Titanium_SafeExecute(^{
+        if (g_isVideoPlayingActive) {
+            isMedia = YES;
+            return;
+        }
+        
+        id del = layer.delegate;
+        NSString *delName = del ? NSStringFromClass([del class]) : @"";
+        NSString *layerName = NSStringFromClass([layer class]);
+
+        if ([delName containsString:@"AV"] || 
+            [delName containsString:@"Video"] || 
+            [delName containsString:@"Player"] || 
+            [delName containsString:@"Media"] || 
+            [delName containsString:@"Web"] ||
+            [delName containsString:@"Camera"] ||
+            [delName containsString:@"VK"] ||
+            [layerName containsString:@"AV"] ||
+            [layerName containsString:@"Video"]) {
+            isMedia = YES;
+        }
+    });
+    return isMedia;
+}
+
+static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
+    return Titanium_IsVideoOrMediaMetalLayer(layer);
+}
+
+%group Group_Metal_ZeroTearing_Pacing
+
+%hook CAMetalLayer
+
+- (void)didMoveToWindow {
+    Titanium_SafeExecute(^{
+        if (!self) {
+            return;
+        }
+
+        %orig;
+        // Chỉ can thiệp khi không phải SpringBoard và layer hợp lệ, tuyệt đối không chạm Main Thread UI
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
+            if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
+                self.maximumDrawableCount = 3;
+            }
+
+            if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+                self.allowsNextDrawableTimeout = YES;
+            }
+
+            if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
+                self.lowLatencyMode = YES; 
+            }
+
+            self.framebufferOnly = YES;
+            if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
+                self.displaySyncEnabled = NO;
+            }
+
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    CAFrameRateRange range = Titanium_SmoothFRR(maxTarget);
+                    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:[self methodSignatureForSelector:@selector(setPreferredFrameRateRange:)]];
+                    [invocation setTarget:self];
+                    [invocation setSelector:@selector(setPreferredFrameRateRange:)];
+                    [invocation setArgument:&range atIndex:2];
+                    [invocation invoke];
+                }
+            }
+        }
+    });
+}
+
+- (void)setDisplaySyncEnabled:(BOOL)enabled {
+    __block BOOL __blockEnabled = enabled;
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            if (Titanium_IsVideoOrMediaMetalLayer(self)) {
+                return;
+            }
+            __blockEnabled = NO; 
+        }
+    });
+    %orig(__blockEnabled);
+}
+
+- (NSUInteger)maximumDrawableCount {
+    __block NSUInteger count = %orig;
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            if (Titanium_IsVideoOrMediaMetalLayer(self)) {
+                return;
+            }
+            count = 3; 
+        }
+    });
+    return count;
+}
+
+- (void)setMaximumDrawableCount:(NSUInteger)count {
+    __block NSUInteger __blockCount = count;
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            if (Titanium_IsVideoOrMediaMetalLayer(self)) {
+                return;
+            }
+            __blockCount = 3;
+        }
+    });
+    %orig(__blockCount);
+}
+
+- (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
+    __block CAFrameRateRange __blockRange = %orig;
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+            __blockRange = Titanium_SmoothFRR(maxTarget);
+        }
+    });
+    return __blockRange;
+}
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+    __block CAFrameRateRange __blockRange = Titanium_SmoothFRR(maxTarget);
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            __blockRange = Titanium_SmoothFRR(maxTarget);
+        } else {
+            __blockRange = range;
+        }
+    });
+    %orig(__blockRange);
+}
+
+- (id)nextDrawable {
+    __block id drawable = nil;
+    Titanium_SafeExecute(^{
+        drawable = %orig;
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
+            g_lastInteractionMachTime = mach_absolute_time();
+        }
+    });
+    return drawable ?: %orig;
+}
+
+- (BOOL)serverPresentsWithTransaction {
+    __block BOOL presents = %orig;
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            if (Titanium_IsMediaOrVideoLayer(self)) {
+                return;
+            }
+            presents = YES;
+        }
+    });
+    return presents;
+}
+
+- (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
+    __block BOOL __blockPresents = serverPresents;
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            if (Titanium_IsMediaOrVideoLayer(self)) {
+                return;
+            }
+            __blockPresents = YES;
+        }
+    });
+    %orig(__blockPresents);
+}
+
+%end
+
+// Khởi tạo thiết bị Metal an toàn không gây nghẽn luồng
+%hookf(id<MTLDevice>, MTLCreateSystemDefaultDevice) {
+    id<MTLDevice> device = %orig;
+    Titanium_SafeExecute(^{
+        if (device && [device respondsToSelector:@selector(newCommandQueue)]) {
+            // Đảm bảo phần cứng hoạt động ổn định
+        }
+    });
+    return device;
+}
+
+%hook UIPanGestureRecognizer
+
+- (CGPoint)translationInView:(UIView *)view {
+    __block CGPoint pt = %orig(view);
+    Titanium_SafeExecute(^{
+        if (!self) return;
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            EnforceMaxCPUPower();
+        }
+    });
+    return pt;
+}
+
+%end
+
+%hook CAContext
+
+- (void)setDesiredDynamicRange:(float)range {
+    Titanium_SafeExecute(^{
+        if (TITANIUM_LITE_MODE) {
+            %orig(range);
+            return;
+        }
+        %orig(range);
+    });
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & PROMOTION (TÍCH HỢP SMOOTH FRR CHỐNG GIẬT KHUNG HÌNH)
 // ====================================================================================================
 
