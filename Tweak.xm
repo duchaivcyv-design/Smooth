@@ -3248,7 +3248,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
-                self.maximumDrawableCount = 2;
+                self.maximumDrawableCount = 1;
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
@@ -7368,11 +7368,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
-                // ĐÃ XÓA HOÀN TOÀN DÒNG Group_Force_Render_Recovery_Overdrive GÂY LỖI BIÊN DỊCH Ở ĐÂY
                 %init(Group_Window_Level_Overdrive);
-                Init_CAWindowServer_Hooks();
+                // ĐÃ SỬA: Loại bỏ Init_CAWindowServer_Hooks() khỏi nhánh app bên thứ ba để tránh lỗi thiếu ký hiệu dyld gây SIGABRT
 
-                // ĐÃ SỬA: Thay 200 giây (NSEC_PER_SEC) thành 150 mili-giây (NSEC_PER_MSEC) để chặn đứng Watchdog và tăng tốc app
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     Titanium_ForceInjectDynamicRefreshSupport();
                     AppleInternal_LockHardwareCADisplay();
