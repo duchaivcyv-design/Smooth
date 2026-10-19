@@ -1446,10 +1446,10 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_ENABLE_WATCHDOG_IMMUNITY 0
 
 #undef TITANIUM_ENABLE_METAL_ENV_TWEAKS
-#define TITANIUM_ENABLE_METAL_ENV_TWEAKS 1
+#define TITANIUM_ENABLE_METAL_ENV_TWEAKS 0 // [ĐÃ SỬA - MƯỢT/ỔN ĐỊNH]: biến MTL_* đặt giữa chừng có thể làm app Metal đen/vỡ hình
 
 #undef TITANIUM_LITE_MODE
-#define TITANIUM_LITE_MODE 0
+#define TITANIUM_LITE_MODE 1 // [ĐÃ SỬA - GIẢM NÓNG/GIẬT]: bật lại chế độ nhẹ cho các hook không thuộc nhóm 3 (xem các "if (TITANIUM_LITE_MODE)" trong file)
 
 #undef TITANIUM_SAFE_STABILITY_PROFILE
 #define TITANIUM_SAFE_STABILITY_PROFILE 0
@@ -1467,7 +1467,7 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_ENABLE_TASK_QOS_TIER 1
 
 #undef TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS
-#define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 1
+#define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 0 // [ĐÃ SỬA - ỔN ĐỊNH]: tắt hook RAM WebKit trong app thứ ba, chỉ chạy trong SpringBoard
 
 // BỔ SUNG CỜ BẬT CHO CÁC NHÓM SÂU ĐỂ KHÔNG BAO GIỜ BỊ BỎ SÓT KHI BIÊN DỊCH
 #undef TITANIUM_ENABLE_DEVICE_AND_OS_SPOOFING
@@ -2775,19 +2775,13 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         @try {
-            pid_t pid = getpid();
-            setpriority(PRIO_PROCESS, pid, -20); // Ép max ưu tiên tiến trình
+            // [ĐÃ SỬA - GIẢM NÓNG]: KHÔNG đụng Hz/FPS/nhóm 3 (ProMotion) - chỉ bỏ 2 lệnh ép CẢ TIẾN TRÌNH chạy mức ưu tiên hệ thống
+            // vĩnh viễn: setpriority(-20) khiến tiến trình này giành CPU của mọi tiến trình khác (kể cả WindowServer/backboardd),
+            // và TASK_LATENCY_QOS_POLICY tier 0 khóa cả task ở mức "không bao giờ ngủ/coalesce timer" - hai thứ này là nguồn
+            // nóng máy + giật hệ thống lớn nhất vì chúng chạy VĨNH VIỄN cho toàn tiến trình, không chỉ lúc đang chạm/cuộn.
+            // Vẫn giữ I/O policy (nhẹ, không tốn CPU/nhiệt) và hook sysctlbyname (không liên quan hiệu năng/nhiệt).
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
             setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
-
-            mach_port_t selfTask = mach_task_self();
-            if (selfTask != MACH_PORT_NULL) {
-                #ifdef TASK_LATENCY_QOS_POLICY
-                task_latency_qos_policy_data_t latencyPolicy;
-                latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
-                task_policy_set(selfTask, TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
-                #endif
-            }
 
             void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
             if (sysSym) {
@@ -2893,16 +2887,10 @@ static inline NSInteger Titanium_CalculateAdaptiveProMaxTier(void) {
 }
 
 static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            #ifdef TASK_LATENCY_QOS_POLICY
-            task_latency_qos_policy_data_t latencyPolicy;
-            latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
-            task_policy_set(mach_task_self(), TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
-            #endif
-        } @catch (__unused NSException *e) {}
-    });
+    // [ĐÃ SỬA - GIẢM NÓNG]: bỏ task_policy_set(TASK_LATENCY_QOS_POLICY tier 0) - khóa cả task ở mức năng lượng cao nhất
+    // vĩnh viễn (tắt coalescing timer của toàn tiến trình) là nguồn nóng máy, không liên quan Hz/FPS/nhóm 3.
+    // Hàm giữ lại (không xóa lời gọi ở nơi khác) nhưng nay không làm gì, tránh phải sửa nhiều chỗ gọi nó.
+    (void)0;
 }
 
 static void AppleInternal_LockHardwareCADisplay(void) {
@@ -3582,6 +3570,17 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
     return 240;
 }
 
+// [ĐÃ SỬA - SIÊU MƯỢT TỪNG KHUNG HÌNH]: dải tần "đóng đinh" (min=max=preferred) không cho CoreAnimation compositor
+// bất kỳ khoảng đệm nào để bù trừ jitter dựng hình (frame pacing) -> mỗi khung trễ dù 1 tick cũng lộ ra thành giật.
+// Khi trần >= 60Hz, hạ sàn xuống 60 (hoặc thấp hơn 1 chút nếu trần cao) để hệ thống có khoảng đệm mượt hoá;
+// khi người dùng chủ động chọn mức thấp hơn 60 (tiết kiệm pin), vẫn giữ đóng đinh đúng mức đã chọn.
+static inline CAFrameRateRange Titanium_SmoothFRR(float cap) {
+    if (cap < 15.0f) cap = 15.0f;
+    if (cap > 240.0f) cap = 240.0f;
+    float floorHz = (cap > 60.0f) ? 60.0f : cap;
+    return CAFrameRateRangeMake(floorHz, cap, cap);
+}
+
 static volatile BOOL g_isDynamicMorphActive = NO;
 static volatile uint64_t g_lastDynamicMorphTick = 0;
 
@@ -3646,7 +3645,7 @@ static CADisplayLink *s_keeperLink = nil;
         }
         @try {
             if (@available(iOS 15.0, *)) {
-                s_keeperLink.preferredFrameRateRange = CAFrameRateRangeMake(targetHz, targetHz, targetHz);
+                s_keeperLink.preferredFrameRateRange = Titanium_SmoothFRR(targetHz); // [ĐÃ SỬA - MƯỢT HƠN]
             }
         } @catch (__unused NSException *e) {}
         s_keeperLink.preferredFramesPerSecond = (NSInteger)targetHz;
@@ -3744,8 +3743,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                 self.preferredFramesPerSecond = cap;
                 if (@available(iOS 15.0, *)) {
                     if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        float fCap = (float)cap;
-                        self.preferredFrameRateRange = CAFrameRateRangeMake(fCap, fCap, fCap);
+                        self.preferredFrameRateRange = Titanium_SmoothFRR((float)cap); // [ĐÃ SỬA - MƯỢT HƠN]
                     }
                 }
             } @catch (__unused NSException *e) {}
@@ -3794,10 +3792,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             if (g_isVideoPlayingActive) return %orig;
 
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            if (maxTarget < 15.0f) maxTarget = 15.0f;
-            if (maxTarget > 240.0f) maxTarget = 240.0f;
-            return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            return Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap()); // [ĐÃ SỬA - MƯỢT HƠN]
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -3810,10 +3805,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            if (maxTarget < 15.0f) maxTarget = 15.0f;
-            if (maxTarget > 240.0f) maxTarget = 240.0f;
-            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            range = Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap()); // [ĐÃ SỬA - MƯỢT HƠN]
         }
         %orig(range);
     } @catch (__unused NSException *e) {}
@@ -4067,8 +4059,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         }
         if (@available(iOS 15.0, *)) {
             if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
-                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                range = Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap()); // [ĐÃ SỬA - MƯỢT HƠN]
             }
         }
         %orig(range);
@@ -4102,7 +4093,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
                     @try {
                         if (!g_isVideoPlayingActive) {
-                            anim.preferredFrameRateRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                            anim.preferredFrameRateRange = Titanium_SmoothFRR(maxTarget); // [ĐÃ SỬA - MƯỢT HƠN]
                         }
                     } @catch (__unused NSException *e) {}
                 }
