@@ -7880,43 +7880,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 %init(Group_Window_Level_Overdrive);
                 Init_CAWindowServer_Hooks();
 
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                    Titanium_ForceInjectDynamicRefreshSupport();
-                    AppleInternal_LockHardwareCADisplay();
-                    AppleInternal_EnforceZeroLatencyKernelTier();
-                    Titanium_ApplySiliconDeepOptimizations();
-                    Titanium_RegisterAppResumeRefreshV12();
-                    Titanium_ReapplyFrameRateToAllScenes();
-                });
-            }
-
-            g_SystemMasterReady = YES;
-        } @catch (__unused NSException *e) {}
-    }
-}
-
-                Titanium_StartThermalAndChargingWatchdog();
-
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    AppleInternal_EnforceZeroLatencyKernelTier();
-                    Titanium_ApplySiliconDeepOptimizations();
-                    AppleInternal_LockHardwareCADisplay();
-                    Titanium_ForceInjectDynamicRefreshSupport();
-                    Titanium_TuneWindowServerDisplayDirectly();
-                });
-
-                Titanium_StartIPCHearthbeatV12();
-
-                NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-                [[NSFileManager defaultManager] createFileAtPath:TITANIUM_BOOT_FLAG_VERIFIED
-                                                        contents:verifiedData
-                                                      attributes:@{NSFilePosixPermissions: @(0644)}];
-            } else {
-                %init(Group_UIKit_ThirdParty_IsolatedV285);
-                %init(Group_Force_Render_Recovery_Overdrive);
-                %init(Group_Window_Level_Overdrive);
-                Init_CAWindowServer_Hooks();
-
                 // ĐÃ SỬA: Thay 200 giây (NSEC_PER_SEC) thành 150 mili-giây (NSEC_PER_MSEC) để chặn đứng Watchdog và tăng tốc app
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     Titanium_ForceInjectDynamicRefreshSupport();
