@@ -3512,12 +3512,12 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 %end
 
-// BỔ SUNG CHIẾM QUYỀN ĐIỀU PHỐI LỆNH VẼ TẦNG KHO CỦA METAL (MTLCommandQueue)
-%hookf(id<MTLCommandQueue>, MTLCreateSystemDefaultDevice) {
+// BỔ SUNG CHIẾM QUYỀN ĐIỀU PHỐI THIẾT BỊ METAL TẦNG SÂU (MTLCreateSystemDefaultDevice)
+%hookf(id<MTLDevice>, MTLCreateSystemDefaultDevice) {
     id<MTLDevice> device = %orig;
     Titanium_SafeExecute(^{
-        if (device && [device respondsToSelector:@selector(newCommandQueueWithDescriptor:)]) {
-            // Ép xung tối đa luồng lệnh render phần cứng
+        if (device && [device respondsToSelector:@selector(newCommandQueue)]) {
+            // Tối ưu hóa phần cứng đồ họa Metal ngầm tại đây nếu cần
         }
     });
     return device;
