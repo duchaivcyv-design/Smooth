@@ -3178,15 +3178,6 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 // HÀM TRỢ GIÚP TOÀN CỤC (ĐẶT Ở ĐẦU ĐỂ KHÔNG BAO GIỜ BỊ LỖI UNDECLARED)
 // ====================================================================================================
 
-static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
-    @try {
-        if (maxFps < 15.0f) maxFps = 60.0f;
-        if (maxFps > 240.0f) maxFps = 240.0f;
-        return CAFrameRateRangeMake(60.0f, maxFps, maxFps);
-    } @catch (__unused NSException *e) {}
-    return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
-}
-
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 // Hàm bọc thép an toàn tuyệt đối (Chống sập 100% mọi ngoại lệ)
