@@ -3239,38 +3239,51 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hook CAMetalLayer
 
 - (void)didMoveToWindow {
-    // 1. Gọi %orig trực tiếp ở đây, TUYỆT ĐỐI KHÔNG bọc vào block hay try/catch
     %orig;
-
     if (!self) return;
 
-    // 2. Bọc bảo vệ trực tiếp các lệnh gán phía dưới (giữ nguyên số 1 bắt buộc)
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
-            if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
-                self.maximumDrawableCount = 1;
-            }
-
-            if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-                self.allowsNextDrawableTimeout = YES;
-            }
-
-            if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
-                self.lowLatencyMode = YES; 
-            }
-
-            self.framebufferOnly = YES;
-            
-            if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
-                self.displaySyncEnabled = NO;
-            }
-
-            if (@available(iOS 15.0, *)) {
-                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    self.preferredFrameRateRange = Titanium_SmoothFRR(maxTarget);
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            @try {
+                if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
+                    if ([self respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+                        self.maximumDrawableCount = 1;
+                    }
                 }
-            }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+                    self.allowsNextDrawableTimeout = YES;
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
+                    self.lowLatencyMode = YES; 
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if ([self respondsToSelector:@selector(setFramebufferOnly:)]) {
+                    self.framebufferOnly = YES;
+                }
+            } @catch (__unused NSException *e) {}
+            
+            @try {
+                if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
+                    self.displaySyncEnabled = NO;
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (@available(iOS 15.0, *)) {
+                    if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                        self.preferredFrameRateRange = Titanium_SmoothFRR(maxTarget);
+                    }
+                }
+            } @catch (__unused NSException *e) {}
         }
     } @catch (__unused NSException *e) {}
 }
@@ -3278,13 +3291,15 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     __block BOOL __blockEnabled = enabled;
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            if (Titanium_IsVideoOrMediaMetalLayer(self)) {
-                return;
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                if (Titanium_IsVideoOrMediaMetalLayer(self)) {
+                    return;
+                }
+                __blockEnabled = NO; 
             }
-            __blockEnabled = NO; 
-        }
+        } @catch (__unused NSException *e) {}
     });
     %orig(__blockEnabled);
 }
@@ -3292,13 +3307,15 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (NSUInteger)maximumDrawableCount {
     __block NSUInteger count = %orig;
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            if (Titanium_IsVideoOrMediaMetalLayer(self)) {
-                return;
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                if (Titanium_IsVideoOrMediaMetalLayer(self)) {
+                    return;
+                }
+                count = 1; 
             }
-            count = 1; 
-        }
+        } @catch (__unused NSException *e) {}
     });
     return count;
 }
@@ -3306,13 +3323,15 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     __block NSUInteger __blockCount = count;
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            if (Titanium_IsVideoOrMediaMetalLayer(self)) {
-                return;
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                if (Titanium_IsVideoOrMediaMetalLayer(self)) {
+                    return;
+                }
+                __blockCount = 1; 
             }
-            __blockCount = 1; 
-        }
+        } @catch (__unused NSException *e) {}
     });
     %orig(__blockCount);
 }
@@ -3320,11 +3339,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
     __block CAFrameRateRange __blockRange = %orig;
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            __blockRange = Titanium_SmoothFRR(maxTarget);
-        }
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                __blockRange = Titanium_SmoothFRR(maxTarget);
+            }
+        } @catch (__unused NSException *e) {}
     });
     return __blockRange;
 }
@@ -3333,12 +3354,14 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
     __block CAFrameRateRange __blockRange = Titanium_SmoothFRR(maxTarget);
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            __blockRange = Titanium_SmoothFRR(maxTarget);
-        } else {
-            __blockRange = range;
-        }
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                __blockRange = Titanium_SmoothFRR(maxTarget);
+            } else {
+                __blockRange = range;
+            }
+        } @catch (__unused NSException *e) {}
     });
     %orig(__blockRange);
 }
@@ -3346,11 +3369,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (id)nextDrawable {
     __block id drawable = nil;
     Titanium_SafeExecute(^{
-        drawable = %orig;
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            g_lastInteractionMachTime = mach_absolute_time();
-        }
+        @try {
+            drawable = %orig;
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                g_lastInteractionMachTime = mach_absolute_time();
+            }
+        } @catch (__unused NSException *e) {}
     });
     return drawable ?: %orig;
 }
@@ -3358,13 +3383,15 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (BOOL)serverPresentsWithTransaction {
     __block BOOL presents = %orig;
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (Titanium_IsMediaOrVideoLayer(self)) {
-                return;
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                if (Titanium_IsMediaOrVideoLayer(self)) {
+                    return;
+                }
+                presents = YES;
             }
-            presents = YES;
-        }
+        } @catch (__unused NSException *e) {}
     });
     return presents;
 }
@@ -3372,13 +3399,15 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
     __block BOOL __blockPresents = serverPresents;
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (Titanium_IsMediaOrVideoLayer(self)) {
-                return;
+        @try {
+            if (!self) return;
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                if (Titanium_IsMediaOrVideoLayer(self)) {
+                    return;
+                }
+                __blockPresents = YES;
             }
-            __blockPresents = YES;
-        }
+        } @catch (__unused NSException *e) {}
     });
     %orig(__blockPresents);
 }
@@ -3388,8 +3417,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hookf(id<MTLDevice>, MTLCreateSystemDefaultDevice) {
     id<MTLDevice> device = %orig;
     Titanium_SafeExecute(^{
-        if (device && [device respondsToSelector:@selector(newCommandQueue)]) {
-        }
+        @try {
+            if (device && [device respondsToSelector:@selector(newCommandQueue)]) {
+            }
+        } @catch (__unused NSException *e) {}
     });
     return device;
 }
@@ -3399,10 +3430,12 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (CGPoint)translationInView:(UIView *)view {
     __block CGPoint pt = %orig(view);
     Titanium_SafeExecute(^{
-        if (!self) return;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            EnforceMaxCPUPower();
-        }
+        @try {
+            if (!self) return;
+            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+                EnforceMaxCPUPower();
+            }
+        } @catch (__unused NSException *e) {}
     });
     return pt;
 }
@@ -3412,13 +3445,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hook CAContext
 
 - (void)setDesiredDynamicRange:(float)range {
-    Titanium_SafeExecute(^{
+    @try {
         if (TITANIUM_LITE_MODE) {
             %orig(range);
             return;
         }
         %orig(range);
-    });
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -3433,8 +3466,8 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     @try {
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
-        if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) return 60;
+        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 240;
+        if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) return 240; // Ép đè không cho rớt 60Hz
         NSInteger userHz = (g_syncPayloadV285.targetHz > 0) ? (NSInteger)g_syncPayloadV285.targetHz : g_cachedResolvedHz;
         if (userHz <= 0 && CFG285) userHz = (NSInteger)CFG285.targetHz;
         if (userHz <= 0) userHz = 240;
@@ -3447,8 +3480,8 @@ static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
 
 static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     @try {
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 60;
-        if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) return 60;
+        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 240;
+        if ((CFG285 && CFG285.batterySaver60Hz) || g_syncPayloadV285.powerSaveModeActive) return 240; // Ép đè không cho rớt 60Hz
         NSInteger userFPS = (g_syncPayloadV285.targetFPS > 0) ? (NSInteger)g_syncPayloadV285.targetFPS : g_cachedResolvedFPS;
         if (userFPS <= 0 && CFG285) userFPS = (NSInteger)CFG285.targetFPS;
         if (userFPS <= 0) userFPS = Titanium_GetTargetConfiguredHz();
@@ -3514,7 +3547,6 @@ static CADisplayLink *s_keeperLink = nil;
             return;
         }
         if (!Titanium_IsSpringBoard()) return;
-        if (!Titanium_IsInDynamicMorphWindow() && g_activeAnimationCount == 0 && !g_isInteracting) return;
         float targetHz = 240.0f;
         if (!s_keeperLink) {
             s_keeperLink = [CADisplayLink displayLinkWithTarget:[TitaniumRateKeeper class] selector:@selector(tick:)];
@@ -3533,10 +3565,6 @@ static CADisplayLink *s_keeperLink = nil;
 + (void)tick:(CADisplayLink *)link {
     @try {
         if (!link) return;
-        if (!Titanium_IsInDynamicMorphWindow() && g_activeAnimationCount == 0 && !g_isInteracting) {
-            link.paused = YES;
-            s_keeperLink = nil;
-        }
     } @catch (__unused NSException *e) {}
 }
 @end
@@ -3557,31 +3585,26 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
             @"  var lastTickTime = performance.now();"
             @"  var channel = new MessageChannel();"
             @"  function step() {"
-            @"    if (callbacks.size === 0) { running = false; return; }"
-            @"    var fps = window.__titaniumTargetFPS || 60;"
+            @"    var fps = window.__titaniumTargetFPS || 240;"
             @"    if (fps < 15) fps = 15; if (fps > 240) fps = 240;"
             @"    var interval = 1000.0 / fps;"
             @"    var now = performance.now();"
             @"    var due = lastTickTime + interval;"
             @"    if (now + 0.08 >= due) {"
-            @"      if (now - due > interval * 2.0) { lastTickTime = now; } else { lastTickTime = due; }"
+            @"      lastTickTime = due;"
             @"      var currentBatch = Array.from(callbacks.values());"
             @"      callbacks.clear();"
             @"      var ts = performance.now();"
             @"      for (var i = 0; i < currentBatch.length; i++) {"
             @"        try { currentBatch[i](ts); } catch(e) {}"
             @"      }"
-            @"      if (callbacks.size > 0) { scheduleNext(); } else { running = false; }"
+            @"      scheduleNext();"
             @"    } else {"
-            @"      var remain = due - now;"
-            @"      if (remain > 2.2) { setTimeout(step, Math.floor(remain - 1.2)); } else { channel.port2.postMessage(0); }"
+            @"      channel.port2.postMessage(0);"
             @"    }"
             @"  }"
             @"  function scheduleNext() {"
-            @"    var fps = window.__titaniumTargetFPS || 60;"
-            @"    var interval = 1000.0 / fps;"
-            @"    var remain = (lastTickTime + interval) - performance.now();"
-            @"    if (remain > 2.2) { setTimeout(step, Math.floor(remain - 1.2)); } else { channel.port2.postMessage(0); }"
+            @"    channel.port2.postMessage(0);"
             @"  }"
             @"  channel.port1.onmessage = step;"
             @"  window.requestAnimationFrame = function(cb) {"
@@ -3608,13 +3631,12 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             return;
         }
         %orig(runLoop, mode);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isVideoPlayingActive) return;
-
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap < 15) cap = 15;
-            if (cap > 240) cap = 240;
-            @try {
+        @try {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                NSInteger cap = Titanium_GetEffectiveFrameCap();
+                if (cap < 15) cap = 15;
+                if (cap > 240) cap = 240;
+                
                 EnforceMaxCPUPower();
                 Titanium_EnforceThreadVIPPolicy();
 
@@ -3625,8 +3647,8 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                         self.preferredFrameRateRange = CAFrameRateRangeMake(fCap, fCap, fCap);
                     }
                 }
-            } @catch (__unused NSException *e) {}
-        }
+            }
+        } @catch (__unused NSException *e) {}
     } @catch (__unused NSException *e) {
         %orig(runLoop, mode);
     }
@@ -3635,8 +3657,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (NSInteger)preferredFramesPerSecond {
     @try {
         if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isVideoPlayingActive) return %orig;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             return Titanium_GetEffectiveFrameCap();
         }
     } @catch (__unused NSException *e) {}
@@ -3649,16 +3670,12 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             %orig(fps);
             return;
         }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isVideoPlayingActive) {
-                %orig(fps);
+        @try {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                %orig(Titanium_GetEffectiveFrameCap());
                 return;
             }
-            @try {
-                %orig(Titanium_GetEffectiveFrameCap());
-            } @catch (__unused NSException *e) {}
-            return;
-        }
+        } @catch (__unused NSException *e) {}
         %orig(fps);
     } @catch (__unused NSException *e) {
         %orig(fps);
@@ -3666,18 +3683,17 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 - (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
+    __block CAFrameRateRange __blockRange = %orig;
     @try {
-        if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isVideoPlayingActive) return %orig;
-
+        if (!self) return __blockRange;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             if (maxTarget < 15.0f) maxTarget = 15.0f;
             if (maxTarget > 240.0f) maxTarget = 240.0f;
-            return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return __blockRange;
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
@@ -3686,37 +3702,41 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             %orig(range);
             return;
         }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            if (maxTarget < 15.0f) maxTarget = 15.0f;
-            if (maxTarget > 240.0f) maxTarget = 240.0f;
-            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
-        }
+        @try {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                if (maxTarget < 15.0f) maxTarget = 15.0f;
+                if (maxTarget > 240.0f) maxTarget = 240.0f;
+                range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            }
+        } @catch (__unused NSException *e) {}
         %orig(range);
     } @catch (__unused NSException *e) {}
 }
 
 - (CFTimeInterval)duration {
+    __block CFTimeInterval dur = %orig;
     @try {
-        if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
+        if (!self) return dur;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap > 0) return (1.0 / (double)cap);
+            if (cap > 0) dur = (1.0 / (double)cap);
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return dur;
 }
 
 - (CFTimeInterval)targetTimestamp {
+    __block CFTimeInterval tsVal = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return tsVal;
         CFTimeInterval ts = self.timestamp;
-        if (ts > 0.0 && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
+        if (ts > 0.0 && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap > 0) return (ts + (1.0 / (double)cap));
+            if (cap > 0) tsVal = (ts + (1.0 / (double)cap));
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return tsVal;
 }
 
 %end
@@ -3724,13 +3744,14 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CADisplayMode
 
 - (double)refreshRate {
+    __block double rate = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return (double)Titanium_GetEffectiveFrameCap();
+            rate = (double)Titanium_GetEffectiveFrameCap();
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return rate;
 }
 
 %end
@@ -3772,34 +3793,37 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 - (CFTimeInterval)minimumFrameDuration {
+    __block CFTimeInterval dur = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return dur;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
             if (cap < 15) cap = 15;
             if (cap > 240) cap = 240;
-            return (1.0 / (double)cap);
+            dur = (1.0 / (double)cap);
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return dur;
 }
 
 - (double)refreshRate {
+    __block double rate = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            return (cap > 0) ? (double)cap : %orig;
+            rate = (cap > 0) ? (double)cap : %orig;
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return rate;
 }
 
 - (NSInteger)preferredFPS {
     @try {
         if (!self) return %orig;
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return %orig;
-        return Titanium_GetEffectiveFrameCap();
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            return Titanium_GetEffectiveFrameCap();
+        }
     } @catch (__unused NSException *e) {}
     return %orig;
 }
@@ -3810,13 +3834,13 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             %orig(fps);
             return;
         }
-        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) {
-            %orig(fps);
-            return;
-        }
         @try {
-            %orig(Titanium_GetEffectiveFrameCap());
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                %orig(Titanium_GetEffectiveFrameCap());
+                return;
+            }
         } @catch (__unused NSException *e) {}
+        %orig(fps);
     } @catch (__unused NSException *e) {
         %orig(fps);
     }
@@ -3827,29 +3851,31 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CAWindowServerDisplay
 
 - (double)minimumFrameDuration {
+    __block double dur = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return dur;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            return (1.0 / targetHz);
+            dur = (1.0 / targetHz);
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return dur;
 }
 
 - (double)maximumRefreshRate {
+    __block double rate = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            return targetHz;
+            rate = targetHz;
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return rate;
 }
 
 %end
@@ -3877,14 +3903,15 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 - (CGFloat)_refreshRate {
+    __block CGFloat rate = %orig;
     @try {
-        if (!self) return %orig;
+        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            return (cap > 0) ? (CGFloat)cap : %orig;
+            rate = (cap > 0) ? (CGFloat)cap : %orig;
         }
     } @catch (__unused NSException *e) {}
-    return %orig;
+    return rate;
 }
 
 %end
@@ -3894,7 +3921,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (id)objectForInfoDictionaryKey:(NSString *)key {
     @try {
         if (!key) return %orig(key);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             if ([key isEqualToString:@"CADisableMinimumFrameDuration"] ||
                 [key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"]) {
                 return @YES;
@@ -3942,12 +3969,14 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             %orig(range);
             return;
         }
-        if (@available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
-                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+        @try {
+            if (@available(iOS 15.0, *)) {
+                if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                }
             }
-        }
+        } @catch (__unused NSException *e) {}
         %orig(range);
     } @catch (__unused NSException *e) {}
 }
@@ -3963,36 +3992,17 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             return;
         }
         
-        // BẺ KHÓA / BẢO VỆ LOAD ẢNH & CHỌN MỤC: Nếu liên quan đến ImageView, Media hoặc Transition ảnh, nhả hoàn toàn để không bị đơ cứng
-        if (self.delegate && ([NSStringFromClass([self.delegate class]) containsString:@"ImageView"] || 
-                              [NSStringFromClass([self.delegate class]) containsString:@"Media"] || 
-                              [NSStringFromClass([self.delegate class]) containsString:@"Photo"] ||
-                              [NSStringFromClass([self.delegate class]) containsString:@"Image"] ||
-                              [NSStringFromClass([self.delegate class]) containsString:@"Transition"])) {
-            %orig(anim, key);
-            return;
-        }
-
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            if (@available(iOS 15.0, *)) {
-                if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    @try {
-                        if (!g_isVideoPlayingActive) {
-                            anim.preferredFrameRateRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
-                        }
-                    } @catch (__unused NSException *e) {}
+        @try {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                if (@available(iOS 15.0, *)) {
+                    if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                        float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                        anim.preferredFrameRateRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+                    }
                 }
             }
+        } @catch (__unused NSException *e) {}
 
-            if (Titanium_IsSpringBoard()) {
-                Titanium_MarkDynamicMorphBurst();
-                EnforceMaxCPUPower();
-                #if TITANIUM_ENABLE_RATE_KEEPER
-                [TitaniumRateKeeper kick];
-                #endif
-            }
-        }
         %orig(anim, key);
     } @catch (__unused NSException *e) {
         %orig(anim, key);
@@ -4008,9 +4018,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (!self) {
             %orig(rate);
             return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            g_isVideoPlayingActive = (rate > 0.0f);
         }
         %orig(rate);
     } @catch (__unused NSException *e) {
@@ -5982,66 +5989,117 @@ static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
 static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
     @try {
         if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
-                return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"iPhone18,2"];
-            }
-            if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("HardwarePlatform"), 0) == kCFCompareEqualTo) {
-                return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"d85ap"];
-            }
-            if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ArtworkDeviceSubType"), 0) == kCFCompareEqualTo) {
-                return (__bridge CFPropertyListRef)[NSNumber numberWithInt:3000]; 
-            }
+            @try {
+                if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
+                    return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"iPhone18,2"];
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("HardwarePlatform"), 0) == kCFCompareEqualTo) {
+                    return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"d85ap"];
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ArtworkDeviceSubType"), 0) == kCFCompareEqualTo) {
+                    return (__bridge CFPropertyListRef)[NSNumber numberWithInt:3000]; 
+                }
+            } @catch (__unused NSException *e) {}
         }
     } @catch (__unused NSException *e) {}
-    return orig_MGCopyAnswer(key);
+    
+    if (orig_MGCopyAnswer) {
+        @try {
+            return orig_MGCopyAnswer(key);
+        } @catch (__unused NSException *e) {}
+    }
+    return NULL;
 }
 
 static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
 static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     @try {
         if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
-                const char *spoofModel = "iPhone18,2";
-                size_t len = strlen(spoofModel) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofModel, len);
+            @try {
+                if (strcmp(name, "hw.cpubrand") == 0 || strcmp(name, "machdep.cpu.brand_string") == 0) {
+                    const char *spoofChip = "Apple A20 Pro (3nm Ultra)";
+                    size_t len = strlen(spoofChip) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofChip, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
                         *oldlenp = len;
                         return 0;
                     }
-                } else if (!oldp && oldlenp) {
-                    *oldlenp = len;
-                    return 0;
                 }
-            } else if (strcmp(name, "hw.model") == 0) {
-                const char *spoofBoard = "D85AP";
-                size_t len = strlen(spoofBoard) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofBoard, len);
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
+                    const char *spoofModel = "iPhone18,2";
+                    size_t len = strlen(spoofModel) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofModel, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
                         *oldlenp = len;
                         return 0;
                     }
-                } else if (!oldp && oldlenp) {
-                    *oldlenp = len;
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.model") == 0) {
+                    const char *spoofBoard = "D85AP";
+                    size_t len = strlen(spoofBoard) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofBoard, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
+                        *oldlenp = len;
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0) {
+                    int cpus = 8;
+                    if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
+                        memcpy(oldp, &cpus, sizeof(int));
+                        *oldlenp = sizeof(int);
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.memsize") == 0 && oldp && oldlenp && *oldlenp >= sizeof(uint64_t)) {
+                    uint64_t fakeRam = 12ULL * 1024ULL * 1024ULL * 1024ULL;
+                    memcpy(oldp, &fakeRam, sizeof(uint64_t));
+                    *oldlenp = sizeof(uint64_t);
                     return 0;
                 }
-            } else if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0) {
-                int cpus = 8;
-                if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
-                    memcpy(oldp, &cpus, sizeof(int));
-                    *oldlenp = sizeof(int);
-                    return 0;
-                }
-            } else if (strcmp(name, "hw.memsize") == 0 && oldp && oldlenp && *oldlenp >= sizeof(uint64_t)) {
-                uint64_t fakeRam = 12ULL * 1024ULL * 1024ULL * 1024ULL;
-                memcpy(oldp, &fakeRam, sizeof(uint64_t));
-                *oldlenp = sizeof(uint64_t);
-                return 0;
-            }
+            } @catch (__unused NSException *e) {}
         }
     } @catch (__unused NSException *e) {}
-    return orig_sysctlbyname_spoof(name, oldp, oldlenp, newp, newlen);
+    
+    if (orig_sysctlbyname_spoof) {
+        @try {
+            return orig_sysctlbyname_spoof(name, oldp, oldlenp, newp, newlen);
+        } @catch (__unused NSException *e) {}
+    }
+    return -1;
 }
 
 static int (*orig_sysctl_spoof)(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
@@ -6049,42 +6107,53 @@ static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *old
     @try {
         if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
             !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            if (name[1] == HW_MACHINE) {
-                const char *spoofModel = "iPhone18,2";
-                size_t len = strlen(spoofModel) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofModel, len);
+            @try {
+                if (name[1] == HW_MACHINE) {
+                    const char *spoofModel = "iPhone18,2";
+                    size_t len = strlen(spoofModel) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofModel, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
                         *oldlenp = len;
                         return 0;
                     }
-                } else if (!oldp && oldlenp) {
-                    *oldlenp = len;
-                    return 0;
-                }
-            } else if (name[1] == HW_MODEL) {
-                const char *spoofBoard = "D85AP";
-                size_t len = strlen(spoofBoard) + 1;
-                if (oldp && oldlenp) {
-                    if (*oldlenp >= len) {
-                        memcpy(oldp, spoofBoard, len);
+                } else if (name[1] == HW_MODEL) {
+                    const char *spoofBoard = "D85AP";
+                    size_t len = strlen(spoofBoard) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofBoard, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
                         *oldlenp = len;
                         return 0;
                     }
-                } else if (!oldp && oldlenp) {
-                    *oldlenp = len;
-                    return 0;
                 }
-            }
+            } @catch (__unused NSException *e) {}
         }
     } @catch (__unused NSException *e) {}
-    return orig_sysctl_spoof(name, namelen, oldp, oldlenp, newp, newlen);
+    
+    if (orig_sysctl_spoof) {
+        @try {
+            return orig_sysctl_spoof(name, namelen, oldp, oldlenp, newp, newlen);
+        } @catch (__unused NSException *e) {}
+    }
+    return -1;
 }
 
 static int (*orig_uname_spoof)(struct utsname *name) = NULL;
 static int hooked_uname_spoof(struct utsname *name) {
-    int ret = orig_uname_spoof(name);
+    int ret = -1;
     @try {
+        if (orig_uname_spoof) {
+            ret = orig_uname_spoof(name);
+        }
         if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
             strncpy(name->machine, "iPhone18,2", sizeof(name->machine) - 1);
             name->machine[sizeof(name->machine) - 1] = '\0';
@@ -6133,17 +6202,18 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
             %orig(property, key);
             return;
         }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key) {
-            if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-                %orig(@(1000), key);
-                return;
+        @try {
+            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key) {
+                if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
+                    %orig(@(1000), key);
+                    return;
+                }
             }
-        }
+        } @catch (__unused NSException *e) {}
+        %orig(property, key);
     } @catch (__unused NSException *e) {
         %orig(property, key);
-        return;
     }
-    %orig(property, key);
 }
 
 %end
@@ -6151,16 +6221,22 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 %hook IOMobileFramebufferClient
 
 - (int)setDisplayRefreshRate:(float)rate options:(unsigned int)options {
+    __block int result = 0;
     @try {
         if (!self) return %orig(rate, options);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap < 15) cap = 15;
-            if (cap > 240) cap = 240;
-            rate = (float)cap; // Bẻ khóa trực tiếp tầng khung hình framebuffer phần cứng
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig(rate, options);
+        @try {
+            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+                NSInteger cap = Titanium_GetEffectiveFrameCap();
+                if (cap < 15) cap = 15;
+                if (cap > 240) cap = 240;
+                rate = (float)cap; 
+            }
+        } @catch (__unused NSException *e) {}
+        result = %orig(rate, options);
+    } @catch (__unused NSException *e) {
+        result = -1;
+    }
+    return result;
 }
 
 %end
@@ -6168,14 +6244,20 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 %hook AGXAccelerator
 
 - (int)setPowerState:(unsigned int)state {
+    __block int result = 0;
     @try {
         if (!self) return %orig(state);
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            EnforceMaxCPUPower();
-            state = 1; // Giữ trạng thái hiệu năng GPU luôn ở mức cao nhất
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig(state);
+        @try {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                EnforceMaxCPUPower();
+                state = 1; 
+            }
+        } @catch (__unused NSException *e) {}
+        result = %orig(state);
+    } @catch (__unused NSException *e) {
+        result = -1;
+    }
+    return result;
 }
 
 %end
@@ -7289,7 +7371,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Titanium_ReloadSharedSyncStateV285();
             });
 
-            // Khởi tạo các nhóm Hook an toàn
+            // Khởi tạo các nhóm Hook an toàn chung cho mọi tiến trình
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_Metal_ZeroTearing_Pacing);
             %init(Group_FluidTransitions_Pacing);
@@ -7323,6 +7405,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             %init(Group_Deep_RAM_Compaction_Engine);
             %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
+            %init(Group_Window_Level_Overdrive);
 
             if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
                 %init(Group_WebKit_RAM_Optimizer);
@@ -7368,8 +7451,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
-                %init(Group_Window_Level_Overdrive);
-                // ĐÃ SỬA: Loại bỏ Init_CAWindowServer_Hooks() khỏi nhánh app bên thứ ba để tránh lỗi thiếu ký hiệu dyld gây SIGABRT
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     Titanium_ForceInjectDynamicRefreshSupport();
