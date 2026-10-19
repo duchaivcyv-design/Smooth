@@ -5887,6 +5887,139 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
+// NHÓM TỐI ƯU AI STREAMING & TEXT LAYOUT (TỐI ƯU SÂU CHUYÊN BIỆT CHO APP AI - AN TOÀN TUYỆT ĐỐI)
+// ====================================================================================================
+
+%group Group_AI_Stream_Optimization
+
+%hook UITextView
+
+- (void)didMoveToWindow {
+    @try {
+        if (!self) {
+            %orig;
+            return;
+        }
+        %orig;
+        if (Titanium_IsAIApp() && self.window) {
+            // Ép layout không liên tục và tối ưu hóa cuộn mượt cho text dài
+            if ([self respondsToSelector:@selector(layoutManager)]) {
+                NSLayoutManager *lm = [self layoutManager];
+                if (lm) {
+                    lm.allowsNonContiguousLayout = YES;
+                }
+            }
+            // Kích hoạt phần cứng tăng tốc cuộn trên UITextView của App AI
+            self.layer.drawsAsynchronously = YES;
+            self.layer.shouldRasterize = NO; // Tránh rasterize gây mờ chữ khi scroll nhanh
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
+    }
+}
+
+// Tối ưu hóa luồng nhận text streaming liên tục từ model AI đổ về
+- (void)insertText:(NSString *)text {
+    @try {
+        if (Titanium_IsAIApp() && text.length > 0) {
+            // Ép xung nhịp Main Thread lập tức khi AI đang trả token text
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+            EnforceMaxCPUPower();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(text);
+}
+
+- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
+    @try {
+        if (Titanium_IsAIApp() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+            // Giảm bớt độ trễ khi tự động trôi xuống theo luồng tin nhắn mới của AI
+            animated = NO; 
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(contentOffset, animated);
+}
+
+%end
+
+%hook UILabel
+
+- (void)didMoveToWindow {
+    @try {
+        if (!self) {
+            %orig;
+            return;
+        }
+        %orig;
+        if (Titanium_IsAIApp() && self.window) {
+            self.layer.drawsAsynchronously = YES; // Cho phép render bất đồng bộ để không nghẽn UI
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
+    }
+}
+
+%end
+
+%end
+
+// ĐÃ SỬA: Cho phép App AI được ép xung tần số quét ProMotion / Hz cao thay vì bị loại trừ gây giật lag
+static void Titanium_ReapplyFrameRateToAllScenes(void) {
+    @try {
+        if (![NSThread isMainThread]) {
+            dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
+            return;
+        }
+        if (g_isCurrentAppBlacklisted) return; // Chỉ loại bỏ app bị blacklist, giữ lại App AI để tối ưu mượt mà
+        if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
+        
+        UIApplication *app = [UIApplication sharedApplication];
+        if (!app) return;
+        
+        if (@available(iOS 13.0, *)) {
+            NSSet *scenes = [app.connectedScenes copy];
+            for (UIScene *scene in scenes) {
+                if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+                
+                if (@available(iOS 15.0, *)) {
+                    UIWindowScene *winScene = (UIWindowScene *)scene;
+                    if ([winScene respondsToSelector:@selector(preferredFrameRateRange)]) {
+                        SafeFrameRateRange current = SafeMakeFRR(60.0f, 60.0f, 60.0f);
+                        @try {
+                            NSMethodSignature *sig = [winScene methodSignatureForSelector:@selector(preferredFrameRateRange)];
+                            if (sig) {
+                                NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+                                [inv setSelector:@selector(preferredFrameRateRange)];
+                                [inv setTarget:winScene];
+                                [inv invoke];
+                                [inv getReturnValue:&current];
+                            }
+                        } @catch (__unused NSException *subEx) {}
+
+                        SafeFrameRateRange normalized = Titanium_NormalizeFrameRateRange(current, Titanium_IsSpringBoard());
+                        if ([winScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                            @try {
+                                [(id)winScene setPreferredFrameRateRange:normalized];
+                            } @catch (__unused NSException *e) {}
+                        }
+                    }
+                }
+            }
+        }
+    } @catch (__unused NSException *e) {}
+}
+
+static inline BOOL Titanium_IsDismissingToHomeV12(void) {
+    @try {
+        if (g_isContinuousSwiping) return YES;
+        if (g_lastInteractionMachTime == 0) return NO;
+        uint64_t now = mach_absolute_time();
+        return ((now - g_lastInteractionMachTime) < Titanium_NanosToMachTicks(250ULL * 1000000ULL));
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
+
+// ====================================================================================================
 // NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (ĐÃ BỌC THÉP AN TOÀN)
 // ====================================================================================================
 
