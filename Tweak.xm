@@ -2561,13 +2561,13 @@ static uint64_t g_bannerDurationMachTicks = 0;
 static volatile uint64_t g_lastFrameRenderTick = 0;
 static volatile double g_currentFrameDriftRatio = 1.00;
 
-// Bộ điều phối Smart Throttle chống spam lệnh, chống nóng máy & siêu mượt đa nhiệm (Giản cách 80ms an toàn tuyệt đối)
+// Smart Throttle tối ưu hóa: Giãn cách 60ms vừa đủ để giữ độ nhạy bén cao mà không gây nghẽn UI
 static uint64_t s_lastSmartBoostTick = 0;
 
 static inline void Titanium_SmartThrottle60Hz(void) {
     @try {
         uint64_t now = mach_absolute_time();
-        if (now - s_lastSmartBoostTick > Titanium_NanosToMachTicks(80ULL * 1000000ULL)) {
+        if (now - s_lastSmartBoostTick > Titanium_NanosToMachTicks(60ULL * 1000000ULL)) {
             s_lastSmartBoostTick = now;
             EnforceMaxCPUPower();
         }
@@ -2605,7 +2605,7 @@ static int hooked_sysctlbyname_a20_spoof(const char *name, void *oldp, size_t *o
                 }
             }
             
-            // 2. Ép số nhân CPU lên 10 nhân để app kích hoạt luồng xử lý đa nhân tối đa
+            // 2. Ép số nhân CPU lên 10 nhân
             else if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.logicalcpu") == 0) {
                 int cpus = 10;
                 if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
@@ -2615,7 +2615,7 @@ static int hooked_sysctlbyname_a20_spoof(const char *name, void *oldp, size_t *o
                 }
             }
             
-            // 3. Giả lập tần số quét màn hình tối đa 240Hz để hệ thống & game tự nhận diện phần cứng ProMotion cấp độ cao
+            // 3. Giả lập tần số quét màn hình tối đa 240Hz
             else if (strcmp(name, "hw.screensync") == 0 || strcmp(name, "hw.maxframes") == 0) {
                 int maxHz = 240;
                 if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
@@ -2769,14 +2769,14 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 }
 
 // ==============================================================================
-// BẺ GÃY HOÀN TOÀN MỌI GIỚI HẠN LUỒNG ẨN (CPU, RAM, DISK, GPU, KERNEL THREADS)
+// KHAI PHÁ HỆ THỐNG TOÀN DIỆN (MAX PRIORITY CHO GAME/RENDER, NHƯỜNG UI CHO MAIN THREAD)
 // ==============================================================================
 static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         @try {
             pid_t pid = getpid();
-            setpriority(PRIO_PROCESS, pid, -20);
+            setpriority(PRIO_PROCESS, pid, -20); // Ép max ưu tiên tiến trình
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
             setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
 
@@ -2787,15 +2787,8 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
                 latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
                 task_policy_set(selfTask, TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
                 #endif
-
-                #ifdef TASK_THROUGHPUT_QOS_POLICY
-                task_throughput_qos_policy_data_t throughputPolicy;
-                throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0;
-                task_policy_set(selfTask, TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
-                #endif
             }
 
-            // Tự động kích hoạt hook A20 ngay khi khởi tạo luồng hệ thống sâu
             void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
             if (sysSym) {
                 MSHookFunction(sysSym, (void *)hooked_sysctlbyname_a20_spoof, (void **)&orig_sysctlbyname_a20_spoof);
@@ -2813,14 +2806,14 @@ static inline void Titanium_LockMainThreadFast(void) {
             return;
         }
 
+        // ĐẶC BIỆT: Main Thread dùng QOS_CLASS_USER_INTERACTIVE nhưng KHÔNG ép time-constraint cứng, 
+        // giúp UIKit render mượt mà, chuyển cảnh không bao giờ bị khựng khung hình.
         static uint64_t s_lastNanoBurstTick = 0;
         uint64_t now = mach_absolute_time();
         
-        if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(150000000ULL), 0)) {
+        if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(200000000ULL), 0)) {
             s_lastNanoBurstTick = now;
             pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            
-            Titanium_EnforceMachFrameConstraint();
             AppleInternal_LockHardwareCADisplay();
             AppleInternal_EnforceZeroLatencyKernelTier();
         }
@@ -2908,12 +2901,6 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void) {
             latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
             task_policy_set(mach_task_self(), TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
             #endif
-
-            #ifdef TASK_THROUGHPUT_QOS_POLICY
-            task_throughput_qos_policy_data_t throughputPolicy;
-            throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0;
-            task_policy_set(mach_task_self(), TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
-            #endif
         } @catch (__unused NSException *e) {}
     });
 }
@@ -2936,12 +2923,6 @@ static void AppleInternal_LockHardwareCADisplay(void) {
             if ([display respondsToSelector:selLatency]) {
                 void (*setLatency)(id, SEL, double) = (void (*)(id, SEL, double))objc_msgSend;
                 setLatency(display, selLatency, 0.0);
-            }
-
-            SEL selVirtual = sel_registerName("setAllowsVirtualModes:");
-            if ([display respondsToSelector:selVirtual]) {
-                void (*setVirtual)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))objc_msgSend;
-                setVirtual(display, selVirtual, YES);
             }
         } @catch (__unused NSException *e) {}
     });
@@ -2979,12 +2960,16 @@ static inline void Titanium_UpdateAdaptiveFrameDrift(void) {
 
 static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
     @try {
+        // Chỉ áp dụng ràng buộc khắt khe cho luồng Render/Game, tuyệt đối không gí cứng Main Thread UI
+        if ([NSThread isMainThread]) {
+            return;
+        }
+
         if (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive) {
             return;
         }
 
         Titanium_UpdateAdaptiveFrameDrift();
-        Titanium_UnleashAllHiddenSystemThreads();
         
         pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
@@ -2992,25 +2977,11 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
         if (selfThread == MACH_PORT_NULL) return;
 
         @try {
-            thread_precedence_policy_data_t precPolicy;
-            precPolicy.importance = 127; 
-            thread_policy_set(selfThread,
-                              THREAD_PRECEDENCE_POLICY,
-                              (thread_policy_t)&precPolicy,
-                              THREAD_PRECEDENCE_POLICY_COUNT);
-
-            thread_throttle_policy_data_t throttlePolicy;
-            throttlePolicy.pset_limit = 0;
-            thread_policy_set(selfThread,
-                              THREAD_THROTTLE_POLICY,
-                              (thread_policy_t)&throttlePolicy,
-                              1);
-
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 240) targetHz = 240;
 
             uint32_t periodNs = (uint32_t)(1000000000ULL / targetHz); 
-            uint32_t computationNs = periodNs; 
+            uint32_t computationNs = periodNs; // Dùng 100% tài nguyên cho luồng render đồ họa nặng
 
             thread_time_constraint_policy_data_t timeConstraintPolicy;
             timeConstraintPolicy.period = periodNs;
@@ -3022,18 +2993,6 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
                               THREAD_TIME_CONSTRAINT_POLICY, 
                               (thread_policy_t)&timeConstraintPolicy, 
                               THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-
-            #ifdef TASK_LATENCY_QOS_POLICY
-            task_latency_qos_policy_data_t latencyPolicy;
-            latencyPolicy.task_latency_qos_tier = LATENCY_QOS_TIER_0;
-            task_policy_set(mach_task_self(), TASK_LATENCY_QOS_POLICY, (task_policy_t)&latencyPolicy, TASK_LATENCY_QOS_POLICY_COUNT);
-            #endif
-
-            #ifdef TASK_THROUGHPUT_QOS_POLICY
-            task_throughput_qos_policy_data_t throughputPolicy;
-            throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0;
-            task_policy_set(mach_task_self(), TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
-            #endif
 
         } @catch (__unused NSException *subEx) {}
     } @catch (__unused NSException *e) {}
