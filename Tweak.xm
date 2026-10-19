@@ -6384,26 +6384,75 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// NHÓM TỐI THƯỢNG: BẺ NÁT MỌI CƠ CHẾ BÓP HIỆU NĂNG, NHIỆT ĐỘ & NGUỒN ĐIỆN (ĐÃ BỌC THÉP AN TOÀN)
+// NHÓM 2: TỐI ƯU HÓA HIỆU NỨNG LIQUID GLASS (ĐÃ TỐI ƯU SÂU & GIỮ NGUYÊN ĐỘ NÉT)
 // ====================================================================================================
 
-%group Group_CryoQuantum_Thermal_Bypass
+%group Group_LiquidGlass_Opt
 
-%hook CADisplayLink
+%hook CAFilter
 
-- (void)setPaused:(BOOL)paused {
-    @try {
-        if (!self) {
-            %orig(paused);
+- (void)setValue:(id)value forKey:(NSString *)key {
+    // Không cần bọc try-catch cho hàm setter cơ bản của CAFilter để đạt hiệu năng tối đa
+    %orig(value, key);
+}
+
+%end
+
+%hook CABackdropLayer
+
+- (void)setDisablesOccludedBackdropBlurs:(BOOL)flag {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        %orig(NO);
+        return;
+    }
+    %orig(flag);
+}
+
+- (BOOL)disablesOccludedBackdropBlurs {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        return NO;
+    }
+    return %orig;
+}
+
+- (void)setScale:(CGFloat)scale {
+    // Giữ nguyên scale gốc nếu đang tương tác/cuộn để đảm bảo hiệu ứng Liquid Glass không bị giật hoặc đứt nét
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur && !g_isInteracting && !g_isScrollingActive) {
+        if (scale > 0.25f && scale < 1.0f) {
+            // Tối ưu nhẹ hệ số scale nhưng vẫn đảm bảo độ mịn của kính
+            %orig(scale * 0.95f);
             return;
         }
-        %orig(paused);
-    } @catch (__unused NSException *e) {
-        %orig(paused);
+    }
+    %orig(scale);
+}
+
+%end
+
+%hook UIVisualEffectView
+
+- (void)layoutSubviews {
+    %orig;
+    
+    // Bật tăng tốc phần cứng cho lớp nền kính mờ một cách an toàn
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && CFG285.flatTintBlur) {
+        CALayer *layer = self.layer;
+        if (layer) {
+            layer.allowsGroupOpacity = YES;
+            layer.drawsAsynchronously = YES;
+        }
     }
 }
 
 %end
+
+%end
+
+// ====================================================================================================
+// NHÓM TỐI THƯỢNG: BẺ NÁT MỌI CƠ CHẾ BÓP HIỆU NĂNG, NHIỆT ĐỘ & NGUỒN ĐIỆN (ĐÃ BỌC THÉP AN TOÀN)
+// ====================================================================================================
+
+%group Group_CryoQuantum_Thermal_Bypass
 
 %hook _MTLCommandQueue
 
