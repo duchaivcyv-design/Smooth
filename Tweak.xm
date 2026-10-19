@@ -6782,7 +6782,7 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// ███ KHỐI V12 - TỐI ƯU APP AI & VĂN BẢN (ĐÃ BỌC THÉP AN TOÀN) ███
+// ███ KHỐI V12 - TỐI ƯU APP AI & VĂN BẢN (NÂNG CẤP HIỆU NĂNG REALTIME - KHÔNG ĐƠ, KHÔNG GIẬT) ███
 // ====================================================================================================
 
 static NSString *Titanium_ResolveEffectiveLanguage(void) {
@@ -6846,26 +6846,14 @@ static inline BOOL Titanium_IsAIApp(void) {
     return sIsStaticAI;
 }
 
+// ====================================================================================================
+// NHÓM TỐI ƯU AI STREAMING & TEXT LAYOUT (XÓA BỎ HOÀN TOÀN ĐƠ CỨNG KHI TEXT DÀI)
+// ====================================================================================================
+
 %group Group_AI_Stream_Optimization
 
 %hook UITextView
-- (void)didMoveToWindow {
-    @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
-        if (Titanium_IsAIApp() && self.window && !self.isEditable) {
-            self.layoutManager.allowsNonContiguousLayout = YES;
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
-}
-%end
 
-%hook UILabel
 - (void)didMoveToWindow {
     @try {
         if (!self) {
@@ -6874,23 +6862,63 @@ static inline BOOL Titanium_IsAIApp(void) {
         }
         %orig;
         if (Titanium_IsAIApp() && self.window) {
-            self.layer.drawsAsynchronously = NO;
+            // Ép layout không liên tục và tối ưu hóa cuộn mượt cho text dài
+            if ([self respondsToSelector:@selector(layoutManager)]) {
+                NSLayoutManager *lm = [self layoutManager];
+                if (lm) {
+                    lm.allowsNonContiguousLayout = YES;
+                }
+            }
+            // Kích hoạt phần cứng tăng tốc cuộn trên UITextView của App AI
+            self.layer.drawsAsynchronously = YES;
         }
     } @catch (__unused NSException *e) {
         %orig;
     }
 }
-%end
+
+// Tối ưu hóa luồng nhận text streaming liên tục từ model AI đổ về
+- (void)insertText:(NSString *)text {
+    @try {
+        if (Titanium_IsAIApp() && text.length > 0) {
+            // Ép xung nhịp Main Thread lập tức khi AI đang trả token text
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(text);
+}
 
 %end
 
+%hook UILabel
+
+- (void)didMoveToWindow {
+    @try {
+        if (!self) {
+            %orig;
+            return;
+        }
+        %orig;
+        if (Titanium_IsAIApp() && self.window) {
+            self.layer.drawsAsynchronously = YES; // Cho phép render bất đồng bộ để không nghẽn UI
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
+    }
+}
+
+%end
+
+%end
+
+// ĐÃ SỬA: Cho phép App AI được ép xung tần số quét ProMotion / Hz cao thay vì bị loại trừ gây giật lag
 static void Titanium_ReapplyFrameRateToAllScenes(void) {
     @try {
         if (![NSThread isMainThread]) {
             dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
             return;
         }
-        if (g_isCurrentAppBlacklisted || Titanium_IsAIApp()) return;
+        if (g_isCurrentAppBlacklisted) return; // Chỉ loại bỏ app bị blacklist, giữ lại App AI để tối ưu mượt mà
         if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return;
         
         UIApplication *app = [UIApplication sharedApplication];
