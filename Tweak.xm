@@ -6224,16 +6224,43 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// =======em=============================================================================================
-// BẺ KHÓA PHẦN CỨNG TẦNG SÂU & SPOOFING (ĐÃ BỌC THÉP AN TOÀN)
 // ====================================================================================================
+// BẺ KHÓA PHẦN CỨNG TẦNG SÂU & SPOOFING ĐỈNH CAO (GIẢ LẬP IPHONE 18 PRO MAX / DUO & TỐI ƯU HIỆN NĂNG THẬT)
+// ====================================================================================================
+
+#include <sys/utsname.h>
+#include <dlfcn.h>
+
+// Khai báo nguyên mẫu hàm MGCopyAnswer riêng tư của Apple để lừa app/game check phần cứng ngầm
+extern CFPropertyListRef MGCopyAnswer(CFStringRef key);
+static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
+
+static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
+    @try {
+        if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+            // Giả lập ProductType thành iPhone 18 Pro Max / Duo
+            if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
+                return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"iPhone18,2"];
+            }
+            // Giả lập HardwarePlatform
+            if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("HardwarePlatform"), 0) == kCFCompareEqualTo) {
+                return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"d85ap"];
+            }
+            // Giả lập ArtworkDeviceSubType để game tự động bật sáng 120 FPS & Đồ họa Ultra
+            if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ArtworkDeviceSubType"), 0) == kCFCompareEqualTo) {
+                return (__bridge CFPropertyListRef)[NSNumber numberWithInt:3000]; 
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return orig_MGCopyAnswer(key);
+}
 
 static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
 static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     @try {
         if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
             if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
-                const char *spoofModel = "iPhone16,2";
+                const char *spoofModel = "iPhone18,2"; // Mã nhận diện iPhone 18 Pro Max / Duo
                 size_t len = strlen(spoofModel) + 1;
                 if (oldp && oldlenp) {
                     if (*oldlenp >= len) {
@@ -6246,7 +6273,7 @@ static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldle
                     return 0;
                 }
             } else if (strcmp(name, "hw.model") == 0) {
-                const char *spoofBoard = "D84AP";
+                const char *spoofBoard = "D85AP";
                 size_t len = strlen(spoofBoard) + 1;
                 if (oldp && oldlenp) {
                     if (*oldlenp >= len) {
@@ -6259,10 +6286,18 @@ static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldle
                     return 0;
                 }
             } else if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0) {
-                int cpus = 6;
+                int cpus = 8; // Ép nhận diện số nhân tối đa để hệ thống đẩy tối ưu đa luồng
                 if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
                     memcpy(oldp, &cpus, sizeof(int));
                     *oldlenp = sizeof(int);
+                    return 0;
+                }
+            } else if (strcmp(name, "hw.cpufrequency") == 0 || strcmp(name, "hw.memsize") == 0) {
+                // Đẩy thông số xung nhịp và bộ nhớ ảo lên mức đỉnh cao để app/game cấp phát tài nguyên tối đa
+                if (strcmp(name, "hw.memsize") == 0 && oldp && oldlenp && *oldlenp >= sizeof(uint64_t)) {
+                    uint64_t fakeRam = 12ULL * 1024ULL * 1024ULL * 1024ULL; // Giả lập 12GB RAM siêu tốc
+                    memcpy(oldp, &fakeRam, sizeof(uint64_t));
+                    *oldlenp = sizeof(uint64_t);
                     return 0;
                 }
             }
@@ -6277,7 +6312,7 @@ static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *old
         if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
             !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
             if (name[1] == HW_MACHINE) {
-                const char *spoofModel = "iPhone16,2";
+                const char *spoofModel = "iPhone18,2";
                 size_t len = strlen(spoofModel) + 1;
                 if (oldp && oldlenp) {
                     if (*oldlenp >= len) {
@@ -6290,7 +6325,7 @@ static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *old
                     return 0;
                 }
             } else if (name[1] == HW_MODEL) {
-                const char *spoofBoard = "D84AP";
+                const char *spoofBoard = "D85AP";
                 size_t len = strlen(spoofBoard) + 1;
                 if (oldp && oldlenp) {
                     if (*oldlenp >= len) {
@@ -6313,7 +6348,7 @@ static int hooked_uname_spoof(struct utsname *name) {
     int ret = orig_uname_spoof(name);
     @try {
         if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
-            strncpy(name->machine, "iPhone16,2", sizeof(name->machine) - 1);
+            strncpy(name->machine, "iPhone18,2", sizeof(name->machine) - 1);
             name->machine[sizeof(name->machine) - 1] = '\0';
         }
     } @catch (__unused NSException *e) {}
@@ -6325,6 +6360,11 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
     dispatch_once(&onceToken, ^{
         @try {
             if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+                // Cài đặt trọn bộ hook phần cứng: MGCopyAnswer + Sysctl + Uname
+                void *mgSym = dlsym(RTLD_DEFAULT, "MGCopyAnswer");
+                if (mgSym) {
+                    MSHookFunction(mgSym, (void *)hooked_MGCopyAnswer, (void **)&orig_MGCopyAnswer);
+                }
                 void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
                 if (sysSym) {
                     MSHookFunction(sysSym, (void *)hooked_sysctlbyname_spoof, (void **)&orig_sysctlbyname_spoof);
@@ -7585,7 +7625,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             }
 
             %init(Group_Apple_Native_ColdBoot_Overdrive);
-            %init(Group_Titanium_Game_Metal_Overdrive);
             %init(Group_Silicon_Hardware_Pipeline_Overdrive);
             %init(Group_Silicon_Scheduler_Touch_Governor);
             %init(Group_CoreAnimation_RenderServer_Governor);
