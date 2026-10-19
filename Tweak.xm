@@ -7253,11 +7253,14 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 return;
             }
 
+            // Khởi tạo vùng nhớ chia sẻ IPC Zero-Copy ngay từ đầu
+            Titanium_InitZeroCopyIPC(isSpringBoard);
+
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 Titanium_ReloadSharedSyncStateV285();
             });
 
-            // 1. KÍCH HOẠT NHÓM METAL DYNAMIC (ÉP ĐỘNG KHÔNG DÙNG HOOK TĨNH - AN TOÀN TUYỆT ĐỐI CHO CẢ SPRINGBOARD)
+            // 1. KÍCH HOẠT ĐỘNG NHÓM METAL & TẮT V-SYNC (ÉP ĐỘNG QUA RUNTIME SWIZZLING - AN TOÀN TUYỆT ĐỐI CHO CẢ SPRINGBOARD)
             Titanium_InstallDynamicMetalOverdriveGroup2();
 
             // 2. Khởi tạo các nhóm Hook an toàn khác
