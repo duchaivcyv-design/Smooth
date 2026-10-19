@@ -3175,8 +3175,17 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP TẮT V-SYNC, GIẢM BUFFER 3 XUỐNG 2 - ĐỘ TRỄ 0MS, AN TOÀN TẦNG SÂU)
+// HÀM TRỢ GIÚP TOÀN CỤC (ĐẶT Ở ĐẦU ĐỂ KHÔNG BAO GIỜ BỊ LỖI UNDECLARED)
 // ====================================================================================================
+
+static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
+    @try {
+        if (maxFps < 15.0f) maxFps = 60.0f;
+        if (maxFps > 240.0f) maxFps = 240.0f;
+        return CAFrameRateRangeMake(60.0f, maxFps, maxFps);
+    } @catch (__unused NSException *e) {}
+    return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
+}
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
@@ -3220,6 +3229,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     return Titanium_IsVideoOrMediaMetalLayer(layer);
 }
 
+// ====================================================================================================
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP BUFFER 1, TẮT V-SYNC - 0MS LATENCY, SIÊU TỐC, KHÔNG NÓNG MÁY)
+// ====================================================================================================
+
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
@@ -3231,11 +3244,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
         }
 
         %orig;
-        // Chỉ can thiệp khi không phải SpringBoard và layer hợp lệ, tuyệt đối không chạm Main Thread UI
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
-                // Ép hạ bộ đệm drawable từ 3 xuống 2 để giảm thiểu độ trễ khung hình (input lag)
-                self.maximumDrawableCount = 2;
+                // Ép hạ bộ đệm drawable xuống 1 để đạt tốc độ phản hồi tức thì, không có độ trễ khung hình
+                self.maximumDrawableCount = 1;
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
@@ -3248,7 +3260,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
             self.framebufferOnly = YES;
             
-            // Ép tắt hoàn toàn V-Sync ở cấp độ Layer để đạt tốc độ hiển thị tối đa
             if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
                 self.displaySyncEnabled = NO;
             }
@@ -3276,7 +3287,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockEnabled = NO; // Ép vô hiệu hóa V-Sync hoàn toàn
+            __blockEnabled = NO; 
         }
     });
     %orig(__blockEnabled);
@@ -3290,7 +3301,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            count = 2; // Ép buộc giới hạn buffer là 2
+            count = 1; // Ép buộc giới hạn buffer là 1 để tối đa hóa tốc độ render không độ trễ
         }
     });
     return count;
@@ -3304,7 +3315,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockCount = 2; // Ép buộc giới hạn buffer là 2
+            __blockCount = 1; // Ép buộc giới hạn buffer là 1
         }
     });
     %orig(__blockCount);
@@ -3378,12 +3389,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 %end
 
-// Khởi tạo thiết bị Metal an toàn không gây nghẽn luồng
 %hookf(id<MTLDevice>, MTLCreateSystemDefaultDevice) {
     id<MTLDevice> device = %orig;
     Titanium_SafeExecute(^{
         if (device && [device respondsToSelector:@selector(newCommandQueue)]) {
-            // Đảm bảo phần cứng hoạt động ổn định
         }
     });
     return device;
@@ -3419,15 +3428,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %end
 
 %end
-
-static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
-    @try {
-        if (maxFps < 15.0f) maxFps = 60.0f;
-        if (maxFps > 240.0f) maxFps = 240.0f;
-        return CAFrameRateRangeMake(60.0f, maxFps, maxFps);
-    } @catch (__unused NSException *e) {}
-    return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
-}
 
 // ====================================================================================================
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & PROMOTION (TÍCH HỢP SMOOTH FRR CHỐNG GIẬT KHUNG HÌNH)
