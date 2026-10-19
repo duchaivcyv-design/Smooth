@@ -3244,7 +3244,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
     if (!self) return;
 
-    // 2. Bọc bảo vệ trực tiếp các lệnh gán phía dưới
+    // 2. Bọc bảo vệ trực tiếp các lệnh gán phía dưới (giữ nguyên số 1 bắt buộc)
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
@@ -3268,12 +3268,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (@available(iOS 15.0, *)) {
                 if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    CAFrameRateRange range = Titanium_SmoothFRR(maxTarget);
-                    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:[self methodSignatureForSelector:@selector(setPreferredFrameRateRange:)]];
-                    [invocation setTarget:self];
-                    [invocation setSelector:@selector(setPreferredFrameRateRange:)];
-                    [invocation setArgument:&range atIndex:2];
-                    [invocation invoke];
+                    self.preferredFrameRateRange = Titanium_SmoothFRR(maxTarget);
                 }
             }
         }
