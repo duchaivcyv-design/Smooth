@@ -3175,7 +3175,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - AN TOÀN TẦNG SÂU, KHÔNG LAG, KHÔNG CRASH)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP TẮT V-SYNC, GIẢM BUFFER 3 XUỐNG 2 - ĐỘ TRỄ 0MS, AN TOÀN TẦNG SÂU)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -3234,7 +3234,8 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
         // Chỉ can thiệp khi không phải SpringBoard và layer hợp lệ, tuyệt đối không chạm Main Thread UI
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
-                self.maximumDrawableCount = 3;
+                // Ép hạ bộ đệm drawable từ 3 xuống 2 để giảm thiểu độ trễ khung hình (input lag)
+                self.maximumDrawableCount = 2;
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
@@ -3246,6 +3247,8 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             }
 
             self.framebufferOnly = YES;
+            
+            // Ép tắt hoàn toàn V-Sync ở cấp độ Layer để đạt tốc độ hiển thị tối đa
             if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
                 self.displaySyncEnabled = NO;
             }
@@ -3273,7 +3276,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockEnabled = NO; 
+            __blockEnabled = NO; // Ép vô hiệu hóa V-Sync hoàn toàn
         }
     });
     %orig(__blockEnabled);
@@ -3287,7 +3290,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            count = 3; 
+            count = 2; // Ép buộc giới hạn buffer là 2
         }
     });
     return count;
@@ -3301,7 +3304,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockCount = 3;
+            __blockCount = 2; // Ép buộc giới hạn buffer là 2
         }
     });
     %orig(__blockCount);
