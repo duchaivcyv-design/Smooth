@@ -3341,8 +3341,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 static inline void Titanium_SafeExecute(void (^block)(void)) {
     @try {
         if (block) block();
-    } @catch (__unused NSException *e) {
-    } @catch (__unused NSThrowable *t) {}
+    } @catch (__unused NSException *e) {}
 }
 
 // Kiểm tra layer Metal có thuộc luồng phát Video / Camera / Trình duyệt không
@@ -3386,7 +3385,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)didMoveToWindow {
     Titanium_SafeExecute(^{
         if (!self) {
-            %orig;
             return;
         }
 
@@ -3437,16 +3435,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     Titanium_SafeExecute(^{
         if (!self) {
-            %orig(enabled);
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
-                %orig(enabled);
                 return;
             }
-            %orig(NO);
-            return;
+            enabled = NO;
         }
     });
     %orig(enabled);
@@ -3469,16 +3464,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     Titanium_SafeExecute(^{
         if (!self) {
-            %orig(count);
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
-                %orig(count);
                 return;
             }
-            %orig(3);
-            return;
+            count = 3;
         }
     });
     %orig(count);
@@ -3499,7 +3491,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     Titanium_SafeExecute(^{
         if (!self) {
-            %orig(range);
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
@@ -3538,20 +3529,19 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
+    __block BOOL __blockPresents = serverPresents;
     Titanium_SafeExecute(^{
         if (!self) {
-            %orig(serverPresents);
             return;
         }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             if (Titanium_IsMediaOrVideoLayer(self)) {
-                %orig(serverPresents);
                 return;
             }
-            serverPresents = YES;
+            __blockPresents = YES;
         }
     });
-    %orig(serverPresents);
+    %orig(__blockPresents);
 }
 
 %end
