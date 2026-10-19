@@ -2,8 +2,7 @@ Package: com.taojb.boostiphone6s
 Name: SmoothIOS Pro debug
 Version: 1.4.0-debug-1
 Architecture: iphoneos-arm64
-Description: Description: Fluidity redefined, đéo còn giật cục — ProMotion-grade frame pacing and adaptive refresh rate that actually works, không như mấy con hàng lởm khởm ngoài kia. Tái định nghĩa độ mượt mà của hệ thống từ gốc rễ: Engineered with intelligent variable refresh rates, zero-latency touch response, and seamless animation pacing — tối ưu hóa điều tiết khung hình chuẩn ProMotion không một vết xước, triệt tiêu hoàn toàn độ trễ cảm ứng và hoạt ảnh chuyển cảnh tức thì, đéo có chuyện khựng khung hình hay delay nhảm nhí, mà vẫn giữ thiết bị luôn mát mẻ như lúc vừa rút sạc (whisper-quiet thermal efficiency).
-Tương thích: iOS 14.0 – 26.0.1 (Từ thời iPhone 6s cụ tổ cho đến iPhone 15 Pro Max chấp hết mọi thể loại
+Description: Fluidity redefined, đéo còn giật cục — ProMotion-grade frame pacing and adaptive refresh rate that actually works, không như mấy con hàng lởm khởm ngoài kia. Tái định nghĩa độ mượt mà của hệ thống từ gốc rễ: Engineered with intelligent variable refresh rates, zero-latency touch response, and seamless animation pacing — tối ưu hóa điều tiết khung hình chuẩn ProMotion không một vết xước, triệt tiêu hoàn toàn độ trễ cảm ứng và hoạt ảnh chuyển cảnh tức thì, đéo có chuyện khựng khung hình hay delay nhảm nhí, mà vẫn giữ thiết bị luôn mát mẻ như lúc vừa rút sạc (whisper-quiet thermal efficiency). Tương thích: iOS 14.0 – 26.0.1 (Từ thời iPhone 6s cụ tổ cho đến iPhone 15 Pro Max chấp hết mọi thể loại lag tung chảo).
 Maintainer: TaoJB, NoJB,NoNo
 Author: TaoJB, NoJB, NoNo
 Section: Tweaks
