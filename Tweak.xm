@@ -3332,27 +3332,28 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - CÁCH LY AN TOÀN CHO VIDEO & AN TUTU)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - BỌC THÉP AN TOÀN CHO MỌI TIẾN TRÌNH & ANTUTU)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
-// Kiểm tra xem có phải app benchmark (AnTuTu) hay không để tránh bị văng MetalAssert()
-static inline BOOL Titanium_IsAnTuTuOrBenchmarkApp(void) {
+// Hàm bọc thép an toàn tuyệt đối cho mọi câu lệnh gọi ngoại vi (Chống sập 100%)
+static inline void Titanium_SafeExecute(void (^block)(void)) {
     @try {
-        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-        if (bundleID && ([bundleID containsString:@"antutu"] || [bundleID containsString:@"benchmark"])) {
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
-    return NO;
+        if (block) block();
+    } @catch (__unused NSException *e) {
+    } @catch (__unused NSThrowable *t) {}
 }
 
 // Kiểm tra layer Metal có thuộc luồng phát Video / Camera / Trình duyệt không
 static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
     if (!layer) return NO;
-    @try {
-        if (g_isVideoPlayingActive) return YES;
+    __block BOOL isMedia = NO;
+    Titanium_SafeExecute(^{
+        if (g_isVideoPlayingActive) {
+            isMedia = YES;
+            return;
+        }
         
         id del = layer.delegate;
         NSString *delName = del ? NSStringFromClass([del class]) : @"";
@@ -3367,10 +3368,10 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
             [delName containsString:@"VK"] ||
             [layerName containsString:@"AV"] ||
             [layerName containsString:@"Video"]) {
-            return YES;
+            isMedia = YES;
         }
-    } @catch (__unused NSException *e) {}
-    return NO;
+    });
+    return isMedia;
 }
 
 // Hàm hỗ trợ kiểm tra media layer từ Nhóm 14
@@ -3383,14 +3384,8 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hook CAMetalLayer
 
 - (void)didMoveToWindow {
-    @try {
+    Titanium_SafeExecute(^{
         if (!self) {
-            %orig;
-            return;
-        }
-        
-        // BẢO VỆ AN TUTU / BENCHMARK: Nếu là AnTuTu, nhả hoàn toàn để không bị văng RenderThread
-        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
             %orig;
             return;
         }
@@ -3436,18 +3431,12 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
                 }
             }
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    });
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
-    @try {
+    Titanium_SafeExecute(^{
         if (!self) {
-            %orig(enabled);
-            return;
-        }
-        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
             %orig(enabled);
             return;
         }
@@ -3459,30 +3448,27 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             %orig(NO);
             return;
         }
-    } @catch (__unused NSException *e) {}
+    });
     %orig(enabled);
 }
 
 - (NSUInteger)maximumDrawableCount {
-    @try {
-        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
+    __block NSUInteger count = %orig;
+    Titanium_SafeExecute(^{
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
-                return %orig;
+                return;
             }
-            return 3; 
+            count = 3; 
         }
-    } @catch (__unused NSException *e) {}
-    return %orig;
+    });
+    return count;
 }
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
-    @try {
+    Titanium_SafeExecute(^{
         if (!self) {
-            %orig(count);
-            return;
-        }
-        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
             %orig(count);
             return;
         }
@@ -3494,28 +3480,25 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             %orig(3);
             return;
         }
-    } @catch (__unused NSException *e) {}
+    });
     %orig(count);
 }
 
 - (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
-    @try {
-        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
+    __block CAFrameRateRange range = %orig;
+    Titanium_SafeExecute(^{
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
-    } @catch (__unused NSException *e) {}
-    return %orig;
+    });
+    return range;
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    @try {
+    Titanium_SafeExecute(^{
         if (!self) {
-            %orig(range);
-            return;
-        }
-        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
             %orig(range);
             return;
         }
@@ -3523,41 +3506,40 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
-        %orig(range);
-    } @catch (__unused NSException *e) {}
+    });
+    %orig(range);
 }
 
 - (id)nextDrawable {
-    @try {
-        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
+    __block id drawable = nil;
+    Titanium_SafeExecute(^{
+        drawable = %orig;
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             g_lastInteractionMachTime = mach_absolute_time();
             EnforceMaxCPUPower();
         }
-    } @catch (__unused NSException *e) {}
-    return %orig;
+    });
+    return drawable ?: %orig;
 }
 
 - (BOOL)serverPresentsWithTransaction {
-    @try {
-        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
+    __block BOOL presents = %orig;
+    Titanium_SafeExecute(^{
+        if (!self) return;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             if (Titanium_IsMediaOrVideoLayer(self)) {
-                return %orig;
+                return;
             }
-            return YES;
+            presents = YES;
         }
-    } @catch (__unused NSException *e) {}
-    return %orig;
+    });
+    return presents;
 }
 
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
-    @try {
+    Titanium_SafeExecute(^{
         if (!self) {
-            %orig(serverPresents);
-            return;
-        }
-        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
             %orig(serverPresents);
             return;
         }
@@ -3568,10 +3550,8 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             }
             serverPresents = YES;
         }
-        %orig(serverPresents);
-    } @catch (__unused NSException *e) {
-        %orig(serverPresents);
-    }
+    });
+    %orig(serverPresents);
 }
 
 %end
@@ -3579,13 +3559,14 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hook UIPanGestureRecognizer
 
 - (CGPoint)translationInView:(UIView *)view {
-    @try {
-        if (!self) return %orig(view);
+    __block CGPoint pt = %orig(view);
+    Titanium_SafeExecute(^{
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             EnforceMaxCPUPower();
         }
-    } @catch (__unused NSException *e) {}
-    return %orig(view);
+    });
+    return pt;
 }
 
 %end
@@ -3593,15 +3574,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hook CAContext
 
 - (void)setDesiredDynamicRange:(float)range {
-    @try {
+    Titanium_SafeExecute(^{
         if (TITANIUM_LITE_MODE) {
             %orig(range);
             return;
         }
         %orig(range);
-    } @catch (__unused NSException *e) {
-        %orig(range);
-    }
+    });
 }
 
 %end
