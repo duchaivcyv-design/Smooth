@@ -7765,13 +7765,25 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // BỌC THÉP TẦNG SÂU: Chặn tín hiệu sập ngầm để bẻ nát mọi tiến trình giao diện và game mà không văng
-        @try {
-            signal(SIGBUS, SIG_IGN);
-            signal(SIGSEGV, SIG_IGN);
-        } @catch (__unused NSException *e) {}
+        // BỔ SUNG: Chặn đứng các tiến trình dịch vụ giao diện hệ thống gây xung đột bộ nhớ (tránh crash SIGBUS/SIGSEGV)
+        if (strcasestr(progName, "ScreenshotServicesService") != NULL ||
+            strcasestr(progName, "MediaRemoteUI") != NULL ||
+            strcasestr(progName, "SharingViewService") != NULL ||
+            strcasestr(progName, "PassbookUIService") != NULL ||
+            strcasestr(progName, "UserNotificationCenter") != NULL ||
+            strcasestr(progName, "CoreAuthUI") != NULL ||
+            strcasestr(progName, "ControlCenter") != NULL) {
+            return;
+        }
 
-        // CHẶN TUYỆT ĐỐI: Tiến trình mạng, tiến trình báo cáo Apple (Telemetry/Crash), và dịch vụ giao diện dễ sập
+        if (strcasestr(progName, "smooth") != NULL ||
+            strcasestr(progName, "boosti") != NULL ||
+            strcasestr(progName, "liquid") != NULL ||
+            strcasestr(progName, "zinitd") != NULL ||
+            strcasestr(progName, "roothide") != NULL) {
+            return;
+        }
+
         if (strcasestr(progName, "networkd") != NULL ||
             strcasestr(progName, "trustd") != NULL ||
             strcasestr(progName, "configd") != NULL ||
@@ -7779,28 +7791,46 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "CommCenter") != NULL ||
             strcasestr(progName, "mDNSResponder") != NULL ||
             strcasestr(progName, "nsurlsessiond") != NULL ||
+            strcasestr(progName, "GPUProcess") != NULL ||
             strcasestr(progName, "Networking") != NULL ||
             strcasestr(progName, "neagent") != NULL ||
             strcasestr(progName, "nesessionmanager") != NULL ||
             strcasestr(progName, "apsd") != NULL ||
+            strcasestr(progName, "cloudd") != NULL ||
+            strcasestr(progName, "geod") != NULL ||
+            strcasestr(progName, "akd") != NULL ||
+            strcasestr(progName, "identityservicesd") != NULL ||
+            strcasestr(progName, "imagent") != NULL ||
             strcasestr(progName, "bluetoothd") != NULL ||
-            strcasestr(progName, "launchd") != NULL ||
-            strcasestr(progName, "kernelmanagerd") != NULL ||
-            // Chặn tiêm vào các tiến trình chuyên báo cáo lỗi/telemetry về Apple
-            strcasestr(progName, "analyticsd") != NULL ||
-            strcasestr(progName, "symptomsd") != NULL ||
-            strcasestr(progName, "ReportCrash") != NULL ||
-            strcasestr(progName, "awdd") != NULL ||
-            strcasestr(progName, "OSASubmissionClient") != NULL ||
-            strcasestr(progName, "DiagnosticLogCollection") != NULL ||
-            // Chặn tiến trình giao diện hệ thống gây xung đột bộ nhớ
-            strcasestr(progName, "ScreenshotServicesService") != NULL ||
-            strcasestr(progName, "MediaRemoteUI") != NULL) {
+            strcasestr(progName, "profiled") != NULL) {
+            return;
+        }
+
+        if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
+            strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
+            strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
+            strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
+            strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
+            strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
+            strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
+            strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
+            strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
+            strcasestr(progName, "passd")) {
             return;
         }
 
         NSBundle *mainBundle = [NSBundle mainBundle];
         NSString *bundleID = [mainBundle bundleIdentifier];
+
+        if (bundleID) {
+            if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+                return;
+            }
+        }
 
         BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
 
