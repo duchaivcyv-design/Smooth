@@ -3239,12 +3239,13 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 %hook CAMetalLayer
 
 - (void)didMoveToWindow {
-    Titanium_SafeExecute(^{
-        if (!self) {
-            return;
-        }
+    // 1. Gọi %orig trực tiếp ở đây, TUYỆT ĐỐI KHÔNG bọc vào block hay try/catch
+    %orig;
 
-        %orig;
+    if (!self) return;
+
+    // 2. Bọc bảo vệ trực tiếp các lệnh gán phía dưới
+    @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
                 self.maximumDrawableCount = 1;
@@ -3276,7 +3277,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
                 }
             }
         }
-    });
+    } @catch (__unused NSException *e) {}
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
