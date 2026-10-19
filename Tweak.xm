@@ -7793,6 +7793,17 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
+        // BỔ SUNG: Chặn đứng các tiến trình dịch vụ giao diện hệ thống gây xung đột bộ nhớ (tránh crash SIGBUS/SIGSEGV)
+        if (strcasestr(progName, "ScreenshotServicesService") != NULL ||
+            strcasestr(progName, "MediaRemoteUI") != NULL ||
+            strcasestr(progName, "SharingViewService") != NULL ||
+            strcasestr(progName, "PassbookUIService") != NULL ||
+            strcasestr(progName, "UserNotificationCenter") != NULL ||
+            strcasestr(progName, "CoreAuthUI") != NULL ||
+            strcasestr(progName, "ControlCenter") != NULL) {
+            return;
+        }
+
         if (strcasestr(progName, "smooth") != NULL ||
             strcasestr(progName, "boosti") != NULL ||
             strcasestr(progName, "liquid") != NULL ||
