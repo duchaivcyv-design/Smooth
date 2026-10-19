@@ -7373,9 +7373,11 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
+                // ĐÃ XÓA HOÀN TOÀN DÒNG Group_Force_Render_Recovery_Overdrive GÂY LỖI BIÊN DỊCH Ở ĐÂY
                 %init(Group_Window_Level_Overdrive);
                 Init_CAWindowServer_Hooks();
 
+                // ĐÃ SỬA: Thay 200 giây (NSEC_PER_SEC) thành 150 mili-giây (NSEC_PER_MSEC) để chặn đứng Watchdog và tăng tốc app
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     Titanium_ForceInjectDynamicRefreshSupport();
                     AppleInternal_LockHardwareCADisplay();
@@ -7439,9 +7441,9 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "PassbookUIService") != NULL ||
             strcasestr(progName, "UserNotificationCenter") != NULL ||
             strcasestr(progName, "CoreAuthUI") != NULL ||
-            strcasestr(progName, "assistivetouchd") != NULL || // Chặn AssistiveTouch[span_0](start_span)[span_0](end_span)
-            strcasestr(progName, "PosterBoard") != NULL ||     // Chặn PosterBoard (Lock Screen)[span_1](start_span)[span_1](end_span)
-            strcasestr(progName, "sharingd") != NULL) {        // Chặn sharingd (AirDrop/Sharing)[span_2](start_span)[span_2](end_span)
+            strcasestr(progName, "assistivetouchd") != NULL || 
+            strcasestr(progName, "PosterBoard") != NULL ||     
+            strcasestr(progName, "sharingd") != NULL) {        
             return;
         }
 
@@ -7516,7 +7518,7 @@ static void SpringBoardBootstrapTrigger(void) {
                 [CFG285 loadSettings];
                 if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger prefHz = (NSInteger)CFG285.targetHz;
-                        if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
+                    if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
                         g_cachedResolvedHz = prefHz;
                     }
                 }
