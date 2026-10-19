@@ -3332,6 +3332,11 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
     return isMedia;
 }
 
+// Hàm bổ sung chuẩn xác để triệt tiêu lỗi "use of undeclared identifier"
+static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
+    return Titanium_IsVideoOrMediaMetalLayer(layer);
+}
+
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
