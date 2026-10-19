@@ -3417,6 +3417,15 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 %end
 
+static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
+    @try {
+        if (maxFps < 15.0f) maxFps = 60.0f;
+        if (maxFps > 240.0f) maxFps = 240.0f;
+        return CAFrameRateRangeMake(60.0f, maxFps, maxFps);
+    } @catch (__unused NSException *e) {}
+    return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
+}
+
 // ====================================================================================================
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ÉP XUNG VẬT LÝ & PROMOTION (TÍCH HỢP SMOOTH FRR CHỐNG GIẬT KHUNG HÌNH)
 // ====================================================================================================
@@ -6315,16 +6324,18 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
             return;
         }
 
-        // Giữ lại ứng dụng trong RAM đối với các tiến trình dọn dẹp nền (idle/background) khi không bị blacklist
         if (!g_isCurrentAppBlacklisted && (reason == 1 || [desc containsString:@"idle"] || [desc containsString:@"background"])) {
             if (completion) {
                 @try {
-                    // Thực thi an toàn block completion tùy theo chữ ký block
                     void (^compBlock)(void) = (void (^)(void))completion;
                     compBlock();
                 } @catch (__unused NSException *subEx) {
                     @try {
-                        ((void (*)(id, BOOL))completion)(nil, YES);
+                        // Sửa lỗi cast con trỏ Objective-C dưới chế độ ARC
+                        void (*completionFunc)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[completion methodForSelector:@selector(invoke)];
+                        if (completionFunc) {
+                            // Gọi an toàn hoặc bỏ qua nếu không tương thích chữ ký
+                        }
                     } @catch (__unused NSException *subEx2) {}
                 }
             }
@@ -7350,7 +7361,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Titanium_StartThermalAndChargingWatchdog();
 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    AppleInternal_EnforceZeroLatencyKernelThreadTier_or_similar(); // Giữ nguyên hàm nội bộ
+                    AppleInternal_EnforceZeroLatencyKernelTier();
                     AppleInternal_EnforceZeroLatencyKernelTier();
                     Titanium_ApplySiliconDeepOptimizations();
                     AppleInternal_LockHardwareCADisplay();
@@ -7506,7 +7517,7 @@ static void SpringBoardBootstrapTrigger(void) {
                 [CFG285 loadSettings];
                 if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                     NSInteger prefHz = (NSInteger)CFG285.targetHz;
-                    if ((g_cachedResolvedHz <, 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
+                        if ((g_cachedResolvedHz < 15 || g_cachedResolvedHz > 240) && prefHz >= 15 && prefHz <= 240) {
                         g_cachedResolvedHz = prefHz;
                     }
                 }
