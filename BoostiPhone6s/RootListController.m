@@ -2736,7 +2736,8 @@ static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_
 
 // [V30 FIX]: Thêm 15Hz vào danh sách chuẩn
 static NSArray<NSNumber *> *TIStandardRateValues(void) {
-    return @[@15, @60, @90, @120, @144, @240];
+    // Unified Hz/FPS selector: show only the requested presets.
+    return @[@60, @90, @120, @144, @240];
 }
 
 // [V30 FIX]: Hàm trả về nhãn mô tả từng mức Hz/FPS giống ảnh 2
@@ -2756,18 +2757,8 @@ static NSString *TIRateDescription(NSInteger r, BOOL isHz) {
 }
 
 static NSArray<NSNumber *> *TIExpandedRateValues(void) {
-    static NSArray<NSNumber *> *values;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSMutableSet<NSNumber *> *set = [NSMutableSet set];
-        for (NSInteger v = 15; v <= 235; v += 5) [set addObject:@(v)];
-        for (NSNumber *v in @[@20,@25,@30,@35,@40,@50,@70,@80,@85,@95,@100,@105,@110,@115,@125,@130,@135,@145,@150,@160]) [set addObject:v];
-        [set addObject:@240];
-        values = [[set allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
-            return [a compare:b];
-        }];
-    });
-    return values;
+    // “Mở rộng” reveals the combined Hz/FPS area; keep the preset list consistent.
+    return @[@60, @90, @120, @144, @240];
 }
 
 
@@ -3690,18 +3681,24 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [sheet addAction:[UIAlertAction actionWithTitle:@"Tự động theo máy" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         self.settingsDict[@"SelectedLanguage"] = @"auto";
         self.settingsDict[@"AppLanguage"] = @"auto";
+        [[NSUserDefaults standardUserDefaults] setObject:@"auto" forKey:@"SelectedLanguage"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         self.settingsDict[@"SelectedLanguage"] = @"vi";
         self.settingsDict[@"AppLanguage"] = @"vi";
+        [[NSUserDefaults standardUserDefaults] setObject:@"vi" forKey:@"SelectedLanguage"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         self.settingsDict[@"SelectedLanguage"] = @"en";
         self.settingsDict[@"AppLanguage"] = @"en";
+        [[NSUserDefaults standardUserDefaults] setObject:@"en" forKey:@"SelectedLanguage"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
         [self saveSettingsDataAndSync];
         [self.customTableView reloadData];
     }]];
@@ -5075,11 +5072,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (index < 0 || index >= _tabConfigs.count) return;
     NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
-    if (!serverChosen) {
+    if (!serverChosen && index != 1 && index != 0) {
         [self showFirstInstallServerPicker];
         return;
     }
-    if (!_isFeatureActivated && index != 4 && index != 0) {
+    if (!_isFeatureActivated && index != 4 && index != 0 && index != 1) {
         [self showUnexploitedWarningAlert];
         return;
     }
@@ -5279,7 +5276,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0) return 1;
+    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return 1;
 
     if (_currentBottomTab == 0) {
         if (section == 0) return 1;
@@ -5293,7 +5290,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else if (_currentBottomTab == 1) {
         if (section == 0) return 1; // standard / expanded selector
         if (section == 1) return 1; // Hz / FPS selector
-        return (NSInteger)(_expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues()).count + 1;
+        return (NSInteger)(_expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues()).count;
     } else if (_currentBottomTab == 2) {
         if (section == 0) return 1;
         switch (_currentSwitchSubTab) {
@@ -5312,12 +5309,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 0) return 2;
         if (section == 1) return _isFeatureActivated ? 8 : 1;
         if (section == 2) return [self isAdminDevRole] ? 7 : 5;
-        return 4;
+        return 6;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0) return @"CẦN KÍCH HOẠT CẤU HÌNH";
+    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return @"CẦN KÍCH HOẠT CẤU HÌNH";
     if (_currentBottomTab == 0) {
         if (section == 0) return @"BỘ ĐO CHỈ ĐỌC · CPU THỰC TẾ, GPU/NHIỆT ĐỘ THEO KHẢ NĂNG iOS";
         if (section == 1) return @"CPU";
@@ -5366,7 +5363,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIView *accessory = nil;
     UIColor *accent = nil;
 
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0) {
+    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) {
         title = @"CẦN KÍCH HOẠT CẤU HÌNH";
         detail = @"Vào Cài Đặt";
         [cell configureWithTitle:title detail:detail accessory:nil accent:[UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0]];
@@ -5487,12 +5484,35 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             accessory = modeSeg;
             title = @"Chọn danh sách mức thường hoặc danh sách mở rộng";
         } else if (indexPath.section == 1) {
-            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Hz", @"FPS"]];
-            seg.selectedSegmentIndex = _currentHzFpsSubTab;
+            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"Hz/FPS", @"Hz", @"FPS"]];
+            seg.selectedSegmentIndex = MIN(2, MAX(0, _currentHzFpsSubTab));
             __weak typeof(self) wS = self;
             seg.valueChangedBlock = ^(NSInteger index) {
                 __strong typeof(wS) sS = wS;
                 if (!sS) return;
+
+                // Hz/FPS is a one-tap action: tapping it immediately syncs FPS to the
+                // currently configured Hz. Hz and FPS tabs remain manual-only.
+                if (index == 0) {
+                    if (sS->_isRateLocked) {
+                        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"KHÓA" message:@"Mở khóa góc phải trước." preferredStyle:UIAlertControllerStyleAlert];
+                        [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+                        [sS presentViewController:a animated:YES completion:nil];
+                        return;
+                    }
+                    NSInteger rate = [sS.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
+                    rate = MAX(60, MIN(240, rate));
+                    [sS applyRateValue:rate isDynamic:NO isFPS:NO];
+                    [sS applyRateValue:rate isDynamic:NO isFPS:YES];
+                    sS->_currentHzFpsSubTab = 0;
+                    [sS applyDeepSpringBoardAndUIKitTweaks];
+                    [sS showRateSuccessBannerForRate:rate combined:YES isFPS:NO];
+                    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+                    [fb impactOccurred];
+                    [sS smoothReloadTable];
+                    return;
+                }
+
                 if (sS->_currentHzFpsSubTab == index) return;
                 sS->_currentHzFpsSubTab = index;
                 [sS smoothReloadTable];
@@ -5500,21 +5520,22 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             accessory = seg;
             title = @"   Chế độ:";
         } else {
-            BOOL isHz = (_currentHzFpsSubTab == 0);
-            NSInteger cur = isHz ? [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue] : [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
+            BOOL combined = (_currentHzFpsSubTab == 0);
+            BOOL isHz = combined || (_currentHzFpsSubTab == 1);
+            NSInteger curHz = [self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
+            NSInteger curFPS = [self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
+            NSInteger cur = combined ? (curHz == curFPS ? curHz : 0) : (isHz ? curHz : curFPS);
             NSArray<NSNumber *> *rates = _expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues();
-            NSInteger applied = isHz ? _lastAppliedHz : _lastAppliedFPS;
+            NSInteger applied = combined ? ((_lastAppliedHz == _lastAppliedFPS) ? _lastAppliedHz : 0) : (isHz ? _lastAppliedHz : _lastAppliedFPS);
             if (indexPath.row < (NSInteger)rates.count) {
                 NSInteger r = rates[indexPath.row].integerValue;
-                NSString *heading = (r == 240) ? [NSString stringWithFormat:@"%ld %@ MAX", (long)r, isHz ? @"Hz" : @"FPS"] : [NSString stringWithFormat:@"%ld %@", (long)r, isHz ? @"Hz" : @"FPS"];
+                NSString *unit = combined ? @"Hz/FPS" : (isHz ? @"Hz" : @"FPS");
+                NSString *heading = (r == 240) ? [NSString stringWithFormat:@"%ld %@ MAX", (long)r, unit] : [NSString stringWithFormat:@"%ld %@", (long)r, unit];
                 // [V30 FIX]: Dùng nhãn mô tả riêng từng mức giống ảnh 2
                 NSString *description = TIRateDescription(r, isHz);
                 title = [NSString stringWithFormat:@"%@ — %@", heading, description];
                 if (cur == r) { detail = @"✓ Đang chọn"; accent = [UIColor colorWithRed:0.35 green:1.0 blue:0.55 alpha:1.0]; }
                 else if (applied == r) accent = [UIColor colorWithRed:0.35 green:0.75 blue:1.0 alpha:1.0];
-            } else {
-                title = _expandedHzFPS ? @"Nhập mức tùy chỉnh (15–240)…" : @"Nhập mức tùy chỉnh (15–240)…";
-                detail = [NSString stringWithFormat:@"Đang chọn: %ld", (long)cur];
             }
         }
     }
@@ -5806,9 +5827,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             } else if (indexPath.row == 2) {
                 title = @"Sandbox";
                 detail = Titanium_SandboxDiagnosticForUI();
-            } else {
+            } else if (indexPath.row == 3) {
                 title = @"IPC";
                 detail = Titanium_IPCDiagnosticForUI();
+            } else if (indexPath.row == 4) {
+                title = @"Ngôn ngữ / Language";
+                NSString *lang = self.settingsDict[@"SelectedLanguage"] ?: self.settingsDict[@"AppLanguage"] ?: @"auto";
+                detail = [lang isEqualToString:@"vi"] ? @"Tiếng Việt" : ([lang isEqualToString:@"en"] ? @"English" : @"Auto · theo thiết bị");
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+            } else {
+                title = @"Thông báo tác giả";
+                detail = @"TaoJb · NoNo · NoJB · nhóm cộng tác";
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             }
         }
     }
@@ -5835,16 +5865,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
+    BOOL languageSettingsRow = (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 4);
+    BOOL authorSettingsRow = (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 5);
     BOOL themeSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3);
     BOOL freePingSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == ([self isAdminDevRole] ? 5 : 4));
     BOOL manualPingRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0);
     BOOL serverAPISettingsRow = (_currentBottomTab == 4 && [self isAdminDevRole] && indexPath.section == 2 && indexPath.row == 4);
-    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer && !themeSettingsRow && !freePingSettingsRow && !manualPingRow && !serverAPISettingsRow) {
+    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer && _currentBottomTab != 1 && !themeSettingsRow && !freePingSettingsRow && !manualPingRow && !serverAPISettingsRow && !languageSettingsRow && !authorSettingsRow) {
         [self showFirstInstallServerPicker];
         return;
     }
 
-    if (!_isFeatureActivated) {
+    if (!_isFeatureActivated && _currentBottomTab != 1) {
         if (themeSettingsRow) { [self showThemeModePicker]; return; }
         if (freePingSettingsRow) { [self showFreeServerPingURLEditor]; return; }
         if (manualPingRow) { [self performManualServerPing]; return; }
@@ -5887,33 +5919,25 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             [self presentViewController:a animated:YES completion:nil];
             return;
         }
-        BOOL isHz = (_currentHzFpsSubTab == 0);
+        BOOL combined = (_currentHzFpsSubTab == 0);
+        BOOL isHz = combined || (_currentHzFpsSubTab == 1);
         NSArray<NSNumber *> *rates = _expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues();
         NSInteger targetRate = 0;
         if (indexPath.row < (NSInteger)rates.count) targetRate = rates[indexPath.row].integerValue;
-        else { [self showCustomRateInputAlertForHz:isHz]; return; }
+        else { return; }
 
-        NSTimeInterval suppressUntil = [[NSUserDefaults standardUserDefaults] doubleForKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
-        void (^applySelectedRate)(void) = ^{
+        // Apply the selected value directly; do not interrupt every Hz/FPS tap with a warning.
+        if (combined) {
+            [self applyRateValue:targetRate isDynamic:NO isFPS:NO];
+            [self applyRateValue:targetRate isDynamic:NO isFPS:YES];
+        } else {
             [self applyRateValue:targetRate isDynamic:NO isFPS:!isHz];
-            [self applyDeepSpringBoardAndUIKitTweaks];
-            UIImpactFeedbackGenerator *rateFb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-            [rateFb impactOccurred];
-            [self smoothReloadTable];
-        };
-        if (suppressUntil > NSDate.date.timeIntervalSince1970) { applySelectedRate(); return; }
-        NSString *kind = isHz ? @"Hz" : @"FPS";
-        UIAlertController *warning = [UIAlertController alertControllerWithTitle:@"Cảnh báo Hz/FPS"
-            message:[NSString stringWithFormat:@"Bạn chọn mức mục tiêu %ld %@. Đây là yêu cầu cấu hình, không phải bảo đảm màn hình/game sẽ đạt mức đó. Tăng mức có thể làm máy nóng và hao pin.", (long)targetRate, kind]
-            preferredStyle:UIAlertControllerStyleAlert];
-        [warning addAction:[UIAlertAction actionWithTitle:@"X / Để sau" style:UIAlertActionStyleCancel handler:nil]];
-        [warning addAction:[UIAlertAction actionWithTitle:@"Tắt nhắc 3 tiếng" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            [[NSUserDefaults standardUserDefaults] setDouble:(NSDate.date.timeIntervalSince1970 + 3.0 * 60.0 * 60.0) forKey:TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            applySelectedRate();
-        }]];
-        [warning addAction:[UIAlertAction actionWithTitle:@"Tiếp tục" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { applySelectedRate(); }]];
-        [self presentViewController:warning animated:YES completion:nil];
+        }
+        [self applyDeepSpringBoardAndUIKitTweaks];
+        [self showRateSuccessBannerForRate:targetRate combined:combined isFPS:!isHz];
+        UIImpactFeedbackGenerator *rateFb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [rateFb impactOccurred];
+        [self smoothReloadTable];
     } else if (_currentBottomTab == 4 && indexPath.section == 0 && indexPath.row == 0) {
         if (!_isAdminServer && !([self isServerStateOK])) { [self showPersistentServerStateAlert]; return; }
         NSInteger cc = Titanium_GetCrashCount();
@@ -6066,17 +6090,67 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [self presentViewController:a animated:YES completion:nil];
 }
 
+- (void)showRateSuccessBannerForRate:(NSInteger)rate combined:(BOOL)combined isFPS:(BOOL)isFPS {
+    NSString *message = combined
+        ? [NSString stringWithFormat:@"✓ Đã chỉnh Hz/FPS thành %ld", (long)rate]
+        : [NSString stringWithFormat:@"✓ Đã chỉnh %@ thành %ld", isFPS ? @"FPS" : @"Hz", (long)rate];
+    UIView *banner = [UIView new];
+    banner.translatesAutoresizingMaskIntoConstraints = NO;
+    banner.backgroundColor = [UIColor colorWithRed:0.10 green:0.13 blue:0.20 alpha:0.97];
+    banner.layer.cornerRadius = 16.0;
+    banner.layer.borderWidth = 1.0;
+    banner.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.22].CGColor;
+    banner.layer.shadowColor = UIColor.blackColor.CGColor;
+    banner.layer.shadowOpacity = 0.22;
+    banner.layer.shadowRadius = 12.0;
+    banner.layer.shadowOffset = CGSizeMake(0, 4);
+    banner.clipsToBounds = YES;
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = message;
+    label.textColor = UIColor.whiteColor;
+    label.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    label.numberOfLines = 0;
+    label.lineBreakMode = NSLineBreakByWordWrapping;
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumScaleFactor = 0.85;
+    label.textAlignment = NSTextAlignmentLeft;
+    [banner addSubview:label];
+    [self.view addSubview:banner];
+    [NSLayoutConstraint activateConstraints:@[
+        [banner.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:12],
+        [banner.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-12],
+        [banner.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [label.leadingAnchor constraintEqualToAnchor:banner.leadingAnchor constant:15],
+        [label.trailingAnchor constraintEqualToAnchor:banner.trailingAnchor constant:-15],
+        [label.topAnchor constraintEqualToAnchor:banner.topAnchor constant:12],
+        [label.bottomAnchor constraintEqualToAnchor:banner.bottomAnchor constant:-12]
+    ]];
+    banner.alpha = 0.0;
+    banner.transform = CGAffineTransformMakeTranslation(0, -16);
+    [UIView animateWithDuration:0.24 animations:^{ banner.alpha = 1.0; banner.transform = CGAffineTransformIdentity; }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.2 animations:^{ banner.alpha = 0.0; } completion:^(__unused BOOL finished) { [banner removeFromSuperview]; }];
+    });
+}
+
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
     rate = MAX(15, MIN(240, rate));
+    NSUserDefaults *rateDefaults = [NSUserDefaults standardUserDefaults];
     if (isFPS) {
         self.settingsDict[@"TargetFPSRate"] = @(rate);
         self.settingsDict[@"EnableFPSControl"] = @YES;
         self->_lastAppliedFPS = rate;
+        [rateDefaults setInteger:rate forKey:@"TargetFPSRate"];
+        [rateDefaults setBool:YES forKey:@"EnableFPSControl"];
     } else {
         self.settingsDict[@"TargetRefreshRate"] = @(rate);
         self.settingsDict[@"EnableHzControl"] = @YES;
         self->_lastAppliedHz = rate;
+        [rateDefaults setInteger:rate forKey:@"TargetRefreshRate"];
+        [rateDefaults setBool:YES forKey:@"EnableHzControl"];
     }
+    [rateDefaults synchronize];
     [self saveSettingsDataAndSync];
 }
 
@@ -6409,76 +6483,40 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         });
     }
 
-    // Animate progress bar without a self-capturing recursive block.
+    // Animate progress bar over phaseDuration
+    NSTimeInterval tickInterval = phaseDuration / 50.0;
+    __block NSInteger tick = 0;
     __weak UIProgressView *wprog = prog;
     __weak UILabel *wperc = percentLbl;
     __weak UIView *woverlay = overlay;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        [self scheduleExploitProgressTick:1
-                             tickInterval:(phaseDuration / 50.0)
-                                    phase:phase
-                             totalExecuted:newTotal
-                              progressView:wprog
-                              percentLabel:wperc
-                                   overlay:woverlay];
-    });
-}
-
-- (void)scheduleExploitProgressTick:(NSInteger)tick
-                       tickInterval:(NSTimeInterval)tickInterval
-                              phase:(NSInteger)phase
-                      totalExecuted:(NSInteger)newTotal
-                       progressView:(UIProgressView *)progressView
-                        percentLabel:(UILabel *)percentLabel
-                             overlay:(UIView *)overlay {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        UIProgressView *progress = progressView;
-        UILabel *percent = percentLabel;
-        UIView *currentOverlay = overlay;
-        if (!progress || !percent || !currentOverlay) return;
-
-        float value = MIN((float)tick / 50.0f, 1.0f);
-        progress.progress = value;
-        percent.text = [NSString stringWithFormat:@"%.0f%%", value * 100.0f];
-        if (tick < 50) {
-            [self scheduleExploitProgressTick:tick + 1 tickInterval:tickInterval phase:phase
-                                totalExecuted:newTotal progressView:progress percentLabel:percent overlay:currentOverlay];
-            return;
-        }
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [UIView animateWithDuration:0.18 animations:^{ currentOverlay.alpha = 0.0; }
-                             completion:^(BOOL finished) {
-                [currentOverlay removeFromSuperview];
-                [self runFullExploitSequenceWithPhase:phase + 1 totalCodeExecuted:newTotal];
-            }];
+    __weak typeof(self) weakSelf = self;
+    dispatch_block_t ticker = nil;
+    __block dispatch_block_t tickerRef = nil;
+    tickerRef = ^{
+        tick++;
+        float progress = (float)tick / 50.0f;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            wprog.progress = progress;
+            wperc.text = [NSString stringWithFormat:@"%.0f%%", progress * 100.0f];
         });
-    });
-}
-
-- (void)performAppleFlashStep:(NSInteger)count flash:(UIView *)flash icon:(UILabel *)icon {
-    if (!flash || !icon) {
-        [self finalizeExploitActivation];
-        return;
-    }
-    if (count <= 0) {
-        [UIView animateWithDuration:0.3 animations:^{ flash.alpha = 0.0; icon.alpha = 0.0; }
-                         completion:^(BOOL finished) {
-            [flash removeFromSuperview];
-            [self finalizeExploitActivation];
-        }];
-        return;
-    }
-    [UIView animateWithDuration:0.15 animations:^{ flash.alpha = 0.85; icon.alpha = 1.0; }
-                     completion:^(BOOL finished) {
-        [UIView animateWithDuration:0.15 animations:^{ flash.alpha = 0.0; icon.alpha = 0.3; }
-                         completion:^(BOOL finishedAgain) {
-            [self performAppleFlashStep:count - 1 flash:flash icon:icon];
-        }];
-    }];
+        if (tick < 50) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), tickerRef);
+        } else {
+            // Pha xong — xóa overlay và chuyển pha tiếp
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [UIView animateWithDuration:0.18 animations:^{ woverlay.alpha = 0.0; } completion:^(BOOL f) {
+                    [woverlay removeFromSuperview];
+                    __strong typeof(weakSelf) sS = weakSelf;
+                    if (sS) {
+                        [sS runFullExploitSequenceWithPhase:phase + 1 totalCodeExecuted:newTotal];
+                    }
+                }];
+            });
+        }
+    };
+    (void)ticker;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), tickerRef);
 }
 
 - (void)runAppleTadaAnimation {
@@ -6501,12 +6539,39 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     appleIcon.alpha = 0.0;
     [flash addSubview:appleIcon];
 
-    // Nhấp nháy 3 lần; recursion is handled by a method to avoid block retain cycles.
+    // Nhấp nháy 3 lần
     __weak UIView *wflash = flash;
     __weak UILabel *wicon = appleIcon;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        [self performAppleFlashStep:3 flash:wflash icon:wicon];
+    __weak typeof(self) weakSelf = self;
+    void (^doFlash)(NSInteger) = nil;
+    __block void (^doFlashRef)(NSInteger) = nil;
+    doFlashRef = ^(NSInteger count) {
+        if (count <= 0) {
+            [UIView animateWithDuration:0.3 animations:^{
+                wflash.alpha = 0.0;
+                wicon.alpha = 0.0;
+            } completion:^(BOOL f) {
+                [wflash removeFromSuperview];
+                __strong typeof(weakSelf) sS = weakSelf;
+                if (sS) [sS finalizeExploitActivation];
+            }];
+            return;
+        }
+        [UIView animateWithDuration:0.15 animations:^{
+            wflash.alpha = 0.85;
+            wicon.alpha = 1.0;
+        } completion:^(BOOL f) {
+            [UIView animateWithDuration:0.15 animations:^{
+                wflash.alpha = 0.0;
+                wicon.alpha = 0.3;
+            } completion:^(BOOL f2) {
+                doFlashRef(count - 1);
+            }];
+        }];
+    };
+    (void)doFlash;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        doFlashRef(3);
     });
 }
 
@@ -6579,15 +6644,49 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 
 - (void)loadSettingsData {
     NSString *p = Titanium_ResolvePrefPath();
+    NSUserDefaults *savedDefaults = [NSUserDefaults standardUserDefaults];
+    NSDictionary *backup = [savedDefaults dictionaryForKey:@"TitaniumSettingsBackup_v1"];
+    NSMutableDictionary *loaded = [backup isKindOfClass:[NSDictionary class]] ? [backup mutableCopy] : nil;
     if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
-        self.settingsDict = [NSMutableDictionary dictionaryWithContentsOfFile:p] ?: [NSMutableDictionary dictionary];
-    } else self.settingsDict = [NSMutableDictionary dictionary];
+        NSDictionary *disk = [NSDictionary dictionaryWithContentsOfFile:p];
+        if ([disk isKindOfClass:[NSDictionary class]]) {
+            if (!loaded) loaded = [NSMutableDictionary dictionary];
+            // The latest backup wins; disk fills only keys absent from that backup.
+            [disk enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+                if (!loaded[key] && key && obj) loaded[key] = obj;
+            }];
+        }
+    }
+    // CFPreferences is the shared domain consumed by Tweak.xm; use it as a fallback
+    // when plist paths differ across rootless/rootful/RootHide bootstrap layouts.
+    if (!loaded || loaded.count == 0) {
+        CFPreferencesAppSynchronize(PREF_DOMAIN);
+        CFArrayRef keys = CFPreferencesCopyKeyList(PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keys) {
+            CFDictionaryRef values = CFPreferencesCopyMultiple(keys, PREF_DOMAIN, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (values) loaded = [(__bridge_transfer NSDictionary *)values mutableCopy];
+            CFRelease(keys);
+        }
+    }
+    self.settingsDict = loaded ?: [NSMutableDictionary dictionary];
+    if (!self.settingsDict[@"SelectedLanguage"]) {
+        NSString *savedLanguage = [savedDefaults stringForKey:@"SelectedLanguage"];
+        if (savedLanguage.length) self.settingsDict[@"SelectedLanguage"] = savedLanguage;
+    }
+    if (!self.settingsDict[@"TargetRefreshRate"] && [savedDefaults objectForKey:@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @([savedDefaults integerForKey:@"TargetRefreshRate"]);
+    if (!self.settingsDict[@"TargetFPSRate"] && [savedDefaults objectForKey:@"TargetFPSRate"]) self.settingsDict[@"TargetFPSRate"] = @([savedDefaults integerForKey:@"TargetFPSRate"]);
+    if (!self.settingsDict[@"EnableHzControl"] && [savedDefaults objectForKey:@"EnableHzControl"]) self.settingsDict[@"EnableHzControl"] = @([savedDefaults boolForKey:@"EnableHzControl"]);
+    if (!self.settingsDict[@"EnableFPSControl"] && [savedDefaults objectForKey:@"EnableFPSControl"]) self.settingsDict[@"EnableFPSControl"] = @([savedDefaults boolForKey:@"EnableFPSControl"]);
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
     [self ensureDefaultSettingsExist];
+    [self saveSettingsDataAndSync];
 }
 
 - (void)saveSettingsDataAndSync {
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
+    NSUserDefaults *settingsBackupDefaults = [NSUserDefaults standardUserDefaults];
+    [settingsBackupDefaults setObject:[self.settingsDict copy] forKey:@"TitaniumSettingsBackup_v1"];
+    [settingsBackupDefaults synchronize];
     NSString *p = Titanium_ResolvePrefPath();
     NSString *d = [p stringByDeletingLastPathComponent];
     if (![[NSFileManager defaultManager] fileExistsAtPath:d]) {
