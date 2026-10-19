@@ -60,6 +60,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <Metal/Metal.h>
 #import <WebKit/WebKit.h>
+#import <StoreKit/StoreKit.h> // <--- THÊM NGAY DÒNG NÀY VÀO ĐẦU FILE .XM
 
 // BẢO VỆ SDK: Chống lỗi fatal error nếu SDK thiếu thư mục Private Framework IOKit / IOSurface
 #if __has_include(<IOKit/IOKitLib.h>)
