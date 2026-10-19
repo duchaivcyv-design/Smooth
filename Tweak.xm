@@ -3175,8 +3175,17 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// HÀM TRỢ GIÚP TOÀN CỤC (ĐẶT Ở ĐẦU ĐỂ KHÔNG BAO GIỜ BỊ LỖI UNDECLARED)
+// HÀM TRỢ GIÚP TOÀN CỤC & TÍNH TOÁN FPS (ĐẶT Ở ĐẦU TIÊN ĐỂ TRIỆT TIÊU LỖI UNDECLARED)
 // ====================================================================================================
+
+static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
+    @try {
+        if (maxFps < 15.0f) maxFps = 60.0f;
+        if (maxFps > 240.0f) maxFps = 240.0f;
+        return CAFrameRateRangeMake(60.0f, maxFps, maxFps);
+    } @catch (__unused NSException *e) {}
+    return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
+}
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
