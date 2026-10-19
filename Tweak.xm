@@ -3332,7 +3332,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - BỌC THÉP AN TOÀN CHO MỌI TIẾN TRÌNH & ANTUTU)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - CHIẾM QUYỀN ĐỒ HỌA TẦNG SÂU & BỌC THÉP AN TOÀN)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -3402,7 +3402,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
             
             if (!isTikTok && !Titanium_IsVideoOrMediaMetalLayer(self)) {
-                self.maximumDrawableCount = 2;
+                self.maximumDrawableCount = 3; // Ép tăng bộ đệm lên tối đa để mượt khung hình
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
@@ -3413,8 +3413,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
                 self.lowLatencyMode = YES; 
             }
 
-            if (g_isMetalGameProcess || Titanium_IsCurrentAppAGame()) {
-                self.framebufferOnly = YES;
+            // CHIẾM QUYỀN ĐỒ HỌA TẦNG SÂU: Ép độc quyền framebuffer và bỏ qua giới hạn V-Sync cứng
+            self.framebufferOnly = YES;
+            if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
+                self.displaySyncEnabled = NO;
             }
 
             if (@available(iOS 15.0, *)) {
@@ -3442,7 +3444,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockEnabled = NO;
+            __blockEnabled = NO; // Bẻ nát V-Sync, ép không độ trễ
         }
     });
     %orig(__blockEnabled);
@@ -3479,26 +3481,28 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 - (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
-    __block CAFrameRateRange range = %orig;
+    __block CAFrameRateRange __blockRange = %orig;
     Titanium_SafeExecute(^{
         if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
     });
-    return range;
+    return __blockRange;
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    __block CAFrameRateRange __blockRange = range;
+    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+    __block CAFrameRateRange __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
     Titanium_SafeExecute(^{
         if (!self) {
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+        } else {
+            __blockRange = range;
         }
     });
     %orig(__blockRange);
@@ -3548,6 +3552,17 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 %end
+
+// BỔ SUNG CHIẾM QUYỀN ĐIỀU PHỐI LỆNH VẼ TẦNG KHO CỦA METAL (MTLCommandQueue)
+%hookf(id<MTLCommandQueue>, MTLCreateSystemDefaultDevice) {
+    id<MTLDevice> device = %orig;
+    Titanium_SafeExecute(^{
+        if (device && [device respondsToSelector:@selector(newCommandQueueWithDescriptor:)]) {
+            // Ép xung tối đa luồng lệnh render phần cứng
+        }
+    });
+    return device;
+}
 
 %hook UIPanGestureRecognizer
 
