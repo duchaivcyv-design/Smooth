@@ -3283,10 +3283,21 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - CÁCH LY AN TOÀN CHO VIDEO)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - CÁCH LY AN TOÀN CHO VIDEO & AN TUTU)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
+
+// Kiểm tra xem có phải app benchmark (AnTuTu) hay không để tránh bị văng MetalAssert()
+static inline BOOL Titanium_IsAnTuTuOrBenchmarkApp(void) {
+    @try {
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        if (bundleID && ([bundleID containsString:@"antutu"] || [bundleID containsString:@"benchmark"])) {
+            return YES;
+        }
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
 
 // Kiểm tra layer Metal có thuộc luồng phát Video / Camera / Trình duyệt không
 static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
@@ -3313,6 +3324,11 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
     return NO;
 }
 
+// Hàm hỗ trợ kiểm tra media layer từ Nhóm 14
+static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
+    return Titanium_IsVideoOrMediaMetalLayer(layer);
+}
+
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
@@ -3323,6 +3339,13 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
             %orig;
             return;
         }
+        
+        // BẢO VỆ AN TUTU / BENCHMARK: Nếu là AnTuTu, nhả hoàn toàn để không bị văng RenderThread
+        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
+            %orig;
+            return;
+        }
+
         %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
             CGSize scrSize = [UIScreen mainScreen].bounds.size;
@@ -3375,6 +3398,10 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
             %orig(enabled);
             return;
         }
+        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
+            %orig(enabled);
+            return;
+        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 %orig(enabled);
@@ -3389,7 +3416,7 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
 
 - (NSUInteger)maximumDrawableCount {
     @try {
-        if (!self) return %orig;
+        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return %orig;
@@ -3403,6 +3430,10 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     @try {
         if (!self) {
+            %orig(count);
+            return;
+        }
+        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
             %orig(count);
             return;
         }
@@ -3420,7 +3451,7 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
 
 - (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
     @try {
-        if (!self) return %orig;
+        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             return CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
@@ -3435,6 +3466,10 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
             %orig(range);
             return;
         }
+        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
+            %orig(range);
+            return;
+        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
             range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
@@ -3445,13 +3480,49 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
 
 - (id)nextDrawable {
     @try {
-        if (!self) return %orig;
+        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             g_lastInteractionMachTime = mach_absolute_time();
             EnforceMaxCPUPower();
         }
     } @catch (__unused NSException *e) {}
     return %orig;
+}
+
+- (BOOL)serverPresentsWithTransaction {
+    @try {
+        if (!self || Titanium_IsAnTuTuOrBenchmarkApp()) return %orig;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            if (Titanium_IsMediaOrVideoLayer(self)) {
+                return %orig;
+            }
+            return YES;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
+    @try {
+        if (!self) {
+            %orig(serverPresents);
+            return;
+        }
+        if (Titanium_IsAnTuTuOrBenchmarkApp()) {
+            %orig(serverPresents);
+            return;
+        }
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            if (Titanium_IsMediaOrVideoLayer(self)) {
+                %orig(serverPresents);
+                return;
+            }
+            serverPresents = YES;
+        }
+        %orig(serverPresents);
+    } @catch (__unused NSException *e) {
+        %orig(serverPresents);
+    }
 }
 
 %end
@@ -5693,79 +5764,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 14: ĐỘNG CƠ METAL GAME OVERDRIVE (ÉP YES AN TOÀN CHO GAME - CÁCH LY KHÔNG ĐEN VIDEO)
-// ====================================================================================================
-
-// Hàm kiểm tra layer hiện tại có phải là luồng phát video, media hay camera không
-static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
-    if (!layer) return NO;
-    @try {
-        // Nếu cờ toàn cục đang báo phát video, nhả kiểm soát ngay
-        if (g_isVideoPlayingActive) return YES;
-
-        // Kiểm tra delegate hoặc class cha của Layer
-        id del = layer.delegate;
-        NSString *delName = del ? NSStringFromClass([del class]) : @"";
-        NSString *layerName = NSStringFromClass([layer class]);
-
-        if ([delName containsString:@"AV"] || 
-            [delName containsString:@"Video"] || 
-            [delName containsString:@"Player"] || 
-            [delName containsString:@"Media"] || 
-            [delName containsString:@"Web"] ||
-            [delName containsString:@"Camera"] ||
-            [layerName containsString:@"AV"] ||
-            [layerName containsString:@"Video"]) {
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
-    return NO;
-}
-
-%group Group_Titanium_Game_Metal_Overdrive
-
-%hook CAMetalLayer
-
-- (BOOL)serverPresentsWithTransaction {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // NẾU LÀ VIDEO/MEDIA: Trả về gốc để không bị đen màn hình hoặc đứng hình
-            if (Titanium_IsMediaOrVideoLayer(self)) {
-                return %orig;
-            }
-            // TOÀN BỘ GAME VÀ GIAO DIỆN KHÁC: Ép cứng YES theo ý bạn
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
-- (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
-    @try {
-        if (!self) {
-            %orig(serverPresents);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (Titanium_IsMediaOrVideoLayer(self)) {
-                %orig(serverPresents);
-                return;
-            }
-            // Ép cứng YES cho Game & UI thông thường
-            serverPresents = YES;
-        }
-        %orig(serverPresents);
-    } @catch (__unused NSException *e) {
-        %orig(serverPresents);
-    }
-}
-
-%end
-
-%end
-
-// ====================================================================================================
 // NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (ĐÃ BỌC THÉP AN TOÀN)
 // ====================================================================================================
 
@@ -5883,20 +5881,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     } @catch (__unused NSException *e) {
         %orig(duration);
     }
-}
-
-%end
-
-%hook CAMetalLayer
-
-- (void)setCornerRadius:(CGFloat)cornerRadius {
-    @try {
-        if (!self) {
-            %orig(cornerRadius);
-            return;
-        }
-        %orig(cornerRadius);
-    } @catch (__unused NSException *e) {}
 }
 
 %end
