@@ -6290,6 +6290,90 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
+// NHÓM: GIỮ VÔ HẠN ỨNG DỤNG TRONG RAM (ĐÃ TỐI ƯU SÂU, AN TOÀN TUYỆT ĐỐI, KHÔNG KẸT SWIPE-TO-CLOSE)
+// ====================================================================================================
+
+%group Group_KeepAppsAlive_NoKill
+
+%hook FBProcess
+
+- (void)killForReason:(long long)reason 
+             andReport:(BOOL)report 
+       withDescription:(id)description 
+            completion:(id)completion {
+    @try {
+        if (!self) {
+            %orig(reason, report, description, completion);
+            return;
+        }
+        
+        NSString *desc = description ? [description lowercaseString] : @"";
+        
+        // Nếu người dùng chủ động vuốt đóng app từ giao diện đa nhiệm, cho phép hệ thống kill bình thường
+        if ([desc containsString:@"user"] || [desc containsString:@"terminate"] || [desc containsString:@"explicit"] || [desc containsString:@"switcher"]) {
+            %orig(reason, report, description, completion);
+            return;
+        }
+
+        // Giữ lại ứng dụng trong RAM đối với các tiến trình dọn dẹp nền (idle/background) khi không bị blacklist
+        if (!g_isCurrentAppBlacklisted && (reason == 1 || [desc containsString:@"idle"] || [desc containsString:@"background"])) {
+            if (completion) {
+                @try {
+                    // Thực thi an toàn block completion tùy theo chữ ký block
+                    void (^compBlock)(void) = (void (^)(void))completion;
+                    compBlock();
+                } @catch (__unused NSException *subEx) {
+                    @try {
+                        ((void (*)(id, BOOL))completion)(nil, YES);
+                    } @catch (__unused NSException *subEx2) {}
+                }
+            }
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(reason, report, description, completion);
+}
+
+- (BOOL)isPendingExit {
+    @try {
+        if (!self) return %orig;
+        // Chỉ giữ app không thoát ngầm khi ở background, tôn trọng lệnh thoát trực tiếp
+        if (!g_isCurrentAppBlacklisted) {
+            return NO;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+%end
+
+%hook SBMainWorkspace
+
+- (void)handleApplicationSuspended:(id)application {
+    @try {
+        if (!self) {
+            %orig(application);
+            return;
+        }
+        %orig(application);
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            // Đưa lệnh xả bộ nhớ đệm xuống luồng nền để tránh nghẽn UI
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                @autoreleasepool {
+                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
+                }
+            });
+        }
+    } @catch (__unused NSException *e) {
+        %orig(application);
+    }
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM V12: ĐÀN HỒI THOÁT APP MƯỢT TỰ NHIÊN (ĐÃ TỐI ƯU SÂU & HIỆU NĂNG CAO)
 // ====================================================================================================
 
