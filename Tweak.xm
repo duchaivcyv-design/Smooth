@@ -3182,7 +3182,8 @@ static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
     @try {
         if (maxFps < 15.0f) maxFps = 60.0f;
         if (maxFps > 240.0f) maxFps = 240.0f;
-        return CAFrameRateRangeMake(60.0f, maxFps, maxFps);
+        float floorHz = (maxFps > 60.0f) ? 60.0f : maxFps;
+        return CAFrameRateRangeMake(floorHz, maxFps, maxFps);
     } @catch (__unused NSException *e) {}
     return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
 }
@@ -3474,14 +3475,6 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
         return (fpsCap > 0) ? fpsCap : hzCap;
     } @catch (__unused NSException *e) {}
     return 240;
-}
-
-// Bổ sung chuẩn hóa biên độ mượt mà cho CoreAnimation (Tránh jitter giật khung hình)
-static inline CAFrameRateRange Titanium_SmoothFRR(float cap) {
-    if (cap < 15.0f) cap = 15.0f;
-    if (cap > 240.0f) cap = 240.0f;
-    float floorHz = (cap > 60.0f) ? 60.0f : cap;
-    return CAFrameRateRangeMake(floorHz, cap, cap);
 }
 
 static volatile BOOL g_isDynamicMorphActive = NO;
