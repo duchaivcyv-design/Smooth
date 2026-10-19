@@ -5817,6 +5817,43 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 %end
 
 // ====================================================================================================
+// NHÓM BỔ SUNG: GROUP_HARDWARE_DEEP_CORE_BYPASS (ĐÃ TỐI ƯU VÀ AN TOÀN HƠN)
+// ====================================================================================================
+
+%group Group_Hardware_Deep_Core_Bypass
+
+%hook IORegistryEntry
+
+- (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
+    // Tránh gọi trực tiếp nếu key quá rỗng để tiết kiệm chu kỳ CPU
+    if (!key || !self) {
+        return %orig(key, value);
+    }
+
+    @try {
+        // Gom điều kiện kiểm tra nhanh
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+            // Sử dụng so sánh tối ưu hơn cho NSString thay vì gọi nhiều containsString liên tục nếu có thể
+            if ([key rangeOfString:@"Thermal" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [key rangeOfString:@"PowerLimit" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+                return KERN_SUCCESS;
+            }
+        }
+    } @catch (NSException *exception) {
+        // Log lỗi nhẹ nếu cần thiết trong môi trường debug, tránh nuốt chửng hoàn toàn exception nặng
+        #ifdef DEBUG
+        NSLog(@ "[TweakDebug] Error in setCFProperty: %@", exception.reason);
+        #endif
+    }
+    
+    return %orig(key, value);
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM ĐỘC QUYỀN APPLE RUNTIME (ĐÃ BỌC THÉP AN TOÀN)
 // ====================================================================================================
 
