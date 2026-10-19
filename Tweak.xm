@@ -5924,6 +5924,40 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
+// NHÓM V12: ĐÀN HỒI THOÁT APP MƯỢT TỰ NHIÊN (ĐÃ TỐI ƯU SÂU & HIỆU NĂNG CAO)
+// ====================================================================================================
+
+%group Group_TitaniumV12_SmoothExit_And_DisplayLink
+
+%hook CASpringAnimation
+
+- (CGFloat)damping {
+    CGFloat orig = %orig;
+    
+    // Tối ưu: Đưa các cờ kiểm tra lên đầu, hạn chế block @try cho các hàm chạy liên tục ở 120Hz
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (orig > 0.0 && orig < 25.0) {
+            // Tinh chỉnh nhẹ hệ số đàn hồi để chuyển động tự nhiên, không bị khựng
+            return orig * 1.02; 
+        }
+    }
+    return orig;
+}
+
+- (void)setDamping:(CGFloat)damping {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (damping > 0.0 && damping < 25.0) {
+            damping *= 1.02;
+        }
+    }
+    %orig(damping);
+}
+
+%end
+
+%end
+
+// ====================================================================================================
 // NHÓM TỐI ƯU AI STREAMING & TEXT LAYOUT (TỐI ƯU SÂU CHUYÊN BIỆT CHO APP AI - AN TOÀN TUYỆT ĐỐI)
 // ====================================================================================================
 
