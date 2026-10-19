@@ -2526,7 +2526,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 
 // ====================================================================================================
-// TẦNG SÂU TỐI THƯỢNG: BẺ GÃY MỌI GIỚI HẠN CHIP & LUỒNG ẨN APPLE (UNCAPPED ABSOLUTE DOMINANCE - OPTIMIZED 20X)
+// TẦNG SÂU TỐI THƯỢNG: BẺ GÃY MỌI GIỚI HẠN CHIP & LUỒNG ẨN APPLE (TÍCH HỢP ĐÁNH LỪA CHIP A20 & MÀN HÌNH 240HZ)
 // ====================================================================================================
 
 #include <mach/mach.h>
@@ -2534,6 +2534,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/resource.h>
+#include <dlfcn.h>
 
 #define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
 #define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
@@ -2560,7 +2561,7 @@ static uint64_t g_bannerDurationMachTicks = 0;
 static volatile uint64_t g_lastFrameRenderTick = 0;
 static volatile double g_currentFrameDriftRatio = 1.00;
 
-// Bộ điều phối Smart Throttle chống spam lệnh, chống nóng máy & siêu mượt đa nhiệm
+// Bộ điều phối Smart Throttle chống spam lệnh, chống nóng máy & siêu mượt đa nhiệm (Giản cách 80ms an toàn tuyệt đối)
 static uint64_t s_lastSmartBoostTick = 0;
 
 static inline void Titanium_SmartThrottle60Hz(void) {
@@ -2578,6 +2579,55 @@ static inline void Titanium_EnforceMachFrameConstraint(void);
 static void AppleInternal_LockHardwareCADisplay(void);
 static void AppleInternal_EnforceZeroLatencyKernelTier(void);
 static inline void Titanium_UnleashAllHiddenSystemThreads(void);
+
+// ==============================================================================
+// ĐÁNH LỪA HỆ THỐNG & APP: NGHĨ RÀNG ĐANG CHẠY CHIP APPLE A20 PRO & MÀN HÌNH 240HZ
+// ==============================================================================
+
+static int (*orig_sysctlbyname_a20_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
+static int hooked_sysctlbyname_a20_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    @try {
+        if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+            
+            // 1. Đánh lừa tên dòng chip thành Apple A20 Pro
+            if (strcmp(name, "hw.cpubrand") == 0 || strcmp(name, "machdep.cpu.brand_string") == 0) {
+                const char *spoofChip = "Apple A20 Pro (3nm Ultra)";
+                size_t len = strlen(spoofChip) + 1;
+                if (oldp && oldlenp) {
+                    if (*oldlenp >= len) {
+                        memcpy(oldp, spoofChip, len);
+                        *oldlenp = len;
+                        return 0;
+                    }
+                } else if (!oldp && oldlenp) {
+                    *oldlenp = len;
+                    return 0;
+                }
+            }
+            
+            // 2. Ép số nhân CPU lên 10 nhân để app kích hoạt luồng xử lý đa nhân tối đa
+            else if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0 || strcmp(name, "hw.logicalcpu") == 0) {
+                int cpus = 10;
+                if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
+                    memcpy(oldp, &cpus, sizeof(int));
+                    *oldlenp = sizeof(int);
+                    return 0;
+                }
+            }
+            
+            // 3. Giả lập tần số quét màn hình tối đa 240Hz để hệ thống & game tự nhận diện phần cứng ProMotion cấp độ cao
+            else if (strcmp(name, "hw.screensync") == 0 || strcmp(name, "hw.maxframes") == 0) {
+                int maxHz = 240;
+                if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
+                    memcpy(oldp, &maxHz, sizeof(int));
+                    *oldlenp = sizeof(int);
+                    return 0;
+                }
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return orig_sysctlbyname_a20_spoof(name, oldp, oldlenp, newp, newlen);
+}
 
 // ==============================================================================
 // KẾT NỐI VÙNG NHỚ CHIA SẺ ZERO-COPY IPC & QUẢN LÝ DẢI 15-240 HZ
@@ -2743,6 +2793,12 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
                 throughputPolicy.task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0;
                 task_policy_set(selfTask, TASK_THROUGHPUT_QOS_POLICY, (task_policy_t)&throughputPolicy, TASK_THROUGHPUT_QOS_POLICY_COUNT);
                 #endif
+            }
+
+            // Tự động kích hoạt hook A20 ngay khi khởi tạo luồng hệ thống sâu
+            void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
+            if (sysSym) {
+                MSHookFunction(sysSym, (void *)hooked_sysctlbyname_a20_spoof, (void **)&orig_sysctlbyname_a20_spoof);
             }
         } @catch (__unused NSException *e) {}
     });
@@ -2953,7 +3009,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
             if (targetHz < 15) targetHz = 15;
             if (targetHz > 240) targetHz = 240;
 
-            uint32_t periodNs = 4166667ULL; 
+            uint32_t periodNs = (uint32_t)(1000000000ULL / targetHz); 
             uint32_t computationNs = periodNs; 
 
             thread_time_constraint_policy_data_t timeConstraintPolicy;
@@ -2984,7 +3040,7 @@ static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
 }
 
 static inline void Titanium_EnforceMachFrameConstraint(void) {
-    Titanium_EnforceMachFrameConstraintDynamic(240);
+    Titanium_EnforceMachFrameConstraintDynamic(Titanium_CalculateAdaptiveProMaxTier());
 }
 
 // ====================================================================================================
