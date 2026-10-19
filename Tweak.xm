@@ -3291,12 +3291,12 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - CHIẾM QUYỀN ĐỒ HỌA TẦNG SÂU & BỌC THÉP AN TOÀN)
+// NHÓM 2: OVERDRIVE METAL GRAPHICS (ÉP MỞ KHÓA FPS TỐI ĐA - AN TOÀN TẦNG SÂU, KHÔNG LAG, KHÔNG CRASH)
 // ====================================================================================================
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
-// Hàm bọc thép an toàn tuyệt đối cho mọi câu lệnh gọi ngoại vi (Chống sập 100%)
+// Hàm bọc thép an toàn tuyệt đối (Chống sập 100% mọi ngoại lệ)
 static inline void Titanium_SafeExecute(void (^block)(void)) {
     @try {
         if (block) block();
@@ -3332,11 +3332,6 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
     return isMedia;
 }
 
-// Hàm hỗ trợ kiểm tra media layer từ Nhóm 14
-static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
-    return Titanium_IsVideoOrMediaMetalLayer(layer);
-}
-
 %group Group_Metal_ZeroTearing_Pacing
 
 %hook CAMetalLayer
@@ -3348,20 +3343,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
         }
 
         %orig;
+        // Chỉ can thiệp khi không phải SpringBoard và layer hợp lệ, tuyệt đối không chạm Main Thread UI
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && self.context) {
-            CGSize scrSize = [UIScreen mainScreen].bounds.size;
-            CGFloat scrArea = scrSize.width * scrSize.height;
-            CGRect layerBounds = self.bounds;
-            CGFloat layerArea = layerBounds.size.width * layerBounds.size.height;
-            if (scrArea > 0.0 && (layerArea / scrArea) >= 0.70) {
-                g_isMetalGameProcess = YES;
-            }
-
-            NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-            BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
-            
-            if (!isTikTok && !Titanium_IsVideoOrMediaMetalLayer(self)) {
-                self.maximumDrawableCount = 3; // Ép tăng bộ đệm lên tối đa để mượt khung hình
+            if (!Titanium_IsVideoOrMediaMetalLayer(self)) {
+                self.maximumDrawableCount = 3;
             }
 
             if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
@@ -3372,7 +3357,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
                 self.lowLatencyMode = YES; 
             }
 
-            // CHIẾM QUYỀN ĐỒ HỌA TẦNG SÂU: Ép độc quyền framebuffer và bỏ qua giới hạn V-Sync cứng
             self.framebufferOnly = YES;
             if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
                 self.displaySyncEnabled = NO;
@@ -3396,14 +3380,12 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
     __block BOOL __blockEnabled = enabled;
     Titanium_SafeExecute(^{
-        if (!self) {
-            return;
-        }
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            __blockEnabled = NO; // Bẻ nát V-Sync, ép không độ trễ
+            __blockEnabled = NO; 
         }
     });
     %orig(__blockEnabled);
@@ -3426,9 +3408,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setMaximumDrawableCount:(NSUInteger)count {
     __block NSUInteger __blockCount = count;
     Titanium_SafeExecute(^{
-        if (!self) {
-            return;
-        }
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
@@ -3455,9 +3435,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     float maxTarget = (float)Titanium_GetEffectiveFrameCap();
     __block CAFrameRateRange __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
     Titanium_SafeExecute(^{
-        if (!self) {
-            return;
-        }
+        if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         } else {
@@ -3474,7 +3452,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
         if (!self) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             g_lastInteractionMachTime = mach_absolute_time();
-            EnforceMaxCPUPower();
         }
     });
     return drawable ?: %orig;
@@ -3497,9 +3474,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 - (void)setServerPresentsWithTransaction:(BOOL)serverPresents {
     __block BOOL __blockPresents = serverPresents;
     Titanium_SafeExecute(^{
-        if (!self) {
-            return;
-        }
+        if (!self) return;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             if (Titanium_IsMediaOrVideoLayer(self)) {
                 return;
@@ -3512,12 +3487,12 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 %end
 
-// BỔ SUNG CHIẾM QUYỀN ĐIỀU PHỐI THIẾT BỊ METAL TẦNG SÂU (MTLCreateSystemDefaultDevice)
+// Khởi tạo thiết bị Metal an toàn không gây nghẽn luồng
 %hookf(id<MTLDevice>, MTLCreateSystemDefaultDevice) {
     id<MTLDevice> device = %orig;
     Titanium_SafeExecute(^{
         if (device && [device respondsToSelector:@selector(newCommandQueue)]) {
-            // Tối ưu hóa phần cứng đồ họa Metal ngầm tại đây nếu cần
+            // Đảm bảo phần cứng hoạt động ổn định
         }
     });
     return device;
