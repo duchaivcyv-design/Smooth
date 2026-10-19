@@ -1282,9 +1282,6 @@ static ApexV285ProPayload g_syncPayloadV285 = {
 #define PRIMARY_SYNC_FILE @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s_sync.bin"
 #define SECONDARY_SYNC_FILE @"/tmp/.boost_hz_sync_v285"
 
-#import <malloc/malloc.h>
-#import <sys/utsname.h>
-
 // ====================================================================================================
 // KHAI BÁO BIẾN TOÀN CỤC, TRẠNG THÁI IPC VÀ KERNEL WRITE-PROTECT BYPASS CHUẨN XNU (ĐÃ BẺ NÁT & ÉP CỨNG)
 // ====================================================================================================
@@ -1306,7 +1303,36 @@ static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
 
-// Đưa thẳng định nghĩa thực tế của các hàm này lên đây để trình biên dịch nhìn thấy luôn, không cần khai báo prototype lằng nhằng
+// ====================================================================================================
+// ĐỊNH NGHĨA THỰC TẾ CÁC HÀM TRỢ GIÚP ĐỂ TRIỆT TIÊU HOÀN TOÀN WARNING
+// ====================================================================================================
+
+static NSString *Titanium_ResolveEffectiveLanguage(void) {
+    @try {
+        NSArray *languages = [NSLocale preferredLanguages];
+        if (languages && [languages count] > 0) {
+            return [languages objectAtIndex:0];
+        }
+    } @catch (__unused NSException *e) {}
+    return @"vi";
+}
+
+static inline BOOL Titanium_IsAIApp(void) {
+    @try {
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        if (!bundleID) return NO;
+        if ([bundleID containsString:@"openai"] || 
+            [bundleID containsString:@"claude"] || 
+            [bundleID containsString:@"deepseek"] || 
+            [bundleID containsString:@"chatgpt"] || 
+            [bundleID containsString:@"gemini"] || 
+            [bundleID containsString:@"ai"]) {
+            return YES;
+        }
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
+
 static SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange range, BOOL isSpringBoard) {
     @try {
         if (range.minimum < 15) range.minimum = 15;
@@ -1336,7 +1362,6 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
     } @catch (__unused NSException *e) {}
 }
 
-static NSString *Titanium_ResolveEffectiveLanguage(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_StartIPCHearthbeatV12(void);
 static void Titanium_RegisterAppResumeRefreshV12(void);
