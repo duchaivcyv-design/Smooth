@@ -3433,6 +3433,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 - (void)setDisplaySyncEnabled:(BOOL)enabled {
+    __block BOOL __blockEnabled = enabled;
     Titanium_SafeExecute(^{
         if (!self) {
             return;
@@ -3441,10 +3442,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            enabled = NO;
+            __blockEnabled = NO;
         }
     });
-    %orig(enabled);
+    %orig(__blockEnabled);
 }
 
 - (NSUInteger)maximumDrawableCount {
@@ -3462,6 +3463,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 - (void)setMaximumDrawableCount:(NSUInteger)count {
+    __block NSUInteger __blockCount = count;
     Titanium_SafeExecute(^{
         if (!self) {
             return;
@@ -3470,10 +3472,10 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 return;
             }
-            count = 3;
+            __blockCount = 3;
         }
     });
-    %orig(count);
+    %orig(__blockCount);
 }
 
 - (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
@@ -3489,16 +3491,17 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    __block CAFrameRateRange __blockRange = range;
     Titanium_SafeExecute(^{
         if (!self) {
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
             float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-            range = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
+            __blockRange = CAFrameRateRangeMake(maxTarget, maxTarget, maxTarget);
         }
     });
-    %orig(range);
+    %orig(__blockRange);
 }
 
 - (id)nextDrawable {
