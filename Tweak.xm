@@ -7428,7 +7428,7 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // BẢO VỆ TOÀN DIỆN: Chặn đứng các tiến trình extension, share, notes và dịch vụ hệ thống gây xung đột
+        // BẢO VỆ TOÀN DIỆN: Chặn đứng các tiến trình extension, share, notes, daemon hệ thống và 3 tiến trình gây crash Safe Mode
         if (strcasestr(progName, "ShareExtension") != NULL ||
             strcasestr(progName, "Extension") != NULL ||
             strcasestr(progName, "Cr4shed") != NULL ||
@@ -7438,7 +7438,10 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "SharingViewService") != NULL ||
             strcasestr(progName, "PassbookUIService") != NULL ||
             strcasestr(progName, "UserNotificationCenter") != NULL ||
-            strcasestr(progName, "CoreAuthUI") != NULL) {
+            strcasestr(progName, "CoreAuthUI") != NULL ||
+            strcasestr(progName, "assistivetouchd") != NULL || // Chặn AssistiveTouch[span_0](start_span)[span_0](end_span)
+            strcasestr(progName, "PosterBoard") != NULL ||     // Chặn PosterBoard (Lock Screen)[span_1](start_span)[span_1](end_span)
+            strcasestr(progName, "sharingd") != NULL) {        // Chặn sharingd (AirDrop/Sharing)[span_2](start_span)[span_2](end_span)
             return;
         }
 
