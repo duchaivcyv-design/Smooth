@@ -3045,7 +3045,7 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 1: CẢM ỨNG 0MS NỘI BỘ APPLE (ĐÃ BỌC THÉP CHẶN ĐỨNG TRUY CẬP NIL)
+// NHÓM 1: CẢM ỨNG 0MS NỘI BỘ APPLE (ĐÃ BỌC THÉP CHẶN ĐỨNG TRUY CẬP NIL & CHỐNG ĐƠ KHI CHỤP MÀN HÌNH)
 // ====================================================================================================
 
 %group Group_ZeroLatency_Touch_Opt
@@ -3199,6 +3199,22 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
         return;
     }
     @try {
+        // --- BẢO VỆ CHỤP MÀN HÌNH: Nhả hoàn toàn sự kiện để không bị đơ liệt cảm ứng ---
+        NSString *windowClass = NSStringFromClass([self class]);
+        if (windowClass && ([windowClass containsString:@"Screenshot"] || 
+                            [windowClass containsString:@"SSUI"] || 
+                            [windowClass containsString:@"Flash"] ||
+                            [windowClass containsString:@"Overlay"])) {
+            %orig(event);
+            return;
+        }
+        
+        if (self.accessibilityIdentifier && [self.accessibilityIdentifier containsString:@"Screenshot"]) {
+            %orig(event);
+            return;
+        }
+        // ---------------------------------------------------------------------------
+
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             if (event.type == 0) {
                 BOOL shouldTriggerBoost = YES;
@@ -3209,7 +3225,6 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
                         if (allTouches) {
                             UITouch *touch = [allTouches anyObject];
                             if (touch && touch.phase == UITouchPhaseMoved) {
-                                // Đã sửa nil thành self để an toàn tuyệt đối, chống sập 0x10
                                 CGPoint currentLoc = [touch locationInView:self];
                                 CGPoint prevLoc = [touch previousLocationInView:self];
                                 CGFloat deltaX = currentLoc.x - prevLoc.x;
@@ -3243,6 +3258,24 @@ static inline void Titanium_ApplyMultiPolicyRealtimeBinding(void) {
         }
     } @catch (__unused NSException *e) {}
     %orig(event);
+}
+
+// Gộp xả RAM từ nhóm Deep RAM vào đây để dọn sạch rác
+- (void)didReceiveMemoryWarning {
+    @try {
+        if (!self) {
+            %orig;
+            return;
+        }
+        %orig;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                malloc_zone_pressure_relief(malloc_default_zone(), 0);
+            });
+        }
+    } @catch (__unused NSException *e) {
+        %orig;
+    }
 }
 
 %end
@@ -3303,7 +3336,6 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
             NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
             BOOL isTikTok = [bundleID containsString:@"musical.ly"] || [bundleID containsString:@"tiktok"];
             
-            // Giữ đệm 3 buffer cho app/game thường để đạt FPS tối đa, tránh tràn VRAM
             if (!isTikTok && !Titanium_IsVideoOrMediaMetalLayer(self)) {
                 self.maximumDrawableCount = 2;
             }
@@ -3344,12 +3376,10 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard()) {
-            // NẾU LÀ VIDEO/MEDIA (TikTok, YouTube): Giữ nguyên đồng bộ để hình khớp tiếng, không bị đứng/đen hình
             if (Titanium_IsVideoOrMediaMetalLayer(self)) {
                 %orig(enabled);
                 return;
             }
-            // TOÀN BỘ GAME VÀ APP KHÁC: Ép tắt đồng bộ cứng (NO) để bung hoàn toàn FPS
             %orig(NO);
             return;
         }
@@ -3422,27 +3452,6 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
         }
     } @catch (__unused NSException *e) {}
     return %orig;
-}
-
-%end
-
-%hook CALayer
-
-- (void)display {
-    @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        if (TITANIUM_LITE_MODE || Titanium_IsAIApp()) {
-            %orig;
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
-    } @catch (__unused NSException *e) {}
-    %orig;
 }
 
 %end
@@ -4030,6 +4039,17 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             %orig(anim, key);
             return;
         }
+        
+        // BẺ KHÓA / BẢO VỆ LOAD ẢNH & CHỌN MỤC: Nếu liên quan đến ImageView, Media hoặc Transition ảnh, nhả hoàn toàn để không bị đơ cứng
+        if (self.delegate && ([NSStringFromClass([self.delegate class]) containsString:@"ImageView"] || 
+                              [NSStringFromClass([self.delegate class]) containsString:@"Media"] || 
+                              [NSStringFromClass([self.delegate class]) containsString:@"Photo"] ||
+                              [NSStringFromClass([self.delegate class]) containsString:@"Image"] ||
+                              [NSStringFromClass([self.delegate class]) containsString:@"Transition"])) {
+            %orig(anim, key);
+            return;
+        }
+
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             if (@available(iOS 15.0, *)) {
                 if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
@@ -4505,10 +4525,42 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY (ĐÃ SỬA LỖI MẤT CHỮ & BẢO VỆ LAYOUT)
+// NHÓM 6: CUỘN FEED TIKTOK / BÀN PHÍM SIÊU NHẠY (ĐÃ TỐI ƯU SÂU - CHỐNG ĐƠ CHỮ & TRÀN RENDER)
 // ====================================================================================================
 
 %group Group_Scroll_And_Keyboard_Opt
+
+// 0. BẢO VỆ BÀN PHÍM & VÙNG NHẬP LIỆU (CHỐNG LỖI GÕ CHỮ PHẢI BẤM 2 LẦN)
+@protocol UITextInput;
+
+%hook UIResponder
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    @try {
+        if (!self) {
+            %orig(touches, event);
+            return;
+        }
+        
+        NSString *className = NSStringFromClass([self class]);
+        if (className && ([className containsString:@"Keyboard"] || 
+                          [className containsString:@"Input"] || 
+                          [className containsString:@"Text"] || 
+                          [className containsString:@"Candidates"] ||
+                          [className containsString:@"Key"])) {
+            %orig(touches, event);
+            return;
+        }
+
+        if ([self conformsToProtocol:@protocol(UITextInput)]) {
+            %orig(touches, event);
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(touches, event);
+}
+
+%end
 
 // 1. TỐC ĐỘ NẢY BÀN PHÍM CHUẨN XÁC: ÉP RÚT VỀ 0.12S
 %hook UIInputViewAnimationStyle
@@ -4525,7 +4577,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 2. TRIỆT TIÊU 100% ĐỘ TRỄ GÕ PHÍM NỘI BỘ APPLE (ĐÃ LOẠI BỎ HOÀN TOÀN setFrame ĐỂ BẢO VỆ TOÀN BỘ PHÍM)
+// 2. TRIỆT TIÊU 100% ĐỘ TRỄ GÕ PHÍM NỘI BỘ APPLE
 %hook UIKeyboardImpl
 
 + (NSTimeInterval)suppressionIntervalForTouchesOnKeyboard {
@@ -4542,9 +4594,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            // Không ép xung quá nặng tại đây để tránh nghẽn luồng render bàn phím
             Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -4563,8 +4614,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
     %orig(index);
@@ -4578,8 +4627,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && selectedViewController) {
             Titanium_TriggerInstantTouchBurst();
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
     %orig(selectedViewController);
@@ -4616,8 +4663,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
     %orig(viewController, animated);
@@ -4631,8 +4676,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
         }
     } @catch (__unused NSException *e) {}
     return %orig(animated);
@@ -4640,7 +4683,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER (ĐÃ BỎ CƯỠNG BỨC LAYOUT/DISPLAY ĐỂ HẾT NHÁY HÌNH)
+// 5. TỐI ƯU CHUYỂN CẢNH VIEW CONTROLLER
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -4658,8 +4701,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
             g_isInteracting = YES;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
             Titanium_TriggerInstantTouchBurst();
         }
     } @catch (__unused NSException *e) {}
@@ -4677,8 +4718,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
             g_isInteracting = YES;
-            EnforceMaxCPUPower();
-            Titanium_EnforceThreadVIPPolicy();
             Titanium_TriggerInstantTouchBurst();
         }
     } @catch (__unused NSException *e) {}
@@ -4687,7 +4726,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 6. TỐI ƯU HÓA CUỘN SCROLLVIEW (BÁM TAY, HẾT DROP KHUNG HÌNH)
+// ====================================================================================================
+// 6. TỐI ƯU HÓA CUỘN SCROLLVIEW (MƯỢT MÀ, THANH THOÁT, AN TOÀN TUYỆT ĐỐI CHO APP CHAT)
+// ====================================================================================================
 %hook UIScrollView
 
 - (UIPanGestureRecognizer *)panGestureRecognizer {
@@ -4730,100 +4771,6 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     return %orig;
 }
 
-- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        if (!self) {
-            %orig(touches, event);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = YES;
-            g_isInteracting = YES;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(touches, event);
-}
-
-- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        if (!self) {
-            %orig(touches, event);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = YES;
-            g_isInteracting = YES;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(touches, event);
-}
-
-- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        if (!self) {
-            %orig(touches, event);
-            return;
-        }
-        %orig(touches, event);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = NO;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-
-            __weak UIScrollView *weakSelf = self;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    UIScrollView *strongSelf = weakSelf;
-                    if (!g_isUserTouchingScreen && (!strongSelf || !strongSelf.isDecelerating)) {
-                        g_isScrollingActive = NO;
-                        g_isInteracting = NO;
-                    }
-                } @catch (__unused NSException *innerE) {}
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
-    }
-}
-
-- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    @try {
-        if (!self) {
-            %orig(touches, event);
-            return;
-        }
-        %orig(touches, event);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_isUserTouchingScreen = NO;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-
-            __weak UIScrollView *weakSelf = self;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    UIScrollView *strongSelf = weakSelf;
-                    if (!g_isUserTouchingScreen && (!strongSelf || !strongSelf.isDecelerating)) {
-                        g_isScrollingActive = NO;
-                        g_isInteracting = NO;
-                    }
-                } @catch (__unused NSException *innerE) {}
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig(touches, event);
-    }
-}
-
 - (void)_scrollViewWillBeginDragging {
     @try {
         if (!self) {
@@ -4831,14 +4778,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
             g_isScrollingActive = YES;
             g_isUserTouchingScreen = YES;
-            g_isInteracting = YES;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            EnforceMaxCPUPower();
-            Titanium_TriggerInstantTouchBurst();
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -4850,14 +4791,10 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             %orig;
             return;
         }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = YES;
-                g_isInteracting = YES;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        if (bundleID && ([bundleID containsString:@"zalo"] || [bundleID containsString:@"messenger"] || [bundleID containsString:@"telegram"])) {
+            %orig;
+            return;
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -4869,14 +4806,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             %orig(timestamp);
             return;
         }
+        NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+        if (bundleID && ([bundleID containsString:@"zalo"] || [bundleID containsString:@"messenger"] || [bundleID containsString:@"telegram"])) {
+            %orig(timestamp);
+            return;
+        }
+        
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isUserTouchingScreen || self.isDecelerating || self.isTracking || self.isDragging) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = YES;
-                g_isInteracting = YES;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
             if (!self.isPagingEnabled && self.isDecelerating) {
                 self.decelerationRate = 0.994f;
             }
@@ -4904,13 +4840,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         }
         %orig(notify);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (!g_isUserTouchingScreen) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = NO;
-                g_isInteracting = NO;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
+            g_isScrollingActive = NO;
+            g_isUserTouchingScreen = NO;
         }
     } @catch (__unused NSException *e) {
         %orig(notify);
@@ -4925,13 +4856,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         }
         %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            if (!g_isUserTouchingScreen) {
-                uint64_t now = mach_absolute_time();
-                g_isScrollingActive = NO;
-                g_isInteracting = NO;
-                g_lastInteractionMachTime = now;
-                g_lastInteractiveTick = now;
-            }
+            g_isScrollingActive = NO;
+            g_isUserTouchingScreen = NO;
         }
     } @catch (__unused NSException *e) {
         %orig;
@@ -4945,12 +4871,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             return;
         }
         %orig(view);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.isDecelerating && !g_isUserTouchingScreen) {
-            uint64_t now = mach_absolute_time();
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.isDecelerating) {
             g_isScrollingActive = NO;
-            g_isInteracting = NO;
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
+            g_isUserTouchingScreen = NO;
         }
     } @catch (__unused NSException *e) {
         %orig(view);
@@ -6270,27 +6193,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 %end
 
-%hook UIWindow
-
-- (void)didReceiveMemoryWarning {
-    @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            });
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
-}
-
-%end
-
 %end
 
 // ====================================================================================================
@@ -6622,47 +6524,8 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %end
 
 // ====================================================================================================
-// NHÓM 3 & 4: CHIẾM QUYỀN TẦNG WINDOW / SCENE CẤP CAO (ĐÃ BỌC THÉP AN TOÀN)
+// NHÓM 4: CHỈ GIỮ LẠI WINDOWSCENE AN TOÀN, ĐÃ XOÁ SẠCH CALAYER GÂY ĐƠ APP
 // ====================================================================================================
-
-%group Group_Force_Render_Recovery_Overdrive
-
-%hook CALayer
-
-- (void)setNeedsDisplay {
-    @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
-        // ĐÃ XÓA [CATransaction flush] ĐỂ BẢO VỆ CHỮ BÀN PHÍM VÀ CHỐNG SẬP 0x10
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
-}
-
-- (void)setNeedsDisplayInRect:(CGRect)rect {
-    @try {
-        if (!self) {
-            %orig(rect);
-            return;
-        }
-        %orig(rect);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && [NSThread isMainThread]) {
-            Titanium_EnableZeroLatencyPipeline();
-        }
-    } @catch (__unused NSException *e) {
-        %orig(rect);
-    }
-}
-
-%end
-
-%end
 
 %group Group_Window_Level_Overdrive
 
