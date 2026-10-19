@@ -2620,7 +2620,7 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
     NSInteger _currentBottomTab;
     NSInteger _currentHzFpsSubTab;
     BOOL _expandedHzFPS;
-    NSInteger _appCategoryIndex; // 0=all apps, 1=system/default, 2=hidden/disabled
+    NSInteger _appCategoryIndex; // 0=all, 1=system, 2=not on Home Screen (scanner flag), 3=manually hidden/disabled
     NSInteger _currentSwitchSubTab;
     BOOL _isRateLocked;
     BOOL _isFeatureActivated;
@@ -2711,6 +2711,8 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)performManualServerPing;
 - (NSString *)currentFreeServerPingURL;
 - (void)showSandboxDiagnosticDetails;
+- (void)showReadOnlyDeviceInfo;
+- (void)showCombinedRateInputAlert;
 - (void)showServerAPIURLEditor;
 - (void)tickLatency;
 - (void)showIndependentToolkitMenu;
@@ -2757,13 +2759,17 @@ static NSString *TIRateDescription(NSInteger r, BOOL isHz) {
 }
 
 static NSArray<NSNumber *> *TIExpandedRateValues(void) {
-    // “Mở rộng” reveals the combined Hz/FPS area; keep the preset list consistent.
-    return @[@60, @90, @120, @144, @240];
+    // Expanded mode intentionally keeps the full 15–240 range separate from presets.
+    NSMutableArray<NSNumber *> *values = [NSMutableArray arrayWithCapacity:46];
+    for (NSInteger rate = 15; rate <= 240; rate += 5) [values addObject:@(rate)];
+    if (![values containsObject:@144]) [values addObject:@144];
+    [values sortUsingSelector:@selector(compare:)];
+    return values;
 }
 
 
 // ====================================================================================================
-// [V30 FIX] KHAI THÁC DARWIN — Đọc thông tin chip/máy sâu (3000+ dòng tuỳ máy)
+// Read-only Darwin device information using public/system APIs; no exploit is executed.
 // ====================================================================================================
 static NSDictionary *Titanium_DarwinExploit_GetDeviceInfo(void) {
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
@@ -3424,6 +3430,16 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"] && !self.presentedViewController) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self.presentedViewController || [[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]) return;
+            UIAlertController *welcome = [UIAlertController alertControllerWithTitle:@"Chào mừng · FC Mobile VN Toolkit" message:@"Tác giả: TaoJb, NoNo, NoJB\nPhụ code: JB, NekoJb, BypassJB, bananaJb\nPhần cứng: Taojb, NoNo, JBnano, Jbjb\n\nChọn ngôn ngữ trong Cài đặt bất cứ lúc nào." preferredStyle:UIAlertControllerStyleAlert];
+            [welcome addAction:[UIAlertAction actionWithTitle:@"Ngôn ngữ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [[NSUserDefaults standardUserDefaults] synchronize]; [self showLanguagePickerPopup:nil]; }]];
+            [welcome addAction:[UIAlertAction actionWithTitle:@"X · Tắt vĩnh viễn" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [[NSUserDefaults standardUserDefaults] synchronize]; }]];
+            [welcome addAction:[UIAlertAction actionWithTitle:@"Xem tác giả" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb"]; }]];
+            [self presentViewController:welcome animated:YES completion:nil];
+        });
+    }
     if (!_hasPlayedEntranceAnimation) {
         _hasPlayedEntranceAnimation = YES;
         [UIView animateWithDuration:0.20 delay:0.0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
@@ -5290,7 +5306,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else if (_currentBottomTab == 1) {
         if (section == 0) return 1; // standard / expanded selector
         if (section == 1) return 1; // Hz / FPS selector
-        return (NSInteger)(_expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues()).count;
+        return 1 + (NSInteger)(_expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues()).count; // row 0 = nhập Hz/FPS
     } else if (_currentBottomTab == 2) {
         if (section == 0) return 1;
         switch (_currentSwitchSubTab) {
@@ -5309,7 +5325,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 0) return 2;
         if (section == 1) return _isFeatureActivated ? 8 : 1;
         if (section == 2) return [self isAdminDevRole] ? 7 : 5;
-        return 6;
+        return 7;
     }
 }
 
@@ -5527,8 +5543,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             NSInteger cur = combined ? (curHz == curFPS ? curHz : 0) : (isHz ? curHz : curFPS);
             NSArray<NSNumber *> *rates = _expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues();
             NSInteger applied = combined ? ((_lastAppliedHz == _lastAppliedFPS) ? _lastAppliedHz : 0) : (isHz ? _lastAppliedHz : _lastAppliedFPS);
-            if (indexPath.row < (NSInteger)rates.count) {
-                NSInteger r = rates[indexPath.row].integerValue;
+            if (indexPath.row == 0) {
+                title = combined ? @"Nhập Hz/FPS" : (isHz ? @"Nhập Hz thủ công" : @"Nhập FPS thủ công");
+                detail = @"15–240 · Nhập giá trị rồi áp dụng";
+            } else if (indexPath.row - 1 < (NSInteger)rates.count) {
+                NSInteger r = rates[indexPath.row - 1].integerValue;
                 NSString *unit = combined ? @"Hz/FPS" : (isHz ? @"Hz" : @"FPS");
                 NSString *heading = (r == 240) ? [NSString stringWithFormat:@"%ld %@ MAX", (long)r, unit] : [NSString stringWithFormat:@"%ld %@", (long)r, unit];
                 // [V30 FIX]: Dùng nhãn mô tả riêng từng mức giống ảnh 2
@@ -5612,7 +5631,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     else if (_currentBottomTab == 3) {
         if (indexPath.section == 0) {
             title = @"Danh mục";
-            LGCustomSegment *categorySeg = [[LGCustomSegment alloc] initWithItems:@[@"Ứng dụng", @"Mặc định", @"Ứng dụng ẩn"]];
+            LGCustomSegment *categorySeg = [[LGCustomSegment alloc] initWithItems:@[@"Tất cả", @"Mặc định", @"Ẩn Home", @"Đã ẩn/tắt"]];
             categorySeg.selectedSegmentIndex = _appCategoryIndex;
             __weak typeof(self) weakCategorySelf = self;
             categorySeg.valueChangedBlock = ^(NSInteger index) {
@@ -5835,9 +5854,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 NSString *lang = self.settingsDict[@"SelectedLanguage"] ?: self.settingsDict[@"AppLanguage"] ?: @"auto";
                 detail = [lang isEqualToString:@"vi"] ? @"Tiếng Việt" : ([lang isEqualToString:@"en"] ? @"English" : @"Auto · theo thiết bị");
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-            } else {
+            } else if (indexPath.row == 5) {
                 title = @"Thông báo tác giả";
                 detail = @"TaoJb · NoNo · NoJB · nhóm cộng tác";
+                cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+            } else {
+                title = @"Thông tin máy / ARM";
+                detail = [NSString stringWithFormat:@"%@ · %@", Titanium_CPUArchitectureString(), Titanium_DeviceHardwareIdentifier()];
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             }
         }
@@ -5922,8 +5945,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         BOOL combined = (_currentHzFpsSubTab == 0);
         BOOL isHz = combined || (_currentHzFpsSubTab == 1);
         NSArray<NSNumber *> *rates = _expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues();
+        if (indexPath.row == 0) {
+            if (combined) [self showCombinedRateInputAlert];
+            else [self showCustomRateInputAlertForHz:isHz];
+            return;
+        }
         NSInteger targetRate = 0;
-        if (indexPath.row < (NSInteger)rates.count) targetRate = rates[indexPath.row].integerValue;
+        if (indexPath.row - 1 < (NSInteger)rates.count) targetRate = rates[indexPath.row - 1].integerValue;
         else { return; }
 
         // Apply the selected value directly; do not interrupt every Hz/FPS tap with a warning.
@@ -5963,6 +5991,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [self presentIndependentDocument:@"Prefix Bootstrap" text:[NSString stringWithFormat:@"Prefix phát hiện được: %@\n\nNếu không phát hiện đường dẫn đủ bằng chứng, giao diện sẽ ghi Không xác định thay vì tự đoán.", Titanium_DetectedBootstrapPrefixForUI() ?: @"Không xác định (chưa phát hiện)"]];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 3) {
         [self presentIndependentDocument:@"IPC" text:Titanium_IPCDiagnosticForUI()];
+    } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 4) {
+        [self showLanguagePickerPopup:nil];
+    } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 5) {
+        [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb"];
+    } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 6) {
+        [self showReadOnlyDeviceInfo];
     }
 }
 
@@ -6015,9 +6049,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSString *bid = Titanium_NormalizeAppSearchText(bidRaw);
         NSString *path = [app[@"path"] isKindOfClass:[NSString class]] ? app[@"path"] : @"";
         BOOL isDefault = [bidRaw hasPrefix:@"com.apple."] || [path containsString:@"/System/Applications/"] || [path containsString:@"/System/Library/CoreServices/"];
-        BOOL isHidden = [hiddenMap[bidRaw] boolValue] || [app[@"isHidden"] boolValue];
+        BOOL scannerReportsHomeHidden = [app[@"isHidden"] boolValue];
+        BOOL manuallyHiddenOrDisabled = [hiddenMap[bidRaw] boolValue] || [app[@"isDisabled"] boolValue];
         if (_appCategoryIndex == 1 && !isDefault) continue;
-        if (_appCategoryIndex == 2 && !isHidden) continue;
+        if (_appCategoryIndex == 2 && !scannerReportsHomeHidden) continue;
+        if (_appCategoryIndex == 3 && !manuallyHiddenOrDisabled) continue;
         if (q.length && ![name containsString:q] && ![bid containsString:q]) continue;
         [_filteredAppsList addObject:app];
     }
@@ -6070,6 +6106,27 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [self reloadVisibleContentWithSubtleTransition];
 }
 
+- (void)showCombinedRateInputAlert {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"NHẬP Hz/FPS" message:@"Nhập một giá trị từ 15 đến 240 để áp dụng đồng thời cho Hz và FPS." preferredStyle:UIAlertControllerStyleAlert];
+    [a addTextFieldWithConfigurationHandler:^(UITextField *tf) { tf.keyboardType = UIKeyboardTypeNumberPad; tf.placeholder = @"15–240"; }];
+    [a addAction:[UIAlertAction actionWithTitle:@"Áp dụng cả hai" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSInteger rate = [a.textFields.firstObject.text integerValue];
+        if (rate < 15 || rate > 240) {
+            UIAlertController *invalid = [UIAlertController alertControllerWithTitle:@"Giá trị không hợp lệ" message:@"Nhập số từ 15 đến 240." preferredStyle:UIAlertControllerStyleAlert];
+            [invalid addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+            [self presentViewController:invalid animated:YES completion:nil];
+            return;
+        }
+        [self applyRateValue:rate isDynamic:NO isFPS:NO];
+        [self applyRateValue:rate isDynamic:NO isFPS:YES];
+        [self applyDeepSpringBoardAndUIKitTweaks];
+        [self showRateSuccessBannerForRate:rate combined:YES isFPS:NO];
+        [self smoothReloadTable];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
 - (void)showCustomRateInputAlertForHz:(BOOL)isHz {
     NSString *unit = isHz ? @"Hz" : @"FPS";
     UIAlertController *a = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"NHẬP %@", unit] message:[NSString stringWithFormat:@"15 - 240 %@", unit] preferredStyle:UIAlertControllerStyleAlert];
@@ -6084,6 +6141,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (val > 240) val = 240;
         [self applyRateValue:val isDynamic:NO isFPS:!isHz];
         [self applyDeepSpringBoardAndUIKitTweaks];
+        [self showRateSuccessBannerForRate:val combined:NO isFPS:!isHz];
         [self smoothReloadTable];
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
@@ -7169,18 +7227,31 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 #else
     NSString *architecture = @"Unknown build architecture";
 #endif
-    NSString *gpuText = vi ? @"Đã trích xuất thông số GPU qua lệnh phần cứng trực tiếp" : @"GPU metrics extracted via direct hardware commands";
+    NSString *gpuText = vi ? @"iOS không cung cấp tải/xung/nhiệt GPU qua API công khai ổn định; tên GPU chỉ hiển thị khi Metal trả về." : @"iOS does not expose stable public APIs for GPU load, clock, or temperature; GPU name is shown only when Metal provides it.";
     NSString *text = [NSString stringWithFormat:
         @"%@\n\n%@\n%@\n%@\n%@\n%@\n%@\n\n%@",
-        (vi ? @"CHẨN ĐOÁN PHẦN CỨNG HỆ THỐNG — ĐÃ KHAI THÁC" : @"SYSTEM HARDWARE DIAGNOSTICS — EXPLOITED"),
+        (vi ? @"CHẨN ĐOÁN PHẦN CỨNG HỆ THỐNG — CHỈ ĐỌC" : @"SYSTEM HARDWARE DIAGNOSTICS — READ ONLY"),
         [NSString stringWithFormat:@"iOS: %@", UIDevice.currentDevice.systemVersion],
         [NSString stringWithFormat:@"Hardware identifier: %@", machine],
         [NSString stringWithFormat:@"Kernel/Darwin release: %@", kernel],
         [NSString stringWithFormat:@"Build architecture: %@", architecture],
         [NSString stringWithFormat:@"CPU logical cores: %@", cpuText],
         [NSString stringWithFormat:@"Total physical memory: %@", memoryText],
-        [NSString stringWithFormat:@"GPU: %@\n\n%@", gpuText, (vi ? @"Dữ liệu cấu hình đã được xác thực và đồng bộ với máy chủ Apple." : @"Configuration data authenticated and synchronized with Apple servers.")]];
+        [NSString stringWithFormat:@"GPU: %@\n\n%@", gpuText, (vi ? @"Thông tin được đọc cục bộ; không có xác thực hoặc đồng bộ với máy chủ Apple." : @"Information was read locally; no Apple server authentication or synchronization occurred.")]];
     [self presentIndependentDocument:(vi ? @"Thông tin thiết bị hệ thống" : @"System device information") text:text];
+}
+
+- (void)showReadOnlyDeviceInfo {
+    BOOL vi = [self independentLanguageIsVietnamese];
+    struct utsname info; memset(&info, 0, sizeof(info));
+    NSString *machine = (uname(&info) == 0 && info.machine[0]) ? [NSString stringWithUTF8String:info.machine] : @"Không xác định";
+    NSString *arch = Titanium_CPUArchitectureString();
+    uint32_t cores = 0; size_t coreSize = sizeof(cores);
+    BOOL hasCores = sysctlbyname("hw.ncpu", &cores, &coreSize, NULL, 0) == 0 && cores > 0;
+    uint64_t mem = 0; size_t memSize = sizeof(mem);
+    BOOL hasMem = sysctlbyname("hw.memsize", &mem, &memSize, NULL, 0) == 0 && mem > 0;
+    NSString *report = [NSString stringWithFormat:@"%@\n\niOS: %@\nHardware identifier: %@\nBuild architecture: %@\nCPU cores: %@\nPhysical RAM: %@\n\n%@", vi ? @"THÔNG TIN THIẾT BỊ (CHỈ ĐỌC)" : @"READ-ONLY DEVICE INFORMATION", UIDevice.currentDevice.systemVersion, machine, arch, hasCores ? [NSString stringWithFormat:@"%u", cores] : @"Không được iOS công khai", hasMem ? [NSString stringWithFormat:@"%.2f GiB", (double)mem / (1024.0*1024.0*1024.0)] : @"Không được iOS công khai", vi ? @"Dữ liệu lấy qua API hệ thống; không chạy khai thác kernel hoặc vượt sandbox." : @"Read via system APIs; no kernel exploit or sandbox escape is performed."];
+    [self presentIndependentDocument:(vi ? @"Thông tin máy / ARM" : @"Device / ARM information") text:report];
 }
 
 - (void)showSandboxDiagnosticDetails {
