@@ -7430,8 +7430,10 @@ static void SpringBoardBootstrapTrigger(void) {
         const char *progName = getprogname();
         if (!progName) return;
 
-        // BẢO VỆ TOÀN DIỆN: Chặn đứng các tiến trình extension, share, notes, daemon hệ thống và 3 tiến trình gây crash Safe Mode
-        if (strcasestr(progName, "ShareExtension") != NULL ||
+        // BỔ SUNG CHẶN TIẾN TRÌNH GÂY CRASH: Chặn AccessibilityUIServer, PosterBoard, và các service ngầm để tránh lỗi SIGSEGV / objc_release
+        if (strcasestr(progName, "AccessibilityUIServer") != NULL ||
+            strcasestr(progName, "PosterBoard") != NULL ||
+            strcasestr(progName, "ShareExtension") != NULL ||
             strcasestr(progName, "Extension") != NULL ||
             strcasestr(progName, "Cr4shed") != NULL ||
             strcasestr(progName, "MobileNotes") != NULL ||
@@ -7441,9 +7443,8 @@ static void SpringBoardBootstrapTrigger(void) {
             strcasestr(progName, "PassbookUIService") != NULL ||
             strcasestr(progName, "UserNotificationCenter") != NULL ||
             strcasestr(progName, "CoreAuthUI") != NULL ||
-            strcasestr(progName, "assistivetouchd") != NULL || 
-            strcasestr(progName, "PosterBoard") != NULL ||     
-            strcasestr(progName, "sharingd") != NULL) {        
+            strcasestr(progName, "assistivetouchd") != NULL ||
+            strcasestr(progName, "sharingd") != NULL) {
             return;
         }
 
@@ -7539,17 +7540,14 @@ static void SpringBoardBootstrapTrigger(void) {
                 SpringBoardBootstrapTrigger();
             });
         } else {
-            // KIỂM TRA MÔI TRƯỜNG THỰC TẾ: Tự động phát hiện xem app đang chạy trên RootHide hay Rootless/Rootful
             NSString *jbRoot = Titanium_GetRootHidePrefixPath();
             BOOL isRootHideEnvironment = (jbRoot && ![jbRoot isEqualToString:@"/"] && ![jbRoot isEqualToString:@"/var/jb"]);
 
             if (isRootHideEnvironment) {
-                // CHỈ TRÌ HOÃN TRÊN ROOTHIDE: Chờ 75ms để hoàn tất mô phỏng không gian tên rồi mới nạp tweak
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(75 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     runCoreTweak(NO, bundleID, progName);
                 });
             } else {
-                // TRÊN ROOTLESS / ROOTFUL: Nạp vào luôn lập tức không trì hoãn để đạt tốc độ tối đa
                 runCoreTweak(NO, bundleID, progName);
             }
         }
