@@ -1,4 +1,4 @@
-name: build deb
+name: build deb1
 
 on:
   push:
