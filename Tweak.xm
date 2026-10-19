@@ -7811,7 +7811,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
             %init(Group_Hardware_Deep_Core_Bypass);
             %init(Group_Safari_And_Animation_Safety);
-
+            %init(_ungrouped);
             %init(Group_Aggressive_RAM_Purge);
 
             if (Titanium_DisplaySpoofAllowed()) {
