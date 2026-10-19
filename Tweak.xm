@@ -3188,16 +3188,7 @@ static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
     return CAFrameRateRangeMake(60.0f, 120.0f, 120.0f);
 }
 
-static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
-    @try {
-        NSInteger userHz = (g_syncPayloadV285.targetHz > 0) ? (NSInteger)g_syncPayloadV285.targetHz : g_cachedResolvedHz;
-        if (userHz <= 0) userHz = 240;
-        if (userHz < 15) userHz = 15;
-        if (userHz > 240) userHz = 240;
-        return userHz;
-    } @catch (__unused NSException *e) {}
-    return 240;
-}
+static inline NSInteger Titanium_GetEffectiveFrameCap(void);
 
 // Hàm bọc thép an toàn tuyệt đối (Chống sập 100% mọi ngoại lệ)
 static inline void Titanium_SafeExecute(void (^block)(void)) {
