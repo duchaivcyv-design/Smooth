@@ -3175,7 +3175,7 @@ static inline void Titanium_EnforceMachFrameConstraint(void) {
 %end
 
 // ====================================================================================================
-// HÀM TRỢ GIÚP TOÀN CỤC & TÍNH TOÁN FPS (ĐẶT Ở ĐẦU TIÊN ĐỂ TRIỆT TIÊU LỖI UNDECLARED)
+// HÀM TRỢ GIÚP TOÀN CỤC & TÍNH TOÁN FPS (ĐẶT Ở ĐẦU TIÊN ĐỂ TRIỆT TIỆU LỖI UNDECLARED)
 // ====================================================================================================
 
 static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
@@ -3231,10 +3231,82 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 // ====================================================================================================
-// NHÓM 2 (FULL DYNAMIC): OVERDRIVE METAL & TẮT V-SYNC - 0MS LATENCY (AN TOÀN TUYỆT ĐỐI CHO SPRINGBOARD & APP)
+// NHÓM 2 (ULTIMATE GPU/CPU/DISPLAY V-SYNC KILLER): BẺ GÃY HOÀN TOÀN V-SYNC & ÉP XUNG METAL 100%
 // ====================================================================================================
 
-// 1. Swizzle cho didMoveToWindow để bơm cấu hình Metal khi layer được nạp
+#import <objc/runtime.h>
+#import <Metal/Metal.h>
+
+// Hàm cốt lõi ép cấu hình tầng sâu, tiêu diệt tận gốc V-Sync ở mọi tầng phần cứng
+static void Titanium_ForceApplyMetalOverdriveUltimate(id self) {
+    @try {
+        if (!self) return;
+        if (Titanium_IsVideoOrMediaMetalLayer(self)) return; // Bảo vệ luồng video/media chuẩn
+
+        // 1. Ép buffer về mức 1 để loại bỏ hoàn toàn độ trễ xếp hàng
+        @try {
+            if ([self respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+                [self setValue:@(1) forKey:@"maximumDrawableCount"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        // 2. Chỉ định Framebuffer độc lập tối ưu hóa tốc độ GPU render
+        @try {
+            if ([self respondsToSelector:@selector(setFramebufferOnly:)]) {
+                [self setValue:@YES forKey:@"framebufferOnly"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        // 3. Cho phép timeout drawable cực nhanh, chống kẹt khung hình
+        @try {
+            if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+                [self setValue:@YES forKey:@"allowsNextDrawableTimeout"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        // 4. Kích hoạt chế độ phần cứng độ trễ thấp tối đa (Low Latency Mode)
+        @try {
+            if ([self respondsToSelector:@selector(setLowLatencyMode:)]) {
+                [self setValue:@YES forKey:@"lowLatencyMode"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        // 5. TẮT HOÀN TOÀN V-SYNC TẦNG METAL / DISPLAY ENGINE
+        @try {
+            if ([self respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
+                [self setValue:@NO forKey:@"displaySyncEnabled"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        // 6. TIÊU DIỆT TẬN GỐC TRANSACTION PACING (Ép GPU đẩy khung hình trực tiếp không chờ tín hiệu đồng bộ dọc)
+        @try {
+            if ([self respondsToSelector:@selector(setServerPresentsWithTransaction:)]) {
+                [self setValue:@NO forKey:@"serverPresentsWithTransaction"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        @try {
+            if ([self respondsToSelector:@selector(setPresentsWithTransaction:)]) {
+                [self setValue:@NO forKey:@"presentsWithTransaction"];
+            }
+        } @catch (__unused NSException *e) {}
+
+        // 7. Ép xung dải tần số quét màn hình lên mức cao nhất (Max FPS / Hz)
+        @try {
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                    CAFrameRateRange range = Titanium_SmoothFRR(maxTarget);
+                    NSValue *rangeVal = [NSValue valueWithBytes:&range objCType:@encode(CAFrameRateRange)];
+                    [self setValue:rangeVal forKey:@"preferredFrameRateRange"];
+                }
+            }
+        } @catch (__unused NSException *e) {}
+
+    } @catch (__unused NSException *e) {}
+}
+
+// Hook didMoveToWindow: Bơm cấu hình ngay khi Layer khởi tạo
 static void (*orig_CAMetalLayer_didMoveToWindow)(id self, SEL _cmd) = NULL;
 static void hooked_CAMetalLayer_didMoveToWindow(id self, SEL _cmd) {
     if (orig_CAMetalLayer_didMoveToWindow) {
@@ -3243,46 +3315,18 @@ static void hooked_CAMetalLayer_didMoveToWindow(id self, SEL _cmd) {
     @try {
         if (!self) return;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // Ép buffer = 1 để tối ưu tốc độ render
-            if ([self respondsToSelector:NSSelectorFromString(@selector(setMaximumDrawableCount:))]) {
-                [self setValue:@(1) forKey:@"maximumDrawableCount"];
-            }
-            // Chỉ định chỉ dùng framebuffer độc lập
-            if ([self respondsToSelector:NSSelectorFromString(@selector(setFramebufferOnly:))]) {
-                [self setValue:@YES forKey:@"framebufferOnly"];
-            }
-            // Cho phép timeout drawable nhanh để tránh kẹt khung hình
-            if ([self respondsToSelector:NSSelectorFromString(@selector(setAllowsNextDrawableTimeout:))]) {
-                [self setValue:@YES forKey:@"allowsNextDrawableTimeout"];
-            }
-            // Kích hoạt chế độ độ trễ thấp (Low Latency Mode)
-            if ([self respondsToSelector:NSSelectorFromString(@selector(setLowLatencyMode:))]) {
-                [self setValue:@YES forKey:@"lowLatencyMode"];
-            }
-            // Ép TẮT V-SYNC (0ms latency, phá bỏ giới hạn đồng bộ màn hình)
-            if ([self respondsToSelector:NSSelectorFromString(@selector(setDisplaySyncEnabled:))]) {
-                [self setValue:@NO forKey:@"displaySyncEnabled"];
-            }
-            // Can thiệp dải tần số quét ProMotion nếu khả dụng
-            if (@available(iOS 15.0, *)) {
-                if ([self respondsToSelector:NSSelectorFromString(@selector(setPreferredFrameRateRange:))]) {
-                    float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                    CAFrameRateRange range = Titanium_SmoothFRR(maxTarget);
-                    NSValue *rangeVal = [NSValue valueWithBytes:&range objCType:@encode(CAFrameRateRange)];
-                    [self setValue:rangeVal forKey:@"preferredFrameRateRange"];
-                }
-            }
+            Titanium_ForceApplyMetalOverdriveUltimate(self);
         }
     } @catch (__unused NSException *e) {}
 }
 
-// 2. Swizzle trực tiếp phương thức setDisplaySyncEnabled: để chặn đứng lệnh bật V-Sync từ hệ thống/app
+// Hook setDisplaySyncEnabled: Chặn đứng lệnh bật V-Sync, ép luôn bằng NO
 static void (*orig_CAMetalLayer_setDisplaySyncEnabled)(id self, SEL _cmd, BOOL enabled) = NULL;
 static void hooked_CAMetalLayer_setDisplaySyncEnabled(id self, SEL _cmd, BOOL enabled) {
     BOOL targetEnabled = enabled;
     @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            targetEnabled = NO; // Ép luôn luôn tắt V-Sync (Zero Tearing / Zero Lag)
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsVideoOrMediaMetalLayer(self)) {
+            targetEnabled = NO; // Ép tắt vĩnh viễn V-Sync
         }
     } @catch (__unused NSException *e) {}
     
@@ -3293,13 +3337,13 @@ static void hooked_CAMetalLayer_setDisplaySyncEnabled(id self, SEL _cmd, BOOL en
     }
 }
 
-// 3. Swizzle trực tiếp phương thức setMaximumDrawableCount: để khóa cứng buffer ở mức 1
+// Hook setMaximumDrawableCount: Khóa cứng buffer đệm = 1
 static void (*orig_CAMetalLayer_setMaximumDrawableCount)(id self, SEL _cmd, NSUInteger count) = NULL;
 static void hooked_CAMetalLayer_setMaximumDrawableCount(id self, SEL _cmd, NSUInteger count) {
     NSUInteger targetCount = count;
     @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            targetCount = 1; // Ép cứng buffer count = 1
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsVideoOrMediaMetalLayer(self)) {
+            targetCount = 1; 
         }
     } @catch (__unused NSException *e) {}
     
@@ -3310,7 +3354,22 @@ static void hooked_CAMetalLayer_setMaximumDrawableCount(id self, SEL _cmd, NSUIn
     }
 }
 
-// Hàm khởi tạo tiêm động toàn cục cho Nhóm 2 (Được gọi bên trong runCoreTweak)
+// Hook nextDrawable: Bẻ gãy giới hạn render, đẩy khung hình tốc độ tối đa
+static id (*orig_CAMetalLayer_nextDrawable)(id self, SEL _cmd) = NULL;
+static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
+    id drawable = nil;
+    @try {
+        if (orig_CAMetalLayer_nextDrawable) {
+            drawable = orig_CAMetalLayer_nextDrawable(self, _cmd);
+        }
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            g_lastInteractionMachTime = mach_absolute_time();
+        }
+    } @catch (__unused NSException *e) {}
+    return drawable;
+}
+
+// Hàm khởi tạo tiêm động toàn cục (Gọi trực tiếp trong runCoreTweak)
 static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -3318,7 +3377,6 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
             Class metalLayerClass = NSClassFromString(@"CAMetalLayer");
             if (!metalLayerClass) return;
 
-            // Tiến hành hoán đổi hàm an toàn thông qua Objective-C Runtime
             Method m1 = class_getInstanceMethod(metalLayerClass, @selector(didMoveToWindow));
             if (m1) {
                 orig_CAMetalLayer_didMoveToWindow = (void (*)(id, SEL))method_getImplementation(m1);
@@ -3335,6 +3393,12 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
             if (m3) {
                 orig_CAMetalLayer_setMaximumDrawableCount = (void (*)(id, SEL, NSUInteger))method_getImplementation(m3);
                 method_setImplementation(m3, (IMP)hooked_CAMetalLayer_setMaximumDrawableCount);
+            }
+
+            Method m4 = class_getInstanceMethod(metalLayerClass, @selector(nextDrawable));
+            if (m4) {
+                orig_CAMetalLayer_nextDrawable = (id (*)(id, SEL))method_getImplementation(m4);
+                method_setImplementation(m4, (IMP)hooked_CAMetalLayer_nextDrawable);
             }
         } @catch (__unused NSException *e) {}
     });
