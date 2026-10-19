@@ -7648,7 +7648,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                       attributes:@{NSFilePosixPermissions: @(0644)}];
             } else {
                 %init(Group_UIKit_ThirdParty_IsolatedV285);
-                %init(Group_Force_Render_Recovery_Overdrive);
+                // ĐÃ XÓA HOÀN TOÀN DÒNG Group_Force_Render_Recovery_Overdrive GÂY LỖI BIÊN DỊCH Ở ĐÂY
                 %init(Group_Window_Level_Overdrive);
                 Init_CAWindowServer_Hooks();
 
@@ -7707,7 +7707,9 @@ static void SpringBoardBootstrapTrigger(void) {
 
         if (strcasestr(progName, "smooth") != NULL ||
             strcasestr(progName, "boosti") != NULL ||
-            strcasestr(progName, "liquid") != NULL) {
+            strcasestr(progName, "liquid") != NULL ||
+            strcasestr(progName, "zinitd") != NULL ||
+            strcasestr(progName, "roothide") != NULL) {
             return;
         }
 
