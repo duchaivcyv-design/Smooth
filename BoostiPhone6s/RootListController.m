@@ -1284,7 +1284,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     _titleL.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold];
     _detailL.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightMedium];
     _glassBackground.backgroundColor = [UIColor colorWithRed:0.055 green:0.028 blue:0.13 alpha:0.98];
-    _glassBackground.layer.cornerRadius = 18.0;
+    _glassBackground.layer.cornerRadius = 22.0;
     _glassBackground.layer.borderWidth = 1.0;
     _glassBackground.layer.borderColor = [pink colorWithAlphaComponent:0.30].CGColor;
     _glassBackground.layer.shadowColor = cyan.CGColor;
@@ -1303,8 +1303,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)layoutSubviews {
     [super layoutSubviews];
     _glassBackground.frame = self.bounds;
-    _glassBackground.layer.cornerRadius = 18.0;
-    _glassBackground.cornerRadiusValue = 18.0;
+    _glassBackground.layer.cornerRadius = 22.0;
+    _glassBackground.cornerRadiusValue = 22.0;
     [_glassBackground layoutSubviews];
 }
 
@@ -3240,15 +3240,15 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     bg.frame = self.view.bounds;
     bg.name = @"TI_V20_1_BackgroundGradient";
     bg.colors = @[
-        (id)[UIColor colorWithRed:0.16 green:0.025 blue:0.31 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.055 green:0.018 blue:0.15 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.008 green:0.018 blue:0.055 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.045 green:0.012 blue:0.095 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.018 green:0.012 blue:0.052 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.004 green:0.009 blue:0.025 alpha:1.0].CGColor
     ];
     bg.locations = @[@0.0, @0.48, @1.0];
     bg.startPoint = CGPointMake(0.0, 0.0);
     bg.endPoint = CGPointMake(0.85, 1.0);
     [self.view.layer insertSublayer:bg atIndex:0];
-    self.view.backgroundColor = [UIColor colorWithRed:0.018 green:0.010 blue:0.045 alpha:1.0];
+    self.view.backgroundColor = [UIColor colorWithRed:0.008 green:0.008 blue:0.025 alpha:1.0];
 
     _currentBottomTab = 0;
     _hasPlayedEntranceAnimation = NO;
@@ -3442,6 +3442,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     if (_currentBottomTab == 0 && [self.settingsDict[@"EnableSystemMonitoring"] boolValue] && !_chipErrorActive) {
         [self startContinuousHardwareHUD];
     }
+    // Start the real display-link sampler on the FPS page too; the value measures this UI only.
+    if (_currentBottomTab == 1) [self startUIFrameSampler];
     if (_adminSessionRestorePending) return;
 
     if (_isAdminServer) {
@@ -3847,7 +3849,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 }
 
 - (void)showPhonkMusicPicker {
-    // In-app music browser: search results stay inside this app instead of launching YouTube.
+    // In-app music browser for YouTube, SoundCloud and Apple Music search pages.
     UIViewController *browser = [UIViewController new];
     browser.modalPresentationStyle = UIModalPresentationPageSheet;
     browser.view.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.13 alpha:1.0];
@@ -3868,14 +3870,14 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     UILabel *subtitle = [UILabel new];
     subtitle.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitle.text = @"Tìm nhạc · Phonk · Apple Music · Chill";
+    subtitle.text = @"Tìm và nghe nhạc · SoundCloud · Apple Music · YouTube";
     subtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
     subtitle.textColor = [UIColor colorWithWhite:1 alpha:0.66];
     [top addSubview:subtitle];
 
     UITextField *search = [UITextField new];
     search.translatesAutoresizingMaskIntoConstraints = NO;
-    search.placeholder = @"  Tìm tên bài hát, nghệ sĩ hoặc playlist…";
+    search.placeholder = @"  Tìm bài hát, nghệ sĩ hoặc playlist…";
     search.textColor = UIColor.whiteColor;
     search.tintColor = cyan;
     search.backgroundColor = [UIColor colorWithWhite:1 alpha:0.09];
@@ -3890,7 +3892,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     search.leftViewMode = UITextFieldViewModeAlways;
     [browser.view addSubview:search];
 
-    UISegmentedControl *categories = [[UISegmentedControl alloc] initWithItems:@[@"PHONK", @"APPLE MUSIC", @"CHILL"]];
+    UISegmentedControl *categories = [[UISegmentedControl alloc] initWithItems:@[@"PHONK", @"SOUNDCLOUD", @"APPLE MUSIC", @"YOUTUBE"]];
     categories.translatesAutoresizingMaskIntoConstraints = NO;
     categories.selectedSegmentIndex = 0;
     categories.selectedSegmentTintColor = purple;
@@ -3906,6 +3908,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     web.opaque = NO;
     web.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.13 alpha:1.0];
     web.scrollView.backgroundColor = web.backgroundColor;
+    if (@available(iOS 15.0, *)) web.underPageBackgroundColor = web.backgroundColor;
+    web.allowsBackForwardNavigationGestures = YES;
     web.layer.cornerRadius = 16;
     web.clipsToBounds = YES;
     [browser.view addSubview:web];
@@ -3919,32 +3923,78 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     go.layer.cornerRadius = 13;
     [browser.view addSubview:go];
 
+    UIButton *openOutside = [UIButton buttonWithType:UIButtonTypeSystem];
+    openOutside.translatesAutoresizingMaskIntoConstraints = NO;
+    [openOutside setTitle:@"MỞ APP" forState:UIControlStateNormal];
+    [openOutside setTitleColor:cyan forState:UIControlStateNormal];
+    openOutside.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
+    [browser.view addSubview:openOutside];
+
     UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
     close.translatesAutoresizingMaskIntoConstraints = NO;
     [close setTitle:@"ĐÓNG" forState:UIControlStateNormal];
     [close setTitleColor:cyan forState:UIControlStateNormal];
-    close.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
+    close.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
     [browser.view addSubview:close];
 
     __block NSInteger category = 0;
     void (^loadSearch)(NSString *) = ^(NSString *term) {
         NSString *q = [term stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (q.length == 0) {
-            q = category == 0 ? @"phonk drift playlist" : (category == 1 ? @"popular songs" : @"chill lofi music");
+            switch (category) {
+                case 0: q = @"phonk drift playlist"; break;
+                case 1: q = @"phonk"; break;
+                case 2: q = @"popular songs"; break;
+                default: q = @"chill lofi music"; break;
+            }
         }
-        NSString *base = category == 1 ? @"https://music.apple.com/us/search?term=" : @"https://m.youtube.com/results?search_query=";
-        NSString *encoded = [q stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
-        NSURL *url = [NSURL URLWithString:[base stringByAppendingString:encoded ?: @"music"]];
-        if (url) [web loadRequest:[NSURLRequest requestWithURL:url]];
+        // URLComponents safely encodes spaces, accents and punctuation in search terms.
+        NSURLComponents *components = [NSURLComponents new];
+        switch (category) {
+            case 0: // YouTube is a reliable default for Phonk/drift mixes.
+                components.scheme = @"https"; components.host = @"m.youtube.com"; components.path = @"/results";
+                components.queryItems = @[[NSURLQueryItem queryItemWithName:@"search_query" value:q]];
+                break;
+            case 1: // SoundCloud search; playback depends on SoundCloud's availability and permissions.
+                components.scheme = @"https"; components.host = @"soundcloud.com"; components.path = @"/search";
+                components.queryItems = @[[NSURLQueryItem queryItemWithName:@"q" value:q]];
+                break;
+            case 2:
+                components.scheme = @"https"; components.host = @"music.apple.com"; components.path = @"/us/search";
+                components.queryItems = @[[NSURLQueryItem queryItemWithName:@"term" value:q]];
+                break;
+            default:
+                components.scheme = @"https"; components.host = @"m.youtube.com"; components.path = @"/results";
+                components.queryItems = @[[NSURLQueryItem queryItemWithName:@"search_query" value:q]];
+                break;
+        }
+        NSURL *url = components.URL;
+        if (url) [web loadRequest:[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:25.0]];
     };
     [go addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { loadSearch(search.text ?: @""); }] forControlEvents:UIControlEventTouchUpInside];
     [search addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { loadSearch(search.text ?: @""); }] forControlEvents:UIControlEventEditingDidEndOnExit];
     [categories addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
         category = categories.selectedSegmentIndex;
-        NSString *placeholder = category == 0 ? @"  Tìm phonk / drift / bass…" : (category == 1 ? @"  Tìm bài hát trên Apple Music…" : @"  Tìm nhạc chill / lofi…");
+        NSString *placeholder = @"  Tìm bài hát, nghệ sĩ hoặc playlist…";
+        if (category == 0) placeholder = @"  Tìm phonk / drift / bass trên YouTube…";
+        else if (category == 1) placeholder = @"  Tìm trên SoundCloud…";
+        else if (category == 2) placeholder = @"  Tìm trên Apple Music…";
+        else placeholder = @"  Tìm video / playlist trên YouTube…";
         search.placeholder = placeholder;
         loadSearch(search.text ?: @"");
     }] forControlEvents:UIControlEventValueChanged];
+    [openOutside addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        NSURL *currentURL = web.URL;
+        if (currentURL) {
+            [[UIApplication sharedApplication] openURL:currentURL options:@{} completionHandler:^(BOOL success) {
+                if (!success && browser.presentedViewController == nil) {
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Không mở được ứng dụng" message:@"Ứng dụng nhạc có thể chưa được cài đặt. Mày vẫn có thể tìm và nghe trong cửa sổ này." preferredStyle:UIAlertControllerStyleAlert];
+                    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                    [browser presentViewController:alert animated:YES completion:nil];
+                }
+            }];
+        }
+    }] forControlEvents:UIControlEventTouchUpInside];
     [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { [browser dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -3969,12 +4019,16 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         [web.trailingAnchor constraintEqualToAnchor:search.trailingAnchor],
         [web.bottomAnchor constraintEqualToAnchor:go.topAnchor constant:-12],
         [go.leadingAnchor constraintEqualToAnchor:search.leadingAnchor],
-        [go.widthAnchor constraintEqualToConstant:120],
+        [go.widthAnchor constraintEqualToConstant:100],
         [go.heightAnchor constraintEqualToConstant:44],
         [go.bottomAnchor constraintEqualToAnchor:browser.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [openOutside.leadingAnchor constraintEqualToAnchor:go.trailingAnchor constant:8],
+        [openOutside.centerYAnchor constraintEqualToAnchor:go.centerYAnchor],
+        [openOutside.widthAnchor constraintEqualToConstant:86],
+        [openOutside.heightAnchor constraintEqualToConstant:44],
         [close.trailingAnchor constraintEqualToAnchor:search.trailingAnchor],
         [close.centerYAnchor constraintEqualToAnchor:go.centerYAnchor],
-        [close.widthAnchor constraintEqualToConstant:70],
+        [close.widthAnchor constraintEqualToConstant:58],
         [close.heightAnchor constraintEqualToConstant:44]
     ]];
     search.text = @"phonk drift playlist";
@@ -5564,6 +5618,25 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     innerRing.backgroundColor = [UIColor colorWithRed:0.30 green:0.055 blue:0.40 alpha:0.65];
     [middleRing addSubview:innerRing];
 
+    // Motion is purely visual; live measurements are supplied by refreshNeonLiveReadouts.
+    CABasicAnimation *ringPulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    ringPulse.fromValue = @0.52;
+    ringPulse.toValue = @1.0;
+    ringPulse.duration = 1.35;
+    ringPulse.autoreverses = YES;
+    ringPulse.repeatCount = HUGE_VALF;
+    [middleRing.layer addAnimation:ringPulse forKey:@"TI_NeonRingPulse"];
+    CABasicAnimation *ringGlow = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+    ringGlow.fromValue = @0.12;
+    ringGlow.toValue = @0.65;
+    ringGlow.duration = 1.6;
+    ringGlow.autoreverses = YES;
+    ringGlow.repeatCount = HUGE_VALF;
+    middleRing.layer.shadowColor = [UIColor colorWithRed:0.12 green:0.82 blue:1.0 alpha:1.0].CGColor;
+    middleRing.layer.shadowRadius = 15.0;
+    middleRing.layer.shadowOpacity = 0.4;
+    [middleRing.layer addAnimation:ringGlow forKey:@"TI_NeonRingGlow"];
+
     UILabel *boost = [[UILabel alloc] initWithFrame:innerRing.bounds];
     boost.text = @"BOOST";
     boost.font = [UIFont systemFontOfSize:22.0 weight:UIFontWeightBlack];
@@ -5690,7 +5763,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger targetFPS = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 60;
     UILabel *big = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, panel.bounds.size.width - 32, 43)];
-    big.text = [NSString stringWithFormat:@"%ld UI FPS", (long)self->_uiFPSMeasured];
+    big.text = [NSString stringWithFormat:@"%ld FPS  ·  LIVE", (long)self->_uiFPSMeasured];
     big.font = [UIFont systemFontOfSize:32 weight:UIFontWeightBlack];
     big.textColor = [UIColor colorWithRed:0.22 green:0.91 blue:1.0 alpha:1.0];
     big.adjustsFontSizeToFitWidth = YES;
@@ -5698,7 +5771,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [panel addSubview:big];
 
     UILabel *detail = [[UILabel alloc] initWithFrame:CGRectMake(18, 60, panel.bounds.size.width - 36, 34)];
-    detail.text = [NSString stringWithFormat:@"Màn hình tối đa %ld Hz  ·  Mục tiêu %ld Hz / %ld FPS", (long)maxHz, (long)targetHz, (long)targetFPS];
+    detail.text = [NSString stringWithFormat:@"Phần cứng tối đa %ld Hz  ·  Cấu hình mục tiêu %ld Hz / %ld FPS", (long)maxHz, (long)targetHz, (long)targetFPS];
     detail.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
     detail.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
     detail.adjustsFontSizeToFitWidth = YES;
@@ -5874,7 +5947,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (_currentBottomTab == 3 && indexPath.section == 1) return 58.0;
-    return 66.0;
+    return 76.0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -5976,9 +6049,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     NSInteger targetHzSetting = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
                     NSInteger targetFPSSetting = [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
                     if (indexPath.row == 0) {
-                        NSInteger displayedIOSHz2 = (targetHzSetting > maximumHz) ? targetHzSetting : maximumHz;
+                        NSInteger displayedIOSHz2 = maximumHz;
                         title = _isScreenExpanded ? @"Màn hình ▼" : @"Màn hình ▶";
-                        detail = [NSString stringWithFormat:@"iOS báo %ld Hz · Tweak ép %ld Hz · %.0f×%.0f px", (long)displayedIOSHz2, (long)targetHzSetting, nativeBounds.size.width, nativeBounds.size.height];
+                        detail = [NSString stringWithFormat:@"Màn hình tối đa %ld Hz · Mục tiêu cấu hình %ld Hz · %.0f×%.0f px", (long)displayedIOSHz2, (long)targetHzSetting, nativeBounds.size.width, nativeBounds.size.height];
                     }
                     else if (indexPath.row == 1) { title = @"   Độ phân giải / scale"; detail = [NSString stringWithFormat:@"%.0f×%.0f px · scale %.2fx · vùng %.0f×%.0f pt", nativeBounds.size.width, nativeBounds.size.height, nativeScale, logicalBounds.size.width, logicalBounds.size.height]; }
                     else if (indexPath.row == 2) {
@@ -6750,7 +6823,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [self refreshNeonLiveReadouts];
 
     _hudTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), (uint64_t)(5.0 * NSEC_PER_SEC), (uint64_t)(0.5 * NSEC_PER_SEC));
+    dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), (uint64_t)(1.0 * NSEC_PER_SEC), (uint64_t)(0.5 * NSEC_PER_SEC));
     __weak typeof(self) wS = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(wS) sS = wS;
@@ -6804,9 +6877,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         _uiFPSFrameCount = 0;
         _uiFPSSampleStart = now;
         if (_currentBottomTab == 1) {
-            UIView *header = [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width];
-            self.customTableView.tableHeaderView = header;
-            [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+            UIView *header = self.customTableView.tableHeaderView;
+            for (UIView *view in header.subviews) {
+                if (![view isKindOfClass:[UIView class]]) continue;
+                for (UIView *child in view.subviews) {
+                    if ([child isKindOfClass:[UILabel class]] && [((UILabel *)child).text containsString:@"FPS  ·  LIVE"]) {
+                        ((UILabel *)child).text = [NSString stringWithFormat:@"%ld FPS  ·  LIVE", (long)_uiFPSMeasured];
+                        child.transform = CGAffineTransformMakeScale(1.03, 1.03);
+                        [UIView animateWithDuration:0.22 animations:^{ child.transform = CGAffineTransformIdentity; }];
+                    }
+                }
+            }
         }
     }
 }
@@ -6821,9 +6902,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UILabel *cpuLabel = (UILabel *)[header viewWithTag:8701];
     UILabel *memoryLabel = (UILabel *)[header viewWithTag:8702];
     UILabel *batteryLabel = (UILabel *)[header viewWithTag:8703];
-    if ([cpuLabel isKindOfClass:[UILabel class]]) cpuLabel.text = cpu >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", cpu] : @"N/A";
-    if ([memoryLabel isKindOfClass:[UILabel class]]) memoryLabel.text = Titanium_ByteCountString(memory);
-    if ([batteryLabel isKindOfClass:[UILabel class]]) batteryLabel.text = battery >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", battery * 100.0f] : @"N/A";
+    void (^updateLiveLabel)(UILabel *, NSString *) = ^(UILabel *label, NSString *value) {
+        if (![label isKindOfClass:[UILabel class]] || [label.text isEqualToString:value]) return;
+        [UIView transitionWithView:label duration:0.22 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionBeginFromCurrentState animations:^{ label.text = value; } completion:nil];
+        label.transform = CGAffineTransformMakeScale(1.035, 1.035);
+        [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut animations:^{ label.transform = CGAffineTransformIdentity; } completion:nil];
+    };
+    updateLiveLabel(cpuLabel, cpu >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", cpu] : @"Không có API");
+    updateLiveLabel(memoryLabel, Titanium_ByteCountString(memory));
+    updateLiveLabel(batteryLabel, battery >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", battery * 100.0f] : @"Không khả dụng");
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
