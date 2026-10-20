@@ -2693,7 +2693,7 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void);
 static inline void Titanium_UnleashAllHiddenSystemThreads(void);
 
 // ==============================================================================
-// KẾT NỐI VÙNG NHỚ CHIA SẺ ZERO-COPY IPC & QUẢN LÝ DẢI 15-240 HZ
+// KẾT NỐI VÙNG NHỚ CHIA SẺ ZERO-COPY IPC & QUẢN LÝ DẢI 15-240 HZ (ĐÃ SỬA CHUẨN ĐỌC CONFIG THỰC TẾ)
 // ==============================================================================
 
 static inline void Titanium_InitZeroCopyIPC(BOOL isSpringBoard) {
@@ -2715,9 +2715,32 @@ static inline void Titanium_InitZeroCopyIPC(BOOL isSpringBoard) {
         if (mapped != MAP_FAILED) {
             g_sharedPayloadPtr = (ApexV285ProPayload *)mapped;
             if (isSpringBoard) {
-                g_sharedPayloadPtr->targetHz = 240;
-                g_sharedPayloadPtr->targetFPS = 240;
-                g_sharedPayloadPtr->masterEnabled = 1;
+                // Đọc đúng giá trị thực tế từ file cấu hình người dùng chọn, không ép cứng 240Hz
+                NSString *prefPath = Titanium_ResolvePrefPath();
+                NSInteger userHz = 240;
+                NSInteger userFPS = 240;
+                BOOL userEnabled = YES;
+                
+                if (prefPath && [[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+                    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+                    if (dict) {
+                        if (dict[@"Enabled"] != nil) userEnabled = [dict[@"Enabled"] boolValue];
+                        if (dict[@"TargetRefreshRate"] != nil) userHz = [dict[@"TargetRefreshRate"] integerValue];
+                        if (dict[@"TargetFPSRate"] != nil) userFPS = [dict[@"TargetFPSRate"] integerValue];
+                    }
+                }
+                
+                if (userHz < 15) userHz = 15;
+                if (userHz > 240) userHz = 240;
+                if (userFPS < 15) userFPS = 15;
+                if (userFPS > 240) userFPS = 240;
+
+                g_sharedPayloadPtr->targetHz = (int32_t)userHz;
+                g_sharedPayloadPtr->targetFPS = (int32_t)userFPS;
+                g_sharedPayloadPtr->masterEnabled = userEnabled ? 1 : 0;
+                
+                g_cachedResolvedHz = userHz;
+                g_cachedResolvedFPS = userFPS;
             }
         }
     }
@@ -3320,7 +3343,7 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
 }
 
 // ====================================================================================================
-// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (15HZ - 240HZ)
+// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (15HZ - 240HZ - TỐI ƯU SIÊU TỐC)
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3350,6 +3373,7 @@ static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
     return (fpsCap > 0) ? fpsCap : hzCap;
 }
 
+// Tối ưu hóa Web Script: Ép toàn bộ trình duyệt web / WebKit app chạy đúng tần số quét cao nhất
 static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
     if (targetFPS < 15) targetFPS = 15;
     if (targetFPS > 240) targetFPS = 240;
@@ -3367,7 +3391,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
         @"  };"
         @"  var nativeSetInterval = window.setInterval;"
         @"  window.setInterval = function(fn, delay) {"
-        @"    if (delay < 4) delay = 4;"
+        @"    if (delay < 2) delay = 2;" // Ép xung interval web tối đa để không có độ trễ render
         @"    return nativeSetInterval(fn, delay);"
         @"  };"
         @"})();", (long)targetFPS];
@@ -3458,7 +3482,10 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (CFTimeInterval)minimumFrameDuration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return (1.0 / (double)Titanium_GetEffectiveFrameCap());
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        if (targetHz < 15.0) targetHz = 15.0;
+        if (targetHz > 240.0) targetHz = 240.0;
+        return (1.0 / targetHz);
     }
     return %orig;
 }
@@ -5038,7 +5065,7 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 }
 
 // ====================================================================================================
-// NHÓM ĐẶC QUYỀN CHIP & MÀN HÌNH (BẺ TRẦN 60HZ, BUNG HZ/FPS THẬT - BỌC THÉP AN TOÀN)
+// NHÓM ĐẶC QUYỀN CHIP & MÀN HÌNH (BẺ TRẦN 60HZ, BUNG HZ/FPS THẬT - GỌT SẠCH KHÔNG RỜM RÀ)
 // ====================================================================================================
 
 %group Group_Hardware_ProMotion_Overclock
@@ -5046,23 +5073,17 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %hook IOHIDEventSystemClient
 
 - (void)setProperty:(id)property forKey:(NSString *)key {
-    @try {
-        if (!self) {
-            %orig(property, key);
+    if (!self) {
+        %orig(property, key);
+        return;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key) {
+        if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
+            %orig(@(1000), key);
             return;
         }
-        @try {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && key) {
-                if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
-                    %orig(@(1000), key);
-                    return;
-                }
-            }
-        } @catch (__unused NSException *e) {}
-        %orig(property, key);
-    } @catch (__unused NSException *e) {
-        %orig(property, key);
     }
+    %orig(property, key);
 }
 
 %end
@@ -5070,22 +5091,14 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %hook IOMobileFramebufferClient
 
 - (int)setDisplayRefreshRate:(float)rate options:(unsigned int)options {
-    __block int result = 0;
-    @try {
-        if (!self) return %orig(rate, options);
-        @try {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                NSInteger cap = Titanium_GetEffectiveFrameCap();
-                if (cap < 15) cap = 15;
-                if (cap > 240) cap = 240;
-                rate = (float)cap; 
-            }
-        } @catch (__unused NSException *e) {}
-        result = %orig(rate, options);
-    } @catch (__unused NSException *e) {
-        result = -1;
+    if (!self) return %orig(rate, options);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        rate = (float)cap; 
     }
-    return result;
+    return %orig(rate, options);
 }
 
 %end
@@ -5093,20 +5106,12 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %hook AGXAccelerator
 
 - (int)setPowerState:(unsigned int)state {
-    __block int result = 0;
-    @try {
-        if (!self) return %orig(state);
-        @try {
-            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-                EnforceMaxCPUPower();
-                state = 1; 
-            }
-        } @catch (__unused NSException *e) {}
-        result = %orig(state);
-    } @catch (__unused NSException *e) {
-        result = -1;
+    if (!self) return %orig(state);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        EnforceMaxCPUPower();
+        state = 1; // Ép trạng thái nguồn GPU hoạt động ở mức cao nhất
     }
-    return result;
+    return %orig(state);
 }
 
 %end
@@ -5125,14 +5130,12 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
     if (!key || !self) {
         return %orig(key, value);
     }
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            if ([key rangeOfString:@"Thermal" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                [key rangeOfString:@"PowerLimit" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-                return KERN_SUCCESS;
-            }
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if ([key rangeOfString:@"Thermal" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [key rangeOfString:@"PowerLimit" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            return KERN_SUCCESS;
         }
-    } @catch (__unused NSException *e) {}
+    }
     return %orig(key, value);
 }
 
@@ -5325,12 +5328,10 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %hook CADisplayController
 
 - (void)displayLinkDidFire:(id)arg1 {
-    @try {
-        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
-            Titanium_LockMainThreadFast();
-            Titanium_EnableZeroLatencyPipeline();
-        }
-    } @catch (__unused NSException *e) {}
+    if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
+        Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+    }
     %orig(arg1);
 }
 
@@ -5352,38 +5353,32 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 }
 
 - (double)minimumFrameDuration {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            double targetHz = (double)Titanium_GetEffectiveFrameCap();
-            if (targetHz < 15.0) targetHz = 15.0;
-            if (targetHz > 240.0) targetHz = 240.0;
-            return (1.0 / targetHz);
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        if (targetHz < 15.0) targetHz = 15.0;
+        if (targetHz > 240.0) targetHz = 240.0;
+        return (1.0 / targetHz);
+    }
     return %orig;
 }
 
 - (double)maximumRefreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            double targetHz = (double)Titanium_GetEffectiveFrameCap();
-            if (targetHz < 15.0) targetHz = 15.0;
-            if (targetHz > 240.0) targetHz = 240.0;
-            return targetHz;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        if (targetHz < 15.0) targetHz = 15.0;
+        if (targetHz > 240.0) targetHz = 240.0;
+        return targetHz;
+    }
     return %orig;
 }
 
 - (double)idealRefreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            double targetHz = (double)Titanium_GetEffectiveFrameCap();
-            if (targetHz < 15.0) targetHz = 15.0;
-            if (targetHz > 240.0) targetHz = 240.0;
-            return targetHz;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        if (targetHz < 15.0) targetHz = 15.0;
+        if (targetHz > 240.0) targetHz = 240.0;
+        return targetHz;
+    }
     return %orig;
 }
 
@@ -5400,29 +5395,22 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %hook UIWindowScene
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    // Sửa lỗi: Tách @available ra khỏi câu điều kiện gộp (self && @available)
     if (@available(iOS 15.0, *)) {
-        if (self) {
-            @try {
-                if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                    float targetCap = (float)Titanium_GetEffectiveFrameCap();
-                    CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
-                    range = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
-                }
-            } @catch (__unused NSException *e) {}
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float targetCap = (float)Titanium_GetEffectiveFrameCap();
+            CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
+            range = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
         }
     }
     %orig(range);
 }
 
 - (void)_processUpdateWithFrameContext:(id)context {
-    @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            if (g_isInteracting || g_isScrollingActive || g_isContinuousSwiping || g_activeAnimationCount > 0) {
-                Titanium_LockMainThreadFast();
-            }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        if (g_isInteracting || g_isScrollingActive || g_isContinuousSwiping || g_activeAnimationCount > 0) {
+            Titanium_LockMainThreadFast();
         }
-    } @catch (__unused NSException *e) {}
+    }
     %orig(context);
 }
 
@@ -5498,81 +5486,68 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// NHÓM ĐA NHIỆM & SPRINGBOARD (TỐI ƯU SÂU ĐỘ MƯỢT, XUNG NHỊP VIP - BỌC THÉP AN TOÀN)
+// NHÓM ĐA NHIỆM & SPRINGBOARD (TỐI ƯU SÂU ĐỘ MƯỢT, XUNG NHỊP VIP - GỌT SẠCH KHÔNG RỜM RÀ)
 // ====================================================================================================
 
 %group Group_SpringBoard_Switcher_Opt
 
 %hook _UIScreenEdgePanGestureRecognizer
 - (BOOL)delaysTouchesBegan {
-    @try {
-        if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return NO;
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) return %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        return NO;
+    }
     return %orig;
 }
 
 - (double)_edgeRegionSize {
-    @try {
-        if (!self) return %orig;
-        double size = %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return (size > 0.0) ? (size * 1.15) : 20.0;
-        }
-        return size;
-    } @catch (__unused NSException *e) {}
-    return %orig;
+    if (!self) return %orig;
+    double size = %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        return (size > 0.0) ? (size * 1.15) : 20.0;
+    }
+    return size;
 }
 %end
 
 %hook SBFolderControllerAnimationSettings
 - (double)duration {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return 0.15; // Tốc độ mở thư mục siêu tốc, phản hồi ngay tức thì
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) return %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.10; // Đẩy tốc độ mở thư mục lên mức chớp nhoáng (0.10s)
+    }
     return %orig;
 }
 %end
 
 %hook SBFluidSwitcherItemContainer
 - (void)setShadowStyle:(long long)style {
-    @try {
-        if (!self) {
-            %orig(style);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            %orig(style);
-            return;
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) {
+        %orig(style);
+        return;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        %orig(style);
+        return;
+    }
     %orig(style);
 }
 
 - (long long)shadowStyle {
-    @try {
-        if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return %orig;
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) return %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        return %orig;
+    }
     return %orig;
 }
 %end
 
 %hook SBFluidSwitcherModifier
 - (double)shadowOpacityForIndex:(unsigned long long)index {
-    @try {
-        if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            return %orig;
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) return %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        return %orig;
+    }
     return %orig;
 }
 %end
@@ -5583,58 +5558,50 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 }
 
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    return YES; // Giữ nguyên snapshot đa nhiệm trong RAM để chuyển app không bị tải lại
+    return YES; // Giữ nguyên toàn bộ snapshot đa nhiệm trong RAM, chuyển thẻ app lập tức không tải lại
 }
 %end
 
 %hook SBMainWorkspace
 - (void)_handleDismissOverlaysGesture:(id)arg1 {
-    @try {
-        if (!self) {
-            %orig(arg1);
-            return;
-        }
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
-            Titanium_LockMainThreadFast();
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) {
+        %orig(arg1);
+        return;
+    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+        Titanium_LockMainThreadFast();
+    }
     %orig(arg1);
 }
 %end
 
 %hook SBFluidSwitcherViewController
 - (void)cardInteractiveTransitionDidEnd:(id)arg1 {
-    @try {
-        if (!self) {
-            %orig(arg1);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_LockMainThreadFast();
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) {
+        %orig(arg1);
+        return;
+    }
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_LockMainThreadFast();
+    }
     %orig(arg1);
 }
 %end
 
 %hook SBFluidSwitcherAnimationSettings
 - (double)switcherScaleTransitionDuration {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return 0.15; // Nhịp phóng to/thu nhỏ chuyển cảnh đa nhiệm mượt mà, phản hồi 0ms
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) return %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.10; // Rút ngắn thời gian phóng to/thu nhỏ đa nhiệm xuống 0.10s để mượt vô hạn
+    }
     return %orig;
 }
 
 - (double)slideInDuration {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return 0.15;
-        }
-    } @catch (__unused NSException *e) {}
+    if (!self) return %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.10;
+    }
     return %orig;
 }
 %end
