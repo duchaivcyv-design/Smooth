@@ -212,18 +212,19 @@ static const char *Titanium_SafeGetProgName(void) {
     return fallback_name;
 }
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-    kern_return_t vm_purgable_control(mach_port_t task, vm_address_t address, vm_purgable_t control, int *state);
-    const char *getprogname(void);
-    extern char **environ;
-    int setiopolicy_np(int iotype, int scope, int policy);
-    kern_return_t IOPMAssertionCreateWithName(CFStringRef assertionType, uint32_t assertionLevel, CFStringRef assertionName, IOPMAssertionID *assertionID);
-    kern_return_t IOPMAssertionRelease(IOPMAssertionID assertionID);
-#ifdef __cplusplus
+// [FIX SYMBOL MISSING]: không link trực tiếp các symbol private/ không chắc tồn tại trên mọi iOS.
+// Resolve lúc runtime bằng dlsym; nếu không có thì no-op an toàn, tránh dyld abort khi launch.
+extern char **environ;
+typedef int (*Titanium_setiopolicy_np_fn)(int, int, int);
+static int Titanium_setiopolicy_np_safe(int iotype, int scope, int policy) {
+    static Titanium_setiopolicy_np_fn fn = NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        fn = (Titanium_setiopolicy_np_fn)dlsym(RTLD_DEFAULT, "setiopolicy_np");
+    });
+    return fn ? fn(iotype, scope, policy) : -1;
 }
-#endif
+#define setiopolicy_np Titanium_setiopolicy_np_safe
 
 // ====================================================================================================
 // MACRO ĐỒNG BỘ TOÀN HỆ THỐNG & ĐƯỜNG DẪN TỆP IPC NGUYÊN TỬ (ĐÃ BỔ SUNG ĐẦY ĐỦ)
@@ -6356,7 +6357,7 @@ static void SpringBoardBootstrapTrigger(void) {
 }
 
 // [buildfix3] Khối MGCopyAnswer/sysctl/uname lấy từ v9 (định nghĩa bị thiếu trong bản build)
-extern CFPropertyListRef MGCopyAnswer(CFStringRef key);
+// [FIX SYMBOL MISSING]: không khai báo extern; dùng con trỏ hàm lấy qua dlsym ở Titanium_InstallMGCopyAnswerHookV26.
 static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
 
 static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
