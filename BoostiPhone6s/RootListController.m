@@ -2241,14 +2241,14 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
 
 - (void)startSpinner {
     [self stopSpinner];
-    // V22: render spinner on Core Animation's compositor instead of mutating a layer every display tick on main.
+    // V23: render spinner on Core Animation's compositor instead of mutating a layer every display tick on main.
     CABasicAnimation *rotation = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
     rotation.fromValue = @0.0;
     rotation.toValue = @(M_PI * 2.0);
     rotation.duration = 1.15;
     rotation.repeatCount = HUGE_VALF;
     rotation.removedOnCompletion = NO;
-    [_spinnerArc addAnimation:rotation forKey:@"V22.spinner.rotation"];
+    [_spinnerArc addAnimation:rotation forKey:@"V23.spinner.rotation"];
     CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
     pulse.fromValue = @0.45;
     pulse.toValue = @1.0;
@@ -2256,12 +2256,12 @@ typedef NS_ENUM(NSInteger, LGAppleServerPhase) {
     pulse.autoreverses = YES;
     pulse.repeatCount = HUGE_VALF;
     pulse.removedOnCompletion = NO;
-    [_spinnerArc addAnimation:pulse forKey:@"V22.spinner.opacity"];
+    [_spinnerArc addAnimation:pulse forKey:@"V23.spinner.opacity"];
 }
 - (void)stopSpinner {
     if (_spinLink) { [_spinLink invalidate]; _spinLink = nil; }
-    [_spinnerArc removeAnimationForKey:@"V22.spinner.rotation"];
-    [_spinnerArc removeAnimationForKey:@"V22.spinner.opacity"];
+    [_spinnerArc removeAnimationForKey:@"V23.spinner.rotation"];
+    [_spinnerArc removeAnimationForKey:@"V23.spinner.opacity"];
 }
 
 - (void)stopAllTimers {
@@ -3103,14 +3103,11 @@ static NSString *Titanium_DarwinExploit_FullReport(void) {
 
 // [V31] Hàm chạy khai thác Darwin — gọi khi người dùng nhấn nút "Khai thác"
 static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
+    // V23: read-only diagnostic only. Device information is not a kernel exploit.
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // Mô phỏng chạy 3000-5000 dòng code tuỳ máy — đo thật từ sysctl
-        usleep(500000); // 0.5s để cảm giác khai thác thật
-        NSString *report = Titanium_DarwinExploit_FullReport();
-        Titanium_Darwin_MarkExploited(YES);
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (completion) completion(report);
-        });
+        NSString *report = @"Không có triển khai kernel exploit thực sự trong RootListController.
+Chỉ có thể đọc thông tin thiết bị; trạng thái này không mở khóa kernel.";
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(report); });
     });
 }
 
@@ -3122,146 +3119,49 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
 @property (nonatomic, strong) UITextView *codeTextView;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, copy) void (^completion)(BOOL success, NSString *report);
-@property (nonatomic, assign) BOOL exploitSuccess;
 @end
 
 @implementation TitaniumExploitScreen
-
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // V9 shared control palette; only appearance is changed, not switch behavior.
-    UISwitch *switchAppearance = [UISwitch appearanceWhenContainedInInstancesOfClasses:@[[UITableView class]]];
-    switchAppearance.onTintColor = [UIColor colorWithRed:0.78 green:0.18 blue:0.95 alpha:1.0];
-    switchAppearance.thumbTintColor = [UIColor colorWithRed:0.95 green:0.97 blue:1.0 alpha:1.0];
-    self.view.backgroundColor = [UIColor blackColor];
-    
-    // Code text view — chữ nhỏ (10pt), màu trắng, nền đen
-    self.codeTextView = [[UITextView alloc] initWithFrame:self.view.bounds];
+    self.view.backgroundColor = [UIColor colorWithRed:.025 green:.012 blue:.07 alpha:1];
+    self.codeTextView = [[UITextView alloc] initWithFrame:CGRectInset(self.view.bounds, 12, 28)];
     self.codeTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.codeTextView.backgroundColor = [UIColor blackColor];
-    self.codeTextView.textColor = [UIColor whiteColor];
-    self.codeTextView.font = [UIFont fontWithName:@"Menlo" size:10.0]; // Chữ nhỏ hơn bình thường
-    self.codeTextView.editable = NO;
-    self.codeTextView.selectable = NO;
-    self.codeTextView.text = @"";
+    self.codeTextView.backgroundColor = UIColor.clearColor;
+    self.codeTextView.textColor = [UIColor colorWithRed:.35 green:.92 blue:1 alpha:1];
+    self.codeTextView.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightMedium];
+    self.codeTextView.editable = NO; self.codeTextView.selectable = NO;
+    self.codeTextView.text = @"SMOOTHIOS PRO · KIỂM TRA MÔI TRƯỜNG\n\nĐang đọc thông tin hệ thống…\n";
     [self.view addSubview:self.codeTextView];
-    
-    // Spinner
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-    self.spinner.center = CGPointMake(self.view.bounds.size.width / 2, self.view.bounds.size.height - 60);
-    [self.spinner startAnimating];
-    [self.view addSubview:self.spinner];
-    
-    self.exploitSuccess = YES; // Giả định thành công, nếu có lỗi sẽ set NO
+    self.spinner.center = CGPointMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds)-48);
+    self.spinner.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
+    [self.spinner startAnimating]; [self.view addSubview:self.spinner];
 }
-
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    [self runExploitCode];
-}
-
-- (void)appendCodeLine:(NSString *)line {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *current = self.codeTextView.text ?: @"";
-        self.codeTextView.text = [NSString stringWithFormat:@"%@%@\n", current, line];
-        // Tự scroll xuống cuối
-        if (self.codeTextView.text.length > 0) {
-            NSRange bottom = NSMakeRange(self.codeTextView.text.length - 1, 1);
-            [self.codeTextView scrollRangeToVisible:bottom];
-        }
-    });
-}
-
-- (void)runExploitCode {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSArray *codeLines = @[
-            @"[*] Initializing Darwin exploit engine...",
-            @"[+] Kernel task port acquired",
-            @"[*] Patching vm_map_protect...",
-            @"[+] PAC pointer authentication bypassed",
-            @"[*] Kernel slide resolved",
-            @"[+] Kernel base found",
-            @"[*] Resolving kernel symbols...",
-            @"[+] 847 kernel symbols resolved",
-            @"[*] Patching AMFI...",
-            @"[+] AMFI bypassed, code signing disabled",
-            @"[*] Enabling task_for_pid-allow...",
-            @"[+] Root privileges gained",
-            @"[*] Escaping sandbox...",
-            @"[+] Sandbox escaped, full filesystem access",
-            @"[*] Reading device tree...",
-            @"[+] Device: iPhone10,2",
-            @"[*] Reading CPU info...",
-            @"[+] CPU: 6 cores @ 2340 MHz",
-            @"[*] Reading GPU info...",
-            @"[+] GPU: Apple GPU 3 cores",
-            @"[*] Reading memory info...",
-            @"[+] RAM: 3072 MB",
-            @"[*] Reading NAND info...",
-            @"[+] Storage: 256 GB",
-            @"[*] Reading display info...",
-            @"[+] Display: 60 Hz max",
-            @"[*] Reading thermal state...",
-            @"[+] Thermal state: nominal",
-            @"[*] Reading jailbreak info...",
-            @"[+] Jailbreak: Dopamine/RootHide",
-            @"[*] Patching SpringBoard hooks...",
-            @"[+] All hooks installed successfully",
-            @"[*] Verifying exploit integrity...",
-            @"[+] Verification passed",
-            @"[*] Finalizing exploit...",
-        ];
-        
-        int totalLines = 3000 + (arc4random() % 3000);
-        
-        for (int i = 0; i < totalLines; i++) {
-            NSString *line = codeLines[arc4random() % codeLines.count];
-            [self appendCodeLine:line];
-            
-            useconds_t delay = 500 + (arc4random() % 2000);
-            usleep(delay);
-            
-            if (i % 500 == 0) {
-                usleep(50000);
-            }
-        }
-        
-        [self appendCodeLine:@""];
-        [self appendCodeLine:@"======================================="];
-        [self appendCodeLine:@"  end — exploit completed successfully"];
-        [self appendCodeLine:@"======================================="];
-        
-        usleep(1000000);
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.spinner stopAnimating];
-            [self dismissViewControllerAnimated:YES completion:^{
-                if (self.completion) {
-                    if (self.exploitSuccess) {
-                        NSString *report = Titanium_DarwinExploit_FullReport();
-                        Titanium_Darwin_MarkExploited(YES);
-                        self.completion(YES, report);
-                    } else {
-                        Titanium_Darwin_MarkExploited(NO);
-                        self.completion(NO, @"Exploit failed — all switches/Hz/FPS locked. Please re-run exploit.");
-                    }
-                }
-            }];
+        struct utsname u; memset(&u, 0, sizeof(u));
+        NSString *machine = uname(&u)==0 ? [NSString stringWithUTF8String:u.machine] : @"Không xác định";
+        NSString *os = UIDevice.currentDevice.systemVersion ?: @"?";
+        NSString *arch = Titanium_CPUArchitectureString() ?: @"Không xác định";
+        self.codeTextView.text = [NSString stringWithFormat:@"SMOOTHIOS PRO · KIỂM TRA MÔI TRƯỜNG\n\nThiết bị: %@\niOS: %@\nKiến trúc tiến trình: %@\n\nKhông tìm thấy trong RootListController một triển khai khai thác kernel thực sự.\nMàn hình log trước đây chỉ lặp thông báo giả, khiến tiến trình có thể bị treo ở 2%%.\n\nKhông đánh dấu khai thác thành công khi chưa có backend/primitive khai thác tương thích.\nHãy đóng màn hình này; tính năng cần khai thác thật vẫn chưa được mở khóa.\n", machine ?: @"?", os, arch];
+        [self.spinner stopAnimating];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25*NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self dismissViewControllerAnimated:YES completion:^{ if (self.completion) self.completion(NO, @"Không có triển khai kernel exploit thực sự trong RootListController; không thể xác nhận thành công."); }];
         });
     });
 }
-
 @end
 
-// [V32] Hàm hiển thị màn hình khai thác từ RootListController
 static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completion)(BOOL success, NSString *report)) {
-    TitaniumExploitScreen *exploitVC = [[TitaniumExploitScreen alloc] init];
+    TitaniumExploitScreen *exploitVC = [TitaniumExploitScreen new];
     exploitVC.modalPresentationStyle = UIModalPresentationFullScreen;
     exploitVC.completion = completion;
     [fromVC presentViewController:exploitVC animated:NO completion:nil];
 }
 
-// V21: enlarged rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
+// V23: enlarged rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
 @interface TITrendGraphView : UIView
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *samples;
 @property (nonatomic, strong) CAShapeLayer *gridLayer;
@@ -3729,45 +3629,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 #pragma mark - First Install Picker
 
 - (void)showFirstInstallServerPicker {
-    NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    if ([selected isEqualToString:@"free"] || self->_isAdminServer) return;
-    if (self.presentedViewController) return;
-
-    // Centered modal; no Cancel action. Choosing Admin does NOT unlock the app.
-    UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:@"Chưa chọn server"
-        message:@"Bạn phải chọn server trước khi sử dụng tweak. Server Admin yêu cầu xác thực tài khoản; Server Free có thể bị quá tải."
-        preferredStyle:UIAlertControllerStyleAlert];
-    __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"Server Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        __strong typeof(weakSelf) selfRef = weakSelf;
-        if (!selfRef) return;
-        [selfRef showAdminServerLogin];
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cấu hình URL Server Admin" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        __strong typeof(weakSelf) selfRef = weakSelf;
-        if (!selfRef) return;
-        [selfRef showServerAPIURLEditor];
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Server Free" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        __strong typeof(weakSelf) selfRef = weakSelf;
-        if (!selfRef) return;
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults setObject:@"free" forKey:TI_SELECTED_SERVER_KEY];
-        [defaults setBool:YES forKey:TI_FIRST_INSTALL_KEY];
-        [defaults synchronize];
-        selfRef.customTableView.userInteractionEnabled = YES;
-        [selfRef updateRoleBadgeTitle:@"Free"];
-        [selfRef tickLatency];
-        [selfRef updateServerStatusIndicator];
-        [selfRef refreshBottomTabsAvailability];
-        [selfRef selectTabIndex:4 animated:YES];
-        [selfRef.customTableView reloadData];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (!selfRef.presentedViewController) [selfRef openDopamineStyleExploitConsole];
-        });
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // V23: server selection has been removed from the user interface.
+    // Do not show Admin/Free/server URL choices from legacy call sites.
+    return;
 }
 
 #pragma mark - Server alerts
@@ -3882,35 +3746,13 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 }
 
 - (void)setupTopHeaderBar {
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 212, 30)];
-
-    _serverStatusDot = [[UIView alloc] initWithFrame:CGRectMake(0, 11, 8, 8)];
-    _serverStatusDot.layer.cornerRadius = 4;
-    _serverStatusDot.backgroundColor = [UIColor colorWithRed:0.20 green:0.90 blue:0.70 alpha:1.0];
-    [container addSubview:_serverStatusDot];
-
-    _serverStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 4, 116, 22)];
-    _serverStatusLabel.text = @"Server: Chưa đo";
-    _serverStatusLabel.textColor = [UIColor colorWithRed:0.75 green:0.68 blue:1.0 alpha:1.0];
-    _serverStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
-    [container addSubview:_serverStatusLabel];
-
-    UIButton *loginBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    loginBtn.tag = 731904;
-    NSUserDefaults *roleDefaults = [NSUserDefaults standardUserDefaults];
-    NSString *savedServerMode = [roleDefaults stringForKey:TI_SELECTED_SERVER_KEY];
-    // UI label is not an authorization token. Admin roles are shown only after the backend authenticates this session.
-    NSString *savedRoleTitle = [savedServerMode isEqualToString:@"free"] ? @"Free" : @"Server";
-    [loginBtn setTitle:savedRoleTitle forState:UIControlStateNormal];
-    loginBtn.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
-    loginBtn.frame = CGRectMake(136, 0, 72, 30);
-    loginBtn.layer.cornerRadius = 8;
-    loginBtn.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
-    [loginBtn setTitleColor:[UIColor colorWithRed:1.0 green:0.85 blue:0.35 alpha:1.0] forState:UIControlStateNormal];
-    [loginBtn addTarget:self action:@selector(handleServerButtonTap) forControlEvents:UIControlEventTouchUpInside];
-    [container addSubview:loginBtn];
-
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
+    UILabel *welcome = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 205, 30)];
+    welcome.tag = 731905;
+    welcome.text = @"Chào mừng bạn";
+    welcome.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBlack];
+    welcome.textColor = [UIColor colorWithRed:.30 green:.88 blue:1 alpha:1];
+    welcome.textAlignment = NSTextAlignmentLeft;
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:welcome];
     UIButton *musicButton = [UIButton buttonWithType:UIButtonTypeSystem];
     musicButton.frame = CGRectMake(0, 0, 42, 36);
     musicButton.layer.cornerRadius = 12.0;
@@ -3919,10 +3761,28 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     musicButton.layer.borderColor = [UIColor colorWithRed:0.42 green:0.26 blue:0.85 alpha:0.9].CGColor;
     [musicButton setImage:[UIImage systemImageNamed:@"music.note.list"] forState:UIControlStateNormal];
     [musicButton setTintColor:[UIColor colorWithRed:0.40 green:0.78 blue:1.0 alpha:1.0]];
-    musicButton.accessibilityLabel = @"Mở Music Studio: Phonk, SoundCloud, Apple Music và YouTube";
+    musicButton.accessibilityLabel = @"Mở Music Studio";
     [musicButton addTarget:self action:@selector(showPhonkMusicPicker) forControlEvents:UIControlEventTouchUpInside];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:musicButton];
-    [self updateServerStatusIndicator];
+    NSArray<NSString *> *messages = @[@"Chào mừng bạn", @"SmoothIOS Pro"];
+    __weak typeof(self) weakSelf = self;
+    __block NSUInteger messageIndex = 0;
+    void (^cycle)(void) = ^{
+        __strong typeof(weakSelf) selfRef = weakSelf; if (!selfRef) return;
+        UILabel *label = (UILabel *)selfRef.navigationItem.leftBarButtonItem.customView;
+        if (![label isKindOfClass:UILabel.class]) return;
+        [UIView animateWithDuration:.45 animations:^{ label.alpha = 0; label.transform = CGAffineTransformMakeTranslation(-12, 0); } completion:^(BOOL done) {
+            label.text = messages[messageIndex % messages.count]; messageIndex++;
+            label.transform = CGAffineTransformMakeTranslation(12, 0);
+            [UIView animateWithDuration:.55 animations:^{ label.alpha = 1; label.transform = CGAffineTransformIdentity; }];
+        }];
+    };
+    __block void (^repeatCycle)(void) = nil;
+    repeatCycle = ^{
+        cycle();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10*NSEC_PER_SEC)), dispatch_get_main_queue(), repeatCycle);
+    };
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10*NSEC_PER_SEC)), dispatch_get_main_queue(), repeatCycle);
 }
 
 - (void)showPhonkMusicPicker {
@@ -4141,16 +4001,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 }
 
 - (void)handleServerButtonTap {
-    NSString *selected = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    if ([selected isEqualToString:@"admin"] || [selected isEqualToString:@"admin_dev"]) {
-        [self showAdminServerLogin]; // Re-authenticate in-place; do not silently switch the selection to Free.
-        return;
-    }
-    if (![selected isEqualToString:@"free"] && !self->_isAdminServer) {
-        [self showFirstInstallServerPicker];
-        return;
-    }
-    [self showAdminServerLogin];
+    // V23: legacy server/admin control intentionally disabled; no server picker is shown.
+    return;
 }
 
 // Default backend endpoint. Only an authenticated admin_dev session can view or change the override in the UI.
@@ -5223,7 +5075,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)runApplyWithLoading {
     if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
-    // V22: avoid a 5-second full-screen dim overlay and per-frame car timer.
+    // V23: avoid a 5-second full-screen dim overlay and per-frame car timer.
     // The actual preference/payload work is coalesced and applied by applyDeepSpringBoardAndUIKitTweaks.
     [self applyDeepSpringBoardAndUIKitTweaks];
     [self updateServerStatusIndicator];
@@ -5343,7 +5195,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (!CGRectEqualToRect(self.customTableView.frame, tableFrame)) self.customTableView.frame = tableFrame;
         CGFloat headerWidth = self.view.bounds.size.width;
         if (self.customTableView.tableHeaderView && fabs(self.customTableView.tableHeaderView.bounds.size.width - headerWidth) > 1.0) {
-            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)]));
+            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:headerWidth] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)])));
         }
         UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, 10.0, 0.0);
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
@@ -5379,7 +5231,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         @{ @"title": @"Hz / FPS", @"icon": @"speedometer", @"tab": @1 },
         @{ @"title": @"Tối ưu", @"icon": @"slider.horizontal.3", @"tab": @2 },
         @{ @"title": @"Ứng dụng", @"icon": @"app.dashed", @"tab": @3 },
-        @{ @"title": @"Cài đặt", @"icon": @"gearshape.fill", @"tab": @4 }
+        @{ @"title": @"Cài đặt", @"icon": @"gearshape.fill", @"tab": @4 },
+        @{ @"title": @"Thông tin", @"icon": @"info.circle.fill", @"tab": @5 }
     ];
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / MAX(1, _tabConfigs.count);
     CGFloat indicatorSize = 42.0;
@@ -5424,19 +5277,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
     if (index < 0 || index >= _tabConfigs.count) return;
-    NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
-    if (!serverChosen && index != 1 && index != 0) {
-        [self showFirstInstallServerPicker];
-        return;
-    }
-    if (!_isFeatureActivated && index != 4 && index != 0 && index != 1) {
-        [self showUnexploitedWarningAlert];
-        return;
-    }
+    // V23: no server-selection gate; UI navigation is local and does not grant admin privileges.
+    // V23: diagnostics, app list and settings remain accessible without claiming exploit success.
     NSInteger oldTab = _currentBottomTab;
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
-    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)]));
+    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)])));
     self.customTableView.tableHeaderView = nextHeader;
     if (_currentBottomTab == 0) {
         // Dashboard readouts stay live; the switch only controls the detailed monitor rows.
@@ -5792,7 +5637,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width), side = 16.0, cw = w - side * 2.0;
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 785.0)];
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 805.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(side, 12, cw, 15)];
     eyebrow.text = @"SMOOTHIOS  /  LIVE MONITOR"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
@@ -5824,9 +5669,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             UIImageView *icon=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbols[idx]]]; icon.frame=CGRectMake(12,12,20,20); icon.tintColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; [card addSubview:icon];
             UILabel *name=[[UILabel alloc] initWithFrame:CGRectMake(40,10,cw-55,17)]; name.text=groups[page][j]; name.font=[UIFont systemFontOfSize:11 weight:UIFontWeightBlack]; name.textColor=UIColor.whiteColor; [card addSubview:name];
             UILabel *detail=[[UILabel alloc] initWithFrame:CGRectMake(40,28,cw-55,14)]; detail.text=details[idx]; detail.font=[UIFont systemFontOfSize:9]; detail.textColor=[UIColor colorWithWhite:.62 alpha:1]; [card addSubview:detail];
-            // V21: scrolling heartbeat-style line chart with rolling samples.
-            TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(12,49,cw-24,42)]; graph.tag=9200+idx; [card addSubview:graph];
-            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,91,cw-24,17)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
+            // V23: scrolling heartbeat-style line chart with rolling samples.
+            TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(12,47,cw-24,54)]; graph.tag=9200+idx; [card addSubview:graph];
+            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,102,cw-24,17)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
         }
     }
     chartScroll.contentSize=CGSizeMake(cw*2,270);
@@ -5839,6 +5684,43 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSArray *rateNames=@[@"TẦN SỐ MÀN HÌNH",@"TỐC ĐỘ KHUNG HÌNH"]; NSArray *rateValues=@[[NSString stringWithFormat:@"%ld Hz",(long)targetHz],[NSString stringWithFormat:@"%ld FPS",(long)targetFPS]];
     for(NSInteger i=0;i<2;i++){ CGFloat gap=10, rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),582,rw,65)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=15; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(8,8,rw-16,14)]; n.text=rateNames[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor colorWithWhite:.65 alpha:1]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(8,26,rw-16,30)]; v.text=rateValues[i]; v.font=[UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor colorWithRed:1 green:.3 blue:.55 alpha:1]:[UIColor colorWithRed:.2 green:.82 blue:1 alpha:1]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
     UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,657,cw,36)]; note.numberOfLines=2; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor colorWithWhite:.60 alpha:1]; note.text=@"Đường biểu đồ lưu mẫu gần nhất: CPU, RAM tiến trình, pin và FPS giao diện. FPS không phải FPS trong game; Hz là mức cấu hình. GPU/nhiệt độ chip chỉ thêm khi có nguồn đọc hợp lệ."; [root addSubview:note];
+    return root;
+}
+
+- (UIView *)buildV23DeviceInfoHeaderWithWidth:(CGFloat)width {
+    CGFloat w=MAX(320.0,width), side=14.0, cw=w-2*side;
+    UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,690)]; root.backgroundColor=UIColor.clearColor;
+    UILabel *title=[[UILabel alloc] initWithFrame:CGRectMake(side,12,cw,30)]; title.text=@"THÔNG TIN THIẾT BỊ"; title.font=[UIFont systemFontOfSize:23 weight:UIFontWeightBlack]; title.textColor=[UIColor colorWithRed:.42 green:.80 blue:1 alpha:1]; [root addSubview:title];
+    UILabel *sub=[[UILabel alloc] initWithFrame:CGRectMake(side,43,cw,34)]; sub.text=@"Thông số đọc trực tiếp từ iOS; trường không khả dụng sẽ được ghi rõ."; sub.numberOfLines=2; sub.font=[UIFont systemFontOfSize:11]; sub.textColor=[UIColor colorWithWhite:.72 alpha:1]; [root addSubview:sub];
+    struct utsname u; memset(&u,0,sizeof(u)); BOOL ok=(uname(&u)==0);
+    NSString *machine=ok?[NSString stringWithUTF8String:u.machine]:@"Không rõ";
+    NSString *arch=Titanium_CPUArchitectureString() ?: @"Không rõ";
+    NSString *ios=UIDevice.currentDevice.systemVersion ?: @"Không rõ";
+    uint64_t ram=Titanium_TotalPhysicalMemoryBytes();
+    NSArray *names=@[@"CPU & KIẾN TRÚC",@"GPU",@"RAM",@"MÀN HÌNH · HZ · FPS",@"THÔNG TIN MÁY",@"JAILBREAK & MÔI TRƯỜNG"];
+    NSArray *details=@[
+      [NSString stringWithFormat:@"%@
+%@ · %u lõi logic
+Xung nhịp tối đa: %@",machine,arch,Titanium_LogicalCPUCoreCount(),@"Không khả dụng qua API công khai"],
+      @"Tên GPU / tải GPU / xung GPU
+Không có nguồn đo tin cậy trong controller hiện tại.",
+      [NSString stringWithFormat:@"RAM vật lý: %@
+Bộ nhớ tiến trình: %@",Titanium_ByteCountString(ram),Titanium_ByteCountString(Titanium_CurrentProcessFootprintBytes())],
+      [NSString stringWithFormat:@"Hz tối đa do iOS báo: %ld
+FPS đo của giao diện: %ld
+FPS game: Không khả dụng",(long)UIScreen.mainScreen.maximumFramesPerSecond,(long)_uiFPSMeasured],
+      [NSString stringWithFormat:@"Model: %@
+iOS: %@
+Scale: %.2fx",machine,ios,UIScreen.mainScreen.scale],
+      [NSString stringWithFormat:@"var/jb: %@
+Môi trường: %@
+Kernel exploit: Chưa xác minh",[[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]?@"Có":@"Không thấy",[[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]?@"Có thể rootless/roothide; cần xác minh bootstrap":@"Rootful hoặc môi trường khác; cần xác minh"]
+    ];
+    for(NSInteger i=0;i<names.count;i++) {
+      CGFloat y=88+i*96; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(side,y,cw,86)]; card.backgroundColor=[UIColor colorWithRed:.055 green:.035 blue:.14 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.35 green:.24 blue:.78 alpha:.9].CGColor; [root addSubview:card];
+      UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(12,8,cw-24,16)]; n.text=names[i]; n.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; n.textColor=[UIColor colorWithRed:.25 green:.85 blue:1 alpha:1]; [card addSubview:n];
+      UILabel *d=[[UILabel alloc] initWithFrame:CGRectMake(12,27,cw-24,54)]; d.text=details[i]; d.numberOfLines=3; d.adjustsFontSizeToFitWidth=YES; d.minimumScaleFactor=.75; d.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; d.textColor=UIColor.whiteColor; [card addSubview:d];
+    }
     return root;
 }
 
@@ -5875,7 +5757,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.frame=CGRectMake(18,199,cw-36,42); apply.tag=99440; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; apply.layer.shadowOpacity=.24; apply.layer.shadowRadius=9; [apply setTitle:@"ÁP DỤNG NGAY" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightBlack]; [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:apply];
     UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,331,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
     UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Chỉ số mục tiêu được lưu vào cấu hình; FPS LIVE bên dưới là tốc độ khung hình của giao diện ứng dụng, không phải phép đo FPS mọi game."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
-    // V21: six compact information tiles are always visible on the dashboard.
+    // V23: six compact information tiles are always visible on the dashboard.
     UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,704,cw,18)];
     infoTitle.text=@"THÔNG TIN THIẾT BỊ · CHẠM ĐỂ XEM CHI TIẾT";
     infoTitle.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack];
@@ -5895,13 +5777,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         UILabel *lab=[[UILabel alloc] initWithFrame:CGRectMake(29,8,tileW-34,36)];
         lab.text=infoNames[i]; lab.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack];
         lab.textColor=UIColor.whiteColor; lab.numberOfLines=2; lab.adjustsFontSizeToFitWidth=YES; lab.minimumScaleFactor=.7; [tile addSubview:lab];
-        [tile addTarget:self action:@selector(neonV21ShowDeviceInfo:) forControlEvents:UIControlEventTouchUpInside];
+        [tile addTarget:self action:@selector(neonV23ShowDeviceInfo:) forControlEvents:UIControlEventTouchUpInside];
         [root addSubview:tile];
     }
     return root;
 }
 
-- (void)neonV21ShowDeviceInfo:(UIButton *)sender {
+- (void)neonV23ShowDeviceInfo:(UIButton *)sender {
     NSInteger index=sender.tag-99500;
     struct utsname sysinfo; uname(&sysinfo);
     NSString *machine=[NSString stringWithUTF8String:sysinfo.machine] ?: @"Không rõ";
@@ -5999,13 +5881,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     if (_currentBottomTab == 0) return 0;
     if (_currentBottomTab == 1) return 0;
+    if (_currentBottomTab == 5) return 0;
     if (_currentBottomTab == 2) return 2;
     if (_currentBottomTab == 3) return 3;
     return 4; // Keep stable section indexes for existing activation logic; unused sections have zero rows.
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return 1;
+    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1 && _currentBottomTab != 5) return 1;
 
     if (_currentBottomTab == 0) {
         if (section == 0) return 1;
@@ -6042,7 +5925,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return @"Cần kích hoạt trước";
+    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1 && _currentBottomTab != 5) return @"Chế độ chẩn đoán · chưa xác minh exploit";
     if (_currentBottomTab == 0) {
         if (section == 0) return @"TỔNG QUAN HỆ THỐNG";
         if (section == 1) return @"CPU";
@@ -6650,10 +6533,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     BOOL freePingSettingsRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == ([self isAdminDevRole] ? 5 : 4));
     BOOL manualPingRow = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 0);
     BOOL serverAPISettingsRow = (_currentBottomTab == 4 && [self isAdminDevRole] && indexPath.section == 2 && indexPath.row == 4);
-    if (![selectedServer isEqualToString:@"free"] && !self->_isAdminServer && _currentBottomTab != 1 && !themeSettingsRow && !freePingSettingsRow && !manualPingRow && !serverAPISettingsRow && !languageSettingsRow && !authorSettingsRow && !simpleSettingsRow) {
-        [self showFirstInstallServerPicker];
-        return;
-    }
+    // V23: legacy server selection no longer blocks local settings or navigation.
 
     if (!_isFeatureActivated && _currentBottomTab != 1) {
         if (themeSettingsRow) { [self showThemeModePicker]; return; }
@@ -6810,7 +6690,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Chip error
 
 - (void)startChipErrorLoop {
-    // V22: do not inject randomized fake chip/server failures or reload the table every second.
+    // V23: do not inject randomized fake chip/server failures or reload the table every second.
     [self cancelChipErrorRandom];
 }
 - (void)scheduleChipErrorRandomOnHome { [self cancelChipErrorRandom]; }
@@ -7199,7 +7079,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)applyDeepSpringBoardAndUIKitTweaks {
     if (!_isFeatureActivated) return;
-    // V22: coalesce rapid preference changes. Hz/FPS values and native caps are unchanged;
+    // V23: coalesce rapid preference changes. Hz/FPS values and native caps are unchanged;
     // only redundant main-queue application work is skipped.
     NSUInteger generation = ++_v22ApplyGeneration;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.04 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -7301,130 +7181,22 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 }
 
 - (void)runFullExploitSequenceWithPhase:(NSInteger)phase totalCodeExecuted:(NSInteger)total {
-    _activationFlowPresenting = YES;
-    NSArray<NSString *> *names = TI_ExploitPhaseNames();
-    NSArray<NSNumber *> *durations = TI_ExploitPhaseDurations();
-    NSArray<NSNumber *> *codeCounts = TI_ExploitPhaseCodeCount();
-
-    if (phase >= (NSInteger)names.count) {
-        // Tất cả pha xong — hiện nhấp nháy táo rồi quay lại app
-        [self runAppleTadaAnimation];
-        return;
-    }
-
-    NSString *phaseName = names[phase];
-    NSTimeInterval phaseDuration = [durations[phase] doubleValue];
-    NSInteger phaseCode = [codeCounts[phase] integerValue];
-    NSInteger newTotal = total + phaseCode;
-
-    UIWindow *host = self.view.window ?: [UIApplication sharedApplication].keyWindow;
-    if (!host) { _activationFlowPresenting = NO; return; }
-
-    // Tạo overlay terminal
-    UIView *overlay = [[UIView alloc] initWithFrame:host.bounds];
-    overlay.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.06 alpha:0.97];
-    overlay.tag = 9977;
-    overlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [host addSubview:overlay];
-
-    UILabel *titleLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 60, host.bounds.size.width - 40, 28)];
-    titleLbl.text = phaseName;
-    titleLbl.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightBold];
-    titleLbl.textColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.5 alpha:1.0];
-    titleLbl.textAlignment = NSTextAlignmentCenter;
-    [overlay addSubview:titleLbl];
-
-    UILabel *subtitleLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 92, host.bounds.size.width - 40, 22)];
-    subtitleLbl.text = [NSString stringWithFormat:@"Thực thi %ld dòng mã · Tổng: %ld/2100+", (long)phaseCode, (long)newTotal];
-    subtitleLbl.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
-    subtitleLbl.textColor = [UIColor colorWithRed:0.6 green:0.8 blue:1.0 alpha:1.0];
-    subtitleLbl.textAlignment = NSTextAlignmentCenter;
-    [overlay addSubview:subtitleLbl];
-
-    UITextView *logView = [[UITextView alloc] initWithFrame:CGRectMake(16, 128, host.bounds.size.width - 32, host.bounds.size.height - 220)];
-    logView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.5];
-    logView.textColor = [UIColor colorWithRed:0.3 green:1.0 blue:0.4 alpha:1.0];
-    logView.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
-    logView.editable = NO;
-    logView.layer.cornerRadius = 8;
-    [overlay addSubview:logView];
-
-    UIProgressView *prog = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleBar];
-    prog.frame = CGRectMake(30, host.bounds.size.height - 80, host.bounds.size.width - 60, 6);
-    prog.progressTintColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.5 alpha:1.0];
-    prog.trackTintColor = [UIColor colorWithWhite:0.2 alpha:1.0];
-    prog.progress = 0.0;
-    [overlay addSubview:prog];
-
-    UILabel *percentLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, host.bounds.size.height - 68, host.bounds.size.width - 40, 22)];
-    percentLbl.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
-    percentLbl.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightMedium];
-    percentLbl.textAlignment = NSTextAlignmentCenter;
-    percentLbl.text = @"0%";
-    [overlay addSubview:percentLbl];
-
-    overlay.alpha = 0.0;
-    [UIView animateWithDuration:0.2 animations:^{ overlay.alpha = 1.0; }];
-
-    // Sinh log giả ngẫu nhiên
-    NSMutableArray<NSString *> *logLines = [NSMutableArray array];
-    NSArray *kernelOps = @[@"mach_vm_map", @"task_info", @"mach_port_allocate", @"vm_purgable_control",
-        @"CAFrameRateRange::apply", @"MTLDevice::newCommandQueue", @"CADisplayLink::setPreferredFrameRateRange",
-        @"UIScreen::_setTargetRefreshRate", @"IOPMAssertionCreate", @"pthread_set_qos_class_self_np",
-        @"setiopolicy_np", @"host_statistics", @"sysctl::hw.ncpu", @"CATransaction::flush",
-        @"CAMetalLayer::setMaximumDrawableCount", @"CAWindowServer::setMaximumRefreshRate",
-        @"SecItemCopyMatching", @"CFPreferencesCopyAppValue", @"notify_post", @"mach_timebase_info",
-        @"malloc_zone_pressure_relief", @"vm_statistics64", @"host_page_size", @"mach_absolute_time"];
-    for (NSInteger i = 0; i < phaseCode; i++) {
-        NSString *op = kernelOps[arc4random_uniform((uint32_t)kernelOps.count)];
-        [logLines addObject:[NSString stringWithFormat:@"[%04ld] %-40s → 0x%08X OK",
-            (long)(total + i), op.UTF8String, (unsigned)(arc4random() & 0xFFFFFF)]];
-    }
-    logView.text = [logLines componentsJoinedByString:@"\n"];
-    // Scroll to bottom
-    if (logLines.count > 0) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [logView scrollRangeToVisible:NSMakeRange(logView.text.length, 0)];
-        });
-    }
-
-    // Animate progress bar over phaseDuration
-    NSTimeInterval tickInterval = phaseDuration / 50.0;
-    __block NSInteger tick = 0;
-    __weak UIProgressView *wprog = prog;
-    __weak UILabel *wperc = percentLbl;
-    __weak UIView *woverlay = overlay;
+    (void)phase; (void)total;
+    // V23: this controller has no real kernel exploit primitive. Never fabricate progress,
+    // execute thousands of fake log lines, or persist a false success flag.
+    _activationFlowPresenting = NO;
+    TitaniumExploitScreen *screen = [TitaniumExploitScreen new];
+    screen.modalPresentationStyle = UIModalPresentationFullScreen;
     __weak typeof(self) weakSelf = self;
-    __block dispatch_block_t tickerRef = nil;
-    __weak dispatch_block_t weakTickerRef = nil;
-    tickerRef = ^{
-        tick++;
-        float progress = (float)tick / 50.0f;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            wprog.progress = progress;
-            wperc.text = [NSString stringWithFormat:@"%.0f%%", progress * 100.0f];
-        });
-        if (tick < 50) {
-            dispatch_block_t nextTick = weakTickerRef;
-            if (nextTick) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), nextTick);
-            }
-        } else {
-            // Pha xong — xóa overlay và chuyển pha tiếp
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [UIView animateWithDuration:0.18 animations:^{ woverlay.alpha = 0.0; } completion:^(BOOL f) {
-                    [woverlay removeFromSuperview];
-                    __strong typeof(weakSelf) sS = weakSelf;
-                    if (sS) {
-                        [sS runFullExploitSequenceWithPhase:phase + 1 totalCodeExecuted:newTotal];
-                    }
-                }];
-            });
-        }
+    screen.completion = ^(BOOL success, NSString *report) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf->_activationFlowPresenting = NO;
+        UIAlertController *a = [UIAlertController alertControllerWithTitle:(success ? @"Đã xác minh" : @"Chưa có exploit kernel") message:(report ?: @"Không có triển khai khai thác tương thích trong mã nguồn này.") preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+        if (!strongSelf.presentedViewController) [strongSelf presentViewController:a animated:YES completion:nil];
     };
-    weakTickerRef = tickerRef;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), tickerRef);
+    [self presentViewController:screen animated:NO completion:nil];
 }
 
 - (void)runAppleTadaAnimation {
