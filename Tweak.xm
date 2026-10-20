@@ -3441,7 +3441,7 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
             @"      callback(timestamp);"
             @"    });"
             @"  };"
-            @f$// Ghi đè interval để tăng tốc độ render web app$
+            @"  // Ghi đè interval để tăng tốc độ render web app"
             @"  var nativeSetInterval = window.setInterval;"
             @"  window.setInterval = function(fn, delay) {"
             @"    if (delay < 4) delay = 4;"
