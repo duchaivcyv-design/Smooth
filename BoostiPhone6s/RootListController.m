@@ -3427,6 +3427,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 @property (nonatomic, strong) CAShapeLayer *gridLayer;
 @property (nonatomic, strong) CAShapeLayer *lineLayer;
 @property (nonatomic, strong) CAShapeLayer *glowLayer;
+@property (nonatomic, assign) BOOL autoScaleSamples;
 - (void)addSample:(CGFloat)value;
 @end
 @implementation TITrendGraphView
@@ -3443,8 +3444,11 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     if (!isfinite(value)) return;
     void (^update)(void) = ^{
         [CATransaction begin]; [CATransaction setDisableActions:YES];
-        [self.samples addObject:@(MAX(0.0, MIN(100.0, value)))];
-        while (self.samples.count > 36) [self.samples removeObjectAtIndex:0];
+        // Standard utilization charts use a fixed 0–100 scale. Sensor charts opt into
+        // auto-scaling so raw IORegistry counters/temperatures are not silently clamped.
+        CGFloat storedValue = self.autoScaleSamples ? value : MAX(0.0, MIN(100.0, value));
+        [self.samples addObject:@(storedValue)];
+        while (self.samples.count > 60) [self.samples removeObjectAtIndex:0];
         [self setNeedsLayout];
         [CATransaction commit];
     };
@@ -3466,10 +3470,30 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     UIBezierPath *path = [UIBezierPath bezierPath];
     NSUInteger count = _samples.count;
     if (count > 0) {
+        CGFloat minValue = 0.0, maxValue = 100.0;
+        if (self.autoScaleSamples) {
+            minValue = CGFLOAT_MAX;
+            maxValue = -CGFLOAT_MAX;
+            for (NSNumber *sample in _samples) {
+                CGFloat v = sample.doubleValue;
+                if (!isfinite(v)) continue;
+                minValue = MIN(minValue, v);
+                maxValue = MAX(maxValue, v);
+            }
+            if (minValue == CGFLOAT_MAX || maxValue == -CGFLOAT_MAX) { minValue = 0.0; maxValue = 1.0; }
+            // Keep a visible line when a raw sensor has not changed between samples.
+            if (fabs(maxValue - minValue) < 0.000001) {
+                CGFloat pad = MAX(1.0, fabs(maxValue) * 0.02);
+                minValue -= pad;
+                maxValue += pad;
+            }
+        }
+        CGFloat plotHeight = MAX(1.0, CGRectGetHeight(b) - 3.0);
         for (NSUInteger i = 0; i < count; i++) {
             CGFloat x = count <= 1 ? CGRectGetWidth(b) : ((CGFloat)i / (CGFloat)(count - 1)) * CGRectGetWidth(b);
             CGFloat v = [_samples[i] doubleValue];
-            CGFloat y = CGRectGetHeight(b) - (v / 100.0) * MAX(1, CGRectGetHeight(b) - 3) - 1.5;
+            CGFloat fraction = self.autoScaleSamples ? (v - minValue) / MAX(0.000001, maxValue - minValue) : v / 100.0;
+            CGFloat y = CGRectGetHeight(b) - fraction * plotHeight - 1.5;
             if (i == 0) [path moveToPoint:CGPointMake(x, y)];
             else [path addLineToPoint:CGPointMake(x, y)];
         }
@@ -6541,7 +6565,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             UILabel *thermalNote=[[UILabel alloc] initWithFrame:CGRectMake(4,2,cw-8,48)]; thermalNote.numberOfLines=0; thermalNote.font=[UIFont systemFontOfSize:11]; thermalNote.textColor=[UIColor secondaryLabelColor]; thermalNote.text=@"Đang dò các cảm biến số thực tế mà IORegistry của thiết bị công bố. Tên và đơn vị phụ thuộc SoC/iOS; chỉ số nào không có nguồn cảm biến tương ứng sẽ không được suy diễn thành °C."; [inner addSubview:thermalNote];
             NSArray *tn=@[@"CPU · NHIỆT / CẢM BIẾN",@"GPU · NHIỆT / CẢM BIẾN",@"RAM · NHIỆT / CẢM BIẾN",@"MÀN HÌNH · CẢM BIẾN",@"PIN · CẢM BIẾN NHIỆT"];
             NSArray *td=@[@"IORegistry sensor trend",@"IORegistry sensor trend",@"IORegistry sensor trend",@"IORegistry sensor trend",@"Battery sensor trend"];
-            for(NSInteger i=0;i<5;i++){ CGFloat gap=9, cardW=(cw-gap)/2.0; NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),62+row*124,cardW,116)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(10,7,cardW-20,25)]; n.numberOfLines=2; n.text=tn[i]; n.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack]; n.textColor=UIColor.whiteColor; [card addSubview:n]; TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(9,34,cardW-18,38)]; graph.tag=9250+i; graph.lineLayer.strokeColor=[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1].CGColor; graph.glowLayer.strokeColor=[[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1] colorWithAlphaComponent:.18].CGColor; [card addSubview:graph]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(9,76,cardW-18,32)]; v.tag=8740+i; v.numberOfLines=2; v.text=td[i]; v.font=[UIFont systemFontOfSize:9 weight:UIFontWeightSemibold]; v.textColor=[UIColor colorWithRed:1 green:.65 blue:.25 alpha:1]; v.adjustsFontSizeToFitWidth=YES; v.minimumScaleFactor=.7; [card addSubview:v]; }
+            for(NSInteger i=0;i<5;i++){ CGFloat gap=9, cardW=(cw-gap)/2.0; NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),62+row*124,cardW,116)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(10,7,cardW-20,25)]; n.numberOfLines=2; n.text=tn[i]; n.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack]; n.textColor=UIColor.whiteColor; [card addSubview:n]; TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(9,34,cardW-18,38)]; graph.tag=9250+i; graph.autoScaleSamples=YES; graph.lineLayer.strokeColor=[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1].CGColor; graph.glowLayer.strokeColor=[[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1] colorWithAlphaComponent:.18].CGColor; [card addSubview:graph]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(9,76,cardW-18,32)]; v.tag=8740+i; v.numberOfLines=2; v.text=td[i]; v.font=[UIFont systemFontOfSize:9 weight:UIFontWeightSemibold]; v.textColor=[UIColor colorWithRed:1 green:.65 blue:.25 alpha:1]; v.adjustsFontSizeToFitWidth=YES; v.minimumScaleFactor=.7; [card addSubview:v]; }
             UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,440,cw-8,42)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,490);
         }
     }
@@ -8002,11 +8026,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if(nowTitleLabel) nowTitleLabel.text=nowTitle.length ? nowTitle : @"Chưa có thông tin bài hát";
     if(nowArtistLabel) nowArtistLabel.text=nowArtist.length ? nowArtist : (nowTitle.length ? @"Nghệ sĩ chưa được cung cấp" : @"Ứng dụng phát cần chia sẻ metadata với iOS");
     NSDictionary<NSString *, NSNumber *> *ioSensors = Titanium_ReadIORegistrySensors();
+    // Probe several real IORegistry naming conventions. These remain raw sensor readings;
+    // no unit conversion is applied unless the property itself declares a unit.
     NSNumber *cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"cpu"]);
     if (!cpuSensor) cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"die"]);
+    if (!cpuSensor) cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"cpu"]);
+    if (!cpuSensor) cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"soc"]);
     NSNumber *gpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"gpu"]);
+    if (!gpuSensor) gpuSensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"gpu"]);
     NSNumber *ramSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"dram"]);
+    if (!ramSensor) ramSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"memory"]);
+    if (!ramSensor) ramSensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"dram"]);
     NSNumber *displaySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"display"]);
+    if (!displaySensor) displaySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"screen"]);
     NSNumber *batterySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"battery"]);
     if (!batterySensor) batterySensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"battery"]);
     // Sensor units are not standardized across iOS builds; never label raw IORegistry values as Celsius.
@@ -8028,9 +8060,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             if (sensorLabel) sensorLabel.text = [NSString stringWithFormat:@"%@ · chưa có cảm biến đọc được", sensorNames[ti]];
         } else {
             if (sensorLabel) sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ · không tự quy đổi °C", reading];
-            // TITrendGraphView is scaled 0–100. Plot only readings in that range; do not clamp
-            // large encoded sensor values into a misleading flat 100% line.
-            if ([sensorGraph isKindOfClass:TITrendGraphView.class] && reading.doubleValue >= 0.0 && reading.doubleValue <= 100.0) {
+            // Plot the actual numeric sensor value on an auto-scaled graph. The UI labels it
+            // as raw IORegistry data because a numeric property alone does not prove Celsius.
+            if ([sensorGraph isKindOfClass:TITrendGraphView.class] && isfinite(reading.doubleValue) && reading.doubleValue >= 0.0 && reading.doubleValue <= 1000000000.0) {
                 [sensorGraph addSample:reading.doubleValue];
             }
         }
