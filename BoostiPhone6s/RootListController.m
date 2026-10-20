@@ -1230,9 +1230,9 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         self.contentView.layer.masksToBounds = NO;
 
         _glassBackground = [[AppleLiquidGlassView alloc] initWithFrame:self.bounds
-                                                          cornerRadius:16.0
+                                                          cornerRadius:18.0
                                                           materialType:LGGlassMaterialTypeThin];
-        // Table rows avoid repeated multi-layer spring transforms on every selection; keep taps lightweight.
+        // A solid neon card is used instead of the legacy liquid-glass material.
         _glassBackground.interactiveHighlightEnabled = NO;
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -1283,13 +1283,13 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     _detailL.textColor = dark ? [UIColor colorWithRed:0.75 green:0.78 blue:0.91 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
     _titleL.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold];
     _detailL.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightMedium];
-    _glassBackground.backgroundColor = [UIColor colorWithRed:0.075 green:0.045 blue:0.16 alpha:0.96];
-    _glassBackground.layer.cornerRadius = 17.0;
-    _glassBackground.layer.borderWidth = 0.8;
-    _glassBackground.layer.borderColor = [pink colorWithAlphaComponent:0.32].CGColor;
+    _glassBackground.backgroundColor = [UIColor colorWithRed:0.055 green:0.028 blue:0.13 alpha:0.98];
+    _glassBackground.layer.cornerRadius = 18.0;
+    _glassBackground.layer.borderWidth = 1.0;
+    _glassBackground.layer.borderColor = [pink colorWithAlphaComponent:0.30].CGColor;
     _glassBackground.layer.shadowColor = cyan.CGColor;
-    _glassBackground.layer.shadowOpacity = 0.12;
-    _glassBackground.layer.shadowRadius = 8.0;
+    _glassBackground.layer.shadowOpacity = 0.10;
+    _glassBackground.layer.shadowRadius = 9.0;
     _glassBackground.layer.shadowOffset = CGSizeMake(0, 3);
 }
 
@@ -2643,6 +2643,10 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 // ====================================================================================================
 @interface RootListController () <LGExpandingNavBarButtonDelegate> {
     dispatch_source_t _hudTimer;
+    CADisplayLink *_uiFPSDisplayLink;
+    CFTimeInterval _uiFPSSampleStart;
+    NSInteger _uiFPSFrameCount;
+    NSInteger _uiFPSMeasured;
     NSInteger _currentBottomTab;
     NSInteger _currentHzFpsSubTab;
     BOOL _expandedHzFPS;
@@ -2730,6 +2734,10 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)showPhonkMusicPicker;
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width;
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width;
+- (void)startUIFrameSampler;
+- (void)stopUIFrameSampler;
+- (void)sampleUIFrame:(CADisplayLink *)link;
+- (void)refreshNeonLiveReadouts;
 - (void)setupExpandingNavigationItems;
 - (void)reloadVisibleContentWithSubtleTransition;
 - (void)v20HandleForegroundTransition:(NSNotification *)notification;
@@ -3570,6 +3578,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self stopUIFrameSampler];
     [_appScanTimer invalidate];
     _appScanTimer = nil;
     [self v20StopBackgroundMotion];
@@ -5290,13 +5299,22 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
     UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)]);
     self.customTableView.tableHeaderView = nextHeader;
-    if (_currentBottomTab == 0 && [self.settingsDict[@"EnableSystemMonitoring"] boolValue]) [self startContinuousHardwareHUD];
-    else [self stopContinuousHardwareHUD];
+    if (_currentBottomTab == 0) {
+        // Dashboard readouts stay live; the switch only controls the detailed monitor rows.
+        [self startContinuousHardwareHUD];
+    } else {
+        [self stopContinuousHardwareHUD];
+        if (_currentBottomTab == 1) [self startUIFrameSampler];
+    }
     if (_currentBottomTab == 3 && !_hasStartedAppScan) {
         _hasStartedAppScan = YES;
         [self loadInstalledAppsAsync];
     }
 
+    if (!_tabConfigs.count || !_liquidNavBarContainer || !_activeGlassIndicator || _tabButtons.count != _tabConfigs.count) {
+        [self.customTableView reloadData];
+        return;
+    }
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
     CGFloat blobSize = 48.0;
     // Giọt nước di chuyển đến centerX của tab được chọn, giữ nguyên vị trí y (nổi trên thanh)
@@ -5565,10 +5583,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     // Compact stat cards are labels only; the real hardware values remain in the monitor sections.
     CGFloat gap = 9.0;
     CGFloat statW = (contentW - gap * 2.0) / 3.0;
+    UIDevice.currentDevice.batteryMonitoringEnabled = YES;
+    float initialCPU = Titanium_GetLiveCPULoadPercentage();
+    uint64_t initialRAM = Titanium_CurrentProcessFootprintBytes();
+    float initialBattery = UIDevice.currentDevice.batteryLevel;
     NSArray *stats = @[
-        @{ @"title": @"CPU", @"value": @"MONITOR", @"icon": @"cpu" },
-        @{ @"title": @"MEMORY", @"value": @"RAM", @"icon": @"memorychip" },
-        @{ @"title": @"POWER", @"value": @"BATTERY", @"icon": @"battery.100" }
+        @{ @"title": @"CPU LOAD", @"value": (initialCPU >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", initialCPU] : @"Đang đo"), @"icon": @"cpu" },
+        @{ @"title": @"APP MEMORY", @"value": Titanium_ByteCountString(initialRAM), @"icon": @"memorychip" },
+        @{ @"title": @"BATTERY", @"value": (initialBattery >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", initialBattery * 100.0f] : @"N/A"), @"icon": @"battery.100" }
     ];
     for (NSInteger i = 0; i < stats.count; i++) {
         NSDictionary *item = stats[i];
@@ -5591,6 +5613,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [card addSubview:statTitle];
         UILabel *statValue = [[UILabel alloc] initWithFrame:CGRectMake(10, 57, statW - 20, 20)];
         statValue.text = item[@"value"];
+        statValue.tag = 8701 + i;
         statValue.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightHeavy];
         statValue.textColor = UIColor.whiteColor;
         statValue.adjustsFontSizeToFitWidth = YES;
@@ -5634,6 +5657,63 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     return root;
 }
 
+
+- (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
+    CGFloat w = MAX(320.0, width);
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 236.0)];
+    root.backgroundColor = UIColor.clearColor;
+
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(18, 10, w - 36, 14)];
+    eyebrow.text = @"T I T A N I U M  /  DISPLAY TELEMETRY";
+    eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold];
+    eyebrow.textColor = [UIColor colorWithRed:0.18 green:0.88 blue:1.0 alpha:1.0];
+    [root addSubview:eyebrow];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(17, 29, w - 34, 31)];
+    title.text = @"REFRESH RATE  /  FPS";
+    title.font = [UIFont systemFontOfSize:23 weight:UIFontWeightBlack];
+    title.textColor = UIColor.whiteColor;
+    [root addSubview:title];
+
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(16, 70, w - 32, 112)];
+    panel.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.14 alpha:0.98];
+    panel.layer.cornerRadius = 21;
+    panel.layer.borderWidth = 1;
+    panel.layer.borderColor = [UIColor colorWithRed:0.64 green:0.23 blue:1.0 alpha:0.82].CGColor;
+    panel.layer.shadowColor = [UIColor colorWithRed:0.55 green:0.12 blue:1.0 alpha:1.0].CGColor;
+    panel.layer.shadowOpacity = 0.18;
+    panel.layer.shadowRadius = 12;
+    panel.layer.shadowOffset = CGSizeMake(0, 3);
+    [root addSubview:panel];
+
+    NSInteger maxHz = MAX(1, (NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
+    NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
+    NSInteger targetFPS = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 60;
+    UILabel *big = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, panel.bounds.size.width - 32, 43)];
+    big.text = [NSString stringWithFormat:@"%ld UI FPS", (long)self->_uiFPSMeasured];
+    big.font = [UIFont systemFontOfSize:32 weight:UIFontWeightBlack];
+    big.textColor = [UIColor colorWithRed:0.22 green:0.91 blue:1.0 alpha:1.0];
+    big.adjustsFontSizeToFitWidth = YES;
+    big.minimumScaleFactor = 0.7;
+    [panel addSubview:big];
+
+    UILabel *detail = [[UILabel alloc] initWithFrame:CGRectMake(18, 60, panel.bounds.size.width - 36, 34)];
+    detail.text = [NSString stringWithFormat:@"Màn hình tối đa %ld Hz  ·  Mục tiêu %ld Hz / %ld FPS", (long)maxHz, (long)targetHz, (long)targetFPS];
+    detail.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
+    detail.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
+    detail.adjustsFontSizeToFitWidth = YES;
+    detail.minimumScaleFactor = 0.7;
+    [panel addSubview:detail];
+
+    UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(18, 190, w - 36, 30)];
+    note.text = @"UI FPS là nhịp khung hình của giao diện này, không phải FPS của game. iOS chỉ hỗ trợ Hz theo phần cứng/màn hình.";
+    note.numberOfLines = 2;
+    note.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+    note.textColor = [UIColor colorWithWhite:0.66 alpha:1.0];
+    [root addSubview:note];
+    return root;
+}
+
 - (void)neonDashboardQuickAction:(UIButton *)sender {
     if (sender.tag < 0) { [self showPhonkMusicPicker]; return; }
     [self selectTabIndex:sender.tag animated:YES];
@@ -5646,10 +5726,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)setupMainTableView {
-    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStyleInsetGrouped];
+    self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStylePlain];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
-    self.customTableView.separatorColor = [UIColor colorWithRed:0.40 green:0.22 blue:0.72 alpha:0.18];
+    self.customTableView.separatorColor = UIColor.clearColor;
     self.customTableView.contentInset = UIEdgeInsetsMake(4.0, 0.0, 14.0, 0.0);
     if (@available(iOS 11.0, *)) self.customTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     self.customTableView.estimatedRowHeight = 0.0;
@@ -5829,8 +5909,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if (!sS) return;
                 sS.settingsDict[@"EnableSystemMonitoring"] = @(isOn);
                 [sS saveSettingsDataAndSync];
-                if (isOn && sS->_currentBottomTab == 0) [sS startContinuousHardwareHUD];
-                else if (!isOn) [sS stopContinuousHardwareHUD];
+                if (sS->_currentBottomTab == 0) [sS startContinuousHardwareHUD];
                 [sS.customTableView reloadData];
             };
             accessory = s;
@@ -5989,7 +6068,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
             LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"CPU", @"GPU", @"Màn", @"PIN & NĂNG LƯỢNG", @"Hệ Thống"]];
-            seg.selectedSegmentIndex = _currentSwitchSubTab;
+            seg.selectedSegmentIndex = MIN(4, MAX(0, _currentSwitchSubTab));
             __weak typeof(self) wS = self;
             seg.valueChangedBlock = ^(NSInteger index) {
                 __strong typeof(wS) sS = wS;
@@ -6314,6 +6393,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    // Ignore stale taps delivered during a tab/section reload; never index arrays from an invalid path.
+    NSInteger sectionCount = [self numberOfSectionsInTableView:tableView];
+    if (indexPath.section < 0 || indexPath.section >= sectionCount) return;
+    NSInteger rowCount = [self tableView:tableView numberOfRowsInSection:indexPath.section];
+    if (indexPath.row < 0 || indexPath.row >= rowCount) return;
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     BOOL languageSettingsRow = (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 4);
@@ -6662,12 +6746,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)startContinuousHardwareHUD {
     [self stopContinuousHardwareHUD];
+    [self startUIFrameSampler];
+    [self refreshNeonLiveReadouts];
 
     _hudTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(_hudTimer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), (uint64_t)(5.0 * NSEC_PER_SEC), (uint64_t)(0.5 * NSEC_PER_SEC));
     __weak typeof(self) wS = self;
     dispatch_source_set_event_handler(_hudTimer, ^{
         __strong typeof(wS) sS = wS;
+        if (sS && sS->_currentBottomTab == 0) [sS refreshNeonLiveReadouts];
         if (sS && sS->_currentBottomTab == 0 && [sS.settingsDict[@"EnableSystemMonitoring"] boolValue] && !sS->_chipErrorActive) {
             NSArray<NSIndexPath *> *visible = sS.customTableView.indexPathsForVisibleRows ?: @[];
             NSMutableArray<NSIndexPath *> *rows = [NSMutableArray arrayWithCapacity:visible.count];
@@ -6686,6 +6773,57 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 - (void)stopContinuousHardwareHUD {
     if (_hudTimer) { dispatch_source_cancel(_hudTimer); _hudTimer = nil; }
+    [self stopUIFrameSampler];
+}
+
+- (void)startUIFrameSampler {
+    [self stopUIFrameSampler];
+    _uiFPSFrameCount = 0;
+    _uiFPSMeasured = 0;
+    _uiFPSSampleStart = CACurrentMediaTime();
+    _uiFPSDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(sampleUIFrame:)];
+    if (@available(iOS 15.0, *)) {
+        NSInteger maxRate = MAX(1, (NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
+        _uiFPSDisplayLink.preferredFrameRateRange = CAFrameRateRangeMake(1.0, (float)maxRate, (float)maxRate);
+    }
+    [_uiFPSDisplayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+}
+
+- (void)stopUIFrameSampler {
+    [_uiFPSDisplayLink invalidate];
+    _uiFPSDisplayLink = nil;
+}
+
+- (void)sampleUIFrame:(CADisplayLink *)link {
+    (void)link;
+    _uiFPSFrameCount++;
+    CFTimeInterval now = CACurrentMediaTime();
+    CFTimeInterval elapsed = now - _uiFPSSampleStart;
+    if (elapsed >= 1.0) {
+        _uiFPSMeasured = (NSInteger)lrint((double)_uiFPSFrameCount / elapsed);
+        _uiFPSFrameCount = 0;
+        _uiFPSSampleStart = now;
+        if (_currentBottomTab == 1) {
+            UIView *header = [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width];
+            self.customTableView.tableHeaderView = header;
+            [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
+        }
+    }
+}
+
+- (void)refreshNeonLiveReadouts {
+    if (!self.isViewLoaded) return;
+    float cpu = Titanium_GetLiveCPULoadPercentage();
+    uint64_t memory = Titanium_CurrentProcessFootprintBytes();
+    UIDevice.currentDevice.batteryMonitoringEnabled = YES;
+    float battery = UIDevice.currentDevice.batteryLevel;
+    UIView *header = self.customTableView.tableHeaderView;
+    UILabel *cpuLabel = (UILabel *)[header viewWithTag:8701];
+    UILabel *memoryLabel = (UILabel *)[header viewWithTag:8702];
+    UILabel *batteryLabel = (UILabel *)[header viewWithTag:8703];
+    if ([cpuLabel isKindOfClass:[UILabel class]]) cpuLabel.text = cpu >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", cpu] : @"N/A";
+    if ([memoryLabel isKindOfClass:[UILabel class]]) memoryLabel.text = Titanium_ByteCountString(memory);
+    if ([batteryLabel isKindOfClass:[UILabel class]]) batteryLabel.text = battery >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", battery * 100.0f] : @"N/A";
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
