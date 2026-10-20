@@ -1234,7 +1234,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
         _titleL = [[UILabel alloc] init];
         _titleL.textColor = [UIColor whiteColor];
-        _titleL.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+        _titleL.font = [UIFont systemFontOfSize:15.5 weight:UIFontWeightSemibold];
         _titleL.translatesAutoresizingMaskIntoConstraints = NO;
         _titleL.numberOfLines = 1;
         _titleL.adjustsFontSizeToFitWidth = YES;
@@ -1243,8 +1243,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
         _detailL = [[UILabel alloc] init];
         _detailL.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
-        _detailL.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
+        _detailL.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightMedium];
         _detailL.textAlignment = NSTextAlignmentRight;
+        _detailL.numberOfLines = 2;
+        _detailL.lineBreakMode = NSLineBreakByWordWrapping;
         _detailL.translatesAutoresizingMaskIntoConstraints = NO;
         [self applyV20CellTheme];
         [self.contentView addSubview:_detailL];
@@ -5330,43 +5332,86 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return @"CẦN KÍCH HOẠT CẤU HÌNH";
+    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return @"Cần kích hoạt trước";
     if (_currentBottomTab == 0) {
-        if (section == 0) return @"BỘ ĐO CHỈ ĐỌC · CPU THỰC TẾ, GPU/NHIỆT ĐỘ THEO KHẢ NĂNG iOS";
+        if (section == 0) return @"Theo dõi thiết bị";
         if (section == 1) return @"CPU";
         if (section == 2) return @"GPU";
-        if (section == 3) return @"RAM";
-        if (section == 4) return @"PIN";
-        return @"MÀN HÌNH";
+        if (section == 3) return @"Bộ nhớ";
+        if (section == 4) return @"Pin";
+        return @"Màn hình";
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return @"MỨC THƯỜNG / MỞ RỘNG";
-        if (section == 1) return @"CHỌN Hz / FPS";
+        if (section == 0) return @"Mức khung hình";
+        if (section == 1) return @"Chế độ điều chỉnh";
         return (_currentHzFpsSubTab == 0) ? (_expandedHzFPS ? @"Hz MỞ RỘNG" : @"Hz THƯỜNG") : (_expandedHzFPS ? @"FPS MỞ RỘNG" : @"FPS THƯỜNG");
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return @"CHỌN NHÓM";
+        if (section == 0) return @"Nhóm tính năng";
         switch (_currentSwitchSubTab) {
             case 0: return @"CPU";
             case 1: return @"GPU";
-            case 2: return @"MÀN HÌNH";
-            case 3: return @"PIN";
-            case 4: return @"HỆ THỐNG";
-            default: return @"CÔNG TẮC";
+            case 2: return @"Màn hình";
+            case 3: return @"Pin";
+            case 4: return @"Hệ thống";
+            default: return @"Công tắc";
         }
     } else if (_currentBottomTab == 3) {
-        if (section == 0) return @"THAO TÁC NHANH";
-        if (section == 1) return @"TÌM KIẾM";
-        return @"QUẢN LÝ ỨNG DỤNG";
+        if (section == 0) return @"Truy cập nhanh";
+        if (section == 1) return @"Tìm ứng dụng";
+        return @"Ứng dụng";
     } else {
-        if (section == 0) return @"KÍCH HOẠT";
-        if (section == 1) return @"PHẦN CỨNG";
-        if (section == 2) return @"SERVER & GIAO DIỆN";
-        return @"SANDBOX";
+        if (section == 0) return @"Trạng thái kích hoạt";
+        if (section == 1) return @"Thông tin thiết bị";
+        if (section == 2) return @"Kết nối và giao diện";
+        return @"Quyền truy cập hệ thống";
     }
 }
 
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    NSString *heading = [self tableView:tableView titleForHeaderInSection:section];
+    if (heading.length == 0) return nil;
+
+    UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
+    container.backgroundColor = [UIColor clearColor];
+
+    UIView *marker = [[UIView alloc] initWithFrame:CGRectZero];
+    marker.translatesAutoresizingMaskIntoConstraints = NO;
+    marker.backgroundColor = [UIColor colorWithRed:0.25 green:0.62 blue:1.0 alpha:1.0];
+    marker.layer.cornerRadius = 1.5;
+    [container addSubview:marker];
+
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = heading;
+    label.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
+    label.textColor = [UIColor colorWithRed:0.67 green:0.77 blue:0.94 alpha:1.0];
+    label.numberOfLines = 2;
+    label.lineBreakMode = NSLineBreakByWordWrapping;
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumScaleFactor = 0.88;
+    [container addSubview:label];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [marker.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:7],
+        [marker.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [marker.widthAnchor constraintEqualToConstant:3],
+        [marker.heightAnchor constraintEqualToConstant:18],
+        [label.leadingAnchor constraintEqualToAnchor:marker.trailingAnchor constant:9],
+        [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-10],
+        [label.topAnchor constraintEqualToAnchor:container.topAnchor constant:8],
+        [label.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-4]
+    ]];
+    return container;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    NSString *heading = [self tableView:tableView titleForHeaderInSection:section];
+    if (heading.length == 0) return 8.0;
+    return (heading.length > 38) ? 48.0 : 36.0;
+}
+
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (_currentBottomTab == 3 && indexPath.section == 1) return 52.0;
-    return 58.0;
+    if (_currentBottomTab == 3 && indexPath.section == 1) return 54.0;
+    return 62.0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -5380,7 +5425,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIColor *accent = nil;
 
     if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) {
-        title = @"CẦN KÍCH HOẠT CẤU HÌNH";
+        title = @"Cần kích hoạt trước";
         detail = @"Vào Cài Đặt";
         [cell configureWithTitle:title detail:detail accessory:nil accent:[UIColor colorWithRed:1.0 green:0.5 blue:0.5 alpha:1.0]];
         cell.userInteractionEnabled = NO;
@@ -5729,7 +5774,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             else if (indexPath.row == 3) { title = @"iOS"; detail = [NSString stringWithFormat:@"%@", ov]; }
             else if (indexPath.row == 4) { title = @"Tên"; detail = [[UIDevice currentDevice] name]; }
             else if (indexPath.row == 5) { title = @"CPU"; detail = _deepCoreCountString; }
-            else if (indexPath.row == 6) { title = @"RAM"; detail = _deepRamString; }
+            else if (indexPath.row == 6) { title = @"Bộ nhớ"; detail = _deepRamString; }
             else { title = @"Darwin"; detail = _deepKernelString; }
         } else if (indexPath.section == 2) {
             if (indexPath.row == 0) {
@@ -6548,8 +6593,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     __weak UILabel *wperc = percentLbl;
     __weak UIView *woverlay = overlay;
     __weak typeof(self) weakSelf = self;
-    dispatch_block_t ticker = nil;
     __block dispatch_block_t tickerRef = nil;
+    __weak dispatch_block_t weakTickerRef = nil;
     tickerRef = ^{
         tick++;
         float progress = (float)tick / 50.0f;
@@ -6558,8 +6603,11 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
             wperc.text = [NSString stringWithFormat:@"%.0f%%", progress * 100.0f];
         });
         if (tick < 50) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), tickerRef);
+            dispatch_block_t nextTick = weakTickerRef;
+            if (nextTick) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(tickInterval * NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), nextTick);
+            }
         } else {
             // Pha xong — xóa overlay và chuyển pha tiếp
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -6573,7 +6621,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
             });
         }
     };
-    (void)ticker;
+    weakTickerRef = tickerRef;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), tickerRef);
 }
 
@@ -6601,14 +6649,19 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     __weak UIView *wflash = flash;
     __weak UILabel *wicon = appleIcon;
     __weak typeof(self) weakSelf = self;
-    void (^doFlash)(NSInteger) = nil;
     __block void (^doFlashRef)(NSInteger) = nil;
+    __weak void (^weakDoFlashRef)(NSInteger) = nil;
     doFlashRef = ^(NSInteger count) {
+        // Hold the recursive block only for the duration of the active animation chain.
+        // The animation completion temporarily retains this strong local, avoiding a self-cycle.
+        void (^keepAlive)(NSInteger) = weakDoFlashRef;
+        if (!keepAlive) return;
         if (count <= 0) {
             [UIView animateWithDuration:0.3 animations:^{
                 wflash.alpha = 0.0;
                 wicon.alpha = 0.0;
             } completion:^(BOOL f) {
+                (void)keepAlive;
                 [wflash removeFromSuperview];
                 __strong typeof(weakSelf) sS = weakSelf;
                 if (sS) [sS finalizeExploitActivation];
@@ -6623,11 +6676,13 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
                 wflash.alpha = 0.0;
                 wicon.alpha = 0.3;
             } completion:^(BOOL f2) {
-                doFlashRef(count - 1);
+                (void)keepAlive;
+                void (^nextFlash)(NSInteger) = weakDoFlashRef;
+                if (nextFlash) nextFlash(count - 1);
             }];
         }];
     };
-    (void)doFlash;
+    weakDoFlashRef = doFlashRef;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         doFlashRef(3);
     });
