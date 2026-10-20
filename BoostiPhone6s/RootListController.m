@@ -1,5 +1,6 @@
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
+#import <WebKit/WebKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <spawn.h>
@@ -157,70 +158,15 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-
-    // ====== 34 CONG TAC DIEU KHIEN NHOM (dong bo 100% Tweak.xm) ======
-    uint32_t enableAppleInternalProMotion;
-    uint32_t enableZeroLatencyTouch;
-    uint32_t enableMetalZeroTearing;
-    uint32_t enableFluidTransitions;
-    uint32_t enableTitaniumGameMetalOverdrive;
-    uint32_t enableAIStreamOptimization;
-    uint32_t enableFastLaunchSuperEngine;
-    uint32_t enableScrollAndKeyboard;
-    uint32_t enableInstantActionTransitions;
-    uint32_t enableGlobalThreadGovernor;
-    uint32_t enableSiliconSchedulerTouch;
-    uint32_t enableCoreAnimationRenderServer;
-    uint32_t enableCAWindowServerDominance;
-    uint32_t enableForceRenderRecovery;
-    uint32_t enableWindowLevelOverdrive;
-    uint32_t enableSystemMemoryGovernor;
-    uint32_t enableThermalCryoPacing;
-    uint32_t enableDeepRamCompaction;
-    uint32_t enableWebKitRamOptimizer;
-    uint32_t enableSiliconHardwarePipeline;
-    uint32_t enableHardwareProMotionOverclock;
-    uint32_t enableNeuralTouchEdgeZeroLatency;
-    uint32_t enableNativeColdBootOverdrive;
-    uint32_t enableTitaniumV12SmoothExit;
-    uint32_t enableDisplaySpringBoard;
-    uint32_t enableLiquidGlassOpt;
-    uint32_t enableSwitcher30Apps;
-    uint32_t enableSpringBoardSwitcherOpt;
-    uint32_t enableFloatingWindowPiP;
-    uint32_t enableHardwareSegregationHome;
-    uint32_t enableSpringBoardProcessManager;
-    uint32_t enableKeepAppsAlive;
-    uint32_t enableTitaniumV10LayoutBoost;
-    uint32_t enableUIKitThirdPartyIsolated;
-
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[200];
+    uint32_t magic, masterEnabled;
+    int32_t targetHz, targetFPS;
+    uint32_t forceOverclock, pipSyncEnabled, thermalShield, antiStutterExit;
+    uint32_t smartBufferingLevel, zeroLatencyTouch, shaderOptimization, dynamicInterpolation;
+    uint32_t fastAppLaunch, lowLatencyAudio, memoryPressureRelief, metalPacingEnabled;
+    uint32_t runloopHangGuard, keyboardZeroLagV3, aggressiveRamCleaner, lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch, diskIOPriorityBoost, rawTouchDirectDelivery, powerSaveModeActive;
+    uint64_t updateSeq, lastHeartbeat;
+    char reserved[48];
 } ApexV285ProPayload;
 #endif
 
@@ -565,10 +511,10 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _chromaticEdge.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _chromaticEdge.cornerCurve = kCACornerCurveContinuous;
         _chromaticEdge.colors = @[
-            (id)[UIColor colorWithRed:0.35 green:1.0 blue:1.0 alpha:0.24].CGColor,
-            (id)[UIColor colorWithRed:0.7 green:0.4  blue:1.0 alpha:0.16].CGColor,
+            (id)[UIColor colorWithRed:0.4 green:0.75 blue:1.0 alpha:0.24].CGColor,
+            (id)[UIColor colorWithRed:0.7 green:0.5  blue:1.0 alpha:0.16].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithRed:1.0 green:0.4 blue:0.85 alpha:0.18].CGColor
+            (id)[UIColor colorWithRed:0.5 green:1.0 blue:0.7 alpha:0.18].CGColor
         ];
         _chromaticEdge.locations = @[@0.0, @0.15, @0.85, @1.0];
         _chromaticEdge.startPoint = CGPointMake(0.0, 0.0);
@@ -620,16 +566,16 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
             if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
                 return [UIColor colorWithRed:0.94 green:0.96 blue:0.99 alpha:1.0];
             }
-            return [UIColor colorWithRed:0.06 green:0.03 blue:0.12 alpha:1.0];
+            return [UIColor colorWithRed:0.035 green:0.055 blue:0.105 alpha:1.0];
         }];
     } else {
-        surface = [UIColor colorWithRed:0.06 green:0.03 blue:0.12 alpha:1.0];
+        surface = [UIColor colorWithRed:0.035 green:0.055 blue:0.105 alpha:1.0];
     }
     self.backgroundColor = surface;
     _tintView.backgroundColor = surface;
     self.layer.borderWidth = 1.0;
-    self.layer.borderColor = [UIColor colorWithRed:0.70 green:0.40 blue:1.0 alpha:0.82].CGColor;
-    self.layer.shadowColor = [UIColor colorWithRed:0.50 green:0.20 blue:0.90 alpha:1.0].CGColor;
+    self.layer.borderColor = [UIColor colorWithRed:0.12 green:0.55 blue:1.0 alpha:0.82].CGColor;
+    self.layer.shadowColor = [UIColor colorWithRed:0.02 green:0.42 blue:1.0 alpha:1.0].CGColor;
     self.layer.shadowOpacity = 0.26;
     self.layer.shadowRadius = 15.0;
     self.layer.shadowOffset = CGSizeMake(0, 5.0);
@@ -1061,8 +1007,8 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 - (void)updateUIAnimated:(BOOL)animated {
     NSArray *onC = @[
-        (id)[UIColor colorWithRed:0.35 green:1.0 blue:1.0 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.20 green:0.80 blue:0.90 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.22 green:0.80 blue:0.38 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.16 green:0.68 blue:0.28 alpha:1.0].CGColor
     ];
     NSArray *offC = @[
         (id)[UIColor colorWithRed:0.22 green:0.24 blue:0.28 alpha:1.0].CGColor,
@@ -1290,6 +1236,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _glassBackground.interactiveHighlightEnabled = NO;
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _glassBackground.layer.borderWidth = 0.8;
+        _glassBackground.layer.borderColor = [UIColor colorWithRed:0.40 green:0.23 blue:0.70 alpha:0.52].CGColor;
+        _glassBackground.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.08 blue:0.82 alpha:1.0].CGColor;
+        _glassBackground.layer.shadowOpacity = 0.12;
+        _glassBackground.layer.shadowRadius = 8.0;
+        _glassBackground.layer.shadowOffset = CGSizeMake(0, 3);
         [self.contentView insertSubview:_glassBackground atIndex:0];
 
         _titleL = [[UILabel alloc] init];
@@ -1339,8 +1291,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)layoutSubviews {
     [super layoutSubviews];
     _glassBackground.frame = self.bounds;
-    _glassBackground.layer.cornerRadius = 16.0;
-    _glassBackground.cornerRadiusValue = 16.0;
+    _glassBackground.layer.cornerRadius = 18.0;
+    _glassBackground.cornerRadiusValue = 18.0;
     [_glassBackground layoutSubviews];
 }
 
@@ -1850,12 +1802,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         CGFloat dotY = frame.size.height / 2.0 - 14.0;
 
         _dot1 = [[UIView alloc] initWithFrame:CGRectMake(startX, dotY, dotSize, dotSize)];
-        _dot1.backgroundColor = [UIColor colorWithRed:0.35 green:1.0 blue:1.0 alpha:1.0];
+        _dot1.backgroundColor = [UIColor colorWithRed:0.35 green:0.95 blue:0.60 alpha:1.0];
         _dot1.layer.cornerRadius = dotSize / 2.0;
         [self addSubview:_dot1];
 
         _dot2 = [[UIView alloc] initWithFrame:CGRectMake(startX + dotSize + spacing, dotY, dotSize, dotSize)];
-        _dot2.backgroundColor = [UIColor colorWithRed:1.0 green:0.40 blue:0.85 alpha:1.0];
+        _dot2.backgroundColor = [UIColor colorWithRed:0.40 green:0.85 blue:1.0 alpha:1.0];
         _dot2.layer.cornerRadius = dotSize / 2.0;
         [self addSubview:_dot2];
 
@@ -3267,13 +3219,15 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     bg.frame = self.view.bounds;
     bg.name = @"TI_V20_1_BackgroundGradient";
     bg.colors = @[
-        (id)[UIColor colorWithRed:0.10 green:0.04 blue:0.20 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.03 green:0.01 blue:0.08 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.105 green:0.025 blue:0.22 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.035 green:0.018 blue:0.105 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.008 green:0.018 blue:0.055 alpha:1.0].CGColor
     ];
+    bg.locations = @[@0.0, @0.48, @1.0];
     bg.startPoint = CGPointMake(0.0, 0.0);
-    bg.endPoint = CGPointMake(0.0, 1.0);
+    bg.endPoint = CGPointMake(0.85, 1.0);
     [self.view.layer insertSublayer:bg atIndex:0];
-    self.view.backgroundColor = [UIColor colorWithRed:0.04 green:0.02 blue:0.10 alpha:1.0];
+    self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.02 blue:0.05 alpha:1.0];
 
     _currentBottomTab = 0;
     _hasPlayedEntranceAnimation = NO;
@@ -3859,7 +3813,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     UIButton *musicButton = [UIButton buttonWithType:UIButtonTypeSystem];
     musicButton.frame = CGRectMake(0, 0, 42, 36);
     musicButton.layer.cornerRadius = 12.0;
-    musicButton.backgroundColor = [UIColor colorWithRed:0.05 green:0.24 blue:0.48 alpha:1.0];
+    musicButton.backgroundColor = [UIColor colorWithRed:0.22 green:0.055 blue:0.42 alpha:1.0];
+    musicButton.layer.borderWidth = 1.0;
+    musicButton.layer.borderColor = [UIColor colorWithRed:0.42 green:0.26 blue:0.85 alpha:0.9].CGColor;
     [musicButton setImage:[UIImage systemImageNamed:@"music.note.list"] forState:UIControlStateNormal];
     [musicButton setTintColor:[UIColor colorWithRed:0.40 green:0.78 blue:1.0 alpha:1.0]];
     musicButton.accessibilityLabel = @"Chọn nhạc phonk trên YouTube";
@@ -3869,35 +3825,139 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 }
 
 - (void)showPhonkMusicPicker {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"PHONK PLAYER"
-        message:@"Chọn một kiểu nhạc để mở tìm kiếm trên YouTube. Phát nhạc do YouTube quản lý; ứng dụng không giả lập phát nền." 
-        preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray<NSDictionary *> *items = @[
-        @{ @"title": @"Phonk drift · playlist", @"query": @"phonk drift playlist" },
-        @{ @"title": @"Brazilian phonk", @"query": @"Brazilian phonk playlist" },
-        @{ @"title": @"Dark phonk · bass", @"query": @"dark phonk bass playlist" },
-        @{ @"title": @"Phonk gaming mix", @"query": @"phonk gaming mix playlist" },
-        @{ @"title": @"Aggressive phonk", @"query": @"aggressive phonk playlist" }
-    ];
-    __weak typeof(self) weakSelf = self;
-    for (NSDictionary *item in items) {
-        [sheet addAction:[UIAlertAction actionWithTitle:item[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            NSString *query = [item[@"query"] stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-            NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://www.youtube.com/results?search_query=%@", query ?: @"phonk"]];
-            if (url && [UIApplication.sharedApplication canOpenURL:url]) {
-                [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
-            } else {
-                UIAlertController *error = [UIAlertController alertControllerWithTitle:@"YouTube không khả dụng" message:@"Hãy kiểm tra kết nối mạng hoặc mở YouTube thủ công." preferredStyle:UIAlertControllerStyleAlert];
-                [error addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-                [weakSelf presentViewController:error animated:YES completion:nil];
-            }
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
-    }
-    [self presentViewController:sheet animated:YES completion:nil];
+    // In-app music browser: search results stay inside this app instead of launching YouTube.
+    UIViewController *browser = [UIViewController new];
+    browser.modalPresentationStyle = UIModalPresentationPageSheet;
+    browser.view.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.13 alpha:1.0];
+    browser.title = @"MUSIC STUDIO";
+
+    UIColor *purple = [UIColor colorWithRed:0.68 green:0.20 blue:1.0 alpha:1.0];
+    UIColor *cyan = [UIColor colorWithRed:0.10 green:0.88 blue:1.0 alpha:1.0];
+    UIView *top = [UIView new];
+    top.translatesAutoresizingMaskIntoConstraints = NO;
+    [browser.view addSubview:top];
+
+    UILabel *heading = [UILabel new];
+    heading.translatesAutoresizingMaskIntoConstraints = NO;
+    heading.text = @"MUSIC STUDIO";
+    heading.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBlack];
+    heading.textColor = UIColor.whiteColor;
+    [top addSubview:heading];
+
+    UILabel *subtitle = [UILabel new];
+    subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.text = @"Tìm nhạc · Phonk · Apple Music · Chill";
+    subtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    subtitle.textColor = [UIColor colorWithWhite:1 alpha:0.66];
+    [top addSubview:subtitle];
+
+    UITextField *search = [UITextField new];
+    search.translatesAutoresizingMaskIntoConstraints = NO;
+    search.placeholder = @"  Tìm tên bài hát, nghệ sĩ hoặc playlist…";
+    search.textColor = UIColor.whiteColor;
+    search.tintColor = cyan;
+    search.backgroundColor = [UIColor colorWithWhite:1 alpha:0.09];
+    search.layer.cornerRadius = 14;
+    search.layer.borderWidth = 1;
+    search.layer.borderColor = [purple colorWithAlphaComponent:0.55].CGColor;
+    search.font = [UIFont systemFontOfSize:14];
+    search.returnKeyType = UIReturnKeySearch;
+    search.clearButtonMode = UITextFieldViewModeWhileEditing;
+    UIView *pad = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 1)];
+    search.leftView = pad;
+    search.leftViewMode = UITextFieldViewModeAlways;
+    [browser.view addSubview:search];
+
+    UISegmentedControl *categories = [[UISegmentedControl alloc] initWithItems:@[@"PHONK", @"APPLE MUSIC", @"CHILL"]];
+    categories.translatesAutoresizingMaskIntoConstraints = NO;
+    categories.selectedSegmentIndex = 0;
+    categories.selectedSegmentTintColor = purple;
+    categories.backgroundColor = [UIColor colorWithWhite:1 alpha:0.08];
+    [categories setTitleTextAttributes:@{NSForegroundColorAttributeName: UIColor.whiteColor, NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightBold]} forState:UIControlStateNormal];
+    [categories setTitleTextAttributes:@{NSForegroundColorAttributeName: UIColor.whiteColor, NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightBold]} forState:UIControlStateSelected];
+    [browser.view addSubview:categories];
+
+    WKWebViewConfiguration *config = [WKWebViewConfiguration new];
+    config.allowsInlineMediaPlayback = YES;
+    WKWebView *web = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
+    web.translatesAutoresizingMaskIntoConstraints = NO;
+    web.opaque = NO;
+    web.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.13 alpha:1.0];
+    web.scrollView.backgroundColor = web.backgroundColor;
+    web.layer.cornerRadius = 16;
+    web.clipsToBounds = YES;
+    [browser.view addSubview:web];
+
+    UIButton *go = [UIButton buttonWithType:UIButtonTypeSystem];
+    go.translatesAutoresizingMaskIntoConstraints = NO;
+    [go setTitle:@"TÌM KIẾM" forState:UIControlStateNormal];
+    [go setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    go.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBlack];
+    go.backgroundColor = purple;
+    go.layer.cornerRadius = 13;
+    [browser.view addSubview:go];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.translatesAutoresizingMaskIntoConstraints = NO;
+    [close setTitle:@"ĐÓNG" forState:UIControlStateNormal];
+    [close setTitleColor:cyan forState:UIControlStateNormal];
+    close.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
+    [browser.view addSubview:close];
+
+    __block NSInteger category = 0;
+    void (^loadSearch)(NSString *) = ^(NSString *term) {
+        NSString *q = [term stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (q.length == 0) {
+            q = category == 0 ? @"phonk drift playlist" : (category == 1 ? @"popular songs" : @"chill lofi music");
+        }
+        NSString *base = category == 1 ? @"https://music.apple.com/us/search?term=" : @"https://m.youtube.com/results?search_query=";
+        NSString *encoded = [q stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
+        NSURL *url = [NSURL URLWithString:[base stringByAppendingString:encoded ?: @"music"]];
+        if (url) [web loadRequest:[NSURLRequest requestWithURL:url]];
+    };
+    [go addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { loadSearch(search.text ?: @""); }] forControlEvents:UIControlEventTouchUpInside];
+    [search addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { loadSearch(search.text ?: @""); }] forControlEvents:UIControlEventEditingDidEndOnExit];
+    [categories addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        category = categories.selectedSegmentIndex;
+        NSString *placeholder = category == 0 ? @"  Tìm phonk / drift / bass…" : (category == 1 ? @"  Tìm bài hát trên Apple Music…" : @"  Tìm nhạc chill / lofi…");
+        search.placeholder = placeholder;
+        loadSearch(search.text ?: @"");
+    }] forControlEvents:UIControlEventValueChanged];
+    [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { [browser dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [top.topAnchor constraintEqualToAnchor:browser.view.safeAreaLayoutGuide.topAnchor constant:10],
+        [top.leadingAnchor constraintEqualToAnchor:browser.view.leadingAnchor constant:18],
+        [top.trailingAnchor constraintEqualToAnchor:browser.view.trailingAnchor constant:-18],
+        [heading.topAnchor constraintEqualToAnchor:top.topAnchor],
+        [heading.leadingAnchor constraintEqualToAnchor:top.leadingAnchor],
+        [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:4],
+        [subtitle.leadingAnchor constraintEqualToAnchor:top.leadingAnchor],
+        [subtitle.bottomAnchor constraintEqualToAnchor:top.bottomAnchor],
+        [search.topAnchor constraintEqualToAnchor:top.bottomAnchor constant:14],
+        [search.leadingAnchor constraintEqualToAnchor:browser.view.leadingAnchor constant:18],
+        [search.trailingAnchor constraintEqualToAnchor:browser.view.trailingAnchor constant:-18],
+        [search.heightAnchor constraintEqualToConstant:46],
+        [categories.topAnchor constraintEqualToAnchor:search.bottomAnchor constant:10],
+        [categories.leadingAnchor constraintEqualToAnchor:search.leadingAnchor],
+        [categories.trailingAnchor constraintEqualToAnchor:search.trailingAnchor],
+        [categories.heightAnchor constraintEqualToConstant:38],
+        [web.topAnchor constraintEqualToAnchor:categories.bottomAnchor constant:12],
+        [web.leadingAnchor constraintEqualToAnchor:search.leadingAnchor],
+        [web.trailingAnchor constraintEqualToAnchor:search.trailingAnchor],
+        [web.bottomAnchor constraintEqualToAnchor:go.topAnchor constant:-12],
+        [go.leadingAnchor constraintEqualToAnchor:search.leadingAnchor],
+        [go.widthAnchor constraintEqualToConstant:120],
+        [go.heightAnchor constraintEqualToConstant:44],
+        [go.bottomAnchor constraintEqualToAnchor:browser.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [close.trailingAnchor constraintEqualToAnchor:search.trailingAnchor],
+        [close.centerYAnchor constraintEqualToAnchor:go.centerYAnchor],
+        [close.widthAnchor constraintEqualToConstant:70],
+        [close.heightAnchor constraintEqualToConstant:44]
+    ]];
+    search.text = @"phonk drift playlist";
+    loadSearch(search.text);
+    [self presentViewController:browser animated:YES completion:nil];
 }
 
 - (void)updateRoleBadgeTitle:(NSString *)title {
@@ -5383,111 +5443,139 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width);
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 286.0)];
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 386.0)];
     root.backgroundColor = UIColor.clearColor;
 
-    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 12, w - 40, 16)];
-    eyebrow.text = @"T I T A N I U M   /   CONTROL CENTER";
-    eyebrow.font = [UIFont systemFontOfSize:9 weight:UIFontWeightBold];
-    eyebrow.textColor = [UIColor colorWithRed:0.72 green:0.42 blue:1.0 alpha:1.0];
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w - 40, 15)];
+    eyebrow.text = @"T I T A N I U M   /   GAMING CONTROL";
+    eyebrow.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
+    eyebrow.textColor = [UIColor colorWithRed:0.45 green:0.86 blue:1.0 alpha:1.0];
     [root addSubview:eyebrow];
 
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 31, w - 36, 36)];
-    title.text = @"NEON DASHBOARD";
-    title.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBlack];
-    title.textColor = [UIColor colorWithWhite:0.97 alpha:1.0];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 28, w - 36, 34)];
+    title.text = @"iPhone Boost Center";
+    title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack];
+    title.textColor = UIColor.whiteColor;
     [root addSubview:title];
 
-    UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 67, w - 40, 20)];
-    subtitle.text = @"Hiệu năng · Thiết bị · Công cụ của bạn";
-    subtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    subtitle.textColor = [UIColor colorWithWhite:0.62 alpha:1.0];
+    UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 62, w - 40, 18)];
+    subtitle.text = @"Hiệu năng · Phần cứng · Điều khiển hệ thống";
+    subtitle.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    subtitle.textColor = [UIColor colorWithWhite:0.72 alpha:1.0];
     [root addSubview:subtitle];
 
-    CGFloat cardX = 16.0, cardY = 99.0, cardW = w - 32.0, cardH = 119.0;
+    CGFloat cardX = 15.0, cardY = 88.0, cardW = w - 30.0, cardH = 165.0;
     UIView *hero = [[UIView alloc] initWithFrame:CGRectMake(cardX, cardY, cardW, cardH)];
-    hero.backgroundColor = [UIColor colorWithRed:0.055 green:0.035 blue:0.13 alpha:1.0];
-    hero.layer.cornerRadius = 19.0;
+    hero.backgroundColor = [UIColor colorWithRed:0.045 green:0.025 blue:0.13 alpha:0.98];
+    hero.layer.cornerRadius = 23.0;
     hero.layer.borderWidth = 1.0;
-    hero.layer.borderColor = [UIColor colorWithRed:0.53 green:0.22 blue:0.98 alpha:0.78].CGColor;
-    hero.layer.shadowColor = [UIColor colorWithRed:0.48 green:0.13 blue:1.0 alpha:1.0].CGColor;
-    hero.layer.shadowOpacity = 0.23;
-    hero.layer.shadowRadius = 15.0;
+    hero.layer.borderColor = [UIColor colorWithRed:0.54 green:0.24 blue:0.98 alpha:0.9].CGColor;
+    hero.layer.shadowColor = [UIColor colorWithRed:0.56 green:0.08 blue:1.0 alpha:1.0].CGColor;
+    hero.layer.shadowOpacity = 0.28;
+    hero.layer.shadowRadius = 17.0;
     hero.layer.shadowOffset = CGSizeMake(0, 5);
-    hero.clipsToBounds = NO;
     [root addSubview:hero];
 
-    CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.frame = CGRectMake(0, 0, cardW, cardH);
-    gradient.cornerRadius = 19.0;
-    gradient.colors = @[(id)[UIColor colorWithRed:0.20 green:0.055 blue:0.39 alpha:0.90].CGColor,
-                        (id)[UIColor colorWithRed:0.075 green:0.045 blue:0.19 alpha:0.96].CGColor,
-                        (id)[UIColor colorWithRed:0.035 green:0.045 blue:0.12 alpha:1.0].CGColor];
-    gradient.startPoint = CGPointMake(0, 0);
-    gradient.endPoint = CGPointMake(1, 1);
-    [hero.layer insertSublayer:gradient atIndex:0];
+    CAGradientLayer *heroGradient = [CAGradientLayer layer];
+    heroGradient.frame = hero.bounds;
+    heroGradient.cornerRadius = 23.0;
+    heroGradient.colors = @[(id)[UIColor colorWithRed:0.20 green:0.045 blue:0.43 alpha:0.98].CGColor,
+                            (id)[UIColor colorWithRed:0.075 green:0.035 blue:0.20 alpha:0.98].CGColor,
+                            (id)[UIColor colorWithRed:0.025 green:0.045 blue:0.15 alpha:0.99].CGColor];
+    heroGradient.startPoint = CGPointMake(0, 0);
+    heroGradient.endPoint = CGPointMake(1, 1);
+    [hero.layer insertSublayer:heroGradient atIndex:0];
 
-    UILabel *pill = [[UILabel alloc] initWithFrame:CGRectMake(15, 13, 104, 20)];
-    pill.text = @"●  SYSTEM READY";
-    pill.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
-    pill.textAlignment = NSTextAlignmentCenter;
-    pill.textColor = [UIColor colorWithRed:0.78 green:0.57 blue:1.0 alpha:1.0];
-    pill.backgroundColor = [UIColor colorWithRed:0.42 green:0.12 blue:0.76 alpha:0.35];
-    pill.layer.cornerRadius = 7;
-    pill.clipsToBounds = YES;
-    [hero addSubview:pill];
+    UILabel *status = [[UILabel alloc] initWithFrame:CGRectMake(15, 12, 126, 20)];
+    status.text = @"●  DEVICE OVERVIEW";
+    status.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
+    status.textColor = [UIColor colorWithRed:0.45 green:0.91 blue:1.0 alpha:1.0];
+    [hero addSubview:status];
 
-    UILabel *heroTitle = [[UILabel alloc] initWithFrame:CGRectMake(15, 40, cardW - 112, 30)];
-    heroTitle.text = @"TUNE YOUR DEVICE";
-    heroTitle.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBlack];
-    heroTitle.textColor = UIColor.whiteColor;
-    [hero addSubview:heroTitle];
+    CGFloat ringSize = 104.0;
+    UIView *ring = [[UIView alloc] initWithFrame:CGRectMake((cardW-ringSize)/2.0, 34, ringSize, ringSize)];
+    ring.backgroundColor = [UIColor colorWithRed:0.06 green:0.035 blue:0.16 alpha:0.95];
+    ring.layer.cornerRadius = ringSize/2.0;
+    ring.layer.borderWidth = 5.0;
+    ring.layer.borderColor = [UIColor colorWithRed:0.16 green:0.88 blue:1.0 alpha:1.0].CGColor;
+    ring.layer.shadowColor = [UIColor colorWithRed:0.90 green:0.16 blue:1.0 alpha:1.0].CGColor;
+    ring.layer.shadowOpacity = 0.62;
+    ring.layer.shadowRadius = 13.0;
+    [hero addSubview:ring];
+    UIView *innerRing = [[UIView alloc] initWithFrame:CGRectInset(ring.bounds, 9, 9)];
+    innerRing.layer.cornerRadius = innerRing.bounds.size.width/2.0;
+    innerRing.layer.borderWidth = 2.0;
+    innerRing.layer.borderColor = [UIColor colorWithRed:0.77 green:0.23 blue:1.0 alpha:0.95].CGColor;
+    [ring addSubview:innerRing];
+    UILabel *ringIcon = [[UILabel alloc] initWithFrame:ring.bounds];
+    ringIcon.text = @"✦";
+    ringIcon.font = [UIFont systemFontOfSize:43 weight:UIFontWeightLight];
+    ringIcon.textAlignment = NSTextAlignmentCenter;
+    ringIcon.textColor = [UIColor colorWithRed:0.88 green:0.91 blue:1.0 alpha:1.0];
+    [ring addSubview:ringIcon];
 
-    UILabel *heroDetail = [[UILabel alloc] initWithFrame:CGRectMake(16, 71, cardW - 112, 29)];
-    heroDetail.text = @"Truy cập nhanh các công cụ\nHz/FPS và thông tin thiết bị.";
-    heroDetail.numberOfLines = 2;
-    heroDetail.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightMedium];
-    heroDetail.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
-    [hero addSubview:heroDetail];
+    UILabel *ringCaption = [[UILabel alloc] initWithFrame:CGRectMake(15, 140, cardW-30, 16)];
+    ringCaption.text = @"CONTROL CENTER  •  READY";
+    ringCaption.font = [UIFont systemFontOfSize:9 weight:UIFontWeightBold];
+    ringCaption.textAlignment = NSTextAlignmentCenter;
+    ringCaption.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
+    [hero addSubview:ringCaption];
 
-    UIView *orb = [[UIView alloc] initWithFrame:CGRectMake(cardW - 91, 27, 66, 66)];
-    orb.backgroundColor = [UIColor colorWithRed:0.42 green:0.12 blue:0.85 alpha:0.18];
-    orb.layer.cornerRadius = 33;
-    orb.layer.borderWidth = 1.0;
-    orb.layer.borderColor = [UIColor colorWithRed:0.68 green:0.38 blue:1.0 alpha:0.85].CGColor;
-    [hero addSubview:orb];
-    UILabel *orbIcon = [[UILabel alloc] initWithFrame:orb.bounds];
-    orbIcon.text = @"✦";
-    orbIcon.font = [UIFont systemFontOfSize:37 weight:UIFontWeightLight];
-    orbIcon.textAlignment = NSTextAlignmentCenter;
-    orbIcon.textColor = [UIColor colorWithRed:0.79 green:0.56 blue:1.0 alpha:1.0];
-    [orb addSubview:orbIcon];
-    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    pulse.fromValue = @0.62; pulse.toValue = @1.0; pulse.duration = 1.6;
-    pulse.autoreverses = YES; pulse.repeatCount = HUGE_VALF;
-    [orb.layer addAnimation:pulse forKey:@"neonPulse"];
+    CGFloat gap = 8.0;
+    CGFloat metricY = 263.0;
+    CGFloat metricW = (w - 30.0 - gap * 2.0) / 3.0;
+    NSArray *metrics = @[
+        @{ @"title": @"CPU", @"detail": @"Phần xử lý", @"icon": @"cpu", @"accent": [UIColor colorWithRed:0.98 green:0.26 blue:0.86 alpha:1.0] },
+        @{ @"title": @"RAM", @"detail": @"Bộ nhớ", @"icon": @"memorychip", @"accent": [UIColor colorWithRed:0.25 green:0.88 blue:1.0 alpha:1.0] },
+        @{ @"title": @"PIN", @"detail": @"Năng lượng", @"icon": @"battery.100", @"accent": [UIColor colorWithRed:0.55 green:0.48 blue:1.0 alpha:1.0] }
+    ];
+    for (NSInteger i=0; i<metrics.count; i++) {
+        NSDictionary *m = metrics[i];
+        CGFloat x = 15.0 + i*(metricW+gap);
+        UIView *tile = [[UIView alloc] initWithFrame:CGRectMake(x, metricY, metricW, 64)];
+        tile.backgroundColor = [UIColor colorWithRed:0.085 green:0.055 blue:0.18 alpha:0.98];
+        tile.layer.cornerRadius = 14.0;
+        tile.layer.borderWidth = 1.0;
+        tile.layer.borderColor = [m[@"accent"] colorWithAlphaComponent:0.68].CGColor;
+        [root addSubview:tile];
+        UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:m[@"icon"]]];
+        icon.frame = CGRectMake(10, 9, 18, 18);
+        icon.tintColor = m[@"accent"];
+        icon.contentMode = UIViewContentModeScaleAspectFit;
+        [tile addSubview:icon];
+        UILabel *name = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, metricW-16, 16)];
+        name.text = m[@"title"];
+        name.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBlack];
+        name.textColor = UIColor.whiteColor;
+        [tile addSubview:name];
+        UILabel *detail = [[UILabel alloc] initWithFrame:CGRectMake(10, 46, metricW-12, 12)];
+        detail.text = m[@"detail"];
+        detail.font = [UIFont systemFontOfSize:8 weight:UIFontWeightMedium];
+        detail.textColor = [UIColor colorWithWhite:0.67 alpha:1.0];
+        [tile addSubview:detail];
+    }
 
-    CGFloat gap = 9.0;
-    CGFloat chipW = (w - 32.0 - gap * 2.0) / 3.0;
-    NSArray *chips = @[@{ @"title": @"Hz / FPS", @"icon": @"◉", @"tab": @1 },
-                       @{ @"title": @"Tối ưu", @"icon": @"✧", @"tab": @2 },
-                       @{ @"title": @"Phonk", @"icon": @"♫", @"tab": @-1 }];
-    for (NSInteger i = 0; i < chips.count; i++) {
+    CGFloat chipY = 337.0;
+    CGFloat chipW = (w - 30.0 - gap*2.0)/3.0;
+    NSArray *chips = @[@{ @"title": @"Hz / FPS", @"icon": @"speedometer", @"tab": @1 },
+                        @{ @"title": @"Tối ưu", @"icon": @"sparkles", @"tab": @2 },
+                        @{ @"title": @"Nhạc", @"icon": @"music.note", @"tab": @-1 }];
+    for (NSInteger i=0; i<chips.count; i++) {
         NSDictionary *item = chips[i];
         UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
-        chip.frame = CGRectMake(16 + i * (chipW + gap), 230, chipW, 43);
-        chip.backgroundColor = [UIColor colorWithRed:0.075 green:0.065 blue:0.15 alpha:1.0];
+        chip.frame = CGRectMake(15+i*(chipW+gap), chipY, chipW, 39);
+        chip.backgroundColor = [UIColor colorWithRed:0.085 green:0.06 blue:0.18 alpha:1.0];
         chip.layer.cornerRadius = 12.0;
         chip.layer.borderWidth = 1.0;
-        chip.layer.borderColor = [UIColor colorWithRed:0.38 green:0.22 blue:0.61 alpha:0.75].CGColor;
+        chip.layer.borderColor = [UIColor colorWithRed:0.38 green:0.27 blue:0.75 alpha:0.9].CGColor;
         [chip setTitle:[NSString stringWithFormat:@"%@  %@", item[@"icon"], item[@"title"]] forState:UIControlStateNormal];
-        [chip setTitleColor:[UIColor colorWithWhite:0.93 alpha:1.0] forState:UIControlStateNormal];
-        chip.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
+        [chip setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        chip.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBold];
         chip.tag = [item[@"tab"] integerValue];
         [chip addTarget:self action:@selector(neonDashboardQuickAction:) forControlEvents:UIControlEventTouchUpInside];
-        [root addSubview:chip];
         [chip addTarget:self action:@selector(neonDashboardButtonDown:) forControlEvents:UIControlEventTouchDown];
         [chip addTarget:self action:@selector(neonDashboardButtonUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+        [root addSubview:chip];
     }
     return root;
 }
@@ -5609,15 +5697,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     UIView *marker = [[UIView alloc] initWithFrame:CGRectZero];
     marker.translatesAutoresizingMaskIntoConstraints = NO;
-    marker.backgroundColor = [UIColor colorWithRed:0.68 green:0.34 blue:1.0 alpha:1.0];
+    marker.backgroundColor = [UIColor colorWithRed:0.22 green:0.88 blue:1.0 alpha:1.0];
     marker.layer.cornerRadius = 2.0;
+    marker.layer.shadowColor = [UIColor colorWithRed:0.68 green:0.20 blue:1.0 alpha:1.0].CGColor;
+    marker.layer.shadowOpacity = 0.85;
+    marker.layer.shadowRadius = 5.0;
     [container addSubview:marker];
 
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = heading;
-    label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightHeavy];
-    label.textColor = [UIColor colorWithRed:0.72 green:0.48 blue:1.00 alpha:1.0];
+    label.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightHeavy];
+    label.textColor = [UIColor colorWithRed:0.74 green:0.61 blue:1.00 alpha:1.0];
     label.numberOfLines = 2;
     label.lineBreakMode = NSLineBreakByWordWrapping;
     label.adjustsFontSizeToFitWidth = YES;
@@ -5644,8 +5735,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (_currentBottomTab == 3 && indexPath.section == 1) return 54.0;
-    return 62.0;
+    if (_currentBottomTab == 3 && indexPath.section == 1) return 58.0;
+    return 66.0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
