@@ -3495,8 +3495,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (0MS DELAY, SIÊU MƯỢT)
 // ====================================================================================================
 
-%group Group_FluidTransitions_Pacing
-
 %hook CADisplayLink
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
@@ -3639,46 +3637,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         return;
     }
     %orig(fps);
-}
-
-%end
-
-%hook CAWindowServerDisplay
-
-- (double)minimumFrameDuration {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            double targetHz = (double)Titanium_GetEffectiveFrameCap();
-            if (targetHz < 15.0) targetHz = 15.0;
-            if (targetHz > 240.0) targetHz = 240.0;
-            return (1.0 / targetHz);
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
-- (double)maximumRefreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            double targetHz = (double)Titanium_GetEffectiveFrameCap();
-            if (targetHz < 15.0) targetHz = 15.0;
-            if (targetHz > 240.0) targetHz = 240.0;
-            return targetHz;
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
-- (double)idealRefreshRate {
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            double targetHz = (double)Titanium_GetEffectiveFrameCap();
-            if (targetHz < 15.0) targetHz = 15.0;
-            if (targetHz > 240.0) targetHz = 240.0;
-            return targetHz;
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
 }
 
 %end
@@ -6425,45 +6383,39 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 }
 
 - (double)minimumFrameDuration {
-    __block double dur = %orig;
     @try {
-        if (!self) return dur;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            dur = (1.0 / targetHz);
+            return (1.0 / targetHz);
         }
     } @catch (__unused NSException *e) {}
-    return dur;
+    return %orig;
 }
 
 - (double)maximumRefreshRate {
-    __block double rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            rate = targetHz;
+            return targetHz;
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 - (double)idealRefreshRate {
-    __block double rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            rate = targetHz;
+            return targetHz;
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 %end
