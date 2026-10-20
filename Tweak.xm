@@ -4619,38 +4619,29 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 13: BẺ KHÓA TRIỆT ĐỂ BÓP HIỆU NĂNG PIN YẾU (< 20%) & NHIỆT ĐỘ HỆ THỐNG
+// NHÓM 13: BẺ KHÓA HIỆU NĂNG PIN YẾU & NHIỆT ĐỘ (GIỮ NGUYÊN HIỂN THỊ THẬT CHO USER, ÉP TẦNG SÂU CHẠY MAX)
 // ====================================================================================================
 
 #include <dlfcn.h>
 
+// Hàm IOKit gốc không bị can thiệp ép 100%, giữ nguyên dung lượng thật cho thanh trạng thái (Status Bar)
 static CFDictionaryRef (*orig_IOPSGetPowerSourceDescription)(CFTypeRef blob, CFTypeRef ps) = NULL;
 static CFDictionaryRef hooked_IOPSGetPowerSourceDescription(CFTypeRef blob, CFTypeRef ps) {
-    CFDictionaryRef desc = orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
     @try {
-        if (desc && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            CFMutableDictionaryRef mutDesc = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, desc);
-            if (mutDesc) {
-                int fakeCap = 100;
-                CFNumberRef capNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &fakeCap);
-                CFDictionarySetValue(mutDesc, CFSTR("Current Capacity"), capNum);
-                CFDictionarySetValue(mutDesc, CFSTR("Max Capacity"), capNum);
-                CFDictionarySetValue(mutDesc, CFSTR("Is Charging"), kCFBooleanTrue);
-                CFDictionarySetValue(mutDesc, CFSTR("Fully Charged"), kCFBooleanTrue);
-                CFRelease(capNum);
-                return mutDesc;
-            }
-        }
+        CFDictionaryRef desc = orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
+        return desc; // Trả về thông tin gốc chuẩn xác 100% để hiển thị đúng % pin ra màn hình
     } @catch (__unused NSException *e) {}
-    return desc;
+    return orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
 }
 
 static int (*orig_IOPSGetPercentRemaining)(void) = NULL;
 static int hooked_IOPSGetPercentRemaining(void) {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return 100;
-    }
-    return orig_IOPSGetPercentRemaining ? orig_IOPSGetPercentRemaining() : 100;
+    @try {
+        if (orig_IOPSGetPercentRemaining) {
+            return orig_IOPSGetPercentRemaining(); // Trả về % pin thật để app quản lý pin đọc được
+        }
+    } @catch (__unused NSException *e) {}
+    return 100;
 }
 
 %group Group_Global_Thread_Governor_Unthrottled
@@ -4658,10 +4649,12 @@ static int hooked_IOPSGetPercentRemaining(void) {
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState {
+    // Luôn báo máy mát mẻ ở tầng kernel, cấm tuyệt đối tiến trình nền bóp hiệu năng chip
     return NSProcessInfoThermalStateNominal;
 }
 
 - (BOOL)isLowPowerModeEnabled {
+    // Chặn chế độ nguồn điện thấp làm nghẽn luồng render
     return NO;
 }
 
@@ -4670,11 +4663,12 @@ static int hooked_IOPSGetPercentRemaining(void) {
 %hook UIDevice
 
 - (float)batteryLevel {
-    return 1.0f;
+    // GIỮ NGUYÊN % PIN THẬT: Trả về giá trị gốc của hệ thống để bạn nhìn thấy % pin chính xác mà sạc
+    return %orig;
 }
 
 - (UIDeviceBatteryState)batteryState {
-    return UIDeviceBatteryStateFull;
+    return %orig; // Giữ nguyên trạng thái sạc/dùng thật
 }
 
 - (BOOL)isBatteryMonitoringEnabled {
