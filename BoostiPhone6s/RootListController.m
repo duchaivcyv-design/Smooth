@@ -157,15 +157,70 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
-    uint32_t magic, masterEnabled;
-    int32_t targetHz, targetFPS;
-    uint32_t forceOverclock, pipSyncEnabled, thermalShield, antiStutterExit;
-    uint32_t smartBufferingLevel, zeroLatencyTouch, shaderOptimization, dynamicInterpolation;
-    uint32_t fastAppLaunch, lowLatencyAudio, memoryPressureRelief, metalPacingEnabled;
-    uint32_t runloopHangGuard, keyboardZeroLagV3, aggressiveRamCleaner, lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch, diskIOPriorityBoost, rawTouchDirectDelivery, powerSaveModeActive;
-    uint64_t updateSeq, lastHeartbeat;
-    char reserved[48];
+    uint32_t magic;
+    uint32_t masterEnabled;
+    int32_t  targetHz;
+    int32_t  targetFPS;
+    uint32_t forceOverclock;
+    uint32_t pipSyncEnabled;
+    uint32_t thermalShield;
+    uint32_t antiStutterExit;
+    uint32_t smartBufferingLevel;
+    uint32_t zeroLatencyTouch;
+    uint32_t shaderOptimization;
+    uint32_t dynamicInterpolation;
+    uint32_t fastAppLaunch;
+    uint32_t lowLatencyAudio;
+    uint32_t memoryPressureRelief;
+    uint32_t metalPacingEnabled;
+    uint32_t runloopHangGuard;
+    uint32_t keyboardZeroLagV3;
+    uint32_t aggressiveRamCleaner;
+    uint32_t lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch;
+    uint32_t diskIOPriorityBoost;
+    uint32_t rawTouchDirectDelivery;
+    uint32_t powerSaveModeActive;
+
+    // ====== 34 CONG TAC DIEU KHIEN NHOM (dong bo 100% Tweak.xm) ======
+    uint32_t enableAppleInternalProMotion;
+    uint32_t enableZeroLatencyTouch;
+    uint32_t enableMetalZeroTearing;
+    uint32_t enableFluidTransitions;
+    uint32_t enableTitaniumGameMetalOverdrive;
+    uint32_t enableAIStreamOptimization;
+    uint32_t enableFastLaunchSuperEngine;
+    uint32_t enableScrollAndKeyboard;
+    uint32_t enableInstantActionTransitions;
+    uint32_t enableGlobalThreadGovernor;
+    uint32_t enableSiliconSchedulerTouch;
+    uint32_t enableCoreAnimationRenderServer;
+    uint32_t enableCAWindowServerDominance;
+    uint32_t enableForceRenderRecovery;
+    uint32_t enableWindowLevelOverdrive;
+    uint32_t enableSystemMemoryGovernor;
+    uint32_t enableThermalCryoPacing;
+    uint32_t enableDeepRamCompaction;
+    uint32_t enableWebKitRamOptimizer;
+    uint32_t enableSiliconHardwarePipeline;
+    uint32_t enableHardwareProMotionOverclock;
+    uint32_t enableNeuralTouchEdgeZeroLatency;
+    uint32_t enableNativeColdBootOverdrive;
+    uint32_t enableTitaniumV12SmoothExit;
+    uint32_t enableDisplaySpringBoard;
+    uint32_t enableLiquidGlassOpt;
+    uint32_t enableSwitcher30Apps;
+    uint32_t enableSpringBoardSwitcherOpt;
+    uint32_t enableFloatingWindowPiP;
+    uint32_t enableHardwareSegregationHome;
+    uint32_t enableSpringBoardProcessManager;
+    uint32_t enableKeepAppsAlive;
+    uint32_t enableTitaniumV10LayoutBoost;
+    uint32_t enableUIKitThirdPartyIsolated;
+
+    uint64_t updateSeq;
+    uint64_t lastHeartbeat;
+    char     reserved[200];
 } ApexV285ProPayload;
 #endif
 
@@ -510,10 +565,10 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
         _chromaticEdge.cornerRadius = radius;
         if (@available(iOS 13.0, *)) _chromaticEdge.cornerCurve = kCACornerCurveContinuous;
         _chromaticEdge.colors = @[
-            (id)[UIColor colorWithRed:0.4 green:0.75 blue:1.0 alpha:0.24].CGColor,
-            (id)[UIColor colorWithRed:0.7 green:0.5  blue:1.0 alpha:0.16].CGColor,
+            (id)[UIColor colorWithRed:0.35 green:1.0 blue:1.0 alpha:0.24].CGColor,
+            (id)[UIColor colorWithRed:0.7 green:0.4  blue:1.0 alpha:0.16].CGColor,
             (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithRed:0.5 green:1.0 blue:0.7 alpha:0.18].CGColor
+            (id)[UIColor colorWithRed:1.0 green:0.4 blue:0.85 alpha:0.18].CGColor
         ];
         _chromaticEdge.locations = @[@0.0, @0.15, @0.85, @1.0];
         _chromaticEdge.startPoint = CGPointMake(0.0, 0.0);
@@ -565,16 +620,16 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
             if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
                 return [UIColor colorWithRed:0.94 green:0.96 blue:0.99 alpha:1.0];
             }
-            return [UIColor colorWithRed:0.035 green:0.055 blue:0.105 alpha:1.0];
+            return [UIColor colorWithRed:0.06 green:0.03 blue:0.12 alpha:1.0];
         }];
     } else {
-        surface = [UIColor colorWithRed:0.035 green:0.055 blue:0.105 alpha:1.0];
+        surface = [UIColor colorWithRed:0.06 green:0.03 blue:0.12 alpha:1.0];
     }
     self.backgroundColor = surface;
     _tintView.backgroundColor = surface;
     self.layer.borderWidth = 1.0;
-    self.layer.borderColor = [UIColor colorWithRed:0.12 green:0.55 blue:1.0 alpha:0.82].CGColor;
-    self.layer.shadowColor = [UIColor colorWithRed:0.02 green:0.42 blue:1.0 alpha:1.0].CGColor;
+    self.layer.borderColor = [UIColor colorWithRed:0.70 green:0.40 blue:1.0 alpha:0.82].CGColor;
+    self.layer.shadowColor = [UIColor colorWithRed:0.50 green:0.20 blue:0.90 alpha:1.0].CGColor;
     self.layer.shadowOpacity = 0.26;
     self.layer.shadowRadius = 15.0;
     self.layer.shadowOffset = CGSizeMake(0, 5.0);
@@ -1006,8 +1061,8 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 - (void)updateUIAnimated:(BOOL)animated {
     NSArray *onC = @[
-        (id)[UIColor colorWithRed:0.22 green:0.80 blue:0.38 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.16 green:0.68 blue:0.28 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.35 green:1.0 blue:1.0 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.20 green:0.80 blue:0.90 alpha:1.0].CGColor
     ];
     NSArray *offC = @[
         (id)[UIColor colorWithRed:0.22 green:0.24 blue:0.28 alpha:1.0].CGColor,
@@ -1795,12 +1850,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         CGFloat dotY = frame.size.height / 2.0 - 14.0;
 
         _dot1 = [[UIView alloc] initWithFrame:CGRectMake(startX, dotY, dotSize, dotSize)];
-        _dot1.backgroundColor = [UIColor colorWithRed:0.35 green:0.95 blue:0.60 alpha:1.0];
+        _dot1.backgroundColor = [UIColor colorWithRed:0.35 green:1.0 blue:1.0 alpha:1.0];
         _dot1.layer.cornerRadius = dotSize / 2.0;
         [self addSubview:_dot1];
 
         _dot2 = [[UIView alloc] initWithFrame:CGRectMake(startX + dotSize + spacing, dotY, dotSize, dotSize)];
-        _dot2.backgroundColor = [UIColor colorWithRed:0.40 green:0.85 blue:1.0 alpha:1.0];
+        _dot2.backgroundColor = [UIColor colorWithRed:1.0 green:0.40 blue:0.85 alpha:1.0];
         _dot2.layer.cornerRadius = dotSize / 2.0;
         [self addSubview:_dot2];
 
@@ -3212,13 +3267,13 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     bg.frame = self.view.bounds;
     bg.name = @"TI_V20_1_BackgroundGradient";
     bg.colors = @[
-        (id)[UIColor colorWithRed:0.055 green:0.035 blue:0.105 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.008 green:0.008 blue:0.025 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.10 green:0.04 blue:0.20 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.03 green:0.01 blue:0.08 alpha:1.0].CGColor
     ];
     bg.startPoint = CGPointMake(0.0, 0.0);
     bg.endPoint = CGPointMake(0.0, 1.0);
     [self.view.layer insertSublayer:bg atIndex:0];
-    self.view.backgroundColor = [UIColor colorWithRed:0.02 green:0.02 blue:0.05 alpha:1.0];
+    self.view.backgroundColor = [UIColor colorWithRed:0.04 green:0.02 blue:0.10 alpha:1.0];
 
     _currentBottomTab = 0;
     _hasPlayedEntranceAnimation = NO;
