@@ -1277,8 +1277,20 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)applyV20CellTheme {
     BOOL dark = YES;
     if (@available(iOS 13.0, *)) dark = self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
-    _titleL.textColor = _v20AccentColor ?: (dark ? [UIColor whiteColor] : [UIColor colorWithWhite:0.12 alpha:1.0]);
-    _detailL.textColor = dark ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
+    UIColor *pink = [UIColor colorWithRed:0.96 green:0.27 blue:0.91 alpha:1.0];
+    UIColor *cyan = [UIColor colorWithRed:0.16 green:0.86 blue:1.0 alpha:1.0];
+    _titleL.textColor = _v20AccentColor ?: (dark ? [UIColor colorWithWhite:0.98 alpha:1.0] : [UIColor colorWithWhite:0.12 alpha:1.0]);
+    _detailL.textColor = dark ? [UIColor colorWithRed:0.75 green:0.78 blue:0.91 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
+    _titleL.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold];
+    _detailL.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightMedium];
+    _glassBackground.backgroundColor = [UIColor colorWithRed:0.075 green:0.045 blue:0.16 alpha:0.96];
+    _glassBackground.layer.cornerRadius = 17.0;
+    _glassBackground.layer.borderWidth = 0.8;
+    _glassBackground.layer.borderColor = [pink colorWithAlphaComponent:0.32].CGColor;
+    _glassBackground.layer.shadowColor = cyan.CGColor;
+    _glassBackground.layer.shadowOpacity = 0.12;
+    _glassBackground.layer.shadowRadius = 8.0;
+    _glassBackground.layer.shadowOffset = CGSizeMake(0, 3);
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -2717,6 +2729,7 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)setupTopHeaderBar;
 - (void)showPhonkMusicPicker;
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width;
+- (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width;
 - (void)setupExpandingNavigationItems;
 - (void)reloadVisibleContentWithSubtleTransition;
 - (void)v20HandleForegroundTransition:(NSNotification *)notification;
@@ -3219,8 +3232,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     bg.frame = self.view.bounds;
     bg.name = @"TI_V20_1_BackgroundGradient";
     bg.colors = @[
-        (id)[UIColor colorWithRed:0.105 green:0.025 blue:0.22 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.035 green:0.018 blue:0.105 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.16 green:0.025 blue:0.31 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.055 green:0.018 blue:0.15 alpha:1.0].CGColor,
         (id)[UIColor colorWithRed:0.008 green:0.018 blue:0.055 alpha:1.0].CGColor
     ];
     bg.locations = @[@0.0, @0.48, @1.0];
@@ -5175,7 +5188,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (!CGRectEqualToRect(self.customTableView.frame, tableFrame)) self.customTableView.frame = tableFrame;
         CGFloat headerWidth = self.view.bounds.size.width;
         if (self.customTableView.tableHeaderView && fabs(self.customTableView.tableHeaderView.bounds.size.width - headerWidth) > 1.0) {
-            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)];
+            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)]);
         }
         UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, 10.0, 0.0);
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
@@ -5200,7 +5213,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     _liquidNavBarContainer.layer.shadowOpacity = 0.24;
     _liquidNavBarContainer.layer.shadowRadius = 12.0;
     _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 4);
-    _liquidNavBarContainer.layer.shadowColor = [UIColor blackColor].CGColor;
+    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.50 green:0.12 blue:1.0 alpha:1.0].CGColor;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.28;
+    _liquidNavBarContainer.layer.shadowRadius = 18.0;
+    _liquidNavBarContainer.layer.borderWidth = 1.0;
+    _liquidNavBarContainer.layer.borderColor = [UIColor colorWithRed:0.62 green:0.31 blue:1.0 alpha:0.48].CGColor;
 
     _tabConfigs = @[
         @{@"title": @"Dashboard", @"icon": @"square.grid.2x2.fill", @"tab": @0},
@@ -5268,7 +5285,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     NSInteger oldTab = _currentBottomTab;
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
-    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)];
+    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)]);
     self.customTableView.tableHeaderView = nextHeader;
     if (_currentBottomTab == 0 && [self.settingsDict[@"EnableSystemMonitoring"] boolValue]) [self startContinuousHardwareHUD];
     else [self stopContinuousHardwareHUD];
@@ -5442,141 +5459,256 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Neon gaming dashboard
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
+    // Dashboard visual rebuilt around the supplied reference: dark violet canvas,
+    // segmented neon ring, compact hardware cards and a full-width BOOST action.
     CGFloat w = MAX(320.0, width);
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 386.0)];
+    CGFloat h = 438.0;
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, h)];
     root.backgroundColor = UIColor.clearColor;
 
-    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w - 40, 15)];
-    eyebrow.text = @"T I T A N I U M   /   GAMING CONTROL";
+    UIColor *pink = [UIColor colorWithRed:1.0 green:0.24 blue:0.86 alpha:1.0];
+    UIColor *purple = [UIColor colorWithRed:0.57 green:0.20 blue:1.0 alpha:1.0];
+    UIColor *cyan = [UIColor colorWithRed:0.12 green:0.88 blue:1.0 alpha:1.0];
+    UIColor *muted = [UIColor colorWithRed:0.69 green:0.68 blue:0.82 alpha:1.0];
+
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(22, 10, w-44, 15)];
+    eyebrow.text = @"T I T A N I U M   /   PERFORMANCE SUITE";
     eyebrow.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
-    eyebrow.textColor = [UIColor colorWithRed:0.45 green:0.86 blue:1.0 alpha:1.0];
+    eyebrow.textColor = cyan;
     [root addSubview:eyebrow];
 
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 28, w - 36, 34)];
-    title.text = @"iPhone Boost Center";
-    title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 29, w-40, 32)];
+    title.text = @"HOME DASHBOARD";
+    title.font = [UIFont systemFontOfSize:24 weight:UIFontWeightBlack];
     title.textColor = UIColor.whiteColor;
     [root addSubview:title];
 
-    UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 62, w - 40, 18)];
-    subtitle.text = @"Hiệu năng · Phần cứng · Điều khiển hệ thống";
+    UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(22, 61, w-44, 17)];
+    subtitle.text = @"Hiệu năng thiết bị · Công cụ · Điều khiển";
     subtitle.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
-    subtitle.textColor = [UIColor colorWithWhite:0.72 alpha:1.0];
+    subtitle.textColor = muted;
     [root addSubview:subtitle];
 
-    CGFloat cardX = 15.0, cardY = 88.0, cardW = w - 30.0, cardH = 165.0;
-    UIView *hero = [[UIView alloc] initWithFrame:CGRectMake(cardX, cardY, cardW, cardH)];
-    hero.backgroundColor = [UIColor colorWithRed:0.045 green:0.025 blue:0.13 alpha:0.98];
-    hero.layer.cornerRadius = 23.0;
-    hero.layer.borderWidth = 1.0;
-    hero.layer.borderColor = [UIColor colorWithRed:0.54 green:0.24 blue:0.98 alpha:0.9].CGColor;
-    hero.layer.shadowColor = [UIColor colorWithRed:0.56 green:0.08 blue:1.0 alpha:1.0].CGColor;
-    hero.layer.shadowOpacity = 0.28;
-    hero.layer.shadowRadius = 17.0;
-    hero.layer.shadowOffset = CGSizeMake(0, 5);
-    [root addSubview:hero];
-
-    CAGradientLayer *heroGradient = [CAGradientLayer layer];
-    heroGradient.frame = hero.bounds;
-    heroGradient.cornerRadius = 23.0;
-    heroGradient.colors = @[(id)[UIColor colorWithRed:0.20 green:0.045 blue:0.43 alpha:0.98].CGColor,
-                            (id)[UIColor colorWithRed:0.075 green:0.035 blue:0.20 alpha:0.98].CGColor,
-                            (id)[UIColor colorWithRed:0.025 green:0.045 blue:0.15 alpha:0.99].CGColor];
-    heroGradient.startPoint = CGPointMake(0, 0);
-    heroGradient.endPoint = CGPointMake(1, 1);
-    [hero.layer insertSublayer:heroGradient atIndex:0];
-
-    UILabel *status = [[UILabel alloc] initWithFrame:CGRectMake(15, 12, 126, 20)];
-    status.text = @"●  DEVICE OVERVIEW";
-    status.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
-    status.textColor = [UIColor colorWithRed:0.45 green:0.91 blue:1.0 alpha:1.0];
-    [hero addSubview:status];
-
-    CGFloat ringSize = 104.0;
-    UIView *ring = [[UIView alloc] initWithFrame:CGRectMake((cardW-ringSize)/2.0, 34, ringSize, ringSize)];
-    ring.backgroundColor = [UIColor colorWithRed:0.06 green:0.035 blue:0.16 alpha:0.95];
+    // Large concentric ring. It is a visual status indicator only; no fake percentage is shown.
+    CGFloat ringSize = MIN(188.0, w * 0.52);
+    CGFloat ringX = (w-ringSize)/2.0;
+    CGFloat ringY = 82.0;
+    UIView *ring = [[UIView alloc] initWithFrame:CGRectMake(ringX, ringY, ringSize, ringSize)];
+    ring.backgroundColor = [UIColor colorWithRed:0.045 green:0.025 blue:0.12 alpha:0.98];
     ring.layer.cornerRadius = ringSize/2.0;
-    ring.layer.borderWidth = 5.0;
-    ring.layer.borderColor = [UIColor colorWithRed:0.16 green:0.88 blue:1.0 alpha:1.0].CGColor;
-    ring.layer.shadowColor = [UIColor colorWithRed:0.90 green:0.16 blue:1.0 alpha:1.0].CGColor;
-    ring.layer.shadowOpacity = 0.62;
-    ring.layer.shadowRadius = 13.0;
-    [hero addSubview:ring];
-    UIView *innerRing = [[UIView alloc] initWithFrame:CGRectInset(ring.bounds, 9, 9)];
-    innerRing.layer.cornerRadius = innerRing.bounds.size.width/2.0;
-    innerRing.layer.borderWidth = 2.0;
-    innerRing.layer.borderColor = [UIColor colorWithRed:0.77 green:0.23 blue:1.0 alpha:0.95].CGColor;
-    [ring addSubview:innerRing];
-    UILabel *ringIcon = [[UILabel alloc] initWithFrame:ring.bounds];
-    ringIcon.text = @"✦";
-    ringIcon.font = [UIFont systemFontOfSize:43 weight:UIFontWeightLight];
-    ringIcon.textAlignment = NSTextAlignmentCenter;
-    ringIcon.textColor = [UIColor colorWithRed:0.88 green:0.91 blue:1.0 alpha:1.0];
-    [ring addSubview:ringIcon];
+    ring.layer.borderWidth = 1.0;
+    ring.layer.borderColor = [purple colorWithAlphaComponent:0.55].CGColor;
+    ring.layer.shadowColor = purple.CGColor;
+    ring.layer.shadowOpacity = 0.35;
+    ring.layer.shadowRadius = 19.0;
+    ring.layer.shadowOffset = CGSizeZero;
+    [root addSubview:ring];
 
-    UILabel *ringCaption = [[UILabel alloc] initWithFrame:CGRectMake(15, 140, cardW-30, 16)];
-    ringCaption.text = @"CONTROL CENTER  •  READY";
-    ringCaption.font = [UIFont systemFontOfSize:9 weight:UIFontWeightBold];
+    CGPoint center = CGPointMake(ringSize/2.0, ringSize/2.0);
+    CGFloat radius = ringSize * 0.405;
+    CAShapeLayer *track = [CAShapeLayer layer];
+    track.frame = ring.bounds;
+    track.path = [UIBezierPath bezierPathWithArcCenter:center radius:radius startAngle:(CGFloat)-M_PI_2 endAngle:(CGFloat)(M_PI*1.5) clockwise:YES].CGPath;
+    track.fillColor = UIColor.clearColor.CGColor;
+    track.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.10].CGColor;
+    track.lineWidth = 9.0;
+    [ring.layer addSublayer:track];
+
+    // Segmented circumference inspired by the reference image.
+    NSInteger segmentCount = 44;
+    for (NSInteger i=0; i<segmentCount; i++) {
+        CGFloat a0 = (CGFloat)(-M_PI_2 + (2.0*M_PI*i/segmentCount));
+        CGFloat a1 = a0 + (CGFloat)(M_PI*0.72/segmentCount);
+        UIBezierPath *segmentPath = [UIBezierPath bezierPathWithArcCenter:center radius:radius+7.0 startAngle:a0 endAngle:a1 clockwise:YES];
+        CAShapeLayer *segment = [CAShapeLayer layer];
+        segment.path = segmentPath.CGPath;
+        segment.fillColor = UIColor.clearColor.CGColor;
+        segment.strokeColor = (i < segmentCount/3) ? cyan.CGColor : ((i < segmentCount*2/3) ? pink.CGColor : purple.CGColor);
+        segment.lineWidth = 3.0;
+        segment.lineCap = kCALineCapRound;
+        [ring.layer addSublayer:segment];
+    }
+
+    CAShapeLayer *innerRing = [CAShapeLayer layer];
+    innerRing.frame = ring.bounds;
+    innerRing.path = [UIBezierPath bezierPathWithArcCenter:center radius:ringSize*0.285 startAngle:0 endAngle:(CGFloat)(M_PI*2) clockwise:YES].CGPath;
+    innerRing.fillColor = [purple colorWithAlphaComponent:0.06].CGColor;
+    innerRing.strokeColor = [cyan colorWithAlphaComponent:0.95].CGColor;
+    innerRing.lineWidth = 1.6;
+    innerRing.shadowColor = cyan.CGColor;
+    innerRing.shadowOpacity = 0.8;
+    innerRing.shadowRadius = 5.0;
+    [ring.layer addSublayer:innerRing];
+
+    UILabel *boostWord = [[UILabel alloc] initWithFrame:CGRectMake(0, ringSize*0.37, ringSize, 35)];
+    boostWord.text = @"BOOST";
+    boostWord.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
+    boostWord.textColor = UIColor.whiteColor;
+    boostWord.textAlignment = NSTextAlignmentCenter;
+    [ring addSubview:boostWord];
+    UILabel *ringCaption = [[UILabel alloc] initWithFrame:CGRectMake(0, ringSize*0.57, ringSize, 18)];
+    ringCaption.text = @"CONTROL CENTER";
+    ringCaption.font = [UIFont systemFontOfSize:8 weight:UIFontWeightBold];
+    ringCaption.textColor = muted;
     ringCaption.textAlignment = NSTextAlignmentCenter;
-    ringCaption.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
-    [hero addSubview:ringCaption];
+    [ring addSubview:ringCaption];
 
-    CGFloat gap = 8.0;
-    CGFloat metricY = 263.0;
-    CGFloat metricW = (w - 30.0 - gap * 2.0) / 3.0;
-    NSArray *metrics = @[
-        @{ @"title": @"CPU", @"detail": @"Phần xử lý", @"icon": @"cpu", @"accent": [UIColor colorWithRed:0.98 green:0.26 blue:0.86 alpha:1.0] },
-        @{ @"title": @"RAM", @"detail": @"Bộ nhớ", @"icon": @"memorychip", @"accent": [UIColor colorWithRed:0.25 green:0.88 blue:1.0 alpha:1.0] },
-        @{ @"title": @"PIN", @"detail": @"Năng lượng", @"icon": @"battery.100", @"accent": [UIColor colorWithRed:0.55 green:0.48 blue:1.0 alpha:1.0] }
+    // Hardware cards use the values exposed by the existing monitor APIs.
+    CGFloat side = 16.0, gap = 8.0;
+    CGFloat cardY = 280.0;
+    CGFloat cardW = (w - side*2.0 - gap*2.0)/3.0;
+    float cpuValue = Titanium_GetLiveCPULoadPercentage();
+    uint64_t ramTotal = Titanium_TotalPhysicalMemoryBytes();
+    uint64_t ramUsed = Titanium_CurrentProcessFootprintBytes();
+    NSString *cpuText = cpuValue >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", cpuValue] : @"—";
+    NSString *ramText = [NSString stringWithFormat:@"%@", Titanium_ByteCountString(ramUsed)];
+    UIDevice.currentDevice.batteryMonitoringEnabled = YES;
+    float batteryLevel = UIDevice.currentDevice.batteryLevel;
+    NSString *batteryText = batteryLevel >= 0.0f ? [NSString stringWithFormat:@"%ld%%", (long)round(batteryLevel * 100.0)] : @"N/A";
+    NSArray *cards = @[
+        @{ @"title": @"CPU", @"value": cpuText, @"note": @"Tải hiện tại", @"icon": @"◈", @"color": pink },
+        @{ @"title": @"RAM", @"value": ramText, @"note": [NSString stringWithFormat:@"Tổng %@", Titanium_ByteCountString(ramTotal)], @"icon": @"▤", @"color": cyan },
+        @{ @"title": @"BATTERY", @"value": batteryText, @"note": @"Mức pin", @"icon": @"▣", @"color": purple }
     ];
-    for (NSInteger i=0; i<metrics.count; i++) {
-        NSDictionary *m = metrics[i];
-        CGFloat x = 15.0 + i*(metricW+gap);
-        UIView *tile = [[UIView alloc] initWithFrame:CGRectMake(x, metricY, metricW, 64)];
-        tile.backgroundColor = [UIColor colorWithRed:0.085 green:0.055 blue:0.18 alpha:0.98];
-        tile.layer.cornerRadius = 14.0;
-        tile.layer.borderWidth = 1.0;
-        tile.layer.borderColor = [m[@"accent"] colorWithAlphaComponent:0.68].CGColor;
-        [root addSubview:tile];
-        UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:m[@"icon"]]];
-        icon.frame = CGRectMake(10, 9, 18, 18);
-        icon.tintColor = m[@"accent"];
-        icon.contentMode = UIViewContentModeScaleAspectFit;
-        [tile addSubview:icon];
-        UILabel *name = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, metricW-16, 16)];
-        name.text = m[@"title"];
-        name.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBlack];
-        name.textColor = UIColor.whiteColor;
-        [tile addSubview:name];
-        UILabel *detail = [[UILabel alloc] initWithFrame:CGRectMake(10, 46, metricW-12, 12)];
-        detail.text = m[@"detail"];
-        detail.font = [UIFont systemFontOfSize:8 weight:UIFontWeightMedium];
-        detail.textColor = [UIColor colorWithWhite:0.67 alpha:1.0];
-        [tile addSubview:detail];
+    for (NSInteger i=0; i<cards.count; i++) {
+        NSDictionary *item = cards[i];
+        UIView *card = [[UIView alloc] initWithFrame:CGRectMake(side+i*(cardW+gap), cardY, cardW, 88.0)];
+        card.backgroundColor = [UIColor colorWithRed:0.085 green:0.045 blue:0.17 alpha:0.96];
+        card.layer.cornerRadius = 14.0;
+        card.layer.borderWidth = 1.0;
+        card.layer.borderColor = [item[@"color"] colorWithAlphaComponent:0.48].CGColor;
+        card.layer.shadowColor = [item[@"color"] CGColor];
+        card.layer.shadowOpacity = 0.12;
+        card.layer.shadowRadius = 7.0;
+        card.layer.shadowOffset = CGSizeMake(0, 2);
+        [root addSubview:card];
+
+        UILabel *icon = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, 18, 18)];
+        icon.text = item[@"icon"];
+        icon.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBlack];
+        icon.textColor = item[@"color"];
+        [card addSubview:icon];
+        UILabel *cardTitle = [[UILabel alloc] initWithFrame:CGRectMake(30, 9, cardW-36, 16)];
+        cardTitle.text = item[@"title"];
+        cardTitle.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
+        cardTitle.textColor = muted;
+        [card addSubview:cardTitle];
+        UILabel *value = [[UILabel alloc] initWithFrame:CGRectMake(10, 32, cardW-16, 24)];
+        value.text = item[@"value"];
+        value.font = [UIFont systemFontOfSize:(i==1 ? 13 : 19) weight:UIFontWeightBlack];
+        value.adjustsFontSizeToFitWidth = YES;
+        value.minimumScaleFactor = 0.7;
+        value.textColor = UIColor.whiteColor;
+        [card addSubview:value];
+        UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(10, 61, cardW-16, 15)];
+        note.text = item[@"note"];
+        note.font = [UIFont systemFontOfSize:8 weight:UIFontWeightMedium];
+        note.textColor = muted;
+        note.adjustsFontSizeToFitWidth = YES;
+        note.minimumScaleFactor = 0.65;
+        [card addSubview:note];
+        UIView *meter = [[UIView alloc] initWithFrame:CGRectMake(10, 80, cardW-20, 2)];
+        meter.backgroundColor = [item[@"color"] colorWithAlphaComponent:0.9];
+        meter.layer.cornerRadius = 1.0;
+        [card addSubview:meter];
     }
 
-    CGFloat chipY = 337.0;
-    CGFloat chipW = (w - 30.0 - gap*2.0)/3.0;
-    NSArray *chips = @[@{ @"title": @"Hz / FPS", @"icon": @"speedometer", @"tab": @1 },
-                        @{ @"title": @"Tối ưu", @"icon": @"sparkles", @"tab": @2 },
-                        @{ @"title": @"Nhạc", @"icon": @"music.note", @"tab": @-1 }];
-    for (NSInteger i=0; i<chips.count; i++) {
-        NSDictionary *item = chips[i];
-        UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
-        chip.frame = CGRectMake(15+i*(chipW+gap), chipY, chipW, 39);
-        chip.backgroundColor = [UIColor colorWithRed:0.085 green:0.06 blue:0.18 alpha:1.0];
-        chip.layer.cornerRadius = 12.0;
-        chip.layer.borderWidth = 1.0;
-        chip.layer.borderColor = [UIColor colorWithRed:0.38 green:0.27 blue:0.75 alpha:0.9].CGColor;
-        [chip setTitle:[NSString stringWithFormat:@"%@  %@", item[@"icon"], item[@"title"]] forState:UIControlStateNormal];
-        [chip setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-        chip.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBold];
-        chip.tag = [item[@"tab"] integerValue];
-        [chip addTarget:self action:@selector(neonDashboardQuickAction:) forControlEvents:UIControlEventTouchUpInside];
-        [chip addTarget:self action:@selector(neonDashboardButtonDown:) forControlEvents:UIControlEventTouchDown];
-        [chip addTarget:self action:@selector(neonDashboardButtonUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
-        [root addSubview:chip];
+    UIButton *boostButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    boostButton.frame = CGRectMake(16, 379, w-32, 48);
+    boostButton.layer.cornerRadius = 24.0;
+    boostButton.layer.borderWidth = 1.0;
+    boostButton.layer.borderColor = [cyan colorWithAlphaComponent:0.85].CGColor;
+    boostButton.layer.shadowColor = pink.CGColor;
+    boostButton.layer.shadowOpacity = 0.35;
+    boostButton.layer.shadowRadius = 12.0;
+    boostButton.layer.shadowOffset = CGSizeMake(0, 3);
+    CAGradientLayer *boostGradient = [CAGradientLayer layer];
+    boostGradient.frame = boostButton.bounds;
+    boostGradient.cornerRadius = 24.0;
+    boostGradient.colors = @[(id)pink.CGColor, (id)purple.CGColor, (id)cyan.CGColor];
+    boostGradient.startPoint = CGPointMake(0, 0.5);
+    boostGradient.endPoint = CGPointMake(1, 0.5);
+    [boostButton.layer insertSublayer:boostGradient atIndex:0];
+    [boostButton setTitle:@"✦   OPEN BOOST CONTROLS   ›" forState:UIControlStateNormal];
+    [boostButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    boostButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBlack];
+    boostButton.tag = 2;
+    [boostButton addTarget:self action:@selector(neonDashboardQuickAction:) forControlEvents:UIControlEventTouchUpInside];
+    [boostButton addTarget:self action:@selector(neonDashboardButtonDown:) forControlEvents:UIControlEventTouchDown];
+    [boostButton addTarget:self action:@selector(neonDashboardButtonUp:) forControlEvents:UIControlEventTouchUpInside|UIControlEventTouchUpOutside|UIControlEventTouchCancel];
+    [root addSubview:boostButton];
+
+    return root;
+}
+
+- (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
+    CGFloat w = MAX(320.0, width);
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 250.0)];
+    root.backgroundColor = UIColor.clearColor;
+    UIColor *pink = [UIColor colorWithRed:1.0 green:0.24 blue:0.86 alpha:1.0];
+    UIColor *purple = [UIColor colorWithRed:0.58 green:0.20 blue:1.0 alpha:1.0];
+    UIColor *cyan = [UIColor colorWithRed:0.12 green:0.88 blue:1.0 alpha:1.0];
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
+    eyebrow.text = @"PERFORMANCE MONITOR  /  LIVE PROFILE";
+    eyebrow.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
+    eyebrow.textColor = cyan;
+    [root addSubview:eyebrow];
+    UILabel *heading = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 31)];
+    heading.text = (_currentHzFpsSubTab == 0) ? @"REFRESH RATE  /  Hz" : @"FRAME RATE  /  FPS";
+    heading.font = [UIFont systemFontOfSize:23 weight:UIFontWeightBlack];
+    heading.textColor = UIColor.whiteColor;
+    [root addSubview:heading];
+
+    UIView *card = [[UIView alloc] initWithFrame:CGRectMake(14, 68, w-28, 170)];
+    card.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.14 alpha:0.98];
+    card.layer.cornerRadius = 20;
+    card.layer.borderWidth = 1;
+    card.layer.borderColor = [purple colorWithAlphaComponent:0.68].CGColor;
+    card.layer.shadowColor = purple.CGColor;
+    card.layer.shadowOpacity = 0.22;
+    card.layer.shadowRadius = 13;
+    card.layer.shadowOffset = CGSizeMake(0, 3);
+    [root addSubview:card];
+
+    NSInteger rate = (_currentHzFpsSubTab == 0) ? _lastAppliedHz : _lastAppliedFPS;
+    if (rate < 1) rate = (_currentHzFpsSubTab == 0) ? 60 : 60;
+    UILabel *value = [[UILabel alloc] initWithFrame:CGRectMake(17, 12, w-62, 58)];
+    value.text = [NSString stringWithFormat:@"%ld %@", (long)rate, (_currentHzFpsSubTab == 0) ? @"Hz" : @"FPS"];
+    value.font = [UIFont systemFontOfSize:43 weight:UIFontWeightBlack];
+    value.textColor = UIColor.whiteColor;
+    [card addSubview:value];
+    UILabel *caption = [[UILabel alloc] initWithFrame:CGRectMake(19, 67, w-70, 16)];
+    caption.text = @"PROFILE VALUE  ·  chọn mức bên dưới để áp dụng";
+    caption.font = [UIFont systemFontOfSize:9 weight:UIFontWeightBold];
+    caption.textColor = [UIColor colorWithWhite:0.70 alpha:1.0];
+    [card addSubview:caption];
+
+    // Decorative timeline bars, clearly presented as a visual profile rather than measured frame-time data.
+    CGFloat graphX = 19, graphY = 95, graphW = w-66, graphH = 54;
+    UIView *graph = [[UIView alloc] initWithFrame:CGRectMake(graphX, graphY, graphW, graphH)];
+    [card addSubview:graph];
+    for (NSInteger row=0; row<3; row++) {
+        UIView *line = [[UIView alloc] initWithFrame:CGRectMake(0, row*graphH/2.0, graphW, 0.5)];
+        line.backgroundColor = [UIColor colorWithWhite:1 alpha:0.09];
+        [graph addSubview:line];
     }
+    NSInteger bars = 27;
+    CGFloat spacing = 3.0;
+    CGFloat barW = MAX(2.0, (graphW-(bars-1)*spacing)/bars);
+    for (NSInteger i=0; i<bars; i++) {
+        CGFloat normalized = (CGFloat)((i*7+3)%17)/17.0;
+        CGFloat barH = 12.0 + normalized*39.0;
+        UIView *bar = [[UIView alloc] initWithFrame:CGRectMake(i*(barW+spacing), graphH-barH, barW, barH)];
+        bar.layer.cornerRadius = barW/2.0;
+        bar.backgroundColor = (i%4==0) ? cyan : ((i%3==0) ? pink : purple);
+        bar.alpha = 0.88;
+        [graph addSubview:bar];
+    }
+    UILabel *leftLabel = [[UILabel alloc] initWithFrame:CGRectMake(18, 148, graphW, 12)];
+    leftLabel.text = @"LOW LOAD                      PERFORMANCE PROFILE                      HIGH";
+    leftLabel.font = [UIFont systemFontOfSize:7 weight:UIFontWeightBold];
+    leftLabel.textColor = [UIColor colorWithWhite:0.56 alpha:1.0];
+    [card addSubview:leftLabel];
     return root;
 }
 
@@ -5595,7 +5727,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStyleInsetGrouped];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor clearColor];
-    self.customTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.04];
+    self.customTableView.separatorColor = [UIColor colorWithRed:0.40 green:0.22 blue:0.72 alpha:0.18];
+    self.customTableView.contentInset = UIEdgeInsetsMake(4.0, 0.0, 14.0, 0.0);
     if (@available(iOS 11.0, *)) self.customTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     self.customTableView.estimatedRowHeight = 0.0;
     self.customTableView.estimatedSectionHeaderHeight = 0.0;
@@ -5691,47 +5824,50 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
     NSString *heading = [self tableView:tableView titleForHeaderInSection:section];
     if (heading.length == 0) return nil;
-
     UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
-    container.backgroundColor = [UIColor clearColor];
-
+    container.backgroundColor = UIColor.clearColor;
     UIView *marker = [[UIView alloc] initWithFrame:CGRectZero];
     marker.translatesAutoresizingMaskIntoConstraints = NO;
-    marker.backgroundColor = [UIColor colorWithRed:0.22 green:0.88 blue:1.0 alpha:1.0];
-    marker.layer.cornerRadius = 2.0;
-    marker.layer.shadowColor = [UIColor colorWithRed:0.68 green:0.20 blue:1.0 alpha:1.0].CGColor;
-    marker.layer.shadowOpacity = 0.85;
-    marker.layer.shadowRadius = 5.0;
+    CAGradientLayer *markerGradient = [CAGradientLayer layer];
+    markerGradient.colors = @[(id)[UIColor colorWithRed:1.0 green:0.20 blue:0.82 alpha:1.0].CGColor,
+                              (id)[UIColor colorWithRed:0.12 green:0.88 blue:1.0 alpha:1.0].CGColor];
+    markerGradient.startPoint = CGPointMake(0,0);
+    markerGradient.endPoint = CGPointMake(0,1);
+    marker.layer.cornerRadius = 2.5;
+    marker.layer.masksToBounds = YES;
+    [marker.layer insertSublayer:markerGradient atIndex:0];
     [container addSubview:marker];
-
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = heading;
-    label.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightHeavy];
-    label.textColor = [UIColor colorWithRed:0.74 green:0.61 blue:1.00 alpha:1.0];
+    label.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightBlack];
+    label.textColor = [UIColor colorWithRed:0.78 green:0.55 blue:1.0 alpha:1.0];
     label.numberOfLines = 2;
     label.lineBreakMode = NSLineBreakByWordWrapping;
     label.adjustsFontSizeToFitWidth = YES;
-    label.minimumScaleFactor = 0.88;
+    label.minimumScaleFactor = 0.86;
     [container addSubview:label];
-
     [NSLayoutConstraint activateConstraints:@[
         [marker.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:7],
         [marker.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
-        [marker.widthAnchor constraintEqualToConstant:4],
-        [marker.heightAnchor constraintEqualToConstant:20],
-        [label.leadingAnchor constraintEqualToAnchor:marker.trailingAnchor constant:9],
+        [marker.widthAnchor constraintEqualToConstant:5],
+        [marker.heightAnchor constraintEqualToConstant:22],
+        [label.leadingAnchor constraintEqualToAnchor:marker.trailingAnchor constant:10],
         [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-10],
         [label.topAnchor constraintEqualToAnchor:container.topAnchor constant:8],
         [label.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-4]
     ]];
+    // Keep the accent strip aligned when UIKit lays out the header at its final width.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        markerGradient.frame = marker.bounds;
+    });
     return container;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
     NSString *heading = [self tableView:tableView titleForHeaderInSection:section];
-    if (heading.length == 0) return 8.0;
-    return (heading.length > 38) ? 48.0 : 36.0;
+    if (heading.length == 0) return 10.0;
+    return (heading.length > 38) ? 46.0 : 38.0;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -6469,6 +6605,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)onHzFpsSubTabChanged:(UISegmentedControl *)sender {
     _currentHzFpsSubTab = sender.selectedSegmentIndex;
+    self.customTableView.tableHeaderView = [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width];
     [self reloadVisibleContentWithSubtleTransition];
 }
 - (void)onSwitchSubTabChanged:(UISegmentedControl *)sender {
