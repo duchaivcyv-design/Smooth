@@ -344,6 +344,7 @@ static inline BOOL Titanium_IsAIApp(void);
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
+static void Titanium_InstallMGCopyAnswerHookV26(void);  // [buildfix4] khai báo trước để dùng được trong các hàm định nghĩa sớm hơn
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
 
