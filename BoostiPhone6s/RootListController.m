@@ -565,18 +565,18 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
             if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
                 return [UIColor colorWithRed:0.94 green:0.96 blue:0.99 alpha:1.0];
             }
-            return [UIColor colorWithRed:0.055 green:0.085 blue:0.145 alpha:1.0];
+            return [UIColor colorWithRed:0.035 green:0.055 blue:0.105 alpha:1.0];
         }];
     } else {
-        surface = [UIColor colorWithRed:0.055 green:0.085 blue:0.145 alpha:1.0];
+        surface = [UIColor colorWithRed:0.035 green:0.055 blue:0.105 alpha:1.0];
     }
     self.backgroundColor = surface;
     _tintView.backgroundColor = surface;
     self.layer.borderWidth = 1.0;
-    self.layer.borderColor = [UIColor colorWithRed:0.15 green:0.48 blue:0.95 alpha:0.62].CGColor;
-    self.layer.shadowColor = [UIColor colorWithRed:0.05 green:0.35 blue:0.95 alpha:1.0].CGColor;
-    self.layer.shadowOpacity = 0.18;
-    self.layer.shadowRadius = 12.0;
+    self.layer.borderColor = [UIColor colorWithRed:0.12 green:0.55 blue:1.0 alpha:0.82].CGColor;
+    self.layer.shadowColor = [UIColor colorWithRed:0.02 green:0.42 blue:1.0 alpha:1.0].CGColor;
+    self.layer.shadowOpacity = 0.26;
+    self.layer.shadowRadius = 15.0;
     self.layer.shadowOffset = CGSizeMake(0, 5.0);
     [self setNeedsLayout];
 }
@@ -2708,6 +2708,7 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)updateRoleBadgeTitle:(NSString *)title;
 - (void)layoutLiquidGlassControlsForCurrentBounds;
 - (void)setupTopHeaderBar;
+- (void)showPhonkMusicPicker;
 - (void)setupExpandingNavigationItems;
 - (void)reloadVisibleContentWithSubtleTransition;
 - (void)v20HandleForegroundTransition:(NSNotification *)notification;
@@ -3798,7 +3799,48 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [container addSubview:loginBtn];
 
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
+    UIButton *musicButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    musicButton.frame = CGRectMake(0, 0, 42, 36);
+    musicButton.layer.cornerRadius = 12.0;
+    musicButton.backgroundColor = [UIColor colorWithRed:0.05 green:0.24 blue:0.48 alpha:1.0];
+    [musicButton setImage:[UIImage systemImageNamed:@"music.note.list"] forState:UIControlStateNormal];
+    [musicButton setTintColor:[UIColor colorWithRed:0.40 green:0.78 blue:1.0 alpha:1.0]];
+    musicButton.accessibilityLabel = @"Chọn nhạc phonk trên YouTube";
+    [musicButton addTarget:self action:@selector(showPhonkMusicPicker) forControlEvents:UIControlEventTouchUpInside];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:musicButton];
     [self updateServerStatusIndicator];
+}
+
+- (void)showPhonkMusicPicker {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"PHONK PLAYER"
+        message:@"Chọn một kiểu nhạc để mở tìm kiếm trên YouTube. Phát nhạc do YouTube quản lý; ứng dụng không giả lập phát nền." 
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *items = @[
+        @{ @"title": @"Phonk drift · playlist", @"query": @"phonk drift playlist" },
+        @{ @"title": @"Brazilian phonk", @"query": @"Brazilian phonk playlist" },
+        @{ @"title": @"Dark phonk · bass", @"query": @"dark phonk bass playlist" },
+        @{ @"title": @"Phonk gaming mix", @"query": @"phonk gaming mix playlist" },
+        @{ @"title": @"Aggressive phonk", @"query": @"aggressive phonk playlist" }
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *item in items) {
+        [sheet addAction:[UIAlertAction actionWithTitle:item[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            NSString *query = [item[@"query"] stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+            NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://www.youtube.com/results?search_query=%@", query ?: @"phonk"]];
+            if (url && [UIApplication.sharedApplication canOpenURL:url]) {
+                [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
+            } else {
+                UIAlertController *error = [UIAlertController alertControllerWithTitle:@"YouTube không khả dụng" message:@"Hãy kiểm tra kết nối mạng hoặc mở YouTube thủ công." preferredStyle:UIAlertControllerStyleAlert];
+                [error addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+                [weakSelf presentViewController:error animated:YES completion:nil];
+            }
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)updateRoleBadgeTitle:(NSString *)title {
@@ -5040,11 +5082,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     _liquidNavBarContainer.layer.shadowColor = [UIColor blackColor].CGColor;
 
     _tabConfigs = @[
-        @{@"title": @"Trang Chủ", @"icon": @"house.fill",  @"tab": @0},
-        @{@"title": @"Hz/FPS",    @"icon": @"speedometer", @"tab": @1},
-        @{@"title": @"Switch",    @"icon": @"bolt.fill",   @"tab": @2},
-        @{@"title": @"App",       @"icon": @"iphone",      @"tab": @3},
-        @{@"title": @"Cài Đặt",   @"icon": @"gearshape",   @"tab": @4}
+        @{@"title": @"Dashboard", @"icon": @"square.grid.2x2.fill", @"tab": @0},
+        @{@"title": @"Hz / FPS",    @"icon": @"speedometer",        @"tab": @1},
+        @{@"title": @"Tối ưu",@"icon": @"slider.horizontal.3", @"tab": @2},
+        @{@"title": @"Apps",  @"icon": @"app.dashed",          @"tab": @3},
+        @{@"title": @"Cài đặt", @"icon": @"gearshape.fill",      @"tab": @4}
     ];
 
     CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
@@ -5339,35 +5381,35 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1) return @"Cần kích hoạt trước";
     if (_currentBottomTab == 0) {
-        if (section == 0) return @"Theo dõi thiết bị";
+        if (section == 0) return @"TỔNG QUAN HỆ THỐNG";
         if (section == 1) return @"CPU";
         if (section == 2) return @"GPU";
-        if (section == 3) return @"Bộ nhớ";
-        if (section == 4) return @"Pin";
+        if (section == 3) return @"BỘ NHỚ RAM";
+        if (section == 4) return @"PIN & NĂNG LƯỢNG";
         return @"Màn hình";
     } else if (_currentBottomTab == 1) {
-        if (section == 0) return @"Mức khung hình";
-        if (section == 1) return @"Chế độ điều chỉnh";
+        if (section == 0) return @"TẦN SỐ & KHUNG HÌNH";
+        if (section == 1) return @"CHẾ ĐỘ ĐIỀU CHỈNH";
         return (_currentHzFpsSubTab == 0) ? (_expandedHzFPS ? @"Hz MỞ RỘNG" : @"Hz THƯỜNG") : (_expandedHzFPS ? @"FPS MỞ RỘNG" : @"FPS THƯỜNG");
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return @"Nhóm tính năng";
+        if (section == 0) return @"BỘ ĐIỀU KHIỂN";
         switch (_currentSwitchSubTab) {
             case 0: return @"CPU";
             case 1: return @"GPU";
             case 2: return @"Màn hình";
-            case 3: return @"Pin";
+            case 3: return @"PIN & NĂNG LƯỢNG";
             case 4: return @"Hệ thống";
             default: return @"Công tắc";
         }
     } else if (_currentBottomTab == 3) {
-        if (section == 0) return @"Truy cập nhanh";
-        if (section == 1) return @"Tìm ứng dụng";
+        if (section == 0) return @"CÔNG CỤ NHANH";
+        if (section == 1) return @"THƯ VIỆN ỨNG DỤNG";
         return @"Ứng dụng";
     } else {
-        if (section == 0) return @"Trạng thái kích hoạt";
-        if (section == 1) return @"Thông tin thiết bị";
-        if (section == 2) return @"Kết nối và giao diện";
-        return @"Quyền truy cập hệ thống";
+        if (section == 0) return @"TRẠNG THÁI & QUYỀN";
+        if (section == 1) return @"THÔNG SỐ THIẾT BỊ";
+        if (section == 2) return @"GIAO DIỆN & KẾT NỐI";
+        return @"CHẨN ĐOÁN HỆ THỐNG";
     }
 }
 
@@ -5381,14 +5423,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIView *marker = [[UIView alloc] initWithFrame:CGRectZero];
     marker.translatesAutoresizingMaskIntoConstraints = NO;
     marker.backgroundColor = [UIColor colorWithRed:0.25 green:0.62 blue:1.0 alpha:1.0];
-    marker.layer.cornerRadius = 1.5;
+    marker.layer.cornerRadius = 2.0;
     [container addSubview:marker];
 
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = heading;
-    label.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
-    label.textColor = [UIColor colorWithRed:0.67 green:0.77 blue:0.94 alpha:1.0];
+    label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightHeavy];
+    label.textColor = [UIColor colorWithRed:0.40 green:0.72 blue:1.00 alpha:1.0];
     label.numberOfLines = 2;
     label.lineBreakMode = NSLineBreakByWordWrapping;
     label.adjustsFontSizeToFitWidth = YES;
@@ -5398,8 +5440,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [NSLayoutConstraint activateConstraints:@[
         [marker.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:7],
         [marker.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
-        [marker.widthAnchor constraintEqualToConstant:3],
-        [marker.heightAnchor constraintEqualToConstant:18],
+        [marker.widthAnchor constraintEqualToConstant:4],
+        [marker.heightAnchor constraintEqualToConstant:20],
         [label.leadingAnchor constraintEqualToAnchor:marker.trailingAnchor constant:9],
         [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-10],
         [label.topAnchor constraintEqualToAnchor:container.topAnchor constant:8],
@@ -5420,7 +5462,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *cid = @"LGGlassCell";
+    static NSString *cid = @"ApexSolidPremiumCell";
     LGGlassTableViewCell *cell = (LGGlassTableViewCell *)[tableView dequeueReusableCellWithIdentifier:cid];
     if (!cell) cell = [[LGGlassTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cid];
 
@@ -5610,7 +5652,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
-            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"CPU", @"GPU", @"Màn", @"Pin", @"Hệ Thống"]];
+            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"CPU", @"GPU", @"Màn", @"PIN & NĂNG LƯỢNG", @"Hệ Thống"]];
             seg.selectedSegmentIndex = _currentSwitchSubTab;
             __weak typeof(self) wS = self;
             seg.valueChangedBlock = ^(NSInteger index) {
@@ -5779,7 +5821,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             else if (indexPath.row == 3) { title = @"iOS"; detail = [NSString stringWithFormat:@"%@", ov]; }
             else if (indexPath.row == 4) { title = @"Tên"; detail = [[UIDevice currentDevice] name]; }
             else if (indexPath.row == 5) { title = @"CPU"; detail = _deepCoreCountString; }
-            else if (indexPath.row == 6) { title = @"Bộ nhớ"; detail = _deepRamString; }
+            else if (indexPath.row == 6) { title = @"BỘ NHỚ RAM"; detail = _deepRamString; }
             else { title = @"Darwin"; detail = _deepKernelString; }
         } else if (indexPath.section == 2) {
             if (indexPath.row == 0) {
