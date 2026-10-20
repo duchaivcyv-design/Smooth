@@ -1608,9 +1608,10 @@ static void Titanium_DisableKernelThreadThrottling(void) {
 
         thread_throttle_policy_data_t throttlePolicy;
         throttlePolicy.pset_limit = 0;
+        // [SỬA CRASH SPRINGBOARD/BACKBOARDD]: port do pthread_mach_thread_np trả về là port được kernel guard (MOD_REFS).
+        // Bản trước gọi deallocate lên port này => EXC_GUARD, kernel SIGKILL SpringBoard/backboardd mỗi lần mở app.
+        // Tuyệt đối KHÔNG giải phóng port này.
         thread_policy_set(selfThread, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttlePolicy, 1);
-        // [SỬA]: pthread_mach_thread_np trả về send right +1; không deallocate => rò port mỗi luồng
-        mach_port_deallocate(mach_task_self(), selfThread);
     } @catch (__unused NSException *e) {}
 }
 
