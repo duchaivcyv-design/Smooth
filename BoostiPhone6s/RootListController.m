@@ -2723,7 +2723,7 @@ static NSDictionary<NSString *, NSNumber *> *Titanium_ReadIORegistrySensors(void
     @synchronized ([NSObject class]) {
         if (cachedSensors && now - lastScan < 5.0) return cachedSensors;
         NSMutableDictionary<NSString *, NSNumber *> *sensors = [NSMutableDictionary dictionary];
-        io_registry_entry_t root = IORegistryGetRootEntry(kIOMainPortDefault);
+        io_registry_entry_t root = IORegistryGetRootEntry(kIOMasterPortDefault);
         if (root != MACH_PORT_NULL) { TICollectNumericSensors(root, sensors, 0); IOObjectRelease(root); }
         cachedSensors = [sensors copy]; lastScan = now;
         return cachedSensors;
@@ -3018,6 +3018,7 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)handleExpiredAdminSessionForPath:(NSString *)path;
 - (void)showThemeModePicker;
 - (void)showV35AppearanceSettings;
+- (void)applySmooIOSAdaptivePerformancePolicy;
 - (void)showFreeServerPingURLEditor;
 - (void)performManualServerPing;
 - (NSString *)currentFreeServerPingURL;
@@ -3824,144 +3825,193 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
 - (void)showV347FirstLaunchWelcome {
     if (self.presentedViewController) return;
-    UIViewController *welcome = [UIViewController new];
-    welcome.modalPresentationStyle = UIModalPresentationFullScreen;
-    welcome.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
-    welcome.view.backgroundColor = [UIColor colorWithRed:0.012 green:0.018 blue:0.055 alpha:1.0];
+    UIViewController *wizard = [UIViewController new];
+    wizard.modalPresentationStyle = UIModalPresentationFullScreen;
+    wizard.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    wizard.view.backgroundColor = [UIColor colorWithRed:0.012 green:0.018 blue:0.055 alpha:1.0];
 
-    CAGradientLayer *bg = [CAGradientLayer layer];
-    bg.frame = welcome.view.bounds;
-    bg.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
-    bg.colors = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
-                  (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
-                  (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
-    bg.startPoint = CGPointMake(0, 0); bg.endPoint = CGPointMake(1, 1);
-    [welcome.view.layer insertSublayer:bg atIndex:0];
+    CAGradientLayer *background = [CAGradientLayer layer];
+    background.frame = wizard.view.bounds;
+    background.colors = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
+                          (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
+                          (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
+    background.startPoint = CGPointMake(0, 0); background.endPoint = CGPointMake(1, 1);
+    [wizard.view.layer insertSublayer:background atIndex:0];
 
-    UILabel *title = [UILabel new];
-    title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = @"XIN CHÀO TỪ VŨ ĐỨC LONG";
-    title.textAlignment = NSTextAlignmentCenter;
-    title.numberOfLines = 0;
-    title.font = [UIFont systemFontOfSize:23 weight:UIFontWeightBlack];
-    title.textColor = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
-    [welcome.view addSubview:title];
-
-    UITextView *story = [UITextView new];
-    story.translatesAutoresizingMaskIntoConstraints = NO;
-    story.backgroundColor = [UIColor colorWithWhite:1 alpha:.045];
-    story.textColor = [UIColor colorWithWhite:.94 alpha:1];
-    story.font = [UIFont monospacedSystemFontOfSize:12.5 weight:UIFontWeightMedium];
-    story.editable = NO; story.selectable = NO;
-    story.layer.cornerRadius = 16; story.layer.borderWidth = 1;
-    story.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
-    story.textContainerInset = UIEdgeInsetsMake(14, 12, 14, 12);
-    [welcome.view addSubview:story];
-
-    UIButton *(^makeButton)(NSString *, UIColor *) = ^UIButton *(NSString *text, UIColor *color) {
-        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        button.translatesAutoresizingMaskIntoConstraints = NO;
-        [button setTitle:text forState:UIControlStateNormal];
-        [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-        button.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
-        button.titleLabel.numberOfLines = 2; button.titleLabel.textAlignment = NSTextAlignmentCenter;
-        button.backgroundColor = color; button.layer.cornerRadius = 13;
-        button.layer.borderWidth = 1; button.layer.borderColor = [UIColor colorWithWhite:1 alpha:.2].CGColor;
-        return button;
-    };
-    UIButton *safe = makeButton(@"Vào app an toàn\nchưa kích hoạt · chỉ xem", [UIColor colorWithRed:.10 green:.34 blue:.55 alpha:1]);
-    UIButton *normal = makeButton(@"Vào app luôn\ncó thể gây lỗi", [UIColor colorWithRed:.48 green:.12 blue:.27 alpha:1]);
-    [welcome.view addSubview:safe]; [welcome.view addSubview:normal];
+    UILabel *heading = [UILabel new]; heading.translatesAutoresizingMaskIntoConstraints = NO;
+    heading.text = @"SMOOIOS"; heading.textAlignment = NSTextAlignmentCenter; heading.numberOfLines = 2;
+    heading.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
+    heading.textColor = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
+    UILabel *subtitle = [UILabel new]; subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.text = @"Thiết lập ban đầu"; subtitle.textAlignment = NSTextAlignmentCenter;
+    subtitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold]; subtitle.textColor = UIColor.whiteColor;
+    UITextView *detail = [UITextView new]; detail.translatesAutoresizingMaskIntoConstraints = NO;
+    detail.backgroundColor = [UIColor colorWithWhite:1 alpha:.045]; detail.textColor = [UIColor colorWithWhite:.94 alpha:1];
+    detail.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium]; detail.editable = NO; detail.selectable = NO;
+    detail.layer.cornerRadius = 16; detail.layer.borderWidth = 1;
+    detail.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
+    detail.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
+    UIStackView *options = [[UIStackView alloc] init]; options.translatesAutoresizingMaskIntoConstraints = NO;
+    options.axis = UILayoutConstraintAxisVertical; options.spacing = 9; options.distribution = UIStackViewDistributionFillEqually;
+    UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem]; back.translatesAutoresizingMaskIntoConstraints = NO;
+    [back setTitle:@"‹ Quay lại" forState:UIControlStateNormal]; [back setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    UIButton *next = [UIButton buttonWithType:UIButtonTypeSystem]; next.translatesAutoresizingMaskIntoConstraints = NO;
+    [next setTitle:@"Tiếp theo  →" forState:UIControlStateNormal]; [next setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    next.backgroundColor = [UIColor colorWithRed:.06 green:.42 blue:.64 alpha:1]; next.layer.cornerRadius = 13;
+    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.08]; back.layer.cornerRadius = 13;
+    [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:detail];
+    [wizard.view addSubview:options]; [wizard.view addSubview:back]; [wizard.view addSubview:next];
     [NSLayoutConstraint activateConstraints:@[
-        [title.topAnchor constraintEqualToAnchor:welcome.view.safeAreaLayoutGuide.topAnchor constant:12],
-        [title.leadingAnchor constraintEqualToAnchor:welcome.view.leadingAnchor constant:18],
-        [title.trailingAnchor constraintEqualToAnchor:welcome.view.trailingAnchor constant:-18],
-        [story.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:14],
-        [story.leadingAnchor constraintEqualToAnchor:welcome.view.leadingAnchor constant:14],
-        [story.trailingAnchor constraintEqualToAnchor:welcome.view.trailingAnchor constant:-14],
-        [story.bottomAnchor constraintEqualToAnchor:safe.topAnchor constant:-12],
-        [safe.leadingAnchor constraintEqualToAnchor:welcome.view.leadingAnchor constant:14],
-        [safe.trailingAnchor constraintEqualToAnchor:welcome.view.centerXAnchor constant:-5],
-        [safe.bottomAnchor constraintEqualToAnchor:welcome.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
-        [safe.heightAnchor constraintEqualToConstant:58],
-        [normal.leadingAnchor constraintEqualToAnchor:welcome.view.centerXAnchor constant:5],
-        [normal.trailingAnchor constraintEqualToAnchor:welcome.view.trailingAnchor constant:-14],
-        [normal.centerYAnchor constraintEqualToAnchor:safe.centerYAnchor],
-        [normal.heightAnchor constraintEqualToConstant:58]
+        [heading.topAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.topAnchor constant:10],
+        [heading.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
+        [heading.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
+        [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:5],
+        [subtitle.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
+        [subtitle.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
+        [detail.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:16],
+        [detail.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [detail.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [detail.bottomAnchor constraintEqualToAnchor:options.topAnchor constant:-12],
+        [options.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [options.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [options.bottomAnchor constraintEqualToAnchor:back.topAnchor constant:-12],
+        [options.heightAnchor constraintGreaterThanOrEqualToConstant:60],
+        [back.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [back.bottomAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [back.widthAnchor constraintEqualToAnchor:wizard.view.widthAnchor multiplier:.34 constant:-18],
+        [back.heightAnchor constraintEqualToConstant:48],
+        [next.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [next.centerYAnchor constraintEqualToAnchor:back.centerYAnchor],
+        [next.leadingAnchor constraintEqualToAnchor:back.trailingAnchor constant:8],
+        [next.heightAnchor constraintEqualToConstant:48]
     ]];
 
-    NSArray<NSString *> *baseLines = @[
-        @"Chào mừng bạn đến với Neon Control.",
-        @"Mình là Vũ Đức Long, người xây dựng giao diện này.",
-        @"Ứng dụng được thiết kế để hiển thị thông tin và điều khiển cấu hình.",
-        @"Mỗi thiết bị có phần cứng và giới hạn riêng.",
-        @"Một tuỳ chọn có thể hoạt động khác nhau giữa các phiên bản iOS.",
-        @"Hãy đọc nội dung trước khi bật các tính năng nâng cao.",
-        @"Số liệu cần lấy từ nguồn hệ thống thật, không tự tạo cho đẹp.",
-        @"CPU được ước tính bằng chênh lệch bộ đếm tác vụ hệ thống.",
-        @"GPU được đọc từ IOReport nếu bản iOS cung cấp kênh tương thích.",
-        @"RAM hệ thống và bộ nhớ tiến trình là hai số liệu khác nhau.",
-        @"FPS giao diện không đại diện cho FPS bên trong mọi trò chơi.",
-        @"Tần số tối đa của màn hình không đồng nghĩa tần số hiện tại.",
-        @"Nhiệt độ phải đi kèm đúng cảm biến và đúng đơn vị.",
-        @"Không phải máy nào cũng công khai cùng một bộ cảm biến.",
-        @"Một giá trị thô không được tự động coi là độ C.",
-        @"Trạng thái nhiệt của iOS không phải số đo nhiệt độ.",
-        @"Mức pin phần trăm không phải công suất tiêu thụ của pin.",
-        @"Các biểu đồ chỉ dùng mẫu đo có nguồn dữ liệu hợp lệ.",
-        @"Nếu một API riêng tư không có, ứng dụng cần giữ trạng thái chưa có dữ liệu.",
-        @"Đừng ép thiết bị chạy ở mức vượt quá khả năng tản nhiệt.",
-        @"Cấu hình cao có thể tăng nhiệt và giảm thời lượng pin.",
-        @"Tắt từng tuỳ chọn nếu gặp lag, nóng hoặc SpringBoard khởi động lại.",
-        @"Nên thử từng thay đổi một để dễ xác định nguyên nhân.",
-        @"Giữ bản sao lưu cấu hình trước khi thử thay đổi sâu.",
-        @"Nút áp dụng chỉ nên dùng sau khi bạn đã xem lại lựa chọn.",
-        @"Khởi động lại giao diện có thể làm gián đoạn phiên đang dùng.",
-        @"Rootless, RootHide và Rootful có đường dẫn và quyền khác nhau.",
-        @"Tên chế độ tương thích không đảm bảo mọi thiết bị đã được kiểm thử.",
-        @"Giao diện chẩn đoán không tự nó thực hiện khai thác kernel.",
-        @"Không có backend phù hợp thì không được báo khai thác thành công.",
-        @"Hãy dùng bản thử nghiệm có thể khôi phục nếu cần.",
-        @"Nếu có lỗi, ghi lại bước tái hiện và thông tin phiên bản.",
-        @"Báo lỗi cụ thể sẽ giúp sửa đúng phần hơn là thay đổi toàn bộ mã.",
-        @"Neon Control sẽ cố gắng giữ giao diện rõ ràng và dễ đọc.",
-        @"Cảm ơn bạn đã dành thời gian kiểm tra và góp ý.",
-        @"Mình ưu tiên tính ổn định hơn số liệu giả hoặc lời hứa quá mức.",
-        @"Một tính năng chưa được kiểm chứng cần được xem là thử nghiệm.",
-        @"Đừng bật mọi hook cùng lúc trên máy dùng hằng ngày.",
-        @"Hãy theo dõi nhiệt độ, pin và độ ổn định khi thử nghiệm.",
-        @"Bạn có thể vào app để xem giao diện trước khi áp dụng cấu hình."
-    ];
-    NSMutableArray<NSString *> *lines = [NSMutableArray arrayWithCapacity:100];
-    for (NSUInteger i = 0; i < 100; i++) [lines addObject:[NSString stringWithFormat:@"%02lu  %@", (unsigned long)(i + 1), baseLines[i % baseLines.count]]];
-    NSString *fullText = [[lines componentsJoinedByString:@"\n"] stringByAppendingString:@"\n\nChọn cách vào app ở bên dưới."];
-    __block NSUInteger cursor = 0;
-    __weak UITextView *weakStory = story;
-    __block void (^typeNext)(void);
-    typeNext = ^{
-        UITextView *strongStory = weakStory;
-        if (!strongStory || welcome.presentingViewController == nil || cursor >= fullText.length) { typeNext = nil; return; }
-        NSUInteger next = MIN(cursor + 5, fullText.length);
-        strongStory.text = [fullText substringToIndex:next];
-        cursor = next;
-        [strongStory scrollRangeToVisible:NSMakeRange(strongStory.text.length ? strongStory.text.length - 1 : 0, strongStory.text.length ? 1 : 0)];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.012 * NSEC_PER_SEC)), dispatch_get_main_queue(), typeNext);
-    };
-    [self presentViewController:welcome animated:YES completion:^{ typeNext(); }];
+    NSArray<NSString *> *iosChoices = @[@"iOS 14+", @"iOS 15+", @"iOS 16+", @"iOS 17+", @"iOS 18+", @"iOS 26.0–26.0.1"];
+    NSArray<NSString *> *phoneChoices = @[@"iPhone 6s", @"iPhone 6s Plus", @"iPhone 7", @"iPhone 7 Plus", @"iPhone 8", @"iPhone 8 Plus", @"iPhone X", @"iPhone XR", @"iPhone XS / XS Max", @"iPhone 11 / 11 Pro / 11 Pro Max", @"iPhone 12 mini / 12 / 12 Pro / 12 Pro Max", @"iPhone 13 mini / 13 / 13 Pro / 13 Pro Max", @"iPhone 14 / 14 Plus / 14 Pro / 14 Pro Max", @"iPhone 15 / 15 Plus / 15 Pro / 15 Pro Max"];
+    __block NSInteger page = 0;
+    __block NSString *selectedIOS = @"";
+    __block NSString *selectedPhone = @"";
+    __block NSString *extractedReport = nil;
+    __block void (^renderPage)(void);
+    __weak UIViewController *weakWizard = wizard;
 
-    void (^finish)(BOOL) = ^(BOOL safeMode) {
-        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        [defaults setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
-        [defaults setBool:safeMode forKey:@"TIV347SafeViewOnlySelected"];
-        if (safeMode) [defaults setBool:YES forKey:@"TIV347ReadOnlyViewMode"];
-        else [defaults setBool:NO forKey:@"TIV347ReadOnlyViewMode"];
-        [defaults synchronize];
-        [welcome dismissViewControllerAnimated:YES completion:^{
-            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"] && !self.presentedViewController) [self showAuthorIntroSequence];
+    void (^animateToPage)(void) = ^{
+        UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
+        [UIView transitionWithView:strongWizard.view duration:.28 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionCurveEaseInOut animations:^{
+            // renderPage updates all controls; transition is a smooth right-to-left slide via view transform.
+            strongWizard.view.transform = CGAffineTransformMakeTranslation(18, 0);
+            strongWizard.view.alpha = .92;
+        } completion:^(__unused BOOL finished) {
+            strongWizard.view.transform = CGAffineTransformIdentity; strongWizard.view.alpha = 1;
         }];
+        renderPage();
     };
-    [safe addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { (void)action; finish(YES); }] forControlEvents:UIControlEventTouchUpInside];
-    [normal addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { (void)action; finish(NO); }] forControlEvents:UIControlEventTouchUpInside];
+
+    renderPage = ^{
+        UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
+        for (UIView *v in options.arrangedSubviews) { [options removeArrangedSubview:v]; [v removeFromSuperview]; }
+        back.hidden = (page == 0);
+        [next setTitle:(page == 3 ? @"Vào SmooIOS  →" : @"Tiếp theo  →") forState:UIControlStateNormal];
+        if (page == 0) {
+            subtitle.text = @"Chào mừng đến với SmooIOS";
+            detail.text = @"NƠI BẺ KHOÁ TẦNG SÂU\n\nThiết lập tiếp theo sẽ giúp chọn nhóm iOS, xác nhận dòng iPhone và thu thập thông tin thiết bị cùng danh sách tweak để kiểm tra khả năng xung đột.\n\nĐây là bước nhận diện và chẩn đoán; nó không tự chạy khai thác kernel hoặc tuyên bố đã kích hoạt nếu không có backend thực sự.";
+            next.hidden = NO;
+        } else if (page == 1 || page == 2) {
+            BOOL chooseIOS = (page == 1);
+            subtitle.text = chooseIOS ? @"1 / 3 · Chọn phiên bản iOS" : @"2 / 3 · Chọn đúng dòng iPhone";
+            detail.text = chooseIOS ? [NSString stringWithFormat:@"Đã chọn: %@\nChọn nhóm phiên bản phù hợp với máy đang chạy. Nhóm lựa chọn không thay thế việc đọc phiên bản thực tế.", selectedIOS.length ? selectedIOS : @"Chưa chọn"] : [NSString stringWithFormat:@"Đã chọn: %@\nNếu không chắc chắn, hãy dùng thông tin máy được đọc ở bước tiếp theo để đối chiếu.", selectedPhone.length ? selectedPhone : @"Chưa chọn"];
+            NSArray *choices = chooseIOS ? iosChoices : phoneChoices;
+            for (NSString *choice in choices) {
+                UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+                [b setTitle:([choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [@"✓  " stringByAppendingString:choice] : choice) forState:UIControlStateNormal];
+                [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+                b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft; b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 8);
+                b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
+                b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
+                [b.heightAnchor constraintEqualToConstant:39].active = YES;
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; renderPage(); }] forControlEvents:UIControlEventTouchUpInside];
+                [options addArrangedSubview:b];
+            }
+            next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
+        } else {
+            subtitle.text = @"3 / 3 · Chẩn đoán thiết bị";
+            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin’ để đọc mã máy, phiên bản hệ điều hành, chip (nếu hệ thống cung cấp), UDID khả dụng và quét các thư mục tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn; danh sách tweak chỉ phản ánh các thư mục truy cập được.";
+            UIButton *scan = [UIButton buttonWithType:UIButtonTypeSystem];
+            [scan setTitle:@"⌕  Khai thác thông tin Darwin & quét tweak" forState:UIControlStateNormal];
+            [scan setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; scan.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 10;
+            [scan.heightAnchor constraintEqualToConstant:48].active = YES;
+            [scan addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+                (void)a;
+                struct utsname u; memset(&u, 0, sizeof(u)); uname(&u);
+                NSString *machine = [NSString stringWithUTF8String:u.machine] ?: @"Không đọc được";
+                NSString *system = [NSString stringWithFormat:@"iOS %ld.%ld.%ld", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.patchVersion];
+                NSString *chip = @"Không có ánh xạ SoC xác nhận cho mã máy này";
+                if ([machine hasPrefix:@"iPhone8,"]) chip = @"Apple A9 (iPhone 6s family)";
+                else if ([machine hasPrefix:@"iPhone9,"]) chip = @"Apple A10 Fusion (iPhone 7 family)";
+                else if ([machine hasPrefix:@"iPhone10,"]) chip = @"Apple A11 Bionic (iPhone 8 / X family)";
+                else if ([machine hasPrefix:@"iPhone11,"]) chip = @"Apple A12 Bionic (iPhone XS / XR family)";
+                else if ([machine hasPrefix:@"iPhone12,"]) chip = @"Apple A13 Bionic (iPhone 11 family)";
+                else if ([machine hasPrefix:@"iPhone13,"]) chip = @"Apple A14 Bionic (iPhone 12 family)";
+                else if ([machine hasPrefix:@"iPhone14,"]) chip = @"Apple A15 Bionic (iPhone 13 family / SE 3)";
+                else if ([machine hasPrefix:@"iPhone15,"]) chip = @"Apple A16 Bionic (một số iPhone 14/15; đối chiếu mã máy)";
+                else if ([machine hasPrefix:@"iPhone16,"]) chip = @"Apple A17 Pro / A16 tuỳ mã máy; cần đối chiếu chính xác";
+                NSString *udid = @"Không được API ứng dụng công khai cung cấp";
+                NSString *serial = @"Không đọc được qua API công khai";
+                NSMutableArray<NSString *> *found = [NSMutableArray array];
+                NSArray<NSString *> *dirs = @[@"/var/jb/Library/MobileSubstrate/DynamicLibraries", @"/var/jb/usr/lib/TweakInject", @"/Library/MobileSubstrate/DynamicLibraries", @"/usr/lib/TweakInject", @"/var/containers/Bundle/tweaksupport"];
+                NSFileManager *fm = NSFileManager.defaultManager;
+                for (NSString *dir in dirs) { NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil]; for (NSString *item in items) if ([item.pathExtension.lowercaseString isEqualToString:@"dylib"] || [item.pathExtension.lowercaseString isEqualToString:@"plist"]) [found addObject:[dir stringByAppendingPathComponent:item]]; }
+                if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
+                NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
+                extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
+                renderPage();
+            }] forControlEvents:UIControlEventTouchUpInside];
+            [options addArrangedSubview:scan];
+            next.hidden = NO;
+        }
+    };
+    [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        (void)a;
+        if (page < 3) {
+            if (page == 1 && !selectedIOS.length) return;
+            if (page == 2 && !selectedPhone.length) return;
+            page++;
+            CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromRight; transition.duration = .28;
+            [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardForward"];
+            renderPage();
+        } else {
+            if (!extractedReport.length) {
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"Đã hiểu" style:UIAlertActionStyleDefault handler:nil]];
+                [wizard presentViewController:alert animated:YES completion:nil];
+                return;
+            }
+            NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+            [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
+            [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
+            [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
+            [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
+            [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
+            [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
+            if ([d objectForKey:@"SmooIOSProfileV36"] == nil) [d setObject:@"auto" forKey:@"SmooIOSProfileV36"];
+            if ([d objectForKey:@"SmooIOSAutoTuneEnabledV36"] == nil) [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
+            if ([d objectForKey:@"SmooIOSAutoInspectTweaksV36"] == nil) [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
+            if ([d objectForKey:@"SmooIOSHzV36"] == nil) [d setInteger:120 forKey:@"SmooIOSHzV36"];
+            if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
+            [d synchronize];
+            [wizard dismissViewControllerAnimated:YES completion:^{
+                [self.customTableView setNeedsLayout];
+                [self.customTableView reloadData];
+            }];
+        }
+    }] forControlEvents:UIControlEventTouchUpInside];
+    [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        (void)a; if (page <= 0) return; page--;
+        CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
+        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; renderPage();
+    }] forControlEvents:UIControlEventTouchUpInside];
+    [self presentViewController:wizard animated:YES completion:^{ renderPage(); }];
 }
 
 - (void)showAuthorIntroSequence {
@@ -4420,6 +4470,40 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         if (picker.popoverPresentationController) { picker.popoverPresentationController.sourceView = owner.view; picker.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(owner.view.bounds), CGRectGetMidY(owner.view.bounds), 1, 1); }
         [owner presentViewController:picker animated:YES completion:nil];
     }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Chế độ hiệu suất · Hz/FPS" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        RootListController *owner = weakSelf; if (!owner) return;
+        UIAlertController *picker = [UIAlertController alertControllerWithTitle:@"Chế độ hiệu suất SmooIOS" message:@"Tự động dựa trên trạng thái nhiệt iOS và Chế độ nguồn điện thấp. Các mức Hz/FPS là giá trị yêu cầu gửi tới tweak, không đảm bảo màn hình vật lý đạt được mọi mức." preferredStyle:UIAlertControllerStyleActionSheet];
+        NSArray<NSDictionary *> *profiles = @[
+            @{ @"key": @"auto", @"title": @"Tự động theo nhiệt độ/trạng thái iOS" },
+            @{ @"key": @"high", @"title": @"Hiệu suất cao · 240 Hz/FPS yêu cầu" },
+            @{ @"key": @"balanced", @"title": @"Cân bằng · 120 Hz/FPS yêu cầu" },
+            @{ @"key": @"saving", @"title": @"Tiết kiệm pin · 60 Hz/FPS yêu cầu" }
+        ];
+        for (NSDictionary *entry in profiles) {
+            [picker addAction:[UIAlertAction actionWithTitle:entry[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *choice) {
+                NSString *key = entry[@"key"];
+                owner.settingsDict[@"SmooIOSProfileV36"] = key;
+                NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+                [d setObject:key forKey:@"SmooIOSProfileV36"];
+                [d setBool:[key isEqualToString:@"auto"] forKey:@"SmooIOSAutoTuneEnabledV36"];
+                NSInteger rate = [key isEqualToString:@"high"] ? 240 : ([key isEqualToString:@"saving"] ? 60 : 120);
+                if (![key isEqualToString:@"auto"]) {
+                    owner.settingsDict[@"TargetRefreshRate"] = @(rate);
+                    owner.settingsDict[@"TargetFPSRate"] = @(rate);
+                    [d setInteger:rate forKey:@"TargetRefreshRate"];
+                    [d setInteger:rate forKey:@"TargetFPSRate"];
+                }
+                [d synchronize];
+                [owner saveSettingsDataAndSync];
+                [owner syncSharedMemoryFile:YES];
+                [owner refreshNeonLiveReadouts];
+                [owner.customTableView reloadData];
+            }]];
+        }
+        [picker addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+        if (picker.popoverPresentationController) { picker.popoverPresentationController.sourceView = owner.view; picker.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(owner.view.bounds), CGRectGetMidY(owner.view.bounds), 1, 1); }
+        [owner presentViewController:picker animated:YES completion:nil];
+    }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Chẩn đoán RootHide / sandbox" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
         RootListController *owner = weakSelf; if (!owner) return;
         NSString *report = [NSString stringWithFormat:@"Môi trường: %@\n%@\n\nĐây là kiểm tra quyền truy cập hiện tại, không phải bypass sandbox. Ứng dụng không tự sửa entitlement hoặc vô hiệu hóa sandbox bằng một công tắc giao diện.", Titanium_DetectJailbreakTypeForUI(), Titanium_SandboxDiagnosticForUI()];
@@ -4470,7 +4554,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 - (void)setupTopHeaderBar {
     UILabel *welcome = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 205, 30)];
     welcome.tag = 731905;
-    welcome.text = @"Chào mừng bạn";
+    welcome.text = @"SmooIOS";
     welcome.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBlack];
     welcome.textColor = [UIColor colorWithRed:.30 green:.88 blue:1 alpha:1];
     welcome.textAlignment = NSTextAlignmentLeft;
@@ -7799,8 +7883,41 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
 }
 
+- (void)applySmooIOSAdaptivePerformancePolicy {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *profile = [self.settingsDict[@"SmooIOSProfileV36"] isKindOfClass:NSString.class] ? self.settingsDict[@"SmooIOSProfileV36"] : ([defaults stringForKey:@"SmooIOSProfileV36"] ?: @"auto");
+    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 120;
+    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 120;
+    BOOL autoTune = [defaults objectForKey:@"SmooIOSAutoTuneEnabledV36"] ? [defaults boolForKey:@"SmooIOSAutoTuneEnabledV36"] : YES;
+    if (!autoTune || ![profile isEqualToString:@"auto"]) return;
+
+    // Use Apple's published thermal state and Low Power Mode, not guessed Celsius values.
+    NSProcessInfo *info = NSProcessInfo.processInfo;
+    NSInteger resolved = 240;
+    if (info.isLowPowerModeEnabled || info.thermalState >= NSProcessInfoThermalStateCritical) resolved = 60;
+    else if (info.thermalState >= NSProcessInfoThermalStateSerious) resolved = 60;
+    else if (info.thermalState == NSProcessInfoThermalStateFair) resolved = 90;
+    else if (info.thermalState == NSProcessInfoThermalStateNominal) resolved = 120;
+    // Do not claim to read an exact die temperature; the OS thermal state is the available signal here.
+    resolved = MAX(60, MIN(240, resolved));
+    if (hz == resolved && fps == resolved) return;
+    self.settingsDict[@"TargetRefreshRate"] = @(resolved);
+    self.settingsDict[@"TargetFPSRate"] = @(resolved);
+    [defaults setInteger:resolved forKey:@"TargetRefreshRate"];
+    [defaults setInteger:resolved forKey:@"TargetFPSRate"];
+    [defaults synchronize];
+    [self syncSharedMemoryFile:YES];
+    if (self.isViewLoaded) {
+        UILabel *hzLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8710];
+        UILabel *fpsLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8711];
+        if (hzLabel) hzLabel.text = [NSString stringWithFormat:@"%ld", (long)resolved];
+        if (fpsLabel) fpsLabel.text = [NSString stringWithFormat:@"%ld", (long)resolved];
+    }
+}
+
 - (void)refreshNeonLiveReadouts {
     if (!self.isViewLoaded) return;
+    [self applySmooIOSAdaptivePerformancePolicy];
     float cpu = Titanium_GetLiveCPULoadPercentage();
     uint64_t memory = Titanium_CurrentProcessFootprintBytes();
     double systemRAMPercent = Titanium_GetSystemRAMUsagePercentage();
