@@ -3261,7 +3261,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [fromVC presentViewController:exploitVC animated:NO completion:nil];
 }
 
-// V19: compact rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
+// V21: enlarged rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
 @interface TITrendGraphView : UIView
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *samples;
 @property (nonatomic, strong) CAShapeLayer *gridLayer;
@@ -5792,7 +5792,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width), side = 16.0, cw = w - side * 2.0;
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 745.0)];
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 785.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(side, 12, cw, 15)];
     eyebrow.text = @"SMOOTHIOS  /  LIVE MONITOR"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
@@ -5812,33 +5812,33 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     UILabel *chartTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,213,cw,20)]; chartTitle.text=@"BIỂU ĐỒ GIÁM SÁT"; chartTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; chartTitle.textColor=UIColor.whiteColor; [root addSubview:chartTitle];
     UILabel *chartHint=[[UILabel alloc] initWithFrame:CGRectMake(side,234,cw,17)]; chartHint.text=@"Vuốt ngang để chuyển nhóm thông số"; chartHint.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; chartHint.textColor=[UIColor colorWithWhite:.62 alpha:1]; [root addSubview:chartHint];
-    UIScrollView *chartScroll=[[UIScrollView alloc] initWithFrame:CGRectMake(side,256,cw,246)]; chartScroll.pagingEnabled=YES; chartScroll.showsHorizontalScrollIndicator=NO; chartScroll.backgroundColor=UIColor.clearColor; chartScroll.tag=9160; [root addSubview:chartScroll];
+    UIScrollView *chartScroll=[[UIScrollView alloc] initWithFrame:CGRectMake(side,256,cw,270)]; chartScroll.pagingEnabled=YES; chartScroll.showsHorizontalScrollIndicator=NO; chartScroll.backgroundColor=UIColor.clearColor; chartScroll.tag=9160; [root addSubview:chartScroll];
     NSArray *groups=@[@[@"CPU",@"RAM"],@[@"PIN",@"FPS"]];
     NSArray *symbols=@[@"cpu",@"memorychip",@"battery.100",@"speedometer"];
     NSArray *details=@[@"Mức sử dụng CPU có thể đọc được",@"Bộ nhớ tiến trình hiện tại",@"Phần trăm pin hệ thống",@"FPS của giao diện SmoothIOS"];
     for (NSInteger page=0;page<2;page++) {
-        UIView *pageView=[[UIView alloc] initWithFrame:CGRectMake(page*cw,0,cw,246)]; [chartScroll addSubview:pageView];
+        UIView *pageView=[[UIView alloc] initWithFrame:CGRectMake(page*cw,0,cw,270)]; [chartScroll addSubview:pageView];
         for (NSInteger j=0;j<2;j++) {
-            NSInteger idx=page*2+j; CGFloat y= j*116.0;
-            UIView *card=[[UIView alloc] initWithFrame:CGRectMake(0,y,cw,104)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=16; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [pageView addSubview:card];
+            NSInteger idx=page*2+j; CGFloat y= j*128.0;
+            UIView *card=[[UIView alloc] initWithFrame:CGRectMake(0,y,cw,116)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=16; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [pageView addSubview:card];
             UIImageView *icon=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbols[idx]]]; icon.frame=CGRectMake(12,12,20,20); icon.tintColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; [card addSubview:icon];
             UILabel *name=[[UILabel alloc] initWithFrame:CGRectMake(40,10,cw-55,17)]; name.text=groups[page][j]; name.font=[UIFont systemFontOfSize:11 weight:UIFontWeightBlack]; name.textColor=UIColor.whiteColor; [card addSubview:name];
             UILabel *detail=[[UILabel alloc] initWithFrame:CGRectMake(40,28,cw-55,14)]; detail.text=details[idx]; detail.font=[UIFont systemFontOfSize:9]; detail.textColor=[UIColor colorWithWhite:.62 alpha:1]; [card addSubview:detail];
-            // V19: scrolling heartbeat-style line chart with rolling samples.
-            TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(12,49,cw-24,30)]; graph.tag=9200+idx; [card addSubview:graph];
-            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,80,cw-24,17)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
+            // V21: scrolling heartbeat-style line chart with rolling samples.
+            TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(12,49,cw-24,42)]; graph.tag=9200+idx; [card addSubview:graph];
+            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,91,cw-24,17)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
         }
     }
-    chartScroll.contentSize=CGSizeMake(cw*2,246);
-    UIPageControl *pages=[[UIPageControl alloc] initWithFrame:CGRectMake(side,503,cw,22)]; pages.numberOfPages=2; pages.currentPage=0; pages.pageIndicatorTintColor=[UIColor colorWithWhite:.35 alpha:1]; pages.currentPageIndicatorTintColor=[UIColor colorWithRed:.35 green:.78 blue:1 alpha:1]; pages.tag=9168; [root addSubview:pages];
+    chartScroll.contentSize=CGSizeMake(cw*2,270);
+    UIPageControl *pages=[[UIPageControl alloc] initWithFrame:CGRectMake(side,527,cw,22)]; pages.numberOfPages=2; pages.currentPage=0; pages.pageIndicatorTintColor=[UIColor colorWithWhite:.35 alpha:1]; pages.currentPageIndicatorTintColor=[UIColor colorWithRed:.35 green:.78 blue:1 alpha:1]; pages.tag=9168; [root addSubview:pages];
     // Synchronize the page dots with horizontal swipes without adding a timer or blocking the main thread.
     chartScroll.delegate=(id<UIScrollViewDelegate>)self;
 
-    UILabel *rateTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,533,cw,19)]; rateTitle.text=@"HZ / FPS ĐANG CẤU HÌNH"; rateTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; rateTitle.textColor=UIColor.whiteColor; [root addSubview:rateTitle];
+    UILabel *rateTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,557,cw,19)]; rateTitle.text=@"HZ / FPS ĐANG CẤU HÌNH"; rateTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; rateTitle.textColor=UIColor.whiteColor; [root addSubview:rateTitle];
     NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue]; NSInteger targetFPS=[self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
     NSArray *rateNames=@[@"TẦN SỐ MÀN HÌNH",@"TỐC ĐỘ KHUNG HÌNH"]; NSArray *rateValues=@[[NSString stringWithFormat:@"%ld Hz",(long)targetHz],[NSString stringWithFormat:@"%ld FPS",(long)targetFPS]];
-    for(NSInteger i=0;i<2;i++){ CGFloat gap=10, rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),558,rw,65)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=15; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(8,8,rw-16,14)]; n.text=rateNames[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor colorWithWhite:.65 alpha:1]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(8,26,rw-16,30)]; v.text=rateValues[i]; v.font=[UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor colorWithRed:1 green:.3 blue:.55 alpha:1]:[UIColor colorWithRed:.2 green:.82 blue:1 alpha:1]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
-    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,633,cw,36)]; note.numberOfLines=2; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor colorWithWhite:.60 alpha:1]; note.text=@"Đường biểu đồ lưu mẫu gần nhất: CPU, RAM tiến trình, pin và FPS giao diện. FPS không phải FPS trong game; Hz là mức cấu hình. GPU/nhiệt độ chip chỉ thêm khi có nguồn đọc hợp lệ."; [root addSubview:note];
+    for(NSInteger i=0;i<2;i++){ CGFloat gap=10, rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),582,rw,65)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=15; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(8,8,rw-16,14)]; n.text=rateNames[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor colorWithWhite:.65 alpha:1]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(8,26,rw-16,30)]; v.text=rateValues[i]; v.font=[UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor colorWithRed:1 green:.3 blue:.55 alpha:1]:[UIColor colorWithRed:.2 green:.82 blue:1 alpha:1]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
+    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,657,cw,36)]; note.numberOfLines=2; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor colorWithWhite:.60 alpha:1]; note.text=@"Đường biểu đồ lưu mẫu gần nhất: CPU, RAM tiến trình, pin và FPS giao diện. FPS không phải FPS trong game; Hz là mức cấu hình. GPU/nhiệt độ chip chỉ thêm khi có nguồn đọc hợp lệ."; [root addSubview:note];
     return root;
 }
 
@@ -5875,7 +5875,59 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.frame=CGRectMake(18,199,cw-36,42); apply.tag=99440; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; apply.layer.shadowOpacity=.24; apply.layer.shadowRadius=9; [apply setTitle:@"ÁP DỤNG NGAY" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightBlack]; [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:apply];
     UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,331,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
     UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Chỉ số mục tiêu được lưu vào cấu hình; FPS LIVE bên dưới là tốc độ khung hình của giao diện ứng dụng, không phải phép đo FPS mọi game."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
+    // V21: six compact information tiles are always visible on the dashboard.
+    UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,704,cw,18)];
+    infoTitle.text=@"THÔNG TIN THIẾT BỊ · CHẠM ĐỂ XEM CHI TIẾT";
+    infoTitle.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack];
+    infoTitle.textColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1];
+    [root addSubview:infoTitle];
+    NSArray<NSString *> *infoNames=@[@"CPU",@"GPU",@"RAM",@"MÀN HÌNH",@"THÔNG TIN MÁY",@"JAILBREAK"];
+    NSArray<NSString *> *infoSymbols=@[@"cpu",@"gpu",@"memorychip",@"display",@"iphone",@"lock.shield"];
+    for(NSInteger i=0;i<6;i++) {
+        CGFloat gap=8, tileW=(cw-gap*2)/3.0, x=side+(i%3)*(tileW+gap), y=728+(i/3)*61;
+        UIButton *tile=[UIButton buttonWithType:UIButtonTypeSystem];
+        tile.frame=CGRectMake(x,y,tileW,53); tile.tag=99500+i;
+        tile.backgroundColor=[UIColor colorWithRed:.055 green:.035 blue:.13 alpha:1];
+        tile.layer.cornerRadius=13; tile.layer.borderWidth=1;
+        tile.layer.borderColor=[UIColor colorWithRed:.38 green:.22 blue:.72 alpha:.85].CGColor;
+        UIImageView *ico=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:infoSymbols[i]]];
+        ico.frame=CGRectMake(9,9,17,17); ico.tintColor=[UIColor colorWithRed:.22 green:.82 blue:1 alpha:1]; [tile addSubview:ico];
+        UILabel *lab=[[UILabel alloc] initWithFrame:CGRectMake(29,8,tileW-34,36)];
+        lab.text=infoNames[i]; lab.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack];
+        lab.textColor=UIColor.whiteColor; lab.numberOfLines=2; lab.adjustsFontSizeToFitWidth=YES; lab.minimumScaleFactor=.7; [tile addSubview:lab];
+        [tile addTarget:self action:@selector(neonV21ShowDeviceInfo:) forControlEvents:UIControlEventTouchUpInside];
+        [root addSubview:tile];
+    }
     return root;
+}
+
+- (void)neonV21ShowDeviceInfo:(UIButton *)sender {
+    NSInteger index=sender.tag-99500;
+    struct utsname sysinfo; uname(&sysinfo);
+    NSString *machine=[NSString stringWithUTF8String:sysinfo.machine] ?: @"Không rõ";
+    NSString *os=UIDevice.currentDevice.systemVersion ?: @"Không rõ";
+    NSString *arch=@"Không xác định";
+#if defined(__arm64e__)
+    arch=@"arm64e";
+#elif defined(__arm64__)
+    arch=@"arm64";
+#endif
+    NSString *jailbreak=@"Chưa xác định được loại jailbreak";
+    NSFileManager *fm=NSFileManager.defaultManager;
+    if([fm fileExistsAtPath:@"/var/jb/.installed_roothide"] || [fm fileExistsAtPath:@"/var/containers/Bundle/tweaksupport"]) jailbreak=@"Có dấu hiệu RootHide (heuristic)";
+    else if([fm fileExistsAtPath:@"/var/jb"] || [fm fileExistsAtPath:@"/var/lib/dpkg/status"]) jailbreak=@"Có dấu hiệu jailbreak rootless/rootful; chưa đủ dữ liệu để phân biệt chắc chắn";
+    NSString *message=@""; NSString *title=@"";
+    switch(index) {
+        case 0: title=@"CPU"; message=[NSString stringWithFormat:@"Kiến trúc biên dịch: %@\nSố lõi logic: %u\nMức tải hiện đọc được: %@\nXung nhịp tối đa: iOS không cung cấp giá trị tin cậy qua API công khai; không tự suy đoán.",arch,Titanium_LogicalCPUCoreCount(),Titanium_GetLiveCPULoadPercentage()>=0?[NSString stringWithFormat:@"%.0f%%",Titanium_GetLiveCPULoadPercentage()]:@"Không khả dụng"]; break;
+        case 1: title=@"GPU"; message=@"GPU: thông tin chi tiết và tải GPU không có API công khai tổng quát trong bản này. Không hiển thị số lõi/xung nhịp giả; Metal có thể cung cấp tên GPU ở môi trường tương thích."; break;
+        case 2: title=@"RAM & BỘ NHỚ"; message=[NSString stringWithFormat:@"RAM vật lý: %@\nBộ nhớ tiến trình hiện tại: %@\nLưu ý: bộ nhớ tiến trình không phải tổng RAM đang sử dụng toàn hệ thống.",Titanium_ByteCountString(NSProcessInfo.processInfo.physicalMemory),Titanium_ByteCountString(Titanium_CurrentProcessFootprintBytes())]; break;
+        case 3: title=@"MÀN HÌNH · HZ / FPS"; message=[NSString stringWithFormat:@"Hz tối đa mà UIKit báo: %ld\nHz đang cấu hình: %@\nFPS giao diện SmoothIOS: %ld\nFPS game và nhiệt độ CPU/GPU thực tế không được đo trong bản này.",(long)UIScreen.mainScreen.maximumFramesPerSecond,self.settingsDict[@"TargetRefreshRate"] ?: @"Chưa đặt",(long)_uiFPSMeasured]; break;
+        case 4: title=@"THÔNG TIN MÁY"; message=[NSString stringWithFormat:@"Mẫu thiết bị: %@\niOS: %@\nKiến trúc: %@\nBộ nhớ vật lý: %@",machine,os,arch,Titanium_ByteCountString(NSProcessInfo.processInfo.physicalMemory)]; break;
+        default: title=@"MÔI TRƯỜNG JAILBREAK"; message=[NSString stringWithFormat:@"%@\nĐường dẫn /var/jb: %@\nThông tin chỉ mang tính nhận diện sơ bộ; không xác nhận khai thác kernel thành công.",jailbreak,[fm fileExistsAtPath:@"/var/jb"]?@"Có":@"Không thấy"]; break;
+    }
+    UIAlertController *a=[UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)neonV12SelectMode:(UIButton *)sender {
@@ -6272,10 +6324,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             title = @"MUSIC STUDIO · TÌM VÀ CHỌN NHẠC";
             detail = @"Tìm và chọn nhạc · Phonk · SoundCloud · Apple Music · YouTube";
             UIButton *musicTile = [UIButton buttonWithType:UIButtonTypeSystem];
-            musicTile.frame = CGRectMake(0, 0, 44, 38);
+            musicTile.frame = CGRectMake(0, 0, 92, 38);
             musicTile.layer.cornerRadius = 12.0;
             musicTile.backgroundColor = [UIColor colorWithRed:0.30 green:0.08 blue:0.52 alpha:1.0];
             [musicTile setImage:[UIImage systemImageNamed:@"music.note.list"] forState:UIControlStateNormal];
+            [musicTile setTitle:@" Nhạc" forState:UIControlStateNormal];
+            musicTile.titleLabel.font=[UIFont systemFontOfSize:11 weight:UIFontWeightBold];
             musicTile.tintColor = [UIColor colorWithRed:0.20 green:0.88 blue:1.0 alpha:1.0];
             [musicTile addTarget:self action:@selector(showPhonkMusicPicker) forControlEvents:UIControlEventTouchUpInside];
             accessory = musicTile;
@@ -7234,7 +7288,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     if (self.presentedViewController) return;
     UIAlertController *a = [UIAlertController
         alertControllerWithTitle:@"⚡ KHAI THÁC HỆ THỐNG"
-        message:@"Hệ thống sẽ thực thi 2100+ dòng mã khai thác qua 7 pha.\n\nQuá trình tối ưu hóa toàn bộ máy từ iPhone 6s đến iPhone 15 Pro Max.\n\nNhấn KHAI THÁC để bắt đầu."
+        message:@"Bản này không chứa exploit kernel thực sự. Màn hình tiến trình cũ chỉ tạo log giả nên không thể mở khóa quyền kernel, bỏ AMFI hay ép xung phần cứng.\n\nBạn có thể tiếp tục vào phần cấu hình giao diện và chẩn đoán; trạng thái này không xác nhận đã khai thác thành công."
         preferredStyle:UIAlertControllerStyleAlert];
     __weak typeof(self) weakSelf = self;
     [a addAction:[UIAlertAction actionWithTitle:@"KHAI THÁC" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
