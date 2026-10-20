@@ -2844,7 +2844,7 @@ static NSArray<NSNumber *> *TIExpandedRateValues(void) {
 
 
 // ====================================================================================================
-// Read-only Darwin device information using public/system APIs; no exploit is executed.
+// Read-only Darwin device information using available system interfaces; unavailable GPU thermal/clock sensors must remain unavailable rather than fabricated. No exploit is executed.
 // ====================================================================================================
 static NSDictionary *Titanium_DarwinExploit_GetDeviceInfo(void) {
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
@@ -3183,7 +3183,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 }
 - (void)addSample:(CGFloat)value { if (!isfinite(value)) return; [_samples addObject:@(MAX(0.0, MIN(100.0, value)))]; while (_samples.count > 36) [_samples removeObjectAtIndex:0]; [self setNeedsLayout]; }
 - (void)layoutSubviews { [super layoutSubviews]; CGRect b = self.bounds; UIBezierPath *grid = [UIBezierPath bezierPath]; for (NSInteger i=1;i<4;i++){ CGFloat y=CGRectGetHeight(b)*i/4.0; [grid moveToPoint:CGPointMake(0,y)]; [grid addLineToPoint:CGPointMake(CGRectGetWidth(b),y)]; } _gridLayer.frame=b; _gridLayer.path=grid.CGPath;
-    UIBezierPath *path=[UIBezierPath bezierPath]; NSUInteger count=_samples.count; if(count>0){ for(NSUInteger i=0;i<count;i++){ CGFloat x=(count<=1?CGRectGetWidth(b):((CGFloat)i/(CGFloat)(count-1))*CGRectGetWidth(b)); CGFloat v=[_samples[i] doubleValue]; CGFloat y=CGRectGetHeight(b)-(v/100.0)*MAX(1,CGRectGetHeight(b)-3)-1.5; if(i==0)[path moveToPoint:CGPointMake(x,y)]; else [path addLineToPoint:CGPointMake(x,y)]; }} _lineLayer.frame=b; _lineLayer.path=path.CGPath; _glowLayer.frame=b; _glowLayer.path=path.CGPath;
+    UIBezierPath *path=[UIBezierPath bezierPath]; NSUInteger count=_samples.count; if(count>0){ for(NSUInteger i=0;i<count;i++){ /* Newest sample enters from the right; older samples travel left. */ CGFloat x=(count<=1?CGRectGetWidth(b):CGRectGetWidth(b)-((CGFloat)i/(CGFloat)(count-1))*CGRectGetWidth(b)); CGFloat v=[_samples[i] doubleValue]; CGFloat y=CGRectGetHeight(b)-(v/100.0)*MAX(1,CGRectGetHeight(b)-3)-1.5; if(i==0)[path moveToPoint:CGPointMake(x,y)]; else [path addLineToPoint:CGPointMake(x,y)]; }} _lineLayer.frame=b; _glowLayer.frame=b; [CATransaction begin]; [CATransaction setAnimationDuration:0.12]; [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]]; _lineLayer.path=path.CGPath; _glowLayer.path=path.CGPath; [CATransaction commit];
 }
 @end
 
@@ -3504,6 +3504,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         return;
     }
 
+    // V31: saved configuration is durable UI state; it does not claim that an exploit/kernel session survives force-quit or reboot.
     // Persistent state check
     if ([self isServerCurrentlyDown] || [self isServerCurrentlyOverloadedOrError]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -3526,6 +3527,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     UIView *card = [UIView new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.alpha = 0.0;
+    card.transform = CGAffineTransformMakeScale(0.97, 0.97);
     card.backgroundColor = [UIColor colorWithRed:0.055 green:0.065 blue:0.13 alpha:0.98];
     card.layer.cornerRadius = 24;
     card.layer.borderWidth = 1.2;
@@ -3616,7 +3619,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                     author.text = @"SMOOTHIOS TEAM";
                     heading.text = @"XIN CHÀO MỌI NGƯỜI";
                     heading.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
-                    body.text = @"Cảm ơn mọi người đã sử dụng và gửi phản hồi.";
+                    body.text = @"";
                     body.textAlignment = NSTextAlignmentCenter;
                     showNext = nil;
                     return;
