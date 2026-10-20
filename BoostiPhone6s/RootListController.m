@@ -1,3 +1,5 @@
+// NEON CONTROL V35 — dashboard preferences, persistent appearance controls, live clock, sensor classification, and IOReport GPU telemetry.
+// Derived from V34.7. Verify Theos build and sensor/channel behavior on each target device/iOS release.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -6326,9 +6328,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (value) value.text = [NSString stringWithFormat:@"%ld", (long)rate];
     UILabel *mode = (UILabel *)[self.view viewWithTag:99121];
     if (mode) mode.text = @"MỨC ĐANG CHỌN · CHƯA XÁC NHẬN TẦN SỐ PHẦN CỨNG";
-    NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-    [d setInteger:rate forKey:@"TIV10SelectedRate"];
-    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
+    self.settingsDict[@"TargetRefreshRate"] = @(rate);
+    self.settingsDict[@"TargetFPSRate"] = @(rate);
+    self.settingsDict[@"EnableHzControl"] = @YES;
+    self.settingsDict[@"EnableFPSControl"] = @YES;
+    [self saveSettingsDataAndSync];
 }
 
 - (void)neonV10ChoosePreset:(UIButton *)sender {
@@ -6336,9 +6340,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger idx = MAX(0, MIN((NSInteger)rates.count - 1, sender.tag - 99200));
     NSInteger rate = rates[idx].integerValue;
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-    [d setInteger:rate forKey:@"TIV10SelectedRate"];
-    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
-    [d setInteger:rate forKey:@"TIV11SelectedPreset"];
+    [d setInteger:idx forKey:@"TIV11SelectedPreset"];
+    self.settingsDict[@"TargetRefreshRate"] = @(rate);
+    self.settingsDict[@"TargetFPSRate"] = @(rate);
+    self.settingsDict[@"EnableHzControl"] = @YES;
+    self.settingsDict[@"EnableFPSControl"] = @YES;
     // Keep the dashboard preset and power-related switch configuration in sync.
     NSMutableDictionary *presetSettings = [self.settingsDict mutableCopy] ?: [NSMutableDictionary dictionary];
     if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
@@ -6374,7 +6380,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger rate = 15 + (NSInteger)lrint(fraction * 225.0);
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
     if (slider) { slider.value = rate; [self neonV10SetRate:slider]; }
-    else { [[NSUserDefaults standardUserDefaults] setInteger:rate forKey:@"TIV10SelectedRate"]; }
+    else { self.settingsDict[@"TargetRefreshRate"] = @(rate); self.settingsDict[@"TargetFPSRate"] = @(rate); [self saveSettingsDataAndSync]; }
     // V13: the dial previews a target only; the Apply action is explicit and still subject to iOS/hardware limits.
 }
 
@@ -9420,3 +9426,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 }
 
 @end
+
+
+// V36.5.1 PATCH NOTES: added persistent performance profile selector and thermal-state-based auto target policy.
+// Exact Celsius readings and physical refresh/FPS remain device/backend-dependent; never fabricate readings.
