@@ -3158,7 +3158,22 @@ static NSDictionary *Titanium_DarwinExploit_GetDeviceInfo(void) {
     info[@"load_avg_15min"] = @(loadAvg.ldavg[2]);
     
     // 8. Thông tin jailbreak
-info[@"jailbreak_detection"] = ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ? @"RootHide/Rootless" :([[NSFileManager defaultManager] fileExistsAtPath:@"/jb"] ? @"Rootful" : @"Unknown"));
+BOOL hasVarJB = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
+    BOOL hasJB = [[NSFileManager defaultManager] fileExistsAtPath:@"/jb"];
+    BOOL hasProcursusMarker = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/.procursus_strapped"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/.procursus_strapped"];
+    BOOL hasBasebin = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/basebin"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/usr/bin/basebin"];
+    BOOL hasCydia = [[NSFileManager defaultManager] fileExistsAtPath:@"/Applications/Cydia.app"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Applications/Cydia.app"];
+    BOOL hasSileo = [[NSFileManager defaultManager] fileExistsAtPath:@"/Applications/Sileo.app"] || [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/Applications/Sileo.app"];
+    NSString *jailbreakEnvironment = @"Không phát hiện đường dẫn bootstrap đã kiểm tra";
+    if (hasProcursusMarker && hasVarJB) jailbreakEnvironment = @"RootHide/Procursus · /var/jb";
+    else if (hasVarJB && (hasBasebin || hasSileo || hasCydia)) jailbreakEnvironment = @"Rootless · /var/jb";
+    else if (hasVarJB) jailbreakEnvironment = @"Rootless · /var/jb tồn tại";
+    else if (hasJB || hasCydia || hasSileo) jailbreakEnvironment = @"Rootful hoặc bootstrap ứng dụng phát hiện được";
+    info[@"jailbreak_detection"] = jailbreakEnvironment;
+    info[@"architecture"] = Titanium_CPUArchitectureString();
+    id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice();
+    if (metalDevice.name.length) info[@"gpu_renderer"] = metalDevice.name;
+    info[@"gpu_renderer_available"] = @(metalDevice != nil);
     
     // 9. Thông tin display
     info[@"screen_max_fps"] = @((NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
@@ -4509,7 +4524,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Chế độ hiệu suất · Hz/FPS" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
         RootListController *owner = weakSelf; if (!owner) return;
-        UIAlertController *picker = [UIAlertController alertControllerWithTitle:@"Chế độ hiệu suất SmooIOS" message:@"Tự động dựa trên trạng thái nhiệt iOS và Chế độ nguồn điện thấp. Các mức Hz/FPS là giá trị yêu cầu gửi tới tweak, không đảm bảo màn hình vật lý đạt được mọi mức." preferredStyle:UIAlertControllerStyleActionSheet];
+        UIAlertController *picker = [UIAlertController alertControllerWithTitle:@"Chế độ hiệu suất SmooIOS" message:@"Các mức Hz/FPS là giá trị yêu cầu gửi tới tweak; phần cứng và iOS vẫn có quyền giới hạn tần số thực tế." preferredStyle:UIAlertControllerStyleActionSheet];
         NSArray<NSDictionary *> *profiles = @[
             @{ @"key": @"auto", @"title": @"Tự động theo nhiệt độ/trạng thái iOS" },
             @{ @"key": @"high", @"title": @"Hiệu suất cao · 240 Hz/FPS yêu cầu" },
@@ -7921,34 +7936,33 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)applySmooIOSAdaptivePerformancePolicy {
+    // Preserve the exact user-selected targets. Thermal state is diagnostic data, not permission
+    // to silently rewrite the saved Hz/FPS settings. This method only validates and repairs values.
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSString *profile = [self.settingsDict[@"SmooIOSProfileV36"] isKindOfClass:NSString.class] ? self.settingsDict[@"SmooIOSProfileV36"] : ([defaults stringForKey:@"SmooIOSProfileV36"] ?: @"auto");
-    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 120;
-    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 120;
-    BOOL autoTune = [defaults objectForKey:@"SmooIOSAutoTuneEnabledV36"] ? [defaults boolForKey:@"SmooIOSAutoTuneEnabledV36"] : YES;
-    if (!autoTune || ![profile isEqualToString:@"auto"]) return;
-
-    // Use Apple's published thermal state and Low Power Mode, not guessed Celsius values.
-    NSProcessInfo *info = NSProcessInfo.processInfo;
-    NSInteger resolved = 240;
-    if (info.isLowPowerModeEnabled || info.thermalState >= NSProcessInfoThermalStateCritical) resolved = 60;
-    else if (info.thermalState >= NSProcessInfoThermalStateSerious) resolved = 60;
-    else if (info.thermalState == NSProcessInfoThermalStateFair) resolved = 90;
-    else if (info.thermalState == NSProcessInfoThermalStateNominal) resolved = 120;
-    // Do not claim to read an exact die temperature; the OS thermal state is the available signal here.
-    resolved = MAX(60, MIN(240, resolved));
-    if (hz == resolved && fps == resolved) return;
-    self.settingsDict[@"TargetRefreshRate"] = @(resolved);
-    self.settingsDict[@"TargetFPSRate"] = @(resolved);
-    [defaults setInteger:resolved forKey:@"TargetRefreshRate"];
-    [defaults setInteger:resolved forKey:@"TargetFPSRate"];
-    [defaults synchronize];
-    [self syncSharedMemoryFile:YES];
+    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : [defaults integerForKey:@"TargetRefreshRate"];
+    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : [defaults integerForKey:@"TargetFPSRate"];
+    if (hz < 15 || hz > 240) hz = 240;
+    if (fps < 15 || fps > 240) fps = 240;
+    BOOL changed = NO;
+    if (![self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] || [self.settingsDict[@"TargetRefreshRate"] integerValue] != hz) {
+        self.settingsDict[@"TargetRefreshRate"] = @(hz);
+        [defaults setInteger:hz forKey:@"TargetRefreshRate"];
+        changed = YES;
+    }
+    if (![self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] || [self.settingsDict[@"TargetFPSRate"] integerValue] != fps) {
+        self.settingsDict[@"TargetFPSRate"] = @(fps);
+        [defaults setInteger:fps forKey:@"TargetFPSRate"];
+        changed = YES;
+    }
+    if (changed) {
+        [defaults synchronize];
+        [self syncSharedMemoryFile:YES];
+    }
     if (self.isViewLoaded) {
         UILabel *hzLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8710];
         UILabel *fpsLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8711];
-        if (hzLabel) hzLabel.text = [NSString stringWithFormat:@"%ld", (long)resolved];
-        if (fpsLabel) fpsLabel.text = [NSString stringWithFormat:@"%ld", (long)resolved];
+        if (hzLabel) hzLabel.text = [NSString stringWithFormat:@"%ld", (long)hz];
+        if (fpsLabel) fpsLabel.text = [NSString stringWithFormat:@"%ld", (long)fps];
     }
 }
 
@@ -8007,17 +8021,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         UILabel *sensorLabel = (UILabel *)[headerNow viewWithTag:8740 + ti];
         if (![sensorLabel isKindOfClass:UILabel.class]) continue;
         NSNumber *reading = tempSensors[ti];
-        if (reading.doubleValue < 0) sensorLabel.text = [NSString stringWithFormat:@"%@ · cảm biến không được iOS công bố", @[@"CPU", @"GPU", @"RAM", @"Màn hình"][ti]];
+        if (reading.doubleValue < 0) sensorLabel.text = [NSString stringWithFormat:@"%@ · không có số đo cảm biến khả dụng", @[@"CPU", @"GPU", @"RAM", @"Màn hình"][ti]];
         else sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ (đơn vị chưa xác thực)", reading];
     }
     // Only plot hardware readings when a real sensor source returned a value. Do not fabricate GPU or °C data.
     NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
     double ramPercent = systemRAMPercent;
     float gpuPercent = Titanium_GetLiveGPULoadPercentage();
-    BOOL gpuIsEstimated = (gpuPercent < 0);
-    if (gpuIsEstimated && cpu >= 0) { int noise = (int)arc4random_uniform(11) - 5; gpuPercent = (float)MAX(0, MIN(100, cpu * 0.72 + noise)); }
     NSArray<NSNumber *> *samples=@[@(cpu>=0?cpu:-1),@(gpuPercent>=0?gpuPercent:-1),@(ramPercent>=0?ramPercent:-1),@(MAX(0,MIN(100,(double)targetHz/MAX(1,UIScreen.mainScreen.maximumFramesPerSecond)*100.0))),@(MAX(0,MIN(100,(double)_uiFPSMeasured/MAX(1,UIScreen.mainScreen.maximumFramesPerSecond)*100.0))),@(battery>=0?battery*100.0:-1)];
-    NSArray<NSString *> *sampleTexts=@[cpu>=0?[NSString stringWithFormat:@"CPU · %.0f%%",cpu]:@"CPU · N/A",gpuPercent>=0?[NSString stringWithFormat:(gpuIsEstimated ? @"GPU · ~%.0f%% · ước tính từ CPU" : @"GPU · %.0f%% · IOReport"),gpuPercent]:@"GPU · chưa có dữ liệu CPU để ước tính",ramPercent>=0?[NSString stringWithFormat:@"RAM hệ thống · %.0f%% · tiến trình %@",ramPercent,Titanium_ByteCountString(memory)]:[NSString stringWithFormat:@"RAM tiến trình · %@ · tổng tải N/A",Titanium_ByteCountString(memory)],[NSString stringWithFormat:@"Màn hình · %ld Hz tối đa",(long)UIScreen.mainScreen.maximumFramesPerSecond],[NSString stringWithFormat:@"FPS giao diện · %ld",(long)_uiFPSMeasured],battery>=0?[NSString stringWithFormat:@"Pin · %.0f%% mức sạc",battery*100.0]:@"Pin · N/A"];
+    NSArray<NSString *> *sampleTexts=@[cpu>=0?[NSString stringWithFormat:@"CPU · %.0f%%",cpu]:@"CPU · chưa có số đo",gpuPercent>=0?[NSString stringWithFormat:@"GPU · %.0f%% · IOReport",gpuPercent]:@"GPU · chưa có số đo IOReport",ramPercent>=0?[NSString stringWithFormat:@"RAM hệ thống · %.0f%% · tiến trình %@",ramPercent,Titanium_ByteCountString(memory)]:[NSString stringWithFormat:@"RAM tiến trình · %@ · tổng tải chưa có số đo",Titanium_ByteCountString(memory)],[NSString stringWithFormat:@"Màn hình · %ld Hz tối đa báo cáo bởi UIKit",(long)UIScreen.mainScreen.maximumFramesPerSecond],[NSString stringWithFormat:@"FPS giao diện · %ld",(long)_uiFPSMeasured],battery>=0?[NSString stringWithFormat:@"Pin · %.0f%% mức sạc",battery*100.0]:@"Pin · chưa có số đo"];
     for(NSInteger i=0;i<6;i++){
         TITrendGraphView *graph=(TITrendGraphView *)[headerNow viewWithTag:9200+i]; UILabel *value=(UILabel *)[headerNow viewWithTag:9190+i];
         if(value) value.text=sampleTexts[i];
