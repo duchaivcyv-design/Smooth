@@ -4624,12 +4624,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 #include <dlfcn.h>
 
-// Hàm IOKit gốc không bị can thiệp ép 100%, giữ nguyên dung lượng thật cho thanh trạng thái (Status Bar)
 static CFDictionaryRef (*orig_IOPSGetPowerSourceDescription)(CFTypeRef blob, CFTypeRef ps) = NULL;
 static CFDictionaryRef hooked_IOPSGetPowerSourceDescription(CFTypeRef blob, CFTypeRef ps) {
     @try {
         CFDictionaryRef desc = orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
-        return desc; // Trả về thông tin gốc chuẩn xác 100% để hiển thị đúng % pin ra màn hình
+        return desc; 
     } @catch (__unused NSException *e) {}
     return orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
 }
@@ -4638,10 +4637,29 @@ static int (*orig_IOPSGetPercentRemaining)(void) = NULL;
 static int hooked_IOPSGetPercentRemaining(void) {
     @try {
         if (orig_IOPSGetPercentRemaining) {
-            return orig_IOPSGetPercentRemaining(); // Trả về % pin thật để app quản lý pin đọc được
+            return orig_IOPSGetPercentRemaining(); 
         }
     } @catch (__unused NSException *e) {}
     return 100;
+}
+
+static void Titanium_InstallPowerBypassC(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+            if (iokit) {
+                void *sym1 = dlsym(iokit, "IOPSGetPowerSourceDescription");
+                if (sym1) {
+                    MSHookFunction(sym1, (void *)hooked_IOPSGetPowerSourceDescription, (void **)&orig_IOPSGetPowerSourceDescription);
+                }
+                void *sym2 = dlsym(iokit, "IOPSGetPercentRemaining");
+                if (sym2) {
+                    MSHookFunction(sym2, (void *)hooked_IOPSGetPercentRemaining, (void **)&orig_IOPSGetPercentRemaining);
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
 }
 
 %group Group_Global_Thread_Governor_Unthrottled
@@ -4649,12 +4667,10 @@ static int hooked_IOPSGetPercentRemaining(void) {
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState {
-    // Luôn báo máy mát mẻ ở tầng kernel, cấm tuyệt đối tiến trình nền bóp hiệu năng chip
     return NSProcessInfoThermalStateNominal;
 }
 
 - (BOOL)isLowPowerModeEnabled {
-    // Chặn chế độ nguồn điện thấp làm nghẽn luồng render
     return NO;
 }
 
@@ -4663,12 +4679,11 @@ static int hooked_IOPSGetPercentRemaining(void) {
 %hook UIDevice
 
 - (float)batteryLevel {
-    // GIỮ NGUYÊN % PIN THẬT: Trả về giá trị gốc của hệ thống để bạn nhìn thấy % pin chính xác mà sạc
     return %orig;
 }
 
 - (UIDeviceBatteryState)batteryState {
-    return %orig; // Giữ nguyên trạng thái sạc/dùng thật
+    return %orig; 
 }
 
 - (BOOL)isBatteryMonitoringEnabled {
@@ -4693,26 +4708,7 @@ static int hooked_IOPSGetPercentRemaining(void) {
 
 %end
 
-%end
-
-static void Titanium_InstallPowerBypassC(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
-            if (iokit) {
-                void *sym1 = dlsym(iokit, "IOPSGetPowerSourceDescription");
-                if (sym1) {
-                    MSHookFunction(sym1, (void *)hooked_IOPSGetPowerSourceDescription, (void **)&orig_IOPSGetPowerSourceDescription);
-                }
-                void *sym2 = dlsym(iokit, "IOPSGetPercentRemaining");
-                if (sym2) {
-                    MSHookFunction(sym2, (void *)hooked_IOPSGetPercentRemaining, (void **)&orig_IOPSGetPercentRemaining);
-                }
-            }
-        } @catch (__unused NSException *e) {}
-    });
-}
+%end // <--- QUAN TRỌNG: Đóng nhóm Group_Global_Thread_Governor_Unthrottled tại đây để tránh lỗi biên dịch
 
 // ====================================================================================================
 // NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (TỐI ƯU METAL PIPELINE, CHỐNG DEADLOCK & KILL APP NGẦM)
