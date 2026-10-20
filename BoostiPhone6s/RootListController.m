@@ -1,5 +1,3 @@
-// NEON CONTROL V35 — dashboard preferences, persistent appearance controls, live clock, sensor classification, and IOReport GPU telemetry.
-// Derived from V34.7. Verify Theos build and sensor/channel behavior on each target device/iOS release.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -6328,11 +6326,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (value) value.text = [NSString stringWithFormat:@"%ld", (long)rate];
     UILabel *mode = (UILabel *)[self.view viewWithTag:99121];
     if (mode) mode.text = @"MỨC ĐANG CHỌN · CHƯA XÁC NHẬN TẦN SỐ PHẦN CỨNG";
-    self.settingsDict[@"TargetRefreshRate"] = @(rate);
-    self.settingsDict[@"TargetFPSRate"] = @(rate);
-    self.settingsDict[@"EnableHzControl"] = @YES;
-    self.settingsDict[@"EnableFPSControl"] = @YES;
-    [self saveSettingsDataAndSync];
+    NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+    [d setInteger:rate forKey:@"TIV10SelectedRate"];
+    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
 }
 
 - (void)neonV10ChoosePreset:(UIButton *)sender {
@@ -6340,11 +6336,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger idx = MAX(0, MIN((NSInteger)rates.count - 1, sender.tag - 99200));
     NSInteger rate = rates[idx].integerValue;
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-    [d setInteger:idx forKey:@"TIV11SelectedPreset"];
-    self.settingsDict[@"TargetRefreshRate"] = @(rate);
-    self.settingsDict[@"TargetFPSRate"] = @(rate);
-    self.settingsDict[@"EnableHzControl"] = @YES;
-    self.settingsDict[@"EnableFPSControl"] = @YES;
+    [d setInteger:rate forKey:@"TIV10SelectedRate"];
+    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
+    [d setInteger:rate forKey:@"TIV11SelectedPreset"];
     // Keep the dashboard preset and power-related switch configuration in sync.
     NSMutableDictionary *presetSettings = [self.settingsDict mutableCopy] ?: [NSMutableDictionary dictionary];
     if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
@@ -6380,7 +6374,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger rate = 15 + (NSInteger)lrint(fraction * 225.0);
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
     if (slider) { slider.value = rate; [self neonV10SetRate:slider]; }
-    else { self.settingsDict[@"TargetRefreshRate"] = @(rate); self.settingsDict[@"TargetFPSRate"] = @(rate); [self saveSettingsDataAndSync]; }
+    else { [[NSUserDefaults standardUserDefaults] setInteger:rate forKey:@"TIV10SelectedRate"]; }
     // V13: the dial previews a target only; the Apply action is explicit and still subject to iOS/hardware limits.
 }
 
@@ -6545,10 +6539,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             inner.contentSize=CGSizeMake(cw,3*(cardH+gap));
         } else {
             UILabel *thermalNote=[[UILabel alloc] initWithFrame:CGRectMake(4,2,cw-8,48)]; thermalNote.numberOfLines=0; thermalNote.font=[UIFont systemFontOfSize:11]; thermalNote.textColor=[UIColor secondaryLabelColor]; thermalNote.text=@"Đang dò các cảm biến số thực tế mà IORegistry của thiết bị công bố. Tên và đơn vị phụ thuộc SoC/iOS; chỉ số nào không có nguồn cảm biến tương ứng sẽ không được suy diễn thành °C."; [inner addSubview:thermalNote];
-            NSArray *tn=@[@"CPU · NHIỆT ĐỘ",@"GPU · NHIỆT ĐỘ",@"RAM · NHIỆT ĐỘ",@"MÀN HÌNH · NHIỆT ĐỘ"];
-            NSArray *td=@[@"Cảm biến CPU / die",@"Cảm biến GPU",@"Cảm biến bộ nhớ",@"Cảm biến hiển thị"];
-            for(NSInteger i=0;i<4;i++){ CGFloat gap=9, cardW=(cw-gap)/2.0; NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),62+row*116,cardW,105)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(10,12,cardW-20,32)]; n.numberOfLines=2; n.text=tn[i]; n.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; n.textColor=UIColor.whiteColor; [card addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(10,51,cardW-20,36)]; v.tag=8740+i; v.numberOfLines=2; v.text=td[i]; v.font=[UIFont systemFontOfSize:10 weight:UIFontWeightSemibold]; v.textColor=[UIColor colorWithRed:1 green:.65 blue:.25 alpha:1]; [card addSubview:v]; }
-            UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,304,cw-8,50)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,365);
+            NSArray *tn=@[@"CPU · NHIỆT / CẢM BIẾN",@"GPU · NHIỆT / CẢM BIẾN",@"RAM · NHIỆT / CẢM BIẾN",@"MÀN HÌNH · CẢM BIẾN",@"PIN · CẢM BIẾN NHIỆT"];
+            NSArray *td=@[@"IORegistry sensor trend",@"IORegistry sensor trend",@"IORegistry sensor trend",@"IORegistry sensor trend",@"Battery sensor trend"];
+            for(NSInteger i=0;i<5;i++){ CGFloat gap=9, cardW=(cw-gap)/2.0; NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),62+row*124,cardW,116)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(10,7,cardW-20,25)]; n.numberOfLines=2; n.text=tn[i]; n.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack]; n.textColor=UIColor.whiteColor; [card addSubview:n]; TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(9,34,cardW-18,38)]; graph.tag=9250+i; graph.lineLayer.strokeColor=[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1].CGColor; graph.glowLayer.strokeColor=[[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1] colorWithAlphaComponent:.18].CGColor; [card addSubview:graph]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(9,76,cardW-18,32)]; v.tag=8740+i; v.numberOfLines=2; v.text=td[i]; v.font=[UIFont systemFontOfSize:9 weight:UIFontWeightSemibold]; v.textColor=[UIColor colorWithRed:1 green:.65 blue:.25 alpha:1]; v.adjustsFontSizeToFitWidth=YES; v.minimumScaleFactor=.7; [card addSubview:v]; }
+            UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,440,cw-8,42)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,490);
         }
     }
     pages.contentSize=CGSizeMake(cw*2,505);
@@ -8013,7 +8007,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSNumber *gpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"gpu"]);
     NSNumber *ramSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"dram"]);
     NSNumber *displaySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"display"]);
-    // Sensor units are not standardized across iOS builds; only display as °C if property name explicitly indicates Celsius.
+    NSNumber *batterySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"battery"]);
+    if (!batterySensor) batterySensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"battery"]);
+    // Sensor units are not standardized across iOS builds; never label raw IORegistry values as Celsius.
     NSProcessInfoThermalState ts = NSProcessInfo.processInfo.thermalState;
     NSInteger si = (NSInteger)ts;
     NSString *thermalText = (ts == NSProcessInfoThermalStateNominal) ? @"Ổn định · Bình thường" : (ts == NSProcessInfoThermalStateFair ? @"Ấm nhẹ" : ((ts == NSProcessInfoThermalStateSerious || ts == NSProcessInfoThermalStateCritical) ? @"Nhiệt cao" : @"Không khả dụng"));
@@ -8022,13 +8018,22 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (tempRead) { tempRead.text = thermalText; tempRead.textColor = thermalColor; }
     UILabel *thermalValue = (UILabel *)[headerNow viewWithTag:8715];
     if (thermalValue) { thermalValue.text = [NSString stringWithFormat:@"%@ · iOS thermal state", thermalText]; thermalValue.textColor = thermalColor; }
-    NSArray<NSNumber *> *tempSensors = @[cpuSensor ?: @(-1), gpuSensor ?: @(-1), ramSensor ?: @(-1), displaySensor ?: @(-1)];
-    for (NSInteger ti = 0; ti < 4; ti++) {
+    NSArray<NSNumber *> *tempSensors = @[cpuSensor ?: @(-1), gpuSensor ?: @(-1), ramSensor ?: @(-1), displaySensor ?: @(-1), batterySensor ?: @(-1)];
+    NSArray<NSString *> *sensorNames = @[@"CPU", @"GPU", @"RAM", @"Màn hình", @"Pin"];
+    for (NSInteger ti = 0; ti < 5; ti++) {
         UILabel *sensorLabel = (UILabel *)[headerNow viewWithTag:8740 + ti];
-        if (![sensorLabel isKindOfClass:UILabel.class]) continue;
+        TITrendGraphView *sensorGraph = (TITrendGraphView *)[headerNow viewWithTag:9250 + ti];
         NSNumber *reading = tempSensors[ti];
-        if (reading.doubleValue < 0) sensorLabel.text = [NSString stringWithFormat:@"%@ · không có số đo cảm biến khả dụng", @[@"CPU", @"GPU", @"RAM", @"Màn hình"][ti]];
-        else sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ (đơn vị chưa xác thực)", reading];
+        if (reading.doubleValue < 0) {
+            if (sensorLabel) sensorLabel.text = [NSString stringWithFormat:@"%@ · chưa có cảm biến đọc được", sensorNames[ti]];
+        } else {
+            if (sensorLabel) sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ · không tự quy đổi °C", reading];
+            // TITrendGraphView is scaled 0–100. Plot only readings in that range; do not clamp
+            // large encoded sensor values into a misleading flat 100% line.
+            if ([sensorGraph isKindOfClass:TITrendGraphView.class] && reading.doubleValue >= 0.0 && reading.doubleValue <= 100.0) {
+                [sensorGraph addSample:reading.doubleValue];
+            }
+        }
     }
     // Only plot hardware readings when a real sensor source returned a value. Do not fabricate GPU or °C data.
     NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
@@ -9426,7 +9431,3 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 }
 
 @end
-
-
-// V36.5.1 PATCH NOTES: added persistent performance profile selector and thermal-state-based auto target policy.
-// Exact Celsius readings and physical refresh/FPS remain device/backend-dependent; never fabricate readings.
