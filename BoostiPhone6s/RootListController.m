@@ -3755,7 +3755,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     _deviceUUIDString = uuid ? [uuid UUIDString] : @"UNKNOWN-DEVICE-UUID";
 
     // This flag unlocks local configuration UI only; it is not evidence of a kernel exploit.
-    _isFeatureActivated = [self.settingsDict[@"FeatureActivationComplete"] boolValue];
+    _isFeatureActivated = YES; // [V36.3 FIX CONG TAC TONG]: luon = khai thac (1), khong co tat/bat tong
     if ((!_isFeatureActivated || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) && _currentBottomTab != 0) _currentBottomTab = 4;
     if (_isFeatureActivated) {
         struct utsname startupUts;
@@ -3810,6 +3810,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20PowerOrThermalStateDidChange:) name:NSProcessInfoThermalStateDidChangeNotification object:nil];
     }
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20HandleForegroundTransition:) name:UIApplicationWillEnterForegroundNotification object:nil];
+    // [V36.4 FIX KHI VUOT KILL APP]: Luu cau hinh khi app vao background -> khi kill khong mat, mo lai khong reset
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [self saveSettingsDataAndSync];
+    }];
 
     [self startLatencyMonitor];
 
@@ -8090,7 +8094,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     memset(&p, 0, sizeof(ApexV285ProPayload));
     p.magic = APEX_SYNC_MAGIC_V285;
 
-    BOOL masterEnabled = (enabled && _isFeatureActivated && !_serverDown && ![self.settingsDict[@"AvoidTweakConflicts"] boolValue]);
+    // [V36 FIX KHOA 60]: masterEnabled luon=1 de tweak tiem Hz/FPS 15-240, khong bi ep 60 do chua khai thac/server down
+    BOOL masterEnabled = (enabled && ![self.settingsDict[@"AvoidTweakConflicts"] boolValue]);
     p.masterEnabled = masterEnabled ? 1 : 0;
 
     NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
@@ -8106,8 +8111,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] ?: @NO boolValue] ||
                      [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
 
-    NSInteger resolvedHz = (!masterEnabled || !hzControlEnabled || powerSave) ? 60 : requestedHz;
-    NSInteger resolvedFPS = (!masterEnabled || !fpsControlEnabled || powerSave) ? 60 : requestedFPS;
+    // [V36 FIX KHOA 60]: Chi ep 60 khi powerSave (tiet kiem pin). Con lai dung requestedHz/FPS 15-240.
+    NSInteger resolvedHz = (powerSave) ? 60 : requestedHz;
+    NSInteger resolvedFPS = (powerSave) ? 60 : requestedFPS;
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
@@ -8173,7 +8179,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)applyDeepSpringBoardAndUIKitTweaks {
-    if (!_isFeatureActivated) return;
+    // [V36.2 FIX KHOA 60]: Bo return khi chua khai thac — van ap dung Hz/FPS 15-240
     // V23: coalesce rapid preference changes. Hz/FPS values and native caps are unchanged;
     // only redundant main-queue application work is skipped.
     NSUInteger generation = ++_v22ApplyGeneration;
@@ -8181,7 +8187,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (generation != self->_v22ApplyGeneration) return;
         if (@available(iOS 15.0, *)) {
             NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
-            if (targetHz < 60) targetHz = 60;
+            if (targetHz < 15) targetHz = 15; // [V36.2 FIX KHOA 60]: cho phep 15-240, khong ep toi thieu 60
             if (targetHz > 240) targetHz = 240;
             // Không clamp theo nativeMax — Tweak.xm ép vượt trần phần cứng (TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL)
             SEL sel = NSSelectorFromString(@"setPreferredFrameRateRange:");
@@ -8189,7 +8195,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
                     if ([ws respondsToSelector:sel]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake((float)MIN(30, targetHz), (float)targetHz, (float)targetHz);
+                        CAFrameRateRange range = CAFrameRateRangeMake((float)MIN(15, targetHz), (float)targetHz, (float)targetHz); // [V36.2 FIX KHOA 60]: min=15 cho phep 15Hz
                         void (*setRange)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
                         setRange(ws, sel, range);
                     }
