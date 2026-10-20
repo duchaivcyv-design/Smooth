@@ -1,3 +1,5 @@
+// NEON CONTROL v20 — full-screen per-app profiles, apply action, settings cleanup groundwork.
+// V20 is a source edit; compile and device validation are still required.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -5547,9 +5549,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (value) value.text = [NSString stringWithFormat:@"%ld", (long)rate];
     UILabel *mode = (UILabel *)[self.view viewWithTag:99121];
     if (mode) mode.text = @"MỨC ĐANG CHỌN · CHƯA XÁC NHẬN TẦN SỐ PHẦN CỨNG";
-    NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-    [d setInteger:rate forKey:@"TIV10SelectedRate"];
-    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
+    // [SỬA HZ/FPS]: tweak chỉ đọc TargetRefreshRate/TargetFPSRate trong file cấu hình chung (settingsDict),
+    // nên phải ghi vào đó và lưu, không ghi NSUserDefaults của app.
+    self.settingsDict[@"TargetRefreshRate"] = @(rate);
+    self.settingsDict[@"TargetFPSRate"] = @(rate);
+    [self saveSettingsDataAndSync];
 }
 
 - (void)neonV10ChoosePreset:(UIButton *)sender {
@@ -5557,13 +5561,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger idx = MAX(0, MIN((NSInteger)rates.count - 1, sender.tag - 99200));
     NSInteger rate = rates[idx].integerValue;
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-    [d setInteger:rate forKey:@"TIV10SelectedRate"];
-    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
-    [d setInteger:rate forKey:@"TIV11SelectedPreset"];
+    [d setInteger:idx forKey:@"TIV11SelectedPreset"];
     // Keep the dashboard preset and power-related switch configuration in sync.
     NSMutableDictionary *presetSettings = [self.settingsDict mutableCopy] ?: [NSMutableDictionary dictionary];
     if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
     else { presetSettings[@"powerSaveMode"] = @NO; presetSettings[@"batterySaver60Hz"] = @NO; }
+    // [SỬA HZ/FPS]: khóa mà tweak thật sự đọc
+    presetSettings[@"TargetRefreshRate"] = @(rate);
+    presetSettings[@"TargetFPSRate"] = @(rate);
     self.settingsDict = presetSettings;
     [self saveSettingsDataAndSync];
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
@@ -5595,7 +5600,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger rate = 15 + (NSInteger)lrint(fraction * 225.0);
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
     if (slider) { slider.value = rate; [self neonV10SetRate:slider]; }
-    else { [[NSUserDefaults standardUserDefaults] setInteger:rate forKey:@"TIV10SelectedRate"]; }
+    else { self.settingsDict[@"TargetRefreshRate"] = @(rate); self.settingsDict[@"TargetFPSRate"] = @(rate); [self saveSettingsDataAndSync]; }
     // V13: the dial previews a target only; the Apply action is explicit and still subject to iOS/hardware limits.
 }
 
