@@ -1486,16 +1486,16 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_V10_PERFORMANCE 1
 
 #undef TITANIUM_ENABLE_RATE_KEEPER
-#define TITANIUM_ENABLE_RATE_KEEPER 1
+#define TITANIUM_ENABLE_RATE_KEEPER 0 // [SỬA NGHẼN LUỒNG]: CADisplayLink giữ nhịp chạy liên tục trên main thread khi có tương tác gần đây
 
 #undef TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES
-#define TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES 1
+#define TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES 0 // [SỬA]: allowGPUOptimizedContents=YES làm hỏng texture IOSurface (video/ảnh)
 
 #undef TITANIUM_ENABLE_TASK_QOS_TIER
 #define TITANIUM_ENABLE_TASK_QOS_TIER 1
 
 #undef TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS
-#define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 1 // [ĐÃ SỬA - ỔN ĐỊNH]: tắt hook RAM WebKit trong app thứ ba, chỉ chạy trong SpringBoard
+#define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 0 // [ĐÃ SỬA - ỔN ĐỊNH]: tắt hook RAM WebKit trong app thứ ba, chỉ chạy trong SpringBoard
 
 // BỔ SUNG CỜ BẬT CHO CÁC NHÓM SÂU ĐỂ KHÔNG BAO GIỜ BỊ BỎ SÓT KHI BIÊN DỊCH
 #undef TITANIUM_ENABLE_DEVICE_AND_OS_SPOOFING
@@ -1609,6 +1609,8 @@ static void Titanium_DisableKernelThreadThrottling(void) {
         thread_throttle_policy_data_t throttlePolicy;
         throttlePolicy.pset_limit = 0;
         thread_policy_set(selfThread, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttlePolicy, 1);
+        // [SỬA]: pthread_mach_thread_np trả về send right +1; không deallocate => rò port mỗi luồng
+        mach_port_deallocate(mach_task_self(), selfThread);
     } @catch (__unused NSException *e) {}
 }
 
@@ -1720,14 +1722,12 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
             cursor += (size_t)written;
             remaining -= (size_t)written;
         }
-        if (ok && fsync(fd) != 0) ok = NO;
+        // [SỬA NGHẼN I/O]: không fsync (stall I/O cả hệ thống mỗi lần ghi); rename() vẫn giữ tính atomic
         if (ok && fchmod(fd, 0644) != 0) ok = NO;
         if (close(fd) != 0) ok = NO;
 
         if (ok && rename(temporaryPath, [targetPath fileSystemRepresentation]) == 0) {
             (void)chmod([targetPath fileSystemRepresentation], 0644);
-            int dirFD = open([directory fileSystemRepresentation], O_RDONLY);
-            if (dirFD >= 0) { (void)fsync(dirFD); close(dirFD); }
         } else {
             (void)unlink(temporaryPath);
             ok = NO;
@@ -3434,7 +3434,9 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
 
 static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
     @try {
-        Titanium_ReloadSharedSyncStateV285();
+        // [SỬA NGHẼN LUỒNG]: bản cũ gọi ReloadSharedSyncStateV285 ở MỖI lần hook khung hình (~24 chỗ), cứ 200ms lại
+        // đọc plist từ đĩa + stat đường dẫn ngay trên luồng chính => nghẽn liên tục khi vuốt. Nay chỉ đọc giá trị đã cache;
+        // việc nạp lại đã được xử lý khi đổi cài đặt (thông báo Darwin) và khi app trở lại foreground.
         NSInteger hzCap = Titanium_GetTargetConfiguredHz();
         NSInteger fpsCap = Titanium_GetTargetConfiguredFPS();
         if (CFG285) {
@@ -3468,9 +3470,11 @@ static inline void Titanium_MarkDynamicMorphBurst(void) {
         g_isDynamicMorphActive = YES;
         g_lastDynamicMorphTick = mach_absolute_time();
         g_lastInteractionMachTime = g_lastDynamicMorphTick;
+#if TITANIUM_ENABLE_RATE_KEEPER
         if (Titanium_IsSpringBoard()) {
             [TitaniumRateKeeper kick];
         }
+#endif
     } @catch (__unused NSException *e) {}
 }
 
@@ -3954,14 +3958,15 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(rate);
+            origDone = YES; %orig(rate);
             return;
         }
-        %orig(rate);
+        origDone = YES; %orig(rate);
     } @catch (__unused NSException *e) {
-        %orig(rate);
+        if (!origDone) %orig(rate);
     }
 }
 
@@ -4449,17 +4454,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UINavigationController
 
 - (void)viewDidAppear:(BOOL)animated {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(animated);
+            origDone = YES; %orig(animated);
             return;
         }
-        %orig(animated);
+        origDone = YES; %orig(animated);
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.interactivePopGestureRecognizer) {
             self.interactivePopGestureRecognizer.delaysTouchesBegan = NO;
         }
     } @catch (__unused NSException *e) {
-        %orig(animated);
+        if (!origDone) %orig(animated);
     }
 }
 
@@ -4640,50 +4646,53 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)_stopScrollDecelerationNotify:(BOOL)notify {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(notify);
+            origDone = YES; %orig(notify);
             return;
         }
-        %orig(notify);
+        origDone = YES; %orig(notify);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isScrollingActive = NO;
             g_isUserTouchingScreen = NO;
         }
     } @catch (__unused NSException *e) {
-        %orig(notify);
+        if (!origDone) %orig(notify);
     }
 }
 
 - (void)_scrollViewDidEndDecelerating {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isScrollingActive = NO;
             g_isUserTouchingScreen = NO;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
 - (void)_scrollViewDidEndDraggingForChildScrollView:(id)view {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(view);
+            origDone = YES; %orig(view);
             return;
         }
-        %orig(view);
+        origDone = YES; %orig(view);
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !self.isDecelerating) {
             g_isScrollingActive = NO;
             g_isUserTouchingScreen = NO;
         }
     } @catch (__unused NSException *e) {
-        %orig(view);
+        if (!origDone) %orig(view);
     }
 }
 
@@ -4871,12 +4880,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)_notifyDidScroll {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isScrollingActive = YES;
             uint64_t now = mach_absolute_time();
@@ -4884,17 +4894,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
 - (void)_smoothScrollWithTimestamp:(double)timestamp {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(timestamp);
+            origDone = YES; %orig(timestamp);
             return;
         }
-        %orig(timestamp);
+        origDone = YES; %orig(timestamp);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isScrollingActive = YES;
             uint64_t now = mach_absolute_time();
@@ -4902,7 +4913,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig(timestamp);
+        if (!origDone) %orig(timestamp);
     }
 }
 
@@ -4958,19 +4969,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)didClose {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -5045,19 +5057,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(animated);
+            origDone = YES; %orig(animated);
             return;
         }
-        %orig(animated);
+        origDone = YES; %orig(animated);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig(animated);
+        if (!origDone) %orig(animated);
     }
 }
 
@@ -5122,53 +5135,56 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook PGPictureInPictureRemoteObject
 
 - (void)_updatePreferredContentSize {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
 - (void)startPictureInPicture {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
 - (void)stopPictureInPictureAnimated:(BOOL)animated {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(animated);
+            origDone = YES; %orig(animated);
             return;
         }
-        %orig(animated);
+        origDone = YES; %orig(animated);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig(animated);
+        if (!origDone) %orig(animated);
     }
 }
 
@@ -5177,19 +5193,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBPIPController
 
 - (void)startPictureInPictureForApplicationWithProcessIdentifier:(int)pid sceneIdentifier:(id)sceneId animated:(BOOL)animated completionHandler:(id)completion {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(pid, sceneId, animated, completion);
+            origDone = YES; %orig(pid, sceneId, animated, completion);
             return;
         }
-        %orig(pid, sceneId, animated, completion);
+        origDone = YES; %orig(pid, sceneId, animated, completion);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig(pid, sceneId, animated, completion);
+        if (!origDone) %orig(pid, sceneId, animated, completion);
     }
 }
 
@@ -5198,36 +5215,38 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook AVPictureInPictureController
 
 - (void)startPictureInPicture {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
 - (void)stopPictureInPicture {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -5313,18 +5332,19 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UITableView
 
 - (void)didMoveToWindow {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
             self.delaysContentTouches = NO;
             self.canCancelContentTouches = YES;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -5333,19 +5353,20 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UICollectionView
 
 - (void)didMoveToWindow {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window && !Titanium_IsSpringBoard()) {
             self.delaysContentTouches = NO;
             self.canCancelContentTouches = YES;
             self.prefetchingEnabled = YES;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -5362,14 +5383,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIKeyboardTaskQueue
 
 - (void)performTask:(id)task {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(task);
+            origDone = YES; %orig(task);
             return;
         }
-        %orig(task);
+        origDone = YES; %orig(task);
     } @catch (__unused NSException *e) {
-        %orig(task);
+        if (!origDone) %orig(task);
     }
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -5399,14 +5421,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIButton
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(touches, event);
+            origDone = YES; %orig(touches, event);
             return;
         }
-        %orig(touches, event);
+        origDone = YES; %orig(touches, event);
     } @catch (__unused NSException *e) {
-        %orig(touches, event);
+        if (!origDone) %orig(touches, event);
     }
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -5460,22 +5483,23 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook _MTLCommandQueue
 
 - (void)setStatOptions:(NSUInteger)options {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(options);
+            origDone = YES; %orig(options);
             return;
         }
         if (Titanium_IsSpringBoard()) {
-            %orig(options);
+            origDone = YES; %orig(options);
             return;
         }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            %orig(0);
+            origDone = YES; %orig(0);
             return;
         }
-        %orig(options);
+        origDone = YES; %orig(options);
     } @catch (__unused NSException *e) {
-        %orig(options);
+        if (!origDone) %orig(options);
     }
 }
 
@@ -5532,22 +5556,23 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)setAllowGPUOptimizedContents:(BOOL)flag {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(flag);
+            origDone = YES; %orig(flag);
             return;
         }
         if (Titanium_IsSpringBoard()) {
-            %orig(flag);
+            origDone = YES; %orig(flag);
             return;
         }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(YES);
+            origDone = YES; %orig(YES);
             return;
         }
-        %orig(flag);
+        origDone = YES; %orig(flag);
     } @catch (__unused NSException *e) {
-        %orig(flag);
+        if (!origDone) %orig(flag);
     }
 }
 
@@ -5556,18 +5581,19 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook CAMetalDrawable
 
 - (void)presentAfterMinimumDuration:(CFTimeInterval)duration {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(duration);
+            origDone = YES; %orig(duration);
             return;
         }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(0.0); // Xuất khung hình ngay lập tức không có độ trễ thời gian chờ
+            origDone = YES; %orig(0.0); // Xuất khung hình ngay lập tức không có độ trễ thời gian chờ
             return;
         }
-        %orig(duration);
+        origDone = YES; %orig(duration);
     } @catch (__unused NSException *e) {
-        %orig(duration);
+        if (!origDone) %orig(duration);
     }
 }
 
@@ -5584,18 +5610,19 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)setWaitForFence:(BOOL)wait {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(wait);
+            origDone = YES; %orig(wait);
             return;
         }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(NO);
+            origDone = YES; %orig(NO);
             return;
         }
-        %orig(wait);
+        origDone = YES; %orig(wait);
     } @catch (__unused NSException *e) {
-        %orig(wait);
+        if (!origDone) %orig(wait);
     }
 }
 
@@ -5766,18 +5793,19 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook MTMaterialView
 
 - (void)didMoveToWindow {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (TITANIUM_LITE_MODE) return;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && self.layer != nil) {
             self.layer.allowsGroupOpacity = YES;
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -5825,12 +5853,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook WKWebView
 
 - (void)didMoveToWindow {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window) {
             NSInteger currentCap = Titanium_GetEffectiveFrameCap();
             NSString *js = Titanium_BuildWebFPSOverdriveScript(currentCap);
@@ -5839,17 +5868,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             }
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
 - (void)_didReceiveMemoryWarning {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             WKProcessPool *pool = [NSThread isMainThread] ? self.configuration.processPool : nil;
             if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
@@ -5860,7 +5890,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             });
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -6352,12 +6382,13 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook UITextView
 
 - (void)didMoveToWindow {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (Titanium_IsAIApp() && self.window) {
             // Ép layout không liên tục và tối ưu hóa cuộn mượt cho text dài
             if ([self respondsToSelector:@selector(layoutManager)]) {
@@ -6371,7 +6402,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
             self.layer.shouldRasterize = NO; // Tránh rasterize gây mờ chữ khi scroll nhanh
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -6402,17 +6433,18 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook UILabel
 
 - (void)didMoveToWindow {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig;
+            origDone = YES; %orig;
             return;
         }
-        %orig;
+        origDone = YES; %orig;
         if (Titanium_IsAIApp() && self.window) {
             self.layer.drawsAsynchronously = YES; // Cho phép render bất đồng bộ để không nghẽn UI
         }
     } @catch (__unused NSException *e) {
-        %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -6838,15 +6870,16 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %hook _MTLCommandQueue
 
 - (void)enqueueCommandBuffer:(id)buffer {
+    BOOL origDone = NO;
     @try {
         if (!self) {
-            %orig(buffer);
+            origDone = YES; %orig(buffer);
             return;
         }
         EnforceMaxCPUPower(); // Bung tối đa năng lực phần cứng khi đẩy lệnh đồ họa
-        %orig(buffer);
+        origDone = YES; %orig(buffer);
     } @catch (__unused NSException *e) {
-        %orig(buffer);
+        if (!origDone) %orig(buffer);
     }
 }
 
@@ -7074,7 +7107,19 @@ static void Titanium_StartIPCHearthbeatV12(void) {
                                                                        CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
                             } @catch (NSException *e) {}
                         } else {
-                            Titanium_WriteSyncPayloadV285(&snapshot);
+                            // [SỬA NGHẼN I/O]: bản cũ ghi file (có fsync) mỗi 5 giây dù cấu hình không đổi.
+                            // lastHeartbeat không có tiến trình nào đọc, nên chỉ ghi lại khi nội dung cấu hình thay đổi.
+                            static ApexV285ProPayload s_lastWrittenHB;
+                            static BOOL s_hasLastWrittenHB = NO;
+                            ApexV285ProPayload cmpNew = snapshot;
+                            ApexV285ProPayload cmpOld = s_lastWrittenHB;
+                            cmpNew.updateSeq = 0; cmpNew.lastHeartbeat = 0;
+                            cmpOld.updateSeq = 0; cmpOld.lastHeartbeat = 0;
+                            if (!s_hasLastWrittenHB || memcmp(&cmpNew, &cmpOld, sizeof(cmpNew)) != 0) {
+                                Titanium_WriteSyncPayloadV285(&snapshot);
+                                s_lastWrittenHB = snapshot;
+                                s_hasLastWrittenHB = YES;
+                            }
                         }
                     }
                 } @catch (__unused NSException *e) {}
