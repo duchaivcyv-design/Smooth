@@ -4662,6 +4662,7 @@ static void Titanium_InstallPowerBypassC(void) {
     });
 }
 
+// Định nghĩa nhóm Logos hoàn toàn độc lập bên dưới các hàm C
 %group Group_Global_Thread_Governor_Unthrottled
 
 %hook NSProcessInfo
@@ -4708,7 +4709,8 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
-%end // <--- QUAN TRỌNG: Đóng nhóm Group_Global_Thread_Governor_Unthrottled tại đây để tránh lỗi biên dịch
+%end
+
 
 // ====================================================================================================
 // NHÓM 15: SILICON HARDWARE PIPELINE OVERDRIVE (TỐI ƯU METAL PIPELINE, CHỐNG DEADLOCK & KILL APP NGẦM)
