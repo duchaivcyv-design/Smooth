@@ -1492,10 +1492,38 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 #define TITANIUM_ENABLE_METAL_CONTRACT_OVERRIDES 0 // [SỬA]: allowGPUOptimizedContents=YES làm hỏng texture IOSurface (video/ảnh)
 
 #undef TITANIUM_ENABLE_TASK_QOS_TIER
-#define TITANIUM_ENABLE_TASK_QOS_TIER 1
+#define TITANIUM_ENABLE_TASK_QOS_TIER 0 // [v8]: không còn code nào dùng macro này; tắt cho đúng thực tế
 
 #undef TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS
 #define TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS 0 // [ĐÃ SỬA - ỔN ĐỊNH]: tắt hook RAM WebKit trong app thứ ba, chỉ chạy trong SpringBoard
+
+// [SỬA VĂNG APP YOUTUBE/AI]: giả mạo model (hw.machine/ProductType/uname/cpubrand) trong app bên thứ ba khiến app
+// chọn đường dẫn phần cứng không tồn tại trên máy thật (iPhone10,2) => crash khi mở. Mặc định TẮT.
+#ifndef TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS
+#define TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS 1
+#endif
+
+// Danh sách app KHÔNG được giả mạo model (app này dùng thông tin phần cứng để chọn đường giải mã/Metal, giả mạo làm văng).
+// Thêm/bớt bundle ID tại đây. Game và các app khác vẫn được giả mạo để bật Hz/FPS cao.
+static inline BOOL Titanium_IsSpoofExcludedApp(void) {
+    @try {
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+        if (!bid) return NO;
+        static NSSet<NSString *> *excluded = nil;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            excluded = [NSSet setWithObjects:
+                @"com.google.ios.youtube",   // YouTube
+                @"com.google.gemini",        // Gemini
+                @"com.anthropic.claudeios",  // Claude
+                @"com.anthropic.claude",
+                @"com.openai.chat",          // ChatGPT
+                nil];
+        });
+        return [excluded containsObject:bid];
+    } @catch (__unused NSException *e) {}
+    return NO;
+}
 
 // BỔ SUNG CỜ BẬT CHO CÁC NHÓM SÂU ĐỂ KHÔNG BAO GIỜ BỊ BỎ SÓT KHI BIÊN DỊCH
 #undef TITANIUM_ENABLE_DEVICE_AND_OS_SPOOFING
@@ -1638,6 +1666,27 @@ static inline void Titanium_BoostCurrentThreadBriefly(void) {
     Titanium_DisableKernelThreadThrottling();
 }
 
+// [v9]: gom các lần dọn heap nền (malloc_zone_pressure_relief) vào một hàm có giới hạn tần suất 3 giây.
+// Luồng nền vẫn là QoS BACKGROUND như cũ; chỉ tránh việc quét heap lặp lại khi app chuyển nền liên tiếp.
+static void Titanium_BackgroundHeapRelief(void) {
+    static os_unfair_lock s_reliefLock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t s_lastReliefTicks = 0;
+    uint64_t now = mach_absolute_time();
+    BOOL go = NO;
+    os_unfair_lock_lock(&s_reliefLock);
+    if (s_lastReliefTicks == 0 || (now - s_lastReliefTicks) >= Titanium_NanosToMachTicks(3000000000ULL)) {
+        s_lastReliefTicks = now;
+        go = YES;
+    }
+    os_unfair_lock_unlock(&s_reliefLock);
+    if (!go) return;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+        @autoreleasepool {
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+        }
+    });
+}
+
 static inline void Titanium_BackgroundPurgeMemory(void) {
     @try {
         static os_unfair_lock s_purgeLock = OS_UNFAIR_LOCK_INIT;
@@ -1655,11 +1704,7 @@ static inline void Titanium_BackgroundPurgeMemory(void) {
         os_unfair_lock_unlock(&s_purgeLock);
         if (!shouldPurge) return;
 
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            @autoreleasepool {
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            }
-        });
+        Titanium_BackgroundHeapRelief();
     } @catch (__unused NSException *e) {}
 }
 
@@ -2602,8 +2647,6 @@ static inline void Titanium_SmartThrottle60Hz(void) {
     } @catch (__unused NSException *e) {}
 }
 
-static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz);
-static inline void Titanium_EnforceMachFrameConstraint(void);
 static void AppleInternal_LockHardwareCADisplay(void);
 static void AppleInternal_EnforceZeroLatencyKernelTier(void);
 static inline void Titanium_UnleashAllHiddenSystemThreads(void);
@@ -2894,81 +2937,7 @@ static void AppleInternal_LockHardwareCADisplay(void) {
     });
 }
 
-static inline mach_port_t Titanium_GetCachedThreadPort(void) {
-    static __thread mach_port_t s_cachedThreadPort = MACH_PORT_NULL;
-    if (__builtin_expect(s_cachedThreadPort != MACH_PORT_NULL, 1)) {
-        return s_cachedThreadPort;
-    }
-    @try {
-        s_cachedThreadPort = pthread_mach_thread_np(pthread_self());
-    } @catch (__unused NSException *e) {}
-    return s_cachedThreadPort;
-}
-
-static inline void Titanium_UpdateAdaptiveFrameDrift(void) {
-    @try {
-        uint64_t now = mach_absolute_time();
-        if (g_lastFrameRenderTick != 0) {
-            uint64_t deltaTicks = now - g_lastFrameRenderTick;
-            mach_timebase_info_data_t tb;
-            mach_timebase_info(&tb);
-            uint64_t deltaNs = (deltaTicks * tb.numer) / tb.denom;
-            
-            if (deltaNs > 4166667ULL) {
-                g_currentFrameDriftRatio = 0.99;
-            } else {
-                g_currentFrameDriftRatio = 1.00;
-            }
-        }
-        g_lastFrameRenderTick = now;
-    } @catch (__unused NSException *e) {}
-}
-
-// 2. RIÊNG PHẦN LUỒNG (THREAD TIME CONSTRAINT POLICY): Giới hạn mốc trần 90, cân bằng hoàn hảo chống quá nhiệt
-static inline void Titanium_EnforceMachFrameConstraintDynamic(int targetHz) {
-    @try {
-        if ([NSThread isMainThread]) {
-            return;
-        }
-
-        if (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isScrollingActive) {
-            return;
-        }
-
-        Titanium_UpdateAdaptiveFrameDrift();
-        
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
-
-        thread_port_t selfThread = Titanium_GetCachedThreadPort();
-        if (selfThread == MACH_PORT_NULL) return;
-
-        @try {
-            // Giới hạn mốc trần luồng xử lý ở mức 90 (Cân bằng tuyệt đối 50%-70%)
-            int threadLimitHz = targetHz;
-            if (threadLimitHz < 15) threadLimitHz = 15;
-            if (threadLimitHz > 90) threadLimitHz = 90;
-
-            uint32_t periodNs = (uint32_t)(1000000000ULL / threadLimitHz); 
-            uint32_t computationNs = periodNs / 2; // Phân bổ 50% period, nhường 50% còn lại cho UIKit render mượt mà, chống nóng máy
-
-            thread_time_constraint_policy_data_t timeConstraintPolicy;
-            timeConstraintPolicy.period = periodNs;
-            timeConstraintPolicy.computation = computationNs;
-            timeConstraintPolicy.constraint = periodNs;
-            timeConstraintPolicy.preemptible = TRUE; 
-            
-            thread_policy_set(selfThread, 
-                              THREAD_TIME_CONSTRAINT_POLICY, 
-                              (thread_policy_t)&timeConstraintPolicy, 
-                              THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-
-        } @catch (__unused NSException *subEx) {}
-    } @catch (__unused NSException *e) {}
-}
-
-static inline void Titanium_EnforceMachFrameConstraint(void) {
-    Titanium_EnforceMachFrameConstraintDynamic(Titanium_CalculateAdaptiveProMaxTier());
-}
+// [SỬA v8]: đã xóa chuỗi hàm port luồng không còn được gọi (Titanium_EnforceMachFrameConstraint*), tránh rủi ro port guard.
 
 // ====================================================================================================
 // NHÓM NỘI BỘ APPLE: MÔ PHỎNG VÒNG LẶP _UIUPDATECYCLE (BỌC THÉP AN TOÀN TUYỆT ĐỐI)
@@ -5838,9 +5807,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
     %orig;
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            });
+            Titanium_BackgroundHeapRelief();
         }
     } @catch (__unused NSException *e) {}
 }
@@ -5886,9 +5853,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
                 [pool _clearMemoryCache];
             }
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            });
+            Titanium_BackgroundHeapRelief();
         }
     } @catch (__unused NSException *e) {
         if (!origDone) %orig;
@@ -5911,7 +5876,7 @@ static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
 
 static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
     @try {
-        if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
             @try {
                 if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
                     // [SỬA CRASH KHI MỞ APP]: MGCopyAnswer theo quy tắc Copy (người gọi CFRelease), phải trả reference +1
@@ -5944,7 +5909,7 @@ static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
 static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
 static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     @try {
-        if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
             @try {
                 if (strcmp(name, "hw.cpubrand") == 0 || strcmp(name, "machdep.cpu.brand_string") == 0) {
                     const char *spoofChip = "Apple A20 Pro (3nm Ultra)";
@@ -6030,7 +5995,7 @@ static int (*orig_sysctl_spoof)(int *name, u_int namelen, void *oldp, size_t *ol
 static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
     @try {
         if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
-            !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+            !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
             @try {
                 if (name[1] == HW_MACHINE) {
                     const char *spoofModel = "iPhone18,2";
@@ -6078,7 +6043,7 @@ static int hooked_uname_spoof(struct utsname *name) {
         if (orig_uname_spoof) {
             ret = orig_uname_spoof(name);
         }
-        if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
+        if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
             strncpy(name->machine, "iPhone18,2", sizeof(name->machine) - 1);
             name->machine[sizeof(name->machine) - 1] = '\0';
         }
@@ -6327,11 +6292,7 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
     %orig(application);
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                @autoreleasepool {
-                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                }
-            });
+            Titanium_BackgroundHeapRelief();
         }
     } @catch (__unused NSException *e) {}
 }
@@ -7282,6 +7243,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             if (Titanium_DisplaySpoofAllowed()) {
                 %init(Group_Hardware_ProMotion_Overclock);
+            }
+            // [SỬA VĂNG APP]: chỉ hook MGCopyAnswer/sysctl/uname khi bật macro (xem TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS)
+            if (isSpringBoard || (TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS && !Titanium_IsSpoofExcludedApp())) {
                 Titanium_InstallMGCopyAnswerHookV26();
             }
 
@@ -7293,7 +7257,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             
             %init(Group_Thermal_CryoPacing_ZeroDrop);
             %init(Group_CryoQuantum_Thermal_Bypass);
-            %init(Group_UltimateDevice_And_OS_Spoofing);
+            // [SỬA VĂNG APP]: nhóm giả mạo UIDevice/NSProcessInfo/uname chỉ nạp khi bật macro
+            if (isSpringBoard || (TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS && !Titanium_IsSpoofExcludedApp())) {
+                %init(Group_UltimateDevice_And_OS_Spoofing);
+            }
 
             %init(Group_Deep_RAM_Compaction_Engine);
             %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
