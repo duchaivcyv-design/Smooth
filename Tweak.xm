@@ -6161,7 +6161,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Scroll_And_Keyboard_Opt);
             %init(Group_InstantActionAndMenuTransitions_Boost);
 
-            Titanium_InstallPowerBypassC();
             %init(Group_Global_Thread_Governor_Unthrottled);
 
             %init(Group_Apple_Internal_ProMotion_Apex);
@@ -6280,6 +6279,213 @@ static void SpringBoardBootstrapTrigger(void) {
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
         runCoreTweak(YES, bundleID, progName);
+    });
+}
+
+// [buildfix3] Khối MGCopyAnswer/sysctl/uname lấy từ v9 (định nghĩa bị thiếu trong bản build)
+extern CFPropertyListRef MGCopyAnswer(CFStringRef key);
+static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
+
+static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
+    @try {
+        if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
+            @try {
+                if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
+                    // [SỬA CRASH KHI MỞ APP]: MGCopyAnswer theo quy tắc Copy (người gọi CFRelease), phải trả reference +1
+                    return (CFPropertyListRef)CFBridgingRetain([NSString stringWithUTF8String:"iPhone18,2"]);
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("HardwarePlatform"), 0) == kCFCompareEqualTo) {
+                    return (CFPropertyListRef)CFBridgingRetain([NSString stringWithUTF8String:"d85ap"]);
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ArtworkDeviceSubType"), 0) == kCFCompareEqualTo) {
+                    return (CFPropertyListRef)CFBridgingRetain([NSNumber numberWithInt:3000]);
+                }
+            } @catch (__unused NSException *e) {}
+        }
+    } @catch (__unused NSException *e) {}
+    
+    if (orig_MGCopyAnswer) {
+        @try {
+            return orig_MGCopyAnswer(key);
+        } @catch (__unused NSException *e) {}
+    }
+    return NULL;
+}
+
+static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
+static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    @try {
+        if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
+            @try {
+                if (strcmp(name, "hw.cpubrand") == 0 || strcmp(name, "machdep.cpu.brand_string") == 0) {
+                    const char *spoofChip = "Apple A20 Pro (3nm Ultra)";
+                    size_t len = strlen(spoofChip) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofChip, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
+                        *oldlenp = len;
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
+                    const char *spoofModel = "iPhone18,2";
+                    size_t len = strlen(spoofModel) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofModel, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
+                        *oldlenp = len;
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.model") == 0) {
+                    const char *spoofBoard = "D85AP";
+                    size_t len = strlen(spoofBoard) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofBoard, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
+                        *oldlenp = len;
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0) {
+                    int cpus = 8;
+                    if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
+                        memcpy(oldp, &cpus, sizeof(int));
+                        *oldlenp = sizeof(int);
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+
+            @try {
+                if (strcmp(name, "hw.memsize") == 0 && oldp && oldlenp && *oldlenp >= sizeof(uint64_t)) {
+                    uint64_t fakeRam = 12ULL * 1024ULL * 1024ULL * 1024ULL;
+                    memcpy(oldp, &fakeRam, sizeof(uint64_t));
+                    *oldlenp = sizeof(uint64_t);
+                    return 0;
+                }
+            } @catch (__unused NSException *e) {}
+        }
+    } @catch (__unused NSException *e) {}
+    
+    if (orig_sysctlbyname_spoof) {
+        @try {
+            return orig_sysctlbyname_spoof(name, oldp, oldlenp, newp, newlen);
+        } @catch (__unused NSException *e) {}
+    }
+    return -1;
+}
+
+static int (*orig_sysctl_spoof)(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
+static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+    @try {
+        if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+            !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
+            @try {
+                if (name[1] == HW_MACHINE) {
+                    const char *spoofModel = "iPhone18,2";
+                    size_t len = strlen(spoofModel) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofModel, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
+                        *oldlenp = len;
+                        return 0;
+                    }
+                } else if (name[1] == HW_MODEL) {
+                    const char *spoofBoard = "D85AP";
+                    size_t len = strlen(spoofBoard) + 1;
+                    if (oldp && oldlenp) {
+                        if (*oldlenp >= len) {
+                            memcpy(oldp, spoofBoard, len);
+                            *oldlenp = len;
+                            return 0;
+                        }
+                    } else if (!oldp && oldlenp) {
+                        *oldlenp = len;
+                        return 0;
+                    }
+                }
+            } @catch (__unused NSException *e) {}
+        }
+    } @catch (__unused NSException *e) {}
+    
+    if (orig_sysctl_spoof) {
+        @try {
+            return orig_sysctl_spoof(name, namelen, oldp, oldlenp, newp, newlen);
+        } @catch (__unused NSException *e) {}
+    }
+    return -1;
+}
+
+static int (*orig_uname_spoof)(struct utsname *name) = NULL;
+static int hooked_uname_spoof(struct utsname *name) {
+    int ret = -1;
+    @try {
+        if (orig_uname_spoof) {
+            ret = orig_uname_spoof(name);
+        }
+        if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
+            strncpy(name->machine, "iPhone18,2", sizeof(name->machine) - 1);
+            name->machine[sizeof(name->machine) - 1] = '\0';
+        }
+    } @catch (__unused NSException *e) {}
+    return ret;
+}
+
+static void Titanium_InstallMGCopyAnswerHookV26(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+                void *mgSym = dlsym(RTLD_DEFAULT, "MGCopyAnswer");
+                if (mgSym) {
+                    MSHookFunction(mgSym, (void *)hooked_MGCopyAnswer, (void **)&orig_MGCopyAnswer);
+                }
+                void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
+                if (sysSym) {
+                    MSHookFunction(sysSym, (void *)hooked_sysctlbyname_spoof, (void **)&orig_sysctlbyname_spoof);
+                }
+                void *sysctlMibSym = dlsym(RTLD_DEFAULT, "sysctl");
+                if (sysctlMibSym) {
+                    MSHookFunction(sysctlMibSym, (void *)hooked_sysctl_spoof, (void **)&orig_sysctl_spoof);
+                }
+                void *unameSym = dlsym(RTLD_DEFAULT, "uname");
+                if (unameSym) {
+                    MSHookFunction(unameSym, (void *)hooked_uname_spoof, (void **)&orig_uname_spoof);
+                }
+            }
+        } @catch (__unused NSException *e) {}
     });
 }
 
