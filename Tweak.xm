@@ -4625,26 +4625,26 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 13: BẺ KHÓA TRIỆT ĐỂ BÓP HIỆU NĂNG PIN YẾU (< 20%) & NHIỆT ĐỘ HỆ THỐNG (GIỮ % THẬT CHO UI)
+// NHÓM 13: BẺ KHÓA HIỆU NĂNG PIN YẾU & NHIỆT ĐỘ (AN TOÀN TUYỆT ĐỐI - KHÔNG BAO GIỜ MISSING SYMBOL)
 // ====================================================================================================
 
 #include <dlfcn.h>
 
-// Giữ nguyên mô tả nguồn điện gốc, không ép cứng 100% để hiển thị đúng % pin thật cho Status Bar
 static CFDictionaryRef (*orig_IOPSGetPowerSourceDescription)(CFTypeRef blob, CFTypeRef ps) = NULL;
 static CFDictionaryRef hooked_IOPSGetPowerSourceDescription(CFTypeRef blob, CFTypeRef ps) {
     @try {
-        CFDictionaryRef desc = orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
-        return desc; // Trả về thông tin gốc chuẩn xác để hiện % pin thực tế
+        if (orig_IOPSGetPowerSourceDescription) {
+            return orig_IOPSGetPowerSourceDescription(blob, ps);
+        }
     } @catch (__unused NSException *e) {}
-    return orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
+    return NULL;
 }
 
 static int (*orig_IOPSGetPercentRemaining)(void) = NULL;
 static int hooked_IOPSGetPercentRemaining(void) {
     @try {
         if (orig_IOPSGetPercentRemaining) {
-            return orig_IOPSGetPercentRemaining(); // Trả về % pin thật để app và hệ thống đọc đúng dung lượng
+            return orig_IOPSGetPercentRemaining();
         }
     } @catch (__unused NSException *e) {}
     return 100;
@@ -4652,41 +4652,56 @@ static int hooked_IOPSGetPercentRemaining(void) {
 
 %group Group_Global_Thread_Governor_Unthrottled
 
-// 1. CHẶN BÓP NGUỒN ĐIỆN & NHIỆT ĐỘ TRÊN PROCESS INFO (Vẫn giữ max hiệu năng)
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState {
-    return NSProcessInfoThermalStateNominal;
+    @try {
+        return NSProcessInfoThermalStateNominal;
+    } @catch (__unused NSException *e) {}
+    return %orig;
 }
 
 - (BOOL)isLowPowerModeEnabled {
-    return NO;
-}
-
-%end
-
-// 2. BẺ KHÓA UIDEVICE: Trả về % pin và trạng thái THẬT để bạn biết đường cắm sạc
-%hook UIDevice
-
-- (float)batteryLevel {
-    return %orig; // Trả về dung lượng % pin thật của máy
-}
-
-- (UIDeviceBatteryState)batteryState {
-    return %orig; // Trả về trạng thái sạc thực tế của thiết bị
-}
-
-- (BOOL)isBatteryMonitoringEnabled {
+    @try {
+        return NO;
+    } @catch (__unused NSException *e) {}
     return %orig;
 }
 
 %end
 
-// 3. VÔ HIỆU HÓA HOÀN TOÀN CÔNG TẮC BÓP XUNG TRONG SPRINGBOARD POWER CONTROLLER
+%hook UIDevice
+
+- (float)batteryLevel {
+    @try {
+        return %orig; // Giữ nguyên % pin thật để biết đường sạc
+    } @catch (__unused NSException *e) {}
+    return 1.0f;
+}
+
+- (UIDeviceBatteryState)batteryState {
+    @try {
+        return %orig; // Giữ nguyên trạng thái sạc thật
+    } @catch (__unused NSException *e) {}
+    return UIDeviceBatteryStateFull;
+}
+
+- (BOOL)isBatteryMonitoringEnabled {
+    @try {
+        return %orig;
+    } @catch (__unused NSException *e) {}
+    return YES;
+}
+
+%end
+
 %hook SBUIController
 
 - (BOOL)isBatterySaverModeActive {
-    return NO;
+    @try {
+        return NO;
+    } @catch (__unused NSException *e) {}
+    return %orig;
 }
 
 %end
@@ -4694,12 +4709,34 @@ static int hooked_IOPSGetPercentRemaining(void) {
 %hook _CDBatterySaver
 
 - (BOOL)getPowerMode {
-    return NO;
+    @try {
+        return NO;
+    } @catch (__unused NSException *e) {}
+    return %orig;
 }
 
 %end
 
 %end
+
+static void Titanium_InstallPowerBypassC(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+            if (iokit) {
+                void *sym1 = dlsym(iokit, "IOPSGetPowerSourceDescription");
+                if (sym1) {
+                    MSHookFunction(sym1, (void *)hooked_IOPSGetPowerSourceDescription, (void **)&orig_IOPSGetPowerSourceDescription);
+                }
+                void *sym2 = dlsym(iokit, "IOPSGetPercentRemaining");
+                if (sym2) {
+                    MSHookFunction(sym2, (void *)hooked_IOPSGetPercentRemaining, (void **)&orig_IOPSGetPercentRemaining);
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
 
 
 // ====================================================================================================
