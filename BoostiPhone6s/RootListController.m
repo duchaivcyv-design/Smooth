@@ -3892,9 +3892,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __block NSString *selectedIOS = @"";
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
+    __weak UIViewController *weakWizard = wizard; // <-- THÊM DÒNG NÀY
     __block void (^renderPage)(void);
     __weak void (^weakRenderPage)(void) = nil;
-
+    
     void (^animateToPage)(void) = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         [UIView transitionWithView:strongWizard.view duration:.28 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionCurveEaseInOut animations:^{
