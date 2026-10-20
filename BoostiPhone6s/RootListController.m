@@ -225,6 +225,18 @@ static void Titanium_SynchronizeLinkedPreferences(NSMutableDictionary *settings,
     }
 }
 
+// Query the system Now Playing center dynamically so this controller does not need a hard MediaPlayer link.
+static NSDictionary *Titanium_CurrentNowPlayingInfo(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ (void)dlopen("/System/Library/Frameworks/MediaPlayer.framework/MediaPlayer", RTLD_LAZY | RTLD_LOCAL); });
+    Class centerClass = NSClassFromString(@"MPNowPlayingInfoCenter");
+    if (!centerClass) return @{};
+    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, sel_registerName("defaultCenter"));
+    if (!center) return @{};
+    id info = ((id (*)(id, SEL))objc_msgSend)(center, sel_registerName("nowPlayingInfo"));
+    return [info isKindOfClass:[NSDictionary class]] ? info : @{};
+}
+
 static NSString *Titanium_NormalizeAppSearchText(NSString *value) {
     if (![value isKindOfClass:[NSString class]]) return @"";
     NSString *trimmed = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1360,6 +1372,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 
 - (void)configureWithTitle:(NSString *)title detail:(NSString *)detail accessory:(UIView *)accessory accent:(UIColor *)accent {
+    _titleL.hidden = NO;
+    _detailL.hidden = NO;
     _titleL.text = title;
     _detailL.text = detail;
     _v20AccentColor = accent;
@@ -1377,7 +1391,18 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _accessoryContainer = accessory;
         accessory.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:accessory];
-        if ([accessory isKindOfClass:[LiquidCapsuleSwitch class]]) {
+        if (accessory.tag == 334) {
+            _titleL.hidden = YES;
+            _detailL.hidden = YES;
+            _accessoryConstraints = @[
+                [accessory.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:14],
+                [accessory.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-14],
+                [accessory.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+                [accessory.heightAnchor constraintEqualToConstant:92]
+            ];
+        } else if ([accessory isKindOfClass:[LiquidCapsuleSwitch class]]) {
+            _titleL.hidden = NO;
+            _detailL.hidden = NO;
             _accessoryConstraints = @[
                 [accessory.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
                 [accessory.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
@@ -2809,7 +2834,7 @@ static NSString * const SUExtraDiagnosticsEnabledKey = @"su_extra_diagnostics_en
 static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_enabled_v1";
 
 
-// V32: giữ mức chuẩn và dải mở rộng tách riêng; không gộp preset vào dải 20–235.
+// V30: mức chuẩn và dải mở rộng được tách riêng.
 static NSArray<NSNumber *> *TIStandardRateValues(void) {
     // Unified Hz/FPS selector: show only the requested presets.
     return @[@15, @30, @60, @90, @120, @144, @240];
@@ -3163,7 +3188,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [fromVC presentViewController:exploitVC animated:NO completion:nil];
 }
 
-// V32: rolling telemetry graph. Samples are real observations; missing sensor values are not fabricated.
+// V23: enlarged rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
 @interface TITrendGraphView : UIView
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *samples;
 @property (nonatomic, strong) CAShapeLayer *gridLayer;
@@ -3191,73 +3216,137 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 @property(nonatomic, copy) NSString *authorScript;
 @property(nonatomic, strong) UITextView *authorTextView;
 @property(nonatomic, strong) NSTimer *typingTimer;
-@property(nonatomic, strong) NSTimer *helloTimer;
+@property(nonatomic, strong) NSTimer *stageTimer;
 @property(nonatomic, assign) NSUInteger typingIndex;
+@property(nonatomic, assign) NSInteger stageIndex;
 @property(nonatomic, copy) NSString *activeAuthorName;
+@property(nonatomic, copy) NSArray<NSString *> *stageTexts;
+@property(nonatomic, copy) NSArray<NSString *> *stageNames;
+@property(nonatomic, strong) UIView *authorCard;
+@property(nonatomic, strong) UILabel *eyebrowLabel;
 @end
 
 @implementation TIAuthorsDocumentController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Tác giả · Môi trường · iOS";
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
-    self.authorTextView = [[UITextView alloc] initWithFrame:CGRectZero];
+    self.title = @"Tác giả";
+    self.view.backgroundColor = [UIColor colorWithRed:0.025 green:0.018 blue:0.075 alpha:1.0];
+
+    self.stageNames = @[@"GIỚI THIỆU", @"TaoJb", @"NoNo", @"NekoJb", @"XIN CHÀO MỌI NGƯỜI"];
+    self.stageTexts = @[
+        @"iOS 14–26.0.1\niPhone 6s–15 Pro Max\nHỗ trợ môi trường: Rootless / RootHide / Rootful\n\nĐang giới thiệu nhóm phát triển…",
+        @"hello Tôi là Taojb là người hoa kỳ và là người làm về mặt phần cứng tôi xin lỗi về việc lỗi rất nhiều tôi sẽ sửa lỗi đó sớm thôi và mong mọi người sử dụng ổn định không phàn nàn với VŨ ĐỨC LONG vì ông đấy làm việc xử lý nặng hơn các người khác rất nhiều. Xin hẹn gặp lại.",
+        @"xin chào tôi là NoNo tôi là người hoa kỳ tôi làm về mảng phần cứng và tôi cũng làm về người xử lý lỗi code hiện mấy ngày nay lỗi lag rất nhiều tôi cũng xin lỗi vì không xử lý triệt để tôi cũng không muốn điều đó xảy ra vì nó rất khó sửa mong mọi người đừng ép bọn tôi quá mức vì công việc rất nhiều. Xin chào hẹn gặp lại",
+        @"xin chào tôi là Nekojb người Việt Nam tôi đến từ hà nội toi là bạn cũng Vũ đức Long tôi làm về mảng phụ code về tầng sâu mấy ngày hôm nay có nhiều người test hay báo lỗi liên tục toi rất xin lỗi về mảng code này tôi cũng muốn sữa nhanh để sử dụng ổn định những khối lượng công việc quá nhiều toi không thể xử lý quá nhanh mong mọi người sử dụng không báo sửa lỗi ép quá mức mong mọi người chân trọng bọn toi ạ. Hẹn gặp lại",
+        @"XIN CHÀO MỌI NGƯỜI"
+    ];
+
+    self.authorCard = [UIView new];
+    self.authorCard.translatesAutoresizingMaskIntoConstraints = NO;
+    self.authorCard.backgroundColor = [UIColor colorWithRed:.055 green:.035 blue:.15 alpha:1];
+    self.authorCard.layer.cornerRadius = 24;
+    self.authorCard.layer.cornerCurve = kCACornerCurveContinuous;
+    self.authorCard.layer.borderWidth = 1.2;
+    self.authorCard.layer.borderColor = [UIColor colorWithRed:.32 green:.68 blue:1 alpha:.85].CGColor;
+    self.authorCard.layer.shadowColor = [UIColor cyanColor].CGColor;
+    self.authorCard.layer.shadowOpacity = .18;
+    self.authorCard.layer.shadowRadius = 18;
+    self.authorCard.layer.shadowOffset = CGSizeMake(0, 8);
+    [self.view addSubview:self.authorCard];
+
+    self.eyebrowLabel = [UILabel new];
+    self.eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.eyebrowLabel.text = @"NEON CONTROL · AUTHORS";
+    self.eyebrowLabel.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold];
+    self.eyebrowLabel.textColor = [UIColor colorWithRed:.28 green:.86 blue:1 alpha:1];
+    self.eyebrowLabel.textAlignment = NSTextAlignmentLeft;
+    [self.authorCard addSubview:self.eyebrowLabel];
+
+    self.authorTextView = [UITextView new];
     self.authorTextView.translatesAutoresizingMaskIntoConstraints = NO;
     self.authorTextView.editable = NO;
     self.authorTextView.selectable = YES;
     self.authorTextView.backgroundColor = UIColor.clearColor;
-    self.authorTextView.textColor = UIColor.labelColor;
-    self.authorTextView.font = [UIFont monospacedSystemFontOfSize:14.0 weight:UIFontWeightRegular];
-    self.authorTextView.alpha = 0.0;
-    [self.view addSubview:self.authorTextView];
+    self.authorTextView.textColor = UIColor.whiteColor;
+    self.authorTextView.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    self.authorTextView.textContainerInset = UIEdgeInsetsMake(12, 8, 12, 8);
+    self.authorTextView.alpha = 0;
+    [self.authorCard addSubview:self.authorTextView];
+
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [self.authorTextView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12.0],
-        [self.authorTextView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
-        [self.authorTextView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8.0],
-        [self.authorTextView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-8.0]
+        [self.authorCard.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12],
+        [self.authorCard.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12],
+        [self.authorCard.centerYAnchor constraintEqualToAnchor:safe.centerYAnchor],
+        [self.authorCard.heightAnchor constraintGreaterThanOrEqualToConstant:360],
+        [self.authorCard.heightAnchor constraintLessThanOrEqualToAnchor:safe.heightAnchor multiplier:.88],
+        [self.eyebrowLabel.topAnchor constraintEqualToAnchor:self.authorCard.topAnchor constant:18],
+        [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.authorCard.leadingAnchor constant:20],
+        [self.eyebrowLabel.trailingAnchor constraintEqualToAnchor:self.authorCard.trailingAnchor constant:-20],
+        [self.authorTextView.topAnchor constraintEqualToAnchor:self.eyebrowLabel.bottomAnchor constant:10],
+        [self.authorTextView.leadingAnchor constraintEqualToAnchor:self.authorCard.leadingAnchor constant:12],
+        [self.authorTextView.trailingAnchor constraintEqualToAnchor:self.authorCard.trailingAnchor constant:-12],
+        [self.authorTextView.bottomAnchor constraintEqualToAnchor:self.authorCard.bottomAnchor constant:-16]
     ]];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Tác giả: TaoJb" style:UIBarButtonItemStylePlain target:nil action:nil];
-    [UIView animateWithDuration:1.2 delay:0.15 options:UIViewAnimationOptionCurveEaseInOut animations:^{
-        self.authorTextView.alpha = 1.0;
-    } completion:^(__unused BOOL finished) {
-        self.typingIndex = 0;
-        self.authorTextView.text = @"";
-        self.typingTimer = [NSTimer scheduledTimerWithTimeInterval:0.035 target:self selector:@selector(ti_typeNextCharacter:) userInfo:nil repeats:YES];
-    }];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"NEON" style:UIBarButtonItemStylePlain target:nil action:nil];
+    self.stageIndex = 0;
+    [self ti_beginStage:0];
+}
+
+- (void)ti_beginStage:(NSInteger)stage {
+    [self.typingTimer invalidate]; self.typingTimer = nil;
+    [self.stageTimer invalidate]; self.stageTimer = nil;
+    self.stageIndex = stage;
+    if (stage >= self.stageTexts.count) return;
+    NSString *text = self.stageTexts[stage];
+    self.activeAuthorName = self.stageNames[stage];
+    self.navigationItem.rightBarButtonItem.title = self.activeAuthorName;
+    self.eyebrowLabel.text = [NSString stringWithFormat:@"NEON CONTROL · %@", self.activeAuthorName.uppercaseString];
+    self.authorTextView.text = @"";
+    self.typingIndex = 0;
+    [UIView animateWithDuration:.35 animations:^{ self.authorTextView.alpha = 1; self.authorCard.alpha = 1; }];
+    if (stage == 0) {
+        self.authorTextView.text = text;
+        self.authorTextView.textAlignment = NSTextAlignmentCenter;
+        self.authorTextView.font = [UIFont systemFontOfSize:19 weight:UIFontWeightSemibold];
+        self.stageTimer = [NSTimer scheduledTimerWithTimeInterval:20.0 target:self selector:@selector(ti_advanceStage:) userInfo:nil repeats:NO];
+    } else if (stage == 4) {
+        self.authorTextView.textAlignment = NSTextAlignmentCenter;
+        self.authorTextView.font = [UIFont systemFontOfSize:32 weight:UIFontWeightBlack];
+        self.authorTextView.textColor = [UIColor colorWithRed:.30 green:.88 blue:1 alpha:1];
+        self.authorTextView.text = text;
+        self.stageTimer = [NSTimer scheduledTimerWithTimeInterval:8.0 target:self selector:@selector(ti_finishSequence:) userInfo:nil repeats:NO];
+    } else {
+        self.authorTextView.textAlignment = NSTextAlignmentNatural;
+        self.authorTextView.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+        self.authorTextView.textColor = UIColor.whiteColor;
+        self.typingTimer = [NSTimer scheduledTimerWithTimeInterval:.025 target:self selector:@selector(ti_typeNextCharacter:) userInfo:nil repeats:YES];
+        self.stageTimer = [NSTimer scheduledTimerWithTimeInterval:40.0 target:self selector:@selector(ti_advanceStage:) userInfo:nil repeats:NO];
+    }
 }
 
 - (void)ti_typeNextCharacter:(NSTimer *)timer {
-    if (self.typingIndex >= self.authorScript.length) {
-        [timer invalidate];
-        self.typingTimer = nil;
-        self.navigationItem.rightBarButtonItem.title = @"Tác giả: hoàn tất";
-        self.helloTimer = [NSTimer scheduledTimerWithTimeInterval:60.0 target:self selector:@selector(ti_showHello:) userInfo:nil repeats:NO];
-        return;
-    }
-    NSRange range = [self.authorScript rangeOfComposedCharacterSequenceAtIndex:self.typingIndex];
-    NSString *character = [self.authorScript substringWithRange:range];
-    self.authorTextView.text = [self.authorTextView.text stringByAppendingString:character];
+    NSString *fullText = self.stageTexts[self.stageIndex];
+    if (self.typingIndex >= fullText.length) { [timer invalidate]; self.typingTimer = nil; return; }
+    NSRange range = [fullText rangeOfComposedCharacterSequenceAtIndex:self.typingIndex];
+    self.authorTextView.text = [self.authorTextView.text stringByAppendingString:[fullText substringWithRange:range]];
     self.typingIndex = NSMaxRange(range);
-    NSString *remaining = [self.authorScript substringToIndex:MIN(self.typingIndex, self.authorScript.length)];
-    if ([remaining containsString:@"TÁC GIẢ 2"] || [remaining containsString:@"Tác giả 2"]) {
-        self.navigationItem.rightBarButtonItem.title = @"Tác giả: NoNo";
-    } else if ([remaining containsString:@"TÁC GIẢ 3"] || [remaining containsString:@"Tác giả 3"]) {
-        self.navigationItem.rightBarButtonItem.title = @"Tác giả: NekoJb";
-    }
-    [self.authorTextView scrollRangeToVisible:NSMakeRange(self.authorTextView.text.length ? self.authorTextView.text.length - 1 : 0, self.authorTextView.text.length ? 1 : 0)];
+    NSUInteger length = self.authorTextView.text.length;
+    if (length) [self.authorTextView scrollRangeToVisible:NSMakeRange(length - 1, 1)];
 }
 
-- (void)ti_showHello:(NSTimer *)timer {
-    self.authorTextView.text = [self.authorTextView.text stringByAppendingString:@"\n\nXin chào 🤡"];
-    [self.authorTextView scrollRangeToVisible:NSMakeRange(self.authorTextView.text.length - 1, 1)];
+- (void)ti_advanceStage:(NSTimer *)timer { [self ti_beginStage:self.stageIndex + 1]; }
+- (void)ti_finishSequence:(NSTimer *)timer {
+    [self.stageTimer invalidate]; self.stageTimer = nil;
+    self.navigationItem.rightBarButtonItem.title = @"Hoàn tất";
 }
-
-- (void)dealloc {
-    [self.typingTimer invalidate];
-    [self.helloTimer invalidate];
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self.typingTimer invalidate]; self.typingTimer = nil;
+    [self.stageTimer invalidate]; self.stageTimer = nil;
 }
+- (void)dealloc { [_typingTimer invalidate]; [_stageTimer invalidate]; }
 @end
 
 @implementation RootListController
@@ -3298,7 +3387,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     _v20LastNavFrame = CGRectNull;
     _currentHzFpsSubTab = 0;
     _expandedHzFPS = NO;
-    _appCategoryIndex = 0;
+    _appCategoryIndex = MAX(0, MIN(3, [[NSUserDefaults standardUserDefaults] integerForKey:@"TIAppCategoryCard_v1"]));
     _currentSwitchSubTab = 0;
 
     _isCpuExpanded = NO; _isGpuExpanded = NO; _isRamExpanded = NO;
@@ -3645,13 +3734,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 typeNext = ^{
                     if (intro.presentingViewController == nil) { typeNext = nil; return; }
                     if (charIndex >= full.length) { typeNext = nil; return; }
-                    NSRange characterRange = [full rangeOfComposedCharacterSequenceAtIndex:charIndex];
-                    NSUInteger next = NSMaxRange(characterRange);
+                    NSUInteger next = MIN(charIndex + 2, full.length);
                     body.text = [full substringToIndex:next];
                     charIndex = next;
-                    if (body.text.length > 0) {
-                        [body scrollRangeToVisible:NSMakeRange(body.text.length - 1, 1)];
-                    }
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.025 * NSEC_PER_SEC)), dispatch_get_main_queue(), typeNext);
                 };
                 typeNext();
@@ -5910,6 +5995,23 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger hz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue], fps=[self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue]; NSArray *rn=@[@"TẦN SỐ MÀN HÌNH",@"FPS MỤC TIÊU"], *rv=@[[NSString stringWithFormat:@"%ld Hz",(long)hz],[NSString stringWithFormat:@"%ld FPS",(long)fps]];
     for(NSInteger i=0;i<2;i++){ CGFloat gap=9,rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),751,rw,62)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=14; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(6,6,rw-12,14)]; n.text=rn[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor secondaryLabelColor]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(6,23,rw-12,30)]; v.text=rv[i]; v.font=[UIFont monospacedSystemFontOfSize:19 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor systemPinkColor]:[UIColor systemCyanColor]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
     UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,823,cw,42)]; note.numberOfLines=0; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor secondaryLabelColor]; note.text=@"Biểu đồ chạy theo chu kỳ lấy mẫu của ứng dụng. GPU load và nhiệt độ chip theo °C không có sẵn qua API công khai; Hz/FPS mục tiêu không bảo đảm game đạt đúng mức đó."; [root addSubview:note];
+    // V33.2: live Now Playing card reads the system media session (Apple Music and apps that publish Now Playing metadata).
+    UIView *musicCard=[[UIView alloc] initWithFrame:CGRectMake(side,872,cw,94)];
+    musicCard.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.12 alpha:1];
+    musicCard.layer.cornerRadius=17; musicCard.layer.borderWidth=1;
+    musicCard.layer.borderColor=[UIColor colorWithRed:.18 green:.72 blue:.92 alpha:.8].CGColor;
+    [root addSubview:musicCard];
+    UIImageView *musicIcon=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"music.note.list"]];
+    musicIcon.frame=CGRectMake(13,13,24,24); musicIcon.tintColor=[UIColor colorWithRed:.25 green:.85 blue:1 alpha:1]; [musicCard addSubview:musicIcon];
+    UILabel *musicHeading=[[UILabel alloc] initWithFrame:CGRectMake(45,12,cw-58,17)];
+    musicHeading.text=@"ĐANG PHÁT · NOW PLAYING"; musicHeading.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; musicHeading.textColor=[UIColor colorWithRed:.3 green:.86 blue:1 alpha:1]; [musicCard addSubview:musicHeading];
+    UILabel *musicTitle=[[UILabel alloc] initWithFrame:CGRectMake(13,38,cw-26,22)]; musicTitle.tag=8720; musicTitle.text=@"Chưa có thông tin bài hát"; musicTitle.font=[UIFont systemFontOfSize:14 weight:UIFontWeightBold]; musicTitle.textColor=UIColor.whiteColor; musicTitle.lineBreakMode=NSLineBreakByTruncatingTail; [musicCard addSubview:musicTitle];
+    UILabel *musicArtist=[[UILabel alloc] initWithFrame:CGRectMake(13,62,cw-26,18)]; musicArtist.tag=8721; musicArtist.text=@"Phát nhạc trong ứng dụng hỗ trợ Now Playing"; musicArtist.font=[UIFont systemFontOfSize:11 weight:UIFontWeightMedium]; musicArtist.textColor=[UIColor secondaryLabelColor]; musicArtist.lineBreakMode=NSLineBreakByTruncatingTail; [musicCard addSubview:musicArtist];
+    NSDictionary *nowInfo=Titanium_CurrentNowPlayingInfo();
+    NSString *nowTitle=[nowInfo[@"title"] isKindOfClass:NSString.class] ? nowInfo[@"title"] : nil;
+    NSString *nowArtist=[nowInfo[@"artist"] isKindOfClass:NSString.class] ? nowInfo[@"artist"] : nil;
+    musicTitle.text=nowTitle.length ? nowTitle : @"Chưa có thông tin bài hát";
+    musicArtist.text=nowArtist.length ? nowArtist : (nowTitle.length ? @"Nghệ sĩ chưa được cung cấp" : @"Ứng dụng phát cần chia sẻ metadata với iOS");
     return root;
 }
 
@@ -5926,7 +6028,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSArray *names=@[@"CPU & KIẾN TRÚC",@"GPU",@"RAM",@"MÀN HÌNH · HZ · FPS",@"THÔNG TIN MÁY",@"JAILBREAK & MÔI TRƯỜNG"];
     NSArray *details=@[
       [NSString stringWithFormat:@"%@\n%@ · %u lõi logic\nXung nhịp tối đa: %@",machine,arch,Titanium_LogicalCPUCoreCount(),@"Không khả dụng qua API công khai"],
-      @"Tên GPU / tải GPU / xung GPU\nKhông có nguồn đo tin cậy trong controller hiện tại.",
+      [NSString stringWithFormat:@"GPU renderer: %@\nTải GPU / xung GPU: không có số đo đáng tin cậy từ API đang dùng\nTrạng thái nhiệt iOS: %@", (MTLCreateSystemDefaultDevice() ? MTLCreateSystemDefaultDevice().name : @"Không xác định"), (NSProcessInfo.processInfo.thermalState == NSProcessInfoThermalStateNominal ? @"Bình thường" : (NSProcessInfo.processInfo.thermalState == NSProcessInfoThermalStateFair ? @"Ấm" : (NSProcessInfo.processInfo.thermalState == NSProcessInfoThermalStateSerious ? @"Nóng" : (NSProcessInfo.processInfo.thermalState == NSProcessInfoThermalStateCritical ? @"Rất nóng" : @"Không xác định"))))],
       [NSString stringWithFormat:@"RAM vật lý: %@\nBộ nhớ tiến trình: %@",Titanium_ByteCountString(ram),Titanium_ByteCountString(Titanium_CurrentProcessFootprintBytes())],
       [NSString stringWithFormat:@"Hz tối đa do iOS báo: %ld\nFPS đo của giao diện: %ld\nFPS game: Không khả dụng",(long)UIScreen.mainScreen.maximumFramesPerSecond,(long)_uiFPSMeasured],
       [NSString stringWithFormat:@"Model: %@\niOS: %@\nScale: %.2fx",machine,ios,UIScreen.mainScreen.scale],
@@ -5948,12 +6050,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width), side = 14.0, cw = w - side * 2.0;
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 445.0)];
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 505.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
     eyebrow.text = @"SMOOTHIOS / DISPLAY CONTROL V18"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; title.text = @"Hz · FPS · Đồng bộ"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 255)]; panel.backgroundColor = [UIColor colorWithRed:.025 green:.018 blue:.075 alpha:.99]; panel.layer.cornerRadius = 25; panel.layer.borderWidth = 1; panel.layer.borderColor = [UIColor colorWithRed:.5 green:.2 blue:.92 alpha:.9].CGColor; [root addSubview:panel];
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 300)]; panel.backgroundColor = [UIColor colorWithRed:.025 green:.018 blue:.075 alpha:.99]; panel.layer.cornerRadius = 25; panel.layer.borderWidth = 1; panel.layer.borderColor = [UIColor colorWithRed:.5 green:.2 blue:.92 alpha:.9].CGColor; [root addSubview:panel];
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 60;
     NSInteger mode = ([[NSUserDefaults standardUserDefaults] objectForKey:@"TIV12RateMode"] ? [[NSUserDefaults standardUserDefaults] integerForKey:@"TIV12RateMode"] : 1);
@@ -5970,8 +6072,26 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UILabel *selectedLabel=[[UILabel alloc] initWithFrame:CGRectMake(15,119,cw-30,18)]; selectedLabel.text=@"KÉO ĐỂ CHỌN MỨC 15–240"; selectedLabel.font=[UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightBold]; selectedLabel.textColor=[UIColor colorWithWhite:.78 alpha:1]; selectedLabel.textAlignment=NSTextAlignmentCenter; [panel addSubview:selectedLabel];
     UISlider *slider=[[UISlider alloc] initWithFrame:CGRectMake(20,143,cw-40,32)]; slider.tag=99430; slider.minimumValue=15; slider.maximumValue=240; slider.value=(mode==0?hz:(mode==2?fps:((hz==fps)?hz:MAX(hz,fps)))); slider.minimumTrackTintColor=[UIColor colorWithRed:.25 green:.82 blue:.48 alpha:1]; slider.maximumTrackTintColor=[UIColor colorWithWhite:.25 alpha:1]; slider.thumbTintColor=[UIColor colorWithRed:.15 green:.9 blue:1 alpha:1]; [slider addTarget:self action:@selector(neonV12SliderChanged:) forControlEvents:UIControlEventValueChanged]; [panel addSubview:slider];
     UILabel *range=[[UILabel alloc] initWithFrame:CGRectMake(20,174,cw-40,15)]; range.text=@"15                                      240"; range.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightMedium]; range.textColor=[UIColor colorWithWhite:.58 alpha:1]; [panel addSubview:range];
-    UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.frame=CGRectMake(18,199,cw-36,42); apply.tag=99440; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; apply.layer.shadowOpacity=.24; apply.layer.shadowRadius=9; [apply setTitle:@"ÁP DỤNG NGAY" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightBlack]; [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:apply];
-    UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,331,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
+    // Three quick profiles requested by the user: performance 240, balanced 90, battery 60.
+    NSArray<NSString *> *profileNames=@[@"HIỆU SUẤT · 240", @"CÂN BẰNG · 90", @"TIẾT KIỆM · 60"];
+    CGFloat profileGap=6, profileW=(cw-28-profileGap*2)/3.0;
+    for(NSInteger pi=0;pi<3;pi++) {
+        UIButton *profile=[UIButton buttonWithType:UIButtonTypeSystem];
+        profile.frame=CGRectMake(14+pi*(profileW+profileGap),190,profileW,34);
+        profile.tag=99450+pi; profile.layer.cornerRadius=11; profile.layer.borderWidth=1;
+        profile.layer.borderColor=[UIColor colorWithRed:.3 green:.75 blue:1 alpha:.65].CGColor;
+        profile.backgroundColor=[UIColor colorWithRed:.1 green:.12 blue:.22 alpha:1];
+        [profile setTitle:profileNames[pi] forState:UIControlStateNormal];
+        [profile setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        profile.titleLabel.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBlack];
+        profile.titleLabel.adjustsFontSizeToFitWidth=YES; profile.titleLabel.minimumScaleFactor=.65;
+        [profile addTarget:self action:@selector(v332ApplyPreset:) forControlEvents:UIControlEventTouchUpInside];
+        [panel addSubview:profile];
+    }
+    CGFloat actionGap=8, actionW=(cw-36-actionGap)/2.0;
+    UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.frame=CGRectMake(18,236,actionW,42); apply.tag=99440; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; apply.layer.shadowOpacity=.24; apply.layer.shadowRadius=9; [apply setTitle:@"ÁP DỤNG" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightBlack]; [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:apply];
+    UIButton *respring=[UIButton buttonWithType:UIButtonTypeSystem]; respring.frame=CGRectMake(18+actionW+actionGap,236,actionW,42); respring.tag=99441; respring.layer.cornerRadius=15; respring.backgroundColor=[UIColor colorWithRed:.22 green:.18 blue:.42 alpha:1]; respring.layer.borderWidth=1; respring.layer.borderColor=[UIColor colorWithRed:.56 green:.42 blue:1 alpha:.9].CGColor; [respring setTitle:@"RESPRING" forState:UIControlStateNormal]; [respring setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; respring.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; [respring addTarget:self action:@selector(v332RequestRespring:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:respring];
+    UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,378,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
     UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Chỉ số mục tiêu được lưu vào cấu hình; FPS LIVE bên dưới là tốc độ khung hình của giao diện ứng dụng, không phải phép đo FPS mọi game."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
     // V23: six compact information tiles are always visible on the dashboard.
     UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,704,cw,18)];
@@ -6224,6 +6344,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (_currentBottomTab == 3 && indexPath.section == 0) return 108.0;
     if (_currentBottomTab == 3 && indexPath.section == 1) return 58.0;
     // Switch rows are intentionally taller so each control reads as an individual rounded tile.
     if (_currentBottomTab == 2 && indexPath.section == 1) return 88.0;
@@ -6291,8 +6412,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     else if (indexPath.row == 5) { title = @"   Kiến trúc CPU"; detail = Titanium_CPUArchitectureString(); }
                     else { title = @"   Mã phần cứng"; detail = Titanium_DeviceHardwareIdentifier(); }
                 } else if (indexPath.section == 2) {
-                    if (indexPath.row == 0) { title = _isGpuExpanded ? @"GPU ▼" : @"GPU ▶"; detail = @"Thông tin GPU và số đo thực tế nếu hệ thống cung cấp"; }
-                    else if (indexPath.row == 1) { title = @"   Tải GPU"; detail = gpu >= 0.0f ? [NSString stringWithFormat:@"%.1f%%", gpu] : @"Chưa có số đo thực tế từ nguồn cảm biến khả dụng"; }
+                    if (indexPath.row == 0) { title = _isGpuExpanded ? @"GPU ▼" : @"GPU ▶"; detail = @"Không có phép đo tải GPU công khai"; }
+                    else if (indexPath.row == 1) { title = @"   Tải GPU"; detail = gpu >= 0.0f ? [NSString stringWithFormat:@"%.1f%%", gpu] : @"Không được API công khai hỗ trợ"; }
                     else if (indexPath.row == 2) { id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice(); title = @"   Tên GPU"; detail = metalDevice.name.length ? metalDevice.name : @"Metal GPU không được hệ thống công khai"; }
                     else if (indexPath.row == 3) { title = @"   Nhiệt GPU"; detail = @"iOS không công khai"; }
                     else if (indexPath.row == 4) { title = @"   Xung GPU"; detail = @"iOS không công khai"; }
@@ -6338,10 +6459,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                         // [V30 FIX]: Nếu tweak đã ép vượt trần iOS, hiển thị giá trị đã ép thay vì 60
                         NSInteger displayedIOSHz = (targetHzSetting > maximumHz) ? targetHzSetting : maximumHz;
                         title = @"   Tần số iOS báo / Tweak ép";
-                        detail = [NSString stringWithFormat:@"iOS tối đa: %ld Hz · Mục tiêu cấu hình: %ld Hz · Máy: %@%@", (long)displayedIOSHz, (long)targetHzSetting, deviceHW, (targetHzSetting > maximumHz) ? @" (vượt khả năng báo cáo của màn hình; không đảm bảo áp dụng)" : @""];
+                        detail = [NSString stringWithFormat:@"iOS: %ld Hz · Tweak: %ld Hz · Máy: %@%@", (long)displayedIOSHz, (long)targetHzSetting, deviceHW, (targetHzSetting > maximumHz) ? @" (đã ép vượt trần)" : @""];
                     }
-                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu"; detail = [NSString stringWithFormat:@"%ld FPS đang cấu hình · hiệu lực phụ thuộc ứng dụng và thiết bị", (long)targetFPSSetting]; }
-                    else { title = @"   Hz mục tiêu"; detail = [NSString stringWithFormat:@"%ld Hz đang cấu hình · không thể vượt giới hạn vật lý chỉ bằng cấu hình", (long)targetHzSetting]; }
+                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld FPS đang cấu hình · Tweak.xm ép phần cứng", (long)targetFPSSetting]; }
+                    else { title = @"   Hz mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld Hz đang cấu hình · TITANIUM_SPOOF vượt trần iOS", (long)targetHzSetting]; }
                 }
             }
         }
@@ -6492,18 +6613,48 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 3) {
         if (indexPath.section == 0) {
-            title = @"Danh mục";
-            LGCustomSegment *categorySeg = [[LGCustomSegment alloc] initWithItems:@[@"Tất cả app", @"Mặc định hệ thống", @"Đã bật", @"Đã tắt"]];
-            categorySeg.selectedSegmentIndex = _appCategoryIndex;
+            title = @"ỨNG DỤNG · CHỌN DANH MỤC";
+            UIView *categoryCards = [[UIView alloc] initWithFrame:CGRectMake(0, 0, MAX(280.0, CGRectGetWidth(self.view.bounds) - 34.0), 100.0)];
+            categoryCards.backgroundColor = UIColor.clearColor;
+            categoryCards.tag = 334;
+            NSArray<NSString *> *cardTitles = @[@"App mặc định", @"App Store", @"App ẩn", @"App chạy riêng"];
+            NSArray<NSString *> *cardSymbols = @[@"gearshape.fill", @"square.and.arrow.down.fill", @"eye.slash.fill", @"square.stack.3d.up.fill"];
+            CGFloat gap = 7.0;
+            CGFloat cardW = (CGRectGetWidth(categoryCards.bounds) - gap * 3.0) / 4.0;
             __weak typeof(self) weakCategorySelf = self;
-            categorySeg.valueChangedBlock = ^(NSInteger index) {
-                __strong typeof(weakCategorySelf) strongSelf = weakCategorySelf;
-                if (!strongSelf) return;
-                strongSelf->_appCategoryIndex = index;
-                [strongSelf applyAppFilter];
-                [strongSelf.customTableView reloadSections:[NSIndexSet indexSetWithIndex:2] withRowAnimation:UITableViewRowAnimationNone];
-            };
-            accessory = categorySeg;
+            for (NSInteger i = 0; i < 4; i++) {
+                UIButton *tile = [UIButton buttonWithType:UIButtonTypeSystem];
+                tile.frame = CGRectMake(i * (cardW + gap), 2.0, cardW, 92.0);
+                tile.tag = i;
+                tile.titleLabel.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightBold];
+                tile.titleLabel.numberOfLines = 2;
+                tile.titleLabel.textAlignment = NSTextAlignmentCenter;
+                tile.titleLabel.adjustsFontSizeToFitWidth = YES;
+                tile.titleLabel.minimumScaleFactor = 0.72;
+                [tile setTitle:cardTitles[i] forState:UIControlStateNormal];
+                [tile setImage:[UIImage systemImageNamed:cardSymbols[i]] forState:UIControlStateNormal];
+                tile.imageView.contentMode = UIViewContentModeScaleAspectFit;
+                tile.titleEdgeInsets = UIEdgeInsetsMake(46.0, -25.0, 0.0, -25.0);
+                tile.imageEdgeInsets = UIEdgeInsetsMake(-13.0, (cardW - 25.0) / 2.0, 19.0, (cardW - 25.0) / 2.0);
+                tile.imageView.tintColor = [UIColor colorWithRed:0.38 green:0.86 blue:1.0 alpha:1.0];
+                tile.layer.cornerRadius = 15.0;
+                tile.layer.cornerCurve = kCACornerCurveContinuous;
+                tile.layer.borderWidth = (_appCategoryIndex == i) ? 1.2 : 0.6;
+                tile.layer.borderColor = (_appCategoryIndex == i) ? [UIColor colorWithRed:0.25 green:0.82 blue:1.0 alpha:0.95].CGColor : [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
+                tile.backgroundColor = (_appCategoryIndex == i) ? [UIColor colorWithRed:0.08 green:0.25 blue:0.40 alpha:0.95] : [UIColor colorWithWhite:1.0 alpha:0.045];
+                [tile setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+                [tile addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+                    (void)action;
+                    __strong typeof(weakCategorySelf) strongSelf = weakCategorySelf;
+                    if (!strongSelf) return;
+                    strongSelf->_appCategoryIndex = action.sender ? ((UIButton *)action.sender).tag : i;
+                    [[NSUserDefaults standardUserDefaults] setInteger:strongSelf->_appCategoryIndex forKey:@"TIAppCategoryCard_v1"];
+                    [strongSelf applyAppFilter];
+                    [strongSelf.customTableView reloadData];
+                }] forControlEvents:UIControlEventTouchUpInside];
+                [categoryCards addSubview:tile];
+            }
+            accessory = categoryCards;
         } else if (indexPath.section == 1) {
             UITextField *searchField = [[UITextField alloc] init];
             searchField.placeholder = @"Tìm app...";
@@ -6542,6 +6693,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if (!strongSelf || bundleID.length == 0) return;
                 strongSelf->_appTweakStates[bundleID] = @(isOn);
                 strongSelf.settingsDict[@"AppTweakStates"] = strongSelf->_appTweakStates;
+                [[NSUserDefaults standardUserDefaults] setObject:strongSelf->_appTweakStates forKey:@"TIAppTweakStatesPersistent_v1"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
                 [strongSelf saveSettingsDataAndSync];
                 [strongSelf applyDeepSpringBoardAndUIKitTweaks];
             };
@@ -6923,10 +7076,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSString *bid = Titanium_NormalizeAppSearchText(bidRaw);
         NSString *path = [app[@"path"] isKindOfClass:[NSString class]] ? app[@"path"] : @"";
         BOOL isDefault = [bidRaw hasPrefix:@"com.apple."] || [path containsString:@"/System/Applications/"] || [path containsString:@"/System/Library/CoreServices/"];
-        BOOL disabled = [hiddenMap[bidRaw] boolValue] || [app[@"isDisabled"] boolValue];
-        if (_appCategoryIndex == 1 && !isDefault) continue;
-        if (_appCategoryIndex == 2 && disabled) continue;
-        if (_appCategoryIndex == 3 && !disabled) continue;
+        BOOL isHidden = [hiddenMap[bidRaw] boolValue] || [app[@"isHidden"] boolValue];
+        BOOL isSeparate = [_appTweakStates[bidRaw] boolValue];
+        // The four cards are distinct filters; App Store category is approximated as installed non-Apple apps.
+        if (_appCategoryIndex == 0 && !isDefault) continue;
+        if (_appCategoryIndex == 1 && isDefault) continue;
+        if (_appCategoryIndex == 2 && !isHidden) continue;
+        if (_appCategoryIndex == 3 && !isSeparate) continue;
         if (q.length && ![name containsString:q] && ![bid containsString:q]) continue;
         [_filteredAppsList addObject:app];
     }
@@ -7020,6 +7176,28 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)v332ApplyPreset:(UIButton *)sender {
+    NSInteger rate = (sender.tag == 99450) ? 240 : ((sender.tag == 99451) ? 90 : 60);
+    if (_isRateLocked) {
+        UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Đang khóa Hz/FPS" message:@"Mở khóa Hz/FPS trước khi áp dụng hồ sơ." preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil]; return;
+    }
+    [self applyRateValue:rate isDynamic:NO isFPS:NO];
+    [self applyRateValue:rate isDynamic:NO isFPS:YES];
+    [self applyDeepSpringBoardAndUIKitTweaks];
+    self.customTableView.tableHeaderView=[self buildNeonRateHeaderWithWidth:self.view.bounds.size.width];
+    [self showRateSuccessBannerForRate:rate combined:YES isFPS:NO];
+}
+
+- (void)v332RequestRespring:(UIButton *)sender {
+    (void)sender;
+    UIAlertController *confirm=[UIAlertController alertControllerWithTitle:@"Respring" message:@"Khởi động lại SpringBoard để nạp lại các thay đổi? Ứng dụng đang mở có thể bị đóng." preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { [self executeRespring]; }]];
+    [self presentViewController:confirm animated:YES completion:nil];
 }
 
 - (void)showRateSuccessBannerForRate:(NSInteger)rate combined:(BOOL)combined isFPS:(BOOL)isFPS {
@@ -7206,6 +7384,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UILabel *fpsRead=(UILabel *)[headerNow viewWithTag:8711]; if(fpsRead) fpsRead.text=[NSString stringWithFormat:@"%ld",(long)_uiFPSMeasured];
     UILabel *ramRead=(UILabel *)[headerNow viewWithTag:8712]; if(ramRead) ramRead.text=Titanium_ByteCountString(memory);
     UILabel *batRead=(UILabel *)[headerNow viewWithTag:8713]; if(batRead) batRead.text=(battery>=0?[NSString stringWithFormat:@"%.0f%%",battery*100.0f]:@"N/A");
+    NSDictionary *nowInfo=Titanium_CurrentNowPlayingInfo();
+    NSString *nowTitle=[nowInfo[@"title"] isKindOfClass:NSString.class] ? nowInfo[@"title"] : nil;
+    NSString *nowArtist=[nowInfo[@"artist"] isKindOfClass:NSString.class] ? nowInfo[@"artist"] : nil;
+    UILabel *nowTitleLabel=(UILabel *)[headerNow viewWithTag:8720];
+    UILabel *nowArtistLabel=(UILabel *)[headerNow viewWithTag:8721];
+    if(nowTitleLabel) nowTitleLabel.text=nowTitle.length ? nowTitle : @"Chưa có thông tin bài hát";
+    if(nowArtistLabel) nowArtistLabel.text=nowArtist.length ? nowArtist : (nowTitle.length ? @"Nghệ sĩ chưa được cung cấp" : @"Ứng dụng phát cần chia sẻ metadata với iOS");
     NSProcessInfoThermalState ts = NSProcessInfo.processInfo.thermalState;
     NSArray<NSString *> *states = @[@"Mát", @"Bình thường", @"Ấm", @"Nóng", @"Rất nóng"];
     NSInteger si = (NSInteger)ts;
@@ -7618,8 +7803,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     }
     if (!self.settingsDict[@"TargetRefreshRate"] && [savedDefaults objectForKey:@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @([savedDefaults integerForKey:@"TargetRefreshRate"]);
     if (!self.settingsDict[@"TargetFPSRate"] && [savedDefaults objectForKey:@"TargetFPSRate"]) self.settingsDict[@"TargetFPSRate"] = @([savedDefaults integerForKey:@"TargetFPSRate"]);
-    if (!self.settingsDict[@"EnableHzControl"] && [savedDefaults objectForKey:@"EnableHzControl"] != nil) self.settingsDict[@"EnableHzControl"] = @([savedDefaults boolForKey:@"EnableHzControl"]);
-    if (!self.settingsDict[@"EnableFPSControl"] && [savedDefaults objectForKey:@"EnableFPSControl"] != nil) self.settingsDict[@"EnableFPSControl"] = @([savedDefaults boolForKey:@"EnableFPSControl"]);
+    if (!self.settingsDict[@"EnableHzControl"] && [savedDefaults objectForKey:@"EnableHzControl"]) self.settingsDict[@"EnableHzControl"] = @([savedDefaults boolForKey:@"EnableHzControl"]);
+    if (!self.settingsDict[@"EnableFPSControl"] && [savedDefaults objectForKey:@"EnableFPSControl"]) self.settingsDict[@"EnableFPSControl"] = @([savedDefaults boolForKey:@"EnableFPSControl"]);
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
     [self ensureDefaultSettingsExist];
     [self saveSettingsDataAndSync];
@@ -7729,7 +7914,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 
 - (void)loadInstalledAppsAsync {
     NSDictionary *saved = self.settingsDict[@"AppTweakStates"];
-    _appTweakStates = saved ? [saved mutableCopy] : [NSMutableDictionary dictionary];
+    NSDictionary *persistentAppStates = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIAppTweakStatesPersistent_v1"];
+    _appTweakStates = saved ? [saved mutableCopy] : (persistentAppStates ? [persistentAppStates mutableCopy] : [NSMutableDictionary dictionary]);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         NSMutableArray<NSDictionary *> *temp = [NSMutableArray array];
         NSArray *dirs = @[@"/Applications", @"/var/jb/Applications", @"/System/Applications", @"/System/Library/CoreServices", @"/var/containers/Bundle/Application", @"/private/var/containers/Bundle/Application"];
@@ -7916,7 +8102,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 - (void)presentIndependentDocument:(NSString *)title text:(NSString *)text {
     if ([title isEqualToString:@"Tác giả & hỗ trợ"] || [title isEqualToString:@"Tác giả · Môi trường · iOS"]) {
         TIAuthorsDocumentController *authors = [TIAuthorsDocumentController new];
-        authors.authorScript = @"THÔNG TIN ỨNG DỤNG\nMôi trường: RootHide / rootless / rootful tùy bootstrap.\niOS mục tiêu: 14.0–26.0.1 (chưa xác minh trên mọi phiên bản/thiết bị).\n\nTÁC GIẢ 1 — TaoJb\nHello! Tôi là TaoJb, người Hoa Kỳ và làm về phần cứng. Tôi xin lỗi vì những lỗi xuất hiện nhiều lần. Tôi sẽ cố gắng sửa sớm và mong mọi người sử dụng ổn định, đồng thời đừng phàn nàn với Vũ Đức Long vì bạn ấy đang xử lý khối lượng công việc nặng hơn những người khác rất nhiều. Xin hẹn gặp lại.\n\nTÁC GIẢ 2 — NoNo\nXin chào, tôi là NoNo, người Hoa Kỳ. Tôi làm về phần cứng và hỗ trợ xử lý lỗi code. Những ngày gần đây ứng dụng bị lag nhiều; tôi xin lỗi vì chưa xử lý triệt để. Tôi cũng không muốn điều đó xảy ra vì các lỗi này rất khó sửa. Mong mọi người đừng gây áp lực quá mức vì khối lượng công việc rất lớn. Xin chào, hẹn gặp lại.\n\nTÁC GIẢ 3 — NekoJb\nXin chào, tôi là NekoJb, người Việt Nam, đến từ Hà Nội và là bạn của Vũ Đức Long. Tôi phụ code ở tầng sâu. Những ngày gần đây có nhiều người thử nghiệm và báo lỗi liên tục. Tôi rất xin lỗi; tôi cũng muốn sửa nhanh để ứng dụng ổn định, nhưng khối lượng công việc quá nhiều nên không thể xử lý ngay lập tức. Mong mọi người thông cảm, tránh gây áp lực quá mức và trân trọng công sức của chúng tôi. Hẹn gặp lại.\n\n";
+        authors.authorScript = @"THÔNG TIN ỨNG DỤNG\nMôi trường: RootHide / rootless / rootful tùy bootstrap.\nMục tiêu tương thích: iOS 14–26.0.1 · iPhone 6s–15 Pro Max. Cần kiểm thử từng thiết bị/bootstrap.\n\nTÁC GIẢ 1 — TaoJb\nHello! Tôi là TaoJb, người Hoa Kỳ và làm về phần cứng. Tôi xin lỗi vì những lỗi xuất hiện nhiều lần. Tôi sẽ cố gắng sửa sớm và mong mọi người sử dụng ổn định, đồng thời đừng phàn nàn với Vũ Đức Long vì bạn ấy đang xử lý khối lượng công việc nặng hơn những người khác rất nhiều. Xin hẹn gặp lại.\n\nTÁC GIẢ 2 — NoNo\nXin chào, tôi là NoNo, người Hoa Kỳ. Tôi làm về phần cứng và hỗ trợ xử lý lỗi code. Những ngày gần đây ứng dụng bị lag nhiều; tôi xin lỗi vì chưa xử lý triệt để. Tôi cũng không muốn điều đó xảy ra vì các lỗi này rất khó sửa. Mong mọi người đừng gây áp lực quá mức vì khối lượng công việc rất lớn. Xin chào, hẹn gặp lại.\n\nTÁC GIẢ 3 — NekoJb\nXin chào, tôi là NekoJb, người Việt Nam, đến từ Hà Nội và là bạn của Vũ Đức Long. Tôi phụ code ở tầng sâu. Những ngày gần đây có nhiều người thử nghiệm và báo lỗi liên tục. Tôi rất xin lỗi; tôi cũng muốn sửa nhanh để ứng dụng ổn định, nhưng khối lượng công việc quá nhiều nên không thể xử lý ngay lập tức. Mong mọi người thông cảm, tránh gây áp lực quá mức và trân trọng công sức của chúng tôi. Hẹn gặp lại.\n\n";
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:authors];
         nav.modalPresentationStyle = UIModalPresentationPageSheet;
         [self presentViewController:nav animated:YES completion:nil];
