@@ -1370,6 +1370,7 @@ static void Titanium_StartIPCHearthbeatV12(void);
 static void Titanium_RegisterAppResumeRefreshV12(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
 static inline void Titanium_A20PrewarmAssetsAndGPU(void);
+static void Titanium_ForceInjectDynamicRefreshSupport(void);
 
 // Triển khai thực tế hàm kernel write-protect bypass để triệt tiêu hoàn toàn cảnh báo biên dịch
 static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize) {
@@ -3490,40 +3491,35 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
 
 static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
+// ====================================================================================================
+// NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (0MS DELAY, SIÊU MƯỢT)
+// ====================================================================================================
+
+%group Group_FluidTransitions_Pacing
+
 %hook CADisplayLink
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
+    %orig(runLoop, mode);
     @try {
-        if (!self) {
-            %orig(runLoop, mode);
-            return;
-        }
-        %orig(runLoop, mode);
-        @try {
-            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-                NSInteger cap = Titanium_GetEffectiveFrameCap();
-                if (cap < 15) cap = 15;
-                if (cap > 240) cap = 240;
-                
-                EnforceMaxCPUPower();
-                Titanium_EnforceThreadVIPPolicy();
+        if (!self) return;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            if (cap < 15) cap = 15;
+            if (cap > 240) cap = 240;
 
-                self.preferredFramesPerSecond = cap;
-                if (@available(iOS 15.0, *)) {
-                    if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        self.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
-                    }
+            self.preferredFramesPerSecond = cap;
+            if (@available(iOS 15.0, *)) {
+                if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    self.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
                 }
             }
-        } @catch (__unused NSException *e) {}
-    } @catch (__unused NSException *e) {
-        %orig(runLoop, mode);
-    }
+        }
+    } @catch (__unused NSException *e) {}
 }
 
 - (NSInteger)preferredFramesPerSecond {
     @try {
-        if (!self) return %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             return Titanium_GetEffectiveFrameCap();
         }
@@ -3532,70 +3528,43 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    @try {
-        if (!self) {
-            %orig(fps);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(Titanium_GetEffectiveFrameCap());
-            return;
-        }
-        %orig(fps);
-    } @catch (__unused NSException *e) {
-        %orig(fps);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(Titanium_GetEffectiveFrameCap());
+        return;
     }
+    %orig(fps);
 }
 
-- (CAFrameRateRange)preferredFrameRateRange API_AVAILABLE(ios(15.0)) {
-    __block CAFrameRateRange __blockRange = %orig;
+- (CAFrameRateRange)preferredFrameRateRange {
     @try {
-        if (!self) return __blockRange;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            float target = (float)Titanium_GetEffectiveFrameCap();
-            __blockRange = Titanium_SmoothFRR(target);
+        if (@available(iOS 15.0, *)) {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                float target = (float)Titanium_GetEffectiveFrameCap();
+                return Titanium_SmoothFRR(target);
+            }
         }
     } @catch (__unused NSException *e) {}
-    return __blockRange;
+    return %orig;
 }
 
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range API_AVAILABLE(ios(15.0)) {
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     @try {
-        if (!self) {
-            %orig(range);
-            return;
+        if (@available(iOS 15.0, *)) {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                float target = (float)Titanium_GetEffectiveFrameCap();
+                range = Titanium_SmoothFRR(target);
+            }
         }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            float target = (float)Titanium_GetEffectiveFrameCap();
-            range = Titanium_SmoothFRR(target);
-        }
-        %orig(range);
     } @catch (__unused NSException *e) {}
+    %orig(range);
 }
 
 - (CFTimeInterval)duration {
-    __block CFTimeInterval dur = %orig;
-    @try {
-        if (!self) return dur;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap >= 15 && cap <= 240) dur = (1.0 / (double)cap);
-        }
-    } @catch (__unused NSException *e) {}
-    return dur;
+    return %orig;
 }
 
 - (CFTimeInterval)targetTimestamp {
-    __block CFTimeInterval tsVal = %orig;
-    @try {
-        if (!self) return tsVal;
-        CFTimeInterval ts = self.timestamp;
-        if (ts > 0.0 && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            NSInteger cap = Titanium_GetEffectiveFrameCap();
-            if (cap >= 15 && cap <= 240) tsVal = (ts + (1.0 / (double)cap));
-        }
-    } @catch (__unused NSException *e) {}
-    return tsVal;
+    return %orig;
 }
 
 %end
@@ -3603,14 +3572,12 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CADisplayMode
 
 - (double)refreshRate {
-    __block double rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            rate = (double)Titanium_GetEffectiveFrameCap();
+            return (double)Titanium_GetEffectiveFrameCap();
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 %end
@@ -3618,66 +3585,47 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CADisplay
 
 - (BOOL)allowsVirtualModes {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     return %orig;
 }
 
 - (void)setAllowsVirtualModes:(BOOL)allows {
-    @try {
-        if (!self) {
-            %orig(allows);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(YES);
-            return;
-        }
-        %orig(allows);
-    } @catch (__unused NSException *e) {
-        %orig(allows);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(YES);
+        return;
     }
+    %orig(allows);
 }
 
 - (double)latency {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return 0.0;
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return 0.0;
     return %orig;
 }
 
 - (CFTimeInterval)minimumFrameDuration {
-    __block CFTimeInterval dur = %orig;
     @try {
-        if (!self) return dur;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
             if (cap < 15) cap = 15;
             if (cap > 240) cap = 240;
-            dur = (1.0 / (double)cap);
+            return (1.0 / (double)cap);
         }
     } @catch (__unused NSException *e) {}
-    return dur;
+    return %orig;
 }
 
 - (double)refreshRate {
-    __block double rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            rate = (cap > 0) ? (double)cap : %orig;
+            return (cap > 0) ? (double)cap : %orig;
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 - (NSInteger)preferredFPS {
     @try {
-        if (!self) return %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             return Titanium_GetEffectiveFrameCap();
         }
@@ -3686,19 +3634,11 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
-    @try {
-        if (!self) {
-            %orig(fps);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            %orig(Titanium_GetEffectiveFrameCap());
-            return;
-        }
-        %orig(fps);
-    } @catch (__unused NSException *e) {
-        %orig(fps);
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(Titanium_GetEffectiveFrameCap());
+        return;
     }
+    %orig(fps);
 }
 
 %end
@@ -3706,45 +3646,39 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CAWindowServerDisplay
 
 - (double)minimumFrameDuration {
-    __block double dur = %orig;
     @try {
-        if (!self) return dur;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            dur = (1.0 / targetHz);
+            return (1.0 / targetHz);
         }
     } @catch (__unused NSException *e) {}
-    return dur;
+    return %orig;
 }
 
 - (double)maximumRefreshRate {
-    __block double rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            rate = targetHz;
+            return targetHz;
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 - (double)idealRefreshRate {
-    __block double rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             double targetHz = (double)Titanium_GetEffectiveFrameCap();
             if (targetHz < 15.0) targetHz = 15.0;
             if (targetHz > 240.0) targetHz = 240.0;
-            rate = targetHz;
+            return targetHz;
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 %end
@@ -3753,7 +3687,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (NSInteger)maximumFramesPerSecond {
     @try {
-        if (!self) return %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             return Titanium_GetEffectiveFrameCap();
         }
@@ -3763,7 +3696,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (NSInteger)_maximumFramesPerSecond {
     @try {
-        if (!self) return %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             return Titanium_GetEffectiveFrameCap();
         }
@@ -3772,15 +3704,13 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 - (CGFloat)_refreshRate {
-    __block CGFloat rate = %orig;
     @try {
-        if (!self) return rate;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             NSInteger cap = Titanium_GetEffectiveFrameCap();
-            rate = (cap > 0) ? (CGFloat)cap : %orig;
+            return (cap > 0) ? (CGFloat)cap : %orig;
         }
     } @catch (__unused NSException *e) {}
-    return rate;
+    return %orig;
 }
 
 %end
@@ -3789,8 +3719,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (id)objectForInfoDictionaryKey:(NSString *)key {
     @try {
-        if (!key) return %orig(key);
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+        if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             if ([key isEqualToString:@"CADisableMinimumFrameDuration"] ||
                 [key isEqualToString:@"CADisableMinimumFrameDurationOnPhone"]) {
                 return @YES;
@@ -3819,31 +3748,29 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                 [configuration.userContentController addUserScript:script];
             }
         }
-        WKWebView *webView = %orig(frame, configuration);
-        if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-            objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        return webView;
     } @catch (__unused NSException *e) {}
-    return %orig(frame, configuration);
+    
+    WKWebView *webView = %orig(frame, configuration);
+    if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+        objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return webView;
 }
 
 %end
 
 %hook CAAnimation
 
-- (void)setPreferredFrameRateRange:(CAFrameRateRange)range API_AVAILABLE(ios(15.0)) {
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     @try {
-        if (!self) {
-            %orig(range);
-            return;
+        if (@available(iOS 15.0, *)) {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                float target = (float)Titanium_GetEffectiveFrameCap();
+                range = Titanium_SmoothFRR(target);
+            }
         }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            float target = (float)Titanium_GetEffectiveFrameCap();
-            range = Titanium_SmoothFRR(target);
-        }
-        %orig(range);
     } @catch (__unused NSException *e) {}
+    %orig(range);
 }
 
 %end
@@ -3852,11 +3779,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
     @try {
-        if (!self || !anim) {
-            %orig(anim, key);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (anim && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             if (@available(iOS 15.0, *)) {
                 if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     float target = (float)Titanium_GetEffectiveFrameCap();
@@ -3864,10 +3787,8 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                 }
             }
         }
-        %orig(anim, key);
-    } @catch (__unused NSException *e) {
-        %orig(anim, key);
-    }
+    } @catch (__unused NSException *e) {}
+    %orig(anim, key);
 }
 
 %end
@@ -3875,16 +3796,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook AVPlayer
 
 - (void)setRate:(float)rate {
-    BOOL origDone = NO;
-    @try {
-        if (!self) {
-            origDone = YES; %orig(rate);
-            return;
-        }
-        origDone = YES; %orig(rate);
-    } @catch (__unused NSException *e) {
-        if (!origDone) %orig(rate);
-    }
+    %orig(rate);
 }
 
 %end
@@ -3926,32 +3838,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 // ====================================================================================================
-// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT, CỬ CHỈ & CHỐNG KHỰNG (TỰ NHIÊN, KHÔNG ĐỨNG KHỰNG, CHUYỂN TAB 0MS)
+// NHÓM 4: ĐA NHIỆM SIÊU MƯỢT TẦNG SÂU (BẺ KHÓA SNAPSHOT CACHE, PHẢN HỒI CHUYỂN TAB 0MS)
 // ====================================================================================================
 
 %group Group_Switcher30Apps_Virtualization
 
-// 1. CỬ CHỈ HOME & BUNG LUỒNG TỨC THÌ KHI TƯƠNG TÁC
+// 1. CỬ CHỈ ĐA NHIỆM (SỬA DỨT ĐIỂM LỖI BUILD VÀ ÉP XUNG ĐÚNG THỜI ĐIỂM)
 %hook SBHomeGestureInteraction
 
-- (void)_handleGestureBegan:(id)gesture {
-    @try {
-        if (!self) {
-            %orig(gesture);
-            return;
-        }
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = YES;
-            g_isInteracting = YES;
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_TriggerInstantTouchBurst();
-        }
-    } @catch (__unused NSException *e) {}
-    %orig(gesture);
-}
-
+// Thay _handleGestureBegan không tồn tại trên iOS 16 bằng _handleGestureChanged và quản lý trạng thái luồng chuẩn xác
 - (void)_handleGestureChanged:(id)gesture {
     @try {
         if (!self) {
@@ -3959,8 +3854,11 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             return;
         }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            g_isContinuousSwiping = YES;
-            g_isInteracting = YES;
+            if (!g_isContinuousSwiping) {
+                g_isContinuousSwiping = YES;
+                g_isInteracting = YES;
+                Titanium_TriggerInstantTouchBurst();
+            }
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
@@ -4001,21 +3899,12 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBFluidSwitcherGestureWorkspaceTransaction
 
 - (BOOL)canInterruptActiveGesture {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return YES;
-        }
-    } @catch (__unused NSException *e) {}
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     return %orig;
 }
 
 - (void)_begin {
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
@@ -4038,36 +3927,40 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 2. VẬT LÝ QUÁN TÍNH THẺ ĐA NHIỆM: LƯỚT NHẸ TAY, KHÔNG BỊ GHÌM CỨNG
-%hook SBFluidSwitcherAnimationSettings
+// 2. BẺ KHÓA BỘ ĐỆM SNAPSHOT (CHỐNG KHỰNG KHI LƯỚT NHANH GIỮA CÁC THẺ APP)
+%hook SBAppSwitcherSnapshotImageCache
 
-- (double)deckSwipeSpeedFactor {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return 1.0; // Đưa về 1.0 chuẩn động lực học để vuốt nhẹ nhàng, không nặng tay
-        }
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
-- (double)cardFlyInDuration {
-    @try {
-        if (!self) return %orig;
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return 0.16;
-        }
-    } @catch (__unused NSException *e) {}
+- (BOOL)shouldLoadSnapshotImagesImmediately {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return YES;
     return %orig;
 }
 
 %end
 
-// 3. QUẢN LÝ BỘ NHỚ SNAPSHOT & MA SÁT TRƯỢT TỰ NHIÊN (KHÔNG ĐỨNG KHỰNG KHI VUỐT MẠNH)
+// 3. ĐỘNG LỰC HỌC QUÁN TÍNH THẺ: LƯỚT NHẸ TAY, KHÔNG CỨNG, KHÔNG DỪNG ĐỘT NGỘT
+%hook SBFluidSwitcherAnimationSettings
+
+- (double)deckSwipeSpeedFactor {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 1.0; // Đưa về 1.0 chuẩn vật lý, chống ghìm cứng ngón tay
+    }
+    return %orig;
+}
+
+- (double)cardFlyInDuration {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 0.15; // Giảm độ trễ bay vào của thẻ app
+    }
+    return %orig;
+}
+
+%end
+
+// 4. QUẢN LÝ BỘ NHỚ VÀ QUÁN TÍNH TRƯỢT TỰ NHIÊN
 %hook SBAppSwitcherSettings
 
 - (BOOL)shouldKeepAppSnapshotsInMemory {
-    return YES;
+    return YES; // Ép giữ thẻ trong RAM, triệt tiêu độ trễ load lại ảnh
 }
 
 - (BOOL)shouldSimplifyForOptions:(long long)options {
@@ -4075,27 +3968,25 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (CGFloat)decelerationRate {
-    // Trả về gốc của hệ thống để giữ nguyên đường cong quán tính mượt mà, loại bỏ hiện tượng đứng sững lại
+    // Trả về gốc của iOS để giữ trọn vẹn đường cong ma sát trôi tự nhiên, không khựng đứng
     return %orig;
 }
 
 %end
 
-// 4. CHỐNG KHỰNG KHI THOÁT APP VỀ MÀN HÌNH CHÍNH
+// 5. THOÁT APP VỀ HOME MƯỢT TUYỆT ĐỐI
 %hook SBAppToHomeWorkspaceTransaction
 
 - (void)_willBegin {
     @try {
-        if (!self) {
-            %orig;
-            return;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            g_isInteracting = YES;
+            g_activeAnimationCount++;
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            Titanium_TriggerInstantTouchBurst();
         }
-        g_isInteracting = YES;
-        g_activeAnimationCount++;
-        uint64_t now = mach_absolute_time();
-        g_lastInteractionMachTime = now;
-        g_lastInteractiveTick = now;
-        Titanium_TriggerInstantTouchBurst();
     } @catch (__unused NSException *e) {}
     %orig;
 }
@@ -4114,21 +4005,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 5. ĐỒNG BỘ HIỆU ỨNG MỞ APP TỪ ĐA NHIỆM (CHỐNG DELAY, KHỰNG RƠI KHUNG HÌNH KHI CHỌN TAB KHÁC)
+// 6. PHÓNG TO MỞ APP TỪ ĐA NHIỆM (TRIỆT TIÊU DROP FPS & DELAY KHI CHỌN TAB KHÁC)
 %hook SBHomeToAppWorkspaceTransaction
 
 - (void)_willBegin {
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isInteracting = YES;
             g_activeAnimationCount++;
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
+            // Bứt tốc tức thì Main Thread để đón đầu hoạt ảnh mở app
             Titanium_TriggerInstantTouchBurst();
         }
     } @catch (__unused NSException *e) {}
@@ -4147,7 +4035,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 6. PHẢN HỒI CHẠM TỨC THÌ KHI CHỌN THẺ APP KHÁC TRONG ĐA NHIỆM
+// 7. BẺ KHÓA PHẢN HỒI CHẠM THẺ TRONG SWITCHER (CHỌN LÀ NHẬN NGAY LẬP TỨC)
 %hook SBFluidSwitcherItemContainer
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
@@ -4161,6 +4049,18 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         }
     } @catch (__unused NSException *e) {}
     %orig(touches, event);
+}
+
+%end
+
+%hook SBFluidSwitcherGestureManager
+
+// Cho phép phản hồi nhận chọn thẻ app ngay lập tức, không để cử chỉ cuộn cản trở tap
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return YES;
+    }
+    return %orig;
 }
 
 %end
