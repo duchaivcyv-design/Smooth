@@ -14,8 +14,10 @@ BoostiPhone6sApp_FILES = main.m \
                          AppDelegate.m \
                          RootListController.m
 
-# ĐÃ THÊM: IOKit (cần cho IORegistry*) và CoreAudioTypes (tránh warning auto-link)
-BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox IOKit CoreAudioTypes
+# IOKit: cần cho IORegistry* (IOIteratorNext, IORegistryGetRootEntry, ...)
+# KHÔNG thêm CoreAudioTypes: framework này không có trên SDK iOS,
+# chỉ là warning auto-link vô hại nếu bỏ ngoài danh sách.
+BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox IOKit
 BoostiPhone6sApp_INSTALL_PATH = $(_THEOS_PREFIX)/Applications
 
 # CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
