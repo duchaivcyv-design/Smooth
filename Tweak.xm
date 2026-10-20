@@ -5021,6 +5021,22 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
+static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
+    @autoreleasepool {
+        if (@available(iOS 13.0, *)) {
+            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                if ([scene isKindOfClass:[UIWindowScene class]]) {
+                    UIWindowScene *windowScene = (UIWindowScene *)scene;
+                    for (UIWindow *window in windowScene.windows) {
+                        // Ép cập nhật lại màn hình / frame rate cho từng window/scene nếu cần
+                        [window setNeedsLayout];
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ====================================================================================================
 // NHÓM ĐẶC QUYỀN CHIP & MÀN HÌNH (BẺ TRẦN 60HZ, BUNG HZ/FPS THẬT - BỌC THÉP AN TOÀN)
 // ====================================================================================================
@@ -5384,17 +5400,18 @@ static void Titanium_InstallPowerBypassC(void) {
 %hook UIWindowScene
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
-    // [SỬA CRASH/RESPRING LẶP]: bản cũ gọi %orig ở cả @try lẫn @catch => khi có exception, hàm gốc chạy 2 lần và SpringBoard sập.
-    // Nay %orig chỉ chạy đúng 1 lần, sau khi đã tính range.
-    @try {
-        if (self && @available(iOS 15.0, *)) {
-            if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                float targetCap = (float)Titanium_GetEffectiveFrameCap();
-                CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
-                range = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
-            }
+    // Sửa lỗi: Tách @available ra khỏi câu điều kiện gộp (self && @available)
+    if (@available(iOS 15.0, *)) {
+        if (self) {
+            @try {
+                if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+                    float targetCap = (float)Titanium_GetEffectiveFrameCap();
+                    CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
+                    range = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
+                }
+            } @catch (__unused NSException *e) {}
         }
-    } @catch (__unused NSException *e) {}
+    }
     %orig(range);
 }
 
