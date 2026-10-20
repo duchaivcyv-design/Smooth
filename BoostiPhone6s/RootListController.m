@@ -2709,6 +2709,7 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)layoutLiquidGlassControlsForCurrentBounds;
 - (void)setupTopHeaderBar;
 - (void)showPhonkMusicPicker;
+- (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width;
 - (void)setupExpandingNavigationItems;
 - (void)reloadVisibleContentWithSubtleTransition;
 - (void)v20HandleForegroundTransition:(NSNotification *)notification;
@@ -3316,6 +3317,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [self setupExpandingNavigationItems];
     [self setupLiquidGlassNavBar];
     [self setupMainTableView];
+    self.customTableView.tableHeaderView = [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width];
     NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     self.customTableView.userInteractionEnabled = ([initialServerChoice isEqualToString:@"free"] || _isAdminServer);
     NSUserDefaults *creditsDefaults = [NSUserDefaults standardUserDefaults];
@@ -5056,6 +5058,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         tableFrame.size.width = W;
         tableFrame.size.height = MAX(0.0, y - topSafe - 12.0);
         if (!CGRectEqualToRect(self.customTableView.frame, tableFrame)) self.customTableView.frame = tableFrame;
+        CGFloat headerWidth = self.view.bounds.size.width;
+        if (self.customTableView.tableHeaderView && fabs(self.customTableView.tableHeaderView.bounds.size.width - headerWidth) > 1.0) {
+            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)];
+        }
         UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, 10.0, 0.0);
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.scrollIndicatorInsets, desiredInset)) self.customTableView.scrollIndicatorInsets = desiredInset;
@@ -5147,6 +5153,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     NSInteger oldTab = _currentBottomTab;
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
+    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)];
+    self.customTableView.tableHeaderView = nextHeader;
     if (_currentBottomTab == 0 && [self.settingsDict[@"EnableSystemMonitoring"] boolValue]) [self startContinuousHardwareHUD];
     else [self stopContinuousHardwareHUD];
     if (_currentBottomTab == 3 && !_hasStartedAppScan) {
@@ -5316,6 +5324,130 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 #pragma mark - TableView
 
+#pragma mark - Neon gaming dashboard
+
+- (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
+    CGFloat w = MAX(320.0, width);
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 286.0)];
+    root.backgroundColor = UIColor.clearColor;
+
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 12, w - 40, 16)];
+    eyebrow.text = @"T I T A N I U M   /   CONTROL CENTER";
+    eyebrow.font = [UIFont systemFontOfSize:9 weight:UIFontWeightBold];
+    eyebrow.textColor = [UIColor colorWithRed:0.72 green:0.42 blue:1.0 alpha:1.0];
+    [root addSubview:eyebrow];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 31, w - 36, 36)];
+    title.text = @"NEON DASHBOARD";
+    title.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBlack];
+    title.textColor = [UIColor colorWithWhite:0.97 alpha:1.0];
+    [root addSubview:title];
+
+    UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 67, w - 40, 20)];
+    subtitle.text = @"Hiệu năng · Thiết bị · Công cụ của bạn";
+    subtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    subtitle.textColor = [UIColor colorWithWhite:0.62 alpha:1.0];
+    [root addSubview:subtitle];
+
+    CGFloat cardX = 16.0, cardY = 99.0, cardW = w - 32.0, cardH = 119.0;
+    UIView *hero = [[UIView alloc] initWithFrame:CGRectMake(cardX, cardY, cardW, cardH)];
+    hero.backgroundColor = [UIColor colorWithRed:0.055 green:0.035 blue:0.13 alpha:1.0];
+    hero.layer.cornerRadius = 19.0;
+    hero.layer.borderWidth = 1.0;
+    hero.layer.borderColor = [UIColor colorWithRed:0.53 green:0.22 blue:0.98 alpha:0.78].CGColor;
+    hero.layer.shadowColor = [UIColor colorWithRed:0.48 green:0.13 blue:1.0 alpha:1.0].CGColor;
+    hero.layer.shadowOpacity = 0.23;
+    hero.layer.shadowRadius = 15.0;
+    hero.layer.shadowOffset = CGSizeMake(0, 5);
+    hero.clipsToBounds = NO;
+    [root addSubview:hero];
+
+    CAGradientLayer *gradient = [CAGradientLayer layer];
+    gradient.frame = CGRectMake(0, 0, cardW, cardH);
+    gradient.cornerRadius = 19.0;
+    gradient.colors = @[(id)[UIColor colorWithRed:0.20 green:0.055 blue:0.39 alpha:0.90].CGColor,
+                        (id)[UIColor colorWithRed:0.075 green:0.045 blue:0.19 alpha:0.96].CGColor,
+                        (id)[UIColor colorWithRed:0.035 green:0.045 blue:0.12 alpha:1.0].CGColor];
+    gradient.startPoint = CGPointMake(0, 0);
+    gradient.endPoint = CGPointMake(1, 1);
+    [hero.layer insertSublayer:gradient atIndex:0];
+
+    UILabel *pill = [[UILabel alloc] initWithFrame:CGRectMake(15, 13, 104, 20)];
+    pill.text = @"●  SYSTEM READY";
+    pill.font = [UIFont systemFontOfSize:9 weight:UIFontWeightHeavy];
+    pill.textAlignment = NSTextAlignmentCenter;
+    pill.textColor = [UIColor colorWithRed:0.78 green:0.57 blue:1.0 alpha:1.0];
+    pill.backgroundColor = [UIColor colorWithRed:0.42 green:0.12 blue:0.76 alpha:0.35];
+    pill.layer.cornerRadius = 7;
+    pill.clipsToBounds = YES;
+    [hero addSubview:pill];
+
+    UILabel *heroTitle = [[UILabel alloc] initWithFrame:CGRectMake(15, 40, cardW - 112, 30)];
+    heroTitle.text = @"TUNE YOUR DEVICE";
+    heroTitle.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBlack];
+    heroTitle.textColor = UIColor.whiteColor;
+    [hero addSubview:heroTitle];
+
+    UILabel *heroDetail = [[UILabel alloc] initWithFrame:CGRectMake(16, 71, cardW - 112, 29)];
+    heroDetail.text = @"Truy cập nhanh các công cụ\nHz/FPS và thông tin thiết bị.";
+    heroDetail.numberOfLines = 2;
+    heroDetail.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightMedium];
+    heroDetail.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
+    [hero addSubview:heroDetail];
+
+    UIView *orb = [[UIView alloc] initWithFrame:CGRectMake(cardW - 91, 27, 66, 66)];
+    orb.backgroundColor = [UIColor colorWithRed:0.42 green:0.12 blue:0.85 alpha:0.18];
+    orb.layer.cornerRadius = 33;
+    orb.layer.borderWidth = 1.0;
+    orb.layer.borderColor = [UIColor colorWithRed:0.68 green:0.38 blue:1.0 alpha:0.85].CGColor;
+    [hero addSubview:orb];
+    UILabel *orbIcon = [[UILabel alloc] initWithFrame:orb.bounds];
+    orbIcon.text = @"✦";
+    orbIcon.font = [UIFont systemFontOfSize:37 weight:UIFontWeightLight];
+    orbIcon.textAlignment = NSTextAlignmentCenter;
+    orbIcon.textColor = [UIColor colorWithRed:0.79 green:0.56 blue:1.0 alpha:1.0];
+    [orb addSubview:orbIcon];
+    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    pulse.fromValue = @0.62; pulse.toValue = @1.0; pulse.duration = 1.6;
+    pulse.autoreverses = YES; pulse.repeatCount = HUGE_VALF;
+    [orb.layer addAnimation:pulse forKey:@"neonPulse"];
+
+    CGFloat gap = 9.0;
+    CGFloat chipW = (w - 32.0 - gap * 2.0) / 3.0;
+    NSArray *chips = @[@{ @"title": @"Hz / FPS", @"icon": @"◉", @"tab": @1 },
+                       @{ @"title": @"Tối ưu", @"icon": @"✧", @"tab": @2 },
+                       @{ @"title": @"Phonk", @"icon": @"♫", @"tab": @-1 }];
+    for (NSInteger i = 0; i < chips.count; i++) {
+        NSDictionary *item = chips[i];
+        UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
+        chip.frame = CGRectMake(16 + i * (chipW + gap), 230, chipW, 43);
+        chip.backgroundColor = [UIColor colorWithRed:0.075 green:0.065 blue:0.15 alpha:1.0];
+        chip.layer.cornerRadius = 12.0;
+        chip.layer.borderWidth = 1.0;
+        chip.layer.borderColor = [UIColor colorWithRed:0.38 green:0.22 blue:0.61 alpha:0.75].CGColor;
+        [chip setTitle:[NSString stringWithFormat:@"%@  %@", item[@"icon"], item[@"title"]] forState:UIControlStateNormal];
+        [chip setTitleColor:[UIColor colorWithWhite:0.93 alpha:1.0] forState:UIControlStateNormal];
+        chip.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
+        chip.tag = [item[@"tab"] integerValue];
+        [chip addTarget:self action:@selector(neonDashboardQuickAction:) forControlEvents:UIControlEventTouchUpInside];
+        [root addSubview:chip];
+        [chip addTarget:self action:@selector(neonDashboardButtonDown:) forControlEvents:UIControlEventTouchDown];
+        [chip addTarget:self action:@selector(neonDashboardButtonUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+    }
+    return root;
+}
+
+- (void)neonDashboardQuickAction:(UIButton *)sender {
+    if (sender.tag < 0) { [self showPhonkMusicPicker]; return; }
+    [self selectTabIndex:sender.tag animated:YES];
+}
+- (void)neonDashboardButtonDown:(UIButton *)sender {
+    [UIView animateWithDuration:0.12 animations:^{ sender.transform = CGAffineTransformMakeScale(0.96, 0.96); sender.alpha = 0.82; }];
+}
+- (void)neonDashboardButtonUp:(UIButton *)sender {
+    [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.6 options:UIViewAnimationOptionBeginFromCurrentState animations:^{ sender.transform = CGAffineTransformIdentity; sender.alpha = 1.0; } completion:nil];
+}
+
 - (void)setupMainTableView {
     self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStyleInsetGrouped];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -5422,7 +5554,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     UIView *marker = [[UIView alloc] initWithFrame:CGRectZero];
     marker.translatesAutoresizingMaskIntoConstraints = NO;
-    marker.backgroundColor = [UIColor colorWithRed:0.25 green:0.62 blue:1.0 alpha:1.0];
+    marker.backgroundColor = [UIColor colorWithRed:0.68 green:0.34 blue:1.0 alpha:1.0];
     marker.layer.cornerRadius = 2.0;
     [container addSubview:marker];
 
@@ -5430,7 +5562,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = heading;
     label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightHeavy];
-    label.textColor = [UIColor colorWithRed:0.40 green:0.72 blue:1.00 alpha:1.0];
+    label.textColor = [UIColor colorWithRed:0.72 green:0.48 blue:1.00 alpha:1.0];
     label.numberOfLines = 2;
     label.lineBreakMode = NSLineBreakByWordWrapping;
     label.adjustsFontSizeToFitWidth = YES;
