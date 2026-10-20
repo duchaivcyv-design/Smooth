@@ -3184,6 +3184,79 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 }
 @end
 
+@interface TIAuthorsDocumentController : UIViewController
+@property(nonatomic, copy) NSString *authorScript;
+@property(nonatomic, strong) UITextView *authorTextView;
+@property(nonatomic, strong) NSTimer *typingTimer;
+@property(nonatomic, strong) NSTimer *helloTimer;
+@property(nonatomic, assign) NSUInteger typingIndex;
+@property(nonatomic, copy) NSString *activeAuthorName;
+@end
+
+@implementation TIAuthorsDocumentController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"Tác giả · Môi trường · iOS";
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.authorTextView = [[UITextView alloc] initWithFrame:CGRectZero];
+    self.authorTextView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.authorTextView.editable = NO;
+    self.authorTextView.selectable = YES;
+    self.authorTextView.backgroundColor = UIColor.clearColor;
+    self.authorTextView.textColor = UIColor.labelColor;
+    self.authorTextView.font = [UIFont monospacedSystemFontOfSize:14.0 weight:UIFontWeightRegular];
+    self.authorTextView.alpha = 0.0;
+    [self.view addSubview:self.authorTextView];
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [self.authorTextView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12.0],
+        [self.authorTextView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
+        [self.authorTextView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8.0],
+        [self.authorTextView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-8.0]
+    ]];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Tác giả: TaoJb" style:UIBarButtonItemStylePlain target:nil action:nil];
+    [UIView animateWithDuration:1.2 delay:0.15 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        self.authorTextView.alpha = 1.0;
+    } completion:^(__unused BOOL finished) {
+        self.typingIndex = 0;
+        self.authorTextView.text = @"";
+        self.typingTimer = [NSTimer scheduledTimerWithTimeInterval:0.035 target:self selector:@selector(ti_typeNextCharacter:) userInfo:nil repeats:YES];
+    }];
+}
+
+- (void)ti_typeNextCharacter:(NSTimer *)timer {
+    if (self.typingIndex >= self.authorScript.length) {
+        [timer invalidate];
+        self.typingTimer = nil;
+        self.navigationItem.rightBarButtonItem.title = @"Tác giả: hoàn tất";
+        self.helloTimer = [NSTimer scheduledTimerWithTimeInterval:60.0 target:self selector:@selector(ti_showHello:) userInfo:nil repeats:NO];
+        return;
+    }
+    NSRange range = [self.authorScript rangeOfComposedCharacterSequenceAtIndex:self.typingIndex];
+    NSString *character = [self.authorScript substringWithRange:range];
+    self.authorTextView.text = [self.authorTextView.text stringByAppendingString:character];
+    self.typingIndex = NSMaxRange(range);
+    NSString *remaining = [self.authorScript substringToIndex:MIN(self.typingIndex, self.authorScript.length)];
+    if ([remaining containsString:@"TÁC GIẢ 2"] || [remaining containsString:@"Tác giả 2"]) {
+        self.navigationItem.rightBarButtonItem.title = @"Tác giả: NoNo";
+    } else if ([remaining containsString:@"TÁC GIẢ 3"] || [remaining containsString:@"Tác giả 3"]) {
+        self.navigationItem.rightBarButtonItem.title = @"Tác giả: NekoJb";
+    }
+    [self.authorTextView scrollRangeToVisible:NSMakeRange(self.authorTextView.text.length ? self.authorTextView.text.length - 1 : 0, self.authorTextView.text.length ? 1 : 0)];
+}
+
+- (void)ti_showHello:(NSTimer *)timer {
+    self.authorTextView.text = [self.authorTextView.text stringByAppendingString:@"\n\nXin chào 🤡"];
+    [self.authorTextView scrollRangeToVisible:NSMakeRange(self.authorTextView.text.length - 1, 1)];
+}
+
+- (void)dealloc {
+    [self.typingTimer invalidate];
+    [self.helloTimer invalidate];
+}
+@end
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -3449,14 +3522,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                           forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
                     [[NSUserDefaults standardUserDefaults] synchronize];
 
-                    [self presentIndependentDocument:@"Tác giả & hỗ trợ"
-                                                text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\n"
-                                                     "NGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\n"
-                                                     "NGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\n"
-                                                     "MÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; "
-                                                     "không thể khẳng định tương thích tuyệt đối nếu chưa thử.\n"
-                                                     "HỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; "
-                                                     "cần build và kiểm thử trên từng phiên bản/thiết bị."];
+                    [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@""];
                 }]
             ];
             [self presentViewController:welcome animated:YES completion:nil];
@@ -3790,12 +3856,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             [UIView animateWithDuration:.55 animations:^{ label.alpha = 1; label.transform = CGAffineTransformIdentity; }];
         }];
     };
-    __block void (^repeatCycle)(void) = nil;
-    repeatCycle = ^{
+    // A repeating timer avoids a self-capturing block retain cycle.
+    [NSTimer scheduledTimerWithTimeInterval:10.0 repeats:YES block:^(__unused NSTimer *timer) {
         cycle();
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10*NSEC_PER_SEC)), dispatch_get_main_queue(), repeatCycle);
-    };
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10*NSEC_PER_SEC)), dispatch_get_main_queue(), repeatCycle);
+    }];
 }
 
 - (void)showPhonkMusicPicker {
@@ -6564,7 +6628,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (manualPingRow) { [self performManualServerPing]; return; }
         if (_currentBottomTab == 4 && indexPath.section == 3) {
             if (indexPath.row == 0) [self showReadOnlyDeviceInfo];
-            else if (indexPath.row == 1) [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị.")];
+            else if (indexPath.row == 1) [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị."];
             else if (indexPath.row == 2) [self executeResetConfiguration];
             return;
         }
@@ -6643,7 +6707,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 0) {
         [self showReadOnlyDeviceInfo];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 1) {
-        [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị.")];
+        [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị."];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 2) {
         [self executeResetConfiguration];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 3) {
@@ -7708,6 +7772,14 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 }
 
 - (void)presentIndependentDocument:(NSString *)title text:(NSString *)text {
+    if ([title isEqualToString:@"Tác giả & hỗ trợ"] || [title isEqualToString:@"Tác giả · Môi trường · iOS"]) {
+        TIAuthorsDocumentController *authors = [TIAuthorsDocumentController new];
+        authors.authorScript = @"THÔNG TIN ỨNG DỤNG\nMôi trường: RootHide / rootless / rootful tùy bootstrap.\niOS mục tiêu: 14.0–26.0.1 (chưa xác minh trên mọi phiên bản/thiết bị).\n\nTÁC GIẢ 1 — TaoJb\nHello! Tôi là TaoJb, người Hoa Kỳ và làm về phần cứng. Tôi xin lỗi vì những lỗi xuất hiện nhiều lần. Tôi sẽ cố gắng sửa sớm và mong mọi người sử dụng ổn định, đồng thời đừng phàn nàn với Vũ Đức Long vì bạn ấy đang xử lý khối lượng công việc nặng hơn những người khác rất nhiều. Xin hẹn gặp lại.\n\nTÁC GIẢ 2 — NoNo\nXin chào, tôi là NoNo, người Hoa Kỳ. Tôi làm về phần cứng và hỗ trợ xử lý lỗi code. Những ngày gần đây ứng dụng bị lag nhiều; tôi xin lỗi vì chưa xử lý triệt để. Tôi cũng không muốn điều đó xảy ra vì các lỗi này rất khó sửa. Mong mọi người đừng gây áp lực quá mức vì khối lượng công việc rất lớn. Xin chào, hẹn gặp lại.\n\nTÁC GIẢ 3 — NekoJb\nXin chào, tôi là NekoJb, người Việt Nam, đến từ Hà Nội và là bạn của Vũ Đức Long. Tôi phụ code ở tầng sâu. Những ngày gần đây có nhiều người thử nghiệm và báo lỗi liên tục. Tôi rất xin lỗi; tôi cũng muốn sửa nhanh để ứng dụng ổn định, nhưng khối lượng công việc quá nhiều nên không thể xử lý ngay lập tức. Mong mọi người thông cảm, tránh gây áp lực quá mức và trân trọng công sức của chúng tôi. Hẹn gặp lại.\n\n";
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:authors];
+        nav.modalPresentationStyle = UIModalPresentationPageSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+        return;
+    }
     UIViewController *document = [UIViewController new];
     document.view.backgroundColor = UIColor.systemBackgroundColor;
     document.title = title ?: @"Information";
