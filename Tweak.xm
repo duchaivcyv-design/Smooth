@@ -2681,13 +2681,11 @@ static volatile double g_currentFrameDriftRatio = 1.00;
 static uint64_t s_lastSmartBoostTick = 0;
 
 static inline void Titanium_SmartThrottle60Hz(void) {
-    @try {
-        uint64_t now = mach_absolute_time();
-        if (now - s_lastSmartBoostTick > Titanium_NanosToMachTicks(60ULL * 1000000ULL)) {
-            s_lastSmartBoostTick = now;
-            EnforceMaxCPUPower();
-        }
-    } @catch (__unused NSException *e) {}
+    uint64_t now = mach_absolute_time();
+    if (now - s_lastSmartBoostTick > Titanium_NanosToMachTicks(60ULL * 1000000ULL)) {
+        s_lastSmartBoostTick = now;
+        EnforceMaxCPUPower();
+    }
 }
 
 static void AppleInternal_LockHardwareCADisplay(void);
@@ -2695,83 +2693,63 @@ static void AppleInternal_EnforceZeroLatencyKernelTier(void);
 static inline void Titanium_UnleashAllHiddenSystemThreads(void);
 
 // ==============================================================================
-// ĐÁNH LỪA HỆ THỐNG & APP: AN TOÀN TUYỆT ĐỐI (TRÁNH LỖI SIGTRAP / EXC_BREAKPOINT)
-// ==============================================================================
-
-static int (*orig_sysctlbyname_a20_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
-static int hooked_sysctlbyname_a20_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    @try {
-        return orig_sysctlbyname_a20_spoof(name, oldp, oldlenp, newp, newlen);
-    } @catch (__unused NSException *e) {}
-    return orig_sysctlbyname_a20_spoof(name, oldp, oldlenp, newp, newlen);
-}
-
-// ==============================================================================
 // KẾT NỐI VÙNG NHỚ CHIA SẺ ZERO-COPY IPC & QUẢN LÝ DẢI 15-240 HZ
 // ==============================================================================
 
 static inline void Titanium_InitZeroCopyIPC(BOOL isSpringBoard) {
-    @try {
-        if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) return;
+    if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) return;
 
-        int flags = isSpringBoard ? (O_CREAT | O_RDWR) : O_RDWR;
-        g_shmFd = shm_open(TITANIUM_SHARED_MEM_NAME, flags, 0666);
-        
-        if (g_shmFd == -1 && !isSpringBoard) {
-            g_shmFd = shm_open(TITANIUM_SHARED_MEM_NAME, O_CREAT | O_RDWR, 0666);
+    int flags = isSpringBoard ? (O_CREAT | O_RDWR) : O_RDWR;
+    g_shmFd = shm_open(TITANIUM_SHARED_MEM_NAME, flags, 0666);
+    
+    if (g_shmFd == -1 && !isSpringBoard) {
+        g_shmFd = shm_open(TITANIUM_SHARED_MEM_NAME, O_CREAT | O_RDWR, 0666);
+    }
+
+    if (g_shmFd != -1) {
+        if (isSpringBoard) {
+            ftruncate(g_shmFd, TITANIUM_SHARED_MEM_SIZE);
         }
 
-        if (g_shmFd != -1) {
+        void *mapped = mmap(NULL, TITANIUM_SHARED_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, g_shmFd, 0);
+        if (mapped != MAP_FAILED) {
+            g_sharedPayloadPtr = (ApexV285ProPayload *)mapped;
             if (isSpringBoard) {
-                ftruncate(g_shmFd, TITANIUM_SHARED_MEM_SIZE);
-            }
-
-            void *mapped = mmap(NULL, TITANIUM_SHARED_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, g_shmFd, 0);
-            if (mapped != MAP_FAILED) {
-                g_sharedPayloadPtr = (ApexV285ProPayload *)mapped;
-                if (isSpringBoard) {
-                    g_sharedPayloadPtr->targetHz = 240;
-                    g_sharedPayloadPtr->targetFPS = 240;
-                    g_sharedPayloadPtr->masterEnabled = 1;
-                }
+                g_sharedPayloadPtr->targetHz = 240;
+                g_sharedPayloadPtr->targetFPS = 240;
+                g_sharedPayloadPtr->masterEnabled = 1;
             }
         }
-    } @catch (__unused NSException *e) {}
+    }
 }
 
 static inline int Titanium_GetSharedTargetHz(void) {
-    @try {
-        if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
-            int hz = g_sharedPayloadPtr->targetHz;
-            if (hz >= 15 && hz <= 240) return hz;
-        }
-        Titanium_ReloadSharedSyncStateV285();
-    } @catch (__unused NSException *e) {}
+    if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+        int hz = g_sharedPayloadPtr->targetHz;
+        if (hz >= 15 && hz <= 240) return hz;
+    }
+    Titanium_ReloadSharedSyncStateV285();
     return (int)(g_cachedResolvedHz > 0 ? g_cachedResolvedHz : 240);
 }
 
 static inline void Titanium_PublishSharedConfig(int32_t targetHz, uint32_t enabled) {
-    @try {
-        if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
-            g_sharedPayloadPtr->targetHz = targetHz;
-            g_sharedPayloadPtr->targetFPS = targetHz;
-            g_sharedPayloadPtr->masterEnabled = enabled;
-            g_sharedPayloadPtr->updateSeq++;
-        }
-    } @catch (__unused NSException *e) {}
+    if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+        g_sharedPayloadPtr->targetHz = targetHz;
+        g_sharedPayloadPtr->targetFPS = targetHz;
+        g_sharedPayloadPtr->masterEnabled = enabled;
+        g_sharedPayloadPtr->updateSeq++;
+    }
 }
 
 static inline void Titanium_InitUnifiedMachTimebase(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        @try {
-            mach_timebase_info_data_t tb;
-            if (mach_timebase_info(&tb) == KERN_SUCCESS && tb.numer > 0 && tb.denom > 0) {
-                g_burstDurationMachTicks = (850ULL * 1000000ULL * tb.denom) / tb.numer;
-                g_burstDurationChargingMachTicks = (650ULL * 1000000ULL * tb.denom) / tb.numer;
-                g_bannerDurationMachTicks = (700ULL * 1000000ULL * tb.denom) / tb.numer;
-            }
-        } @catch (__unused NSException *e) {}
+        mach_timebase_info_data_t tb;
+        if (mach_timebase_info(&tb) == KERN_SUCCESS && tb.numer > 0 && tb.denom > 0) {
+            g_burstDurationMachTicks = (850ULL * 1000000ULL * tb.denom) / tb.numer;
+            g_burstDurationChargingMachTicks = (650ULL * 1000000ULL * tb.denom) / tb.numer;
+            g_bannerDurationMachTicks = (700ULL * 1000000ULL * tb.denom) / tb.numer;
+        }
     });
 }
 
@@ -2780,69 +2758,60 @@ static inline void Titanium_InitTouchMachTimebase(void) { Titanium_InitUnifiedMa
 static inline void Titanium_InitBannerMachTimebase(void) { Titanium_InitUnifiedMachTimebase(); }
 
 static inline BOOL Titanium_IsNotificationBannerActive(void) {
-    @try {
-        if (g_lastBannerMachTime == 0) return NO;
-        return ((mach_absolute_time() - g_lastBannerMachTime) < g_bannerDurationMachTicks);
-    } @catch (__unused NSException *e) {}
-    return NO;
+    if (g_lastBannerMachTime == 0) return NO;
+    return ((mach_absolute_time() - g_lastBannerMachTime) < g_bannerDurationMachTicks);
 }
 
 static inline BOOL Titanium_IsPassiveVideoPlayback(void) {
-    @try {
-        return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isVolumeHoldingV285 && !g_isScrollingActive && g_activeAnimationCount == 0);
-    } @catch (__unused NSException *e) {}
-    return NO;
+    return (g_isVideoPlayingActive && !g_isUserTouchingScreen && !g_isVolumeHoldingV285 && !g_isScrollingActive && g_activeAnimationCount == 0);
 }
 
 static inline BOOL Titanium_ShouldLockTargetRate(void) {
-    @try {
-        if (g_isRateLockedV285) return YES;
-        if (g_isNotificationBannerActive || Titanium_IsNotificationBannerActive()) return YES;
+    if (g_isRateLockedV285) return YES;
+    if (g_isNotificationBannerActive || Titanium_IsNotificationBannerActive()) return YES;
 
-        static uint64_t s_animStartTick = 0;
-        if (g_activeAnimationCount > 0) {
-            uint64_t nowTick = mach_absolute_time();
-            if (s_animStartTick == 0) {
-                s_animStartTick = nowTick;
-                return YES;
-            } else if ((nowTick - s_animStartTick) < Titanium_NanosToMachTicks(1200000000ULL)) {
-                return YES;
-            } else {
-                g_activeAnimationCount = 0;
-                s_animStartTick = 0;
-            }
+    static uint64_t s_animStartTick = 0;
+    if (g_activeAnimationCount > 0) {
+        uint64_t nowTick = mach_absolute_time();
+        if (s_animStartTick == 0) {
+            s_animStartTick = nowTick;
+            return YES;
+        } else if ((nowTick - s_animStartTick) < Titanium_NanosToMachTicks(1200000000ULL)) {
+            return YES;
         } else {
+            g_activeAnimationCount = 0;
             s_animStartTick = 0;
         }
+    } else {
+        s_animStartTick = 0;
+    }
 
-        if (g_isInteracting || g_isVolumeHoldingV285 || g_isUserTouchingScreen || g_isContinuousSwiping || g_isScrollingActive) {
-            static uint64_t s_staleFlagTicks = 0;
-            if (s_staleFlagTicks == 0) {
-                s_staleFlagTicks = Titanium_NanosToMachTicks(1400000000ULL);
-            }
-            uint64_t nowFlag = mach_absolute_time();
-            uint64_t lastTick = (g_lastInteractiveTick > g_lastInteractionMachTime) ? g_lastInteractiveTick : g_lastInteractionMachTime;
-
-            if (lastTick != 0 && (nowFlag - lastTick) < s_staleFlagTicks) {
-                return YES;
-            }
-            g_isInteracting = NO;
-            g_isVolumeHoldingV285 = NO;
-            g_isUserTouchingScreen = NO;
-            g_isContinuousSwiping = NO;
-            g_isScrollingActive = NO;
+    if (g_isInteracting || g_isVolumeHoldingV285 || g_isUserTouchingScreen || g_isContinuousSwiping || g_isScrollingActive) {
+        static uint64_t s_staleFlagTicks = 0;
+        if (s_staleFlagTicks == 0) {
+            s_staleFlagTicks = Titanium_NanosToMachTicks(1400000000ULL);
         }
+        uint64_t nowFlag = mach_absolute_time();
+        uint64_t lastTick = (g_lastInteractiveTick > g_lastInteractionMachTime) ? g_lastInteractiveTick : g_lastInteractionMachTime;
 
-        if (g_lastInteractionMachTime == 0) return NO;
-        if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
-            Titanium_InitUnifiedMachTimebase();
+        if (lastTick != 0 && (nowFlag - lastTick) < s_staleFlagTicks) {
+            return YES;
         }
+        g_isInteracting = NO;
+        g_isVolumeHoldingV285 = NO;
+        g_isUserTouchingScreen = NO;
+        g_isContinuousSwiping = NO;
+        g_isScrollingActive = NO;
+    }
 
-        uint64_t now = mach_absolute_time();
-        uint64_t limitTicks = g_isDeviceChargingV285 ? g_burstDurationChargingMachTicks : g_burstDurationMachTicks;
-        return ((now - g_lastInteractionMachTime) < limitTicks);
-    } @catch (__unused NSException *e) {}
-    return YES;
+    if (g_lastInteractionMachTime == 0) return NO;
+    if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
+        Titanium_InitUnifiedMachTimebase();
+    }
+
+    uint64_t now = mach_absolute_time();
+    uint64_t limitTicks = g_isDeviceChargingV285 ? g_burstDurationChargingMachTicks : g_burstDurationMachTicks;
+    return ((now - g_lastInteractionMachTime) < limitTicks);
 }
 
 // ==============================================================================
@@ -2851,87 +2820,67 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        @try {
-            // Mở hoàn toàn băng thông đọc ghi cho tiến trình, triệt tiêu I/O wait và ép mức độ ưu tiên tối đa
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
-            setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
-            
-            // Ép mức độ ưu tiên tiến trình lên mức cao nhất theo yêu cầu (-10)
-            setpriority(PRIO_PROCESS, 0, -10);
-        } @catch (__unused NSException *e) {}
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
+        setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
+        setpriority(PRIO_PROCESS, 0, -10);
     });
 }
 
 static inline void Titanium_LockMainThreadFast(void) {
-    @try {
-        Titanium_UnleashAllHiddenSystemThreads();
+    Titanium_UnleashAllHiddenSystemThreads();
 
-        if (![NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            return;
-        }
+    if (![NSThread isMainThread]) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        return;
+    }
 
-        static uint64_t s_lastNanoBurstTick = 0;
-        uint64_t now = mach_absolute_time();
+    static uint64_t s_lastNanoBurstTick = 0;
+    uint64_t now = mach_absolute_time();
+    
+    if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(40000000ULL), 0)) {
+        s_lastNanoBurstTick = now;
         
-        if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(40000000ULL), 0)) {
-            s_lastNanoBurstTick = now;
-            
-            // Đẩy cấp độ ưu tiên luồng giao diện lên QOS_CLASS_USER_INTERACTIVE (bậc 127 tối đa)
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            
-            // Cấp quyền I/O trực tiếp cho luồng chính tránh bị kernel bóp nghẽn
-            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-            
-            // Ép mức nice cho thread hiện tại về -10 để độc chiếm tài nguyên CPU khi xử lý khung hình
-            setpriority(PRIO_DARWIN_THREAD, 0, -10);
-            
-            AppleInternal_LockHardwareCADisplay();
-        }
-    } @catch (__unused NSException *e) {}
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
+        setpriority(PRIO_DARWIN_THREAD, 0, -10);
+        
+        AppleInternal_LockHardwareCADisplay();
+    }
 }
 
 static inline void Titanium_TriggerInstantTouchBurst(void) {
-    @try {
-        if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
-            Titanium_InitUnifiedMachTimebase();
-        }
-        g_lastInteractionMachTime = mach_absolute_time();
-        Titanium_LockMainThreadFast();
-    } @catch (__unused NSException *e) {}
+    if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
+        Titanium_InitUnifiedMachTimebase();
+    }
+    g_lastInteractionMachTime = mach_absolute_time();
+    Titanium_LockMainThreadFast();
 }
 
 static inline void Titanium_TriggerNotificationBurst(void) {
-    @try {
-        if (__builtin_expect(g_bannerDurationMachTicks == 0, 0)) {
-            Titanium_InitUnifiedMachTimebase();
-        }
-        g_lastBannerMachTime = mach_absolute_time();
-        g_isNotificationBannerActive = YES;
-        Titanium_LockMainThreadFast();
+    if (__builtin_expect(g_bannerDurationMachTicks == 0, 0)) {
+        Titanium_InitUnifiedMachTimebase();
+    }
+    g_lastBannerMachTime = mach_absolute_time();
+    g_isNotificationBannerActive = YES;
+    Titanium_LockMainThreadFast();
 
-        static int64_t s_bannerSeq = 0;
-        int64_t currentSeq = ++s_bannerSeq;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            @try {
-                if (s_bannerSeq == currentSeq) {
-                    g_isNotificationBannerActive = NO;
-                }
-            } @catch (__unused NSException *e) {}
-        });
-    } @catch (__unused NSException *e) {}
+    static int64_t s_bannerSeq = 0;
+    int64_t currentSeq = ++s_bannerSeq;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        if (s_bannerSeq == currentSeq) {
+            g_isNotificationBannerActive = NO;
+        }
+    });
 }
 
 static inline void Titanium_BoostRenderWithoutStarvingNetwork(void) {
-    @try {
-        Titanium_UnleashAllHiddenSystemThreads();
-        if (![NSThread isMainThread]) {
-            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            return;
-        }
-        if (!Titanium_ShouldLockTargetRate()) return;
-        Titanium_LockMainThreadFast();
-    } @catch (__unused NSException *e) {}
+    Titanium_UnleashAllHiddenSystemThreads();
+    if (![NSThread isMainThread]) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        return;
+    }
+    if (!Titanium_ShouldLockTargetRate()) return;
+    Titanium_LockMainThreadFast();
 }
 
 // ====================================================================================================
@@ -3596,7 +3545,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     
     WKWebView *webView = %orig(frame, configuration);
     if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        objc_setAssociatedObject(webView, kkTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return webView;
 }
