@@ -3893,7 +3893,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
     __block void (^renderPage)(void);
-    __weak UIViewController *weakWizard = wizard;
+    __weak void (^weakRenderPage)(void) = nil;
 
     void (^animateToPage)(void) = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
@@ -3929,7 +3929,12 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
                 b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
                 [b.heightAnchor constraintEqualToConstant:39].active = YES;
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; renderPage(); }] forControlEvents:UIControlEventTouchUpInside];
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+                    (void)a;
+                    if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
+                    void (^strongRenderPage)(void) = weakRenderPage;
+                    if (strongRenderPage) strongRenderPage();
+                }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
             next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
@@ -3965,12 +3970,16 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
-                renderPage();
+                void (^strongRenderPage)(void) = weakRenderPage;
+                if (strongRenderPage) strongRenderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             next.hidden = NO;
         }
     };
+
+    weakRenderPage = renderPage;
+
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a;
         if (page < 3) {
@@ -3979,7 +3988,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             page++;
             CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromRight; transition.duration = .28;
             [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardForward"];
-            renderPage();
+            void (^strongRenderPage)(void) = weakRenderPage;
+            if (strongRenderPage) strongRenderPage();
         } else {
             if (!extractedReport.length) {
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
@@ -4006,14 +4016,20 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             }];
         }
     }] forControlEvents:UIControlEventTouchUpInside];
+
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a; if (page <= 0) return; page--;
         CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
-        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; renderPage();
+        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"];
+        void (^strongRenderPage)(void) = weakRenderPage;
+        if (strongRenderPage) strongRenderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
-    [self presentViewController:wizard animated:YES completion:^{ renderPage(); }];
-}
 
+    [self presentViewController:wizard animated:YES completion:^{
+        void (^strongRenderPage)(void) = weakRenderPage;
+        if (strongRenderPage) strongRenderPage();
+    }];
+}
 - (void)showAuthorIntroSequence {
     if (self.presentedViewController) return;
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
