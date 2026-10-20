@@ -5531,22 +5531,18 @@ static void Titanium_InstallPowerBypassC(void) {
 %hook UIWindowScene
 
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
+    // [SỬA CRASH/RESPRING LẶP]: bản cũ gọi %orig ở cả @try lẫn @catch => khi có exception, hàm gốc chạy 2 lần và SpringBoard sập.
+    // Nay %orig chỉ chạy đúng 1 lần, sau khi đã tính range.
     @try {
-        if (!self) {
-            %orig(range);
-            return;
-        }
-        if (@available(iOS 15.0, *)) {
+        if (self && @available(iOS 15.0, *)) {
             if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
                 float targetCap = (float)Titanium_GetEffectiveFrameCap();
                 CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
                 range = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
             }
         }
-        %orig(range);
-    } @catch (__unused NSException *e) {
-        %orig(range);
-    }
+    } @catch (__unused NSException *e) {}
+    %orig(range);
 }
 
 - (void)_processUpdateWithFrameContext:(id)context {
