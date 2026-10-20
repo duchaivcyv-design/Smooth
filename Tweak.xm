@@ -1518,7 +1518,7 @@ static inline NSInteger Titanium_NativeMaximumFPS(void) {
 // ====================================================================================================
 
 #undef TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL
-#define TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL 0
+#define TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL 1 // [V36.3 FIX VUOT TRAN 60Hz]: ep vuot tran tren may 60Hz panel
 
 #undef TITANIUM_ENABLE_WATCHDOG_IMMUNITY
 #define TITANIUM_ENABLE_WATCHDOG_IMMUNITY 0
@@ -1643,7 +1643,7 @@ static inline float ClampSafeFPS(float target) {
 }
 
 #undef TITANIUM_FRAME_RATE_FLOOR
-#define TITANIUM_FRAME_RATE_FLOOR 240.0f
+#define TITANIUM_FRAME_RATE_FLOOR 15.0f // [V36 FIX KHOA 60]: san 15Hz cho phep 15-240, khong ep 240 gay range sai
 
 #undef TITANIUM_ALLOW_FLUSH_QOS_DEMOTION
 #define TITANIUM_ALLOW_FLUSH_QOS_DEMOTION 0
