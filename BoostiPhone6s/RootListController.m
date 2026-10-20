@@ -1,5 +1,3 @@
-// NEON CONTROL v20 — full-screen per-app profiles, apply action, settings cleanup groundwork.
-// V20 is a source edit; compile and device validation are still required.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -2811,10 +2809,10 @@ static NSString * const SUExtraDiagnosticsEnabledKey = @"su_extra_diagnostics_en
 static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_enabled_v1";
 
 
-// [V30 FIX]: Thêm 15Hz vào danh sách chuẩn
+// V30: mức chuẩn và dải mở rộng được tách riêng.
 static NSArray<NSNumber *> *TIStandardRateValues(void) {
     // Unified Hz/FPS selector: show only the requested presets.
-    return @[@60, @90, @120, @144, @240];
+    return @[@15, @30, @60, @90, @120, @144, @240];
 }
 
 // [V30 FIX]: Hàm trả về nhãn mô tả từng mức Hz/FPS giống ảnh 2
@@ -2834,11 +2832,13 @@ static NSString *TIRateDescription(NSInteger r, BOOL isHz) {
 }
 
 static NSArray<NSNumber *> *TIExpandedRateValues(void) {
-    // Expanded mode intentionally keeps the full 15–240 range separate from presets.
-    NSMutableArray<NSNumber *> *values = [NSMutableArray arrayWithCapacity:46];
-    for (NSInteger rate = 15; rate <= 240; rate += 5) [values addObject:@(rate)];
-    if (![values containsObject:@144]) [values addObject:@144];
-    [values sortUsingSelector:@selector(compare:)];
+    // Expanded mode: 20–235 only, excluding the dedicated preset rates.
+    NSSet<NSNumber *> *presets = [NSSet setWithArray:TIStandardRateValues()];
+    NSMutableArray<NSNumber *> *values = [NSMutableArray arrayWithCapacity:216];
+    for (NSInteger rate = 20; rate <= 235; rate++) {
+        NSNumber *n = @(rate);
+        if (![presets containsObject:n]) [values addObject:n];
+    }
     return values;
 }
 
@@ -3139,6 +3139,7 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
     self.spinner.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [self.spinner startAnimating]; [self.view addSubview:self.spinner];
 }
+
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -3315,6 +3316,13 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     _serverDown = NO;
 
     [self loadSettingsData];
+    // Persist the local configuration-unlock state across force-quit/relaunch. This is a UI state only,
+    // not proof that a kernel exploit ran or that kernel privileges remain active.
+    NSUserDefaults *localStateDefaults = [NSUserDefaults standardUserDefaults];
+    if ([localStateDefaults boolForKey:@"TI_LocalFeatureActivationComplete_v1"] && ![self.settingsDict[@"FeatureActivationComplete"] boolValue]) {
+        self.settingsDict[@"FeatureActivationComplete"] = @YES;
+        [self saveSettingsDataAndSync];
+    }
     // Migrate the old UI-only flag: previous builds called this "kernel exploited" even though
     // the controller only ran a timed UI sequence. Preserve the user's settings without claiming kernel access.
     if (!self.settingsDict[@"FeatureActivationComplete"] && [self.settingsDict[@"IsKernelExploited"] boolValue]) {
@@ -3388,7 +3396,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     self.customTableView.userInteractionEnabled = YES;
     NSUserDefaults *creditsDefaults = [NSUserDefaults standardUserDefaults];
-    if (![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY] &&
+    if (NO && ![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY] &&
         ![creditsDefaults boolForKey:TI_CREDITS_HIDDEN_KEY]) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.presentedViewController) return;
@@ -3507,27 +3515,141 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     if (_isFeatureActivated) [self startContinuousHardwareHUD];
 }
 
+- (void)showAuthorIntroSequence {
+    if (self.presentedViewController) return;
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    UIViewController *intro = [UIViewController new];
+    intro.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    intro.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+    intro.view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.78];
+
+    UIView *card = [UIView new];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor colorWithRed:0.055 green:0.065 blue:0.13 alpha:0.98];
+    card.layer.cornerRadius = 24;
+    card.layer.borderWidth = 1.2;
+    card.layer.borderColor = [UIColor colorWithRed:0.35 green:0.78 blue:1 alpha:0.9].CGColor;
+    card.clipsToBounds = YES;
+    [intro.view addSubview:card];
+
+    UILabel *author = [UILabel new];
+    author.translatesAutoresizingMaskIntoConstraints = NO;
+    author.text = @"TÁC GIẢ";
+    author.textAlignment = NSTextAlignmentRight;
+    author.font = [UIFont systemFontOfSize:12 weight:UIFontWeightHeavy];
+    author.textColor = [UIColor colorWithRed:0.35 green:0.85 blue:1 alpha:1];
+    author.tag = 9301;
+    [card addSubview:author];
+
+    UILabel *heading = [UILabel new];
+    heading.translatesAutoresizingMaskIntoConstraints = NO;
+    heading.text = @"MÔI TRƯỜNG & THIẾT BỊ HỖ TRỢ";
+    heading.numberOfLines = 0;
+    heading.textAlignment = NSTextAlignmentCenter;
+    heading.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBlack];
+    heading.textColor = UIColor.whiteColor;
+    heading.tag = 9302;
+    [card addSubview:heading];
+
+    UITextView *body = [UITextView new];
+    body.translatesAutoresizingMaskIntoConstraints = NO;
+    body.backgroundColor = UIColor.clearColor;
+    body.textColor = [UIColor colorWithWhite:0.94 alpha:1];
+    body.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    body.textAlignment = NSTextAlignmentNatural;
+    body.editable = NO;
+    body.selectable = NO;
+    body.tag = 9303;
+    [card addSubview:body];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.translatesAutoresizingMaskIntoConstraints = NO;
+    [close setTitle:@"ĐÓNG  ×" forState:UIControlStateNormal];
+    [close setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    close.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+    close.backgroundColor = [UIColor colorWithRed:0.24 green:0.36 blue:0.62 alpha:1];
+    close.layer.cornerRadius = 12;
+    [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { [intro dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:close];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [card.leadingAnchor constraintEqualToAnchor:intro.view.leadingAnchor constant:18],
+        [card.trailingAnchor constraintEqualToAnchor:intro.view.trailingAnchor constant:-18],
+        [card.centerYAnchor constraintEqualToAnchor:intro.view.centerYAnchor],
+        [card.heightAnchor constraintEqualToAnchor:intro.view.heightAnchor multiplier:0.78],
+        [author.topAnchor constraintEqualToAnchor:card.topAnchor constant:18],
+        [author.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
+        [author.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18],
+        [heading.topAnchor constraintEqualToAnchor:author.bottomAnchor constant:12],
+        [heading.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
+        [heading.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18],
+        [body.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:12],
+        [body.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:14],
+        [body.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-14],
+        [body.bottomAnchor constraintEqualToAnchor:close.topAnchor constant:-12],
+        [close.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:22],
+        [close.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-22],
+        [close.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16],
+        [close.heightAnchor constraintEqualToConstant:42]
+    ]];
+
+    [self presentViewController:intro animated:YES completion:^{
+        [UIView animateWithDuration:0.55 animations:^{ card.alpha = 1; card.transform = CGAffineTransformIdentity; }];
+        author.text = @"THÔNG TIN HỖ TRỢ";
+        heading.text = @"SMOOTHIOS · THIẾT BỊ";
+        body.text = @"iOS 14.0–26.0.1\niPhone 6s–iPhone 15 Pro Max\nMôi trường: Rootless / RootHide / Rootful\n\nThông tin tương thích là mục tiêu hỗ trợ, chưa được xác minh trên mọi thiết bị hoặc phiên bản. Đây là bảng giới thiệu; nó không chứng minh khai thác kernel đã thành công.";
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || intro.presentingViewController == nil) return;
+            NSArray<NSDictionary *> *messages = @[
+                @{@"name":@"TaoJb · HOA KỲ · PHẦN CỨNG", @"text":@"Hello, tôi là TaoJb, là người Hoa Kỳ và làm về phần cứng. Tôi xin lỗi vì những lỗi xuất hiện nhiều. Tôi sẽ cố gắng sửa sớm để mọi người sử dụng ổn định hơn. Mong mọi người góp ý kiên nhẫn và đừng đổ toàn bộ áp lực lên Vũ Đức Long, vì bạn ấy đang xử lý khối lượng công việc nặng hơn nhiều người khác. Xin hẹn gặp lại."},
+                @{@"name":@"NoNo · HOA KỲ · PHẦN CỨNG & SỬA LỖI", @"text":@"Xin chào, tôi là NoNo, người Hoa Kỳ. Tôi làm về phần cứng và hỗ trợ xử lý lỗi code. Những ngày gần đây ứng dụng còn lag và tôi xin lỗi vì chưa xử lý triệt để. Việc sửa lỗi này khó và khối lượng công việc nhiều; mong mọi người thông cảm, góp ý cụ thể và đừng ép nhóm phải xử lý mọi thứ ngay lập tức. Xin chào, hẹn gặp lại."},
+                @{@"name":@"NekoJb · VIỆT NAM · HÀ NỘI", @"text":@"Xin chào, tôi là NekoJb, người Việt Nam đến từ Hà Nội và là bạn của Vũ Đức Long. Tôi phụ code ở các tầng sâu. Những ngày qua có nhiều người thử nghiệm và báo lỗi liên tục; tôi rất xin lỗi vì chưa sửa nhanh được. Khối lượng công việc hiện tại rất lớn nên tôi cần thời gian để xử lý và kiểm tra ổn định. Mong mọi người góp ý và trân trọng công sức của nhóm. Hẹn gặp lại."}
+            ];
+            __block NSUInteger idx = 0;
+            __block void (^showNext)(void);
+            showNext = ^{
+                if (intro.presentingViewController == nil) { showNext = nil; return; }
+                if (idx >= messages.count) {
+                    author.text = @"SMOOTHIOS TEAM";
+                    heading.text = @"XIN CHÀO MỌI NGƯỜI";
+                    heading.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
+                    body.text = @"Cảm ơn mọi người đã sử dụng và gửi phản hồi.";
+                    body.textAlignment = NSTextAlignmentCenter;
+                    showNext = nil;
+                    return;
+                }
+                NSDictionary *entry = messages[idx++];
+                author.text = entry[@"name"];
+                heading.text = @"LỜI NHẮN TỪ TÁC GIẢ";
+                body.text = @"";
+                NSString *full = entry[@"text"];
+                __block NSUInteger charIndex = 0;
+                __block void (^typeNext)(void);
+                typeNext = ^{
+                    if (intro.presentingViewController == nil) { typeNext = nil; return; }
+                    if (charIndex >= full.length) { typeNext = nil; return; }
+                    NSUInteger next = MIN(charIndex + 2, full.length);
+                    body.text = [full substringToIndex:next];
+                    charIndex = next;
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.025 * NSEC_PER_SEC)), dispatch_get_main_queue(), typeNext);
+                };
+                typeNext();
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(40 * NSEC_PER_SEC)), dispatch_get_main_queue(), showNext);
+            };
+            showNext();
+        });
+    }];
+}
+
+
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"] && !self.presentedViewController) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (self.presentedViewController || [[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]) return;
-            UIAlertController *welcome = [UIAlertController alertControllerWithTitle:@"Xin chào 🤡" message:@"SmoothIOS Pro\n\nTác giả: TaoJb, NoNo, NoJB\nPhụ code: JB, NekoJb, BypassJB, bananaJb\nPhần cứng: Taojb, NoNo, JBnano, Jbjb\n\nMôi trường: RootHide / rootless / rootful (tùy bootstrap; tự kiểm tra bên dưới).\niOS mục tiêu: 14.0–26.0.1 (chưa xác minh trên mọi phiên bản/thiết bị).\n\nThông tin máy có thể đọc nhanh mà không cần khai thác kernel. Chọn ngôn ngữ trong Cài đặt bất cứ lúc nào." preferredStyle:UIAlertControllerStyleAlert];
-            [welcome addAction:[UIAlertAction actionWithTitle:@"Ngôn ngữ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [[NSUserDefaults standardUserDefaults] synchronize]; [self showLanguagePickerPopup:nil]; }]];
-            [welcome addAction:[UIAlertAction actionWithTitle:@"X · Tắt vĩnh viễn" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [[NSUserDefaults standardUserDefaults] synchronize]; }]];
-            [welcome addAction:
-                [UIAlertAction actionWithTitle:@"Xem tác giả"
-                                         style:UIAlertActionStyleDefault
-                                       handler:^(__unused UIAlertAction *a) {
-                    [[NSUserDefaults standardUserDefaults]
-                        setBool:YES
-                          forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
-                    [[NSUserDefaults standardUserDefaults] synchronize];
-
-                    [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@""];
-                }]
-            ];
-            [self presentViewController:welcome animated:YES completion:nil];
+            if (!self.presentedViewController && ![[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]) [self showAuthorIntroSequence];
         });
     }
     if (!_hasPlayedEntranceAnimation) {
@@ -5549,11 +5671,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (value) value.text = [NSString stringWithFormat:@"%ld", (long)rate];
     UILabel *mode = (UILabel *)[self.view viewWithTag:99121];
     if (mode) mode.text = @"MỨC ĐANG CHỌN · CHƯA XÁC NHẬN TẦN SỐ PHẦN CỨNG";
-    // [SỬA HZ/FPS]: tweak chỉ đọc TargetRefreshRate/TargetFPSRate trong file cấu hình chung (settingsDict),
-    // nên phải ghi vào đó và lưu, không ghi NSUserDefaults của app.
-    self.settingsDict[@"TargetRefreshRate"] = @(rate);
-    self.settingsDict[@"TargetFPSRate"] = @(rate);
-    [self saveSettingsDataAndSync];
+    NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+    [d setInteger:rate forKey:@"TIV10SelectedRate"];
+    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
 }
 
 - (void)neonV10ChoosePreset:(UIButton *)sender {
@@ -5561,14 +5681,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger idx = MAX(0, MIN((NSInteger)rates.count - 1, sender.tag - 99200));
     NSInteger rate = rates[idx].integerValue;
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-    [d setInteger:idx forKey:@"TIV11SelectedPreset"];
+    [d setInteger:rate forKey:@"TIV10SelectedRate"];
+    [d setInteger:rate forKey:@"TIV10SelectedFPS"];
+    [d setInteger:rate forKey:@"TIV11SelectedPreset"];
     // Keep the dashboard preset and power-related switch configuration in sync.
     NSMutableDictionary *presetSettings = [self.settingsDict mutableCopy] ?: [NSMutableDictionary dictionary];
     if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
     else { presetSettings[@"powerSaveMode"] = @NO; presetSettings[@"batterySaver60Hz"] = @NO; }
-    // [SỬA HZ/FPS]: khóa mà tweak thật sự đọc
-    presetSettings[@"TargetRefreshRate"] = @(rate);
-    presetSettings[@"TargetFPSRate"] = @(rate);
     self.settingsDict = presetSettings;
     [self saveSettingsDataAndSync];
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
@@ -5600,7 +5719,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger rate = 15 + (NSInteger)lrint(fraction * 225.0);
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
     if (slider) { slider.value = rate; [self neonV10SetRate:slider]; }
-    else { self.settingsDict[@"TargetRefreshRate"] = @(rate); self.settingsDict[@"TargetFPSRate"] = @(rate); [self saveSettingsDataAndSync]; }
+    else { [[NSUserDefaults standardUserDefaults] setInteger:rate forKey:@"TIV10SelectedRate"]; }
     // V13: the dial previews a target only; the Apply action is explicit and still subject to iOS/hardware limits.
 }
 
@@ -6633,7 +6752,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (manualPingRow) { [self performManualServerPing]; return; }
         if (_currentBottomTab == 4 && indexPath.section == 3) {
             if (indexPath.row == 0) [self showReadOnlyDeviceInfo];
-            else if (indexPath.row == 1) [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị."];
+            else if (indexPath.row == 1) [self showAuthorIntroSequence];
             else if (indexPath.row == 2) [self executeResetConfiguration];
             return;
         }
@@ -6712,7 +6831,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 0) {
         [self showReadOnlyDeviceInfo];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 1) {
-        [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị."];
+        [self showAuthorIntroSequence];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 2) {
         [self executeResetConfiguration];
     } else if (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 3) {
@@ -7433,6 +7552,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         : @"Không khả dụng qua API này";
 
     _isFeatureActivated = YES;
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TI_LocalFeatureActivationComplete_v1"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
     self.settingsDict[@"FeatureActivationComplete"] = @YES;
     [self.settingsDict removeObjectForKey:@"IsKernelExploited"];
     self.settingsDict[@"Enabled"] = @YES;
@@ -7728,6 +7849,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_ADMIN_USER_KEY];
         Titanium_KeychainDeleteAdminToken();
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TI_LocalFeatureActivationComplete_v1"];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_FIRST_INSTALL_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TI_SELECTED_SERVER_KEY];
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
