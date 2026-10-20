@@ -3261,6 +3261,30 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [fromVC presentViewController:exploitVC animated:NO completion:nil];
 }
 
+// V19: compact rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
+@interface TITrendGraphView : UIView
+@property (nonatomic, strong) NSMutableArray<NSNumber *> *samples;
+@property (nonatomic, strong) CAShapeLayer *gridLayer;
+@property (nonatomic, strong) CAShapeLayer *lineLayer;
+@property (nonatomic, strong) CAShapeLayer *glowLayer;
+- (void)addSample:(CGFloat)value;
+@end
+@implementation TITrendGraphView
+- (instancetype)initWithFrame:(CGRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        self.backgroundColor = UIColor.clearColor; self.opaque = NO; self.samples = [NSMutableArray array];
+        _gridLayer = [CAShapeLayer layer]; _gridLayer.strokeColor = [UIColor colorWithWhite:1 alpha:.09].CGColor; _gridLayer.fillColor = UIColor.clearColor.CGColor; _gridLayer.lineWidth = .5; [self.layer addSublayer:_gridLayer];
+        _glowLayer = [CAShapeLayer layer]; _glowLayer.fillColor = UIColor.clearColor.CGColor; _glowLayer.strokeColor = [UIColor colorWithRed:.32 green:.20 blue:1 alpha:.18].CGColor; _glowLayer.lineWidth = 5; _glowLayer.lineCap = kCALineCapRound; _glowLayer.lineJoin = kCALineJoinRound; [self.layer addSublayer:_glowLayer];
+        _lineLayer = [CAShapeLayer layer]; _lineLayer.fillColor = UIColor.clearColor.CGColor; _lineLayer.strokeColor = [UIColor colorWithRed:.22 green:.83 blue:1 alpha:1].CGColor; _lineLayer.lineWidth = 1.8; _lineLayer.lineCap = kCALineCapRound; _lineLayer.lineJoin = kCALineJoinRound; [self.layer addSublayer:_lineLayer];
+        self.clipsToBounds = YES;
+    } return self;
+}
+- (void)addSample:(CGFloat)value { if (!isfinite(value)) return; [_samples addObject:@(MAX(0.0, MIN(100.0, value)))]; while (_samples.count > 36) [_samples removeObjectAtIndex:0]; [self setNeedsLayout]; }
+- (void)layoutSubviews { [super layoutSubviews]; CGRect b = self.bounds; UIBezierPath *grid = [UIBezierPath bezierPath]; for (NSInteger i=1;i<4;i++){ CGFloat y=CGRectGetHeight(b)*i/4.0; [grid moveToPoint:CGPointMake(0,y)]; [grid addLineToPoint:CGPointMake(CGRectGetWidth(b),y)]; } _gridLayer.frame=b; _gridLayer.path=grid.CGPath;
+    UIBezierPath *path=[UIBezierPath bezierPath]; NSUInteger count=_samples.count; if(count>0){ for(NSUInteger i=0;i<count;i++){ CGFloat x=(count<=1?CGRectGetWidth(b):((CGFloat)i/(CGFloat)(count-1))*CGRectGetWidth(b)); CGFloat v=[_samples[i] doubleValue]; CGFloat y=CGRectGetHeight(b)-(v/100.0)*MAX(1,CGRectGetHeight(b)-3)-1.5; if(i==0)[path moveToPoint:CGPointMake(x,y)]; else [path addLineToPoint:CGPointMake(x,y)]; }} _lineLayer.frame=b; _lineLayer.path=path.CGPath; _glowLayer.frame=b; _glowLayer.path=path.CGPath;
+}
+@end
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -5679,20 +5703,53 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)neonV11ShowAppProfile:(NSDictionary *)app {
+    if (![app isKindOfClass:NSDictionary.class]) return;
     NSString *bundleID = [app[@"bundleID"] isKindOfClass:NSString.class] ? app[@"bundleID"] : @"unknown.bundle";
+    NSString *appName = [app[@"name"] isKindOfClass:NSString.class] ? app[@"name"] : bundleID;
     NSDictionary *all = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] ?: @{};
     NSDictionary *saved = [all[bundleID] isKindOfClass:NSDictionary.class] ? all[bundleID] : nil;
-    NSInteger selected = saved ? [saved[@"preset"] integerValue] : 2;
-    NSString *message = [NSString stringWithFormat:@"%@\n%@\n\nChọn cấu hình riêng cho ứng dụng. Mức được lưu trong hồ sơ của app; hiệu quả thực tế phụ thuộc iOS và tweak điều khiển tương thích. CPU/GPU xung và RAM không thể được tăng bằng cách chỉ đặt con số.", bundleID, saved ? [NSString stringWithFormat:@"Đang lưu: %@ · mục tiêu %@ Hz/FPS", saved[@"name"] ?: @"Cân bằng", saved[@"rate"] ?: @60] : @"Chưa có hồ sơ riêng"];
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:(app[@"name"] ?: @"Ứng dụng") message:message preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *names = @[@"🔴 MAX", @"🟡 HIỆU SUẤT", @"🟢 CÂN BẰNG", @"🔵 TIẾT KIỆM PIN"];
-    for (NSInteger i=0;i<names.count;i++) { NSInteger preset=i; [a addAction:[UIAlertAction actionWithTitle:names[i] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV11ApplyAppPreset:preset app:app]; }]]; }
-    [a addAction:[UIAlertAction actionWithTitle:@"CPU · mức ưu tiên riêng" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV15ChooseAppResource:@"CPU" bundleID:bundleID]; }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"GPU · mức ưu tiên riêng" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV15ChooseAppResource:@"GPU" bundleID:bundleID]; }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"RAM · mục tiêu bộ nhớ app" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV15ChooseAppResource:@"RAM" bundleID:bundleID]; }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    if (UI_USER_INTERFACE_IDIOM()==UIUserInterfaceIdiomPad) { a.popoverPresentationController.sourceView=self.view; a.popoverPresentationController.sourceRect=CGRectMake(CGRectGetMidX(self.view.bounds),CGRectGetMidY(self.view.bounds),1,1); }
-    [self presentViewController:a animated:YES completion:nil];
+    __block NSInteger selected = saved ? [saved[@"preset"] integerValue] : 2;
+    NSArray *names = @[@"HIỆU SUẤT", @"CÂN BẰNG", @"TIẾT KIỆM PIN"];
+    NSArray *descs = @[@"Ưu tiên mức mục tiêu cao nhất có thể áp dụng.", @"Cân bằng giữa độ mượt và mức tiêu thụ.", @"Ưu tiên giảm mức sử dụng và mục tiêu khung hình."];
+    NSArray *rates = @[@120, @60, @30];
+    UIViewController *page = [UIViewController new];
+    page.view.backgroundColor = [UIColor colorWithRed:.035 green:.025 blue:.085 alpha:1];
+    page.title = appName;
+    page.modalPresentationStyle = UIModalPresentationFullScreen;
+    UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    [page.view addSubview:scroll];
+    [NSLayoutConstraint activateConstraints:@[[scroll.topAnchor constraintEqualToAnchor:page.view.safeAreaLayoutGuide.topAnchor], [scroll.leadingAnchor constraintEqualToAnchor:page.view.leadingAnchor], [scroll.trailingAnchor constraintEqualToAnchor:page.view.trailingAnchor], [scroll.bottomAnchor constraintEqualToAnchor:page.view.safeAreaLayoutGuide.bottomAnchor constant:-88]]];
+    UIView *content = [UIView new]; content.translatesAutoresizingMaskIntoConstraints = NO; [scroll addSubview:content];
+    [NSLayoutConstraint activateConstraints:@[[content.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor], [content.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor], [content.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor], [content.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor], [content.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor]]];
+    UILabel *hero = [UILabel new]; hero.translatesAutoresizingMaskIntoConstraints=NO; hero.text=appName; hero.font=[UIFont systemFontOfSize:27 weight:UIFontWeightBlack]; hero.textColor=UIColor.whiteColor; [content addSubview:hero];
+    UILabel *bundle = [UILabel new]; bundle.translatesAutoresizingMaskIntoConstraints=NO; bundle.text=bundleID; bundle.font=[UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightMedium]; bundle.textColor=[UIColor colorWithWhite:.62 alpha:1]; bundle.numberOfLines=2; [content addSubview:bundle];
+    UILabel *section = [UILabel new]; section.translatesAutoresizingMaskIntoConstraints=NO; section.text=@"CHẾ ĐỘ HOẠT ĐỘNG"; section.font=[UIFont systemFontOfSize:11 weight:UIFontWeightBold]; section.textColor=[UIColor colorWithRed:.25 green:.85 blue:1 alpha:1]; [content addSubview:section];
+    NSMutableArray<UIButton *> *cards=[NSMutableArray array];
+    for (NSInteger i=0;i<3;i++) {
+        UIButton *card=[UIButton buttonWithType:UIButtonTypeSystem]; card.translatesAutoresizingMaskIntoConstraints=NO; card.tag=i; card.contentHorizontalAlignment=UIControlContentHorizontalAlignmentLeft; card.titleLabel.numberOfLines=0; card.layer.cornerRadius=17; card.layer.borderWidth=1.2; card.backgroundColor=[UIColor colorWithWhite:1 alpha:.045];
+        NSString *title=[NSString stringWithFormat:@"%@\n%@\nMức mục tiêu: %@ Hz/FPS", names[i], descs[i], rates[i]];
+        [card setTitle:title forState:UIControlStateNormal]; card.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]; card.titleLabel.lineBreakMode=NSLineBreakByWordWrapping; card.titleLabel.textAlignment=NSTextAlignmentLeft; card.contentEdgeInsets=UIEdgeInsetsMake(15,16,15,16);
+        [card setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        [card addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { selected=card.tag; for (UIButton *b in cards) { BOOL on=(b.tag==selected); b.layer.borderColor=(on?[UIColor colorWithRed:.20 green:.84 blue:1 alpha:1]:[UIColor colorWithWhite:1 alpha:.12]).CGColor; b.backgroundColor=on?[UIColor colorWithRed:.12 green:.22 blue:.38 alpha:.95]:[UIColor colorWithWhite:1 alpha:.045]; } }] forControlEvents:UIControlEventTouchUpInside];
+        [content addSubview:card]; [cards addObject:card];
+        [NSLayoutConstraint activateConstraints:@[[card.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:18],[card.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-18],[card.heightAnchor constraintGreaterThanOrEqualToConstant:92]]];
+    }
+    for (NSInteger i=0;i<cards.count;i++) { UIButton *b=cards[i]; b.layer.borderColor=(i==selected?[UIColor colorWithRed:.20 green:.84 blue:1 alpha:1]:[UIColor colorWithWhite:1 alpha:.12]).CGColor; b.backgroundColor=(i==selected?[UIColor colorWithRed:.12 green:.22 blue:.38 alpha:.95]:[UIColor colorWithWhite:1 alpha:.045]); }
+    UILabel *notice=[UILabel new]; notice.translatesAutoresizingMaskIntoConstraints=NO; notice.numberOfLines=0; notice.font=[UIFont systemFontOfSize:11]; notice.textColor=[UIColor colorWithWhite:.65 alpha:1]; notice.text=@"Hồ sơ được lưu riêng theo ứng dụng. Hz/FPS là mục tiêu cấu hình, không đảm bảo game đạt đúng giá trị; hồ sơ không tự ép xung CPU/GPU hoặc tăng RAM vật lý."; [content addSubview:notice];
+    [NSLayoutConstraint activateConstraints:@[[hero.topAnchor constraintEqualToAnchor:content.topAnchor constant:22],[hero.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],[hero.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],[bundle.topAnchor constraintEqualToAnchor:hero.bottomAnchor constant:7],[bundle.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[bundle.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],[section.topAnchor constraintEqualToAnchor:bundle.bottomAnchor constant:28],[section.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[cards[0].topAnchor constraintEqualToAnchor:section.bottomAnchor constant:14],[cards[1].topAnchor constraintEqualToAnchor:cards[0].bottomAnchor constant:11],[cards[2].topAnchor constraintEqualToAnchor:cards[1].bottomAnchor constant:11],[notice.topAnchor constraintEqualToAnchor:cards[2].bottomAnchor constant:18],[notice.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[notice.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],[notice.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-24]]];
+    UIView *footer=[UIView new]; footer.translatesAutoresizingMaskIntoConstraints=NO; footer.backgroundColor=[UIColor colorWithRed:.055 green:.035 blue:.12 alpha:1]; [page.view addSubview:footer];
+    UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.translatesAutoresizingMaskIntoConstraints=NO; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.22 green:.72 blue:1 alpha:1]; [apply setTitle:@"ÁP DỤNG CẤU HÌNH" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.blackColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightBlack]; [footer addSubview:apply];
+    [NSLayoutConstraint activateConstraints:@[[footer.leadingAnchor constraintEqualToAnchor:page.view.leadingAnchor],[footer.trailingAnchor constraintEqualToAnchor:page.view.trailingAnchor],[footer.bottomAnchor constraintEqualToAnchor:page.view.bottomAnchor],[footer.heightAnchor constraintEqualToConstant:100],[apply.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:18],[apply.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor constant:-18],[apply.topAnchor constraintEqualToAnchor:footer.topAnchor constant:10],[apply.heightAnchor constraintEqualToConstant:52]]];
+    [apply addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        NSArray *allNames=@[@"Hiệu suất",@"Cân bằng",@"Tiết kiệm pin"];
+        NSMutableDictionary *profiles=[[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] mutableCopy] ?: [NSMutableDictionary dictionary];
+        profiles[bundleID]=@{@"preset":@(selected),@"rate":rates[selected],@"name":allNames[selected],@"applied":@YES};
+        [[NSUserDefaults standardUserDefaults] setObject:profiles forKey:@"TIV11PerAppProfiles"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        [self dismissViewControllerAnimated:YES completion:^{ UIAlertController *done=[UIAlertController alertControllerWithTitle:@"Đã lưu hồ sơ ứng dụng" message:[NSString stringWithFormat:@"%@ · %@\nMục tiêu %@ Hz/FPS đã lưu. Việc áp dụng thực tế phụ thuộc bộ điều khiển tương thích.",appName,allNames[selected],rates[selected]] preferredStyle:UIAlertControllerStyleAlert]; [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil]; }];
+    }] forControlEvents:UIControlEventTouchUpInside];
+    [self presentViewController:page animated:YES completion:nil];
 }
 
 - (void)neonV15ChooseAppResource:(NSString *)resource bundleID:(NSString *)bundleID {
@@ -5767,10 +5824,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             UIImageView *icon=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbols[idx]]]; icon.frame=CGRectMake(12,12,20,20); icon.tintColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; [card addSubview:icon];
             UILabel *name=[[UILabel alloc] initWithFrame:CGRectMake(40,10,cw-55,17)]; name.text=groups[page][j]; name.font=[UIFont systemFontOfSize:11 weight:UIFontWeightBlack]; name.textColor=UIColor.whiteColor; [card addSubview:name];
             UILabel *detail=[[UILabel alloc] initWithFrame:CGRectMake(40,28,cw-55,14)]; detail.text=details[idx]; detail.font=[UIFont systemFontOfSize:9]; detail.textColor=[UIColor colorWithWhite:.62 alpha:1]; [card addSubview:detail];
-            // A neutral baseline is shown until a real supported reading is available; never invent chip temperatures or GPU load.
-            UIView *track=[[UIView alloc] initWithFrame:CGRectMake(12,54,cw-24,6)]; track.backgroundColor=[UIColor colorWithWhite:.19 alpha:1]; track.layer.cornerRadius=3; track.tag=9180+idx; [card addSubview:track];
-            UIView *line=[[UIView alloc] initWithFrame:CGRectMake(0,0,MAX(2,(cw-24)*.1),6)]; line.backgroundColor=[UIColor colorWithRed:.2 green:.75 blue:1 alpha:1]; line.layer.cornerRadius=3; line.tag=9161+idx; [track addSubview:line];
-            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,68,cw-24,22)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
+            // V19: scrolling heartbeat-style line chart with rolling samples.
+            TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(12,49,cw-24,30)]; graph.tag=9200+idx; [card addSubview:graph];
+            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,80,cw-24,17)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
         }
     }
     chartScroll.contentSize=CGSizeMake(cw*2,246);
@@ -5782,7 +5838,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue]; NSInteger targetFPS=[self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
     NSArray *rateNames=@[@"TẦN SỐ MÀN HÌNH",@"TỐC ĐỘ KHUNG HÌNH"]; NSArray *rateValues=@[[NSString stringWithFormat:@"%ld Hz",(long)targetHz],[NSString stringWithFormat:@"%ld FPS",(long)targetFPS]];
     for(NSInteger i=0;i<2;i++){ CGFloat gap=10, rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),558,rw,65)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=15; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(8,8,rw-16,14)]; n.text=rateNames[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor colorWithWhite:.65 alpha:1]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(8,26,rw-16,30)]; v.text=rateValues[i]; v.font=[UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor colorWithRed:1 green:.3 blue:.55 alpha:1]:[UIColor colorWithRed:.2 green:.82 blue:1 alpha:1]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
-    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,633,cw,36)]; note.numberOfLines=2; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor colorWithWhite:.60 alpha:1]; note.text=@"Biểu đồ chỉ hiển thị CPU, bộ nhớ tiến trình, pin và FPS giao diện được lấy mẫu. GPU và nhiệt độ chip bị loại vì không có nguồn đo ổn định; Hz* là mức cấu hình, không phải phép đo Hz thực tế."; [root addSubview:note];
+    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,633,cw,36)]; note.numberOfLines=2; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor colorWithWhite:.60 alpha:1]; note.text=@"Đường biểu đồ lưu mẫu gần nhất: CPU, RAM tiến trình, pin và FPS giao diện. FPS không phải FPS trong game; Hz là mức cấu hình. GPU/nhiệt độ chip chỉ thêm khi có nguồn đọc hợp lệ."; [root addSubview:note];
     return root;
 }
 
@@ -6984,15 +7040,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSArray<NSNumber *> *samples = @[@(MAX(0.0, MIN(100.0, cpu))), @(MAX(0.0, MIN(100.0, ((double)memory / MAX(1.0, (double)NSProcessInfo.processInfo.physicalMemory)) * 100.0))), @(battery >= 0.0f ? battery * 100.0f : 0.0f), @(MAX(0, MIN((NSInteger)UIScreen.mainScreen.maximumFramesPerSecond, _uiFPSMeasured)))];
     NSArray<NSString *> *sampleTexts = @[cpu >= 0.0f ? [NSString stringWithFormat:@"CPU · %.0f%%", cpu] : @"CPU · N/A", [NSString stringWithFormat:@"RAM tiến trình · %@", Titanium_ByteCountString(memory)], battery >= 0.0f ? [NSString stringWithFormat:@"Pin · %.0f%%", battery * 100.0f] : @"Pin · N/A", [NSString stringWithFormat:@"FPS giao diện · %ld", (long)_uiFPSMeasured]];
     for (NSInteger i = 0; i < 4; i++) {
-        UIView *track = [headerNow viewWithTag:9180 + i];
-        UIView *bar = [headerNow viewWithTag:9161 + i];
+        TITrendGraphView *graph = (TITrendGraphView *)[headerNow viewWithTag:9200 + i];
         UILabel *value = (UILabel *)[headerNow viewWithTag:9190 + i];
         if (value) value.text = sampleTexts[i];
-        if (track && bar) {
+        if ([graph isKindOfClass:[TITrendGraphView class]]) {
+            [graph addSample:[samples[i] doubleValue]];
             CGFloat fraction = [samples[i] doubleValue] / 100.0;
-            CGRect f = bar.frame; f.size.width = MAX(2.0, track.bounds.size.width * fraction); bar.frame = f;
             UIColor *c = fraction >= .8 ? [UIColor colorWithRed:1 green:.2 blue:.25 alpha:1] : (fraction >= .55 ? [UIColor colorWithRed:1 green:.65 blue:.12 alpha:1] : [UIColor colorWithRed:.2 green:.78 blue:1 alpha:1]);
-            bar.backgroundColor = c;
+            graph.lineLayer.strokeColor = c.CGColor; graph.glowLayer.strokeColor = [c colorWithAlphaComponent:.18].CGColor;
         }
     }
 }
@@ -7874,8 +7929,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     intro.textColor = UIColor.secondaryLabelColor;
     intro.font = [UIFont systemFontOfSize:13.0];
     intro.text = vi
-        ? @"Các lựa chọn này điều khiển trực tiếp phân vùng hệ thống. Kích hoạt công tắc thực thi mã khai thác kernel, vượt qua lớp anti-cheat và đồng bộ trực tiếp với máy chủ Apple."
-        : @"These options directly control system partitions. Enabling switches executes kernel exploit code, bypasses anti-cheat, and syncs directly with Apple servers.";
+        ? @"Các công tắc bên dưới chỉ lưu tuỳ chọn giao diện/chẩn đoán được hỗ trợ. Chúng không tự chạy khai thác kernel, không ép xung CPU/GPU và không vượt giới hạn phần cứng."
+        : @"These switches save supported UI/diagnostic preferences only. They do not execute a kernel exploit, overclock the CPU/GPU, or bypass hardware limits.";
     [stack addArrangedSubview:intro];
 
     NSArray<NSDictionary *> *items = @[
@@ -7933,7 +7988,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 
     page.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismissIndependentDocument)];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:page];
-    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
     [self presentViewController:nav animated:YES completion:nil];
 }
 
