@@ -2764,6 +2764,8 @@ static NSString *Titanium_DeviceHardwareIdentifier(void) {
 - (void)showPhonkMusicPicker;
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width;
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width;
+- (UIView *)buildNeonSwitchHeaderWithWidth:(CGFloat)width;
+- (void)neonV15SelectSwitchGroup:(UIButton *)sender;
 - (void)startUIFrameSampler;
 - (void)stopUIFrameSampler;
 - (void)sampleUIFrame:(CADisplayLink *)link;
@@ -3893,7 +3895,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     musicButton.layer.borderColor = [UIColor colorWithRed:0.42 green:0.26 blue:0.85 alpha:0.9].CGColor;
     [musicButton setImage:[UIImage systemImageNamed:@"music.note.list"] forState:UIControlStateNormal];
     [musicButton setTintColor:[UIColor colorWithRed:0.40 green:0.78 blue:1.0 alpha:1.0]];
-    musicButton.accessibilityLabel = @"Chọn nhạc phonk trên YouTube";
+    musicButton.accessibilityLabel = @"Mở Music Studio: Phonk, SoundCloud, Apple Music và YouTube";
     [musicButton addTarget:self action:@selector(showPhonkMusicPicker) forControlEvents:UIControlEventTouchUpInside];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:musicButton];
     [self updateServerStatusIndicator];
@@ -5026,15 +5028,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
     } else if (_currentLatencyMs >= 500) {
         _serverStatusDot.backgroundColor = [UIColor systemRedColor];
-        _serverStatusLabel.text = [NSString stringWithFormat:@"Server Free: Chậm - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"SmoothIOS · Kết nối chậm - %ldms", (long)_currentLatencyMs];
         _serverStatusLabel.textColor = [UIColor systemRedColor];
     } else if (_currentLatencyMs >= 150) {
         _serverStatusDot.backgroundColor = [UIColor systemYellowColor];
-        _serverStatusLabel.text = [NSString stringWithFormat:@"Server Free: Kém - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"SmoothIOS · Kết nối yếu - %ldms", (long)_currentLatencyMs];
         _serverStatusLabel.textColor = [UIColor systemYellowColor];
     } else {
         _serverStatusDot.backgroundColor = [UIColor systemGreenColor];
-        _serverStatusLabel.text = [NSString stringWithFormat:@"Server Free: Ổn định - %ldms", (long)_currentLatencyMs];
+        _serverStatusLabel.text = [NSString stringWithFormat:@"SmoothIOS · Đã kết nối - %ldms", (long)_currentLatencyMs];
         _serverStatusLabel.textColor = [UIColor colorWithWhite:0.85 alpha:1.0];
     }
 }
@@ -5317,7 +5319,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (!CGRectEqualToRect(self.customTableView.frame, tableFrame)) self.customTableView.frame = tableFrame;
         CGFloat headerWidth = self.view.bounds.size.width;
         if (self.customTableView.tableHeaderView && fabs(self.customTableView.tableHeaderView.bounds.size.width - headerWidth) > 1.0) {
-            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)]);
+            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)]));
         }
         UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, 10.0, 0.0);
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
@@ -5410,7 +5412,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     NSInteger oldTab = _currentBottomTab;
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
-    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)]);
+    UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)]));
     self.customTableView.tableHeaderView = nextHeader;
     if (_currentBottomTab == 0) {
         // Dashboard readouts stay live; the switch only controls the detailed monitor rows.
@@ -5612,6 +5614,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [d setInteger:rate forKey:@"TIV10SelectedRate"];
     [d setInteger:rate forKey:@"TIV10SelectedFPS"];
     [d setInteger:rate forKey:@"TIV11SelectedPreset"];
+    // Keep the dashboard preset and power-related switch configuration in sync.
+    NSMutableDictionary *presetSettings = [self.settingsDict mutableCopy] ?: [NSMutableDictionary dictionary];
+    if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
+    else { presetSettings[@"powerSaveMode"] = @NO; presetSettings[@"batterySaver60Hz"] = @NO; }
+    self.settingsDict = presetSettings;
+    [self saveSettingsDataAndSync];
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
     if (slider) { slider.value = rate; [self neonV10SetRate:slider]; }
     NSArray *palette = @[[UIColor colorWithRed:1 green:.17 blue:.22 alpha:1],[UIColor colorWithRed:1 green:.68 blue:.12 alpha:1],[UIColor colorWithRed:.24 green:.86 blue:.38 alpha:1],[UIColor colorWithRed:.18 green:.52 blue:1 alpha:1]];
@@ -5679,9 +5687,36 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIAlertController *a = [UIAlertController alertControllerWithTitle:(app[@"name"] ?: @"Ứng dụng") message:message preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray *names = @[@"🔴 MAX", @"🟡 HIỆU SUẤT", @"🟢 CÂN BẰNG", @"🔵 TIẾT KIỆM PIN"];
     for (NSInteger i=0;i<names.count;i++) { NSInteger preset=i; [a addAction:[UIAlertAction actionWithTitle:names[i] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV11ApplyAppPreset:preset app:app]; }]]; }
+    [a addAction:[UIAlertAction actionWithTitle:@"CPU · mức ưu tiên riêng" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV15ChooseAppResource:@"CPU" bundleID:bundleID]; }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"GPU · mức ưu tiên riêng" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV15ChooseAppResource:@"GPU" bundleID:bundleID]; }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"RAM · mục tiêu bộ nhớ app" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self neonV15ChooseAppResource:@"RAM" bundleID:bundleID]; }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
     if (UI_USER_INTERFACE_IDIOM()==UIUserInterfaceIdiomPad) { a.popoverPresentationController.sourceView=self.view; a.popoverPresentationController.sourceRect=CGRectMake(CGRectGetMidX(self.view.bounds),CGRectGetMidY(self.view.bounds),1,1); }
     [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)neonV15ChooseAppResource:(NSString *)resource bundleID:(NSString *)bundleID {
+    NSArray *levels = @[@"Thấp", @"Mặc định", @"Cao", @"Tối đa"];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"%@ · cấu hình riêng", resource] message:@"Lưu mức ưu tiên mục tiêu theo bundle ID. Đây là hồ sơ cấu hình; iOS không cho ứng dụng thường ép xung CPU/GPU hoặc cấp phát RAM vật lý theo yêu cầu." preferredStyle:UIAlertControllerStyleActionSheet];
+    NSDictionary *all = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV15PerAppResources"] ?: @{};
+    NSDictionary *saved = [all[bundleID] isKindOfClass:NSDictionary.class] ? all[bundleID] : @{};
+    NSInteger current = [saved[resource] respondsToSelector:@selector(integerValue)] ? [saved[resource] integerValue] : 1;
+    for (NSInteger i = 0; i < levels.count; i++) {
+        NSInteger level = i;
+        NSString *label = (i == current) ? [NSString stringWithFormat:@"✓ %@", levels[i]] : levels[i];
+        [sheet addAction:[UIAlertAction actionWithTitle:label style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            NSMutableDictionary *resources = [[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV15PerAppResources"] mutableCopy] ?: [NSMutableDictionary dictionary];
+            NSMutableDictionary *entry = [([resources[bundleID] isKindOfClass:NSDictionary.class] ? resources[bundleID] : @{}) mutableCopy];
+            entry[resource] = @(level); resources[bundleID] = entry;
+            [[NSUserDefaults standardUserDefaults] setObject:resources forKey:@"TIV15PerAppResources"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            UIAlertController *done = [UIAlertController alertControllerWithTitle:@"Đã lưu" message:[NSString stringWithFormat:@"%@ · %@: %@", bundleID, resource, levels[level]] preferredStyle:UIAlertControllerStyleAlert];
+            [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) { sheet.popoverPresentationController.sourceView = self.view; sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1); }
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)neonV10OpenInfo:(UIButton *)sender {
@@ -5699,65 +5734,62 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
-    CGFloat w = MAX(320.0, width), side = 18.0, cw = w - side * 2.0;
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 774.0)];
+    CGFloat w = MAX(320.0, width), side = 16.0, cw = w - side * 2.0;
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 745.0)];
     root.backgroundColor = UIColor.clearColor;
-    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(side, 13, cw, 16)];
-    eyebrow.text = @"T I T A N I U M  /  PERFORMANCE CONTROL";
-    eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold];
-    eyebrow.textColor = [UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(side, 34, cw, 35)];
-    title.text = @"NEON CONTROL V12"; title.font = [UIFont systemFontOfSize:29 weight:UIFontWeightBlack];
-    title.textColor = UIColor.whiteColor; title.adjustsFontSizeToFitWidth = YES; [root addSubview:title];
-    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(side+1, 71, cw, 18)];
-    sub.text = @"Chọn cấu hình · tinh chỉnh mức mong muốn"; sub.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    sub.textColor = [UIColor colorWithWhite:.68 alpha:1]; [root addSubview:sub];
-    UIView *telemetry = [[UIView alloc] initWithFrame:CGRectMake(side, 91, cw, 49)]; telemetry.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; telemetry.layer.cornerRadius=15; telemetry.layer.borderWidth=1; telemetry.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:telemetry];
-    NSArray *teleNames=@[@"Hz",@"FPS",@"RAM",@"PIN",@"NHIỆT"];
-    NSArray *teleTags=@[@"TIV12Hz",@"TIV12FPS",@"TIV12RAM",@"TIV12BAT",@"TIV12TEMP"];
-    CGFloat tw=cw/5.0;
-    for(NSInteger ti=0;ti<5;ti++){ UILabel *tl=[[UILabel alloc] initWithFrame:CGRectMake(ti*tw,5,tw,13)]; tl.text=teleNames[ti]; tl.textAlignment=NSTextAlignmentCenter; tl.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; tl.textColor=[UIColor colorWithWhite:.62 alpha:1]; [telemetry addSubview:tl]; UILabel *tv=[[UILabel alloc] initWithFrame:CGRectMake(ti*tw,20,tw,22)]; tv.tag=8710+ti; tv.text=@"—"; tv.textAlignment=NSTextAlignmentCenter; tv.font=[UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBlack]; tv.textColor=(ti==0?[UIColor colorWithRed:.98 green:.28 blue:.48 alpha:1]:(ti==1?[UIColor colorWithRed:.12 green:.82 blue:1 alpha:1]:UIColor.whiteColor)); tv.adjustsFontSizeToFitWidth=YES; tv.minimumScaleFactor=.65; [telemetry addSubview:tv]; }
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(side, 12, cw, 15)];
+    eyebrow.text = @"SMOOTHIOS  /  LIVE MONITOR"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(side, 31, cw, 32)]; title.text = @"BẢNG ĐIỀU KHIỂN"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
+    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(side, 65, cw, 18)]; sub.text = @"Theo dõi dữ liệu hệ thống được iOS cho phép đọc"; sub.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium]; sub.textColor = [UIColor colorWithWhite:.68 alpha:1]; [root addSubview:sub];
 
-    UIView *dialCard = [[UIView alloc] initWithFrame:CGRectMake(side, 151, cw, 270)];
-    dialCard.backgroundColor = [UIColor colorWithRed:.045 green:.025 blue:.105 alpha:1]; dialCard.layer.cornerRadius = 28;
-    dialCard.layer.borderWidth = 1.2; dialCard.layer.borderColor = [UIColor colorWithRed:.58 green:.22 blue:1 alpha:.9].CGColor;
-    dialCard.layer.shadowColor = [UIColor colorWithRed:.45 green:.1 blue:1 alpha:1].CGColor; dialCard.layer.shadowOpacity = .22; dialCard.layer.shadowRadius = 18; dialCard.layer.shadowOffset = CGSizeMake(0, 7); [root addSubview:dialCard];
-    CAGradientLayer *grad = [CAGradientLayer layer]; grad.frame = dialCard.bounds; grad.cornerRadius = 28;
-    grad.colors = @[(id)[UIColor colorWithRed:.16 green:.035 blue:.30 alpha:1].CGColor,(id)[UIColor colorWithRed:.035 green:.045 blue:.12 alpha:1].CGColor];
-    grad.startPoint = CGPointMake(0,0); grad.endPoint = CGPointMake(1,1); [dialCard.layer insertSublayer:grad atIndex:0];
-    UILabel *dialTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 14, cw-32, 18)]; dialTitle.text = @"TẦN SỐ MỤC TIÊU"; dialTitle.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightBold]; dialTitle.textColor = [UIColor colorWithRed:.4 green:.87 blue:1 alpha:1]; dialTitle.textAlignment = NSTextAlignmentCenter; [dialCard addSubview:dialTitle];
-    UIView *ring = [[UIView alloc] initWithFrame:CGRectMake((cw-150)/2, 38, 150, 150)]; ring.layer.cornerRadius=75; ring.layer.borderWidth=4; ring.layer.borderColor=[UIColor colorWithRed:.78 green:.25 blue:1 alpha:1].CGColor; ring.backgroundColor=[UIColor colorWithRed:.06 green:.045 blue:.16 alpha:1]; ring.layer.shadowColor=[UIColor magentaColor].CGColor; ring.layer.shadowOpacity=.35; ring.layer.shadowRadius=16; [dialCard addSubview:ring];
-    ring.userInteractionEnabled = YES;
-    UIPanGestureRecognizer *dialPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(neonV11DialPan:)];
-    [ring addGestureRecognizer:dialPan];
-    UITapGestureRecognizer *dialTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(neonV11DialPan:)];
-    [ring addGestureRecognizer:dialTap];
-    UIView *ring2=[[UIView alloc] initWithFrame:CGRectInset(ring.bounds, 9, 9)]; ring2.layer.cornerRadius=ring2.bounds.size.width/2; ring2.layer.borderWidth=1; ring2.layer.borderColor=[UIColor colorWithRed:.1 green:.85 blue:1 alpha:.9].CGColor; [ring addSubview:ring2];
-    UILabel *rate = [[UILabel alloc] initWithFrame:CGRectMake(8, 48, 134, 48)]; rate.tag=99120; NSInteger saved= [NSUserDefaults.standardUserDefaults integerForKey:@"TIV10SelectedRate"]; if(saved<15||saved>240)saved=120; rate.text=[NSString stringWithFormat:@"%ld",(long)saved]; rate.font=[UIFont systemFontOfSize:43 weight:UIFontWeightBlack]; rate.textColor=UIColor.whiteColor; rate.textAlignment=NSTextAlignmentCenter; [ring addSubview:rate];
-    UILabel *hz = [[UILabel alloc] initWithFrame:CGRectMake(8, 94, 134, 20)]; hz.text=@"Hz / FPS"; hz.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold]; hz.textColor=[UIColor colorWithRed:.28 green:.88 blue:1 alpha:1]; hz.textAlignment=NSTextAlignmentCenter; [ring addSubview:hz];
-    UISlider *slider=[[UISlider alloc] initWithFrame:CGRectMake(22, 202, cw-44, 30)]; slider.tag=99119; slider.minimumValue=15; slider.maximumValue=240; slider.value=saved; slider.minimumTrackTintColor=[UIColor colorWithRed:.83 green:.2 blue:1 alpha:1]; slider.maximumTrackTintColor=[UIColor colorWithWhite:.28 alpha:1]; slider.thumbTintColor=[UIColor colorWithRed:.22 green:.9 blue:1 alpha:1]; [slider addTarget:self action:@selector(neonV10SetRate:) forControlEvents:UIControlEventValueChanged]; [dialCard addSubview:slider];
-    UILabel *range=[[UILabel alloc] initWithFrame:CGRectMake(22, 235, cw-44, 16)]; range.text=@"15  ━━━━━━━━━━━━━━━━━━━━━  240"; range.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightMedium]; range.textColor=[UIColor colorWithWhite:.65 alpha:1]; [dialCard addSubview:range];
+    // Compact live-value tiles; tags are retained for the existing telemetry updater.
+    UIView *values = [[UIView alloc] initWithFrame:CGRectMake(side, 91, cw, 54)]; values.backgroundColor = [UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; values.layer.cornerRadius = 15; values.layer.borderWidth = 1; values.layer.borderColor = [UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:values];
+    NSArray *names = @[@"HZ", @"FPS", @"RAM", @"PIN", @"NHIỆT"];
+    for (NSInteger i=0;i<5;i++) { CGFloat tw=cw/5.0; UILabel *l=[[UILabel alloc] initWithFrame:CGRectMake(i*tw,5,tw,13)]; l.text=names[i]; l.textAlignment=NSTextAlignmentCenter; l.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; l.textColor=[UIColor colorWithWhite:.62 alpha:1]; [values addSubview:l]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(i*tw,20,tw,25)]; v.tag=8710+i; v.text=@"—"; v.textAlignment=NSTextAlignmentCenter; v.font=[UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBlack]; v.textColor=(i==0?[UIColor colorWithRed:.98 green:.28 blue:.48 alpha:1]:(i==1?[UIColor colorWithRed:.12 green:.82 blue:1 alpha:1]:UIColor.whiteColor)); v.adjustsFontSizeToFitWidth=YES; v.minimumScaleFactor=.65; [values addSubview:v]; }
 
-    UILabel *presetTitle=[[UILabel alloc] initWithFrame:CGRectMake(side, 439, cw, 20)]; presetTitle.text=@"CHỌN CẤU HÌNH HIỆU NĂNG"; presetTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; presetTitle.textColor=UIColor.whiteColor; [root addSubview:presetTitle];
-    NSArray *names=@[@"MAX",@"HIỆU SUẤT",@"CÂN BẰNG",@"TIẾT KIỆM PIN"];
-    NSArray *colors=@[[UIColor colorWithRed:1 green:.17 blue:.22 alpha:1],[UIColor colorWithRed:1 green:.68 blue:.12 alpha:1],[UIColor colorWithRed:.24 green:.86 blue:.38 alpha:1],[UIColor colorWithRed:.18 green:.52 blue:1 alpha:1]];
-    CGFloat gap=7, pw=(cw-gap*3)/4;
-    for(NSInteger i=0;i<4;i++) { UIButton *b=[UIButton buttonWithType:UIButtonTypeSystem]; b.frame=CGRectMake(side+i*(pw+gap),466,pw,77); b.tag=99200+i; b.backgroundColor=[colors[i] colorWithAlphaComponent:.13]; b.layer.cornerRadius=17; b.layer.borderWidth=1; b.layer.borderColor=[colors[i] colorWithAlphaComponent:.9].CGColor; [b setTitle:names[i] forState:UIControlStateNormal]; [b setTitleColor:colors[i] forState:UIControlStateNormal]; b.titleLabel.font=[UIFont systemFontOfSize:(i==1||i==2)?9:10 weight:UIFontWeightBlack]; b.titleLabel.numberOfLines=2; b.titleLabel.textAlignment=NSTextAlignmentCenter; [b addTarget:self action:@selector(neonV10ChoosePreset:) forControlEvents:UIControlEventTouchUpInside]; [root addSubview:b]; }
-    UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side, 566, cw, 19)]; infoTitle.text=@"THÔNG SỐ NHANH · CHẠM ĐỂ XEM CHI TIẾT"; infoTitle.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; infoTitle.textColor=[UIColor colorWithRed:.73 green:.49 blue:1 alpha:1]; [root addSubview:infoTitle];
-    NSArray *info=@[@{ @"t":@"CPU", @"s":@"Tải hệ thống", @"i":@"cpu" },@{ @"t":@"RAM", @"s":@"Bộ nhớ app", @"i":@"memorychip" },@{ @"t":@"PIN", @"s":@"Năng lượng", @"i":@"battery.100" },@{ @"t":@"DISPLAY", @"s":@"Hz / FPS", @"i":@"speedometer" }];
-    CGFloat iw=(cw-gap*3)/4;
-    for(NSInteger i=0;i<4;i++) { UIButton *b=[UIButton buttonWithType:UIButtonTypeSystem]; b.frame=CGRectMake(side+i*(iw+gap),592,iw,91); b.tag=99300+i; b.backgroundColor=[UIColor colorWithRed:.055 green:.045 blue:.13 alpha:1]; b.layer.cornerRadius=17; b.layer.borderWidth=1; b.layer.borderColor=[UIColor colorWithRed:.38 green:.23 blue:.65 alpha:1].CGColor; UIImageView *im=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:info[i][@"i"]]]; im.frame=CGRectMake((iw-22)/2,12,22,22); im.contentMode=UIViewContentModeScaleAspectFit; im.tintColor=colors[i]; [b addSubview:im]; UILabel *t=[[UILabel alloc] initWithFrame:CGRectMake(3,42,iw-6,17)]; t.text=info[i][@"t"]; t.textAlignment=NSTextAlignmentCenter; t.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; t.textColor=UIColor.whiteColor; [b addSubview:t]; UILabel *d=[[UILabel alloc] initWithFrame:CGRectMake(3,61,iw-6,14)]; d.text=info[i][@"s"]; d.textAlignment=NSTextAlignmentCenter; d.font=[UIFont systemFontOfSize:8 weight:UIFontWeightMedium]; d.textColor=[UIColor colorWithWhite:.65 alpha:1]; d.adjustsFontSizeToFitWidth=YES; [b addSubview:d]; [b addTarget:self action:@selector(neonV10OpenInfo:) forControlEvents:UIControlEventTouchUpInside]; [root addSubview:b]; }
-    UIView *thermalCard = [[UIView alloc] initWithFrame:CGRectMake(side, 698, cw, 58)];
-    thermalCard.backgroundColor = [UIColor colorWithRed:.055 green:.04 blue:.12 alpha:1];
-    thermalCard.layer.cornerRadius = 17; thermalCard.layer.borderWidth = 1;
-    thermalCard.layer.borderColor = [UIColor colorWithRed:.15 green:.72 blue:.85 alpha:.75].CGColor;
-    [root addSubview:thermalCard];
-    UILabel *thermalTitle = [[UILabel alloc] initWithFrame:CGRectMake(14, 9, cw-88, 20)];
-    thermalTitle.text = @"TỰ ĐIỀU CHỈNH THEO NHIỆT"; thermalTitle.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; thermalTitle.textColor = UIColor.whiteColor; [thermalCard addSubview:thermalTitle];
-    UILabel *thermalSub = [[UILabel alloc] initWithFrame:CGRectMake(14, 29, cw-88, 17)];
-    thermalSub.text = @"Tự đổi cấu hình đã lưu khi trạng thái nhiệt đổi"; thermalSub.font = [UIFont systemFontOfSize:9 weight:UIFontWeightMedium]; thermalSub.textColor = [UIColor colorWithWhite:.68 alpha:1]; [thermalCard addSubview:thermalSub];
-    UISwitch *thermalSwitch = [[UISwitch alloc] initWithFrame:CGRectZero]; thermalSwitch.transform = CGAffineTransformMakeScale(.82,.82); thermalSwitch.onTintColor = [UIColor colorWithRed:.15 green:.8 blue:.52 alpha:1]; thermalSwitch.on = [NSUserDefaults.standardUserDefaults boolForKey:@"TIV11ThermalAutoAdjust"]; thermalSwitch.center = CGPointMake(cw-37,29); [thermalSwitch addTarget:self action:@selector(neonV11ThermalChanged:) forControlEvents:UIControlEventValueChanged]; [thermalCard addSubview:thermalSwitch];
+    // V18: thermal status is placed immediately below the live measurement tiles.
+    UIView *thermalCard=[[UIView alloc] initWithFrame:CGRectMake(side,151,cw,48)]; thermalCard.backgroundColor=[UIColor colorWithRed:.055 green:.04 blue:.12 alpha:1]; thermalCard.layer.cornerRadius=15; thermalCard.layer.borderWidth=1; thermalCard.layer.borderColor=[UIColor colorWithRed:.15 green:.72 blue:.85 alpha:.75].CGColor; [root addSubview:thermalCard];
+    UILabel *thermalTitle=[[UILabel alloc] initWithFrame:CGRectMake(13,7,cw-112,15)]; thermalTitle.text=@"TRẠNG THÁI NHIỆT HỆ THỐNG"; thermalTitle.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; thermalTitle.textColor=UIColor.whiteColor; [thermalCard addSubview:thermalTitle];
+    UILabel *thermalValue=[[UILabel alloc] initWithFrame:CGRectMake(13,24,cw-26,16)]; thermalValue.tag=8715; thermalValue.text=@"Đang đọc trạng thái nhiệt…"; thermalValue.font=[UIFont systemFontOfSize:10 weight:UIFontWeightSemibold]; thermalValue.textColor=[UIColor colorWithRed:.25 green:.9 blue:.5 alpha:1]; [thermalCard addSubview:thermalValue];
+    UISwitch *thermalSwitch=[[UISwitch alloc] initWithFrame:CGRectMake(cw-62,8,0,0)]; thermalSwitch.on=[self.settingsDict[@"ThermalAutoAdjust"] boolValue]; thermalSwitch.transform=CGAffineTransformMakeScale(.68,.68); [thermalSwitch addTarget:self action:@selector(neonV11ThermalChanged:) forControlEvents:UIControlEventValueChanged]; [thermalCard addSubview:thermalSwitch];
+
+    UILabel *chartTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,213,cw,20)]; chartTitle.text=@"BIỂU ĐỒ GIÁM SÁT"; chartTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; chartTitle.textColor=UIColor.whiteColor; [root addSubview:chartTitle];
+    UILabel *chartHint=[[UILabel alloc] initWithFrame:CGRectMake(side,234,cw,17)]; chartHint.text=@"Vuốt ngang để chuyển nhóm thông số"; chartHint.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; chartHint.textColor=[UIColor colorWithWhite:.62 alpha:1]; [root addSubview:chartHint];
+    UIScrollView *chartScroll=[[UIScrollView alloc] initWithFrame:CGRectMake(side,256,cw,246)]; chartScroll.pagingEnabled=YES; chartScroll.showsHorizontalScrollIndicator=NO; chartScroll.backgroundColor=UIColor.clearColor; chartScroll.tag=9160; [root addSubview:chartScroll];
+    NSArray *groups=@[@[@"CPU",@"RAM"],@[@"PIN",@"FPS"]];
+    NSArray *symbols=@[@"cpu",@"memorychip",@"battery.100",@"speedometer"];
+    NSArray *details=@[@"Mức sử dụng CPU có thể đọc được",@"Bộ nhớ tiến trình hiện tại",@"Phần trăm pin hệ thống",@"FPS của giao diện SmoothIOS"];
+    for (NSInteger page=0;page<2;page++) {
+        UIView *pageView=[[UIView alloc] initWithFrame:CGRectMake(page*cw,0,cw,246)]; [chartScroll addSubview:pageView];
+        for (NSInteger j=0;j<2;j++) {
+            NSInteger idx=page*2+j; CGFloat y= j*116.0;
+            UIView *card=[[UIView alloc] initWithFrame:CGRectMake(0,y,cw,104)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=16; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [pageView addSubview:card];
+            UIImageView *icon=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbols[idx]]]; icon.frame=CGRectMake(12,12,20,20); icon.tintColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; [card addSubview:icon];
+            UILabel *name=[[UILabel alloc] initWithFrame:CGRectMake(40,10,cw-55,17)]; name.text=groups[page][j]; name.font=[UIFont systemFontOfSize:11 weight:UIFontWeightBlack]; name.textColor=UIColor.whiteColor; [card addSubview:name];
+            UILabel *detail=[[UILabel alloc] initWithFrame:CGRectMake(40,28,cw-55,14)]; detail.text=details[idx]; detail.font=[UIFont systemFontOfSize:9]; detail.textColor=[UIColor colorWithWhite:.62 alpha:1]; [card addSubview:detail];
+            // A neutral baseline is shown until a real supported reading is available; never invent chip temperatures or GPU load.
+            UIView *track=[[UIView alloc] initWithFrame:CGRectMake(12,54,cw-24,6)]; track.backgroundColor=[UIColor colorWithWhite:.19 alpha:1]; track.layer.cornerRadius=3; track.tag=9180+idx; [card addSubview:track];
+            UIView *line=[[UIView alloc] initWithFrame:CGRectMake(0,0,MAX(2,(cw-24)*.1),6)]; line.backgroundColor=[UIColor colorWithRed:.2 green:.75 blue:1 alpha:1]; line.layer.cornerRadius=3; line.tag=9161+idx; [track addSubview:line];
+            UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(12,68,cw-24,22)]; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.tag=9190+idx; [card addSubview:reading];
+        }
+    }
+    chartScroll.contentSize=CGSizeMake(cw*2,246);
+    UIPageControl *pages=[[UIPageControl alloc] initWithFrame:CGRectMake(side,503,cw,22)]; pages.numberOfPages=2; pages.currentPage=0; pages.pageIndicatorTintColor=[UIColor colorWithWhite:.35 alpha:1]; pages.currentPageIndicatorTintColor=[UIColor colorWithRed:.35 green:.78 blue:1 alpha:1]; pages.tag=9168; [root addSubview:pages];
+    // Synchronize the page dots with horizontal swipes without adding a timer or blocking the main thread.
+    chartScroll.delegate=(id<UIScrollViewDelegate>)self;
+
+    UILabel *rateTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,533,cw,19)]; rateTitle.text=@"HZ / FPS ĐANG CẤU HÌNH"; rateTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; rateTitle.textColor=UIColor.whiteColor; [root addSubview:rateTitle];
+    NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue]; NSInteger targetFPS=[self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
+    NSArray *rateNames=@[@"TẦN SỐ MÀN HÌNH",@"TỐC ĐỘ KHUNG HÌNH"]; NSArray *rateValues=@[[NSString stringWithFormat:@"%ld Hz",(long)targetHz],[NSString stringWithFormat:@"%ld FPS",(long)targetFPS]];
+    for(NSInteger i=0;i<2;i++){ CGFloat gap=10, rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),558,rw,65)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=15; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(8,8,rw-16,14)]; n.text=rateNames[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor colorWithWhite:.65 alpha:1]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(8,26,rw-16,30)]; v.text=rateValues[i]; v.font=[UIFont monospacedSystemFontOfSize:20 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor colorWithRed:1 green:.3 blue:.55 alpha:1]:[UIColor colorWithRed:.2 green:.82 blue:1 alpha:1]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
+    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,633,cw,36)]; note.numberOfLines=2; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor colorWithWhite:.60 alpha:1]; note.text=@"Biểu đồ chỉ hiển thị CPU, bộ nhớ tiến trình, pin và FPS giao diện được lấy mẫu. GPU và nhiệt độ chip bị loại vì không có nguồn đo ổn định; Hz* là mức cấu hình, không phải phép đo Hz thực tế."; [root addSubview:note];
     return root;
+}
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+    if (scrollView.tag != 9160) return;
+    UIPageControl *pages = [self.view viewWithTag:9168];
+    if (pages) pages.currentPage = (NSInteger)llround(scrollView.contentOffset.x / MAX(1.0, scrollView.bounds.size.width));
 }
 
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
@@ -5765,7 +5797,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 445.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
-    eyebrow.text = @"TITANIUM / DISPLAY CONTROL V12"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    eyebrow.text = @"SMOOTHIOS / DISPLAY CONTROL V18"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; title.text = @"Hz · FPS · Đồng bộ"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 255)]; panel.backgroundColor = [UIColor colorWithRed:.025 green:.018 blue:.075 alpha:.99]; panel.layer.cornerRadius = 25; panel.layer.borderWidth = 1; panel.layer.borderColor = [UIColor colorWithRed:.5 green:.2 blue:.92 alpha:.9].CGColor; [root addSubview:panel];
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
@@ -5881,7 +5913,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 1) return 1; // Hz / FPS selector
         return 1 + (NSInteger)(_expandedHzFPS ? TIExpandedRateValues() : TIStandardRateValues()).count; // row 0 = nhập Hz/FPS
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return 1;
+        if (section == 0) return 1; // Music Studio shortcut; switch groups are square tiles in the header.
         switch (_currentSwitchSubTab) {
             case 0: return 7;
             case 1: return 6;
@@ -5915,7 +5947,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 1) return @"CHẾ ĐỘ ĐIỀU CHỈNH";
         return (_currentHzFpsSubTab == 0) ? (_expandedHzFPS ? @"Hz MỞ RỘNG" : @"Hz THƯỜNG") : (_expandedHzFPS ? @"FPS MỞ RỘNG" : @"FPS THƯỜNG");
     } else if (_currentBottomTab == 2) {
-        if (section == 0) return @"BỘ ĐIỀU KHIỂN";
+        if (section == 0) return @"CÔNG TẮC · CONTROL CENTER";
         switch (_currentSwitchSubTab) {
             case 0: return @"CPU";
             case 1: return @"GPU";
@@ -5986,6 +6018,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (_currentBottomTab == 3 && indexPath.section == 1) return 58.0;
+    // Switch rows are intentionally taller so each control reads as an individual rounded tile.
+    if (_currentBottomTab == 2 && indexPath.section == 1) return 88.0;
     return 76.0;
 }
 
@@ -6179,18 +6213,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
-            LGCustomSegment *seg = [[LGCustomSegment alloc] initWithItems:@[@"CPU", @"GPU", @"Màn", @"PIN & NĂNG LƯỢNG", @"Hệ Thống"]];
-            seg.selectedSegmentIndex = MIN(4, MAX(0, _currentSwitchSubTab));
-            __weak typeof(self) wS = self;
-            seg.valueChangedBlock = ^(NSInteger index) {
-                __strong typeof(wS) sS = wS;
-                if (!sS) return;
-                if (sS->_currentSwitchSubTab == index) return;
-                sS->_currentSwitchSubTab = index;
-                [sS.customTableView reloadData];
-            };
-            accessory = seg;
-            title = @"   Nhóm:";
+            title = @"MUSIC STUDIO · TÌM VÀ CHỌN NHẠC";
+            detail = @"Tìm và chọn nhạc · Phonk · SoundCloud · Apple Music · YouTube";
+            UIButton *musicTile = [UIButton buttonWithType:UIButtonTypeSystem];
+            musicTile.frame = CGRectMake(0, 0, 44, 38);
+            musicTile.layer.cornerRadius = 12.0;
+            musicTile.backgroundColor = [UIColor colorWithRed:0.30 green:0.08 blue:0.52 alpha:1.0];
+            [musicTile setImage:[UIImage systemImageNamed:@"music.note.list"] forState:UIControlStateNormal];
+            musicTile.tintColor = [UIColor colorWithRed:0.20 green:0.88 blue:1.0 alpha:1.0];
+            [musicTile addTarget:self action:@selector(showPhonkMusicPicker) forControlEvents:UIControlEventTouchUpInside];
+            accessory = musicTile;
+            accent = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:1.0];
         } else {
             NSString *prefKey = @"";
             if (_currentSwitchSubTab == 0) {
@@ -6233,6 +6266,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 else if (indexPath.row == 7) { title = @"Mach VM Purge"; prefKey = @"machVMPurgeRam"; }
                 else { title = @"Background Pacing"; prefKey = @"backgroundPacingDaemon"; }
             }
+            detail = @"Công tắc cấu hình · chạm để bật hoặc tắt";
             LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
             s.on = [self.settingsDict[prefKey] ?: @NO boolValue];
             __weak typeof(self) wS = self;
@@ -6250,7 +6284,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     else if (_currentBottomTab == 3) {
         if (indexPath.section == 0) {
             title = @"Danh mục";
-            LGCustomSegment *categorySeg = [[LGCustomSegment alloc] initWithItems:@[@"Tất cả", @"Mặc định", @"Đã bật", @"Đã tắt"]];
+            LGCustomSegment *categorySeg = [[LGCustomSegment alloc] initWithItems:@[@"Tất cả app", @"Mặc định hệ thống", @"Đã bật", @"Đã tắt"]];
             categorySeg.selectedSegmentIndex = _appCategoryIndex;
             __weak typeof(self) weakCategorySelf = self;
             categorySeg.valueChangedBlock = ^(NSInteger index) {
@@ -6412,13 +6446,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 }
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else if (indexPath.row == 3) {
-                title = @"Giao diện Sáng / Tối / Tự động";
+                title = @"Giao diện: Sáng / Tối / Theo máy";
                 NSString *mode = self.settingsDict[TI_THEME_MODE_KEY] ?: ([self.settingsDict[TI_AUTO_THEME_KEY] boolValue] ? @"system" : @"dark");
                 detail = [mode isEqualToString:@"light"] ? @"Sáng" : ([mode isEqualToString:@"dark"] ? @"Tối" : @"Theo giao diện hệ thống");
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             } else if (indexPath.row == 4 && [self isAdminDevRole]) {
                 // Admin API endpoint editor is omitted entirely for non-Admin-Dev roles.
-                title = @"Admin Dev · API Endpoint";
+                title = @"Admin Dev · API Endpoint (ẩn)";
                 NSString *base = [self currentAdminAPIBaseURL];
                 NSURLComponents *parts = [NSURLComponents componentsWithString:base];
                 detail = parts.host.length ? @"Đã cấu hình · URL chỉ hiện trong Admin Dev Console" : @"Chưa cấu hình · chỉ Admin Dev";
@@ -6494,6 +6528,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSInteger rowCount = [self tableView:tableView numberOfRowsInSection:indexPath.section];
     if (indexPath.row < 0 || indexPath.row >= rowCount) return;
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (_currentBottomTab == 2 && indexPath.section == 0 && indexPath.row == 0) {
+        [self showPhonkMusicPicker];
+        return;
+    }
     NSString *selectedServer = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     BOOL languageSettingsRow = (_currentBottomTab == 4 && indexPath.section == 3 && indexPath.row == 4);
     BOOL authorSettingsRow = (_currentBottomTab == 4 && indexPath.section == 3 && (indexPath.row == 1 || indexPath.row == 5));
@@ -6933,7 +6971,30 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UILabel *fpsRead=(UILabel *)[headerNow viewWithTag:8711]; if(fpsRead) fpsRead.text=[NSString stringWithFormat:@"%ld",(long)_uiFPSMeasured];
     UILabel *ramRead=(UILabel *)[headerNow viewWithTag:8712]; if(ramRead) ramRead.text=Titanium_ByteCountString(memory);
     UILabel *batRead=(UILabel *)[headerNow viewWithTag:8713]; if(batRead) batRead.text=(battery>=0?[NSString stringWithFormat:@"%.0f%%",battery*100.0f]:@"N/A");
-    UILabel *tempRead=(UILabel *)[headerNow viewWithTag:8714]; if(tempRead){ NSProcessInfoThermalState ts=NSProcessInfo.processInfo.thermalState; NSArray *states=@[@"Mát",@"Bình thường",@"Ấm",@"Nóng",@"Rất nóng"]; NSInteger si=(NSInteger)ts; tempRead.text=(si>=0&&si<(NSInteger)states.count)?states[si]:@"N/A"; tempRead.textColor=(si>=3?[UIColor colorWithRed:1 green:.2 blue:.2 alpha:1]:(si==2?[UIColor colorWithRed:1 green:.62 blue:.12 alpha:1]:[UIColor colorWithRed:.25 green:.9 blue:.5 alpha:1])); }
+    NSProcessInfoThermalState ts = NSProcessInfo.processInfo.thermalState;
+    NSArray<NSString *> *states = @[@"Mát", @"Bình thường", @"Ấm", @"Nóng", @"Rất nóng"];
+    NSInteger si = (NSInteger)ts;
+    NSString *thermalText = (si >= 0 && si < (NSInteger)states.count) ? states[si] : @"Không khả dụng";
+    UIColor *thermalColor = si >= 3 ? [UIColor colorWithRed:1 green:.2 blue:.2 alpha:1] : (si == 2 ? [UIColor colorWithRed:1 green:.62 blue:.12 alpha:1] : [UIColor colorWithRed:.25 green:.9 blue:.5 alpha:1]);
+    UILabel *tempRead = (UILabel *)[headerNow viewWithTag:8714];
+    if (tempRead) { tempRead.text = thermalText; tempRead.textColor = thermalColor; }
+    UILabel *thermalValue = (UILabel *)[headerNow viewWithTag:8715];
+    if (thermalValue) { thermalValue.text = [NSString stringWithFormat:@"%@ · iOS thermal state, không phải °C", thermalText]; thermalValue.textColor = thermalColor; }
+    // V17: update only metrics for which this build has a concrete local reading.
+    NSArray<NSNumber *> *samples = @[@(MAX(0.0, MIN(100.0, cpu))), @(MAX(0.0, MIN(100.0, ((double)memory / MAX(1.0, (double)NSProcessInfo.processInfo.physicalMemory)) * 100.0))), @(battery >= 0.0f ? battery * 100.0f : 0.0f), @(MAX(0, MIN((NSInteger)UIScreen.mainScreen.maximumFramesPerSecond, _uiFPSMeasured)))];
+    NSArray<NSString *> *sampleTexts = @[cpu >= 0.0f ? [NSString stringWithFormat:@"CPU · %.0f%%", cpu] : @"CPU · N/A", [NSString stringWithFormat:@"RAM tiến trình · %@", Titanium_ByteCountString(memory)], battery >= 0.0f ? [NSString stringWithFormat:@"Pin · %.0f%%", battery * 100.0f] : @"Pin · N/A", [NSString stringWithFormat:@"FPS giao diện · %ld", (long)_uiFPSMeasured]];
+    for (NSInteger i = 0; i < 4; i++) {
+        UIView *track = [headerNow viewWithTag:9180 + i];
+        UIView *bar = [headerNow viewWithTag:9161 + i];
+        UILabel *value = (UILabel *)[headerNow viewWithTag:9190 + i];
+        if (value) value.text = sampleTexts[i];
+        if (track && bar) {
+            CGFloat fraction = [samples[i] doubleValue] / 100.0;
+            CGRect f = bar.frame; f.size.width = MAX(2.0, track.bounds.size.width * fraction); bar.frame = f;
+            UIColor *c = fraction >= .8 ? [UIColor colorWithRed:1 green:.2 blue:.25 alpha:1] : (fraction >= .55 ? [UIColor colorWithRed:1 green:.65 blue:.12 alpha:1] : [UIColor colorWithRed:.2 green:.78 blue:1 alpha:1]);
+            bar.backgroundColor = c;
+        }
+    }
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
