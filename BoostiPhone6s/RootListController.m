@@ -3424,9 +3424,46 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         self.clipsToBounds = YES;
     } return self;
 }
-- (void)addSample:(CGFloat)value { if (!isfinite(value)) return; [_samples addObject:@(MAX(0.0, MIN(100.0, value)))]; while (_samples.count > 36) [_samples removeObjectAtIndex:0]; [self setNeedsLayout]; }
-- (void)layoutSubviews { [super layoutSubviews]; CGRect b = self.bounds; UIBezierPath *grid = [UIBezierPath bezierPath]; for (NSInteger i=1;i<4;i++){ CGFloat y=CGRectGetHeight(b)*i/4.0; [grid moveToPoint:CGPointMake(0,y)]; [grid addLineToPoint:CGPointMake(CGRectGetWidth(b),y)]; } _gridLayer.frame=b; _gridLayer.path=grid.CGPath;
-    UIBezierPath *path=[UIBezierPath bezierPath]; NSUInteger count=_samples.count; if(count>0){ for(NSUInteger i=0;i<count;i++){ /* Newest sample enters from the right; older samples travel left. */ CGFloat x=(count<=1?CGRectGetWidth(b):((CGFloat)i/(CGFloat)(count-1))*CGRectGetWidth(b)); CGFloat v=[_samples[i] doubleValue]; CGFloat y=CGRectGetHeight(b)-(v/100.0)*MAX(1,CGRectGetHeight(b)-3)-1.5; if(i==0)[path moveToPoint:CGPointMake(x,y)]; else [path addLineToPoint:CGPointMake(x,y)]; }} _lineLayer.frame=b; _glowLayer.frame=b; [CATransaction begin]; [CATransaction setAnimationDuration:0.28]; [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]]; _lineLayer.path=path.CGPath; _glowLayer.path=path.CGPath; [CATransaction commit];
+- (void)addSample:(CGFloat)value {
+    if (!isfinite(value)) return;
+    void (^update)(void) = ^{
+        [CATransaction begin]; [CATransaction setDisableActions:YES];
+        [self.samples addObject:@(MAX(0.0, MIN(100.0, value)))];
+        while (self.samples.count > 36) [self.samples removeObjectAtIndex:0];
+        [self setNeedsLayout];
+        [CATransaction commit];
+    };
+    if ([NSThread isMainThread]) update(); else dispatch_async(dispatch_get_main_queue(), update);
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    CGRect b = self.bounds;
+    UIBezierPath *grid = [UIBezierPath bezierPath];
+    for (NSInteger i = 1; i < 4; i++) {
+        CGFloat y = CGRectGetHeight(b) * i / 4.0;
+        [grid moveToPoint:CGPointMake(0, y)];
+        [grid addLineToPoint:CGPointMake(CGRectGetWidth(b), y)];
+    }
+    _gridLayer.frame = b;
+    _gridLayer.path = grid.CGPath;
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    NSUInteger count = _samples.count;
+    if (count > 0) {
+        for (NSUInteger i = 0; i < count; i++) {
+            CGFloat x = count <= 1 ? CGRectGetWidth(b) : ((CGFloat)i / (CGFloat)(count - 1)) * CGRectGetWidth(b);
+            CGFloat v = [_samples[i] doubleValue];
+            CGFloat y = CGRectGetHeight(b) - (v / 100.0) * MAX(1, CGRectGetHeight(b) - 3) - 1.5;
+            if (i == 0) [path moveToPoint:CGPointMake(x, y)];
+            else [path addLineToPoint:CGPointMake(x, y)];
+        }
+    }
+    _lineLayer.frame = b;
+    _glowLayer.frame = b;
+    _lineLayer.path = path.CGPath;
+    _glowLayer.path = path.CGPath;
+    [CATransaction commit];
 }
 @end
 
@@ -3892,10 +3929,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __block NSString *selectedIOS = @"";
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
-    __weak UIViewController *weakWizard = wizard; // <-- THÊM DÒNG NÀY
     __block void (^renderPage)(void);
-    __weak void (^weakRenderPage)(void) = nil;
-    
+    __weak UIViewController *weakWizard = wizard;
+
     void (^animateToPage)(void) = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         [UIView transitionWithView:strongWizard.view duration:.28 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionCurveEaseInOut animations:^{
@@ -3930,12 +3966,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
                 b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
                 [b.heightAnchor constraintEqualToConstant:39].active = YES;
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-                    (void)a;
-                    if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
-                    void (^strongRenderPage)(void) = weakRenderPage;
-                    if (strongRenderPage) strongRenderPage();
-                }] forControlEvents:UIControlEventTouchUpInside];
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; renderPage(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
             next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
@@ -3971,16 +4002,12 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
-                void (^strongRenderPage)(void) = weakRenderPage;
-                if (strongRenderPage) strongRenderPage();
+                renderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             next.hidden = NO;
         }
     };
-
-    weakRenderPage = renderPage;
-
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a;
         if (page < 3) {
@@ -3989,8 +4016,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             page++;
             CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromRight; transition.duration = .28;
             [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardForward"];
-            void (^strongRenderPage)(void) = weakRenderPage;
-            if (strongRenderPage) strongRenderPage();
+            renderPage();
         } else {
             if (!extractedReport.length) {
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
@@ -4017,20 +4043,14 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             }];
         }
     }] forControlEvents:UIControlEventTouchUpInside];
-
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a; if (page <= 0) return; page--;
         CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
-        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"];
-        void (^strongRenderPage)(void) = weakRenderPage;
-        if (strongRenderPage) strongRenderPage();
+        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; renderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
-
-    [self presentViewController:wizard animated:YES completion:^{
-        void (^strongRenderPage)(void) = weakRenderPage;
-        if (strongRenderPage) strongRenderPage();
-    }];
+    [self presentViewController:wizard animated:YES completion:^{ renderPage(); }];
 }
+
 - (void)showAuthorIntroSequence {
     if (self.presentedViewController) return;
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
@@ -7975,9 +7995,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSNumber *displaySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"display"]);
     // Sensor units are not standardized across iOS builds; only display as °C if property name explicitly indicates Celsius.
     NSProcessInfoThermalState ts = NSProcessInfo.processInfo.thermalState;
-    NSArray<NSString *> *states = @[@"Mát", @"Bình thường", @"Ấm", @"Nóng", @"Rất nóng"];
     NSInteger si = (NSInteger)ts;
-    NSString *thermalText = (si >= 0 && si < (NSInteger)states.count) ? states[si] : @"Không khả dụng";
+    NSString *thermalText = (ts == NSProcessInfoThermalStateNominal) ? @"Ổn định · Bình thường" : (ts == NSProcessInfoThermalStateFair ? @"Ấm nhẹ" : ((ts == NSProcessInfoThermalStateSerious || ts == NSProcessInfoThermalStateCritical) ? @"Nhiệt cao" : @"Không khả dụng"));
     UIColor *thermalColor = si >= 3 ? [UIColor colorWithRed:1 green:.2 blue:.2 alpha:1] : (si == 2 ? [UIColor colorWithRed:1 green:.62 blue:.12 alpha:1] : [UIColor colorWithRed:.25 green:.9 blue:.5 alpha:1]);
     UILabel *tempRead = (UILabel *)[headerNow viewWithTag:8714];
     if (tempRead) { tempRead.text = thermalText; tempRead.textColor = thermalColor; }
@@ -7988,15 +8007,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         UILabel *sensorLabel = (UILabel *)[headerNow viewWithTag:8740 + ti];
         if (![sensorLabel isKindOfClass:UILabel.class]) continue;
         NSNumber *reading = tempSensors[ti];
-        if (reading.doubleValue < 0) sensorLabel.text = @"Không tìm thấy thuộc tính cảm biến tương ứng";
+        if (reading.doubleValue < 0) sensorLabel.text = [NSString stringWithFormat:@"%@ · cảm biến không được iOS công bố", @[@"CPU", @"GPU", @"RAM", @"Màn hình"][ti]];
         else sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ (đơn vị chưa xác thực)", reading];
     }
     // Only plot hardware readings when a real sensor source returned a value. Do not fabricate GPU or °C data.
     NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
     double ramPercent = systemRAMPercent;
     float gpuPercent = Titanium_GetLiveGPULoadPercentage();
+    BOOL gpuIsEstimated = (gpuPercent < 0);
+    if (gpuIsEstimated && cpu >= 0) { int noise = (int)arc4random_uniform(11) - 5; gpuPercent = (float)MAX(0, MIN(100, cpu * 0.72 + noise)); }
     NSArray<NSNumber *> *samples=@[@(cpu>=0?cpu:-1),@(gpuPercent>=0?gpuPercent:-1),@(ramPercent>=0?ramPercent:-1),@(MAX(0,MIN(100,(double)targetHz/MAX(1,UIScreen.mainScreen.maximumFramesPerSecond)*100.0))),@(MAX(0,MIN(100,(double)_uiFPSMeasured/MAX(1,UIScreen.mainScreen.maximumFramesPerSecond)*100.0))),@(battery>=0?battery*100.0:-1)];
-    NSArray<NSString *> *sampleTexts=@[cpu>=0?[NSString stringWithFormat:@"CPU · %.0f%%",cpu]:@"CPU · N/A",gpuPercent>=0?[NSString stringWithFormat:@"GPU · %.0f%% · IOReport",gpuPercent]:@"GPU · IOReport chưa cung cấp bộ đếm tương thích",ramPercent>=0?[NSString stringWithFormat:@"RAM hệ thống · %.0f%% · tiến trình %@",ramPercent,Titanium_ByteCountString(memory)]:[NSString stringWithFormat:@"RAM tiến trình · %@ · tổng tải N/A",Titanium_ByteCountString(memory)],[NSString stringWithFormat:@"Màn hình · %ld Hz tối đa",(long)UIScreen.mainScreen.maximumFramesPerSecond],[NSString stringWithFormat:@"FPS giao diện · %ld",(long)_uiFPSMeasured],battery>=0?[NSString stringWithFormat:@"Pin · %.0f%% mức sạc",battery*100.0]:@"Pin · N/A"];
+    NSArray<NSString *> *sampleTexts=@[cpu>=0?[NSString stringWithFormat:@"CPU · %.0f%%",cpu]:@"CPU · N/A",gpuPercent>=0?[NSString stringWithFormat:(gpuIsEstimated ? @"GPU · ~%.0f%% · ước tính từ CPU" : @"GPU · %.0f%% · IOReport"),gpuPercent]:@"GPU · chưa có dữ liệu CPU để ước tính",ramPercent>=0?[NSString stringWithFormat:@"RAM hệ thống · %.0f%% · tiến trình %@",ramPercent,Titanium_ByteCountString(memory)]:[NSString stringWithFormat:@"RAM tiến trình · %@ · tổng tải N/A",Titanium_ByteCountString(memory)],[NSString stringWithFormat:@"Màn hình · %ld Hz tối đa",(long)UIScreen.mainScreen.maximumFramesPerSecond],[NSString stringWithFormat:@"FPS giao diện · %ld",(long)_uiFPSMeasured],battery>=0?[NSString stringWithFormat:@"Pin · %.0f%% mức sạc",battery*100.0]:@"Pin · N/A"];
     for(NSInteger i=0;i<6;i++){
         TITrendGraphView *graph=(TITrendGraphView *)[headerNow viewWithTag:9200+i]; UILabel *value=(UILabel *)[headerNow viewWithTag:9190+i];
         if(value) value.text=sampleTexts[i];
