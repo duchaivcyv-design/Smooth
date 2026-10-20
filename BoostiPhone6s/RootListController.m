@@ -3440,7 +3440,25 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             UIAlertController *welcome = [UIAlertController alertControllerWithTitle:@"Xin chào 🤡" message:@"SmoothIOS Pro\n\nTác giả: TaoJb, NoNo, NoJB\nPhụ code: JB, NekoJb, BypassJB, bananaJb\nPhần cứng: Taojb, NoNo, JBnano, Jbjb\n\nMôi trường: RootHide / rootless / rootful (tùy bootstrap; tự kiểm tra bên dưới).\niOS mục tiêu: 14.0–26.0.1 (chưa xác minh trên mọi phiên bản/thiết bị).\n\nThông tin máy có thể đọc nhanh mà không cần khai thác kernel. Chọn ngôn ngữ trong Cài đặt bất cứ lúc nào." preferredStyle:UIAlertControllerStyleAlert];
             [welcome addAction:[UIAlertAction actionWithTitle:@"Ngôn ngữ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [[NSUserDefaults standardUserDefaults] synchronize]; [self showLanguagePickerPopup:nil]; }]];
             [welcome addAction:[UIAlertAction actionWithTitle:@"X · Tắt vĩnh viễn" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [[NSUserDefaults standardUserDefaults] synchronize]; }]];
-            [welcome addAction:[UIAlertAction actionWithTitle:@"Xem tác giả" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) { [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]; [self presentIndependentDocument:@"Tác giả & hỗ trợ" text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\nNGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\nNGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\nMÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; không thể khẳng định tương thích tuyệt đối nếu chưa thử.\nHỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; cần build và kiểm thử trên từng phiên bản/thiết bị.")]; }]];
+            [welcome addAction:
+                [UIAlertAction actionWithTitle:@"Xem tác giả"
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(__unused UIAlertAction *a) {
+                    [[NSUserDefaults standardUserDefaults]
+                        setBool:YES
+                          forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
+                    [[NSUserDefaults standardUserDefaults] synchronize];
+
+                    [self presentIndependentDocument:@"Tác giả & hỗ trợ"
+                                                text:@"NGƯỜI TẠO CHÍNH: TaoJb, NoNo, NoJB\n"
+                                                     "NGƯỜI PHỤ CODE: JB, NekoJb, BypassJB, bananaJb\n"
+                                                     "NGƯỜI CODE PHẦN CỨNG: Taojb, NoNo, JBnano, Jbjb\n\n"
+                                                     "MÔI TRƯỜNG: RootHide / rootless / rootful tùy bootstrap; "
+                                                     "không thể khẳng định tương thích tuyệt đối nếu chưa thử.\n"
+                                                     "HỖ TRỢ MỤC TIÊU: iOS 14.0–26.0.1; "
+                                                     "cần build và kiểm thử trên từng phiên bản/thiết bị."];
+                }]
+            ];
             [self presentViewController:welcome animated:YES completion:nil];
         });
     }
