@@ -2809,7 +2809,7 @@ static NSString * const SUExtraDiagnosticsEnabledKey = @"su_extra_diagnostics_en
 static NSString * const SUExtraTerminalEnabledKey    = @"su_extra_terminal_demo_enabled_v1";
 
 
-// V30: mức chuẩn và dải mở rộng được tách riêng.
+// V32: giữ mức chuẩn và dải mở rộng tách riêng; không gộp preset vào dải 20–235.
 static NSArray<NSNumber *> *TIStandardRateValues(void) {
     // Unified Hz/FPS selector: show only the requested presets.
     return @[@15, @30, @60, @90, @120, @144, @240];
@@ -3163,7 +3163,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [fromVC presentViewController:exploitVC animated:NO completion:nil];
 }
 
-// V23: enlarged rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
+// V32: rolling telemetry graph. Samples are real observations; missing sensor values are not fabricated.
 @interface TITrendGraphView : UIView
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *samples;
 @property (nonatomic, strong) CAShapeLayer *gridLayer;
@@ -3520,50 +3520,50 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     if (self.presentedViewController) return;
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
     [[NSUserDefaults standardUserDefaults] synchronize];
+
     UIViewController *intro = [UIViewController new];
     intro.modalPresentationStyle = UIModalPresentationOverFullScreen;
     intro.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
-    intro.view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.78];
+    intro.view.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.72];
 
     UIView *card = [UIView new];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.alpha = 0.0;
-    card.transform = CGAffineTransformMakeScale(0.97, 0.97);
-    card.backgroundColor = [UIColor colorWithRed:0.055 green:0.065 blue:0.13 alpha:0.98];
-    card.layer.cornerRadius = 24;
-    card.layer.borderWidth = 1.2;
-    card.layer.borderColor = [UIColor colorWithRed:0.35 green:0.78 blue:1 alpha:0.9].CGColor;
+    card.transform = CGAffineTransformMakeScale(0.975, 0.975);
+    card.backgroundColor = [UIColor colorWithRed:0.035 green:0.045 blue:0.105 alpha:0.985];
+    card.layer.cornerRadius = 25.0;
+    card.layer.borderWidth = 1.25;
+    card.layer.borderColor = [UIColor colorWithRed:0.28 green:0.75 blue:1.0 alpha:0.95].CGColor;
     card.clipsToBounds = YES;
     [intro.view addSubview:card];
 
     UILabel *author = [UILabel new];
     author.translatesAutoresizingMaskIntoConstraints = NO;
-    author.text = @"TÁC GIẢ";
+    author.text = @"NEON CONTROL · TÁC GIẢ";
     author.textAlignment = NSTextAlignmentRight;
     author.font = [UIFont systemFontOfSize:12 weight:UIFontWeightHeavy];
-    author.textColor = [UIColor colorWithRed:0.35 green:0.85 blue:1 alpha:1];
-    author.tag = 9301;
+    author.textColor = [UIColor colorWithRed:0.38 green:0.86 blue:1 alpha:1];
+    author.alpha = 0;
     [card addSubview:author];
 
     UILabel *heading = [UILabel new];
     heading.translatesAutoresizingMaskIntoConstraints = NO;
-    heading.text = @"MÔI TRƯỜNG & THIẾT BỊ HỖ TRỢ";
+    heading.text = @"THIẾT BỊ & MÔI TRƯỜNG HỖ TRỢ";
     heading.numberOfLines = 0;
     heading.textAlignment = NSTextAlignmentCenter;
-    heading.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBlack];
+    heading.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBlack];
     heading.textColor = UIColor.whiteColor;
-    heading.tag = 9302;
     [card addSubview:heading];
 
     UITextView *body = [UITextView new];
     body.translatesAutoresizingMaskIntoConstraints = NO;
     body.backgroundColor = UIColor.clearColor;
-    body.textColor = [UIColor colorWithWhite:0.94 alpha:1];
-    body.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    body.textColor = [UIColor colorWithWhite:0.95 alpha:1];
+    body.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     body.textAlignment = NSTextAlignmentNatural;
     body.editable = NO;
     body.selectable = NO;
-    body.tag = 9303;
+    body.textContainerInset = UIEdgeInsetsMake(10, 8, 10, 8);
     [card addSubview:body];
 
     UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -3571,26 +3571,30 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [close setTitle:@"ĐÓNG  ×" forState:UIControlStateNormal];
     [close setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     close.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
-    close.backgroundColor = [UIColor colorWithRed:0.24 green:0.36 blue:0.62 alpha:1];
-    close.layer.cornerRadius = 12;
-    [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { [intro dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
+    close.backgroundColor = [UIColor colorWithRed:0.20 green:0.36 blue:0.65 alpha:1];
+    close.layer.cornerRadius = 13;
+    [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        (void)action;
+        [intro dismissViewControllerAnimated:YES completion:nil];
+    }] forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:close];
 
     [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:intro.view.leadingAnchor constant:18],
-        [card.trailingAnchor constraintEqualToAnchor:intro.view.trailingAnchor constant:-18],
+        [card.leadingAnchor constraintEqualToAnchor:intro.view.leadingAnchor constant:10],
+        [card.trailingAnchor constraintEqualToAnchor:intro.view.trailingAnchor constant:-10],
         [card.centerYAnchor constraintEqualToAnchor:intro.view.centerYAnchor],
-        [card.heightAnchor constraintEqualToAnchor:intro.view.heightAnchor multiplier:0.78],
+        [card.heightAnchor constraintLessThanOrEqualToAnchor:intro.view.heightAnchor multiplier:0.82],
+        [card.heightAnchor constraintGreaterThanOrEqualToAnchor:intro.view.heightAnchor multiplier:0.62],
         [author.topAnchor constraintEqualToAnchor:card.topAnchor constant:18],
         [author.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
         [author.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18],
-        [heading.topAnchor constraintEqualToAnchor:author.bottomAnchor constant:12],
+        [heading.topAnchor constraintEqualToAnchor:author.bottomAnchor constant:13],
         [heading.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
         [heading.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18],
-        [body.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:12],
-        [body.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:14],
-        [body.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-14],
-        [body.bottomAnchor constraintEqualToAnchor:close.topAnchor constant:-12],
+        [body.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:10],
+        [body.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:10],
+        [body.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-10],
+        [body.bottomAnchor constraintEqualToAnchor:close.topAnchor constant:-10],
         [close.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:22],
         [close.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-22],
         [close.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16],
@@ -3598,35 +3602,42 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     ]];
 
     [self presentViewController:intro animated:YES completion:^{
-        [UIView animateWithDuration:0.55 animations:^{ card.alpha = 1; card.transform = CGAffineTransformIdentity; }];
-        author.text = @"THÔNG TIN HỖ TRỢ";
-        heading.text = @"SMOOTHIOS · THIẾT BỊ";
-        body.text = @"iOS 14.0–26.0.1\niPhone 6s–iPhone 15 Pro Max\nMôi trường: Rootless / RootHide / Rootful\n\nThông tin tương thích là mục tiêu hỗ trợ, chưa được xác minh trên mọi thiết bị hoặc phiên bản. Đây là bảng giới thiệu; nó không chứng minh khai thác kernel đã thành công.";
+        [UIView animateWithDuration:0.45 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            card.alpha = 1.0;
+            card.transform = CGAffineTransformIdentity;
+            author.alpha = 1.0;
+        } completion:nil];
+        heading.text = @"THIẾT BỊ & MÔI TRƯỜNG HỖ TRỢ";
+        body.textAlignment = NSTextAlignmentCenter;
+        body.text = @"iOS 14–26.0.1\niPhone 6s–iPhone 15 Pro Max\nHỗ trợ mục tiêu: Rootless / RootHide / Rootful\n\nThông tin tương thích là phạm vi mục tiêu, không phải xác nhận đã kiểm thử trên mọi thiết bị.";
+
         __weak typeof(self) weakSelf = self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || intro.presentingViewController == nil) return;
             NSArray<NSDictionary *> *messages = @[
-                @{@"name":@"TaoJb · HOA KỲ · PHẦN CỨNG", @"text":@"Hello, tôi là TaoJb, là người Hoa Kỳ và làm về phần cứng. Tôi xin lỗi vì những lỗi xuất hiện nhiều. Tôi sẽ cố gắng sửa sớm để mọi người sử dụng ổn định hơn. Mong mọi người góp ý kiên nhẫn và đừng đổ toàn bộ áp lực lên Vũ Đức Long, vì bạn ấy đang xử lý khối lượng công việc nặng hơn nhiều người khác. Xin hẹn gặp lại."},
-                @{@"name":@"NoNo · HOA KỲ · PHẦN CỨNG & SỬA LỖI", @"text":@"Xin chào, tôi là NoNo, người Hoa Kỳ. Tôi làm về phần cứng và hỗ trợ xử lý lỗi code. Những ngày gần đây ứng dụng còn lag và tôi xin lỗi vì chưa xử lý triệt để. Việc sửa lỗi này khó và khối lượng công việc nhiều; mong mọi người thông cảm, góp ý cụ thể và đừng ép nhóm phải xử lý mọi thứ ngay lập tức. Xin chào, hẹn gặp lại."},
-                @{@"name":@"NekoJb · VIỆT NAM · HÀ NỘI", @"text":@"Xin chào, tôi là NekoJb, người Việt Nam đến từ Hà Nội và là bạn của Vũ Đức Long. Tôi phụ code ở các tầng sâu. Những ngày qua có nhiều người thử nghiệm và báo lỗi liên tục; tôi rất xin lỗi vì chưa sửa nhanh được. Khối lượng công việc hiện tại rất lớn nên tôi cần thời gian để xử lý và kiểm tra ổn định. Mong mọi người góp ý và trân trọng công sức của nhóm. Hẹn gặp lại."}
+                @{@"name":@"TaoJb", @"text":@"hello Tôi là Taojb là người hoa kỳ và là người làm về mặt phần cứng tôi xin lỗi về việc lỗi rất nhiều tôi sẽ sửa lỗi đó sớm thôi và mong mọi người sử dụng ổn định không phàn nàn với VŨ ĐỨC LONG vì ông đấy làm việc xử lý nặng hơn các người khác rất nhiều. Xin hẹn gặp lại."},
+                @{@"name":@"NoNo", @"text":@"xin chào tôi là NoNo tôi là người hoa kỳ tôi làm về mảng phần cứng và tôi cũng làm về người xử lý lỗi code hiện mấy ngày nay lỗi lag rất nhiều tôi cũng xin lỗi vì không xử lý triệt để tôi cũng không muốn điều đó xảy ra vì nó rất khó sửa mong mọi người đừng ép bọn tôi quá mức vì công việc rất nhiều. Xin chào hẹn gặp lại"},
+                @{@"name":@"NekoJb", @"text":@"xin chào tôi là Nekojb người Việt Nam tôi đến từ hà nội toi là bạn cũng Vũ đức Long tôi làm về mảng phụ code về tầng sâu mấy ngày hôm nay có nhiều người test hay báo lỗi liên tục toi rất xin lỗi về mảng code này tôi cũng muốn sữa nhanh để sử dụng ổn định những khối lượng công việc quá nhiều toi không thể xử lý quá nhanh mong mọi người sử dụng không báo sửa lỗi ép quá mức mong mọi người chân trọng bọn toi ạ. Hẹn gặp lại"}
             ];
             __block NSUInteger idx = 0;
             __block void (^showNext)(void);
             showNext = ^{
                 if (intro.presentingViewController == nil) { showNext = nil; return; }
                 if (idx >= messages.count) {
-                    author.text = @"SMOOTHIOS TEAM";
+                    [UIView transitionWithView:author duration:0.28 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{ author.text = @"NEON CONTROL · TÁC GIẢ"; } completion:nil];
                     heading.text = @"XIN CHÀO MỌI NGƯỜI";
-                    heading.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
+                    heading.font = [UIFont systemFontOfSize:29 weight:UIFontWeightBlack];
                     body.text = @"";
                     body.textAlignment = NSTextAlignmentCenter;
                     showNext = nil;
                     return;
                 }
                 NSDictionary *entry = messages[idx++];
-                author.text = entry[@"name"];
+                [UIView transitionWithView:author duration:0.25 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{ author.text = entry[@"name"]; } completion:nil];
                 heading.text = @"LỜI NHẮN TỪ TÁC GIẢ";
+                heading.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBlack];
+                body.textAlignment = NSTextAlignmentNatural;
                 body.text = @"";
                 NSString *full = entry[@"text"];
                 __block NSUInteger charIndex = 0;
@@ -3634,9 +3645,13 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 typeNext = ^{
                     if (intro.presentingViewController == nil) { typeNext = nil; return; }
                     if (charIndex >= full.length) { typeNext = nil; return; }
-                    NSUInteger next = MIN(charIndex + 2, full.length);
+                    NSRange characterRange = [full rangeOfComposedCharacterSequenceAtIndex:charIndex];
+                    NSUInteger next = NSMaxRange(characterRange);
                     body.text = [full substringToIndex:next];
                     charIndex = next;
+                    if (body.text.length > 0) {
+                        [body scrollRangeToVisible:NSMakeRange(body.text.length - 1, 1)];
+                    }
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.025 * NSEC_PER_SEC)), dispatch_get_main_queue(), typeNext);
                 };
                 typeNext();
@@ -3647,13 +3662,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     }];
 }
 
-
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"] && !self.presentedViewController) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (!self.presentedViewController && ![[NSUserDefaults standardUserDefaults] boolForKey:@"TIWelcomeAuthorsLanguageDismissed_v1"]) [self showAuthorIntroSequence];
-        });
+        [self showAuthorIntroSequence];
     }
     if (!_hasPlayedEntranceAnimation) {
         _hasPlayedEntranceAnimation = YES;
@@ -6279,8 +6291,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     else if (indexPath.row == 5) { title = @"   Kiến trúc CPU"; detail = Titanium_CPUArchitectureString(); }
                     else { title = @"   Mã phần cứng"; detail = Titanium_DeviceHardwareIdentifier(); }
                 } else if (indexPath.section == 2) {
-                    if (indexPath.row == 0) { title = _isGpuExpanded ? @"GPU ▼" : @"GPU ▶"; detail = @"Không có phép đo tải GPU công khai"; }
-                    else if (indexPath.row == 1) { title = @"   Tải GPU"; detail = gpu >= 0.0f ? [NSString stringWithFormat:@"%.1f%%", gpu] : @"Không được API công khai hỗ trợ"; }
+                    if (indexPath.row == 0) { title = _isGpuExpanded ? @"GPU ▼" : @"GPU ▶"; detail = @"Thông tin GPU và số đo thực tế nếu hệ thống cung cấp"; }
+                    else if (indexPath.row == 1) { title = @"   Tải GPU"; detail = gpu >= 0.0f ? [NSString stringWithFormat:@"%.1f%%", gpu] : @"Chưa có số đo thực tế từ nguồn cảm biến khả dụng"; }
                     else if (indexPath.row == 2) { id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice(); title = @"   Tên GPU"; detail = metalDevice.name.length ? metalDevice.name : @"Metal GPU không được hệ thống công khai"; }
                     else if (indexPath.row == 3) { title = @"   Nhiệt GPU"; detail = @"iOS không công khai"; }
                     else if (indexPath.row == 4) { title = @"   Xung GPU"; detail = @"iOS không công khai"; }
@@ -6326,10 +6338,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                         // [V30 FIX]: Nếu tweak đã ép vượt trần iOS, hiển thị giá trị đã ép thay vì 60
                         NSInteger displayedIOSHz = (targetHzSetting > maximumHz) ? targetHzSetting : maximumHz;
                         title = @"   Tần số iOS báo / Tweak ép";
-                        detail = [NSString stringWithFormat:@"iOS: %ld Hz · Tweak: %ld Hz · Máy: %@%@", (long)displayedIOSHz, (long)targetHzSetting, deviceHW, (targetHzSetting > maximumHz) ? @" (đã ép vượt trần)" : @""];
+                        detail = [NSString stringWithFormat:@"iOS tối đa: %ld Hz · Mục tiêu cấu hình: %ld Hz · Máy: %@%@", (long)displayedIOSHz, (long)targetHzSetting, deviceHW, (targetHzSetting > maximumHz) ? @" (vượt khả năng báo cáo của màn hình; không đảm bảo áp dụng)" : @""];
                     }
-                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld FPS đang cấu hình · Tweak.xm ép phần cứng", (long)targetFPSSetting]; }
-                    else { title = @"   Hz mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld Hz đang cấu hình · TITANIUM_SPOOF vượt trần iOS", (long)targetHzSetting]; }
+                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu"; detail = [NSString stringWithFormat:@"%ld FPS đang cấu hình · hiệu lực phụ thuộc ứng dụng và thiết bị", (long)targetFPSSetting]; }
+                    else { title = @"   Hz mục tiêu"; detail = [NSString stringWithFormat:@"%ld Hz đang cấu hình · không thể vượt giới hạn vật lý chỉ bằng cấu hình", (long)targetHzSetting]; }
                 }
             }
         }
@@ -7186,7 +7198,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         label.transform = CGAffineTransformMakeScale(1.035, 1.035);
         [UIView animateWithDuration:0.28 delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut animations:^{ label.transform = CGAffineTransformIdentity; } completion:nil];
     };
-    updateLiveLabel(cpuLabel, cpu >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", cpu] : @"Không có API");
+    updateLiveLabel(cpuLabel, cpu >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", cpu] : @"Chưa đọc được dữ liệu");
     updateLiveLabel(memoryLabel, Titanium_ByteCountString(memory));
     updateLiveLabel(batteryLabel, battery >= 0.0f ? [NSString stringWithFormat:@"%.0f%%", battery * 100.0f] : @"Không khả dụng");
     UIView *headerNow=self.customTableView.tableHeaderView;
@@ -7606,8 +7618,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     }
     if (!self.settingsDict[@"TargetRefreshRate"] && [savedDefaults objectForKey:@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @([savedDefaults integerForKey:@"TargetRefreshRate"]);
     if (!self.settingsDict[@"TargetFPSRate"] && [savedDefaults objectForKey:@"TargetFPSRate"]) self.settingsDict[@"TargetFPSRate"] = @([savedDefaults integerForKey:@"TargetFPSRate"]);
-    if (!self.settingsDict[@"EnableHzControl"] && [savedDefaults objectForKey:@"EnableHzControl"]) self.settingsDict[@"EnableHzControl"] = @([savedDefaults boolForKey:@"EnableHzControl"]);
-    if (!self.settingsDict[@"EnableFPSControl"] && [savedDefaults objectForKey:@"EnableFPSControl"]) self.settingsDict[@"EnableFPSControl"] = @([savedDefaults boolForKey:@"EnableFPSControl"]);
+    if (!self.settingsDict[@"EnableHzControl"] && [savedDefaults objectForKey:@"EnableHzControl"] != nil) self.settingsDict[@"EnableHzControl"] = @([savedDefaults boolForKey:@"EnableHzControl"]);
+    if (!self.settingsDict[@"EnableFPSControl"] && [savedDefaults objectForKey:@"EnableFPSControl"] != nil) self.settingsDict[@"EnableFPSControl"] = @([savedDefaults boolForKey:@"EnableFPSControl"]);
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
     [self ensureDefaultSettingsExist];
     [self saveSettingsDataAndSync];
