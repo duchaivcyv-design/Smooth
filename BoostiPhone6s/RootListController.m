@@ -865,7 +865,7 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
         _trackOuterRim = [CAShapeLayer layer];
         _trackOuterRim.fillColor = [UIColor clearColor].CGColor;
-        _trackOuterRim.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.18].CGColor;
+        _trackOuterRim.strokeColor = [UIColor colorWithRed:0.22 green:0.82 blue:1.0 alpha:0.68].CGColor;
         _trackOuterRim.lineWidth = 0.5;
         [_trackView.layer addSublayer:_trackOuterRim];
 
@@ -876,10 +876,13 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
                                                      materialType:LGGlassMaterialTypeCrystal];
         _thumbGlass.userInteractionEnabled = NO;
         _thumbGlass.interactiveHighlightEnabled = NO;
-        _thumbGlass.layer.shadowColor = [UIColor blackColor].CGColor;
-        _thumbGlass.layer.shadowOpacity = 0.45;
-        _thumbGlass.layer.shadowOffset = CGSizeMake(0, 3);
-        _thumbGlass.layer.shadowRadius = 5.5;
+        _thumbGlass.backgroundColor = [UIColor colorWithRed:0.035 green:0.025 blue:0.10 alpha:1.0];
+        _thumbGlass.layer.borderWidth = 1.2;
+        _thumbGlass.layer.borderColor = [UIColor colorWithRed:0.12 green:0.78 blue:1.0 alpha:0.95].CGColor;
+        _thumbGlass.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.16 blue:1.0 alpha:1.0].CGColor;
+        _thumbGlass.layer.shadowOpacity = 0.42;
+        _thumbGlass.layer.shadowOffset = CGSizeMake(0, 2);
+        _thumbGlass.layer.shadowRadius = 7.0;
         [self addSubview:_thumbGlass];
 
         _thumbInnerRim = [CAShapeLayer layer];
@@ -1007,8 +1010,9 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 
 - (void)updateUIAnimated:(BOOL)animated {
     NSArray *onC = @[
-        (id)[UIColor colorWithRed:0.22 green:0.80 blue:0.38 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.16 green:0.68 blue:0.28 alpha:1.0].CGColor
+        (id)[UIColor colorWithRed:0.98 green:0.20 blue:0.80 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.35 green:0.18 blue:0.98 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.05 green:0.80 blue:1.0 alpha:1.0].CGColor
     ];
     NSArray *offC = @[
         (id)[UIColor colorWithRed:0.22 green:0.24 blue:0.28 alpha:1.0].CGColor,
@@ -1236,6 +1240,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         _glassBackground.interactiveHighlightEnabled = NO;
         _glassBackground.userInteractionEnabled = NO;
         _glassBackground.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _glassBackground.frame = CGRectInset(self.bounds, 12.0, 4.0);
         _glassBackground.layer.borderWidth = 0.8;
         _glassBackground.layer.borderColor = [UIColor colorWithRed:0.40 green:0.23 blue:0.70 alpha:0.52].CGColor;
         _glassBackground.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.08 blue:0.82 alpha:1.0].CGColor;
@@ -1275,23 +1280,48 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 
 - (void)applyV20CellTheme {
-    BOOL dark = YES;
-    if (@available(iOS 13.0, *)) dark = self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
-    UIColor *pink = [UIColor colorWithRed:0.96 green:0.27 blue:0.91 alpha:1.0];
-    UIColor *cyan = [UIColor colorWithRed:0.16 green:0.86 blue:1.0 alpha:1.0];
-    _titleL.textColor = _v20AccentColor ?: (dark ? [UIColor colorWithWhite:0.98 alpha:1.0] : [UIColor colorWithWhite:0.12 alpha:1.0]);
-    _detailL.textColor = dark ? [UIColor colorWithRed:0.75 green:0.78 blue:0.91 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
-    _titleL.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold];
-    _detailL.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightMedium];
-    _glassBackground.backgroundColor = [UIColor colorWithRed:0.055 green:0.028 blue:0.13 alpha:0.98];
-    _glassBackground.layer.cornerRadius = 22.0;
+    // V9 VISUAL SYSTEM: one consistent, purpose-built control-card treatment.
+    UIColor *pink = [UIColor colorWithRed:1.0 green:0.18 blue:0.70 alpha:1.0];
+    UIColor *violet = [UIColor colorWithRed:0.47 green:0.20 blue:1.0 alpha:1.0];
+    UIColor *cyan = [UIColor colorWithRed:0.08 green:0.88 blue:1.0 alpha:1.0];
+    UIColor *ink = [UIColor colorWithRed:0.025 green:0.018 blue:0.060 alpha:1.0];
+    UIColor *muted = [UIColor colorWithRed:0.67 green:0.72 blue:0.86 alpha:1.0];
+
+    _titleL.textColor = _v20AccentColor ?: [UIColor colorWithWhite:0.98 alpha:1.0];
+    _detailL.textColor = muted;
+    _titleL.font = [UIFont systemFontOfSize:15.5 weight:UIFontWeightSemibold];
+    _detailL.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightMedium];
+    _titleL.numberOfLines = 2;
+    _detailL.numberOfLines = 2;
+
+    _glassBackground.backgroundColor = ink;
+    _glassBackground.layer.cornerRadius = 17.0;
     _glassBackground.layer.borderWidth = 1.0;
-    _glassBackground.layer.borderColor = [pink colorWithAlphaComponent:0.30].CGColor;
-    _glassBackground.layer.shadowColor = cyan.CGColor;
-    _glassBackground.layer.shadowOpacity = 0.10;
-    _glassBackground.layer.shadowRadius = 9.0;
+    _glassBackground.layer.borderColor = [violet colorWithAlphaComponent:0.72].CGColor;
+    _glassBackground.layer.shadowColor = pink.CGColor;
+    _glassBackground.layer.shadowOpacity = 0.11;
+    _glassBackground.layer.shadowRadius = 10.0;
     _glassBackground.layer.shadowOffset = CGSizeMake(0, 3);
+    _glassBackground.layer.masksToBounds = NO;
+
+    // Accent strip makes each row feel like a designed control, not a legacy preference cell.
+    UIView *accent = [_glassBackground viewWithTag:99091];
+    if (!accent) {
+        accent = [[UIView alloc] initWithFrame:CGRectZero];
+        accent.tag = 99091;
+        accent.userInteractionEnabled = NO;
+        accent.layer.cornerRadius = 1.5;
+        [_glassBackground addSubview:accent];
+    }
+    accent.frame = CGRectMake(0, 12, 3, MAX(18, _glassBackground.bounds.size.height - 24));
+    accent.backgroundColor = cyan;
+    accent.layer.shadowColor = cyan.CGColor;
+    accent.layer.shadowOpacity = 0.75;
+    accent.layer.shadowRadius = 5.0;
+    accent.layer.shadowOffset = CGSizeZero;
+    [_glassBackground bringSubviewToFront:accent];
 }
+
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
@@ -1302,9 +1332,9 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    _glassBackground.frame = self.bounds;
+    _glassBackground.frame = CGRectInset(self.bounds, 10.0, 4.0);
     _glassBackground.layer.cornerRadius = 22.0;
-    _glassBackground.cornerRadiusValue = 22.0;
+    _glassBackground.cornerRadiusValue = 19.0;
     [_glassBackground layoutSubviews];
 }
 
@@ -3093,6 +3123,10 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // V9 shared control palette; only appearance is changed, not switch behavior.
+    UISwitch *switchAppearance = [UISwitch appearanceWhenContainedInInstancesOfClasses:@[[UITableView class]]];
+    switchAppearance.onTintColor = [UIColor colorWithRed:0.78 green:0.18 blue:0.95 alpha:1.0];
+    switchAppearance.thumbTintColor = [UIColor colorWithRed:0.95 green:0.97 blue:1.0 alpha:1.0];
     self.view.backgroundColor = [UIColor blackColor];
     
     // Code text view — chữ nhỏ (10pt), màu trắng, nền đen
@@ -3870,7 +3904,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     UILabel *subtitle = [UILabel new];
     subtitle.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitle.text = @"Tìm và nghe nhạc · SoundCloud · Apple Music · YouTube";
+    subtitle.text = @"Tìm nhạc và phát trong cửa sổ tích hợp · dịch vụ có thể yêu cầu đăng nhập";
     subtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
     subtitle.textColor = [UIColor colorWithWhite:1 alpha:0.66];
     [top addSubview:subtitle];
@@ -3903,6 +3937,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
     config.allowsInlineMediaPlayback = YES;
+    config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
     WKWebView *web = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
     web.translatesAutoresizingMaskIntoConstraints = NO;
     web.opaque = NO;
@@ -3910,6 +3945,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     web.scrollView.backgroundColor = web.backgroundColor;
     if (@available(iOS 15.0, *)) web.underPageBackgroundColor = web.backgroundColor;
     web.allowsBackForwardNavigationGestures = YES;
+    web.accessibilityLabel = @"Kết quả tìm kiếm và phát nhạc trong ứng dụng";
     web.layer.cornerRadius = 16;
     web.clipsToBounds = YES;
     [browser.view addSubview:web];
@@ -3955,8 +3991,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 components.scheme = @"https"; components.host = @"m.youtube.com"; components.path = @"/results";
                 components.queryItems = @[[NSURLQueryItem queryItemWithName:@"search_query" value:q]];
                 break;
-            case 1: // SoundCloud search; playback depends on SoundCloud's availability and permissions.
-                components.scheme = @"https"; components.host = @"soundcloud.com"; components.path = @"/search";
+            case 1: // SoundCloud's searchable sounds route; playback is subject to the service's own restrictions.
+                components.scheme = @"https"; components.host = @"soundcloud.com"; components.path = @"/search/sounds";
                 components.queryItems = @[[NSURLQueryItem queryItemWithName:@"q" value:q]];
                 break;
             case 2:
@@ -3984,15 +4020,28 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         loadSearch(search.text ?: @"");
     }] forControlEvents:UIControlEventValueChanged];
     [openOutside addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
-        NSURL *currentURL = web.URL;
-        if (currentURL) {
-            [[UIApplication sharedApplication] openURL:currentURL options:@{} completionHandler:^(BOOL success) {
-                if (!success && browser.presentedViewController == nil) {
-                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Không mở được ứng dụng" message:@"Ứng dụng nhạc có thể chưa được cài đặt. Mày vẫn có thể tìm và nghe trong cửa sổ này." preferredStyle:UIAlertControllerStyleAlert];
-                    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                    [browser presentViewController:alert animated:YES completion:nil];
-                }
+        NSString *term = [search.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (term.length == 0) term = @"phonk drift playlist";
+        NSURLComponents *deep = [NSURLComponents new];
+        if (category == 1) {
+            deep.scheme = @"soundcloud"; deep.host = @"search";
+            deep.queryItems = @[[NSURLQueryItem queryItemWithName:@"q" value:term]];
+        } else if (category == 2) {
+            deep.scheme = @"music"; deep.host = @"search";
+            deep.queryItems = @[[NSURLQueryItem queryItemWithName:@"term" value:term]];
+        } else if (category == 3) {
+            deep.scheme = @"youtube"; deep.host = @"results";
+            deep.queryItems = @[[NSURLQueryItem queryItemWithName:@"search_query" value:term]];
+        }
+        NSURL *appURL = deep.URL;
+        NSURL *fallbackURL = web.URL;
+        UIApplication *application = UIApplication.sharedApplication;
+        if (appURL && [application canOpenURL:appURL]) {
+            [application openURL:appURL options:@{} completionHandler:^(BOOL success) {
+                if (!success && fallbackURL) [application openURL:fallbackURL options:@{} completionHandler:nil];
             }];
+        } else if (fallbackURL) {
+            [application openURL:fallbackURL options:@{} completionHandler:nil];
         }
     }] forControlEvents:UIControlEventTouchUpInside];
     [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { [browser dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
@@ -5262,53 +5311,49 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Liquid Nav Bar
 
 - (void)setupLiquidGlassNavBar {
-    CGFloat barHeight = 66.0;
-    CGFloat barMargin = 10.0;
-    CGFloat barY = self.view.bounds.size.height - self.view.safeAreaInsets.bottom - barHeight - 8.0;
-
-    _liquidNavBarContainer = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - (barMargin * 2), barHeight)
-                                                            cornerRadius:22.0
+    // NEON SYSTEM UI v6: fully opaque dock; no blur, liquid-glass highlights or legacy blob treatment.
+    CGFloat barHeight = 72.0;
+    CGFloat barMargin = 12.0;
+    CGFloat barY = self.view.bounds.size.height - self.view.safeAreaInsets.bottom - barHeight - 7.0;
+    _liquidNavBarContainer = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake(barMargin, barY, self.view.bounds.size.width - barMargin * 2.0, barHeight)
+                                                            cornerRadius:24.0
                                                             materialType:LGGlassMaterialTypeCrystal];
-    _liquidNavBarContainer.backgroundColor = [UIColor colorWithRed:0.035 green:0.022 blue:0.095 alpha:0.98];
-    _liquidNavBarContainer.layer.borderWidth = 1.0;
-    _liquidNavBarContainer.layer.borderColor = [UIColor colorWithRed:0.48 green:0.23 blue:0.82 alpha:0.85].CGColor;
+    [_liquidNavBarContainer setGlassTransparencyEnabled:NO];
+    _liquidNavBarContainer.backgroundColor = [UIColor colorWithRed:0.025 green:0.022 blue:0.065 alpha:1.0];
+    _liquidNavBarContainer.layer.borderWidth = 1.2;
+    _liquidNavBarContainer.layer.borderColor = [UIColor colorWithRed:0.48 green:0.18 blue:0.95 alpha:0.95].CGColor;
     _liquidNavBarContainer.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     _liquidNavBarContainer.interactiveHighlightEnabled = NO;
     _liquidNavBarContainer.clipsToBounds = NO;
     _liquidNavBarContainer.layer.masksToBounds = NO;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.38;
-    _liquidNavBarContainer.layer.shadowRadius = 16.0;
+    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.45 green:0.08 blue:1.0 alpha:1.0].CGColor;
+    _liquidNavBarContainer.layer.shadowOpacity = 0.22;
+    _liquidNavBarContainer.layer.shadowRadius = 17.0;
     _liquidNavBarContainer.layer.shadowOffset = CGSizeMake(0, 4);
-    _liquidNavBarContainer.layer.shadowColor = [UIColor colorWithRed:0.50 green:0.12 blue:1.0 alpha:1.0].CGColor;
-    _liquidNavBarContainer.layer.shadowOpacity = 0.28;
-    _liquidNavBarContainer.layer.shadowRadius = 18.0;
-    _liquidNavBarContainer.layer.borderWidth = 1.0;
-    _liquidNavBarContainer.layer.borderColor = [UIColor colorWithRed:0.62 green:0.31 blue:1.0 alpha:0.48].CGColor;
 
     _tabConfigs = @[
-        @{@"title": @"Dashboard", @"icon": @"square.grid.2x2.fill", @"tab": @0},
-        @{@"title": @"Hz / FPS",    @"icon": @"speedometer",        @"tab": @1},
-        @{@"title": @"Tối ưu",@"icon": @"slider.horizontal.3", @"tab": @2},
-        @{@"title": @"Apps",  @"icon": @"app.dashed",          @"tab": @3},
-        @{@"title": @"Cài đặt", @"icon": @"gearshape.fill",      @"tab": @4}
+        @{ @"title": @"Trang chủ", @"icon": @"square.grid.2x2.fill", @"tab": @0 },
+        @{ @"title": @"Hz / FPS", @"icon": @"speedometer", @"tab": @1 },
+        @{ @"title": @"Tối ưu", @"icon": @"slider.horizontal.3", @"tab": @2 },
+        @{ @"title": @"Ứng dụng", @"icon": @"app.dashed", @"tab": @3 },
+        @{ @"title": @"Cài đặt", @"icon": @"gearshape.fill", @"tab": @4 }
     ];
-
-    CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / _tabConfigs.count;
-
-    // [V10.2 - LIQUID NAVIGATION THEO VIDEO TIKTOK]: indicator là GIỌT NƯỚC TRÒN (blob) nổi lên PHÍA TRÊN thanh nav,
-    // không nằm trong thanh. Di chuyển mượt giữa các tab, co giãn theo vận tốc như giọt nước thật.
-    CGFloat blobSize = 48.0;
-    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth - blobSize)/2.0, -12.0, blobSize, blobSize)
-                                                            cornerRadius:blobSize / 2.0
+    CGFloat btnWidth = _liquidNavBarContainer.bounds.size.width / MAX(1, _tabConfigs.count);
+    CGFloat indicatorSize = 42.0;
+    _activeGlassIndicator = [[AppleLiquidGlassView alloc] initWithFrame:CGRectMake((btnWidth-indicatorSize)/2.0, -5.0, indicatorSize, indicatorSize)
+                                                            cornerRadius:indicatorSize/2.0
                                                             materialType:LGGlassMaterialTypeCrystal];
+    [_activeGlassIndicator setGlassTransparencyEnabled:NO];
+    _activeGlassIndicator.backgroundColor = [UIColor colorWithRed:0.10 green:0.045 blue:0.22 alpha:1.0];
+    _activeGlassIndicator.layer.borderWidth = 1.5;
+    _activeGlassIndicator.layer.borderColor = [UIColor colorWithRed:0.08 green:0.78 blue:1.0 alpha:1.0].CGColor;
     _activeGlassIndicator.userInteractionEnabled = NO;
     _activeGlassIndicator.interactiveHighlightEnabled = NO;
-    _activeGlassIndicator.layer.shadowOpacity = 0.45;
-    _activeGlassIndicator.layer.shadowRadius = 12.0;
-    _activeGlassIndicator.layer.shadowOffset = CGSizeMake(0, 5);
-    _activeGlassIndicator.layer.shadowColor = [UIColor blackColor].CGColor;
+    _activeGlassIndicator.layer.shadowColor = [UIColor colorWithRed:0.08 green:0.78 blue:1.0 alpha:1.0].CGColor;
+    _activeGlassIndicator.layer.shadowOpacity = 0.22;
+    _activeGlassIndicator.layer.shadowRadius = 10.0;
+    _activeGlassIndicator.layer.shadowOffset = CGSizeZero;
     [_liquidNavBarContainer addSubview:_activeGlassIndicator];
-    [_liquidNavBarContainer bringSubviewToFront:_activeGlassIndicator];
 
     for (NSInteger i = 0; i < _tabConfigs.count; i++) {
         NSDictionary *conf = _tabConfigs[i];
@@ -5317,17 +5362,14 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         btn.autoresizingMask = UIViewAutoresizingNone;
         btn.tag = i;
         [btn addTarget:self action:@selector(onCustomTabButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
-
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleTabLongPress:)];
         longPress.minimumPressDuration = 0.30;
         longPress.cancelsTouchesInView = YES;
         longPress.delaysTouchesBegan = NO;
         [btn addGestureRecognizer:longPress];
-
         [_liquidNavBarContainer addSubview:btn];
         [_tabButtons addObject:btn];
     }
-
     if (_tabButtons.count > 0) {
         NSInteger initialIndex = (_currentBottomTab >= 0 && _currentBottomTab < _tabButtons.count) ? _currentBottomTab : 0;
         [_tabButtons[initialIndex] updateTabSelected:YES animated:NO];
@@ -5546,13 +5588,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     root.backgroundColor = UIColor.clearColor;
 
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(side + 2, 12, contentW - 4, 15)];
-    eyebrow.text = @"T I T A N I U M     /     PERFORMANCE SUITE";
+    eyebrow.text = @"N E O N   S Y S T E M   /   LIVE MONITOR";
     eyebrow.font = [UIFont monospacedSystemFontOfSize:9.0 weight:UIFontWeightBold];
     eyebrow.textColor = [UIColor colorWithRed:0.22 green:0.91 blue:1.0 alpha:1.0];
     [root addSubview:eyebrow];
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(side, 31, contentW, 34)];
-    title.text = @"CONTROL CENTER";
+    title.text = @"NEON PERFORMANCE";
     title.font = [UIFont systemFontOfSize:27.0 weight:UIFontWeightBlack];
     title.textColor = UIColor.whiteColor;
     title.adjustsFontSizeToFitWidth = YES;
@@ -5560,7 +5602,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [root addSubview:title];
 
     UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(side + 1, 67, contentW - 2, 18)];
-    subtitle.text = @"Thiết bị của bạn · Theo dõi · Điều khiển";
+    subtitle.text = @"Đo trực tiếp · Tinh chỉnh · Trạng thái thiết bị";
     subtitle.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightMedium];
     subtitle.textColor = [UIColor colorWithWhite:0.66 alpha:1.0];
     [root addSubview:subtitle];
@@ -5733,57 +5775,133 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width);
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 236.0)];
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 390.0)];
     root.backgroundColor = UIColor.clearColor;
 
-    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(18, 10, w - 36, 14)];
-    eyebrow.text = @"T I T A N I U M  /  DISPLAY TELEMETRY";
+    UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 12, w - 40, 15)];
+    eyebrow.text = @"TITANIUM  /  LIVE DISPLAY TELEMETRY";
     eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold];
-    eyebrow.textColor = [UIColor colorWithRed:0.18 green:0.88 blue:1.0 alpha:1.0];
+    eyebrow.textColor = [UIColor colorWithRed:0.20 green:0.88 blue:1.0 alpha:1.0];
     [root addSubview:eyebrow];
 
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(17, 29, w - 34, 31)];
-    title.text = @"REFRESH RATE  /  FPS";
-    title.font = [UIFont systemFontOfSize:23 weight:UIFontWeightBlack];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 31, w - 36, 30)];
+    title.text = @"Tần số & khung hình";
+    title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack];
     title.textColor = UIColor.whiteColor;
     [root addSubview:title];
 
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(16, 70, w - 32, 112)];
-    panel.backgroundColor = [UIColor colorWithRed:0.055 green:0.025 blue:0.14 alpha:0.98];
-    panel.layer.cornerRadius = 21;
-    panel.layer.borderWidth = 1;
-    panel.layer.borderColor = [UIColor colorWithRed:0.64 green:0.23 blue:1.0 alpha:0.82].CGColor;
-    panel.layer.shadowColor = [UIColor colorWithRed:0.55 green:0.12 blue:1.0 alpha:1.0].CGColor;
-    panel.layer.shadowOpacity = 0.18;
-    panel.layer.shadowRadius = 12;
-    panel.layer.shadowOffset = CGSizeMake(0, 3);
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(14, 72, w - 28, 244)];
+    panel.backgroundColor = [UIColor colorWithRed:0.025 green:0.018 blue:0.075 alpha:0.99];
+    panel.layer.cornerRadius = 28.0;
+    panel.layer.borderWidth = 1.0;
+    panel.layer.borderColor = [UIColor colorWithRed:0.50 green:0.20 blue:0.92 alpha:0.9].CGColor;
+    panel.layer.shadowColor = [UIColor colorWithRed:0.32 green:0.12 blue:1.0 alpha:1.0].CGColor;
+    panel.layer.shadowOpacity = 0.22;
+    panel.layer.shadowRadius = 18.0;
+    panel.layer.shadowOffset = CGSizeMake(0, 5);
     [root addSubview:panel];
 
     NSInteger maxHz = MAX(1, (NSInteger)UIScreen.mainScreen.maximumFramesPerSecond);
     NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger targetFPS = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 60;
-    UILabel *big = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, panel.bounds.size.width - 32, 43)];
-    big.text = [NSString stringWithFormat:@"%ld FPS  ·  LIVE", (long)self->_uiFPSMeasured];
-    big.font = [UIFont systemFontOfSize:32 weight:UIFontWeightBlack];
-    big.textColor = [UIColor colorWithRed:0.22 green:0.91 blue:1.0 alpha:1.0];
-    big.adjustsFontSizeToFitWidth = YES;
-    big.minimumScaleFactor = 0.7;
-    [panel addSubview:big];
+    CGFloat diameter = MIN(176.0, panel.bounds.size.width - 36.0);
+    CGFloat gaugeX = (panel.bounds.size.width - diameter) / 2.0;
+    UIView *gauge = [[UIView alloc] initWithFrame:CGRectMake(gaugeX, 12.0, diameter, diameter)];
+    gauge.backgroundColor = [UIColor colorWithRed:0.035 green:0.03 blue:0.095 alpha:1.0];
+    gauge.layer.cornerRadius = diameter / 2.0;
+    gauge.layer.borderWidth = 1.0;
+    gauge.layer.borderColor = [UIColor colorWithRed:0.20 green:0.75 blue:1.0 alpha:0.45].CGColor;
+    gauge.layer.shadowColor = [UIColor colorWithRed:0.15 green:0.72 blue:1.0 alpha:1.0].CGColor;
+    gauge.layer.shadowOpacity = 0.18;
+    gauge.layer.shadowRadius = 14.0;
+    [panel addSubview:gauge];
 
-    UILabel *detail = [[UILabel alloc] initWithFrame:CGRectMake(18, 60, panel.bounds.size.width - 36, 34)];
-    detail.text = [NSString stringWithFormat:@"Phần cứng tối đa %ld Hz  ·  Cấu hình mục tiêu %ld Hz / %ld FPS", (long)maxHz, (long)targetHz, (long)targetFPS];
-    detail.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
-    detail.textColor = [UIColor colorWithWhite:0.78 alpha:1.0];
+    CAShapeLayer *track = [CAShapeLayer layer];
+    track.frame = gauge.bounds;
+    track.path = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(gauge.bounds, 10.0, 10.0)].CGPath;
+    track.fillColor = UIColor.clearColor.CGColor;
+    track.strokeColor = [UIColor colorWithWhite:1.0 alpha:0.10].CGColor;
+    track.lineWidth = 7.0;
+    [gauge.layer addSublayer:track];
+
+    CAShapeLayer *arc = [CAShapeLayer layer];
+    arc.frame = gauge.bounds;
+    UIBezierPath *arcPath = [UIBezierPath bezierPath];
+    [arcPath addArcWithCenter:CGPointMake(diameter/2.0, diameter/2.0) radius:diameter/2.0-10.0 startAngle:(CGFloat)(-M_PI*0.78) endAngle:(CGFloat)(M_PI*0.78) clockwise:YES];
+    arc.path = arcPath.CGPath;
+    arc.fillColor = UIColor.clearColor.CGColor;
+    arc.strokeColor = [UIColor colorWithRed:0.12 green:0.82 blue:1.0 alpha:1.0].CGColor;
+    arc.lineWidth = 7.0;
+    arc.lineCap = kCALineCapRound;
+    arc.shadowColor = arc.strokeColor;
+    arc.shadowOpacity = 0.8;
+    arc.shadowRadius = 7.0;
+    [gauge.layer addSublayer:arc];
+
+    CAShapeLayer *orbit = [CAShapeLayer layer];
+    orbit.frame = gauge.bounds;
+    orbit.path = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(gauge.bounds, 4.0, 4.0)].CGPath;
+    orbit.fillColor = UIColor.clearColor.CGColor;
+    orbit.strokeColor = [UIColor colorWithRed:0.95 green:0.20 blue:0.82 alpha:0.8].CGColor;
+    orbit.lineWidth = 1.2;
+    orbit.lineDashPattern = @[@2, @5];
+    [gauge.layer addSublayer:orbit];
+    if (!UIAccessibilityIsReduceMotionEnabled()) {
+        CABasicAnimation *spin = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+        spin.fromValue = @0.0; spin.toValue = @(M_PI * 2.0); spin.duration = 9.0; spin.repeatCount = HUGE_VALF;
+        [orbit addAnimation:spin forKey:@"titanium.orbit.spin"];
+    }
+
+    UILabel *hzValue = [[UILabel alloc] initWithFrame:CGRectMake(8, diameter/2.0 - 31.0, diameter - 16.0, 38.0)];
+    hzValue.text = [NSString stringWithFormat:@"%ld Hz", (long)targetHz];
+    hzValue.font = [UIFont systemFontOfSize:29 weight:UIFontWeightBlack];
+    hzValue.textAlignment = NSTextAlignmentCenter;
+    hzValue.textColor = [UIColor colorWithRed:0.98 green:0.42 blue:0.91 alpha:1.0];
+    hzValue.adjustsFontSizeToFitWidth = YES;
+    hzValue.minimumScaleFactor = 0.7;
+    hzValue.tag = 7401;
+    [gauge addSubview:hzValue];
+
+    UILabel *fpsValue = [[UILabel alloc] initWithFrame:CGRectMake(8, diameter/2.0 + 7.0, diameter - 16.0, 24.0)];
+    fpsValue.text = [NSString stringWithFormat:@"%ld FPS · LIVE", (long)self->_uiFPSMeasured];
+    fpsValue.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold];
+    fpsValue.textAlignment = NSTextAlignmentCenter;
+    fpsValue.textColor = [UIColor colorWithRed:0.18 green:0.88 blue:1.0 alpha:1.0];
+    fpsValue.adjustsFontSizeToFitWidth = YES;
+    fpsValue.minimumScaleFactor = 0.7;
+    fpsValue.tag = 7402;
+    [gauge addSubview:fpsValue];
+
+    UILabel *caption = [[UILabel alloc] initWithFrame:CGRectMake(12, 194, panel.bounds.size.width - 24, 16)];
+    caption.text = @"TẦN SỐ MỤC TIÊU  /  KHUNG HÌNH ĐO ĐƯỢC";
+    caption.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold];
+    caption.textAlignment = NSTextAlignmentCenter;
+    caption.textColor = [UIColor colorWithWhite:0.72 alpha:1.0];
+    [panel addSubview:caption];
+
+    UILabel *detail = [[UILabel alloc] initWithFrame:CGRectMake(14, 215, panel.bounds.size.width - 28, 20)];
+    detail.text = [NSString stringWithFormat:@"Màn hình tối đa iOS báo: %ld Hz   ·   FPS mục tiêu: %ld", (long)maxHz, (long)targetFPS];
+    detail.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightSemibold];
+    detail.textAlignment = NSTextAlignmentCenter;
+    detail.textColor = [UIColor colorWithWhite:0.80 alpha:1.0];
     detail.adjustsFontSizeToFitWidth = YES;
-    detail.minimumScaleFactor = 0.7;
+    detail.minimumScaleFactor = 0.72;
     [panel addSubview:detail];
 
-    UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(18, 190, w - 36, 30)];
-    note.text = @"UI FPS là nhịp khung hình của giao diện này, không phải FPS của game. iOS chỉ hỗ trợ Hz theo phần cứng/màn hình.";
-    note.numberOfLines = 2;
-    note.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
-    note.textColor = [UIColor colorWithWhite:0.66 alpha:1.0];
-    [root addSubview:note];
+    UIView *status = [[UIView alloc] initWithFrame:CGRectMake(14, 328, w - 28, 43)];
+    status.backgroundColor = [UIColor colorWithRed:0.045 green:0.035 blue:0.105 alpha:1.0];
+    status.layer.cornerRadius = 15.0;
+    status.layer.borderWidth = 1.0;
+    status.layer.borderColor = [UIColor colorWithRed:0.35 green:0.22 blue:0.66 alpha:0.8].CGColor;
+    [root addSubview:status];
+    UILabel *statusLabel = [[UILabel alloc] initWithFrame:CGRectInset(status.bounds, 12, 0)];
+    statusLabel.text = @"Chọn mức bên dưới để áp dụng qua trình xử lý hiện có";
+    statusLabel.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightMedium];
+    statusLabel.textColor = [UIColor colorWithWhite:0.84 alpha:1.0];
+    statusLabel.adjustsFontSizeToFitWidth = YES;
+    statusLabel.minimumScaleFactor = 0.75;
+    [status addSubview:statusLabel];
+
     return root;
 }
 
@@ -5801,7 +5919,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)setupMainTableView {
     self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStylePlain];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.customTableView.backgroundColor = [UIColor clearColor];
+    self.customTableView.backgroundColor = [UIColor colorWithRed:0.012 green:0.010 blue:0.032 alpha:1.0];
     self.customTableView.separatorColor = UIColor.clearColor;
     self.customTableView.contentInset = UIEdgeInsetsMake(4.0, 0.0, 14.0, 0.0);
     if (@available(iOS 11.0, *)) self.customTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
@@ -6881,10 +6999,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             for (UIView *view in header.subviews) {
                 if (![view isKindOfClass:[UIView class]]) continue;
                 for (UIView *child in view.subviews) {
-                    if ([child isKindOfClass:[UILabel class]] && [((UILabel *)child).text containsString:@"FPS  ·  LIVE"]) {
-                        ((UILabel *)child).text = [NSString stringWithFormat:@"%ld FPS  ·  LIVE", (long)_uiFPSMeasured];
-                        child.transform = CGAffineTransformMakeScale(1.03, 1.03);
-                        [UIView animateWithDuration:0.22 animations:^{ child.transform = CGAffineTransformIdentity; }];
+                    if (![child isKindOfClass:[UILabel class]]) continue;
+                    UILabel *label = (UILabel *)child;
+                    if (label.tag == 7402 || [label.text containsString:@"FPS  ·  LIVE"] || [label.text containsString:@"FPS · LIVE"]) {
+                        label.text = [NSString stringWithFormat:@"%ld FPS · LIVE", (long)_uiFPSMeasured];
+                        label.transform = CGAffineTransformMakeScale(1.04, 1.04);
+                        [UIView animateWithDuration:0.22 animations:^{ label.transform = CGAffineTransformIdentity; }];
                     }
                 }
             }
