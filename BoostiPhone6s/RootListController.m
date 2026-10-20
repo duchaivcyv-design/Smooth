@@ -5699,22 +5699,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     uint64_t ram=Titanium_TotalPhysicalMemoryBytes();
     NSArray *names=@[@"CPU & KIẾN TRÚC",@"GPU",@"RAM",@"MÀN HÌNH · HZ · FPS",@"THÔNG TIN MÁY",@"JAILBREAK & MÔI TRƯỜNG"];
     NSArray *details=@[
-      [NSString stringWithFormat:@"%@
-%@ · %u lõi logic
-Xung nhịp tối đa: %@",machine,arch,Titanium_LogicalCPUCoreCount(),@"Không khả dụng qua API công khai"],
-      @"Tên GPU / tải GPU / xung GPU
-Không có nguồn đo tin cậy trong controller hiện tại.",
-      [NSString stringWithFormat:@"RAM vật lý: %@
-Bộ nhớ tiến trình: %@",Titanium_ByteCountString(ram),Titanium_ByteCountString(Titanium_CurrentProcessFootprintBytes())],
-      [NSString stringWithFormat:@"Hz tối đa do iOS báo: %ld
-FPS đo của giao diện: %ld
-FPS game: Không khả dụng",(long)UIScreen.mainScreen.maximumFramesPerSecond,(long)_uiFPSMeasured],
-      [NSString stringWithFormat:@"Model: %@
-iOS: %@
-Scale: %.2fx",machine,ios,UIScreen.mainScreen.scale],
-      [NSString stringWithFormat:@"var/jb: %@
-Môi trường: %@
-Kernel exploit: Chưa xác minh",[[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]?@"Có":@"Không thấy",[[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]?@"Có thể rootless/roothide; cần xác minh bootstrap":@"Rootful hoặc môi trường khác; cần xác minh"]
+      [NSString stringWithFormat:@"%@\n%@ · %u lõi logic\nXung nhịp tối đa: %@",machine,arch,Titanium_LogicalCPUCoreCount(),@"Không khả dụng qua API công khai"],
+      @"Tên GPU / tải GPU / xung GPU\nKhông có nguồn đo tin cậy trong controller hiện tại.",
+      [NSString stringWithFormat:@"RAM vật lý: %@\nBộ nhớ tiến trình: %@",Titanium_ByteCountString(ram),Titanium_ByteCountString(Titanium_CurrentProcessFootprintBytes())],
+      [NSString stringWithFormat:@"Hz tối đa do iOS báo: %ld\nFPS đo của giao diện: %ld\nFPS game: Không khả dụng",(long)UIScreen.mainScreen.maximumFramesPerSecond,(long)_uiFPSMeasured],
+      [NSString stringWithFormat:@"Model: %@\niOS: %@\nScale: %.2fx",machine,ios,UIScreen.mainScreen.scale],
+      [NSString stringWithFormat:@"var/jb: %@\nMôi trường: %@\nKernel exploit: Chưa xác minh",[[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]?@"Có":@"Không thấy",[[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"]?@"Có thể rootless/roothide; cần xác minh bootstrap":@"Rootful hoặc môi trường khác; cần xác minh"]
     ];
     for(NSInteger i=0;i<names.count;i++) {
       CGFloat y=88+i*96; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(side,y,cw,86)]; card.backgroundColor=[UIColor colorWithRed:.055 green:.035 blue:.14 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.35 green:.24 blue:.78 alpha:.9].CGColor; [root addSubview:card];
