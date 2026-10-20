@@ -1390,8 +1390,19 @@ static void Init_CAWindowServer_Hooks(void) {
     // Khởi tạo hook WindowServer tuyệt đối
 }
 
+static inline void Titanium_ReloadSharedSyncStateV285(void);
+static inline void Titanium_ReapplyFrameRateToAllScenes(void);
+
+// Callback nhận thông báo từ app cấu hình (SpringBoard, backboardd và app thứ 3 đều đăng ký).
+// Nạp lại Hz/FPS từ file cấu hình ngay, không chờ throttle, rồi áp dụng lên các scene đang chạy.
 static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    // Đồng bộ lại cấu hình Darwin
+    @try {
+        g_lastSyncTicksV285 = 0;
+        Titanium_ReloadSharedSyncStateV285();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            @try { Titanium_ReapplyFrameRateToAllScenes(); } @catch (__unused NSException *e) {}
+        });
+    } @catch (__unused NSException *e) {}
 }
 
 static void Titanium_ReapplyFrameRateToAllScenes(void);
