@@ -3105,8 +3105,7 @@ static NSString *Titanium_DarwinExploit_FullReport(void) {
 static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
     // V23: read-only diagnostic only. Device information is not a kernel exploit.
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *report = @"Không có triển khai kernel exploit thực sự trong RootListController.
-Chỉ có thể đọc thông tin thiết bị; trạng thái này không mở khóa kernel.";
+        NSString *report = @"Không có triển khai kernel exploit thực sự trong RootListController.\nChỉ có thể đọc thông tin thiết bị; trạng thái này không mở khóa kernel.";
         dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(report); });
     });
 }
