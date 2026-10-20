@@ -4619,16 +4619,17 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 13: BẺ KHÓA HIỆU NĂNG PIN YẾU & NHIỆT ĐỘ (GIỮ NGUYÊN HIỂN THỊ THẬT CHO USER, ÉP TẦNG SÂU CHẠY MAX)
+// NHÓM 13: BẺ KHÓA TRIỆT ĐỂ BÓP HIỆU NĂNG PIN YẾU (< 20%) & NHIỆT ĐỘ HỆ THỐNG (GIỮ % THẬT CHO UI)
 // ====================================================================================================
 
 #include <dlfcn.h>
 
+// Giữ nguyên mô tả nguồn điện gốc, không ép cứng 100% để hiển thị đúng % pin thật cho Status Bar
 static CFDictionaryRef (*orig_IOPSGetPowerSourceDescription)(CFTypeRef blob, CFTypeRef ps) = NULL;
 static CFDictionaryRef hooked_IOPSGetPowerSourceDescription(CFTypeRef blob, CFTypeRef ps) {
     @try {
         CFDictionaryRef desc = orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
-        return desc; 
+        return desc; // Trả về thông tin gốc chuẩn xác để hiện % pin thực tế
     } @catch (__unused NSException *e) {}
     return orig_IOPSGetPowerSourceDescription ? orig_IOPSGetPowerSourceDescription(blob, ps) : NULL;
 }
@@ -4637,34 +4638,15 @@ static int (*orig_IOPSGetPercentRemaining)(void) = NULL;
 static int hooked_IOPSGetPercentRemaining(void) {
     @try {
         if (orig_IOPSGetPercentRemaining) {
-            return orig_IOPSGetPercentRemaining(); 
+            return orig_IOPSGetPercentRemaining(); // Trả về % pin thật để app và hệ thống đọc đúng dung lượng
         }
     } @catch (__unused NSException *e) {}
     return 100;
 }
 
-static void Titanium_InstallPowerBypassC(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
-            if (iokit) {
-                void *sym1 = dlsym(iokit, "IOPSGetPowerSourceDescription");
-                if (sym1) {
-                    MSHookFunction(sym1, (void *)hooked_IOPSGetPowerSourceDescription, (void **)&orig_IOPSGetPowerSourceDescription);
-                }
-                void *sym2 = dlsym(iokit, "IOPSGetPercentRemaining");
-                if (sym2) {
-                    MSHookFunction(sym2, (void *)hooked_IOPSGetPercentRemaining, (void **)&orig_IOPSGetPercentRemaining);
-                }
-            }
-        } @catch (__unused NSException *e) {}
-    });
-}
-
-// Định nghĩa nhóm Logos hoàn toàn độc lập bên dưới các hàm C
 %group Group_Global_Thread_Governor_Unthrottled
 
+// 1. CHẶN BÓP NGUỒN ĐIỆN & NHIỆT ĐỘ TRÊN PROCESS INFO (Vẫn giữ max hiệu năng)
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState {
@@ -4677,14 +4659,15 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
+// 2. BẺ KHÓA UIDEVICE: Trả về % pin và trạng thái THẬT để bạn biết đường cắm sạc
 %hook UIDevice
 
 - (float)batteryLevel {
-    return %orig;
+    return %orig; // Trả về dung lượng % pin thật của máy
 }
 
 - (UIDeviceBatteryState)batteryState {
-    return %orig; 
+    return %orig; // Trả về trạng thái sạc thực tế của thiết bị
 }
 
 - (BOOL)isBatteryMonitoringEnabled {
@@ -4693,6 +4676,7 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
+// 3. VÔ HIỆU HÓA HOÀN TOÀN CÔNG TẮC BÓP XUNG TRONG SPRINGBOARD POWER CONTROLLER
 %hook SBUIController
 
 - (BOOL)isBatterySaverModeActive {
