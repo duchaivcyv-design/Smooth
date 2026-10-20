@@ -33,10 +33,10 @@ BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -Wno-unguarded-availability \
                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                           -IHeaders \
-                          -I../Headers# \
-                          -I LINK.
+                          -I../Headers \
+                          -I.
 
-ER FLAGS
+# LINKER FLAGS
 BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip
 
 BoostiPhone6sCore_CODESIGN_FLAGS = -Sentitlements.plist
