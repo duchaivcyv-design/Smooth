@@ -5883,19 +5883,20 @@ static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
         if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !g_isCurrentAppBlacklisted) {
             @try {
                 if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
-                    return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"iPhone18,2"];
+                    // [SỬA CRASH KHI MỞ APP]: MGCopyAnswer theo quy tắc Copy (người gọi CFRelease), phải trả reference +1
+                    return (CFPropertyListRef)CFBridgingRetain([NSString stringWithUTF8String:"iPhone18,2"]);
                 }
             } @catch (__unused NSException *e) {}
 
             @try {
                 if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("HardwarePlatform"), 0) == kCFCompareEqualTo) {
-                    return (__bridge CFPropertyListRef)[NSString stringWithUTF8String:"d85ap"];
+                    return (CFPropertyListRef)CFBridgingRetain([NSString stringWithUTF8String:"d85ap"]);
                 }
             } @catch (__unused NSException *e) {}
 
             @try {
                 if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ArtworkDeviceSubType"), 0) == kCFCompareEqualTo) {
-                    return (__bridge CFPropertyListRef)[NSNumber numberWithInt:3000]; 
+                    return (CFPropertyListRef)CFBridgingRetain([NSNumber numberWithInt:3000]);
                 }
             } @catch (__unused NSException *e) {}
         }
@@ -6274,35 +6275,15 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
             return;
         }
 
-        if (!g_isCurrentAppBlacklisted && (reason == 1 || [desc containsString:@"idle"] || [desc containsString:@"background"])) {
-            if (completion) {
-                @try {
-                    void (^compBlock)(void) = (void (^)(void))completion;
-                    compBlock();
-                } @catch (__unused NSException *subEx) {
-                    @try {
-                        // Sửa lỗi cast con trỏ Objective-C dưới chế độ ARC
-                        void (*completionFunc)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))[completion methodForSelector:@selector(invoke)];
-                        if (completionFunc) {
-                            // Gọi an toàn hoặc bỏ qua nếu không tương thích chữ ký
-                        }
-                    } @catch (__unused NSException *subEx2) {}
-                }
-            }
-            return;
-        }
+        // [SỬA LAG/NẶNG KHI MỞ-ĐÓNG APP]: bản cũ CHẶN hệ thống kill app nền (reason 1/idle/background), nên các app
+        // WebKit/Safari/Gemini... ở trạng thái suspended chiếm RAM mãi (Jetsam báo WebContent ~512MB) => nén RAM liên tục,
+        // mở/đóng app khựng. Nay để hệ thống kill bình thường như nguyên bản.
     } @catch (__unused NSException *e) {}
     %orig(reason, report, description, completion);
 }
 
 - (BOOL)isPendingExit {
-    @try {
-        if (!self) return %orig;
-        // Chỉ giữ app không thoát ngầm khi ở background, tôn trọng lệnh thoát trực tiếp
-        if (!g_isCurrentAppBlacklisted) {
-            return NO;
-        }
-    } @catch (__unused NSException *e) {}
+    // [SỬA LAG]: bản cũ trả NO cho mọi app không bị loại trừ => app không bao giờ được thoát, RAM đầy. Nay dùng nguyên bản.
     return %orig;
 }
 
