@@ -3508,8 +3508,13 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     %orig(range);
 }
 
-- (CFTimeInterval)duration { return %orig; }
-- (CFTimeInterval)targetTimestamp { return %orig; }
+- (CFTimeInterval)duration {
+    return %orig;
+}
+
+- (CFTimeInterval)targetTimestamp {
+    return %orig;
+}
 
 %end
 
