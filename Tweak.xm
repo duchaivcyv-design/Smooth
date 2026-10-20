@@ -4051,12 +4051,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)_handleGestureEnded:(id)gesture {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig(gesture);
     @try {
-        if (!self) {
-            %orig(gesture);
-            return;
-        }
-        %orig(gesture);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isContinuousSwiping = NO;
             g_isInteracting = NO;
@@ -4064,18 +4061,13 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
-    } @catch (__unused NSException *e) {
-        %orig(gesture);
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 - (void)_handleGestureCancelled:(id)gesture {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig(gesture);
     @try {
-        if (!self) {
-            %orig(gesture);
-            return;
-        }
-        %orig(gesture);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isContinuousSwiping = NO;
             g_isInteracting = NO;
@@ -4083,9 +4075,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
-    } @catch (__unused NSException *e) {
-        %orig(gesture);
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -4118,19 +4108,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)_didComplete {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_isContinuousSwiping = NO;
             g_isInteracting = NO;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -4201,11 +4186,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
         g_lastInteractionMachTime = now;
         g_lastInteractiveTick = now;
 
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-            @autoreleasepool {
-                malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            }
-        });
+        // [SỬA LAG ĐÓNG APP]: đã bỏ malloc_zone_pressure_relief ở đây (quét/khóa heap mỗi lần chuyển cảnh gây khựng)
 
         #if TITANIUM_ENABLE_RATE_KEEPER
         [TitaniumRateKeeper kick];
@@ -4215,21 +4196,16 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)_didComplete {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             if (g_activeAnimationCount > 0) g_activeAnimationCount--;
             g_isContinuousSwiping = NO;
             g_isUserTouchingScreen = NO;
             g_isInteracting = NO;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -4250,12 +4226,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
 
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-                @autoreleasepool {
-                    malloc_zone_pressure_relief(malloc_default_zone(), 0);
-                }
-            });
-            
+            // [SỬA LAG MỞ APP]: đã bỏ malloc_zone_pressure_relief mỗi lần chuyển cảnh từ home vào app
+
             #if TITANIUM_ENABLE_RATE_KEEPER
             [TitaniumRateKeeper kick];
             #endif
@@ -4265,19 +4237,14 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 }
 
 - (void)_didComplete {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             if (g_activeAnimationCount > 0) g_activeAnimationCount--;
             g_isInteracting = NO;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -4327,12 +4294,7 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    @try {
-        if (!self) return %orig;
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.0;
-        }
-    } @catch (__unused NSException *e) {}
+    // [SỬA CRASH/ĐEN KHI MỞ APP]: không ép splash = 0 nữa; giữ thời gian gốc để app vẽ frame đầu trước khi hiện
     return %orig;
 }
 
@@ -5788,20 +5750,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIWindowScene
 
 - (void)_readySceneForDisplay {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             uint64_t now = mach_absolute_time();
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -5848,20 +5805,15 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook UIApplication
 
 - (void)_applicationDidEnterBackground {
+    // [SỬA CRASH MỞ/ĐÓNG APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 malloc_zone_pressure_relief(malloc_default_zone(), 0);
             });
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -6252,39 +6204,29 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook UIScene
 
 - (void)_activationCompleted {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần; code tweak nằm SAU %orig và không bao giờ gọi lại gốc trong @catch
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
             g_isAppFirstFramePresented = YES;
             dispatch_async(dispatch_get_main_queue(), ^{
                 Titanium_ReapplyFrameRateToAllScenes();
             });
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 - (void)_didBecomeActive {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted) {
             Titanium_TriggerInstantTouchBurst();
             dispatch_async(dispatch_get_main_queue(), ^{
                 Titanium_ReapplyFrameRateToAllScenes();
             });
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -6292,19 +6234,14 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook FBApplicationProcess
 
 - (void)_finishInit {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần
+    %orig;
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
-        %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             Titanium_EnforceThreadVIPPolicy();
             EnforceMaxCPUPower();
         }
-    } @catch (__unused NSException *e) {
-        %orig;
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -6374,23 +6311,17 @@ static volatile BOOL g_isAppFirstFramePresented = NO;
 %hook SBMainWorkspace
 
 - (void)handleApplicationSuspended:(id)application {
+    // [SỬA CRASH MỞ/ĐÓNG APP]: gọi %orig đúng 1 lần
+    %orig(application);
     @try {
-        if (!self) {
-            %orig(application);
-            return;
-        }
-        %orig(application);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // Đưa lệnh xả bộ nhớ đệm xuống luồng nền để tránh nghẽn UI
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 @autoreleasepool {
                     malloc_zone_pressure_relief(malloc_default_zone(), 0);
                 }
             });
         }
-    } @catch (__unused NSException *e) {
-        %orig(application);
-    }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -6613,18 +6544,13 @@ static inline BOOL Titanium_IsDismissingToHomeV12(void) {
 }
 
 - (void)_processUpdateWithFrameContext:(id)context {
+    // [SỬA CRASH MỞ APP]: gọi %orig đúng 1 lần (EnforceMaxCPUPower chạy trước, nhẹ, giữ nguyên)
     @try {
-        if (!self) {
-            %orig(context);
-            return;
-        }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             EnforceMaxCPUPower();
         }
-        %orig(context);
-    } @catch (__unused NSException *e) {
-        %orig(context);
-    }
+    } @catch (__unused NSException *e) {}
+    %orig(context);
 }
 
 %end
@@ -6968,18 +6894,8 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %hook SBMainWorkspace
 
 - (void)transitionRequest:(id)arg1 didCompleteWithResult:(id)arg2 {
-    @try {
-        if (!self) {
-            %orig(arg1, arg2);
-            return;
-        }
-        %orig(arg1, arg2);
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            malloc_zone_pressure_relief(malloc_default_zone(), 0);
-        }
-    } @catch (__unused NSException *e) {
-        %orig(arg1, arg2);
-    }
+    // [SỬA LAG MỞ/ĐÓNG APP + CRASH]: không còn quét heap đồng bộ trên luồng chính sau mỗi chuyển cảnh; gọi %orig đúng 1 lần
+    %orig(arg1, arg2);
 }
 
 %end
