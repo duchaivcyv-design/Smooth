@@ -14,7 +14,8 @@ BoostiPhone6sApp_FILES = main.m \
                          AppDelegate.m \
                          RootListController.m
 
-BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox
+# ĐÃ THÊM: IOKit (cần cho IORegistry*) và CoreAudioTypes (tránh warning auto-link)
+BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox IOKit CoreAudioTypes
 BoostiPhone6sApp_INSTALL_PATH = $(_THEOS_PREFIX)/Applications
 
 # CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
@@ -32,10 +33,10 @@ BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -Wno-unguarded-availability \
                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                           -IHeaders \
-                          -I../Headers \
-                          -I.
+                          -I../Headers# \
+                          -I LINK.
 
-# LINKER FLAGS
+ER FLAGS
 BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip
 
 BoostiPhone6sCore_CODESIGN_FLAGS = -Sentitlements.plist
