@@ -548,37 +548,42 @@ typedef NS_ENUM(NSInteger, LGGlassMaterialType) {
 }
 
 - (void)setGlassTransparencyEnabled:(BOOL)enabled {
-    _v20TransparencyEnabled = enabled;
-    _blurView.hidden = !enabled;
-    if (enabled) {
-        self.backgroundColor = [UIColor clearColor];
-        _tintView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:[LGGlassMaterialFactory tintAlphaForType:_materialType]];
+    // Solid performance UI: no Liquid Glass, no backdrop blur, no translucent sampling.
+    // Keep the legacy selector for compatibility with existing callers/settings.
+    _v20TransparencyEnabled = NO;
+    _blurView.hidden = YES;
+    _topSpecular.hidden = YES;
+    _bottomReflection.hidden = YES;
+    _diagonalSheen.hidden = YES;
+    _leftEdgeHighlight.hidden = YES;
+    _chromaticEdge.hidden = YES;
+    _innerRim.hidden = YES;
+    _outerRim.hidden = YES;
+    UIColor *surface;
+    if (@available(iOS 13.0, *)) {
+        surface = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
+                return [UIColor colorWithRed:0.94 green:0.96 blue:0.99 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.055 green:0.085 blue:0.145 alpha:1.0];
+        }];
     } else {
-        // V25: disable backdrop sampling without forcing a near-black slab. Keep a themed,
-        // softly tinted opaque surface in both appearances.
-        UIColor *opaqueGlass;
-        if (@available(iOS 13.0, *)) {
-            opaqueGlass = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-                if (traits.userInterfaceStyle == UIUserInterfaceStyleLight) {
-                    return [UIColor colorWithWhite:0.94 alpha:0.965];
-                }
-                return [UIColor colorWithRed:0.15 green:0.145 blue:0.19 alpha:0.965];
-            }];
-        } else {
-            opaqueGlass = [UIColor colorWithWhite:0.18 alpha:0.965];
-        }
-        self.backgroundColor = opaqueGlass;
-        _tintView.backgroundColor = opaqueGlass;
+        surface = [UIColor colorWithRed:0.055 green:0.085 blue:0.145 alpha:1.0];
     }
+    self.backgroundColor = surface;
+    _tintView.backgroundColor = surface;
+    self.layer.borderWidth = 1.0;
+    self.layer.borderColor = [UIColor colorWithRed:0.15 green:0.48 blue:0.95 alpha:0.62].CGColor;
+    self.layer.shadowColor = [UIColor colorWithRed:0.05 green:0.35 blue:0.95 alpha:1.0].CGColor;
+    self.layer.shadowOpacity = 0.18;
+    self.layer.shadowRadius = 12.0;
+    self.layer.shadowOffset = CGSizeMake(0, 5.0);
     [self setNeedsLayout];
 }
 
 - (void)refreshMaterialForCurrentTraits {
-    if (@available(iOS 13.0, *)) {
-        BOOL dark = (self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight);
-        _blurView.effect = [UIBlurEffect effectWithStyle:[LGGlassMaterialFactory blurStyleForType:_materialType isDark:dark]];
-    }
-    [self setGlassTransparencyEnabled:_v20TransparencyEnabled];
+    // Reapply the opaque theme only; never restore a blur/material effect.
+    [self setGlassTransparencyEnabled:NO];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
