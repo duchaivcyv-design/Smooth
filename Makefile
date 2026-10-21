@@ -9,26 +9,26 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = BoostiPhone6sCore
 
-BoostiPhone6sCore_INSTALL_PATH = $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
+BoostiPhone6sCore_INSTALL_PATH = t $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
 # Khai báo file nguồn chuẩn cú pháp có gạch chéo ngược (\)
-BoostiPhone6sCore_FILES = Tweak.xm \
+BoostiPhone6sCore_FILES = Tweakìm.xm \
                           TitaniumKernelOverdrive.m
                           
-BoostiPhone6sCore_CFLAGS = -fobjc-arc \
+BoostiPhone6sCore_CFLAGS = -fobjc-arc th \
                            -O3 \
                            -fvisibility=hidden \
                            -Wall \
                            -Wno-error \
                            -Wno-unused-variable \
                            -Wno-deprecated-declarations \
-                           -Wno-unused-function \
+                          ấy -Wno-unused-function \
                            -Wno-implicit-function-declaration \
                            -Wno-deprecated-non-prototype \
                            -Wno-macro-redefined \
                            -Wno-module-import-in-extern-c \
                            -Wno-unguarded-availability-new \
-                           -Wno-unguarded-availability \
+                           -Wno- fileunguarded-availability \
                            -Wno-unused-command-line-argument \
                            -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                            -DBUILDING_LIBRARY=1 \
@@ -53,8 +53,11 @@ BoostiPhone6sCore_PRIVATE_FRAMEWORKS = IOKit
 
 BoostiPhone6sCore_LIBRARIES = substrate
 
+# ✅ ĐÃ THÊM FLAG TẮT WARNING LINKER
 BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-undefined,dynamic_lookup \
+                            -Wl,-no_warn_duplicate_libraries \
+                            -Wl,-w \
                             -lpthread
 
 include $(THEOS_MAKE_PATH)/library.mk
@@ -93,7 +96,7 @@ before-all::
 			'</plist>' > BoostiPhone6sCore.entitlements; \
 		echo "  [OK] Đã tự động tạo file entitlements chuẩn!"; \
 	else \
-		echo "=== [BoostiPhone6sCore] Đã tìm thấy file entitlements ==="; \
+		echo "=== [BoostiPhone6sCore] Đã entitlements ==="; \
 	fi
 
 after-stage::
