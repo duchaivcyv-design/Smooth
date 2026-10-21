@@ -1672,59 +1672,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 @end
 
-#pragma mark - Expanding nav
-
-- (void)setupExpandingNavigationItems {
-    _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
-    _expandingBoltButton.delegate = self;
-    _expandingBoltButton.tag = 103;
-    [_expandingBoltButton setActions:@[
-        [LGExpandingMenuAction actionWithTitle:@"Áp Dụng Ngay" image:@"arrow.clockwise" tintColor:[UIColor whiteColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Ép Xung 144Hz" image:@"bolt.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Reset Tần Số" image:@"arrow.counterclockwise" tintColor:[UIColor systemOrangeColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Glass Redraw" image:@"sparkles" tintColor:[UIColor colorWithRed:0.5 green:0.8 blue:1.0 alpha:1.0] destructive:NO],
-    ]];
-
-    _expandingLockButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"lock.open.fill" tintColor:[UIColor whiteColor]];
-    _expandingLockButton.delegate = self;
-    _expandingLockButton.tag = 102;
-    [_expandingLockButton setActions:@[
-        [LGExpandingMenuAction actionWithTitle:@"Mở Khóa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Khóa" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Lưu" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Áp Dụng" image:@"arrow.clockwise" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0] destructive:NO],
-    ]];
-
-    _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal" tintColor:[UIColor whiteColor]];
-    _expandingMenuButton.delegate = self;
-    _expandingMenuButton.tag = 101;
-    [_expandingMenuButton setActions:@[
-        [LGExpandingMenuAction actionWithTitle:@"Respring" image:@"arrow.triangle.2.circlepath" tintColor:[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1.0] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Safe Mode" image:@"shield.lefthalf.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
-        [LGExpandingMenuAction actionWithTitle:@"Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
-        [LGExpandingMenuAction actionWithTitle:([Titanium_ResolvePayloadLanguage(self.settingsDict ?: @{}) isEqualToString:@"vi"] ? @"Hướng dẫn & pháp lý" : @"Guide & legal") image:@"book.closed.fill" tintColor:[UIColor colorWithRed:0.42 green:0.78 blue:1.0 alpha:1.0] destructive:NO],
-    ]];
-
-    CGFloat btnSize = 36.0;
-    CGFloat spacing = 10.0;
-    CGFloat totalW = btnSize * 3 + spacing * 2;
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
-    container.backgroundColor = [UIColor clearColor];
-    container.userInteractionEnabled = NO;
-    container.clipsToBounds = NO;
-
-    _expandingBoltButton.frame = CGRectMake(0, 0, btnSize, btnSize);
-    _expandingLockButton.frame = CGRectMake(btnSize + spacing, 0, btnSize, btnSize);
-    _expandingMenuButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
-    
-    [container addSubview:_expandingMenuButton];
-    [container addSubview:_expandingLockButton];
-    [container addSubview:_expandingBoltButton];
-
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
-    [self updateLockIcon];
-}
 
 // ====================================================================================================
 // MODULE 7: EXPANDING NAV BAR BUTTON
