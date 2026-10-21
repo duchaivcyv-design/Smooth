@@ -1838,25 +1838,26 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t d
     if (incoming.magic != APEX_SYNC_MAGIC_V285) return;
 
     NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
-for (NSString *path in paths) {
-    int fd = open([path UTF8String], O_RDONLY);
-    if (fd >= 0) {
-        ApexV285ProPayload existing;
-        uint8_t *cursor = (uint8_t *)&existing;
-        size_t remaining = sizeof(existing);
-        BOOL readOK = YES;
-        (void)readOK;
-        while (remaining > 0) {
-            ssize_t count = read(fd, cursor, remaining);
-            if (count < 0 && errno == EINTR) continue;
-            if (count <= 0) { readOK = NO; break; }
-            cursor += (size_t)count;
-            remaining -= (size_t)count;
+    for (NSString *path in paths) {
+        int fd = open([path UTF8String], O_RDONLY);
+        if (fd >= 0) {
+            ApexV285ProPayload existing;
+            uint8_t *cursor = (uint8_t *)&existing;
+            size_t remaining = sizeof(existing);
+            BOOL readOK = YES;
+            (void)readOK;
+            while (remaining > 0) {
+                ssize_t count = read(fd, cursor, remaining);
+                if (count < 0 && errno == EINTR) continue;
+                if (count <= 0) { readOK = NO; break; }
+                cursor += (size_t)count;
+                remaining -= (size_t)count;
+            }
+            close(fd);
+            // Ghi đè trực tiếp thông số mới nhất để cập nhật Hz/FPS ngay lập tức không bị kẹt bộ đệm cũ
         }
-        close(fd);
-        // Ghi đè trực tiếp thông số mới nhất để cập nhật Hz/FPS ngay lập tức không bị kẹt bộ đệm cũ
+        (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
     }
-    (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
 }
 
 static void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload) {
@@ -3147,7 +3148,7 @@ static inline void Titanium_KillVSyncCompletelyAtRoot(void) {
 }
 
 // ====================================================================================================
-// NHÓM 2: BẺ KHÓA METAL MƯỢT SIÊU CẤP, TẮT TRIỆT ĐỂ V-SYNC TỪ TRỨNG NƯỚC, 0MS DELAY (GỌT SẠCH)
+// NHÓM 2: BẺ KHÓA METAL MƯỢT SIÊU CẤP, TẮT TRIỆT ĐỂ V-SYNC TỪ TRỨNG NƯỚC, 0MS DELAY (ĐÃ VÁ LỖI SELECTOR)
 // ====================================================================================================
 
 static void Titanium_ForceApplyMetalOverdriveUltimate(id self) {
@@ -3269,7 +3270,7 @@ static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     return drawable;
 }
 
-// Khởi tạo tiêm động toàn cục
+// Khởi tạo tiêm động toàn cục (Đã sửa lại m3 gọi đúng selector setMaximumDrawableCount:)
 static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -3290,7 +3291,8 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
             method_setImplementation(m2, (IMP)hooked_CAMetalLayer_setDisplaySyncEnabled);
          }
 
-        Method m3 = class_getInstanceMethod(metalLayerClass, @selector(setMaximumDraw_getableCount:));
+        // Đã sửa lại đúng tên selector setMaximumDrawableCount:
+        Method m3 = class_getInstanceMethod(metalLayerClass, @selector(setMaximumDrawableCount:));
         if (m3) {
             orig_CAMetalLayer_setMaximumDrawableCount = (void (*)(id, SEL, NSUInteger))method_getImplementation(m3);
             method_setImplementation(m3, (IMP)hooked_CAMetalLayer_setMaximumDrawableCount);
