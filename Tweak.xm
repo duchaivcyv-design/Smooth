@@ -3097,6 +3097,8 @@ static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
     return CAFrameRateRangeMake(floorHz, maxFps, maxFps);
 }
 
+// ✅ KHAI BÁO TRƯỚC — để dùng được ở dòng 3186
+extern NSInteger Titanium_GetEffectiveFrameCap(void);
 extern volatile uint64_t g_lastInteractionMachTime;
 extern BOOL Titanium_IsSpringBoard(void);
 
@@ -3127,8 +3129,8 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
     return Titanium_IsVideoOrMediaMetalLayer(layer);
 }
 
-// ==============================================================================
-// TẮT V-SYNC TẬN GỐC TỪ TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
+// ==========================================================================
+====// TẮT V-SYNC TẬN GỐC TỪ TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
 // ==============================================================================
 
 static inline void Titanium_KillVSyncCompletelyAtRoot(void) {
@@ -3225,7 +3227,7 @@ static void hooked_CAMetalLayer_didMoveToWindow(id self, SEL _cmd) {
     }
 }
 
-// Hook setDisplaySyncEnabled: Chặn đứng mọi lệnh bật lại V-Sync từ app/game
+// Hook setDisplaySyncEnabled
 static void (*orig_CAMetalLayer_setDisplaySyncEnabled)(id self, SEL _cmd, BOOL enabled) = NULL;
 static void hooked_CAMetalLayer_setDisplaySyncEnabled(id self, SEL _cmd, BOOL enabled) {
     BOOL targetEnabled = enabled;
@@ -3268,11 +3270,10 @@ static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     return drawable;
 }
 
-// Khởi tạo tiêm động toàn cục & Tiêm V-Sync Killer ngay từ trứng nước
+// Khởi tạo tiêm động toàn cục
 static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        // Kích hoạt triệt tiêu V-Sync ngay khi nạp nhóm Metal Overdrive
         Titanium_KillVSyncCompletelyAtRoot();
 
         Class metalLayerClass = NSClassFromString(@"CAMetalLayer");
@@ -3286,17 +3287,17 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
 
         Method m2 = class_getInstanceMethod(metalLayerClass, @selector(setDisplaySyncEnabled:));
         if (m2) {
-            orig_CAMetalLayer_setDisplaySyncEnabled = (void (*)(id, SEL, BOOL))method_getImplementation(m2);
-            method_setImplementation(m2, (IMP)hooked_CAMetalLayer_setDisplaySyncEnabled);
+            orig_CAMetalLayer_setDisplaySyncEnabled = (void (*)(id, SEL, BOOL)) =method_getImplementation(m2);
+            method_setImplementation(m2, (IMP)hooked_CAMetalLayer_setDisplaySyncEnabled class);
         }
 
-        Method m3 = class_getInstanceMethod(metalLayerClass, @selector(setMaximumDrawableCount:));
+        Method m3 = class_getInstanceMethod(metalLayerClass, @selector(setMaximumDraw_getableCount:));
         if (m3) {
             orig_CAMetalLayer_setMaximumDrawableCount = (void (*)(id, SEL, NSUInteger))method_getImplementation(m3);
             method_setImplementation(m3, (IMP)hooked_CAMetalLayer_setMaximumDrawableCount);
         }
 
-        Method m4 = class_getInstanceMethod(metalLayerClass, @selector(nextDrawable));
+        Method m4InstanceMethod(metalLayerClass, @selector(nextDrawable));
         if (m4) {
             orig_CAMetalLayer_nextDrawable = (id (*)(id, SEL))method_getImplementation(m4);
             method_setImplementation(m4, (IMP)hooked_CAMetalLayer_nextDrawable);
@@ -3306,7 +3307,6 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
 
 // ====================================================================================================
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (15HZ - 240HZ)
-// BẺ CÁC TẦNG ẨN SÂU TRONG CHIP
 // ====================================================================================================
 
 %group Group_FluidTransitions_Pacing
@@ -3330,7 +3330,8 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     return userFPS;
 }
 
-static inline NSInteger Titanium_GetEffectiveFrameCap(void) {
+// ✅ ĐỊNH NGHĨA — không static inline để khớp với extern ở trên
+NSInteger Titanium_GetEffectiveFrameCap(void) {
     NSInteger hzCap = Titanium_GetTargetConfiguredHz();
     NSInteger fpsCap = Titanium_GetTargetConfiguredFPS();
     return (fpsCap > 0) ? fpsCap : hzCap;
@@ -3416,7 +3417,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 2. CADISPLAYMODE — ÉP MODE HIỂN THỊ ẨN
+// 2. CADISPLAYMODE
 // ====================================================================================================
 
 %hook CADisplayMode
@@ -3431,7 +3432,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 3. CADISPLAY — ÉP DISPLAY ẨN SÂU
+// 3. CADISPLAY
 // ====================================================================================================
 
 %hook CADisplay
@@ -3489,7 +3490,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 4. UISCREEN — ÉP TRẦN ẨN
+// 4. UISCREEN
 // ====================================================================================================
 
 %hook UIScreen
@@ -3518,7 +3519,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 5. NSBUNDLE — BẬT CADISABLEMINIMUMFRAMEDURATION
+// 5. NSBUNDLE
 // ====================================================================================================
 
 %hook NSBundle
@@ -3536,7 +3537,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 6. WKWEBVIEW — ÉP WEB RENDER ẨN
+// 6. WKWEBVIEW
 // ====================================================================================================
 
 %hook WKWebView
@@ -3566,7 +3567,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 7. CAANIMATION — ÉP ANIMATION ẨN
+// 7. CAANIMATION
 // ====================================================================================================
 
 %hook CAAnimation
@@ -3590,7 +3591,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %end
 
 // ====================================================================================================
-// 8. CALAYER — ÉP LAYER ANIMATION ẨN
+// 8. CALAYER
 // ====================================================================================================
 
 %hook CALayer
