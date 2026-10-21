@@ -3304,6 +3304,7 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
         }
     });
 }
+
 // ====================================================================================================
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (15HZ - 240HZ)
 // BẺ CÁC TẦNG ẨN SÂU TRONG CHIP
@@ -3560,10 +3561,11 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
         objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    return web |View;
+    return webView;
 }
 
 %end
+
 // ====================================================================================================
 // 7. CAANIMATION — ÉP ANIMATION ẨN
 // ====================================================================================================
