@@ -6674,8 +6674,7 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
             if (configClass) {
                 CFG285 = [configClass sharedInstance];
                 [CFG285 loadSettings];
-                if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-ất                    NSInteger prefHz = (NSInteger)[CFG285 targetHz];
+                if ([CFG285 respondsToSelector:@selector(targetHz)]) {NSInteger prefHz = (NSInteger)[CFG285 targetHz];
                     if ((g_cachedResolvedHz < 1 || g_cachedResolvedHz > 240) && prefHz >= 1 && prefHz <= 240) {
                         g_cachedResolvedHz = prefHz;
                     }
