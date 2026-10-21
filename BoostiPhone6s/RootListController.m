@@ -1622,8 +1622,6 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 
 - (CGAffineTransform)v20IconTransformForSelected:(BOOL)selected pressed:(BOOL)pressed {
-    // The icon only lifts to the stationary glass lens when selection changes;
-    // touch-down itself never translates the glyph, preventing the "icon drops" glitch.
     (void)pressed;
     CGFloat scale = selected ? 0.98 : 1.0;
     CGFloat y = selected ? -12.0 : 0.0;
@@ -1673,6 +1671,60 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     }
 }
 @end
+
+#pragma mark - Expanding nav
+
+- (void)setupExpandingNavigationItems {
+    _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
+    _expandingBoltButton.delegate = self;
+    _expandingBoltButton.tag = 103;
+    [_expandingBoltButton setActions:@[
+        [LGExpandingMenuAction actionWithTitle:@"Áp Dụng Ngay" image:@"arrow.clockwise" tintColor:[UIColor whiteColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Ép Xung 144Hz" image:@"bolt.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Reset Tần Số" image:@"arrow.counterclockwise" tintColor:[UIColor systemOrangeColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Glass Redraw" image:@"sparkles" tintColor:[UIColor colorWithRed:0.5 green:0.8 blue:1.0 alpha:1.0] destructive:NO],
+    ]];
+
+    _expandingLockButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"lock.open.fill" tintColor:[UIColor whiteColor]];
+    _expandingLockButton.delegate = self;
+    _expandingLockButton.tag = 102;
+    [_expandingLockButton setActions:@[
+        [LGExpandingMenuAction actionWithTitle:@"Mở Khóa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Khóa" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Lưu" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Áp Dụng" image:@"arrow.clockwise" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0] destructive:NO],
+    ]];
+
+    _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal" tintColor:[UIColor whiteColor]];
+    _expandingMenuButton.delegate = self;
+    _expandingMenuButton.tag = 101;
+    [_expandingMenuButton setActions:@[
+        [LGExpandingMenuAction actionWithTitle:@"Respring" image:@"arrow.triangle.2.circlepath" tintColor:[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Safe Mode" image:@"shield.lefthalf.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
+        [LGExpandingMenuAction actionWithTitle:([Titanium_ResolvePayloadLanguage(self.settingsDict ?: @{}) isEqualToString:@"vi"] ? @"Hướng dẫn & pháp lý" : @"Guide & legal") image:@"book.closed.fill" tintColor:[UIColor colorWithRed:0.42 green:0.78 blue:1.0 alpha:1.0] destructive:NO],
+    ]];
+
+    CGFloat btnSize = 36.0;
+    CGFloat spacing = 10.0;
+    CGFloat totalW = btnSize * 3 + spacing * 2;
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
+    container.backgroundColor = [UIColor clearColor];
+    container.userInteractionEnabled = NO;
+    container.clipsToBounds = NO;
+
+    _expandingBoltButton.frame = CGRectMake(0, 0, btnSize, btnSize);
+    _expandingLockButton.frame = CGRectMake(btnSize + spacing, 0, btnSize, btnSize);
+    _expandingMenuButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
+    
+    [container addSubview:_expandingMenuButton];
+    [container addSubview:_expandingLockButton];
+    [container addSubview:_expandingBoltButton];
+
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
+    [self updateLockIcon];
+}
 
 // ====================================================================================================
 // MODULE 7: EXPANDING NAV BAR BUTTON
@@ -1848,8 +1900,8 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         [_dimOverlay addGestureRecognizer:dimTap];
     }
     
-    // Bật khả năng chặn chạm khi menu mở
     _dimOverlay.userInteractionEnabled = YES;
+    _dimOverlay.hidden = NO;
 
     [host addSubview:_dimOverlay];
     [host bringSubviewToFront:_dimOverlay];
@@ -1909,9 +1961,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     if (!_expanded) return;
     _expanded = NO;
     
-    // Ngắt ngay lập tức khả năng chặn chạm để trả lại cảm ứng cho toàn app
     if (_dimOverlay) {
         _dimOverlay.userInteractionEnabled = NO;
+        [_dimOverlay removeFromSuperview];
+        _dimOverlay = nil;
     }
 
     for (NSInteger i = 0; i < _actionViews.count; i++) {
@@ -1922,14 +1975,14 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
             v.transform = CGAffineTransformMakeScale(0.7, 0.7);
         } completion:nil];
     }
+    
     [UIView animateWithDuration:0.28 delay:0.10 options:UIViewAnimationOptionCurveEaseIn animations:^{
-        self->_dimOverlay.alpha = 0.0;
         self.iconView.transform = CGAffineTransformIdentity;
     } completion:^(BOOL finished) {
         [self->_actionsContainer removeFromSuperview];
-        [self->_dimOverlay removeFromSuperview];
-        [self->_actionViews removeAllObjects];
+        [_actionViews removeAllObjects];
     }];
+    
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [fb impactOccurred];
     if ([_delegate respondsToSelector:@selector(expandingButtonDidCollapse:)]) [_delegate expandingButtonDidCollapse:self];
@@ -1937,7 +1990,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 
 - (void)toggle { if (_expanded) [self collapseMenu]; else [self expandMenu]; }
 
-- (void)actionViewTap:(LGExpandingActionView *)v {
+- (void)actionViewTap:(LGExpandingActionView * _Nonnull)v {
     NSInteger idx = v.tag;
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeSuccess];
@@ -5932,9 +5985,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 #pragma mark - Expanding nav
 
 - (void)setupExpandingNavigationItems {
-    // [V10] Sửa lỗi 3-4 nút góc phải dính nhau / nhấn không được:
-    // Không dùng UIStackView (FillEqually kéo rộng vùng chạm đè lên nhau). Dùng container view
-    // với frame cố định chính xác 40x40 mỗi nút, spacing 12, mỗi nút độc lập, vùng chạm không đè.
     _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
     _expandingBoltButton.delegate = self;
     _expandingBoltButton.tag = 103;
@@ -5966,20 +6016,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [LGExpandingMenuAction actionWithTitle:([Titanium_ResolvePayloadLanguage(self.settingsDict ?: @{}) isEqualToString:@"vi"] ? @"Hướng dẫn & pháp lý" : @"Guide & legal") image:@"book.closed.fill" tintColor:[UIColor colorWithRed:0.42 green:0.78 blue:1.0 alpha:1.0] destructive:NO],
     ]];
 
-    // [V10.1 SỬA LỖI 1 NÚT BỊ CHE]: giảm kích thước xuống 36, spacing 10, container rộng vừa đủ,
-    // clipsToBounds=NO, thứ tự add từ phải sang trái để nút ngoài cùng không bị che.
     CGFloat btnSize = 36.0;
     CGFloat spacing = 10.0;
     CGFloat totalW = btnSize * 3 + spacing * 2;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
     container.backgroundColor = [UIColor clearColor];
-    container.userInteractionEnabled = YES;
+    container.userInteractionEnabled = NO;
     container.clipsToBounds = NO;
 
     _expandingBoltButton.frame = CGRectMake(0, 0, btnSize, btnSize);
     _expandingLockButton.frame = CGRectMake(btnSize + spacing, 0, btnSize, btnSize);
     _expandingMenuButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
-    // Thứ tự add: nút phải cùng (bolt) add cuối để nằm trên cùng, không bị che
+    
     [container addSubview:_expandingMenuButton];
     [container addSubview:_expandingLockButton];
     [container addSubview:_expandingBoltButton];
@@ -5988,8 +6036,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [self updateLockIcon];
 }
 
-// [V10] Khi một nút mở rộng, tự động thu hẹp 2 nút còn lại -> không còn tình trạng menu đè nhau,
-// nhấn nút khác không phản ứng (dimOverlay che). Mỗi nút bây giờ độc lập hoàn toàn.
 - (void)expandingButtonDidExpand:(LGExpandingNavBarButton *)button {
     if (button != _expandingMenuButton && [_expandingMenuButton respondsToSelector:@selector(collapseMenu)]) [_expandingMenuButton collapseMenu];
     if (button != _expandingLockButton && [_expandingLockButton respondsToSelector:@selector(collapseMenu)]) [_expandingLockButton collapseMenu];
@@ -5997,7 +6043,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)expandingButton:(LGExpandingNavBarButton *)button didSelectActionAtIndex:(NSInteger)index {
-    // Help, privacy, terms, and read-only diagnostics remain available without activation.
     if (!_isFeatureActivated && !(button == _expandingMenuButton && index == 4)) {
         if ([button respondsToSelector:@selector(collapseMenu)]) [button collapseMenu];
         [self showUnexploitedWarningAlert];
@@ -6082,8 +6127,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)runApplyWithLoading {
     if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
-    // V23: avoid a 5-second full-screen dim overlay and per-frame car timer.
-    // The actual preference/payload work is coalesced and applied by applyDeepSpringBoardAndUIKitTweaks.
     [self applyDeepSpringBoardAndUIKitTweaks];
     [self updateServerStatusIndicator];
     UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
