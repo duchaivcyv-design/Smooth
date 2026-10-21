@@ -6103,21 +6103,10 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 }
 
 // ====================================================================================================
-// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TƯỚNG TAY (RUN CORE TWEAK & CTOR) - ĐÃ TỐI ƯU & LÀM SẠCH TRÙNG LẶP
+// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TƯỚNG TAY (RUN CORE TWEAK & CTOR) - ĐÃ LÀM SẠCH TRÙNG LẶP
 // ====================================================================================================
 
-// Khai báo các biến và hàm toàn cục dùng chung cho toàn bộ module (tránh lỗi undeclared identifier)
-extern BOOL IS_ACTIVE;
-extern struct { BOOL masterEnabled; } g_syncPayloadV285;
-extern BOOL g_isCurrentAppBlacklisted;
-extern BOOL g_SystemMasterReady;
-extern id CFG285;
-extern NSInteger g_cachedResolvedHz;
-extern NSInteger g_cachedResolvedFPS;
-extern BOOL TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS;
-extern BOOL TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS;
-
-// Khai báo nguyên mẫu các hàm xử lý phụ thuộc từ file khác
+// Khai báo các hàm ngoại vi (extern) thực sự cần thiết chưa có định nghĩa trong phạm vi này
 extern void Titanium_BypassQuartzCoreRangeAssertion(void);
 extern void Titanium_KillVSyncCompletelyAtRoot(void);
 extern void Titanium_InitZeroCopyIPC(BOOL isSpringBoard);
@@ -6145,46 +6134,8 @@ extern void Titanium_RegisterAppResumeRefreshV12(void);
 extern void Titanium_ReapplyFrameRateToAllScenes(void);
 extern void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
-static BOOL g_hypervisorShieldActive = YES;
-static BOOL g_absoluteHardwareTakeoverActive = YES;
-static NSInteger g_enforcedTargetHz = 240;
-static NSInteger g_enforcedTargetFPS = 240;
-
-static void Titanium_DeployHypervisorShieldAndAntiKill(void) {
-    @autoreleasepool {
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = SIG_IGN;
-        sigaction(SIGPIPE, &sa, NULL);
-        sigaction(SIGTRAP, &sa, NULL);
-        sigaction(SIGSEGV, &sa, NULL);
-        sigaction(SIGTERM, &sa, NULL);
-        sigaction(SIGKILL, &sa, NULL);
-
-        task_set_exception_ports(mach_task_self(), EXC_MASK_ALL, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
-
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-            pthread_setname_np("com.titanium.hypervisor.shield");
-            while (g_hypervisorShieldActive) {
-                usleep(100000);
-                __asm__ volatile("" : : : "memory");
-            }
-        });
-    }
-}
-
-static float Titanium_SanitizeAndForceExtremeRate(float requestedRate) {
-    if (requestedRate <= 0.0f || requestedRate < 1.0f) {
-        return (float)g_enforcedTargetHz;
-    }
-    if (requestedRate > 240.0f) {
-        return 240.0f;
-    }
-    if (requestedRate == 60.0f && g_enforcedTargetHz > 60) {
-        return (float)g_enforcedTargetHz;
-    }
-    return (float)g_enforcedTargetHz;
-}
+// Khai báo nguyên mẫu hàm hook MGCopyAnswer đã có bên dưới
+static void Titanium_InstallMGCopyAnswerHookV26(void);
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
