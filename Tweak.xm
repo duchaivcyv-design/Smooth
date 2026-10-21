@@ -3542,14 +3542,14 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled];
-) && configuration) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && configuration) {
         NSInteger targetCap = Titanium_GetEffectiveFrameCap();
-        NSString *js = Titan           ium_BuildWebFPSOverdriveScript(targetCap);
+        NSString *js = Titanium_BuildWebFPSOverdriveScript(targetCap);
         if (js && js.length > 0) {
-            WKUserScript *script = [[WKUserScript if alloc] initWithSource:js
+            WKUserScript *script = [[WKUserScript alloc] initWithSource:js
                                                           injectionTime:WKUserScriptInjectionTimeAtDocumentStart
-                                                       forMainFrameOnly:NO (!configuration.userContentController) {
+                                                       forMainFrameOnly:NO];
+            if (!configuration.userContentController) {
                 configuration.userContentController = [[WKUserContentController alloc] init];
             }
             [configuration.userContentController addUserScript:script];
@@ -3560,11 +3560,10 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
         objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    return webView;
+    return web |View;
 }
 
 %end
-
 // ====================================================================================================
 // 7. CAANIMATION — ÉP ANIMATION ẨN
 // ====================================================================================================
@@ -5068,9 +5067,6 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 // ====================================================================================================
 // TITANIUM FULL TẦNG 4 — BẺ KHÓA PANEL & KÍCH HOẠT PROMOTION / 15-240HZ ẨN TRONG CHIP TỰ ĐỘNG
 // ====================================================================================================
-
-#import <QuartzCore/QuartzCore.h>
-#import <UIKit/UIKit.h>
 
 // 1. Include header chứa full definition
 #import "ApexV285ProPayload.h"
