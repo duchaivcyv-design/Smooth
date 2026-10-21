@@ -1,4 +1,4 @@
-behavior on each target device/iOS release.
+//behavior on each target device/iOS release.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -4120,7 +4120,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         renderPage();
     };
 
-    renderPage = ^{
+renderPage = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         for (UIView *v in options.arrangedSubviews) { [options removeArrangedSubview:v]; [v removeFromSuperview]; }
         back.hidden = (page == 0);
@@ -4142,7 +4142,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
                 b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
                 [b.heightAnchor constraintEqualToConstant:39].active = YES;
-                __weak void (^weakRenderPage)(void) = renderPage;   // tránh retain cycle; nút Tiếp theo vẫn giữ renderPage
+                __weak __typeof(renderPage) weakRenderPage = renderPage;   // tránh retain cycle; nút Tiếp theo vẫn giữ renderPage
                 [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; void (^rp)(void) = weakRenderPage; if (rp) rp(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
@@ -4185,6 +4185,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             next.hidden = NO;
         }
     };
+
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a;
         if (page < 3) {
@@ -4224,14 +4225,15 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             }];
         }
     }] forControlEvents:UIControlEventTouchUpInside];
+
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a; if (page <= 0) return; page--;
         CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
         [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; renderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
+
     [self presentViewController:wizard animated:YES completion:^{ renderPage(); }];
 }
-
 - (void)showAuthorIntroSequence {
     if (self.presentedViewController) return;
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
@@ -8290,7 +8292,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         p.reserved[sizeof(p.reserved) - 1] = '\0';
     }
 
-    for (int gi = 0; gi < 34; gi++) p.groupFlags[gi] = 1;
+uint32_t *groupFlagsPtr = (uint32_t *)((uint8_t *)&p + 96);
+    for (int gi = 0; gi < 34; gi++) groupFlagsPtr[gi] = 1;
     p.updateSeq = Titanium_IPCSequenceNow();
     p.lastHeartbeat = p.updateSeq;
 
@@ -8304,6 +8307,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             }
         }];
     }
+    
     NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
     NSDictionary *perAppProfiles = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] ?: @{};
     self.settingsDict[@"PerAppProfiles"] = perAppProfiles;
