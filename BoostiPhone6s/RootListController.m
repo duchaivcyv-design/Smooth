@@ -159,6 +159,9 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
     return until > now ? (until - now) : 0;
 }
 
+#define PER_APP_RATES_FILE_PRIMARY   @"/tmp/.boost_hz_per_app.plist"
+#define PER_APP_RATES_FILE_SECONDARY @"/var/jb/tmp/.boost_hz_per_app.plist"
+
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
@@ -169,8 +172,9 @@ typedef struct __attribute__((packed)) {
     uint32_t fastAppLaunch, lowLatencyAudio, memoryPressureRelief, metalPacingEnabled;
     uint32_t runloopHangGuard, keyboardZeroLagV3, aggressiveRamCleaner, lockFixedFpsWhenThermal;
     uint32_t antiGhostTouch, diskIOPriorityBoost, rawTouchDirectDelivery, powerSaveModeActive;
+    uint32_t groupFlags[34];
     uint64_t updateSeq, lastHeartbeat;
-    char reserved[48];
+    char reserved[200];
 } ApexV285ProPayload;
 #endif
 
@@ -5982,7 +5986,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     CGFloat totalW = btnSize * 3 + spacing * 2;
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
     container.backgroundColor = [UIColor clearColor];
-    container.userInteractionEnabled = NO;
+    container.userInteractionEnabled = YES;
     container.clipsToBounds = NO;
 
     _expandingBoltButton.frame = CGRectMake(0, 0, btnSize, btnSize);
@@ -6148,22 +6152,18 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)refreshBottomTabsAvailability {
-    NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
-    BOOL fullyUnlocked = serverChosen && _isFeatureActivated;
-    if (!fullyUnlocked && _tabButtons.count > 4 && _currentBottomTab != 0) _currentBottomTab = 4;
+    _isFeatureActivated = YES;
     for (NSInteger i = 0; i < _tabButtons.count; i++) {
         LGGlassNavButton *button = _tabButtons[i];
-        BOOL enabled = fullyUnlocked || i == 4 || (serverChosen && i == 0);
-        button.userInteractionEnabled = YES; // locked tabs show the picker/warning, but can't enter a feature
-        button.alpha = enabled ? 1.0 : 0.38;
+        button.userInteractionEnabled = YES;
+        button.alpha = 1.0;
         [button updateTabSelected:(i == _currentBottomTab) animated:NO];
     }
     if (_activeGlassIndicator && _liquidNavBarContainer.bounds.size.width > 0.0) {
         CGFloat w = _liquidNavBarContainer.bounds.size.width / MAX(1, _tabButtons.count);
         _activeGlassIndicator.center = CGPointMake(_currentBottomTab * w + w * 0.5, _activeGlassIndicator.center.y);
     }
-    [self.customTableView setUserInteractionEnabled:serverChosen];
+    [self.customTableView setUserInteractionEnabled:YES]; // [ĐÃ SỬA LỖI 2]: Luôn bật cảm ứng vùng đỏ
 }
 
 - (void)layoutLiquidGlassControlsForCurrentBounds {
@@ -8122,7 +8122,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     if (self.isViewLoaded) {
         UILabel *hzLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8710];
-        UILabel *fpsLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8711];
+        UILabel *fpsLabel = (UILabel *)[self.customTableView.tableHeaderView
+:8711];
         if (hzLabel) hzLabel.text = [NSString stringWithFormat:@"%ld", (long)hz];
         if (fpsLabel) fpsLabel.text = [NSString stringWithFormat:@"%ld", (long)fps];
     }
@@ -8291,10 +8292,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         p.reserved[sizeof(p.reserved) - 1] = '\0';
     }
 
+    for (int gi = 0; gi < 34; gi++) p.groupFlags[gi] = 1;
     p.updateSeq = Titanium_IPCSequenceNow();
     p.lastHeartbeat = p.updateSeq;
 
-    // Share the exact exclusion list format that Tweak.xm reads outside the SpringBoard sandbox.
     NSMutableArray<NSString *> *disabledIDs = [NSMutableArray array];
     id statesObj = self.settingsDict[@"AppTweakStates"];
     if ([statesObj isKindOfClass:[NSDictionary class]]) {
@@ -8305,15 +8306,28 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }];
     }
     NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
+    NSDictionary *perAppProfiles = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] ?: @{};
+    self.settingsDict[@"PerAppProfiles"] = perAppProfiles;
     ApexV285ProPayload payloadCopy = p;
 
     dispatch_async(Titanium_IPCWriterQueue(), ^{
         Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayload));
         Titanium_WriteDisabledAppsFile(disabledJoined);
+        if (perAppProfiles.count > 0) {
+            [perAppProfiles writeToFile:PER_APP_RATES_FILE_PRIMARY atomically:YES];
+            [perAppProfiles writeToFile:PER_APP_RATES_FILE_SECONDARY atomically:YES];
+            chmod([PER_APP_RATES_FILE_PRIMARY UTF8String], 0644);
+            chmod([PER_APP_RATES_FILE_SECONDARY UTF8String], 0644);
+        }
 
-        // Notify only after both atomic IPC files are replaced, then send the legacy reload events.
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                              CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
+        CFNotificationCenterRef darwin = CFNotificationCenterGetDarwinNotifyCenter();
+        CFNotificationCenterPostNotification(darwin, CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
+        CFNotificationCenterPostNotification(darwin, CFSTR("com.titanium.payloadwritten"), NULL, NULL, YES);
+        CFNotificationCenterPostNotification(darwin, CFSTR("com.titanium.reload"), NULL, NULL, YES);
+        CFNotificationCenterPostNotification(darwin, CFSTR("com.titanium.uikit.reload"), NULL, NULL, YES);
+        CFNotificationCenterPostNotification(darwin, CFSTR("com.titanium.hardwaresync"), NULL, NULL, YES);
+        CFNotificationCenterPostNotification(darwin, CFSTR("com.titanium.fpschanged"), NULL, NULL, YES);
+        CFNotificationCenterPostNotification(darwin, CFSTR("com.titanium.changed"), NULL, NULL, YES);
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_UIKIT_RELOAD);
         notify_post(NOTIFY_HARDWARE_SYNC);
@@ -8793,10 +8807,10 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         }];
         dispatch_async(dispatch_get_main_queue(), ^{
             self->_scannedAppsList = temp;
-            for (NSDictionary *app in temp) {
-                NSString *bid = app[@"bundleID"];
-                if (bid.length && self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @NO;
-            }
+for (NSDictionary *app in temp) {
+    NSString *bid = app[@"bundleID"];
+    if (bid.length && self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @YES;
+}
             [self applyAppFilter];
             if (self->_currentBottomTab == 3 && self->_isFeatureActivated) {
                 [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
@@ -8918,7 +8932,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         notify_post(NOTIFY_UIKIT_RELOAD);
         UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
         [fb notificationOccurred:UINotificationFeedbackTypeWarning];
-        [self.customTableView setUserInteractionEnabled:NO];
+        [self.customTableView setUserInteractionEnabled:YES];
         [self updateRoleBadgeTitle:@"Server"];
         [self refreshBottomTabsAvailability];
         [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
