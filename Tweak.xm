@@ -918,6 +918,12 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)setCustomFullHomedStyle:(BOOL)flag;
 @end
 
+// ==================== ✅ BỔ SUNG: SBDOCKVIEW (FIX BUILD ERROR) ====================
+@interface SBDockView : UIView
+- (void)layoutSubviews;
+@end
+// ================================================================================
+
 @interface SBFolderView : UIView
 - (void)layoutSubviews;
 - (void)scrollViewDidScroll:(id)scrollView;
