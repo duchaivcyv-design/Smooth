@@ -387,7 +387,7 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 static void Titanium_InstallMGCopyAnswerHookV26(void);  // [buildfix4] khai báo trước để dùng được trong các hàm định nghĩa sớm hơn
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
-
+extern void Titanium_KillVSyncCompletelyAtRoot(void);
 
 // ====================================================================================================
 // TOÀN BỘ KHAI BÁO @INTERFACE - TITANIUM / APEX V285 PRO (ĐÃ BỔ SUNG ĐẦY ĐỦ CÁC EXTENSION MỚI NHẤT)
@@ -3097,7 +3097,6 @@ static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
     return CAFrameRateRangeMake(floorHz, maxFps, maxFps);
 }
 
-// ✅ KHAI BÁO TRƯỚC — để dùng được ở dòng 3186
 extern NSInteger Titanium_GetEffectiveFrameCap(void);
 extern volatile uint64_t g_lastInteractionMachTime;
 extern BOOL Titanium_IsSpringBoard(void);
@@ -3130,7 +3129,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 }
 
 // ==========================================================================
-====// TẮT V-SYNC TẬN GỐC TỪ TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
+// TẮT V-SYNC TẬN GỐC TỪ TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
 // ==============================================================================
 
 static inline void Titanium_KillVSyncCompletelyAtRoot(void) {
@@ -3330,7 +3329,6 @@ static inline NSInteger Titanium_GetTargetConfiguredFPS(void) {
     return userFPS;
 }
 
-// ✅ ĐỊNH NGHĨA — không static inline để khớp với extern ở trên
 NSInteger Titanium_GetEffectiveFrameCap(void) {
     NSInteger hzCap = Titanium_GetTargetConfiguredHz();
     NSInteger fpsCap = Titanium_GetTargetConfiguredFPS();
