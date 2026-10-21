@@ -3597,13 +3597,16 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 %hook CALayer
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
-    if (anim && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        if (@available(iOS 15.0, *)) {
-            if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                anim.preferredFrameRateRange = Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap());
+    @try {
+        if (anim && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+            if (@available(iOS 15.0, *)) {
+                if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    anim.preferredFrameRateRange = Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap());
+                }
             }
         }
-    }
+    } @catch (__unused NSException *e) {}
+    
     %orig(anim, key);
 }
 
