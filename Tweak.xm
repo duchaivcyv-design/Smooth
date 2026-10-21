@@ -3287,9 +3287,9 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
 
         Method m2 = class_getInstanceMethod(metalLayerClass, @selector(setDisplaySyncEnabled:));
         if (m2) {
-            orig_CAMetalLayer_setDisplaySyncEnabled = (void (*)(id, SEL, BOOL)) =method_getImplementation(m2);
-            method_setImplementation(m2, (IMP)hooked_CAMetalLayer_setDisplaySyncEnabled class);
-        }
+            orig_CAMetalLayer_setDisplaySyncEnabled = (void (*)(id, SEL, BOOL))method_getImplementation(m2);
+            method_setImplementation(m2, (IMP)hooked_CAMetalLayer_setDisplaySyncEnabled);
+         }
 
         Method m3 = class_getInstanceMethod(metalLayerClass, @selector(setMaximumDraw_getableCount:));
         if (m3) {
@@ -3297,7 +3297,7 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
             method_setImplementation(m3, (IMP)hooked_CAMetalLayer_setMaximumDrawableCount);
         }
 
-        Method m4InstanceMethod(metalLayerClass, @selector(nextDrawable));
+        Method m4 = class_getInstanceMethod(metalLayerClass, @selector(nextDrawable));
         if (m4) {
             orig_CAMetalLayer_nextDrawable = (id (*)(id, SEL))method_getImplementation(m4);
             method_setImplementation(m4, (IMP)hooked_CAMetalLayer_nextDrawable);
