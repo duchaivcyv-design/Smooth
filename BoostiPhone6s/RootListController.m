@@ -254,42 +254,89 @@ static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
     void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
     if (!iokit) { cached = nil; return nil; }
 
-    typedef mach_port_t (*IOServiceMatchingFn)(const char *name);
-    typedef mach_port_t (*IOServiceGetMatchingServiceFn)(mach_port_t, CFDictionaryRef);
-    typedef CFTypeRef (*IORegistryEntryCreateCFPropertyFn)(mach_port_t, CFStringRef, CFAllocatorRef, uint32_t);
-    typedef void (*IOObjectReleaseFn)(mach_port_t);
+    // --- Khai báo ĐÚNG kiểu IOKit ---
+    typedef CFMutableDictionaryRef (*IOServiceMatchingFn)(const char *name);
+    typedef io_service_t (*IOServiceGetMatchingServiceFn)(mach_port_t, CFDictionaryRef);
+    typedef CFTypeRef (*IORegistryEntryCreateCFPropertyFn)(io_registry_entry_t, CFStringRef, CFAllocatorRef, uint32_t);
+    typedef kern_return_t (*IOObjectReleaseFn)(io_object_t);
 
-    IOServiceMatchingFn IOServiceMatching = (IOServiceMatchingFn)dlsym(iokit, "IOServiceMatching");
-    IOServiceGetMatchingServiceFn IOServiceGetMatchingService = (IOServiceGetMatchingServiceFn)dlsym(iokit, "IOServiceGetMatchingService");
-    IORegistryEntryCreateCFPropertyFn IORegistryEntryCreateCFProperty = (IORegistryEntryCreateCFPropertyFn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
-    IOObjectReleaseFn IOObjectRelease = (IOObjectReleaseFn)dlsym(iokit, "IOObjectRelease");
-    if (!IOServiceMatching || !IOServiceGetMatchingService || !IORegistryEntryCreateCFProperty || !IOObjectRelease) { cached = nil; return nil; }
+    IOServiceMatchingFn IOServiceMatchingP =
+        (IOServiceMatchingFn)dlsym(iokit, "IOServiceMatching");
+    IOServiceGetMatchingServiceFn IOServiceGetMatchingServiceP =
+        (IOServiceGetMatchingServiceFn)dlsym(iokit, "IOServiceGetMatchingService");
+    IORegistryEntryCreateCFPropertyFn IORegistryEntryCreateCFPropertyP =
+        (IORegistryEntryCreateCFPropertyFn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
+    IOObjectReleaseFn IOObjectReleaseP =
+        (IOObjectReleaseFn)dlsym(iokit, "IOObjectRelease");
+
+    if (!IOServiceMatchingP || !IOServiceGetMatchingServiceP ||
+        !IORegistryEntryCreateCFPropertyP || !IOObjectReleaseP) {
+        cached = nil;
+        return nil;
+    }
 
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
-    mach_port_t masterPort = 0; // mach_host_self()
-    // Lay mach port qua host_get_host_priv
-    typedef mach_port_t (*mach_host_self_fn)(void);
-    mach_host_self_fn mach_host_self_p = (mach_host_self_fn)dlsym(RTLD_DEFAULT, "mach_host_self");
-    if (mach_host_self_p) masterPort = mach_host_self_p();
 
-    NSArray *sensorKeys = @[@"CPU0_Temperature", @"CPU1_Temperature", @"GPU_Temperature", @"PMU_Temperature", @"Temperature"];
-    NSArray *serviceNames = @[@"AppleARMPMUCharger", @"AppleSmartBatteryManager", @"AppleA7IOP", @"PMU"];
+    // --- Master port đúng cách: kIOMasterPortDefault ---
+    // Không dùng mach_host_self() — đây KHÔNG phải IOKit master port.
+    mach_port_t masterPort = kIOMasterPortDefault;
+    if (@available(iOS 12.0, *)) {
+        masterPort = kIOMainPortDefault;
+    }
+
+    NSArray<NSString *> *sensorKeys = @[
+        @"CPU0_Temperature", @"CPU1_Temperature",
+        @"GPU_Temperature",
+        @"PMU_Temperature",
+        @"Temperature"
+    ];
+    NSArray<NSString *> *serviceNames = @[
+        @"AppleARMPMUCharger",
+        @"AppleSmartBatteryManager",
+        @"AppleA7IOP",
+        @"PMU"
+    ];
+
     for (NSString *svc in serviceNames) {
-        mach_port_t service = IOServiceGetMatchingService(masterPort, IOServiceMatching([svc UTF8String]));
+        // IOServiceMatchingP trả về CFMutableDictionaryRef
+        CFMutableDictionaryRef matching = IOServiceMatchingP([svc UTF8String]);
+        if (!matching) continue;
+
+        // IOServiceGetMatchingServiceP nhận (mach_port_t, CFDictionaryRef) -> io_service_t
+        // Hàm này CONSUME (release) `matching` — KHÔNG CFRelease nữa.
+        io_service_t service = IOServiceGetMatchingServiceP(masterPort, matching);
         if (service == 0) continue;
+
         for (NSString *key in sensorKeys) {
-            CFTypeRef val = IORegistryEntryCreateCFProperty(service, (__bridge CFStringRef)key, kCFAllocatorDefault, 0);
-            if (val) {
+            CFTypeRef val = IORegistryEntryCreateCFPropertyP(
+                service,
+                (__bridge CFStringRef)key,
+                kCFAllocatorDefault,
+                0
+            );
+            if (!val) continue;
+
+            // Kiểm tra kiểu trước khi bridge
+            if (CFGetTypeID(val) == CFNumberGetTypeID()) {
                 NSNumber *num = (__bridge_transfer NSNumber *)val;
                 double tempC = [num doubleValue] / 100.0; // IOKit tra ve centi-degree
                 if (tempC > 0 && tempC < 120) {
-                    NSString *label = [key containsString:@"GPU"] ? @"GPU" : ([key containsString:@"CPU"] ? @"CPU" : ([key containsString:@"PMU"] ? @"PMU" : key));
+                    NSString *label = @"Temperature";
+                    if ([key containsString:@"GPU"]) label = @"GPU";
+                    else if ([key containsString:@"CPU"]) label = @"CPU";
+                    else if ([key containsString:@"PMU"]) label = @"PMU";
                     if (!result[label]) result[label] = @(tempC);
                 }
+            } else {
+                CFRelease(val);
             }
         }
-        IOObjectRelease(service);
+        IOObjectReleaseP(service);
     }
+
+    cached = [result copy];
+    return cached;
+}
 
     // Doc nhiet pin qua IOPMPowerSource
     Class psClass = NSClassFromString(@"IOPMPowerSource");
