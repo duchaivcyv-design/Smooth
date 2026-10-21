@@ -3097,7 +3097,6 @@ static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
     return CAFrameRateRangeMake(floorHz, maxFps, maxFps);
 }
 
-extern NSInteger Titanium_GetEffectiveFrameCap(void);
 extern volatile uint64_t g_lastInteractionMachTime;
 extern BOOL Titanium_IsSpringBoard(void);
 
