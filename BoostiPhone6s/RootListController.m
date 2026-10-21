@@ -8292,7 +8292,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         p.reserved[sizeof(p.reserved) - 1] = '\0';
     }
 
-memset(&p.enableAppleInternalProMotion, 1, 34 * sizeof(uint32_t));
+uint32_t *rawFields = (uint32_t *)&p;
+    for (int i = 0; i < 34; i++) {
+        rawFields[24 + i] = 1; // 24 là offset của 34 trường groupFlags (24 * 4 bytes = 96 bytes)
+    }
     p.updateSeq = Titanium_IPCSequenceNow();
     p.lastHeartbeat = p.updateSeq;
 
