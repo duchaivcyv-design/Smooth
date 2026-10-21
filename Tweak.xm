@@ -1838,25 +1838,25 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t d
     if (incoming.magic != APEX_SYNC_MAGIC_V285) return;
 
     NSArray *paths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
-    for (NSString *path in paths) {
-        int fd = open([path UTF8String], O_RDONLY);
-        if (fd >= 0) {
-            ApexV285ProPayload existing;
-            uint8_t *cursor = (uint8_t *)&existing;
-            size_t remaining = sizeof(existing);
-            BOOL readOK = YES;
-            while (remaining > 0) {
-                ssize_t count = read(fd, cursor, remaining);
-                if (count < 0 && errno == EINTR) continue;
-                if (count <= 0) { readOK = NO; break; }
-                cursor += (size_t)count;
-                remaining -= (size_t)count;
-            }
-            close(fd);
-            // Ghi đè trực tiếp thông số mới nhất để cập nhật Hz/FPS ngay lập tức không bị kẹt bộ đệm cũ
+for (NSString *path in paths) {
+    int fd = open([path UTF8String], O_RDONLY);
+    if (fd >= 0) {
+        ApexV285ProPayload existing;
+        uint8_t *cursor = (uint8_t *)&existing;
+        size_t remaining = sizeof(existing);
+        BOOL readOK = YES;
+        (void)readOK;
+        while (remaining > 0) {
+            ssize_t count = read(fd, cursor, remaining);
+            if (count < 0 && errno == EINTR) continue;
+            if (count <= 0) { readOK = NO; break; }
+            cursor += (size_t)count;
+            remaining -= (size_t)count;
         }
-        (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
+        close(fd);
+        // Ghi đè trực tiếp thông số mới nhất để cập nhật Hz/FPS ngay lập tức không bị kẹt bộ đệm cũ
     }
+    (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
 }
 
 static void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload) {
