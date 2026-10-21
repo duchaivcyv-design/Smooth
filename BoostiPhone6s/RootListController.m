@@ -3529,10 +3529,9 @@ static void Titanium_RunDarwinExploit(void (^completion)(NSString *report)) {
 @end
 
 static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completion)(BOOL success, NSString *report)) {
-    TitaniumExploitScreen *exploitVC = [TitaniumExploitScreen new];
-    exploitVC.modalPresentationStyle = UIModalPresentationFullScreen;
-    exploitVC.completion = completion;
-    [fromVC presentViewController:exploitVC animated:NO completion:nil];
+    // Đã bỏ màn hình khai thác giả. Chỉ trả về kết quả trung thực, không khóa giao diện.
+    (void)fromVC;
+    if (completion) completion(NO, @"Chẩn đoán chỉ đọc: không có khai thác kernel trong ứng dụng này.");
 }
 
 // V23: enlarged rolling line chart (heart-monitor style). Values are samples, not fabricated historical telemetry.
@@ -5285,7 +5284,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
         _adminSessionRestorePending = NO;
         _isAdminServer = NO;
-        self.customTableView.userInteractionEnabled = NO;
+        self.customTableView.userInteractionEnabled = YES;   // bảng luôn nhận chạm; quyền từng mục do hàng tự kiểm soát
         if (self.view.window && !self.presentedViewController) {
             UIAlertController *invalid = [UIAlertController alertControllerWithTitle:@"Endpoint không hợp lệ" message:@"Không thể xác minh phiên Admin vì URL backend không phải HTTPS hợp lệ. Kiểm tra URL rồi đăng nhập lại." preferredStyle:UIAlertControllerStyleAlert];
             [invalid addAction:[UIAlertAction actionWithTitle:@"Đăng nhập lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [self showAdminServerLogin]; }]];
@@ -5331,7 +5330,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
             owner->_isAdminServer = NO;
             [owner updateRoleBadgeTitle:@"Server"];
-            owner.customTableView.userInteractionEnabled = NO;
+            owner.customTableView.userInteractionEnabled = YES;   // bảng luôn nhận chạm; quyền từng mục do hàng tự kiểm soát
             [owner refreshBottomTabsAvailability];
             [owner.customTableView reloadData];
             if (http.statusCode == 401 || http.statusCode == 403) {
@@ -5374,7 +5373,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [defaults synchronize];
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateRoleBadgeTitle:@"Server"];
-        self.customTableView.userInteractionEnabled = NO;
+        self.customTableView.userInteractionEnabled = YES;   // bảng luôn nhận chạm; quyền từng mục do hàng tự kiểm soát
         [self refreshBottomTabsAvailability];
         [self updateServerStatusIndicator];
         [self.customTableView reloadData];
@@ -5424,7 +5423,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             [strongSelf updateRoleBadgeTitle:@"Server"];
-            strongSelf.customTableView.userInteractionEnabled = NO;
+            strongSelf.customTableView.userInteractionEnabled = YES;   // bảng luôn nhận chạm; quyền từng mục do hàng tự kiểm soát
         } else {
             [[NSUserDefaults standardUserDefaults] synchronize];
         }
