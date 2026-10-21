@@ -8292,8 +8292,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         p.reserved[sizeof(p.reserved) - 1] = '\0';
     }
 
-uint32_t *groupFlagsPtr = (uint32_t *)((uint8_t *)&p + 96);
-    for (int gi = 0; gi < 34; gi++) groupFlagsPtr[gi] = 1;
+memset(&p.enableAppleInternalProMotion, 1, 34 * sizeof(uint32_t));
     p.updateSeq = Titanium_IPCSequenceNow();
     p.lastHeartbeat = p.updateSeq;
 
