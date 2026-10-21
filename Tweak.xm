@@ -3097,13 +3097,8 @@ static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
     return CAFrameRateRangeMake(floorHz, maxFps, maxFps);
 }
 
-// ✅ SỬA 1: extern thay vì static inline forward declaration (tránh linker undefined symbol)
 extern NSInteger Titanium_GetEffectiveFrameCap(void);
-
-// ✅ SỬA 2: extern cho g_lastInteractionMachTime (tránh linker undefined symbol)
 extern volatile uint64_t g_lastInteractionMachTime;
-
-// ✅ SỬA 3: extern cho Titanium_IsSpringBoard (tránh linker undefined symbol)
 extern BOOL Titanium_IsSpringBoard(void);
 
 // Kiểm tra layer Metal có thuộc luồng phát Video / Camera / Trình duyệt không
@@ -3130,15 +3125,15 @@ static inline BOOL Titanium_IsVideoOrMediaMetalLayer(CAMetalLayer *layer) {
 }
 
 static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
-    return) Titanium_IsVideoOrMediaMetalLayer(layer);
+    return Titanium_IsVideoOrMediaMetalLayer(layer);
 }
 
 // ==============================================================================
-// TẮT V-SYNC TẬN GỐC T {
-// TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
+// TẮT V-SYNC TẬN GỐC TỪ TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
 // ==============================================================================
 
-static inline void Titanium_KillVS   yncCompletelyAtRoot(void setenv("CA_DISABLE_FRAME_RATE_LIMIT", "1", 1);
+static inline void Titanium_KillVSyncCompletelyAtRoot(void) {
+    setenv("CA_DISABLE_FRAME_RATE_LIMIT", "1", 1);
     setenv("CA_FORCE_MAX_REFRESH_RATE", "1", 1);
     setenv("CA_DEBUG_TRANSACTIONS", "0", 1);
     
@@ -3152,16 +3147,16 @@ static inline void Titanium_KillVS   yncCompletelyAtRoot(void setenv("CA_DISABLE
 }
 
 // ====================================================================================================
-// NHÓM 2: BẺ KHÓA METAL MƯỢT SIÊU C HOẤP, TẮT TRIỆT ĐỂ V-SYNC TỪ TRỨNG NƯỚC, 0MS DELAY (GỌT SÀẠCH)
+// NHÓM 2: BẺ KHÓA METAL MƯỢT SIÊU CẤP, TẮT TRIỆT ĐỂ V-SYNC TỪ TRỨNG NƯỚC, 0MS DELAY (GỌT SẠCH)
 // ====================================================================================================
 
 static void Titanium_ForceApplyMetalOverdriveUltimate(id self) {
-   N if (!self) return;
+    if (!self) return;
     
     BOOL isSB = Titanium_IsSpringBoard();
-    BOOL isMedia = Titanium TO_IsVideoOrMediaMetalLayer((CAMetalLayer *)self);
+    BOOL isMedia = Titanium_IsVideoOrMediaMetalLayer((CAMetalLayer *)self);
 
-    // 1. NGOÀI SPRINGBOARD & KHÔNG PHẢI MEDIA: BUNG HẾT CỠ TỪ 15HZ ĐẾN 240HZ, TẮT V-SYÀN
+    // 1. NGOÀI SPRINGBOARD & KHÔNG PHẢI MEDIA: BUNG HẾT CỠ TỪ 15HZ ĐẾN 240HZ, TẮT V-SYNC
     if (!isSB && !isMedia) {
         if ([self respondsToSelector:@selector(setMaximumDrawableCount:)]) {
             ((CAMetalLayer *)self).maximumDrawableCount = 2;
@@ -3309,7 +3304,6 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
         }
     });
 }
-
 // ====================================================================================================
 // NHÓM 3: ĐIỀU PHỐI TỐC ĐỘ, ĐỒNG BỘ PROMOTION & ÉP XUNG TOÀN HỆ THỐNG (15HZ - 240HZ)
 // BẺ CÁC TẦNG ẨN SÂU TRONG CHIP
