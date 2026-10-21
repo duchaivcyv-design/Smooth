@@ -387,7 +387,6 @@ static BOOL g_isCurrentAppBlacklisted = NO;
 static void Titanium_InstallMGCopyAnswerHookV26(void);  // [buildfix4] khai báo trước để dùng được trong các hàm định nghĩa sớm hơn
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
-extern void Titanium_KillVSyncCompletelyAtRoot(void);
 
 // ====================================================================================================
 // TOÀN BỘ KHAI BÁO @INTERFACE - TITANIUM / APEX V285 PRO (ĐÃ BỔ SUNG ĐẦY ĐỦ CÁC EXTENSION MỚI NHẤT)
@@ -5074,7 +5073,6 @@ static inline BOOL Apex_IsMasterEnabled(void) {
     return g_syncPayloadV285.masterEnabled != 0;
 }
 
-extern BOOL IS_ACTIVE;
 extern BOOL g_isCurrentAppBlacklisted;
 @class BoostConfigV285Pro;
 extern BoostConfigV285Pro *CFG285;
@@ -6209,7 +6207,9 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 // ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TƯỚNG TAY (RUN CORE TWEAK & CTOR) - ĐÃ LÀM SẠCH TRÙNG LẶP
 // ====================================================================================================
 
-// Khai báo các hàm ngoại vi (extern) thực sự cần thiết chưa có định nghĩa trong phạm vi này
+extern void Titanium_DeployHypervisorShieldAndAntiKill(void);
+extern float Titanium_SanitizeAndForceExtremeRate(float rate);
+extern void Titanium_DeployHypervisorShieldAndAntiKill(void);
 extern void Titanium_BypassQuartzCoreRangeAssertion(void);
 extern void Titanium_KillVSyncCompletelyAtRoot(void);
 extern void Titanium_InitZeroCopyIPC(BOOL isSpringBoard);
@@ -6272,7 +6272,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         if (!isSpringBoard &&
-            (g_isCurrentAppBlacklisted || (CFG285 && ![CFG285 isEnabled]))) {
+         (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
             g_SystemMasterReady = YES;
             return;
         }
