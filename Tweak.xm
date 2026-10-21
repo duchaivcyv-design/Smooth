@@ -385,6 +385,7 @@ static inline BOOL Titanium_IsAIApp(void);
 static ApexV285ProPayload g_livePayload;
 static os_unfair_lock g_payloadLock = OS_UNFAIR_LOCK_INIT;
 static BOOL g_isCurrentAppBlacklisted = NO;
+static BOOL g_avoidTweakConflicts = NO;   // công tắc "Tránh xung đột Tweak" từ giao diện
 static void Titanium_InstallMGCopyAnswerHookV26(void);  // [buildfix4] khai báo trước để dùng được trong các hàm định nghĩa sớm hơn
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
@@ -1320,8 +1321,8 @@ static ApexV285ProPayload g_syncPayloadV285 = {
 // KHAI BÁO MACRO ĐƯỜNG DẪN IPC VÀ THƯ VIỆN HỆ THỐNG CẤP THẤP
 // ====================================================================================================
 
-#define PRIMARY_SYNC_FILE @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s_sync.bin"
-#define SECONDARY_SYNC_FILE @"/tmp/.boost_hz_sync_v285"
+// [ĐỒNG BỘ] Đã bỏ hai #define ghi đè ở đây. Giao diện ghi /tmp/.boost_hz_sync và /var/jb/tmp/.boost_hz_sync;
+// tweak phải đọc đúng hai đường dẫn này (định nghĩa ở đầu file).
 
 // ====================================================================================================
 // KHAI BÁO BIẾN TOÀN CỤC, TRẠNG THÁI IPC VÀ KERNEL WRITE-PROTECT BYPASS CHUẨN XNU (GỌT SẠCH)
@@ -2484,6 +2485,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.dynamicThermalEngine = GetLiveBool(@"DynamicThermalEngine", YES);
         self.fakeFullBatteryState = GetLiveBool(@"DeviceSpoofer", YES);
         self.gameFPSStabilizer = GetLiveBool(@"GameFPSStabilizer", YES);
+        g_avoidTweakConflicts = GetLiveBool(@"AvoidTweakConflicts", NO);
         self.lockHighIdleFloor = GetLiveBool(@"CPUGPUFreqOptimizer", YES);
         self.quantumCoreSync = GetLiveBool(@"QuantumCoreSync", YES);
         self.pCoreRealtimePriority = GetLiveBool(@"RealtimeThreadSched", YES);
@@ -3098,11 +3100,10 @@ static void AppleInternal_LockHardwareCADisplay(void) {
 // ====================================================================================================
 
 static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
+    // Khóa cứng: min = max = pref = giá trị người dùng chọn (15–240). Không để iOS tự tụt gây drop frame.
     if (maxFps < 15.0f) maxFps = 15.0f;
     if (maxFps > 240.0f) maxFps = 240.0f;
-    float floorHz = 15.0f;
-    if (floorHz > maxFps) floorHz = maxFps;
-    return CAFrameRateRangeMake(floorHz, maxFps, maxFps);
+    return CAFrameRateRangeMake(maxFps, maxFps, maxFps);
 }
 
 extern NSInteger Titanium_GetEffectiveFrameCap(void);
@@ -5973,7 +5974,6 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
             origDone = YES; %orig(buffer);
             return;
         }
-        EnforceMaxCPUPower(); // Bung tối đa năng lực phần cứng khi đẩy lệnh đồ họa
         origDone = YES; %orig(buffer);
     } @catch (__unused NSException *e) {
         if (!origDone) %orig(buffer);
@@ -6323,12 +6323,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_UltimateDevice_And_OS_Spoofing);
 
         %init(Group_Apple_Native_ColdBoot_Overdrive);
-        %init(Group_Silicon_Hardware_Pipeline_Overdrive);
+        if (!g_avoidTweakConflicts) %init(Group_Silicon_Hardware_Pipeline_Overdrive);
         %init(Group_Silicon_Scheduler_Touch_Governor);
         %init(Group_CoreAnimation_RenderServer_Governor);
         %init(Group_System_Memory_And_RunLoop_Governor);
         %init(Group_Thermal_CryoPacing_ZeroDrop);
-        %init(Group_CryoQuantum_Thermal_Bypass);
+        if (!g_avoidTweakConflicts) %init(Group_CryoQuantum_Thermal_Bypass);
         %init(Group_Deep_RAM_Compaction_Engine);
         %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
         %init(Group_Window_Level_Overdrive);
