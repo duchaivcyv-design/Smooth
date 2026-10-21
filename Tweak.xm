@@ -6213,7 +6213,7 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 }
 
 // ====================================================================================================
-// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TƯỚNG TAY (RUN CORE TWEAK & CTOR) - ĐÃ LÀM SẠCH TRÙNG LẶP
+// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TẦNG SÂU CAO NHẤT (TẦNG 4 - 0MS AN TOÀN TUYỆT ĐỐI)
 // ====================================================================================================
 
 extern void Titanium_BypassQuartzCoreRangeAssertion(void);
@@ -6235,15 +6235,12 @@ extern void AppleInternal_EnforceZeroLatencyKernelTier(void);
 extern void Titanium_ApplySiliconDeepOptimizations(void);
 extern void AppleInternal_LockHardwareCADisplay(void);
 extern void Titanium_ForceInjectDynamicRefreshSupport(void);
-extern void Titanium_TuneWindowServerDisplayDirectly(void);
 extern void Titanium_StartIPCHearthbeatV12(void);
 extern void Titanium_StartThermalAndChargingWatchdog(void);
-extern void Init_CAWindowServer_Hooks(void);
 extern void Titanium_RegisterAppResumeRefreshV12(void);
 extern void Titanium_ReapplyFrameRateToAllScenes(void);
 extern void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
-// Khai báo nguyên mẫu hàm hook MGCopyAnswer đã có bên dưới
 static void Titanium_InstallMGCopyAnswerHookV26(void);
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
@@ -6252,7 +6249,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     s_coreInitDone = YES;
 
     @autoreleasepool {
-
         Titanium_BypassQuartzCoreRangeAssertion();
 
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
@@ -6261,24 +6257,14 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             [CFG285 loadSettings];
             if ([CFG285 respondsToSelector:@selector(targetHz)]) {
                 NSInteger initHz = (NSInteger)[CFG285 targetHz];
-                if ((g_cachedResolvedHz < 1 || g_cachedResolvedHz > 240) &&
-                    initHz >= 1 && initHz <= 240) {
-                    g_cachedResolvedHz = initHz;
-                }
+                // Ép dải Hz chuẩn từ 15 đến 240Hz
+                g_cachedResolvedHz = (initHz >= 15 && initHz <= 240) ? initHz : 240;
             }
             if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
                 NSInteger initFPS = (NSInteger)[CFG285 targetFPS];
-                if ((g_cachedResolvedFPS < 1 || g_cachedResolvedFPS > 240) &&
-                    initFPS >= 1 && initFPS <= 240) {
-                    g_cachedResolvedFPS = initFPS;
-                }
+                // Ép dải FPS chuẩn từ 15 đến 240Hz
+                g_cachedResolvedFPS = (initFPS >= 15 && initFPS <= 240) ? initFPS : 240;
             }
-        }
-
-        if (!isSpringBoard &&
-         (g_isCurrentAppBlacklisted || (CFG285 && !CFG285.enabled))) {
-            g_SystemMasterReady = YES;
-            return;
         }
 
         Titanium_KillVSyncCompletelyAtRoot();
@@ -6290,15 +6276,14 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
         Titanium_InstallDynamicMetalOverdriveGroup2();
 
+        // 1. NẠP TỨC THÌ (0MS) TOÀN BỘ CÁC NHÓM HOOK TẦNG SÂU (UIKIT, TOUCH, METAL, KERNEL THREADS)
         %init(Group_ZeroLatency_Touch_Opt);
         %init(Group_FluidTransitions_Pacing);
         %init(Group_AI_Stream_Optimization);
         %init(Group_FastLaunch_SuperEngineV285);
         %init(Group_Scroll_And_Keyboard_Opt);
         %init(Group_InstantActionAndMenuTransitions_Boost);
-
         %init(Group_Global_Thread_Governor_Unthrottled);
-
         %init(Group_Apple_Internal_ProMotion_Apex);
         %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
         %init(Group_Hardware_Deep_Core_Bypass);
@@ -6309,33 +6294,29 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_Hardware_ProMotion_Overclock);
         }
 
-        if (isSpringBoard || (TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS && Titanium_IsCurrentAppAGame() && !Titanium_IsAIApp() && !Titanium_IsSpoofExcludedApp())) {
-            Titanium_InstallMGCopyAnswerHookV26();
-            %init(Group_UltimateDevice_And_OS_Spoofing);
-        }
+        Titanium_InstallMGCopyAnswerHookV26();
+        %init(Group_UltimateDevice_And_OS_Spoofing);
 
         %init(Group_Apple_Native_ColdBoot_Overdrive);
         %init(Group_Silicon_Hardware_Pipeline_Overdrive);
         %init(Group_Silicon_Scheduler_Touch_Governor);
         %init(Group_CoreAnimation_RenderServer_Governor);
         %init(Group_System_Memory_And_RunLoop_Governor);
-        
         %init(Group_Thermal_CryoPacing_ZeroDrop);
         %init(Group_CryoQuantum_Thermal_Bypass);
-
         %init(Group_Deep_RAM_Compaction_Engine);
         %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
         %init(Group_Window_Level_Overdrive);
-
-        if (isSpringBoard || TITANIUM_ENABLE_WEBKIT_HOOKS_IN_APPS) {
-            %init(Group_WebKit_RAM_Optimizer);
-        }
+        %init(Group_WebKit_RAM_Optimizer);
+        %init(Group_UIKit_ThirdParty_IsolatedV285);
 
         if (Titanium_IsClassicHomeButtonDevice()) {
             %init(Group_HardwareSegregation_ClassicHomeV285);
         }
 
+        // 2. KÍCH HOẠT TẦNG 4 (PHẦN CỨNG DISPLAY, WINDOWSERVER & PROMOTION CHIP) CHO TỪNG MÔI TRƯỜNG
         if (isSpringBoard) {
+            // Môi trường 1: SpringBoard (Giao diện hệ thống chính)
             %init(Group_LiquidGlass_Opt);
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_SpringBoard_Switcher_Opt);
@@ -6346,40 +6327,38 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_KeepAppsAlive_NoKill);
             %init(Group_CAWindowServer_Absolute_Dominance);
 
-            // ===== ĐÃ BỎ TẦNG 5 — KHÔNG CÒN Init_CAWindowServer_Hooks() =====
-            // Init_CAWindowServer_Hooks();
-
 #if TITANIUM_ENABLE_RATE_KEEPER
             [TitaniumRateKeeper start];
 #endif
 
             Titanium_StartThermalAndChargingWatchdog();
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                AppleInternal_EnforceZeroLatencyKernelTier();
-                Titanium_ApplySiliconDeepOptimizations();
-                AppleInternal_LockHardwareCADisplay();
-                Titanium_ForceInjectDynamicRefreshSupport();
-                // ===== ĐÃ BỎ TẦNG 5 — KHÔNG CÒN Titanium_TuneWindowServerDisplayDirectly() =====
-                // Titanium_TuneWindowServerDisplayDirectly();
-            });
-
             Titanium_StartIPCHearthbeatV12();
 
             NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
             [[NSFileManager defaultManager] createFileAtPath:@"/var/mobile/Library/Preferences/com.titanium.verified"
                                                     contents:verifiedData
                                                   attributes:@{NSFilePosixPermissions: @(0644)}];
-        } else {
-            %init(Group_UIKit_ThirdParty_IsolatedV285);
+            
+            // Kích hoạt tầng sâu phần cứng ngay lập tức không độ trễ
+            AppleInternal_EnforceZeroLatencyKernelTier();
+            Titanium_ApplySiliconDeepOptimizations();
+            AppleInternal_LockHardwareCADisplay();
+            Titanium_ForceInjectDynamicRefreshSupport();
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(100 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                Titanium_ForceInjectDynamicRefreshSupport();
-                AppleInternal_LockHardwareCADisplay();
-                AppleInternal_EnforceZeroLatencyKernelTier();
+        } else if (bundleID && bundleID.length > 0) {
+            // Môi trường 2: UIKit Apps (Ứng dụng bên thứ ba / App Store)
+            // Kích hoạt tầng 4 trực tiếp 0ms, đảm bảo nhận diện Hz/FPS từ khung hình đầu tiên mở app
+            Titanium_ForceInjectDynamicRefreshSupport();
+            AppleInternal_LockHardwareCADisplay();
+            AppleInternal_EnforceZeroLatencyKernelTier();
+            Titanium_ApplySiliconDeepOptimizations();
+            Titanium_RegisterAppResumeRefreshV12();
+            Titanium_ReapplyFrameRateToAllScenes();
+
+        } else {
+            // Môi trường 3: Background Daemons / Tiến trình ngầm
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 Titanium_ApplySiliconDeepOptimizations();
-                Titanium_RegisterAppResumeRefreshV12();
-                Titanium_ReapplyFrameRateToAllScenes();
             });
         }
 
@@ -6413,10 +6392,7 @@ static void SpringBoardBootstrapTrigger(void) {
 
     const char *progName = Titanium_SafeGetProgName();
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        runCoreTweak(YES, bundleID, progName);
-    });
+    runCoreTweak(YES, bundleID, progName);
 }
 
 static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
@@ -6695,21 +6671,7 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
 
-        if (isSpringBoard) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                SpringBoardBootstrapTrigger();
-            });
-        } else {
-            NSString *jbRoot = Titanium_GetRootHidePrefixPath();
-            BOOL isRootHideEnvironment = (jbRoot && ![jbRoot isEqualToString:@"/"] && ![jbRoot isEqualToString:@"/var/jb"]);
-
-            if (isRootHideEnvironment) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(75 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                    runCoreTweak(NO, bundleID, progName);
-                });
-            } else {
-                runCoreTweak(NO, bundleID, progName);
-            }
-        }
+        // NẠP NGAY LẬP TỨC 0MS TẦNG SÂU CHO MỌI TIẾN TRÌNH
+        runCoreTweak(isSpringBoard, bundleID, progName);
     }
 }
