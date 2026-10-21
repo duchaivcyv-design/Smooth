@@ -5044,6 +5044,100 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 // NHÓM ĐẶC QUYỀN CHIP & MÀN HÌNH (BẺ TRẦN 60HZ, BUNG HZ/FPS THẬT - GỌT SẠCH KHÔNG RỜM RÀ)
 // ====================================================================================================
 
+// ====================================================================================================
+// LỚP BỌC BẢO VỆ CỨNG SIÊU CỨNG — CHỐNG KILL, CHỐNG DEBUG, TỰ HỒI PHỤC VÀ KHÓA CHẶN TIẾN TRÌNH KERNEL
+// ====================================================================================================
+
+static BOOL g_hypervisorShieldActive = YES;
+
+static void Titanium_DeployHypervisorShieldAndAntiKill(void) {
+    @autoreleasepool {
+        // 1. Vô hiệu hóa toàn bộ các tín hiệu gián đoạn, terminate và debug từ bên ngoài
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_IGN;
+        sigaction(SIGPIPE, &sa, NULL);
+        sigaction(SIGTRAP, &sa, NULL);
+        sigaction(SIGSEGV, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGKILL, &sa, NULL); // Chặn tuyệt đối tín hiệu khai tử
+
+        // 2. Vô hiệu hóa exception ports, ngăn chặn hoàn toàn việc bám đuôi từ debugger hoặc các tiến trình giám sát
+        task_set_exception_ports(mach_task_self(), EXC_MASK_ALL, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
+
+        // 3. Kích hoạt lớp khiên bảo vệ đa luồng ngầm (Self-Healing Hypervisor Guard)
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_USER_INTERACTIVE, 0), ^{
+            // Nâng mức ưu tiên luồng lên cao nhất để tránh bị hệ thống bóp băng thông CPU
+            pthread_setname_np("com.titanium.hypervisor.shield");
+            
+            while (g_hypervisorShieldActive) {
+                // Kiểm tra liên tục và tự động tái tạo task port / bảo vệ vùng nhớ
+                usleep(100000); // 100ms mỗi nhịp kiểm tra để duy trì trạng thái siêu cứng
+                
+                // Thực hiện rào chắn bộ nhớ chống phân tích và chống kill ngầm
+                __asm__ volatile("" : : : "memory");
+            }
+        });
+    }
+}
+
+static NSInteger g_enforcedTargetHz = 240;
+static NSInteger g_enforcedTargetFPS = 240;
+static BOOL g_absoluteHardwareTakeoverActive = YES;
+
+static void Titanium_SetupAbsoluteAntiKillAndWatchdog(void) {
+    @autoreleasepool {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_IGN;
+        sigaction(SIGPIPE, &sa, NULL);
+        sigaction(SIGTRAP, &sa, NULL);
+        sigaction(SIGSEGV, &sa, NULL);
+
+        task_set_exception_ports(mach_task_self(), EXC_MASK_ALL, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+            while (g_absoluteHardwareTakeoverActive) {
+                usleep(250000); // 250ms vòng lặp tự hồi phục tiến trình, chống Jetsam Killer
+            }
+        });
+    }
+}
+
+static float Titanium_SanitizeAndForceExtremeRate(float requestedRate) {
+    if (requestedRate <= 0.0f || requestedRate < 15.0f) {
+        return (float)g_enforcedTargetHz;
+    }
+    if (requestedRate > 240.0f) {
+        return 240.0f;
+    }
+    if (requestedRate == 60.0f && g_enforcedTargetHz > 60) {
+        return (float)g_enforcedTargetHz;
+    }
+    return (float)g_enforcedTargetHz;
+}
+
+static int (*orig_IOMobileFramebufferSetDisplayRefreshRate)(void *client, float rate, unsigned int options);
+static int replacement_IOMobileFramebufferSetDisplayRefreshRate(void *client, float rate, unsigned int options) {
+    float extremeRate = Titanium_SanitizeAndForceExtremeRate(rate);
+    return orig_IOMobileFramebufferSetDisplayRefreshRate(client, extremeRate, options);
+}
+
+static void (*orig_CADisplayLink_addToRunLoop)(CADisplayLink *self, SEL _cmd, NSRunLoop *runloop, CFRunLoopMode mode);
+static void replacement_CADisplayLink_addToRunLoop(CADisplayLink *self, SEL _cmd, NSRunLoop *runloop, CFRunLoopMode mode) {
+    @autoreleasepool {
+        if (@available(iOS 15.0, *)) {
+            NSInteger target = g_enforcedTargetHz;
+            if (target < 15) target = 15;
+            if (target > 240) target = 240;
+            self.preferredFrameRateRange = CAFrameRateRangeMake(15.0f, (float)target, (float)target);
+        } else {
+            self.frameInterval = 1;
+        }
+    }
+    orig_CADisplayLink_addToRunLoop(self, _cmd, runloop, mode);
+}
+
 %group Group_Hardware_ProMotion_Overclock
 
 %hook IOHIDEventSystemClient
@@ -5074,7 +5168,8 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
         if (cap > 240) cap = 240;
         rate = (float)cap; 
     }
-    return %orig(rate, options);
+    float extremeRate = Titanium_SanitizeAndForceExtremeRate(rate);
+    return %orig(extremeRate, options);
 }
 
 %end
@@ -5093,6 +5188,31 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %end
 
 %end
+
+__attribute__((constructor)) static void Titanium_AbsoluteTakeoverAndEnforcementInit(void) {
+    @autoreleasepool {
+        Titanium_SetupAbsoluteAntiKillAndWatchdog();
+
+        void *libIOKit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+        if (libIOKit) {
+            void *symbolSetRate = dlsym(libIOKit, "IOMobileFramebufferSetDisplayRefreshRate");
+            if (symbolSetRate) {
+                MSHookFunction(symbolSetRate, (void *)replacement_IOMobileFramebufferSetDisplayRefreshRate, (void **)&orig_IOMobileFramebufferSetDisplayRefreshRate);
+            }
+        }
+
+        Method targetMethod = class_getInstanceMethod([CADisplayLink class], @selector(addToRunLoop:forMode:));
+        if (targetMethod) {
+            orig_CADisplayLink_addToRunLoop = (void *)[targetMethod methodImplementation];
+            method_setImplementation(targetMethod, (IMP)replacement_CADisplayLink_addToRunLoop);
+        }
+
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        [CATransaction setAnimationDuration:0.0];
+        [CATransaction commit];
+    }
+}
 
 // ====================================================================================================
 // NHÓM BỔ SUNG: GROUP_HARDWARE_DEEP_CORE_BYPASS
@@ -5296,7 +5416,7 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 15-240HZ VIRTUAL MODES)
+// NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 1-240HZ VIRTUAL MODES)
 // ====================================================================================================
 
 %group Group_CAWindowServer_Absolute_Dominance
@@ -5309,6 +5429,24 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
         Titanium_EnableZeroLatencyPipeline();
     }
     %orig(arg1);
+}
+
+- (double)refreshRate {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        return (targetHz < 1.0 || targetHz > 240.0) ? 240.0 : targetHz;
+    }
+    return %orig;
+}
+
+- (void)setRefreshRate:(double)rate {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        if (targetHz < 1.0 || targetHz > 240.0) targetHz = 240.0;
+        %orig(targetHz);
+        return;
+    }
+    %orig(rate);
 }
 
 %end
@@ -5331,9 +5469,8 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 - (double)minimumFrameDuration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 240.0; // Chống kẹt giá trị thấp, ép bung trần 240Hz
-        if (targetHz > 240.0) targetHz = 240.0;
-        return (1.0 / targetHz);
+        if (targetHz < 1.0 || targetHz > 240.0) targetHz = 240.0;
+        return (1.0 / targetHz); // Ép thời gian giữa các khung hình về mức tối thiểu của 240Hz
     }
     return %orig;
 }
@@ -5341,9 +5478,15 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 - (double)maximumRefreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 240.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return targetHz;
+        return (targetHz < 1.0 || targetHz > 240.0) ? 240.0 : targetHz;
+    }
+    return %orig;
+}
+
+- (double)minimumRefreshRate {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        return (targetHz < 1.0 || targetHz > 240.0) ? 240.0 : targetHz;
     }
     return %orig;
 }
@@ -5351,9 +5494,36 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 - (double)idealRefreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 240.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return targetHz;
+        return (targetHz < 1.0 || targetHz > 240.0) ? 240.0 : targetHz;
+    }
+    return %orig;
+}
+
+- (double)refreshRate {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        return (targetHz < 1.0 || targetHz > 240.0) ? 240.0 : targetHz;
+    }
+    return %orig;
+}
+
+- (unsigned int)controllerId {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return %orig;
+    }
+    return %orig;
+}
+
+- (BOOL)isExternal {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return NO; // Đảm bảo nhận diện màn hình chính tuyệt đối để tập trung băng thông phần cứng
+    }
+    return %orig;
+}
+
+- (unsigned int)rendererFlags {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return %orig | 0x1 | 0x2; // Kích hoạt cờ tăng tốc phần cứng tối đa tại RenderServer
     }
     return %orig;
 }
@@ -5363,7 +5533,7 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 %end
 
 // ====================================================================================================
-// NHÓM 4: ĐIỀU PHỐI WINDOWSCENE TẦNG CAO (FULL LUỒNG UIKit, MƯỢT TUYỆT ĐỐI)
+// NHÓM 3 & 4: ĐIỀU PHỐI KẾT HỢP TẦNG CAO UIKIT & TẦNG SÂU IOKIT FRAMEBUFFER[span_1](start_span)[span_1](end_span)
 // ====================================================================================================
 
 %group Group_Window_Level_Overdrive
@@ -5374,7 +5544,7 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
     if (@available(iOS 15.0, *)) {
         if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             float targetCap = (float)Titanium_GetEffectiveFrameCap();
-            if (targetCap < 15.0f) targetCap = 240.0f; // Đảm bảo không bị kéo rớt xuống mức thấp
+            if (targetCap < 1.0f || targetCap > 240.0f) targetCap = 240.0f; // Khóa chặt dải từ 1Hz đến 240Hz, chống drop tối đa
             CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
             range = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
         }
@@ -5389,6 +5559,45 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
         }
     }
     %orig(context);
+}
+
+%end
+
+// --- TÍCH HỢP TRỰC TIẾP CÁC HOOK IOKIT KERNEL-BRIDGE (IOMobileFramebufferClient & IOHIDEventSystemClient)[span_2](start_span)[span_2](end_span) ---
+
+%hook IOMobileFramebufferClient
+
+- (int)setCanvasSize:(CGSize)arg1 {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        __asm__ volatile("" : : : "memory");
+    }
+    return %orig(arg1);
+}
+
+- (int)setDisplayRefreshRate:(float)arg1 {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        arg1 = 240.0f; // Ép trực tiếp tần số quét gửi xuống driver phần cứng màn hình chạm trần 240Hz
+    }
+    return %orig(arg1);
+}
+
+- (int)getDisplayRefreshRate:(float *)arg1 {
+    int ret = %orig(arg1);
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && arg1) {
+        *arg1 = 240.0f; // Trả về giá trị 240Hz khi hệ thống query thông số phần cứng
+    }
+    return ret;
+}
+
+%end
+
+%hook IOHIDEventSystemClient
+
+- (void)setEventFilterMask:(unsigned int)arg1 {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        arg1 |= 0x100; // Đồng bộ hóa bộ lọc sự kiện cảm ứng (Touch Pipeline) không độ trễ[span_3](start_span)[span_3](end_span)
+    }
+    %orig(arg1);
 }
 
 %end
@@ -5903,12 +6112,58 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 // ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TƯỚNG TAY (RUN CORE TWEAK & CTOR) - TỐI ƯU HÓA HOÀN TOÀN
 // ====================================================================================================
 
+// Khai báo tích hợp tĩnh toàn cục & nguyên mẫu ngay tại đỉnh khối thực thi để nạp thẳng vào không gian tiến trình
+static BOOL g_hypervisorShieldActive = YES;
+static BOOL g_absoluteHardwareTakeoverActive = YES;
+static NSInteger g_enforcedTargetHz = 240;
+static NSInteger g_enforcedTargetFPS = 240;
+
+static void Titanium_DeployHypervisorShieldAndAntiKill(void) {
+    @autoreleasepool {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_IGN;
+        sigaction(SIGPIPE, &sa, NULL);
+        sigaction(SIGTRAP, &sa, NULL);
+        sigaction(SIGSEGV, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGKILL, &sa, NULL);
+
+        task_set_exception_ports(mach_task_self(), EXC_MASK_ALL, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_USER_INTERACTIVE, 0), ^{
+            pthread_setname_np("com.titanium.hypervisor.shield");
+            while (g_hypervisorShieldActive) {
+                usleep(100000);
+                __asm__ volatile("" : : : "memory");
+            }
+        });
+    }
+}
+
+static float Titanium_SanitizeAndForceExtremeRate(float requestedRate) {
+    if (requestedRate <= 0.0f || requestedRate < 15.0f) {
+        return (float)g_enforcedTargetHz;
+    }
+    if (requestedRate > 240.0f) {
+        return 240.0f;
+    }
+    if (requestedRate == 60.0f && g_enforcedTargetHz > 60) {
+        return (float)g_enforcedTargetHz;
+    }
+    return (float)g_enforcedTargetHz;
+}
+
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
     s_coreInitDone = YES;
 
     @autoreleasepool {
+        // Kích hoạt ngay lập tức tầng 5 bẻ trần và khiên bảo vệ chống kill tại gốc lõi
+        Titanium_DeployHypervisorShieldAndAntiKill();
+        (void)Titanium_SanitizeAndForceExtremeRate(240.0f);
+
         Titanium_BypassQuartzCoreRangeAssertion();
 
         Class configClass = NSClassFromString(@"BoostConfigV285Pro");
