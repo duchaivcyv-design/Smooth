@@ -6213,7 +6213,7 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 }
 
 // ====================================================================================================
-// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TẦNG SÂU CAO NHẤT (TẦNG 4 - 0MS AN TOÀN TUYỆT ĐỐI)
+// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TẦNG SÂU — ĐỘ TRỄ NẠP CHUẨN XÁC TUYỆT ĐỐI CHO 3 MÔI TRƯỜNG
 // ====================================================================================================
 
 extern void Titanium_BypassQuartzCoreRangeAssertion(void);
@@ -6242,6 +6242,31 @@ extern void Titanium_ReapplyFrameRateToAllScenes(void);
 extern void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
 static void Titanium_InstallMGCopyAnswerHookV26(void);
+
+// Hàm hỗ trợ Respring chuẩn xác (Độ trễ 400ms dọn dẹp hệ thống sạch sẽ)
+void Titanium_TriggerRespringAction(void) {
+    UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
+    [fb impactOccurred];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        pid_t pid;
+        const char *args[] = {"sbreload", NULL, NULL};
+        if (posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)args, environ) != 0) {
+            const char *fallbackArgs[] = {"killall", "SpringBoard", NULL};
+            posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)fallbackArgs, environ);
+        }
+    });
+}
+
+// Hàm hỗ trợ Userspace Reboot / Sreboot chuẩn xác (Độ trễ 1200ms khởi động lại không gian người dùng)
+void Titanium_TriggerSrebootAction(void) {
+    UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
+    [fb notificationOccurred:UINotificationFeedbackTypeWarning];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        pid_t pid;
+        const char *args[] = {"launchctl", "reboot", "userspace", NULL};
+        posix_spawn(&pid, "/bin/launchctl", NULL, NULL, (char *const *)args, environ);
+    });
+}
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
@@ -6276,7 +6301,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
         Titanium_InstallDynamicMetalOverdriveGroup2();
 
-        // 1. NẠP TỨC THÌ (0MS) TOÀN BỘ CÁC NHÓM HOOK TẦNG SÂU (UIKIT, TOUCH, METAL, KERNEL THREADS)
+        // 1. NẠP TĨNH TOÀN BỘ CÁC NHÓM HOOK TẦNG SÂU NGAY LẬP TỨC (0MS)
         %init(Group_ZeroLatency_Touch_Opt);
         %init(Group_FluidTransitions_Pacing);
         %init(Group_AI_Stream_Optimization);
@@ -6314,9 +6339,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_HardwareSegregation_ClassicHomeV285);
         }
 
-        // 2. KÍCH HOẠT TẦNG 4 (PHẦN CỨNG DISPLAY, WINDOWSERVER & PROMOTION CHIP) CHO TỪNG MÔI TRƯỜNG
+        // 2. KÍCH HOẠT TẦNG 4 VỚI ĐỘ TRỄ CHUẨN XÁC TỪNG XĂNG-T-I CHO 3 MÔI TRƯỜNG
         if (isSpringBoard) {
-            // Môi trường 1: SpringBoard (Giao diện hệ thống chính)
+            // Môi trường 1: SpringBoard (Độ trễ chuẩn 30ms giúp hệ thống dựng WindowServer mượt mà không nghẽn)
             %init(Group_LiquidGlass_Opt);
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_SpringBoard_Switcher_Opt);
@@ -6339,24 +6364,26 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                                                     contents:verifiedData
                                                   attributes:@{NSFilePosixPermissions: @(0644)}];
             
-            // Kích hoạt tầng sâu phần cứng ngay lập tức không độ trễ
-            AppleInternal_EnforceZeroLatencyKernelTier();
-            Titanium_ApplySiliconDeepOptimizations();
-            AppleInternal_LockHardwareCADisplay();
-            Titanium_ForceInjectDynamicRefreshSupport();
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                AppleInternal_EnforceZeroLatencyKernelTier();
+                Titanium_ApplySiliconDeepOptimizations();
+                AppleInternal_LockHardwareCADisplay();
+                Titanium_ForceInjectDynamicRefreshSupport();
+            });
 
         } else if (bundleID && bundleID.length > 0) {
-            // Môi trường 2: UIKit Apps (Ứng dụng bên thứ ba / App Store)
-            // Kích hoạt tầng 4 trực tiếp 0ms, đảm bảo nhận diện Hz/FPS từ khung hình đầu tiên mở app
-            Titanium_ForceInjectDynamicRefreshSupport();
-            AppleInternal_LockHardwareCADisplay();
-            AppleInternal_EnforceZeroLatencyKernelTier();
-            Titanium_ApplySiliconDeepOptimizations();
-            Titanium_RegisterAppResumeRefreshV12();
-            Titanium_ReapplyFrameRateToAllScenes();
+            // Môi trường 2: UIKit Apps / App thứ ba (Độ trễ chuẩn 15ms để app tạo UIWindow, chống đen/văng app)
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                Titanium_ForceInjectDynamicRefreshSupport();
+                AppleInternal_LockHardwareCADisplay();
+                AppleInternal_EnforceZeroLatencyKernelTier();
+                Titanium_ApplySiliconDeepOptimizations();
+                Titanium_RegisterAppResumeRefreshV12();
+                Titanium_ReapplyFrameRateToAllScenes();
+            });
 
         } else {
-            // Môi trường 3: Background Daemons / Tiến trình ngầm
+            // Môi trường 3: Background Daemons / Tiến trình ngầm (Chạy nền độc lập trên QOS queue)
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
                 Titanium_ApplySiliconDeepOptimizations();
             });
