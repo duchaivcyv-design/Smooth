@@ -5461,19 +5461,19 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 
 %hook FBProcess
 
-- (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)completion {
+- (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)comp {
     @try {
         if (!self) {
-            %orig(reason, report, description, completion);
+            %orig(reason, report, description, comp);
             return;
         }
         NSString *desc = description ? [description lowercaseString] : @"";
         if ([desc containsString:@"user"] || [desc containsString:@"terminate"] || [desc containsString:@"explicit"] || [desc containsString:@"switcher"]) {
-            %orig(reason, report, description, completion);
+            %orig(reason, report, description, comp);
             return;
         }
     } @catch (__unused NSException *e) {}
-    %orig(reason, report, description, completion);
+    %orig(reason, report, description, comp);
 }
 
 - (BOOL)isPendingExit {
@@ -5564,7 +5564,6 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 %end
 
 %end
-
 // ====================================================================================================
 // NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 15-240HZ VIRTUAL MODES)
 // ====================================================================================================
