@@ -277,41 +277,6 @@ static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
 
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
 
-// [V36.6 FIX NHIET DO]: Doc nhiet do CPU/GPU/Pin qua IOKit private API (jailbreak doc duoc so that).
-// Neu khong doc duoc -> tra ve nil, fallback ve text thermalState. Khong crash.
-static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
-    static NSDictionary *cached = nil;
-    static NSTimeInterval lastRead = 0;
-    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
-    if (cached && (now - lastRead) < 5.0) return cached; // cache 5s
-    lastRead = now;
-
-    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
-    if (!iokit) { cached = nil; return nil; }
-
-    // --- Khai báo ĐÚNG kiểu IOKit ---
-    typedef CFMutableDictionaryRef (*IOServiceMatchingFn)(const char *name);
-    typedef io_service_t (*IOServiceGetMatchingServiceFn)(mach_port_t, CFDictionaryRef);
-    typedef CFTypeRef (*IORegistryEntryCreateCFPropertyFn)(io_registry_entry_t, CFStringRef, CFAllocatorRef, uint32_t);
-    typedef kern_return_t (*IOObjectReleaseFn)(io_object_t);
-
-    IOServiceMatchingFn IOServiceMatchingP =
-        (IOServiceMatchingFn)dlsym(iokit, "IOServiceMatching");
-    IOServiceGetMatchingServiceFn IOServiceGetMatchingServiceP =
-        (IOServiceGetMatchingServiceFn)dlsym(iokit, "IOServiceGetMatchingService");
-    IORegistryEntryCreateCFPropertyFn IORegistryEntryCreateCFPropertyP =
-        (IORegistryEntryCreateCFPropertyFn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
-    IOObjectReleaseFn IOObjectReleaseP =
-        (IOObjectReleaseFn)dlsym(iokit, "IOObjectRelease");
-
-    if (!IOServiceMatchingP || !IOServiceGetMatchingServiceP ||
-        !IORegistryEntryCreateCFPropertyP || !IOObjectReleaseP) {
-        cached = nil;
-        return nil;
-    }
-
-    NSMutableDictionary *result = [NSMutableDictionary dictionary];
-
     // --- Master port: dùng kIOMasterPortDefault cho MỌI SDK iOS 12–16 ---
     // (kIOMainPortDefault chỉ có từ SDK iOS 15 → gây lỗi build trên SDK cũ.
     //  Cả 2 cùng giá trị 0 → runtime hoàn toàn tương đương.)
@@ -412,7 +377,6 @@ static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings) {
     });
     return [knownLanguages containsObject:base] ? base : @"en";
 }
-
 // ====================================================================================================
 // MODULE 1: GLASS MATERIAL FACTORY
 // ====================================================================================================
