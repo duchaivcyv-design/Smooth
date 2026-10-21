@@ -1847,6 +1847,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         UITapGestureRecognizer *dimTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(collapseMenu)];
         [_dimOverlay addGestureRecognizer:dimTap];
     }
+    
+    // Bật khả năng chặn chạm khi menu mở
+    _dimOverlay.userInteractionEnabled = YES;
+
     [host addSubview:_dimOverlay];
     [host bringSubviewToFront:_dimOverlay];
     [UIView animateWithDuration:0.28 animations:^{ self->_dimOverlay.alpha = 1.0; }];
@@ -1904,6 +1908,12 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)collapseMenu {
     if (!_expanded) return;
     _expanded = NO;
+    
+    // Ngắt ngay lập tức khả năng chặn chạm để trả lại cảm ứng cho toàn app
+    if (_dimOverlay) {
+        _dimOverlay.userInteractionEnabled = NO;
+    }
+
     for (NSInteger i = 0; i < _actionViews.count; i++) {
         LGExpandingActionView *v = _actionViews[_actionViews.count - 1 - i];
         NSTimeInterval delay = i * 0.03;
