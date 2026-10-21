@@ -4117,8 +4117,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
                 b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
                 [b.heightAnchor constraintEqualToConstant:39].active = YES;
-                __weak void (^weakRenderPage)(void) = renderPage;   // tránh retain cycle; nút Tiếp theo vẫn giữ renderPage
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; void (^rp)(void) = weakRenderPage; if (rp) rp(); }] forControlEvents:UIControlEventTouchUpInside];
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; renderPage(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
             next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
@@ -6898,6 +6897,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStylePlain];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor colorWithRed:0.012 green:0.010 blue:0.032 alpha:1.0];
+    // Control trong tableHeaderView (slider, ô Hz/FPS, nút preset) bị UIScrollView trễ hoặc hủy chạm mặc định.
+    // Tắt delay để slider kéo được và nút nhận chạm ngay.
+    self.customTableView.delaysContentTouches = NO;
+    self.customTableView.canCancelContentTouches = YES;
     self.customTableView.separatorColor = UIColor.clearColor;
     self.customTableView.contentInset = UIEdgeInsetsMake(4.0, 0.0, 14.0, 0.0);
     if (@available(iOS 11.0, *)) self.customTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
