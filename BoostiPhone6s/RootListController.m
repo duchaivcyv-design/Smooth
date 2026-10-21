@@ -1772,6 +1772,17 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 - (void)toggle;
 @end
 
+// [SỬA DOCK] Gỡ mọi lớp mờ menu (tag 0x0D1) còn kẹt trên cửa sổ. Lớp mờ kẹt phủ toàn màn hình, làm tối dock và chặn chạm.
+static void TI_RemoveStaleDimOverlays(UIWindow *w) {
+    if (!w) return;
+    for (UIView *v in [w.subviews copy]) {
+        if (v.tag == 0x0D1) {
+            v.userInteractionEnabled = NO;
+            [v removeFromSuperview];
+        }
+    }
+}
+
 @implementation LGExpandingNavBarButton
 
 - (instancetype)initWithIconName:(NSString *)iconName tintColor:(UIColor *)tint {
@@ -1838,8 +1849,10 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     UIWindow *host = [self hostWindow];
     if (!host) { _expanded = NO; return; }
 
+    TI_RemoveStaleDimOverlays(host);
     if (!_dimOverlay) {
         _dimOverlay = [[UIView alloc] initWithFrame:host.bounds];
+        _dimOverlay.tag = 0x0D1;
         _dimOverlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.18];
         _dimOverlay.alpha = 0.0;
         _dimOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -1913,6 +1926,7 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         [_dimOverlay removeFromSuperview];
         _dimOverlay = nil;
     }
+    TI_RemoveStaleDimOverlays([self hostWindow]);
 
     for (NSInteger i = 0; i < _actionViews.count; i++) {
         LGExpandingActionView *v = _actionViews[_actionViews.count - 1 - i];
@@ -4360,6 +4374,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    TI_RemoveStaleDimOverlays(self.view.window);   // [SỬA DOCK] gỡ lớp mờ kẹt
     NSUserDefaults *welcomeDefaults = [NSUserDefaults standardUserDefaults];
     if (![welcomeDefaults boolForKey:@"TIV347FirstWelcomeCompleted"] && !self.presentedViewController) {
         [self showV347FirstLaunchWelcome];
