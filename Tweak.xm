@@ -5070,8 +5070,6 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 // TITANIUM FULL TẦNG 4 — BẺ KHÓA PANEL & KÍCH HOẠT PROMOTION / 15-240HZ ẨN TRONG CHIP TỰ ĐỘNG
 // ====================================================================================================
 
-// 1. Include header chứa full definition
-#import "ApexV285ProPayload.h"
 extern ApexV285ProPayload g_syncPayloadV285;
 
 static inline BOOL Apex_IsMasterEnabled(void) {
