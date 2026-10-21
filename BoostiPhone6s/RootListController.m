@@ -1,5 +1,4 @@
-// NEON CONTROL V35 — dashboard preferences, persistent appearance controls, live clock, sensor classification, and IOReport GPU telemetry.
-// Derived from V34.7. Verify Theos build and sensor/channel behavior on each target device/iOS release.
+behavior on each target device/iOS release.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -3887,7 +3886,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     // This flag unlocks local configuration UI only; it is not evidence of a kernel exploit.
     _isFeatureActivated = YES; // [V36.3 FIX CONG TAC TONG]: luon = khai thac (1), khong co tat/bat tong
-    if ((!_isFeatureActivated || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) && _currentBottomTab != 0) _currentBottomTab = 4;
     if (_isFeatureActivated) {
         struct utsname startupUts;
         memset(&startupUts, 0, sizeof(startupUts));
@@ -6163,7 +6161,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         CGFloat w = _liquidNavBarContainer.bounds.size.width / MAX(1, _tabButtons.count);
         _activeGlassIndicator.center = CGPointMake(_currentBottomTab * w + w * 0.5, _activeGlassIndicator.center.y);
     }
-    [self.customTableView setUserInteractionEnabled:YES]; // [ĐÃ SỬA LỖI 2]: Luôn bật cảm ứng vùng đỏ
+    [self.customTableView setUserInteractionEnabled:YES];
 }
 
 - (void)layoutLiquidGlassControlsForCurrentBounds {
@@ -6603,6 +6601,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         profiles[bundleID]=@{@"preset":@(selected),@"rate":rates[selected],@"name":allNames[selected],@"applied":@YES};
         [[NSUserDefaults standardUserDefaults] setObject:profiles forKey:@"TIV11PerAppProfiles"];
         [[NSUserDefaults standardUserDefaults] synchronize];
+        [self syncSharedMemoryFile:YES];
         [self dismissViewControllerAnimated:YES completion:^{ UIAlertController *done=[UIAlertController alertControllerWithTitle:@"Đã lưu hồ sơ ứng dụng" message:[NSString stringWithFormat:@"%@ · %@\nMục tiêu %@ Hz/FPS đã lưu. Việc áp dụng thực tế phụ thuộc bộ điều khiển tương thích.",appName,allNames[selected],rates[selected]] preferredStyle:UIAlertControllerStyleAlert]; [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil]; }];
     }] forControlEvents:UIControlEventTouchUpInside];
     [self presentViewController:page animated:YES completion:nil];
@@ -8122,8 +8121,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     if (self.isViewLoaded) {
         UILabel *hzLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8710];
-        UILabel *fpsLabel = (UILabel *)[self.customTableView.tableHeaderView
-:8711];
+        UILabel *fpsLabel = (UILabel *)[self.customTableView.tableHeaderView viewWithTag:8711];
         if (hzLabel) hzLabel.text = [NSString stringWithFormat:@"%ld", (long)hz];
         if (fpsLabel) fpsLabel.text = [NSString stringWithFormat:@"%ld", (long)fps];
     }
@@ -8296,6 +8294,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     p.updateSeq = Titanium_IPCSequenceNow();
     p.lastHeartbeat = p.updateSeq;
 
+    // Share the exact exclusion list format that Tweak.xm reads outside the SpringBoard sandbox.
     NSMutableArray<NSString *> *disabledIDs = [NSMutableArray array];
     id statesObj = self.settingsDict[@"AppTweakStates"];
     if ([statesObj isKindOfClass:[NSDictionary class]]) {
@@ -8807,10 +8806,10 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         }];
         dispatch_async(dispatch_get_main_queue(), ^{
             self->_scannedAppsList = temp;
-for (NSDictionary *app in temp) {
-    NSString *bid = app[@"bundleID"];
-    if (bid.length && self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @YES;
-}
+            for (NSDictionary *app in temp) {
+                NSString *bid = app[@"bundleID"];
+                if (bid.length && self->_appTweakStates[bid] == nil) self->_appTweakStates[bid] = @YES;
+            }
             [self applyAppFilter];
             if (self->_currentBottomTab == 3 && self->_isFeatureActivated) {
                 [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
@@ -9647,7 +9646,3 @@ for (NSDictionary *app in temp) {
 }
 
 @end
-
-
-// V36.5.1 PATCH NOTES: added persistent performance profile selector and thermal-state-based auto target policy.
-// Exact Celsius readings and physical refresh/FPS remain device/backend-dependent; never fabricate readings.
