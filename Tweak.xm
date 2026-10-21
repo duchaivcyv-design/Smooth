@@ -5504,15 +5504,16 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 
 - (void)setDamping:(CGFloat)damping {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        if (damping > 11.0) { %orig(11.0); return; }
+        if (damping > 11.0) { 
+            damping = 11.0; // Gán lại biến local
+        }
     }
-    %orig(damping);
+    %orig(damping); // Truyền biến vào, không truyền số literal
 }
 
 %end
 
 %end
-
 // ====================================================================================================
 // NHÓM TỐI ƯU AI STREAMING & TEXT LAYOUT
 // ====================================================================================================
