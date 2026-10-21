@@ -3135,7 +3135,7 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CAMetalLayer *layer) {
 
 // ==============================================================================
 // TẮT V-SYNC TẬN GỐC T {
-Ừ TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
+// TRONG TRỨNG (TIÊM BIẾN MÔI TRƯỜNG HỆ THỐNG)
 // ==============================================================================
 
 static inline void Titanium_KillVS   yncCompletelyAtRoot(void setenv("CA_DISABLE_FRAME_RATE_LIMIT", "1", 1);
