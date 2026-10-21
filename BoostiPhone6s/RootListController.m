@@ -277,12 +277,10 @@ static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
 
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
 
-    // --- Master port đúng cách: kIOMasterPortDefault ---
-    // Không dùng mach_host_self() — đây KHÔNG phải IOKit master port.
+    // --- Master port: dùng kIOMasterPortDefault cho MỌI SDK iOS 12–16 ---
+    // (kIOMainPortDefault chỉ có từ SDK iOS 15 → gây lỗi build trên SDK cũ.
+    //  Cả 2 cùng giá trị 0 → runtime hoàn toàn tương đương.)
     mach_port_t masterPort = kIOMasterPortDefault;
-    if (@available(iOS 12.0, *)) {
-        masterPort = kIOMainPortDefault;
-    }
 
     NSArray<NSString *> *sensorKeys = @[
         @"CPU0_Temperature", @"CPU1_Temperature",
@@ -298,12 +296,9 @@ static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
     ];
 
     for (NSString *svc in serviceNames) {
-        // IOServiceMatchingP trả về CFMutableDictionaryRef
         CFMutableDictionaryRef matching = IOServiceMatchingP([svc UTF8String]);
         if (!matching) continue;
 
-        // IOServiceGetMatchingServiceP nhận (mach_port_t, CFDictionaryRef) -> io_service_t
-        // Hàm này CONSUME (release) `matching` — KHÔNG CFRelease nữa.
         io_service_t service = IOServiceGetMatchingServiceP(masterPort, matching);
         if (service == 0) continue;
 
@@ -316,10 +311,9 @@ static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
             );
             if (!val) continue;
 
-            // Kiểm tra kiểu trước khi bridge
             if (CFGetTypeID(val) == CFNumberGetTypeID()) {
                 NSNumber *num = (__bridge_transfer NSNumber *)val;
-                double tempC = [num doubleValue] / 100.0; // IOKit tra ve centi-degree
+                double tempC = [num doubleValue] / 100.0;
                 if (tempC > 0 && tempC < 120) {
                     NSString *label = @"Temperature";
                     if ([key containsString:@"GPU"]) label = @"GPU";
@@ -337,7 +331,6 @@ static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
     cached = [result copy];
     return cached;
 }
-
     // Doc nhiet pin qua IOPMPowerSource
     Class psClass = NSClassFromString(@"IOPMPowerSource");
     if (psClass) {
