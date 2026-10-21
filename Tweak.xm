@@ -6209,9 +6209,6 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 // ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TƯỚNG TAY (RUN CORE TWEAK & CTOR) - ĐÃ LÀM SẠCH TRÙNG LẶP
 // ====================================================================================================
 
-extern void Titanium_DeployHypervisorShieldAndAntiKill(void);
-extern float Titanium_SanitizeAndForceExtremeRate(float rate);
-extern void Titanium_DeployHypervisorShieldAndAntiKill(void);
 extern void Titanium_BypassQuartzCoreRangeAssertion(void);
 extern void Titanium_KillVSyncCompletelyAtRoot(void);
 extern void Titanium_InitZeroCopyIPC(BOOL isSpringBoard);
@@ -6248,8 +6245,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     s_coreInitDone = YES;
 
     @autoreleasepool {
-        Titanium_DeployHypervisorShieldAndAntiKill();
-        (void)Titanium_SanitizeAndForceExtremeRate(240.0f);
 
         Titanium_BypassQuartzCoreRangeAssertion();
 
