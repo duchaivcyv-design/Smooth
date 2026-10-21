@@ -14,6 +14,8 @@
 #import <mach/task_info.h>
 #import <mach/task_policy.h>    // Khai báo quản lý QoS Task Kernel
 #import <mach/clock.h>
+#import <SpriteKit/SpriteKit.h>
+#import <SceneKit/SceneKit.h>
 
 // ==================== POSIX, C & SYSTEM ====================
 #include <stdio.h>              // Cho rename(), snprintf() trong hàm ghi IPC atomic
