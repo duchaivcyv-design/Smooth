@@ -5497,18 +5497,14 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (CGFloat)damping {
     CGFloat orig = %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        if (orig > 0.0 && orig < 25.0) {
-            return orig * 1.02; 
-        }
+        if (orig > 11.0) return 11.0;
     }
     return orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        if (damping > 0.0 && damping < 25.0) {
-            damping *= 1.02;
-        }
+        if (damping > 11.0) { %orig(11.0); return; }
     }
     %orig(damping);
 }
