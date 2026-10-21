@@ -3545,15 +3545,29 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            range = Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap());
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+
+            // Lấy đúng Hz/FPS user đã chọn (15–240)
+            float target = (float)Titanium_GetEffectiveFrameCap();
+            if (target < 15.0f)  target = 15.0f;
+            if (target > 240.0f) target = 240.0f;
+
+            // range.maximum  = target  → CA phải nhận đúng Hz/FPS đã chọn
+            // range.preferred= target  → ưu tiên đúng mức đó
+            // range.minimum  = 15      → floor ProMotion (không ép xuống 60)
+            range = CAFrameRateRangeMake(15.0f, target, target);
         }
     }
-    %orig(range);
+
+    // Chặn crash nếu CAAnimation_setter nội bộ validate chặt hơn range truyền vào.
+    @try {
+        %orig(range);
+    } @catch (NSException *e) {
+        // CA từ chối range — nuốt exception, không SIGABRT.
+    }
 }
 
 %end
-
 %hook CALayer
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
