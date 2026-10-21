@@ -2811,6 +2811,7 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 // ==============================================================================
 // BẺ KHÓA LUỒNG TOÀN DIỆN (FULL UNTHROTTLED - MỞ CÔNG SUẤT LÊN MỨC 127, NICE -10, VIP CHIẾM ĐỈNH)
 // ==============================================================================
+
 static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -5464,10 +5465,6 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 %end
 
 %end
-
-// ====================================================================================================
-// TẦNG 3 FULL — WINDOWSERVER / QUARTZCORE — DẢI 15-240HZ — KHÔNG TRÙNG
-// ====================================================================================================
 
 // ====================================================================================================
 // NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 15-240HZ VIRTUAL MODES)
