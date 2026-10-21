@@ -5818,7 +5818,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSTimeInterval downUntil = [[NSDate date] timeIntervalSince1970] + 20 * 60;
     Titanium_SavePersistentServerState(TI_STATE_DOWN, downUntil);
     self.settingsDict[TI_SERVER_DOWN_KEY] = @(downUntil);
-    self.settingsDict[@"Enabled"] = @NO;
+    // Lỗi server không tự tắt công tắc tổng; người dùng vẫn điều khiển được.
     [self saveSettingsDataAndSync];
     [[NSUserDefaults standardUserDefaults] setDouble:downUntil forKey:TI_SERVER_DOWN_KEY];
     [[NSUserDefaults standardUserDefaults] synchronize];
@@ -7962,6 +7962,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
     rate = MAX(15, MIN(240, rate));
     NSUserDefaults *rateDefaults = [NSUserDefaults standardUserDefaults];
+    // Chọn Hz/FPS thủ công phải thắng chế độ tiết kiệm pin: nếu còn cờ này, payload luôn ghi 60.
+    self.settingsDict[@"PowerSaveMode"] = @NO;
+    self.settingsDict[@"batterySaver60Hz"] = @NO;
+    [rateDefaults setBool:NO forKey:@"PowerSaveMode"];
+    [rateDefaults setBool:NO forKey:@"batterySaver60Hz"];
     if (isFPS) {
         self.settingsDict[@"TargetFPSRate"] = @(rate);
         self.settingsDict[@"EnableFPSControl"] = @YES;
@@ -8314,7 +8319,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 }
             }
         }
-        BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
+        BOOL master = [self.settingsDict[@"Enabled"] ?: @YES boolValue];   // mặc định bật sẵn
         [self syncSharedMemoryFile:master];
     });
 }
@@ -8561,7 +8566,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     [[NSUserDefaults standardUserDefaults] synchronize];
     self.settingsDict[@"FeatureActivationComplete"] = @YES;
     [self.settingsDict removeObjectForKey:@"IsKernelExploited"];
-    self.settingsDict[@"Enabled"] = @YES;
+    // Công tắc tổng KHÔNG được bật tự động khi khai thác: giữ nguyên lựa chọn của người dùng.
     self.settingsDict[@"SavedArchString"] = _deepArchString;
     self.settingsDict[@"SavedCoreCountString"] = _deepCoreCountString;
     self.settingsDict[@"SavedRamString"] = _deepRamString;
@@ -8647,7 +8652,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [[NSUserDefaults standardUserDefaults] setDouble:[downVal doubleValue] forKey:TI_SERVER_DOWN_KEY];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
-    BOOL master = [self.settingsDict[@"Enabled"] boolValue];
+    BOOL master = self.settingsDict[@"Enabled"] ? [self.settingsDict[@"Enabled"] boolValue] : YES;   // mặc định bật sẵn
     [self syncSharedMemoryFile:master];
 }
 
