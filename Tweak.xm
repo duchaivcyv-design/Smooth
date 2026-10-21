@@ -1873,58 +1873,114 @@ static void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload) {
 }
 
 static inline void Titanium_ReloadSharedSyncStateV285(void) {
-    if (g_isCurrentAppBlacklisted) return;
-
     uint64_t now = mach_absolute_time();
-    // Giảm độ trễ kiểm tra xuống mức thấp nhất để app thứ ba phản hồi ngay khi thay đổi Hz/FPS
-    if (g_lastSyncTicksV285 != 0 && (now - g_lastSyncTicksV285) < Titanium_NanosToMachTicks(50ULL * 1000000ULL)) {
+    if (g_lastSyncTicksV285 != 0 && (now - g_lastSyncTicksV285) < Titanium_NanosToMachTicks(30ULL * 1000000ULL)) {
         return;
     }
 
     pthread_mutex_lock(&g_syncLockV285);
     g_lastSyncTicksV285 = now;
 
-    // 1. Đọc trực tiếp từ Plist cấu hình (Bypass Sandbox tuyệt đối cho mọi app/game)
-    NSString *prefPath = Titanium_ResolvePrefPath();
-    if (prefPath && [[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
-        NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
-        if (dict) {
-            BOOL master = (dict[@"Enabled"] != nil) ? [dict[@"Enabled"] boolValue] : YES;
-            NSInteger hz = (dict[@"TargetRefreshRate"] != nil) ? [dict[@"TargetRefreshRate"] integerValue] : 240;
-            NSInteger fps = (dict[@"TargetFPSRate"] != nil) ? [dict[@"TargetFPSRate"] integerValue] : hz;
-
-            if (hz < 15) hz = 15;
-            if (hz > 240) hz = 240;
-            if (fps < 15) fps = 15;
-            if (fps > 240) fps = 240;
-
-            g_syncPayloadV285.masterEnabled = master ? 1 : 0;
-            g_syncPayloadV285.targetHz = (int32_t)hz;
-            g_syncPayloadV285.targetFPS = (int32_t)fps;
-            g_cachedResolvedHz = hz;
-            g_cachedResolvedFPS = fps;
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    if (bundleID.length > 0 && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        g_isCurrentAppBlacklisted = Titanium_IsBundleDisabledViaIPC(bundleID);
+        if (g_isCurrentAppBlacklisted) {
+            g_syncPayloadV285.masterEnabled = 0;
             pthread_mutex_unlock(&g_syncLockV285);
             return;
         }
     }
 
-    // 2. Dự phòng đọc từ file IPC Shared Memory /tmp
+    BOOL loadedFromIPC = NO;
+    // 1. Ưu tiên đọc từ file IPC Shared Memory /tmp (Không bị cfprefsd cache hay Sandbox chặn)
     NSString *jbSyncPath = [Titanium_GetRootHidePrefixPath() stringByAppendingPathComponent:@"tmp/.boost_hz_sync"];
     NSArray *checkPaths = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE, jbSyncPath ?: @""];
     for (NSString *path in checkPaths) {
         if (path.length == 0) continue;
         int fd = open([path UTF8String], O_RDONLY);
         if (fd < 0) continue;
-        ApexV285ProPayload temp;
-        if (read(fd, &temp, sizeof(temp)) == sizeof(temp) && temp.magic == APEX_SYNC_MAGIC_V285) {
-            g_syncPayloadV285 = temp;
-            if (temp.targetHz >= 15 && temp.targetHz <= 240) g_cachedResolvedHz = temp.targetHz;
-            if (temp.targetFPS >= 15 && temp.targetFPS <= 240) g_cachedResolvedFPS = temp.targetFPS;
-            close(fd);
-            break;
-        }
+        uint8_t buf[512] = {0};
+        ssize_t n = read(fd, buf, sizeof(buf));
         close(fd);
+        // Chấp nhận cả struct 160 bytes (UI cũ) và 448 bytes (UI mới) miễn khớp magic
+        if (n >= 112) {
+            uint32_t magic = *(uint32_t *)buf;
+            if (magic == APEX_SYNC_MAGIC_V285) {
+                uint32_t master = *((uint32_t *)buf + 1);
+                int32_t hz = *((int32_t *)buf + 2);
+                int32_t fps = *((int32_t *)buf + 3);
+                if (hz < 15) hz = 15;
+                if (hz > 240) hz = 240;
+                if (fps < 15) fps = 15;
+                if (fps > 240) fps = 240;
+                g_syncPayloadV285.masterEnabled = master ? 1 : 0;
+                g_syncPayloadV285.targetHz = hz;
+                g_syncPayloadV285.targetFPS = fps;
+                g_cachedResolvedHz = hz;
+                g_cachedResolvedFPS = fps;
+                if (CFG285) {
+                    CFG285.enabled = (master != 0);
+                    CFG285.targetHz = hz;
+                    CFG285.targetFPS = fps;
+                }
+                loadedFromIPC = YES;
+                break;
+            }
+        }
     }
+
+    // 2. Nếu chưa có file IPC thì đọc từ Plist cấu hình
+    if (!loadedFromIPC) {
+        NSString *prefPath = Titanium_ResolvePrefPath();
+        if (prefPath && [[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
+            NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+            if (dict) {
+                BOOL master = (dict[@"Enabled"] != nil) ? [dict[@"Enabled"] boolValue] : YES;
+                NSInteger hz = (dict[@"TargetRefreshRate"] != nil) ? [dict[@"TargetRefreshRate"] integerValue] : 240;
+                NSInteger fps = (dict[@"TargetFPSRate"] != nil) ? [dict[@"TargetFPSRate"] integerValue] : hz;
+                if (hz < 15) hz = 15;
+                if (hz > 240) hz = 240;
+                if (fps < 15) fps = 15;
+                if (fps > 240) fps = 240;
+                g_syncPayloadV285.masterEnabled = master ? 1 : 0;
+                g_syncPayloadV285.targetHz = (int32_t)hz;
+                g_syncPayloadV285.targetFPS = (int32_t)fps;
+                g_cachedResolvedHz = hz;
+                g_cachedResolvedFPS = fps;
+                if (CFG285) {
+                    CFG285.enabled = master;
+                    CFG285.targetHz = hz;
+                    CFG285.targetFPS = fps;
+                }
+            }
+        }
+    }
+
+    // 3. Kiểm tra cấu hình Hz/FPS riêng cho từng App (Per-App Profile: ép lên hoặc ép xuống 30/60/120/240 đúng theo app đã chọn)
+    if (bundleID.length > 0 && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
+        NSArray *perAppPaths = @[@"/tmp/.boost_hz_per_app.plist", @"/var/jb/tmp/.boost_hz_per_app.plist"];
+        for (NSString *paPath in perAppPaths) {
+            if (access([paPath UTF8String], R_OK) == 0) {
+                NSDictionary *perAppDict = [NSDictionary dictionaryWithContentsOfFile:paPath];
+                NSDictionary *appProf = [perAppDict[bundleID] isKindOfClass:[NSDictionary class]] ? perAppDict[bundleID] : nil;
+                if (appProf && appProf[@"rate"] != nil) {
+                    NSInteger appRate = [appProf[@"rate"] integerValue];
+                    if (appRate >= 15 && appRate <= 240) {
+                        g_syncPayloadV285.targetHz = (int32_t)appRate;
+                        g_syncPayloadV285.targetFPS = (int32_t)appRate;
+                        g_cachedResolvedHz = appRate;
+                        g_cachedResolvedFPS = appRate;
+                        if (CFG285) {
+                            CFG285.targetHz = appRate;
+                            CFG285.targetFPS = appRate;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     pthread_mutex_unlock(&g_syncLockV285);
 }
 
@@ -6012,34 +6068,18 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// NHÓM GIẢ MẠO THIẾT BỊ PHẦN CỨNG (ÁP DỤNG CHO TOÀN BỘ ỨNG DỤNG HỆ THỐNG & BÊN THỨ BA)
+// NHÓM GIẢ MẠO THIẾT BỊ PHẦN CỨNG AN TOÀN (KHÔNG HOOK MGCOPYANSWER / UNAME TRÁNH CRASH ELLEKIT)
 // ====================================================================================================
 
-#include <sys/utsname.h>
-#include <CoreFoundation/CoreFoundation.h>
-
 static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
-    // Tuyệt đối không giả mạo trên SpringBoard và Cài đặt để tránh sập hệ thống/respring
-    if (Titanium_IsSpringBoard() || Titanium_IsSettingsApp()) {
+    if (Titanium_IsSpringBoard() || Titanium_IsSettingsApp() || Titanium_IsSpoofExcludedApp() || g_isCurrentAppBlacklisted) {
         return NO;
     }
     return YES;
 }
 
 %group Group_UltimateDevice_And_OS_Spoofing
-
-// 1. Giả mạo thông số phần cứng qua uname cho toàn bộ các app
-%hookf(int, uname, struct utsname *info) {
-    int result = %orig(info);
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && result == 0 && info != NULL) {
-        if (Titanium_ShouldApplyHardwareSpoof()) {
-            strlcpy(info->machine, "iPhone16,2", sizeof(info->machine)); // Giả mạo dòng máy Pro Max đời mới để mở khóa max đồ họa
-            strlcpy(info->sysname, "Darwin", sizeof(info->sysname));
-        }
-    }
-    return result;
-}
-
+// Đã gỡ %hookf(uname) để tránh xung đột kép với libellekit.dylib trên iOS 16.7.16
 %end
 
 // ====================================================================================================
@@ -6079,7 +6119,7 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 %end
 
 // ====================================================================================================
-// HÀM KHỞI TẠO & HOẠT ĐỘNG TOÀN CỤC `%ctor` (PHÂN TÁCH RIÊNG: ROOTHIDE TRÌ HOÃN - ROOTLESS NẠP NGAY)
+// HÀM KHỞI TẠO & HOẠT ĐỘNG TOÀN CỤC `%ctor`
 // ====================================================================================================
 
 static void Titanium_StartIPCHearthbeatV12(void) {
@@ -6091,35 +6131,7 @@ static void Titanium_StartIPCHearthbeatV12(void) {
             dispatch_source_set_timer(hb, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), (uint64_t)(30 * NSEC_PER_SEC), (uint64_t)(5 * NSEC_PER_SEC));
             dispatch_source_set_event_handler(hb, ^{
                 @try {
-                    static time_t s_bootTimestamp = 0;
-                    if (s_bootTimestamp == 0) s_bootTimestamp = time(NULL);
-                    BOOL earlyBoot = (time(NULL) - s_bootTimestamp) < 60;
-
-                    ApexV285ProPayload snapshot;
-                    pthread_mutex_lock(&g_syncLockV285);
-                    snapshot = g_syncPayloadV285;
-                    pthread_mutex_unlock(&g_syncLockV285);
-                    if (snapshot.magic == APEX_SYNC_MAGIC_V285) {
-                        if (earlyBoot) {
-                            @try {
-                                Titanium_WriteAtomicIPCFile(PRIMARY_SYNC_FILE, &snapshot, sizeof(snapshot));
-                                CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                                                       CFSTR(NOTIFY_PAYLOAD_WRITTEN), NULL, NULL, YES);
-                            } @catch (NSException *e) {}
-                        } else {
-                            static ApexV285ProPayload s_lastWrittenHB;
-                            static BOOL s_hasLastWrittenHB = NO;
-                            ApexV285ProPayload cmpNew = snapshot;
-                            ApexV285ProPayload cmpOld = s_lastWrittenHB;
-                            cmpNew.updateSeq = 0; cmpNew.lastHeartbeat = 0;
-                            cmpOld.updateSeq = 0; cmpOld.lastHeartbeat = 0;
-                            if (!s_hasLastWrittenHB || memcmp(&cmpNew, &cmpOld, sizeof(cmpNew)) != 0) {
-                                Titanium_WriteSyncPayloadV285(&snapshot);
-                                s_lastWrittenHB = snapshot;
-                                s_hasLastWrittenHB = YES;
-                            }
-                        }
-                    }
+                    Titanium_ReloadSharedSyncStateV285();
                 } @catch (__unused NSException *e) {}
             });
             dispatch_resume(hb);
@@ -6129,7 +6141,6 @@ static void Titanium_StartIPCHearthbeatV12(void) {
 
 static void Titanium_RegisterAppResumeRefreshV12(void) {
     @try {
-        if (Titanium_IsSpringBoard()) return;
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
             [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
@@ -6202,48 +6213,6 @@ static void Titanium_StartThermalAndChargingWatchdog(void) {
     });
 }
 
-__attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
-    @autoreleasepool {
-        @try {
-            Titanium_StartIPCHearthbeatV12();
-            Titanium_RegisterAppResumeRefreshV12();
-            Titanium_StartThermalAndChargingWatchdog();
-        } @catch (__unused NSException *e) {}
-    }
-}
-
-// ====================================================================================================
-// ĐIỀU PHỐI TRUNG TÂM & KHỞI TẠO TẦNG SÂU — ĐỘ TRỄ NẠP CHUẨN XÁC TUYỆT ĐỐI CHO 3 MÔI TRƯỜNG
-// ====================================================================================================
-
-extern void Titanium_BypassQuartzCoreRangeAssertion(void);
-extern void Titanium_KillVSyncCompletelyAtRoot(void);
-extern void Titanium_InitZeroCopyIPC(BOOL isSpringBoard);
-extern void Titanium_ReloadSharedSyncStateV285(void);
-extern void Titanium_InstallDynamicMetalOverdriveGroup2(void);
-extern BOOL Titanium_DisplaySpoofAllowed(void);
-extern BOOL Titanium_IsCurrentAppAGame(void);
-extern BOOL Titanium_IsAIApp(void);
-extern BOOL Titanium_IsSpoofExcludedApp(void);
-extern BOOL Titanium_IsClassicHomeButtonDevice(void);
-extern BOOL Titanium_CheckAndPreventBootloopUniversal(void);
-extern NSString *Titanium_GetRootHidePrefixPath(void);
-extern const char *Titanium_SafeGetProgName(void);
-extern BOOL Titanium_IsSpringBoard(void);
-extern BOOL Titanium_IsSettingsApp(void);
-extern void AppleInternal_EnforceZeroLatencyKernelTier(void);
-extern void Titanium_ApplySiliconDeepOptimizations(void);
-extern void AppleInternal_LockHardwareCADisplay(void);
-extern void Titanium_ForceInjectDynamicRefreshSupport(void);
-extern void Titanium_StartIPCHearthbeatV12(void);
-extern void Titanium_StartThermalAndChargingWatchdog(void);
-extern void Titanium_RegisterAppResumeRefreshV12(void);
-extern void Titanium_ReapplyFrameRateToAllScenes(void);
-extern void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
-
-static void Titanium_InstallMGCopyAnswerHookV26(void);
-
-// Hàm hỗ trợ Respring chuẩn xác (Độ trễ 400ms dọn dẹp hệ thống sạch sẽ)
 void Titanium_TriggerRespringAction(void) {
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
     [fb impactOccurred];
@@ -6257,7 +6226,6 @@ void Titanium_TriggerRespringAction(void) {
     });
 }
 
-// Hàm hỗ trợ Userspace Reboot / Sreboot chuẩn xác (Độ trễ 1200ms khởi động lại không gian người dùng)
 void Titanium_TriggerSrebootAction(void) {
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeWarning];
@@ -6266,6 +6234,40 @@ void Titanium_TriggerSrebootAction(void) {
         const char *args[] = {"launchctl", "reboot", "userspace", NULL};
         posix_spawn(&pid, "/bin/launchctl", NULL, NULL, (char *const *)args, environ);
     });
+}
+
+// [ĐÃ SỬA LỖI 1]: Vô hiệu hóa MSHookFunction trên MGCopyAnswer / sysctl / uname
+// vì trên iOS 16.7.16 (ElleKit), patch trực tiếp MGCopyAnswer làm crash TikTok, Zalo, Discord.
+static void Titanium_InstallMGCopyAnswerHookV26(void) {
+    // Giữ trống an toàn — không chạm vào prologue của libMobileGestalt.dylib
+}
+
+static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
+    static BOOL s_obsDone = NO;
+    if (s_obsDone) return;
+    s_obsDone = YES;
+
+    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
+    if (!darwinCenter) return;
+
+    // Lắng nghe cả 2 bộ tên thông báo từ RootListController.m để cập nhật Hz/FPS tức thì (0ms)
+    NSArray<NSString *> *notifications = @[
+        @NOTIFY_RELOAD,
+        @NOTIFY_UIKIT_RELOAD,
+        @NOTIFY_HARDWARE_SYNC,
+        @NOTIFY_FPS_CHANGED,
+        @NOTIFY_TITANIUM_CHANGED,
+        @NOTIFY_PAYLOAD_WRITTEN,
+        @"com.titanium.reload",
+        @"com.titanium.uikit.reload",
+        @"com.titanium.hardwaresync",
+        @"com.titanium.fpschanged",
+        @"com.titanium.changed",
+        @"com.titanium.payloadwritten"
+    ];
+    for (NSString *name in notifications) {
+        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, (__bridge CFStringRef)name, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    }
 }
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
@@ -6280,28 +6282,21 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         if (configClass) {
             CFG285 = [configClass sharedInstance];
             [CFG285 loadSettings];
-            if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-                NSInteger initHz = (NSInteger)[CFG285 targetHz];
-                // Ép dải Hz chuẩn từ 15 đến 240Hz
-                g_cachedResolvedHz = (initHz >= 15 && initHz <= 240) ? initHz : 240;
-            }
-            if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                NSInteger initFPS = (NSInteger)[CFG285 targetFPS];
-                // Ép dải FPS chuẩn từ 15 đến 240Hz
-                g_cachedResolvedFPS = (initFPS >= 15 && initFPS <= 240) ? initFPS : 240;
-            }
+        }
+
+        // Nạp đồng bộ trạng thái Hz/FPS (và cấu hình riêng từng app) ngay lập tức trước khi khởi tạo hook
+        g_lastSyncTicksV285 = 0;
+        Titanium_ReloadSharedSyncStateV285();
+
+        if (g_isCurrentAppBlacklisted) {
+            return;
         }
 
         Titanium_KillVSyncCompletelyAtRoot();
         Titanium_InitZeroCopyIPC(isSpringBoard);
-
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-            Titanium_ReloadSharedSyncStateV285();
-        });
-
         Titanium_InstallDynamicMetalOverdriveGroup2();
 
-        // 1. NẠP TĨNH TOÀN BỘ CÁC NHÓM HOOK TẦNG SÂU NGAY LẬP TỨC (0MS)
+        // 1. NẠP TOÀN BỘ CÁC NHÓM HOOK TẦNG SÂU CHO SPRINGBOARD, UIKIT, APP JB & APP THỨ 3
         %init(Group_ZeroLatency_Touch_Opt);
         %init(Group_FluidTransitions_Pacing);
         %init(Group_AI_Stream_Optimization);
@@ -6318,9 +6313,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         if (Titanium_DisplaySpoofAllowed()) {
             %init(Group_Hardware_ProMotion_Overclock);
         }
-
-        Titanium_InstallMGCopyAnswerHookV26();
-        %init(Group_UltimateDevice_And_OS_Spoofing);
 
         %init(Group_Apple_Native_ColdBoot_Overdrive);
         if (!g_avoidTweakConflicts) %init(Group_Silicon_Hardware_Pipeline_Overdrive);
@@ -6339,9 +6331,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_HardwareSegregation_ClassicHomeV285);
         }
 
-        // 2. KÍCH HOẠT TẦNG 4 VỚI ĐỘ TRỄ CHUẨN XÁC TỪNG XĂNG-T-I CHO 3 MÔI TRƯỜNG
+        // 2. KÍCH HOẠT RIÊNG THEO TỪNG MÔI TRƯỜNG
         if (isSpringBoard) {
-            // Môi trường 1: SpringBoard (Độ trễ chuẩn 30ms giúp hệ thống dựng WindowServer mượt mà không nghẽn)
             %init(Group_LiquidGlass_Opt);
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_SpringBoard_Switcher_Opt);
@@ -6352,28 +6343,23 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_KeepAppsAlive_NoKill);
             %init(Group_CAWindowServer_Absolute_Dominance);
 
-#if TITANIUM_ENABLE_RATE_KEEPER
-            [TitaniumRateKeeper start];
-#endif
-
             Titanium_StartThermalAndChargingWatchdog();
             Titanium_StartIPCHearthbeatV12();
 
-            NSData *verifiedData = [@"VERIFIED" dataUsingEncoding:NSUTF8StringEncoding];
-            [[NSFileManager defaultManager] createFileAtPath:@"/var/mobile/Library/Preferences/com.titanium.verified"
-                                                    contents:verifiedData
-                                                  attributes:@{NSFilePosixPermissions: @(0644)}];
-            
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                Titanium_ReloadSharedSyncStateV285();
                 AppleInternal_EnforceZeroLatencyKernelTier();
                 Titanium_ApplySiliconDeepOptimizations();
                 AppleInternal_LockHardwareCADisplay();
                 Titanium_ForceInjectDynamicRefreshSupport();
+                Titanium_TuneWindowServerDisplayDirectly();
+                Titanium_ReapplyFrameRateToAllScenes();
             });
 
-        } else if (bundleID && bundleID.length > 0) {
-            // Môi trường 2: UIKit Apps / App thứ ba (Độ trễ chuẩn 15ms để app tạo UIWindow, chống đen/văng app)
+        } else {
+            // Cả App thứ 3, WebApp, App JB (Sileo, Filza, Zebra) và Settings đều được nạp đầy đủ
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                Titanium_ReloadSharedSyncStateV285();
                 Titanium_ForceInjectDynamicRefreshSupport();
                 AppleInternal_LockHardwareCADisplay();
                 AppleInternal_EnforceZeroLatencyKernelTier();
@@ -6381,213 +6367,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Titanium_RegisterAppResumeRefreshV12();
                 Titanium_ReapplyFrameRateToAllScenes();
             });
-
-        } else {
-            // Môi trường 3: Background Daemons / Tiến trình ngầm (Chạy nền độc lập trên QOS queue)
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                Titanium_ApplySiliconDeepOptimizations();
-            });
         }
 
         g_SystemMasterReady = YES;
     }
-}
-
-static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
-    static BOOL s_obsDone = NO;
-    if (s_obsDone) return;
-    s_obsDone = YES;
-
-    CFNotificationCenterRef darwinCenter = CFNotificationCenterGetDarwinNotifyCenter();
-    if (!darwinCenter) return;
-
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR("com.titanium.reload"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR("com.titanium.uikit.reload"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR("com.titanium.hardwaresync"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR("com.titanium.fpschanged"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR("com.titanium.changed"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-
-    if (!isSpringBoardProcess) {
-        CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, CFSTR("com.titanium.payloadwritten"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    }
-}
-
-static void SpringBoardBootstrapTrigger(void) {
-    static BOOL s_triggerDone = NO;
-    if (s_triggerDone) return;
-    s_triggerDone = YES;
-
-    const char *progName = Titanium_SafeGetProgName();
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    runCoreTweak(YES, bundleID, progName);
-}
-
-static CFPropertyListRef (*orig_MGCopyAnswer)(CFStringRef key) = NULL;
-
-static CFPropertyListRef hooked_MGCopyAnswer(CFStringRef key) {
-    if (key && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
-        if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ProductType"), 0) == kCFCompareEqualTo) {
-            return (CFPropertyListRef)CFBridgingRetain([NSString stringWithUTF8String:"iPhone18,2"]);
-        }
-        if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("HardwarePlatform"), 0) == kCFCompareEqualTo) {
-            return (CFPropertyListRef)CFBridgingRetain([NSString stringWithUTF8String:"d85ap"]);
-        }
-        if (CFStringGetTypeID() == CFGetTypeID(key) && CFStringCompare(key, CFSTR("ArtworkDeviceSubType"), 0) == kCFCompareEqualTo) {
-            return (CFPropertyListRef)CFBridgingRetain([NSNumber numberWithInt:3000]);
-        }
-    }
-    
-    if (orig_MGCopyAnswer) {
-        return orig_MGCopyAnswer(key);
-    }
-    return NULL;
-}
-
-static int (*orig_sysctlbyname_spoof)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
-static int hooked_sysctlbyname_spoof(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
-        if (strcmp(name, "hw.cpubrand") == 0 || strcmp(name, "machdep.cpu.brand_string") == 0) {
-            const char *spoofChip = "Apple A20 Pro (3nm Ultra)";
-            size_t len = strlen(spoofChip) + 1;
-            if (oldp && oldlenp) {
-                if (*oldlenp >= len) {
-                    memcpy(oldp, spoofChip, len);
-                    *oldlenp = len;
-                    return 0;
-                }
-            } else if (!oldp && oldlenp) {
-                *oldlenp = len;
-                return 0;
-            }
-        }
-
-        if (strcmp(name, "hw.machine") == 0 || strcmp(name, "hw.product") == 0) {
-            const char *spoofModel = "iPhone18,2";
-            size_t len = strlen(spoofModel) + 1;
-            if (oldp && oldlenp) {
-                if (*oldlenp >= len) {
-                    memcpy(oldp, spoofModel, len);
-                    *oldlenp = len;
-                    return 0;
-                }
-            } else if (!oldp && oldlenp) {
-                *oldlenp = len;
-                return 0;
-            }
-        }
-
-        if (strcmp(name, "hw.model") == 0) {
-            const char *spoofBoard = "D85AP";
-            size_t len = strlen(spoofBoard) + 1;
-            if (oldp && oldlenp) {
-                if (*oldlenp >= len) {
-                    memcpy(oldp, spoofBoard, len);
-                    *oldlenp = len;
-                    return 0;
-                }
-            } else if (!oldp && oldlenp) {
-                *oldlenp = len;
-                return 0;
-            }
-        }
-
-        if (strcmp(name, "hw.activecpu") == 0 || strcmp(name, "hw.ncpu") == 0) {
-            int cpus = 8;
-            if (oldp && oldlenp && *oldlenp >= sizeof(int)) {
-                memcpy(oldp, &cpus, sizeof(int));
-                *oldlenp = sizeof(int);
-                return 0;
-            }
-        }
-
-        if (strcmp(name, "hw.memsize") == 0 && oldp && oldlenp && *oldlenp >= sizeof(uint64_t)) {
-            uint64_t fakeRam = 12ULL * 1024ULL * 1024ULL * 1024ULL;
-            memcpy(oldp, &fakeRam, sizeof(uint64_t));
-            *oldlenp = sizeof(uint64_t);
-            return 0;
-        }
-    }
-    
-    if (orig_sysctlbyname_spoof) {
-        return orig_sysctlbyname_spoof(name, oldp, oldlenp, newp, newlen);
-    }
-    return -1;
-}
-
-static int (*orig_sysctl_spoof)(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) = NULL;
-static int hooked_sysctl_spoof(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (name && namelen == 2 && name[0] == CTL_HW && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
-        !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
-        if (name[1] == HW_MACHINE) {
-            const char *spoofModel = "iPhone18,2";
-            size_t len = strlen(spoofModel) + 1;
-            if (oldp && oldlenp) {
-                if (*oldlenp >= len) {
-                    memcpy(oldp, spoofModel, len);
-                    *oldlenp = len;
-                    return 0;
-                }
-            } else if (!oldp && oldlenp) {
-                *oldlenp = len;
-                return 0;
-            }
-        } else if (name[1] == HW_MODEL) {
-            const char *spoofBoard = "D85AP";
-            size_t len = strlen(spoofBoard) + 1;
-            if (oldp && oldlenp) {
-                if (*oldlenp >= len) {
-                    memcpy(oldp, spoofBoard, len);
-                    *oldlenp = len;
-                    return 0;
-                }
-            } else if (!oldp && oldlenp) {
-                *oldlenp = len;
-                return 0;
-            }
-        }
-    }
-    
-    if (orig_sysctl_spoof) {
-        return orig_sysctl_spoof(name, namelen, oldp, oldlenp, newp, newlen);
-    }
-    return -1;
-}
-
-static int (*orig_uname_spoof)(struct utsname *name) = NULL;
-static int hooked_uname_spoof(struct utsname *name) {
-    int ret = -1;
-    if (orig_uname_spoof) {
-        ret = orig_uname_spoof(name);
-    }
-    if (ret == 0 && name && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !Titanium_IsSpringBoard() && !Titanium_IsSettingsApp() && !Titanium_IsSpoofExcludedApp() && !g_isCurrentAppBlacklisted) {
-        strncpy(name->machine, "iPhone18,2", sizeof(name->machine) - 1);
-        name->machine[sizeof(name->machine) - 1] = '\0';
-    }
-    return ret;
-}
-
-static void Titanium_InstallMGCopyAnswerHookV26(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        if (!Titanium_IsSpringBoard() && !Titanium_IsSettingsApp()) {
-            void *mgSym = dlsym(RTLD_DEFAULT, "MGCopyAnswer");
-            if (mgSym) {
-                MSHookFunction(mgSym, (void *)hooked_MGCopyAnswer, (void **)&orig_MGCopyAnswer);
-            }
-            void *sysSym = dlsym(RTLD_DEFAULT, "sysctlbyname");
-            if (sysSym) {
-                MSHookFunction(sysSym, (void *)hooked_sysctlbyname_spoof, (void **)&orig_sysctlbyname_spoof);
-            }
-            void *sysctlMibSym = dlsym(RTLD_DEFAULT, "sysctl");
-            if (sysctlMibSym) {
-                MSHookFunction(sysctlMibSym, (void *)hooked_sysctl_spoof, (void **)&orig_sysctl_spoof);
-            }
-            void *unameSym = dlsym(RTLD_DEFAULT, "uname");
-            if (unameSym) {
-                MSHookFunction(unameSym, (void *)hooked_uname_spoof, (void **)&orig_uname_spoof);
-            }
-        }
-    });
 }
 
 %ctor {
@@ -6595,28 +6378,18 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
         const char *progName = Titanium_SafeGetProgName();
         if (!progName) return;
 
+        // Chỉ loại trừ các daemon hệ thống nền không có giao diện UIKit để tránh hao pin/xung đột
         if (strcasestr(progName, "AccessibilityUIServer") != NULL ||
             strcasestr(progName, "PosterBoard") != NULL ||
-            strcasestr(progName, "ShareExtension") != NULL ||
-            strcasestr(progName, "Extension") != NULL ||
             strcasestr(progName, "Cr4shed") != NULL ||
-            strcasestr(progName, "MobileNotes") != NULL ||
             strcasestr(progName, "ScreenshotServicesService") != NULL ||
-            strcasestr(progName, "MediaRemoteUI") != NULL ||
             strcasestr(progName, "SharingViewService") != NULL ||
             strcasestr(progName, "PassbookUIService") != NULL ||
             strcasestr(progName, "UserNotificationCenter") != NULL ||
             strcasestr(progName, "CoreAuthUI") != NULL ||
             strcasestr(progName, "assistivetouchd") != NULL ||
-            strcasestr(progName, "sharingd") != NULL) {
-            return;
-        }
-
-        if (strcasestr(progName, "smooth") != NULL ||
-            strcasestr(progName, "boosti") != NULL ||
-            strcasestr(progName, "liquid") != NULL ||
-            strcasestr(progName, "zinitd") != NULL ||
-            strcasestr(progName, "roothide") != NULL) {
+            strcasestr(progName, "sharingd") != NULL ||
+            strcasestr(progName, "zinitd") != NULL) {
             return;
         }
 
@@ -6627,8 +6400,6 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
             (strcasecmp(progName, "CommCenter") == 0) ||
             (strcasecmp(progName, "mDNSResponder") == 0) ||
             (strcasecmp(progName, "nsurlsessiond") == 0) ||
-            (strcasecmp(progName, "GPUProcess") == 0) ||
-            (strcasecmp(progName, "Networking") == 0) ||
             (strcasecmp(progName, "neagent") == 0) ||
             (strcasecmp(progName, "nesessionmanager") == 0) ||
             (strcasecmp(progName, "apsd") == 0) ||
@@ -6638,19 +6409,25 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
             (strcasecmp(progName, "identityservicesd") == 0) ||
             (strcasecmp(progName, "imagent") == 0) ||
             (strcasecmp(progName, "bluetoothd") == 0) ||
-            (strcasecmp(progName, "profiled") == 0)) {
-            return;
-        }
-
-        if ((strcasecmp(progName, "jailbreakd") == 0) || (strcasecmp(progName, "launchd") == 0) ||
-            (strcasecmp(progName, "containermanagerd") == 0) || (strcasecmp(progName, "cfprefsd") == 0) ||
-            (strcasecmp(progName, "watchdogd") == 0) || (strcasecmp(progName, "mediaserverd") == 0) ||
-            (strcasecmp(progName, "installd") == 0) || (strcasecmp(progName, "logd") == 0) ||
-            (strcasecmp(progName, "analyticsd") == 0) || (strcasecmp(progName, "symptomsd") == 0) ||
-            (strcasecmp(progName, "powerd") == 0) || (strcasecmp(progName, "notifyd") == 0) ||
-            (strcasecmp(progName, "securityd") == 0) || (strcasecmp(progName, "runningboardd") == 0) ||
-            (strcasecmp(progName, "thermalmonitord") == 0) || (strcasecmp(progName, "mediaremoted") == 0) ||
-            (strcasecmp(progName, "assertiond") == 0) || (strcasecmp(progName, "timed") == 0) ||
+            (strcasecmp(progName, "profiled") == 0) ||
+            (strcasecmp(progName, "jailbreakd") == 0) ||
+            (strcasecmp(progName, "launchd") == 0) ||
+            (strcasecmp(progName, "containermanagerd") == 0) ||
+            (strcasecmp(progName, "cfprefsd") == 0) ||
+            (strcasecmp(progName, "watchdogd") == 0) ||
+            (strcasecmp(progName, "mediaserverd") == 0) ||
+            (strcasecmp(progName, "installd") == 0) ||
+            (strcasecmp(progName, "logd") == 0) ||
+            (strcasecmp(progName, "analyticsd") == 0) ||
+            (strcasecmp(progName, "symptomsd") == 0) ||
+            (strcasecmp(progName, "powerd") == 0) ||
+            (strcasecmp(progName, "notifyd") == 0) ||
+            (strcasecmp(progName, "securityd") == 0) ||
+            (strcasecmp(progName, "runningboardd") == 0) ||
+            (strcasecmp(progName, "thermalmonitord") == 0) ||
+            (strcasecmp(progName, "mediaremoted") == 0) ||
+            (strcasecmp(progName, "assertiond") == 0) ||
+            (strcasecmp(progName, "timed") == 0) ||
             (strcasecmp(progName, "passd") == 0)) {
             return;
         }
@@ -6659,46 +6436,22 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
         NSString *bundleID = [mainBundle bundleIdentifier];
 
         if (bundleID) {
-            if ([bundleID rangeOfString:@"smooth" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                [bundleID rangeOfString:@"boostiphone6s" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                [bundleID rangeOfString:@"liquid" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-                [bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            if ([bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
                 [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) {
                 return;
             }
         }
 
-        BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]);
+        BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]) ||
+                             (strcasecmp(progName, "SpringBoard") == 0);
 
         if (isSpringBoard) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
                 (void)Titanium_CheckAndPreventBootloopUniversal();
             });
         }
 
-        if (strcasestr(progName, "Preferences") || strcasestr(progName, "Settings")) {
-            Class configClass = NSClassFromString(@"BoostConfigV285Pro");
-            if (configClass) {
-                CFG285 = [configClass sharedInstance];
-                [CFG285 loadSettings];
-                if ([CFG285 respondsToSelector:@selector(targetHz)]) {NSInteger prefHz = (NSInteger)[CFG285 targetHz];
-                    if ((g_cachedResolvedHz < 1 || g_cachedResolvedHz > 240) && prefHz >= 1 && prefHz <= 240) {
-                        g_cachedResolvedHz = prefHz;
-                    }
-                }
-                if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                    NSInteger prefFPS = (NSInteger)[CFG285 targetFPS];
-                    if ((g_cachedResolvedFPS < 1 || g_cachedResolvedFPS > 240) && prefFPS >= 1 && prefFPS <= 240) {
-                        g_cachedResolvedFPS = prefFPS;
-                    }
-                }
-            }
-            return;
-        }
-
         Titanium_RegisterPrefsObservers(isSpringBoard);
-
-        // NẠP NGAY LẬP TỨC 0MS TẦNG SÂU CHO MỌI TIẾN TRÌNH
         runCoreTweak(isSpringBoard, bundleID, progName);
     }
 }
