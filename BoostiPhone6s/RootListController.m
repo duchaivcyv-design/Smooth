@@ -1672,6 +1672,59 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 @end
 
+#pragma mark - Expanding nav
+
+- (void)setupExpandingNavigationItems {
+    _expandingBoltButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"bolt.horizontal.fill" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0]];
+    _expandingBoltButton.delegate = self;
+    _expandingBoltButton.tag = 103;
+    [_expandingBoltButton setActions:@[
+        [LGExpandingMenuAction actionWithTitle:@"Áp Dụng Ngay" image:@"arrow.clockwise" tintColor:[UIColor whiteColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Ép Xung 144Hz" image:@"bolt.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Reset Tần Số" image:@"arrow.counterclockwise" tintColor:[UIColor systemOrangeColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Glass Redraw" image:@"sparkles" tintColor:[UIColor colorWithRed:0.5 green:0.8 blue:1.0 alpha:1.0] destructive:NO],
+    ]];
+
+    _expandingLockButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"lock.open.fill" tintColor:[UIColor whiteColor]];
+    _expandingLockButton.delegate = self;
+    _expandingLockButton.tag = 102;
+    [_expandingLockButton setActions:@[
+        [LGExpandingMenuAction actionWithTitle:@"Mở Khóa" image:@"lock.open.fill" tintColor:[UIColor systemGreenColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Khóa" image:@"lock.fill" tintColor:[UIColor systemRedColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Lưu" image:@"square.and.arrow.down.fill" tintColor:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Áp Dụng" image:@"arrow.clockwise" tintColor:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1.0] destructive:NO],
+    ]];
+
+    _expandingMenuButton = [[LGExpandingNavBarButton alloc] initWithIconName:@"line.3.horizontal" tintColor:[UIColor whiteColor]];
+    _expandingMenuButton.delegate = self;
+    _expandingMenuButton.tag = 101;
+    [_expandingMenuButton setActions:@[
+        [LGExpandingMenuAction actionWithTitle:@"Respring" image:@"arrow.triangle.2.circlepath" tintColor:[UIColor colorWithRed:0.4 green:0.85 blue:1.0 alpha:1.0] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Userspace" image:@"arrow.clockwise.circle.fill" tintColor:[UIColor systemOrangeColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Safe Mode" image:@"shield.lefthalf.fill" tintColor:[UIColor systemYellowColor] destructive:NO],
+        [LGExpandingMenuAction actionWithTitle:@"Xóa Sạch" image:@"trash.fill" tintColor:[UIColor systemRedColor] destructive:YES],
+        [LGExpandingMenuAction actionWithTitle:([Titanium_ResolvePayloadLanguage(self.settingsDict ?: @{}) isEqualToString:@"vi"] ? @"Hướng dẫn & pháp lý" : @"Guide & legal") image:@"book.closed.fill" tintColor:[UIColor colorWithRed:0.42 green:0.78 blue:1.0 alpha:1.0] destructive:NO],
+    ]];
+
+    CGFloat btnSize = 36.0;
+    CGFloat spacing = 10.0;
+    CGFloat totalW = btnSize * 3 + spacing * 2;
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, totalW, btnSize)];
+    container.backgroundColor = [UIColor clearColor];
+    container.userInteractionEnabled = NO;
+    container.clipsToBounds = NO;
+
+    _expandingBoltButton.frame = CGRectMake(0, 0, btnSize, btnSize);
+    _expandingLockButton.frame = CGRectMake(btnSize + spacing, 0, btnSize, btnSize);
+    _expandingMenuButton.frame = CGRectMake((btnSize + spacing) * 2, 0, btnSize, btnSize);
+    
+    [container addSubview:_expandingMenuButton];
+    [container addSubview:_expandingLockButton];
+    [container addSubview:_expandingBoltButton];
+
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:container];
+    [self updateLockIcon];
+}
 
 // ====================================================================================================
 // MODULE 7: EXPANDING NAV BAR BUTTON
@@ -7266,7 +7319,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if (indexPath.row == 0) { title = @"Triple Buffering"; prefKey = @"MetalHexBuffering"; }
                 else if (indexPath.row == 1) { title = @"Isolate Pipeline"; prefKey = @"IsolateRenderPipeline"; }
                 else if (indexPath.row == 2) { title = @"Bỏ V-Sync"; prefKey = @"vsyncAdaptiveBuffer"; }
-                else if (indexPath.row == 3) { title = @"Game FPS"; prefKey = @"gameFPSStabilizer"; }
+                else if (indexPath.row == 3) { title = @"Game FPS"; prefKey = @"GameFPSStabilizer"; }
                 else if (indexPath.row == 4) { title = @"Flat Blur"; prefKey = @"flatTintBlur"; }
                 else { title = @"Neural Buffer"; prefKey = @"neuralBufferOpt"; }
             } else if (_currentSwitchSubTab == 2) {
@@ -7963,6 +8016,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
     rate = MAX(15, MIN(240, rate));
     NSUserDefaults *rateDefaults = [NSUserDefaults standardUserDefaults];
+    // Chọn Hz/FPS thủ công: tắt tiết kiệm pin và tắt Tự động để giá trị người dùng chọn có hiệu lực.
+    self.settingsDict[@"PowerSaveMode"] = @NO;
+    self.settingsDict[@"batterySaver60Hz"] = @NO;
+    self.settingsDict[@"SmooIOSAutoTuneEnabledV36"] = @NO;
+    [rateDefaults setBool:NO forKey:@"PowerSaveMode"];
+    [rateDefaults setBool:NO forKey:@"batterySaver60Hz"];
+    [rateDefaults setBool:NO forKey:@"SmooIOSAutoTuneEnabledV36"];
     if (isFPS) {
         self.settingsDict[@"TargetFPSRate"] = @(rate);
         self.settingsDict[@"EnableFPSControl"] = @YES;
@@ -8199,7 +8259,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
-    if (!_isFeatureActivated) return;
 
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
 
@@ -8225,8 +8284,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                      [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
 
     // [V36 FIX KHOA 60]: Chi ep 60 khi powerSave (tiet kiem pin). Con lai dung requestedHz/FPS 15-240.
-    NSInteger resolvedHz = (powerSave) ? 60 : requestedHz;
-    NSInteger resolvedFPS = (powerSave) ? 60 : requestedFPS;
+    // Chế độ Tự động: Hz/FPS theo nhiệt độ máy. Bình thường 240, hơi nóng 144, nóng 90, rất nóng 60.
+    BOOL autoMode = [self.settingsDict[@"SmooIOSAutoTuneEnabledV36"] ?: @NO boolValue];
+    NSInteger tierHz = requestedHz;
+    if (autoMode) {
+        switch ([NSProcessInfo processInfo].thermalState) {
+            case NSProcessInfoThermalStateNominal:  tierHz = 240; break;
+            case NSProcessInfoThermalStateFair:     tierHz = 144; break;
+            case NSProcessInfoThermalStateSerious:  tierHz = 90;  break;
+            default:                                tierHz = 60;  break;
+        }
+    }
+    NSInteger resolvedHz  = (powerSave) ? 60 : tierHz;
+    NSInteger resolvedFPS = (powerSave) ? 60 : (autoMode ? tierHz : requestedFPS);
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
@@ -8627,7 +8697,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [[NSFileManager defaultManager] createDirectoryAtPath:d withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @(0700)} error:nil];
     }
     BOOL didWritePreferences = [self.settingsDict writeToFile:p atomically:YES];
-    if (didWritePreferences) {
+    // [ĐỒNG BỘ] Luôn đẩy CFPreferences + notify, kể cả khi ghi file plist bị sandbox chặn.
+    if (didWritePreferences || YES) {
         chmod([p UTF8String], 0600);
         // Tweak.xm reads the same domain through CFPreferences. Write the complete
         // dictionary there too; plist-only writes can leave its cached domain stale.
@@ -8667,7 +8738,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         @"lockHighIdleFloor", @"AntiThermalThrottling", @"AntiThermalThrottle",
         @"iopolVipPriority", @"coolDownHeavyLoad", @"backgroundPacingDaemon",
         @"MetalHexBuffering", @"IsolateRenderPipeline", @"vsyncAdaptiveBuffer",
-        @"gameFPSStabilizer", @"flatTintBlur", @"neuralBufferOpt",
+        @"GameFPSStabilizer", @"flatTintBlur", @"neuralBufferOpt",   // khóa phải khớp với tweak: GameFPSStabilizer
         @"ForceOverclock144Hz", @"ProMotionEngineBeta7", @"TouchResponseBoost",
         @"ColorOs17SmoothEngine", @"zeroLagNeural", @"ultraResponsiveness",
         @"AntiGhostTouch", @"ChargerRippleRejection", @"fakeFullBatteryState",
@@ -8871,8 +8942,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         self->_adminAccessToken = nil;
         self->_adminRole = nil;
         self.settingsDict = [NSMutableDictionary dictionary];
-        self->_isFeatureActivated = NO;
-        self.settingsDict[@"FeatureActivationComplete"] = @NO;
+        self->_isFeatureActivated = YES;   // đặt lại cấu hình KHÔNG khóa lại tính năng
+        self.settingsDict[@"FeatureActivationComplete"] = @YES;
         self->_activationFlowPresenting = NO;
         self->_deepArchString = nil;
         self->_deepCoreCountString = nil;
