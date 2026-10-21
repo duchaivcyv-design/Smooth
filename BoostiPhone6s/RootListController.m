@@ -1,3 +1,5 @@
+// NEON CONTROL V35 — dashboard preferences, persistent appearance controls, live clock, sensor classification, and IOReport GPU telemetry.
+// Derived from V34.7. Verify Theos build and sensor/channel behavior on each target device/iOS release.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -237,6 +239,72 @@ static NSDictionary *Titanium_CurrentNowPlayingInfo(void) {
     if (!center) return @{};
     id info = ((id (*)(id, SEL))objc_msgSend)(center, sel_registerName("nowPlayingInfo"));
     return [info isKindOfClass:[NSDictionary class]] ? info : @{};
+}
+
+
+// [V36.6 FIX NHIET DO]: Doc nhiet do CPU/GPU/Pin qua IOKit private API (jailbreak doc duoc so that).
+// Neu khong doc duoc -> tra ve nil, fallback ve text thermalState. Khong crash.
+static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
+    static NSDictionary *cached = nil;
+    static NSTimeInterval lastRead = 0;
+    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+    if (cached && (now - lastRead) < 5.0) return cached; // cache 5s
+    lastRead = now;
+
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+    if (!iokit) { cached = nil; return nil; }
+
+    typedef mach_port_t (*IOServiceMatchingFn)(const char *name);
+    typedef mach_port_t (*IOServiceGetMatchingServiceFn)(mach_port_t, CFDictionaryRef);
+    typedef CFTypeRef (*IORegistryEntryCreateCFPropertyFn)(mach_port_t, CFStringRef, CFAllocatorRef, uint32_t);
+    typedef void (*IOObjectReleaseFn)(mach_port_t);
+
+    IOServiceMatchingFn IOServiceMatching = (IOServiceMatchingFn)dlsym(iokit, "IOServiceMatching");
+    IOServiceGetMatchingServiceFn IOServiceGetMatchingService = (IOServiceGetMatchingServiceFn)dlsym(iokit, "IOServiceGetMatchingService");
+    IORegistryEntryCreateCFPropertyFn IORegistryEntryCreateCFProperty = (IORegistryEntryCreateCFPropertyFn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
+    IOObjectReleaseFn IOObjectRelease = (IOObjectReleaseFn)dlsym(iokit, "IOObjectRelease");
+    if (!IOServiceMatching || !IOServiceGetMatchingService || !IORegistryEntryCreateCFProperty || !IOObjectRelease) { cached = nil; return nil; }
+
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    mach_port_t masterPort = 0; // mach_host_self()
+    // Lay mach port qua host_get_host_priv
+    typedef mach_port_t (*mach_host_self_fn)(void);
+    mach_host_self_fn mach_host_self_p = (mach_host_self_fn)dlsym(RTLD_DEFAULT, "mach_host_self");
+    if (mach_host_self_p) masterPort = mach_host_self_p();
+
+    NSArray *sensorKeys = @[@"CPU0_Temperature", @"CPU1_Temperature", @"GPU_Temperature", @"PMU_Temperature", @"Temperature"];
+    NSArray *serviceNames = @[@"AppleARMPMUCharger", @"AppleSmartBatteryManager", @"AppleA7IOP", @"PMU"];
+    for (NSString *svc in serviceNames) {
+        mach_port_t service = IOServiceGetMatchingService(masterPort, IOServiceMatching([svc UTF8String]));
+        if (service == 0) continue;
+        for (NSString *key in sensorKeys) {
+            CFTypeRef val = IORegistryEntryCreateCFProperty(service, (__bridge CFStringRef)key, kCFAllocatorDefault, 0);
+            if (val) {
+                NSNumber *num = (__bridge_transfer NSNumber *)val;
+                double tempC = [num doubleValue] / 100.0; // IOKit tra ve centi-degree
+                if (tempC > 0 && tempC < 120) {
+                    NSString *label = [key containsString:@"GPU"] ? @"GPU" : ([key containsString:@"CPU"] ? @"CPU" : ([key containsString:@"PMU"] ? @"PMU" : key));
+                    if (!result[label]) result[label] = @(tempC);
+                }
+            }
+        }
+        IOObjectRelease(service);
+    }
+
+    // Doc nhiet pin qua IOPMPowerSource
+    Class psClass = NSClassFromString(@"IOPMPowerSource");
+    if (psClass) {
+        @try {
+            id ps = [[psClass alloc] init];
+            if ([ps respondsToSelector:@selector(temperature)]) {
+                NSNumber *batTemp = [ps performSelector:@selector(temperature)];
+                if (batTemp) result[@"PIN"] = @([batTemp doubleValue] / 100.0);
+            }
+        } @catch (__unused NSException *e) {}
+    }
+
+    cached = result.count ? [result copy] : nil;
+    return cached;
 }
 
 static NSString *Titanium_NormalizeAppSearchText(NSString *value) {
@@ -3813,6 +3881,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     // [V36.4 FIX KHI VUOT KILL APP]: Luu cau hinh khi app vao background -> khi kill khong mat, mo lai khong reset
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         [self saveSettingsDataAndSync];
+    }];
+    // [V36.6 FIX NHAC]: Cap nhat nhac hien tai lien tuc khi doi bai (Spotify/Apple Music/YouTube)
+    [[NSNotificationCenter defaultCenter] addObserverForName:@"MPNowPlayingInfoCenterNowPlayingInfoDidChangeNotification" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+        [self refreshNowPlayingDisplay];
     }];
 
     [self startLatencyMonitor];
@@ -8211,6 +8283,25 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     });
 }
 
+
+// [V36.6 FIX NHAC]: Cap nhat hien thi nhac dang phat tu MPNowPlayingInfoCenter
+- (void)refreshNowPlayingDisplay {
+    @try {
+        NSDictionary *info = Titanium_CurrentNowPlayingInfo();
+        NSString *title = info[@"MPMediaItemPropertyTitle"] ?: info[@"title"];
+        NSString *artist = info[@"MPMediaItemPropertyArtist"] ?: info[@"artist"];
+        UILabel *musicTitle = (UILabel *)[self.view viewWithTag:8720];
+        UILabel *musicArtist = (UILabel *)[self.view viewWithTag:8721];
+        if (title.length) {
+            if (musicTitle) musicTitle.text = [NSString stringWithFormat:@"Đang phát: %@", title];
+            if (musicArtist) musicArtist.text = artist.length ? artist : @"Từ app nhạc bên ngoài";
+        } else {
+            if (musicTitle) musicTitle.text = @"Không có nhạc đang phát";
+            if (musicArtist) musicArtist.text = @"Mở Spotify/Apple Music/YouTube để hiện ở đây";
+        }
+    } @catch (__unused NSException *e) {}
+}
+
 #pragma mark - Exploit
 
 - (void)showUnexploitedWarningAlert {
@@ -9473,3 +9564,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 }
 
 @end
+
+
+// V36.5.1 PATCH NOTES: added persistent performance profile selector and thermal-state-based auto target policy.
+// Exact Celsius readings and physical refresh/FPS remain device/backend-dependent; never fabricate readings.
