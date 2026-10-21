@@ -6258,17 +6258,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             CFG285 = [configClass sharedInstance];
             [CFG285 loadSettings];
             if ([CFG285 respondsToSelector:@selector(targetHz)]) {
-Com                NSInteger initHz = (NSInteger)[CFG285 targetHz];
-                if ((g_cachedResolvedHz < 1 || g_cpletelyachedResolvedHz > 240) &&
-                    initHz >= 1 && initHz <= 240)At {
-                    g_cachedResolvedRootHz = initHz;
+                NSInteger initHz = (NSInteger)[CFG285 targetHz];
+                if ((g_cachedResolvedHz < 1 || g_cachedResolvedHz > 240) &&
+                    initHz >= 1 && initHz <= 240) {
+                    g_cachedResolvedHz = initHz;
                 }
             }
             if ([CFG285 respondsToSelector:@selector(targetFPS)]) {
-                NSInteger();
-
- initFPS = (NSInteger)[CFG285 targetFPS];
-                if ((g_cachedResolvedFPS < 1 ||        g_cachedResolvedFPS > 240) &&
+                NSInteger initFPS = (NSInteger)[CFG285 targetFPS];
+                if ((g_cachedResolvedFPS < 1 || g_cachedResolvedFPS > 240) &&
                     initFPS >= 1 && initFPS <= 240) {
                     g_cachedResolvedFPS = initFPS;
                 }
@@ -6281,7 +6279,8 @@ Com                NSInteger initHz = (NSInteger)[CFG285 targetHz];
             return;
         }
 
-        Titanium_KillVSync Titanium_InitZeroCopyIPC(isSpringBoard);
+        Titanium_KillVSyncCompletelyAtRoot();
+        Titanium_InitZeroCopyIPC(isSpringBoard);
 
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
             Titanium_ReloadSharedSyncStateV285();
@@ -6304,10 +6303,9 @@ Com                NSInteger initHz = (NSInteger)[CFG285 targetHz];
         %init(Group_Safari_And_Animation_Safety);
         %init(Group_Aggressive_RAM_Purge);
 
-        // ===== ĐÃ BỎ TẦNG 5 — KHÔNG CÒN Group_Hardware_ProMotion_Overclock =====
-        // if (Titanium_DisplaySpoofAllowed()) {
-        //     %init(Group_Hardware_ProMotion_Overclock);
-        // }
+        if (Titanium_DisplaySpoofAllowed()) {
+            %init(Group_Hardware_ProMotion_Overclock);
+        }
 
         if (isSpringBoard || (TITANIUM_ENABLE_DEVICE_SPOOF_IN_APPS && Titanium_IsCurrentAppAGame() && !Titanium_IsAIApp() && !Titanium_IsSpoofExcludedApp())) {
             Titanium_InstallMGCopyAnswerHookV26();
@@ -6340,13 +6338,13 @@ Com                NSInteger initHz = (NSInteger)[CFG285 targetHz];
             %init(Group_Switcher30Apps_Virtualization);
             %init(Group_SpringBoard_Switcher_Opt);
             %init(Group_Display_SpringBoardV285);
-            %init( //Group_TitaniumV10_SpringBoard_Layout_Boost);
-            %init(Group_V285_FloatingWindow_P =iP);
+            %init(Group_TitaniumV10_SpringBoard_Layout_Boost);
+            %init(Group_V285_FloatingWindow_PiP);
             %init(Group_SpringBoard_ProcessManagerV285);
-            %init(Group_KeepAppsAl====ive_NoKill);
+            %init(Group_KeepAppsAlive_NoKill);
             %init(Group_CAWindowServer_Absolute_Dominance);
 
-            ĐÃ BỎ TẦNG 5 — KHÔNG CÒN Init_CAWindowServer_Hooks() =====
+            // ===== ĐÃ BỎ TẦNG 5 — KHÔNG CÒN Init_CAWindowServer_Hooks() =====
             // Init_CAWindowServer_Hooks();
 
 #if TITANIUM_ENABLE_RATE_KEEPER
