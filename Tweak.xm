@@ -20,6 +20,7 @@
 #include <math.h>               // Cho isfinite(), fmin(), fmax() kiểm tra tọa độ & nhịp Hz
 #include <stdatomic.h>          // Hỗ trợ bộ đếm nguyên tử an toàn đa luồng
 #import <pthread.h>
+#include <strings.h>          // strcasecmp: so khớp đúng tên process daemon
 #import <pthread/qos.h>         // Khai báo pthread_set_qos_class_self_np()
 #import <sched.h>
 #import <unistd.h>
@@ -2306,6 +2307,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         // ==============================================================================================
         // CƠ CHẾ CHO APP THỨ 3 / GAME: ĐỌC ĐỦ 100% CÔNG TẮC TỪ FILE IPC (KHÔNG BỎ SÓT BẤT KỲ CÔNG TẮC NÀO)
         // ==============================================================================================
+        NSString *bidDiag = [[NSBundle mainBundle] bundleIdentifier] ?: @"?";
+        NSLog(@"[BoostTW] %@ plist/cfprefs=%@ keys=%lu", bidDiag, diskDict ? @"YES" : @"NO", (unsigned long)diskDict.count);
+
         if (!diskDict || diskDict.count == 0) {
             NSArray *checkFiles = @[PRIMARY_SYNC_FILE, SECONDARY_SYNC_FILE];
             for (NSString *sf in checkFiles) {
@@ -2316,6 +2320,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                         if (read(fd, &pRead, sizeof(ApexV285ProPayload)) == sizeof(ApexV285ProPayload)) {
                             if (pRead.magic == APEX_SYNC_MAGIC_V285) {
                                 self.enabled = (pRead.masterEnabled != 0);
+                                NSLog(@"[BoostTW] %@ src=ipc:%@ enabled=%d hz=%ld fps=%ld", bidDiag, sf, self.enabled, (long)self.targetHz, (long)self.targetFPS);
                                 
                                 // === CHỐNG KẸT 60HZ TỪ IPC PAYLOAD ===
                                 self.targetHz = (pRead.targetHz >= 15 && pRead.targetHz <= 240) ? pRead.targetHz : 240;
@@ -2391,6 +2396,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                     }
                 }
             }
+            NSLog(@"[BoostTW] %@ src=DEFAULT (no plist, no ipc) hz=240 fps=240", bidDiag);
             ApplyExclusion();
             return;
         }
@@ -2495,6 +2501,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         g_isRateLockedV285 = GetLiveBool(@"IsRateLocked", NO);
 
         ApplyExclusion();
+        NSLog(@"[BoostTW] %@ src=plist/cfprefs enabled=%d hz=%ld fps=%ld", bidDiag, self.enabled, (long)self.targetHz, (long)self.targetFPS);
 
         // === BUNG TRẦN TUYỆT ĐỐI HZ/FPS ===
         NSInteger safeHz = self.targetHz;
@@ -6610,38 +6617,38 @@ static void Titanium_InstallMGCopyAnswerHookV26(void) {
             return;
         }
 
-        if (strcasestr(progName, "networkd") != NULL ||
-            strcasestr(progName, "trustd") != NULL ||
-            strcasestr(progName, "configd") != NULL ||
-            strcasestr(progName, "wifid") != NULL ||
-            strcasestr(progName, "CommCenter") != NULL ||
-            strcasestr(progName, "mDNSResponder") != NULL ||
-            strcasestr(progName, "nsurlsessiond") != NULL ||
-            strcasestr(progName, "GPUProcess") != NULL ||
-            strcasestr(progName, "Networking") != NULL ||
-            strcasestr(progName, "neagent") != NULL ||
-            strcasestr(progName, "nesessionmanager") != NULL ||
-            strcasestr(progName, "apsd") != NULL ||
-            strcasestr(progName, "cloudd") != NULL ||
-            strcasestr(progName, "geod") != NULL ||
-            strcasestr(progName, "akd") != NULL ||
-            strcasestr(progName, "identityservicesd") != NULL ||
-            strcasestr(progName, "imagent") != NULL ||
-            strcasestr(progName, "bluetoothd") != NULL ||
-            strcasestr(progName, "profiled") != NULL) {
+        if ((strcasecmp(progName, "networkd") == 0) ||
+            (strcasecmp(progName, "trustd") == 0) ||
+            (strcasecmp(progName, "configd") == 0) ||
+            (strcasecmp(progName, "wifid") == 0) ||
+            (strcasecmp(progName, "CommCenter") == 0) ||
+            (strcasecmp(progName, "mDNSResponder") == 0) ||
+            (strcasecmp(progName, "nsurlsessiond") == 0) ||
+            (strcasecmp(progName, "GPUProcess") == 0) ||
+            (strcasecmp(progName, "Networking") == 0) ||
+            (strcasecmp(progName, "neagent") == 0) ||
+            (strcasecmp(progName, "nesessionmanager") == 0) ||
+            (strcasecmp(progName, "apsd") == 0) ||
+            (strcasecmp(progName, "cloudd") == 0) ||
+            (strcasecmp(progName, "geod") == 0) ||
+            (strcasecmp(progName, "akd") == 0) ||
+            (strcasecmp(progName, "identityservicesd") == 0) ||
+            (strcasecmp(progName, "imagent") == 0) ||
+            (strcasecmp(progName, "bluetoothd") == 0) ||
+            (strcasecmp(progName, "profiled") == 0)) {
             return;
         }
 
-        if (strcasestr(progName, "jailbreakd") || strcasestr(progName, "launchd") ||
-            strcasestr(progName, "containermanagerd") || strcasestr(progName, "cfprefsd") ||
-            strcasestr(progName, "watchdogd") || strcasestr(progName, "mediaserverd") ||
-            strcasestr(progName, "installd") || strcasestr(progName, "logd") ||
-            strcasestr(progName, "analyticsd") || strcasestr(progName, "symptomsd") ||
-            strcasestr(progName, "powerd") || strcasestr(progName, "notifyd") ||
-            strcasestr(progName, "securityd") || strcasestr(progName, "runningboardd") ||
-            strcasestr(progName, "thermalmonitord") || strcasestr(progName, "mediaremoted") ||
-            strcasestr(progName, "assertiond") || strcasestr(progName, "timed") ||
-            strcasestr(progName, "passd")) {
+        if ((strcasecmp(progName, "jailbreakd") == 0) || (strcasecmp(progName, "launchd") == 0) ||
+            (strcasecmp(progName, "containermanagerd") == 0) || (strcasecmp(progName, "cfprefsd") == 0) ||
+            (strcasecmp(progName, "watchdogd") == 0) || (strcasecmp(progName, "mediaserverd") == 0) ||
+            (strcasecmp(progName, "installd") == 0) || (strcasecmp(progName, "logd") == 0) ||
+            (strcasecmp(progName, "analyticsd") == 0) || (strcasecmp(progName, "symptomsd") == 0) ||
+            (strcasecmp(progName, "powerd") == 0) || (strcasecmp(progName, "notifyd") == 0) ||
+            (strcasecmp(progName, "securityd") == 0) || (strcasecmp(progName, "runningboardd") == 0) ||
+            (strcasecmp(progName, "thermalmonitord") == 0) || (strcasecmp(progName, "mediaremoted") == 0) ||
+            (strcasecmp(progName, "assertiond") == 0) || (strcasecmp(progName, "timed") == 0) ||
+            (strcasecmp(progName, "passd") == 0)) {
             return;
         }
 
