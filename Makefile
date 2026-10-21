@@ -12,7 +12,7 @@ LIBRARY_NAME = BoostiPhone6sCore
 BoostiPhone6sCore_INSTALL_PATH = t $(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries
 
 # Khai báo file nguồn chuẩn cú pháp có gạch chéo ngược (\)
-BoostiPhone6sCore_FILES = Tweakìm.xm \
+BoostiPhone6sCore_FILES = Tweak.xm \
                           TitaniumKernelOverdrive.m
                           
 BoostiPhone6sCore_CFLAGS = -fobjc-arc th \
