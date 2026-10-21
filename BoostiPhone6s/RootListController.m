@@ -4070,6 +4070,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
             [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
             [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
+            // [V36.5 FIX MO KHOA SAU KHAI THAC]: Sau onboarding -> set FeatureActivationComplete=YES -> _isFeatureActivated=YES -> mo khoa tat ca chuc nang
+            self.settingsDict[@"FeatureActivationComplete"] = @YES;
+            self.settingsDict[@"IsKernelExploited"] = @YES;
+            [self saveSettingsDataAndSync];
             [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
             [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
             [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
