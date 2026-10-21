@@ -5069,7 +5069,7 @@ static void Titanium_DeployHypervisorShieldAndAntiKill(void) {
 
         task_set_exception_ports(mach_task_self(), EXC_MASK_ALL, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
 
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_USER_INTERACTIVE, 0), ^{
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             pthread_setname_np("com.titanium.hypervisor.shield");
             
             while (g_hypervisorShieldActive) {
@@ -5095,7 +5095,7 @@ static void Titanium_SetupAbsoluteAntiKillAndWatchdog(void) {
 
         task_set_exception_ports(mach_task_self(), EXC_MASK_ALL, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
 
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             while (g_absoluteHardwareTakeoverActive) {
                 usleep(250000); // 250ms vòng lặp tự hồi phục tiến trình
             }
