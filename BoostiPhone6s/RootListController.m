@@ -1,5 +1,3 @@
-// NEON CONTROL V35 — dashboard preferences, persistent appearance controls, live clock, sensor classification, and IOReport GPU telemetry.
-// Derived from V34.7. Verify Theos build and sensor/channel behavior on each target device/iOS release.
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -241,109 +239,6 @@ static NSDictionary *Titanium_CurrentNowPlayingInfo(void) {
     return [info isKindOfClass:[NSDictionary class]] ? info : @{};
 }
 
-
-// [V36.6 FIX NHIET DO]: Doc nhiet do CPU/GPU/Pin qua IOKit private API (jailbreak doc duoc so that).
-// Neu khong doc duoc -> tra ve nil, fallback ve text thermalState. Khong crash.
-static NSDictionary *Titanium_ReadHardwareTemperatures(void) {
-    static NSDictionary *cached = nil;
-    static NSTimeInterval lastRead = 0;
-    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
-    if (cached && (now - lastRead) < 5.0) return cached; // cache 5s
-    lastRead = now;
-
-    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
-    if (!iokit) { cached = nil; return nil; }
-
-    // --- Khai báo ĐÚNG kiểu IOKit ---
-    typedef CFMutableDictionaryRef (*IOServiceMatchingFn)(const char *name);
-    typedef io_service_t (*IOServiceGetMatchingServiceFn)(mach_port_t, CFDictionaryRef);
-    typedef CFTypeRef (*IORegistryEntryCreateCFPropertyFn)(io_registry_entry_t, CFStringRef, CFAllocatorRef, uint32_t);
-    typedef kern_return_t (*IOObjectReleaseFn)(io_object_t);
-
-    IOServiceMatchingFn IOServiceMatchingP =
-        (IOServiceMatchingFn)dlsym(iokit, "IOServiceMatching");
-    IOServiceGetMatchingServiceFn IOServiceGetMatchingServiceP =
-        (IOServiceGetMatchingServiceFn)dlsym(iokit, "IOServiceGetMatchingService");
-    IORegistryEntryCreateCFPropertyFn IORegistryEntryCreateCFPropertyP =
-        (IORegistryEntryCreateCFPropertyFn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
-    IOObjectReleaseFn IOObjectReleaseP =
-        (IOObjectReleaseFn)dlsym(iokit, "IOObjectRelease");
-
-    if (!IOServiceMatchingP || !IOServiceGetMatchingServiceP ||
-        !IORegistryEntryCreateCFPropertyP || !IOObjectReleaseP) {
-        cached = nil;
-        return nil;
-    }
-
-    NSMutableDictionary *result = [NSMutableDictionary dictionary];
-
-    // --- Master port: dùng kIOMasterPortDefault cho MỌI SDK iOS 12–16 ---
-    // (kIOMainPortDefault chỉ có từ SDK iOS 15 → gây lỗi build trên SDK cũ.
-    //  Cả 2 cùng giá trị 0 → runtime hoàn toàn tương đương.)
-    mach_port_t masterPort = kIOMasterPortDefault;
-
-    NSArray<NSString *> *sensorKeys = @[
-        @"CPU0_Temperature", @"CPU1_Temperature",
-        @"GPU_Temperature",
-        @"PMU_Temperature",
-        @"Temperature"
-    ];
-    NSArray<NSString *> *serviceNames = @[
-        @"AppleARMPMUCharger",
-        @"AppleSmartBatteryManager",
-        @"AppleA7IOP",
-        @"PMU"
-    ];
-
-    for (NSString *svc in serviceNames) {
-        CFMutableDictionaryRef matching = IOServiceMatchingP([svc UTF8String]);
-        if (!matching) continue;
-
-        io_service_t service = IOServiceGetMatchingServiceP(masterPort, matching);
-        if (service == 0) continue;
-
-        for (NSString *key in sensorKeys) {
-            CFTypeRef val = IORegistryEntryCreateCFPropertyP(
-                service,
-                (__bridge CFStringRef)key,
-                kCFAllocatorDefault,
-                0
-            );
-            if (!val) continue;
-
-            if (CFGetTypeID(val) == CFNumberGetTypeID()) {
-                NSNumber *num = (__bridge_transfer NSNumber *)val;
-                double tempC = [num doubleValue] / 100.0;
-                if (tempC > 0 && tempC < 120) {
-                    NSString *label = @"Temperature";
-                    if ([key containsString:@"GPU"]) label = @"GPU";
-                    else if ([key containsString:@"CPU"]) label = @"CPU";
-                    else if ([key containsString:@"PMU"]) label = @"PMU";
-                    if (!result[label]) result[label] = @(tempC);
-                }
-            } else {
-                CFRelease(val);
-            }
-        }
-        IOObjectReleaseP(service);
-    }
-
-    // Đọc nhiệt pin qua IOPMPowerSource (nằm TRONG hàm, không dư khối)
-    Class psClass = NSClassFromString(@"IOPMPowerSource");
-    if (psClass) {
-        @try {
-            id ps = [[psClass alloc] init];
-            if ([ps respondsToSelector:@selector(temperature)]) {
-                NSNumber *batTemp = [ps performSelector:@selector(temperature)];
-                if (batTemp) result[@"PIN"] = @([batTemp doubleValue] / 100.0);
-            }
-        } @catch (__unused NSException *e) {}
-    }
-
-    cached = result.count ? [result copy] : nil;
-    return cached;
-}
-
 static NSString *Titanium_NormalizeAppSearchText(NSString *value) {
     if (![value isKindOfClass:[NSString class]]) return @"";
     NSString *trimmed = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -377,6 +272,7 @@ static NSString *Titanium_ResolvePayloadLanguage(NSDictionary *settings) {
     });
     return [knownLanguages containsObject:base] ? base : @"en";
 }
+
 // ====================================================================================================
 // MODULE 1: GLASS MATERIAL FACTORY
 // ====================================================================================================
@@ -3531,7 +3427,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 @property (nonatomic, strong) CAShapeLayer *gridLayer;
 @property (nonatomic, strong) CAShapeLayer *lineLayer;
 @property (nonatomic, strong) CAShapeLayer *glowLayer;
-@property (nonatomic, assign) BOOL autoScaleSamples;
 - (void)addSample:(CGFloat)value;
 @end
 @implementation TITrendGraphView
@@ -3548,11 +3443,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     if (!isfinite(value)) return;
     void (^update)(void) = ^{
         [CATransaction begin]; [CATransaction setDisableActions:YES];
-        // Standard utilization charts use a fixed 0–100 scale. Sensor charts opt into
-        // auto-scaling so raw IORegistry counters/temperatures are not silently clamped.
-        CGFloat storedValue = self.autoScaleSamples ? value : MAX(0.0, MIN(100.0, value));
-        [self.samples addObject:@(storedValue)];
-        while (self.samples.count > 60) [self.samples removeObjectAtIndex:0];
+        [self.samples addObject:@(MAX(0.0, MIN(100.0, value)))];
+        while (self.samples.count > 36) [self.samples removeObjectAtIndex:0];
         [self setNeedsLayout];
         [CATransaction commit];
     };
@@ -3574,30 +3466,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     UIBezierPath *path = [UIBezierPath bezierPath];
     NSUInteger count = _samples.count;
     if (count > 0) {
-        CGFloat minValue = 0.0, maxValue = 100.0;
-        if (self.autoScaleSamples) {
-            minValue = CGFLOAT_MAX;
-            maxValue = -CGFLOAT_MAX;
-            for (NSNumber *sample in _samples) {
-                CGFloat v = sample.doubleValue;
-                if (!isfinite(v)) continue;
-                minValue = MIN(minValue, v);
-                maxValue = MAX(maxValue, v);
-            }
-            if (minValue == CGFLOAT_MAX || maxValue == -CGFLOAT_MAX) { minValue = 0.0; maxValue = 1.0; }
-            // Keep a visible line when a raw sensor has not changed between samples.
-            if (fabs(maxValue - minValue) < 0.000001) {
-                CGFloat pad = MAX(1.0, fabs(maxValue) * 0.02);
-                minValue -= pad;
-                maxValue += pad;
-            }
-        }
-        CGFloat plotHeight = MAX(1.0, CGRectGetHeight(b) - 3.0);
         for (NSUInteger i = 0; i < count; i++) {
             CGFloat x = count <= 1 ? CGRectGetWidth(b) : ((CGFloat)i / (CGFloat)(count - 1)) * CGRectGetWidth(b);
             CGFloat v = [_samples[i] doubleValue];
-            CGFloat fraction = self.autoScaleSamples ? (v - minValue) / MAX(0.000001, maxValue - minValue) : v / 100.0;
-            CGFloat y = CGRectGetHeight(b) - fraction * plotHeight - 1.5;
+            CGFloat y = CGRectGetHeight(b) - (v / 100.0) * MAX(1, CGRectGetHeight(b) - 3) - 1.5;
             if (i == 0) [path moveToPoint:CGPointMake(x, y)];
             else [path addLineToPoint:CGPointMake(x, y)];
         }
@@ -3859,7 +3731,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     _deviceUUIDString = uuid ? [uuid UUIDString] : @"UNKNOWN-DEVICE-UUID";
 
     // This flag unlocks local configuration UI only; it is not evidence of a kernel exploit.
-    _isFeatureActivated = YES; // [V36.3 FIX CONG TAC TONG]: luon = khai thac (1), khong co tat/bat tong
+    _isFeatureActivated = [self.settingsDict[@"FeatureActivationComplete"] boolValue];
     if ((!_isFeatureActivated || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) && _currentBottomTab != 0) _currentBottomTab = 4;
     if (_isFeatureActivated) {
         struct utsname startupUts;
@@ -3914,14 +3786,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20PowerOrThermalStateDidChange:) name:NSProcessInfoThermalStateDidChangeNotification object:nil];
     }
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(v20HandleForegroundTransition:) name:UIApplicationWillEnterForegroundNotification object:nil];
-    // [V36.4 FIX KHI VUOT KILL APP]: Luu cau hinh khi app vao background -> khi kill khong mat, mo lai khong reset
-    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        [self saveSettingsDataAndSync];
-    }];
-    // [V36.6 FIX NHAC]: Cap nhat nhac hien tai lien tuc khi doi bai (Spotify/Apple Music/YouTube)
-    [[NSNotificationCenter defaultCenter] addObserverForName:@"MPNowPlayingInfoCenterNowPlayingInfoDidChangeNotification" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        [self refreshNowPlayingDisplay];
-    }];
 
     [self startLatencyMonitor];
 
@@ -4178,10 +4042,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
             [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
             [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
-            // [V36.5 FIX MO KHOA SAU KHAI THAC]: Sau onboarding -> set FeatureActivationComplete=YES -> _isFeatureActivated=YES -> mo khoa tat ca chuc nang
-            self.settingsDict[@"FeatureActivationComplete"] = @YES;
-            self.settingsDict[@"IsKernelExploited"] = @YES;
-            [self saveSettingsDataAndSync];
             [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
             [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
             [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
@@ -6679,10 +6539,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             inner.contentSize=CGSizeMake(cw,3*(cardH+gap));
         } else {
             UILabel *thermalNote=[[UILabel alloc] initWithFrame:CGRectMake(4,2,cw-8,48)]; thermalNote.numberOfLines=0; thermalNote.font=[UIFont systemFontOfSize:11]; thermalNote.textColor=[UIColor secondaryLabelColor]; thermalNote.text=@"Đang dò các cảm biến số thực tế mà IORegistry của thiết bị công bố. Tên và đơn vị phụ thuộc SoC/iOS; chỉ số nào không có nguồn cảm biến tương ứng sẽ không được suy diễn thành °C."; [inner addSubview:thermalNote];
-            NSArray *tn=@[@"CPU · NHIỆT / CẢM BIẾN",@"GPU · NHIỆT / CẢM BIẾN",@"RAM · NHIỆT / CẢM BIẾN",@"MÀN HÌNH · CẢM BIẾN",@"PIN · CẢM BIẾN NHIỆT"];
-            NSArray *td=@[@"IORegistry sensor trend",@"IORegistry sensor trend",@"IORegistry sensor trend",@"IORegistry sensor trend",@"Battery sensor trend"];
-            for(NSInteger i=0;i<5;i++){ CGFloat gap=9, cardW=(cw-gap)/2.0; NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),62+row*124,cardW,116)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(10,7,cardW-20,25)]; n.numberOfLines=2; n.text=tn[i]; n.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack]; n.textColor=UIColor.whiteColor; [card addSubview:n]; TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(9,34,cardW-18,38)]; graph.tag=9250+i; graph.autoScaleSamples=YES; graph.lineLayer.strokeColor=[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1].CGColor; graph.glowLayer.strokeColor=[[UIColor colorWithRed:1 green:.58 blue:.22 alpha:1] colorWithAlphaComponent:.18].CGColor; [card addSubview:graph]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(9,76,cardW-18,32)]; v.tag=8740+i; v.numberOfLines=2; v.text=td[i]; v.font=[UIFont systemFontOfSize:9 weight:UIFontWeightSemibold]; v.textColor=[UIColor colorWithRed:1 green:.65 blue:.25 alpha:1]; v.adjustsFontSizeToFitWidth=YES; v.minimumScaleFactor=.7; [card addSubview:v]; }
-            UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,440,cw-8,42)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,490);
+            NSArray *tn=@[@"CPU · NHIỆT ĐỘ",@"GPU · NHIỆT ĐỘ",@"RAM · NHIỆT ĐỘ",@"MÀN HÌNH · NHIỆT ĐỘ"];
+            NSArray *td=@[@"Cảm biến CPU / die",@"Cảm biến GPU",@"Cảm biến bộ nhớ",@"Cảm biến hiển thị"];
+            for(NSInteger i=0;i<4;i++){ CGFloat gap=9, cardW=(cw-gap)/2.0; NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),62+row*116,cardW,105)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(10,12,cardW-20,32)]; n.numberOfLines=2; n.text=tn[i]; n.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; n.textColor=UIColor.whiteColor; [card addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(10,51,cardW-20,36)]; v.tag=8740+i; v.numberOfLines=2; v.text=td[i]; v.font=[UIFont systemFontOfSize:10 weight:UIFontWeightSemibold]; v.textColor=[UIColor colorWithRed:1 green:.65 blue:.25 alpha:1]; [card addSubview:v]; }
+            UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,304,cw-8,50)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,365);
         }
     }
     pages.contentSize=CGSizeMake(cw*2,505);
@@ -6897,10 +6757,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     self.customTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, self.view.bounds.size.height - 106) style:UITableViewStylePlain];
     self.customTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.customTableView.backgroundColor = [UIColor colorWithRed:0.012 green:0.010 blue:0.032 alpha:1.0];
-    // Control trong tableHeaderView (slider, ô Hz/FPS, nút preset) bị UIScrollView trễ hoặc hủy chạm mặc định.
-    // Tắt delay để slider kéo được và nút nhận chạm ngay.
-    self.customTableView.delaysContentTouches = NO;
-    self.customTableView.canCancelContentTouches = YES;
     self.customTableView.separatorColor = UIColor.clearColor;
     self.customTableView.contentInset = UIEdgeInsetsMake(4.0, 0.0, 14.0, 0.0);
     if (@available(iOS 11.0, *)) self.customTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
@@ -8146,22 +8002,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if(nowTitleLabel) nowTitleLabel.text=nowTitle.length ? nowTitle : @"Chưa có thông tin bài hát";
     if(nowArtistLabel) nowArtistLabel.text=nowArtist.length ? nowArtist : (nowTitle.length ? @"Nghệ sĩ chưa được cung cấp" : @"Ứng dụng phát cần chia sẻ metadata với iOS");
     NSDictionary<NSString *, NSNumber *> *ioSensors = Titanium_ReadIORegistrySensors();
-    // Probe several real IORegistry naming conventions. These remain raw sensor readings;
-    // no unit conversion is applied unless the property itself declares a unit.
     NSNumber *cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"cpu"]);
     if (!cpuSensor) cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"die"]);
-    if (!cpuSensor) cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"cpu"]);
-    if (!cpuSensor) cpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"soc"]);
     NSNumber *gpuSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"gpu"]);
-    if (!gpuSensor) gpuSensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"gpu"]);
     NSNumber *ramSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"dram"]);
-    if (!ramSensor) ramSensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"memory"]);
-    if (!ramSensor) ramSensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"dram"]);
     NSNumber *displaySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"display"]);
-    if (!displaySensor) displaySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"screen"]);
-    NSNumber *batterySensor = Titanium_FindSensorValue(ioSensors, @[@"temp", @"battery"]);
-    if (!batterySensor) batterySensor = Titanium_FindSensorValue(ioSensors, @[@"thermal", @"battery"]);
-    // Sensor units are not standardized across iOS builds; never label raw IORegistry values as Celsius.
+    // Sensor units are not standardized across iOS builds; only display as °C if property name explicitly indicates Celsius.
     NSProcessInfoThermalState ts = NSProcessInfo.processInfo.thermalState;
     NSInteger si = (NSInteger)ts;
     NSString *thermalText = (ts == NSProcessInfoThermalStateNominal) ? @"Ổn định · Bình thường" : (ts == NSProcessInfoThermalStateFair ? @"Ấm nhẹ" : ((ts == NSProcessInfoThermalStateSerious || ts == NSProcessInfoThermalStateCritical) ? @"Nhiệt cao" : @"Không khả dụng"));
@@ -8170,22 +8016,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (tempRead) { tempRead.text = thermalText; tempRead.textColor = thermalColor; }
     UILabel *thermalValue = (UILabel *)[headerNow viewWithTag:8715];
     if (thermalValue) { thermalValue.text = [NSString stringWithFormat:@"%@ · iOS thermal state", thermalText]; thermalValue.textColor = thermalColor; }
-    NSArray<NSNumber *> *tempSensors = @[cpuSensor ?: @(-1), gpuSensor ?: @(-1), ramSensor ?: @(-1), displaySensor ?: @(-1), batterySensor ?: @(-1)];
-    NSArray<NSString *> *sensorNames = @[@"CPU", @"GPU", @"RAM", @"Màn hình", @"Pin"];
-    for (NSInteger ti = 0; ti < 5; ti++) {
+    NSArray<NSNumber *> *tempSensors = @[cpuSensor ?: @(-1), gpuSensor ?: @(-1), ramSensor ?: @(-1), displaySensor ?: @(-1)];
+    for (NSInteger ti = 0; ti < 4; ti++) {
         UILabel *sensorLabel = (UILabel *)[headerNow viewWithTag:8740 + ti];
-        TITrendGraphView *sensorGraph = (TITrendGraphView *)[headerNow viewWithTag:9250 + ti];
+        if (![sensorLabel isKindOfClass:UILabel.class]) continue;
         NSNumber *reading = tempSensors[ti];
-        if (reading.doubleValue < 0) {
-            if (sensorLabel) sensorLabel.text = [NSString stringWithFormat:@"%@ · chưa có cảm biến đọc được", sensorNames[ti]];
-        } else {
-            if (sensorLabel) sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ · không tự quy đổi °C", reading];
-            // Plot the actual numeric sensor value on an auto-scaled graph. The UI labels it
-            // as raw IORegistry data because a numeric property alone does not prove Celsius.
-            if ([sensorGraph isKindOfClass:TITrendGraphView.class] && isfinite(reading.doubleValue) && reading.doubleValue >= 0.0 && reading.doubleValue <= 1000000000.0) {
-                [sensorGraph addSample:reading.doubleValue];
-            }
-        }
+        if (reading.doubleValue < 0) sensorLabel.text = [NSString stringWithFormat:@"%@ · không có số đo cảm biến khả dụng", @[@"CPU", @"GPU", @"RAM", @"Màn hình"][ti]];
+        else sensorLabel.text = [NSString stringWithFormat:@"IORegistry raw: %@ (đơn vị chưa xác thực)", reading];
     }
     // Only plot hardware readings when a real sensor source returned a value. Do not fabricate GPU or °C data.
     NSInteger targetHz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
@@ -8210,8 +8047,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     memset(&p, 0, sizeof(ApexV285ProPayload));
     p.magic = APEX_SYNC_MAGIC_V285;
 
-    // [V36 FIX KHOA 60]: masterEnabled luon=1 de tweak tiem Hz/FPS 15-240, khong bi ep 60 do chua khai thac/server down
-    BOOL masterEnabled = (enabled && ![self.settingsDict[@"AvoidTweakConflicts"] boolValue]);
+    BOOL masterEnabled = (enabled && _isFeatureActivated && !_serverDown && ![self.settingsDict[@"AvoidTweakConflicts"] boolValue]);
     p.masterEnabled = masterEnabled ? 1 : 0;
 
     NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
@@ -8227,9 +8063,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] ?: @NO boolValue] ||
                      [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
 
-    // [V36 FIX KHOA 60]: Chi ep 60 khi powerSave (tiet kiem pin). Con lai dung requestedHz/FPS 15-240.
-    NSInteger resolvedHz = (powerSave) ? 60 : requestedHz;
-    NSInteger resolvedFPS = (powerSave) ? 60 : requestedFPS;
+    NSInteger resolvedHz = (!masterEnabled || !hzControlEnabled || powerSave) ? 60 : requestedHz;
+    NSInteger resolvedFPS = (!masterEnabled || !fpsControlEnabled || powerSave) ? 60 : requestedFPS;
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
@@ -8295,7 +8130,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)applyDeepSpringBoardAndUIKitTweaks {
-    // [V36.2 FIX KHOA 60]: Bo return khi chua khai thac — van ap dung Hz/FPS 15-240
+    if (!_isFeatureActivated) return;
     // V23: coalesce rapid preference changes. Hz/FPS values and native caps are unchanged;
     // only redundant main-queue application work is skipped.
     NSUInteger generation = ++_v22ApplyGeneration;
@@ -8303,7 +8138,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (generation != self->_v22ApplyGeneration) return;
         if (@available(iOS 15.0, *)) {
             NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
-            if (targetHz < 15) targetHz = 15; // [V36.2 FIX KHOA 60]: cho phep 15-240, khong ep toi thieu 60
+            if (targetHz < 60) targetHz = 60;
             if (targetHz > 240) targetHz = 240;
             // Không clamp theo nativeMax — Tweak.xm ép vượt trần phần cứng (TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL)
             SEL sel = NSSelectorFromString(@"setPreferredFrameRateRange:");
@@ -8311,7 +8146,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
                     UIWindowScene *ws = (UIWindowScene *)scene;
                     if ([ws respondsToSelector:sel]) {
-                        CAFrameRateRange range = CAFrameRateRangeMake((float)MIN(15, targetHz), (float)targetHz, (float)targetHz); // [V36.2 FIX KHOA 60]: min=15 cho phep 15Hz
+                        CAFrameRateRange range = CAFrameRateRangeMake((float)MIN(30, targetHz), (float)targetHz, (float)targetHz);
                         void (*setRange)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
                         setRange(ws, sel, range);
                     }
@@ -8321,25 +8156,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         BOOL master = [self.settingsDict[@"Enabled"] ?: @NO boolValue];
         [self syncSharedMemoryFile:master];
     });
-}
-
-
-// [V36.6 FIX NHAC]: Cap nhat hien thi nhac dang phat tu MPNowPlayingInfoCenter
-- (void)refreshNowPlayingDisplay {
-    @try {
-        NSDictionary *info = Titanium_CurrentNowPlayingInfo();
-        NSString *title = info[@"MPMediaItemPropertyTitle"] ?: info[@"title"];
-        NSString *artist = info[@"MPMediaItemPropertyArtist"] ?: info[@"artist"];
-        UILabel *musicTitle = (UILabel *)[self.view viewWithTag:8720];
-        UILabel *musicArtist = (UILabel *)[self.view viewWithTag:8721];
-        if (title.length) {
-            if (musicTitle) musicTitle.text = [NSString stringWithFormat:@"Đang phát: %@", title];
-            if (musicArtist) musicArtist.text = artist.length ? artist : @"Từ app nhạc bên ngoài";
-        } else {
-            if (musicTitle) musicTitle.text = @"Không có nhạc đang phát";
-            if (musicArtist) musicArtist.text = @"Mở Spotify/Apple Music/YouTube để hiện ở đây";
-        }
-    } @catch (__unused NSException *e) {}
 }
 
 #pragma mark - Exploit
@@ -9604,7 +9420,3 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
 }
 
 @end
-
-
-// V36.5.1 PATCH NOTES: added persistent performance profile selector and thermal-state-based auto target policy.
-// Exact Celsius readings and physical refresh/FPS remain device/backend-dependent; never fabricate readings.
