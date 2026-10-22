@@ -4117,9 +4117,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __block NSString *selectedIOS = @"";
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
-    __block void (^renderPage)(void);
-    __weak __block void (^weakRenderPageRef)(void) = nil;
-
+    __block void (^renderPage)(void) = nil;
+    __weak UIViewController *weakWizard = wizard;
+    __weak void (^weakRenderPageRef)(void) = nil;
 
     void (^animateToPage)(void) = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
@@ -4130,10 +4130,10 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         } completion:^(__unused BOOL finished) {
             strongWizard.view.transform = CGAffineTransformIdentity; strongWizard.view.alpha = 1;
         }];
-        renderPage();
+        if (renderPage) renderPage();
     };
 
-renderPage = ^{
+    renderPage = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         for (UIView *v in options.arrangedSubviews) { [options removeArrangedSubview:v]; [v removeFromSuperview]; }
         back.hidden = (page == 0);
@@ -4155,8 +4155,12 @@ renderPage = ^{
                 b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
                 b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
                 [b.heightAnchor constraintEqualToConstant:39].active = YES;
-                __weak __typeof(renderPage) weakRenderPage = renderPage;   // tránh retain cycle; nút Tiếp theo vẫn giữ renderPage
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; void (^rp)(void) = weakRenderPage; if (rp) rp(); }] forControlEvents:UIControlEventTouchUpInside];
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+                    (void)a;
+                    if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
+                    void (^rp)(void) = weakRenderPageRef;
+                    if (rp) rp();
+                }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
             next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
@@ -4192,12 +4196,14 @@ renderPage = ^{
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
-                renderPage();
+                void (^rp)(void) = weakRenderPageRef;
+                if (rp) rp();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             next.hidden = NO;
         }
     };
+    weakRenderPageRef = renderPage;
 
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a;
