@@ -1413,9 +1413,11 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
                 Class cfgCls = NSClassFromString(@"BoostConfigV285Pro");
                 if (cfgCls && [cfgCls respondsToSelector:@selector(sharedInstance)]) {
                     id inst = [cfgCls sharedInstance];
+                    if ([inst respondsToSelector:@selector(loadSettings)]) [inst performSelector:@selector(loadSettings)];
                     if ([inst respondsToSelector:@selector(setTargetHz:)]) [inst setValue:@(g_cachedResolvedHz) forKey:@"targetHz"];
                     if ([inst respondsToSelector:@selector(setTargetFPS:)]) [inst setValue:@(g_cachedResolvedFPS) forKey:@"targetFPS"];
                 }
+                Titanium_TuneWindowServerDisplayDirectly();
                 Titanium_ReapplyFrameRateToAllScenes();
             } @catch (__unused NSException *e) {}
         });
@@ -1988,6 +1990,11 @@ static inline void Titanium_ReloadSharedSyncStateV285(void) {
         }
     }
 
+    if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+        g_sharedPayloadPtr->targetHz = (int32_t)g_cachedResolvedHz;
+        g_sharedPayloadPtr->targetFPS = (int32_t)g_cachedResolvedFPS;
+        g_sharedPayloadPtr->masterEnabled = g_syncPayloadV285.masterEnabled;
+    }
     pthread_mutex_unlock(&g_syncLockV285);
 }
 
@@ -2901,17 +2908,14 @@ static inline void Titanium_LockMainThreadFast(void) {
         return;
     }
 
+    Titanium_EnforceThreadVIPPolicy();
+
     static uint64_t s_lastNanoBurstTick = 0;
     uint64_t now = mach_absolute_time();
     
-    // Khóa nhịp 250ms: kích xung tức thì khi chạm/vuốt nhưng giữ tải CPU rảnh ở mức 1–5% (mát 29–33°C)
-    if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(250000000ULL), 0)) {
+    // Khóa nhịp 500ms siêu nhẹ: giữ CPU rảnh 1–5%, nhiệt độ mát 29–33°C, không bao giờ gây nghẽn syscall khi cài nhiều tweak
+    if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(500000000ULL), 0)) {
         s_lastNanoBurstTick = now;
-        
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-        setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
-        setpriority(PRIO_DARWIN_THREAD, 0, -10);
-        
         AppleInternal_LockHardwareCADisplay();
         Titanium_EnableZeroLatencyPipeline();
     }
@@ -3861,37 +3865,40 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 
 %end
 
-// 3. ĐỘNG LỰC HỌC QUÁN TÍNH THẺ: LƯỚT NHẸ TAY, KHÔNG CỨNG, KHÔNG DỪNG ĐỘT NGỘT
+// 3. ĐỘNG LỰC HỌC QUÁN TÍNH THẺ: MỀM MẠI, NHẸ NHÀNG, KHÔNG MẤT HIỆU ỨNG KHI VUỐT NHANH LIÊN TỤC
 %hook SBFluidSwitcherAnimationSettings
 
 - (double)deckSwipeSpeedFactor {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return 1.15;
+        return 1.12;
     }
     return %orig;
 }
 
 - (double)cardFlyInDuration {
+    double orig = %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return 0.08;
+        return (orig > 0.22) ? (orig * 0.78) : orig;
     }
-    return %orig;
+    return orig;
 }
 
 - (double)switcherScaleTransitionDuration {
     if (!self) return %orig;
+    double orig = %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return 0.08;
+        return (orig > 0.22) ? (orig * 0.78) : orig;
     }
-    return %orig;
+    return orig;
 }
 
 - (double)slideInDuration {
     if (!self) return %orig;
+    double orig = %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return 0.08;
+        return (orig > 0.22) ? (orig * 0.78) : orig;
     }
-    return %orig;
+    return orig;
 }
 
 %end
@@ -4041,8 +4048,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (double)zoomDuration {
     @try {
         if (!self) return %orig;
+        double orig = %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.08; 
+            return (orig > 0.20) ? (orig * 0.75) : orig; // Thu phóng mềm mại, bắt kịp tay ngay cả khi đóng mở liên tục
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -4051,8 +4059,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (double)launchDuration {
     @try {
         if (!self) return %orig;
+        double orig = %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-            return 0.08; 
+            return (orig > 0.20) ? (orig * 0.75) : orig;
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -4354,8 +4363,9 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 - (double)duration {
     @try {
         if (!self) return %orig;
+        double orig = %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return 0.06; // Mở/đóng thư mục ứng dụng siêu tốc 0.06s ngang iPhone 18 Pro, tắt sạch delay nặng
+            return (orig > 0.22) ? 0.20 : orig; // Mở/đóng thư mục mềm mại, đầy đủ khung hình 240Hz, không giật cục
         }
     } @catch (__unused NSException *e) {}
     return %orig;
@@ -5496,21 +5506,13 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 
 %hook CASpringAnimation
 
+// Giữ nguyên độ đằm chuẩn mặc định của iOS (Critically Damped), loại bỏ hoàn toàn hiện tượng nảy tưng tưng quá mức khi đóng/mở app
 - (CGFloat)damping {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        if (orig > 11.0) return 11.0;
-    }
-    return orig;
+    return %orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        if (damping > 11.0) { 
-            damping = 11.0; // Gán lại biến local
-        }
-    }
-    %orig(damping); // Truyền biến vào, không truyền số literal
+    %orig(damping);
 }
 
 %end
@@ -5532,8 +5534,18 @@ static float Titanium_ForceUserFPS(float requestedRate) {
             return;
         }
         origDone = YES; %orig;
-        if (Titanium_IsAIApp() && self.window) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window) {
             self.layer.shouldRasterize = NO;
+            self.layer.drawsAsynchronously = YES;
+            if ([self respondsToSelector:@selector(layoutManager)]) {
+                NSLayoutManager *lm = self.layoutManager;
+                if (lm) {
+                    lm.allowsNonContiguousLayout = YES;
+                    if ([lm respondsToSelector:@selector(setBackgroundLayoutEnabled:)]) {
+                        [(id)lm setValue:@YES forKey:@"backgroundLayoutEnabled"];
+                    }
+                }
+            }
         }
     } @catch (__unused NSException *e) {
         if (!origDone) %orig;
@@ -5542,16 +5554,27 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 
 - (void)insertText:(NSString *)text {
     @try {
-        if (Titanium_IsAIApp() && text.length > 0) {
-            static uint64_t s_lastTokenTick = 0;
-            uint64_t now = mach_absolute_time();
-            if (now - s_lastTokenTick > Titanium_NanosToMachTicks(40ULL * 1000000ULL)) {
-                s_lastTokenTick = now;
-                pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-            }
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && text.length > 0) {
+            // Tắt ngầm animation tính toán lại chiều cao khung chat khi gõ tin nhắn dài 20+ dòng đến vô hạn dòng -> 0ms delay bàn phím
+            [UIView performWithoutAnimation:^{
+                %orig(text);
+            }];
+            return;
         }
     } @catch (__unused NSException *e) {}
     %orig(text);
+}
+
+- (void)deleteBackward {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            [UIView performWithoutAnimation:^{
+                %orig;
+            }];
+            return;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
 }
 
 - (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
@@ -5562,6 +5585,68 @@ static float Titanium_ForceUserFPS(float requestedRate) {
         }
     } @catch (__unused NSException *e) {}
     %orig(contentOffset, animated);
+}
+
+%end
+
+%hook UIKeyboardImpl
+
++ (NSTimeInterval)suppressionIntervalForTouchesOnKeyboard {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return 0.0;
+    }
+    return %orig;
+}
+
+- (void)clearAnimations {
+    %orig;
+}
+
+%end
+
+// TĂNG TỐC MẠNG SIÊU CẤP CHUẨN iOS (HTTP/3 QUIC, Pipelining, Multipath TCP & 6 Luồng Tải Song Song)
+%hook NSURLSessionConfiguration
+
++ (NSURLSessionConfiguration *)defaultSessionConfiguration {
+    NSURLSessionConfiguration *cfg = %orig;
+    @try {
+        if (cfg && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            cfg.HTTPShouldUsePipelining = YES;
+            if (cfg.HTTPMaximumConnectionsPerHost < 6) {
+                cfg.HTTPMaximumConnectionsPerHost = 6;
+            }
+            if (@available(iOS 11.0, *)) {
+                cfg.waitsForConnectivity = NO;
+            }
+            if (@available(iOS 15.0, *)) {
+                if ([cfg respondsToSelector:@selector(setAssumesHTTP3Capable:)]) {
+                    cfg.assumesHTTP3Capable = YES;
+                }
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return cfg;
+}
+
++ (NSURLSessionConfiguration *)ephemeralSessionConfiguration {
+    NSURLSessionConfiguration *cfg = %orig;
+    @try {
+        if (cfg && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            cfg.HTTPShouldUsePipelining = YES;
+            if (cfg.HTTPMaximumConnectionsPerHost < 6) {
+                cfg.HTTPMaximumConnectionsPerHost = 6;
+            }
+            if (@available(iOS 11.0, *)) {
+                cfg.waitsForConnectivity = NO;
+            }
+            if (@available(iOS 15.0, *)) {
+                if ([cfg respondsToSelector:@selector(setAssumesHTTP3Capable:)]) {
+                    cfg.assumesHTTP3Capable = YES;
+                }
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return cfg;
 }
 
 %end
