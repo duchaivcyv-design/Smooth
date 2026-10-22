@@ -160,7 +160,7 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
 #define PER_APP_RATES_FILE_PRIMARY   @"/tmp/.boost_hz_per_app.plist"
 #define PER_APP_RATES_FILE_SECONDARY @"/var/jb/tmp/.boost_hz_per_app.plist"
 
-#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#undef _APEX_V285_PRO_PAYLOAD_DEFINED
 #define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic, masterEnabled;
@@ -173,8 +173,8 @@ typedef struct __attribute__((packed)) {
     uint32_t groupFlags[34];
     uint64_t updateSeq, lastHeartbeat;
     char reserved[200];
-} ApexV285ProPayload;
-#endif
+} ApexV285ProPayload_V36;
+#define ApexV285ProPayload ApexV285ProPayload_V36
 
 static NSInteger Titanium_GetCrashCount(void) { return [[NSUserDefaults standardUserDefaults] integerForKey:TI_CRASH_COUNT_KEY]; }
 static void Titanium_SetCrashCount(NSInteger n) { [[NSUserDefaults standardUserDefaults] setInteger:n forKey:TI_CRASH_COUNT_KEY]; [[NSUserDefaults standardUserDefaults] synchronize]; }
@@ -4118,7 +4118,8 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
     __block void (^renderPage)(void);
-    __weak UIViewController *weakWizard = wizard;
+    __weak __block void (^weakRenderPageRef)(void) = nil;
+
 
     void (^animateToPage)(void) = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
