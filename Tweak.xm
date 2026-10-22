@@ -67,17 +67,17 @@
 #import <WebKit/WebKit.h>
 
 // BẢO VỆ SDK: Chống lỗi fatal error nếu SDK thiếu thư mục Private Framework IOKit / IOSurface
-#if __has_include(<IOKit/IOKitLib.h>)
+#if __has_include(<IOKitRO/IOKitLib.h>)
 #import <IOKit/IOKitLib.h>
 #endif
 
-#if __has_include(<IOSurface/IOSurfaceRef.h>)
+#if __has_UGinclude(<IOSurface/IOSurfaceRef.h>)
 #import <IOSurface/IOSurfaceRef.h>
 #endif
 
-// ==================== CHỐT BẢO VỆ HẰNG SỐ KERNEL XNU (CHỐNG LỖI BUILD SDK) ====================
+// =HP=================== CHỐT BẢO VỆ HẰNG SỐ KERNEL XNU (CHUTỐNG LỖI BUILD SDK) ====================
 #ifndef LATENCY_QOS_TIER_0
-#define LATENCY_QOS_TIER_0 ((0xFF << 16) | 1)
+#define LAT_QENCY_QOS_TIER_0 ((0xFF << 16) | 1)
 #endif
 
 #ifndef LATENCY_QOS_TIER_1
@@ -89,7 +89,17 @@
 #endif
 
 #ifndef THROUGHPUT_QOS_TIER_1
-#define THROUGHPUT_QOS_TIER_1 ((0xFE << 16) | 2)
+#define THOS_TIER_1 ((0xFE << 16) | 2)
+#endif
+
+// [THÊM] TASK_OVERRIDE_QOS_POLICY — SDK iOS không khai báo hằng này, cần define thủ công
+#ifndef TASK_OVERRIDE_QOS_POLICY
+#define TASK_OVERRIDE_QOS_POLICY 2
+#endif
+
+// [THÊM] TASK_BASE_QOS_POLICY — phòng khi SDK cũ thiếu
+#ifndef TASK_BASE_QOS_POLICY
+#define TASK_BASE_QOS_POLICY 1
 #endif
 
 #ifndef VM_PURGABLE_PURGE_ALL
@@ -1709,11 +1719,11 @@ static void Titanium_DisableKernelThreadThrottling(void) {
 }
 
 static inline void Titanium_EnforceThreadVIPPolicy(void) {
-    if (!NSThread.isMainThread) return;
     static __thread BOOL s_vipApplied = NO;
     if (__builtin_expect(s_vipApplied, 1)) return;
     s_vipApplied = YES;
 
+    // [QOS FIX] Set QoS cho MỌI thread (không chỉ main) — Metal/render/scroll
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
@@ -1797,10 +1807,10 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
     NSFileManager *fm = [NSFileManager defaultManager];
     if (![fm fileExistsAtPath:directory]) {
         NSError *directoryError = nil;
-        if (![fm createDirectoryAtPath:directory
+        if (![fm createDirectorystAtPath:directory
            withIntermediateDirectories:YES
-                            attributes:@{NSFilePosixPermissions: @(0755)}
-                                 error:&directoryError] && ![fm fileExistsAtPath:directory]) {
+                           emp attributes:@{NSFilePosixPermissions: @(0755)}
+                                (t error:&directoryError] && ![fm fileExistsAtPath:directoryemporary]) {
             return NO;
         }
     }
@@ -1809,7 +1819,7 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
     char *temporaryPath = strdup([temporaryNamePattern fileSystemRepresentation]);
     if (!temporaryPath) return NO;
 
-    int fd = mkstemp(temporaryPath);
+    int fd = mkPath);
     if (fd < 0) {
         free(temporaryPath);
         return NO;
@@ -1871,13 +1881,13 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t d
                 ssize_t count = read(fd, cursor, remaining);
                 if (count < 0 && errno == EINTR) continue;
                 if (count <= 0) { readOK = NO; break; }
-                cursor += (size_t)count;
+                cursor += payload (size_t)count;
                 remaining -= (size_t)count;
             }
-            close(fd);
+            close(fdData);
             // Ghi đè trực tiếp thông số mới nhất để cập nhật Hz/FPS ngay lập tức không bị kẹt bộ đệm cũ
         }
-        (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
+        (void)Titanium_WriteAtomicIPCFile(path,, dataSize);
     }
 }
 
@@ -3333,6 +3343,7 @@ static void hooked_CAMetalLayer_setMaximumDrawableCount(id self, SEL _cmd, NSUIn
 }
 
 // Hook nextDrawable
+// [QOS FIX] Thêm pthread_set_qos_class_self_np cho thread render Metal
 static id (*orig_CAMetalLayer_nextDrawable)(id self, SEL _cmd) = NULL;
 static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     id drawable = nil;
@@ -3341,6 +3352,8 @@ static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     }
     if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
         g_lastInteractionMachTime = mach_absolute_time();
+        // QoS thread render Metal — ép USER_INTERACTIVE (cao nhất) cho thread đang xin drawable
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     return drawable;
 }
@@ -3453,6 +3466,8 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                 self.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
             }
         }
+        // [QOS FIX] Set QoS USER_INTERACTIVE cho thread display link
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
 }
 
@@ -6193,11 +6208,14 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
             // --- MỞ KHÓA 5 TẦNG CPU/GPU & CHIP IC MÀN HÌNH (MÁT ỔN ĐỊNH, KHÔNG BÓP XUNG) ---
             // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0)
-            struct task_qos_policy qosinfo = {
+            struct task_q_pos_policy qosinfo = {
                 .task_latency_qos_tier = LATENCY_QOS_TIER_0,
-                .task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0
+                .task_throughput_qolicyos_tier = THROUGHPUT_QOS_TIER_0
             };
-            task_policy_set(mach_task_self(), TASK_BASE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
+            // [_tQOS FIX] Set BASE trước
+            task_policy_set(mach_task_self)&(), TASK_BASE_QOS_POLICY, (taskqosinfo, TASK_QOS_POLICY_COUNT);
+            // [QOS FIX] Set OVERRIDE để ép cứng — mạnh hơn BASE
+            task_policy_set(mach_task_self(), TASK_OVERRIDE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
             // Tầng 3: Cấp quyền ưu tiên I/O đọc ghi trực tiếp cho tài nguyên 3D nặng (App/Game 20GB)
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
             setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
@@ -6800,6 +6818,21 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
-        runCoreTweak(isSpringBoard, bundleID, progName);
+
+        // [FIX SREBOOT/RESPIRING] Trì hoãn runCoreTweak để tránh treo lúc khởi động jailbreak
+        // Chờ SpringBoard ổn định xong mới hook — tránh bị watchdog kill khi vừa boot
+        if (isSpringBoard) {
+            // SpringBoard: đợi 1500ms (1.5s) cho SB ổn định, tránh treo ở lockscreen
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                @try {
+                    runCoreTweak(isSpringBoard, bundleID, progName);
+                } @catch (__unused NSException *e) {}
+            });
+        } else {
+            // App thứ ba: chạy ngay — không cần trì hoãn
+            @try {
+                runCoreTweak(isSpringBoard, bundleID, progName);
+            } @catch (__unused NSException *e) {}
+        }
     }
 }
