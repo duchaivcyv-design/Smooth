@@ -3502,20 +3502,24 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (NSInteger)preferredFramesPerSecond {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSInteger fps = g_syncPayloadV285.targetFPS;
-        if (fps < 15 || fpsorig > 240) fps = g_cachedResolvedFPS;
+        if (fps < 15 || fps > 240) fps = g_cachedResolvedFPS;
         if (fps < 15 || fps > 240) fps = 240;
-        return fps(target;
+        return fps;
     }
     return %orig;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (IS_ACTIVE || g_syncPayloadV);
-285.masterEnabled) {
-        NSInteger target = g_syncPayloadV285.target       FPS;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger target = g_syncPayloadV285.targetFPS;
         if (target < 15 || target > 240) target = g_cachedResolvedFPS;
-        if (target return < 15 || target > 240) target = 240;
-        %;
+        if (target < 15 || target > 240) target = 240;
+        if (fps != target) {
+            %orig(target);
+        } else {
+            %orig(fps);
+        }
+        return;
     }
     %orig(fps);
 }
@@ -3713,19 +3717,19 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (js && js.length > 0) {
             WKUserScript *script = [[WKUserScript alloc] initWithSource:js
                                                           injectionTime:WKUserScriptInjectionTimeAtDocumentStart
-                                                       forMainFrameOnly:NO];
-            if (!configuration.userContentController) {
+                                                       forMainFrameOnly (!:NO];
+            ifconfiguration.userContentController) {
                 configuration.userContentController = [[WKUserContentController alloc] init];
             }
             [configuration.userContentController addUserScript:script];
         }
     }
     
-    W;
-KWebView *webView = %orig(frame, configuration);
-    if (webView && (IS_ACTIVE || g_syncPayloadV285       .masterEnabled) && !g_isCurrentAppBlacklisted) {
+    WKWebView *webView = %orig(frame, configuration);
+    if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger cap = g_syncPayloadV285.targetFPS;
-        if (cap < if 15 || cap > 240) cap = g_cachedResolvedFPS (cap < 15 || cap > 240) cap = 240;
+        if (cap < 15 || cap > 240) cap = g_cachedResolvedFPS;
+        if (cap < 15 || cap > 240) cap = 240;
         objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(cap), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return webView;
@@ -3749,7 +3753,7 @@ KWebView *webView = %orig(frame, configuration);
             }
         }
     } @catch (__unused NSException *e) {
-        if (!origDone) %orig;
+        if (!origạDone) %orig;
     }
 }
 
@@ -3764,11 +3768,11 @@ KWebView *webView = %orig(frame, configuration);
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             WKProcessPool *pool = [NSThread isMainThread] ? self.configuration.processPool : nil;
             if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
-                [pool _clearMemoryCache];
+                [poolch _clearMemoryCache];
             }
             Titanium_BackgroundHeapRelief();
         }
-    } @catch (__unused NSException *e) {
+    } @catch ( 2 l__unused NSException *e) {
         if (!origDone) %orig;
     }
 }
@@ -5703,12 +5707,13 @@ static float Titanium_ForceUserFPS(float requestedRate) {
     NSURLSessionConfiguration *cfg = %orig;
     @try {
         if (cfg && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            // [FIX LAG MẠNG] Chỉ tối ưu nhẹ, không phá logic app
             cfg.HTTPShouldUsePipelining = YES;
-            if (cfg.HTTPMaximumConnectionsPerHost < 6) {
-                cfg.HTTPMaximumConnectionsPerHost = 6;
+            if (cfg.HTTPMaximumConnectionsPerHost < 2) {   // Giảm 6 → 2 (an toàn cho server)
+                cfg.HTTPMaximumConnectionsPerHost = 2;
             }
             if (@available(iOS 11.0, *)) {
-                cfg.waitsForConnectivity = NO;
+                cfg.waitsForConnectivity = YES;            // Giữ YES (iOS mặc định) thay vì NO
             }
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
@@ -5725,11 +5730,11 @@ static float Titanium_ForceUserFPS(float requestedRate) {
     @try {
         if (cfg && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             cfg.HTTPShouldUsePipelining = YES;
-            if (cfg.HTTPMaximumConnectionsPerHost < 6) {
-                cfg.HTTPMaximumConnectionsPerHost = 6;
+            if (cfg.HTTPMaximumConnectionsPerHost < 2) {   // Giảm 6 → 2
+                cfg.HTTPMaximumConnectionsPerHost = 2;
             }
             if (@available(iOS 11.0, *)) {
-                cfg.waitsForConnectivity = NO;
+                cfg.waitsForConnectivity = YES;            // Giữ YES
             }
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
@@ -5744,6 +5749,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 %end
 
 %end
+
 // ====================================================================================================
 // NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 15-240HZ VIRTUAL MODES)
 // ====================================================================================================
@@ -6578,12 +6584,6 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 %end
 
 %end
-
-
-// ====================================================================================================
-// HÀM KHỞI TẠO & HOẠT ĐỘNG TOÀN CỤC `%ctor`
-// ====================================================================================================
-
 
 // ====================================================================================================
 // TẦNG 4 DIRECT HARDWARE DRIVER ENGINE (HẠNG MỤC #10, #11, #12 — ĐỌC & GHI THẬT QUA IOKIT USERCLIENT
