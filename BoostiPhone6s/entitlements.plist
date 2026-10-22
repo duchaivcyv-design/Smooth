@@ -28,7 +28,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- SANDBOX BYPASS — QUAN TRỌNG NHẤT                             -->
+    <!-- SANDBOX BYPASS                                                -->
     <!-- ============================================================ -->
     <key>com.apple.private.security.no-sandbox</key>
     <true/>
@@ -52,7 +52,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- STORAGE ACCESS — QUYỀN ĐỌC GHI NGOÀI SANDBOX                  -->
+    <!-- STORAGE ACCESS                                                -->
     <!-- ============================================================ -->
     <key>com.apple.private.security.storage.AppBundles</key>
     <true/>
@@ -97,24 +97,24 @@
     <true/>
 
     <key>com.apple.private.security.storage.MobileAsset</key>
-   .app <true/>
-
-    <key>com.apple.private.security.storage.CloudAssets</lekey>
     <true/>
 
-    <key>com.apple.private.security.storage.HomeKit</.key>
+    <key>com.apple.private.security.storage.CloudAssets</key>
     <true/>
 
-    <key>com.apple.private.security.storage.MobileBackup</keyprivate>
+    <key>com.apple.private.security.storage.HomeKit</key>
     <true/>
 
-    <key>com.apple.private.security.storage.DataProtection</key.t>
+    <key>com.apple.private.security.storage.MobileBackup</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.DataProtection</key>
     <true/>
 
     <!-- ============================================================ -->
-    <!-- TCC — QUYỀN TRUY CẬP FILESYSTEM TOÀN CỤC                     -->
+    <!-- TCC                                                           -->
     <!-- ============================================================ -->
-    <key>comcc.allow</key>
+    <key>com.apple.private.tcc.allow</key>
     <array>
         <string>kTCCServiceSystemPolicyAllFiles</string>
         <string>kTCCServiceSystemPolicyDesktopFolder</string>
@@ -158,7 +158,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- TASK PORTS & KERNEL ACCESS                                   -->
+    <!-- TASK PORTS & KERNEL ACCESS                                    -->
     <!-- ============================================================ -->
     <key>get-task-allow</key>
     <true/>
@@ -206,7 +206,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- MACH PORTS & SERVICES                                        -->
+    <!-- MACH PORTS & SERVICES                                         -->
     <!-- ============================================================ -->
     <key>com.apple.security.exception.mach-lookup.global-name</key>
     <array>
@@ -228,12 +228,23 @@
         <string>com.apple.CARenderServer</string>
         <string>com.apple.SBUserNotification</string>
         <string>com.apple.springboard.activateapps</string>
+        <string>com.apple.thermalmonitor</string>
+        <string>com.apple.powerd</string>
+        <string>com.apple.watchdogd</string>
+        <string>com.apple.jetsam</string>
+        <string>com.apple.memorystatus</string>
+        <string>com.apple.iokit</string>
+        <string>com.apple.iokit.IOKitRegistryCompatibility</string>
+        <string>com.apple.iokit.IOHIDSystem</string>
+        <string>com.apple.iokit.IOMobileFramebuffer</string>
+        <string>com.apple.iokit.IOGPUDevice</string>
     </array>
 
     <key>com.apple.security.exception.mach-lookup.local-name</key>
     <array>
         <string>com.apple.springboard.services</string>
         <string>com.apple.backboardd.services</string>
+        <string>com.apple.thermalmonitor</string>
     </array>
 
     <key>com.apple.security.exception.iokit-user-client-class</key>
@@ -242,15 +253,32 @@
         <string>AppleSPUHIDDriver</string>
         <string>IOMobileFramebuffer</string>
         <string>IOMobileFramebufferAP</string>
+        <string>IOMobileFramebufferShim</string>
         <string>AppleCLCD</string>
         <string>AppleCLCD2</string>
+        <string>AppleDCP</string>
+        <string>AppleDCPAVController</string>
+        <string>AppleDCPExtDisplay</string>
+        <string>AppleM2ScalerCSCDriver</string>
         <string>AGXAccelerator</string>
+        <string>AGXCommandQueue</string>
+        <string>AGXDevice</string>
+        <string>AGXSharedUserClient</string>
+        <string>IOGPUDevice</string>
+        <string>IOGPUDeviceUserClient</string>
         <string>IOHIDEventDriver</string>
         <string>IOHIDEventServiceFastPathUserClient</string>
+        <string>IOHIDLibUserClient</string>
+        <string>AppleARMPE</string>
+        <string>AppleARMPMU</string>
+        <string>IOPlatformPluginUserClient</string>
+        <string>IOPMrootDomain</string>
+        <string>AppleSmartBattery</string>
+        <string>AppleSmartBatteryCommands</string>
     </array>
 
     <!-- ============================================================ -->
-    <!-- IOKIT — CẢM BIẾN PHẦN CỨNG + FRAMEBUFFER + GPU                -->
+    <!-- IOKIT                                                         -->
     <!-- ============================================================ -->
     <key>com.apple.security.iokit-user-client-class</key>
     <array>
@@ -274,6 +302,9 @@
         <string>IOMobileFramebufferShim</string>
         <string>AppleCLCD</string>
         <string>AppleCLCD2</string>
+        <string>AppleDCP</string>
+        <string>AppleDCPAVController</string>
+        <string>AppleDCPExtDisplay</string>
         <string>AppleM2ScalerCSCDriver</string>
         <string>AGXAccelerator</string>
         <string>AGXCommandQueue</string>
@@ -282,9 +313,6 @@
         <string>IOGPUDevice</string>
         <string>IOGPUDeviceUserClient</string>
         <string>AppleDisplay</string>
-        <string>AppleDCP</string>
-        <string>AppleDCPAVController</string>
-        <string>AppleDCPExtDisplay</string>
         <string>AppleHPMDevice</string>
         <string>AppleHPMDeviceUserClient</string>
         <string>IOSurfaceRoot</string>
@@ -293,7 +321,6 @@
         <string>AppleDialogPMU</string>
     </array>
 
-    <!-- [BẮT BUỘC] Quyền ghi trực tiếp driver panel — V-Sync tầng chip -->
     <key>com.apple.private.IOMobileFramebuffer</key>
     <true/>
 
@@ -307,6 +334,9 @@
     <true/>
 
     <key>com.apple.private.IOKit.AppleCLCD2</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.AppleDCP</key>
     <true/>
 
     <key>com.apple.private.IOKit.AGXAccelerator</key>
@@ -336,8 +366,17 @@
     <key>com.apple.private.iokit.hid-access</key>
     <true/>
 
+    <key>com.apple.private.IOKit.set-property</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.io-registry</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.registry-entry</key>
+    <true/>
+
     <!-- ============================================================ -->
-    <!-- HID & TOUCH                                                  -->
+    <!-- HID & TOUCH                                                   -->
     <!-- ============================================================ -->
     <key>com.apple.private.hid.client.event-dispatch</key>
     <true/>
@@ -354,20 +393,20 @@
     <key>com.apple.private.hid.manager</key>
     <true/>
 
-    <key>com.apple.private.backboardd.allow-restricted-services</key>
-    <true/>
-
-    <key>com.apple.backboardd.allow-debug</key>
-    <true/>
-
     <key>com.apple.private.hid.service</key>
     <true/>
 
     <key>com.apple.private.hid.system-client</key>
     <true/>
 
+    <key>com.apple.private.backboardd.allow-restricted-services</key>
+    <true/>
+
+    <key>com.apple.backboardd.allow-debug</key>
+    <true/>
+
     <!-- ============================================================ -->
-    <!-- CODE SIGNING & JIT                                           -->
+    <!-- CODE SIGNING & JIT                                            -->
     <!-- ============================================================ -->
     <key>dynamic-codesigning</key>
     <true/>
@@ -394,12 +433,15 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- MEMORY & GESTALT                                             -->
+    <!-- MEMORY & GESTALT                                              -->
     <!-- ============================================================ -->
     <key>com.apple.private.memorystatus</key>
     <true/>
 
     <key>com.apple.private.memorystatus.setpriority</key>
+    <true/>
+
+    <key>com.apple.private.memorystatus.set-idle-exit-band</key>
     <true/>
 
     <key>com.apple.private.mobilegestalt</key>
@@ -446,7 +488,7 @@
     </array>
 
     <!-- ============================================================ -->
-    <!-- NETWORK                                                      -->
+    <!-- NETWORK                                                       -->
     <!-- ============================================================ -->
     <key>com.apple.security.network.client</key>
     <true/>
@@ -461,7 +503,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- RUNNINGBOARD / LAUNCHD                                       -->
+    <!-- RUNNINGBOARD / LAUNCHD                                        -->
     <!-- ============================================================ -->
     <key>com.apple.runningboard.assertions.frontboard</key>
     <true/>
@@ -494,7 +536,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- SPRINGBOARD ACCESS                                           -->
+    <!-- SPRINGBOARD ACCESS                                            -->
     <!-- ============================================================ -->
     <key>com.apple.springboard.launchapplications</key>
     <true/>
@@ -530,7 +572,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- GRAPHICS / METAL / CORE ANIMATION                            -->
+    <!-- GRAPHICS / METAL / CORE ANIMATION                             -->
     <!-- ============================================================ -->
     <key>com.apple.private.Metal.device</key>
     <true/>
@@ -575,11 +617,8 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- PROCESS SPAWN (posix_spawn trong code)                      -->
+    <!-- PROCESS SPAWN                                                 -->
     <!-- ============================================================ -->
-    <key>com.apple.private.security.disk-device-access</key>
-    <true/>
-
     <key>com.apple.private.persona</key>
     <true/>
 
@@ -602,7 +641,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- PREFS                                                        -->
+    <!-- PREFS                                                         -->
     <!-- ============================================================ -->
     <key>com.apple.private.cfprefs.any-user</key>
     <true/>
@@ -626,7 +665,7 @@
     <true/>
 
     <!-- ============================================================ -->
-    <!-- THERMAL / POWER (chống hạ xung)                              -->
+    <!-- THERMAL / POWER                                               -->
     <!-- ============================================================ -->
     <key>com.apple.private.thermal-pressure-monitor</key>
     <true/>
@@ -640,14 +679,8 @@
     <key>com.apple.private.pm.assertion</key>
     <true/>
 
-    <key>com.apple.private.IOKit.set-property</key>
-    <true/>
-
-    <key>com.apple.private.IOKit.io-registry</key>
-    <true/>
-
     <!-- ============================================================ -->
-    <!-- DEBUG / TRACE                                                -->
+    <!-- DEBUG / TRACE                                                 -->
     <!-- ============================================================ -->
     <key>com.apple.private.security.debugger</key>
     <true/>
