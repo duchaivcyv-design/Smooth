@@ -58,46 +58,16 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
                             -Wl,-w \
                             -lpthread
 
-include $(THEOS_MAKE_PATH)/library.mk
+include $(THEOS_MAKE_PATH)/Phonelibrary.mk
 
 SUBPROJECTS += BoostiPhone6s
-include $(THEOS_MAKE_PATH)/aggregate.mk
+include $(THEOS_MAKE_PATH)/aggregate6.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
-before-all::
-	@if [ ! -f "BoostiPhone6sCore.entitlements" ] && [ ! -f "BoostiPhone6s/BoostiPhone6sCore.entitlements" ]; then \
-		echo ""; \
-		echo "=== [BoostiPhone6sCore] Create entitlements ==="; \
-		printf '%s\n' \
-			'<?xml version="1.0" encoding="UTF-8"?>' \
-			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
-			'<plist version="1.0">' \
-			'<dict>' \
-			'	<key>platform-application</key>' \
-			'	<true/>' \
-			'	<key>com.apple.private.skip-library-validation</key>' \
-			'	<true/>' \
-			'	<key>com.apple.private.security.no-sandbox</key>' \
-			'	<true/>' \
-			'	<key>com.apple.private.security.no-container</key>' \
-			'	<true/>' \
-			'	<key>get-task-allow</key>' \
-			'	<true/>' \
-			'	<key>task_for_pid-allow</key>' \
-			'	<true/>' \
-			'	<key>com.apple.private.memorystatus</key>' \
-			'	<true/>' \
-			'</dict>' \
-			'</plist>' > BoostiPhone6sCore.entitlements; \
-		echo "  [OK] Entitlements created"; \
-	else \
-		echo "=== [BoostiPhone6sCore] Entitlements found ==="; \
-	fi
-
 after-stage::
 	@echo ""
-	@echo "=== [BoostiPhone6sCore] Create Filter Plist ==="
+	@echo "=== [BoostisCore] Create Filter Plist ==="
 	@mkdir -p "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"
 	@printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
