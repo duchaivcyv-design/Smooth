@@ -3835,7 +3835,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     CAGradientLayer *background = [CAGradientLayer layer];
     background.frame = UIScreen.mainScreen.bounds;
-    background.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
     background.colors = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
@@ -3897,6 +3896,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
     __block void (^renderPage)(void);
+    __weak void (^weakRenderPage)(void);
     __weak UIViewController *weakWizard = wizard;
 
     void (^animateToPage)(void) = ^{
@@ -3933,7 +3933,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
                 b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
                 [b.heightAnchor constraintEqualToConstant:39].active = YES;
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; renderPage(); }] forControlEvents:UIControlEventTouchUpInside];
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; if (weakRenderPage) weakRenderPage(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
             next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
@@ -3975,6 +3975,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             next.hidden = NO;
         }
     };
+    weakRenderPage = renderPage;
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a;
         if (page < 3) {
