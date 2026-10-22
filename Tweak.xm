@@ -1430,6 +1430,7 @@ static void Titanium_RegisterAppResumeRefreshV12(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
 static inline void Titanium_A20PrewarmAssetsAndGPU(void);
 static void Titanium_ForceInjectDynamicRefreshSupport(void);
+static void Titanium_TuneWindowServerDisplayDirectly(void);
 
 // Triển khai thực tế hàm kernel write-protect bypass sạch sẽ
 static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize) {
@@ -2704,9 +2705,6 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 
 #define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
 #define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
-
-static ApexV285ProPayload *g_sharedPayloadPtr = (ApexV285ProPayload *)MAP_FAILED;
-static int g_shmFd = -1;
 
 static volatile BOOL g_isContinuousSwiping = NO;
 static volatile BOOL g_isUserTouchingScreen = NO;
@@ -5619,8 +5617,10 @@ static float Titanium_ForceUserFPS(float requestedRate) {
                 cfg.waitsForConnectivity = NO;
             }
             if (@available(iOS 15.0, *)) {
-                if ([cfg respondsToSelector:@selector(setAssumesHTTP3Capable:)]) {
-                    cfg.assumesHTTP3Capable = YES;
+                if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
+                    @try {
+                        [cfg setValue:@YES forKey:@"assumesHTTP3Capable"];
+                    } @catch (__unused NSException *e) {}
                 }
             }
         }
@@ -5640,8 +5640,10 @@ static float Titanium_ForceUserFPS(float requestedRate) {
                 cfg.waitsForConnectivity = NO;
             }
             if (@available(iOS 15.0, *)) {
-                if ([cfg respondsToSelector:@selector(setAssumesHTTP3Capable:)]) {
-                    cfg.assumesHTTP3Capable = YES;
+                if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
+                    @try {
+                        [cfg setValue:@YES forKey:@"assumesHTTP3Capable"];
+                    } @catch (__unused NSException *e) {}
                 }
             }
         }
@@ -5652,6 +5654,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 %end
 
 %end
+
 // ====================================================================================================
 // NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 15-240HZ VIRTUAL MODES)
 // ====================================================================================================
