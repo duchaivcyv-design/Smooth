@@ -6582,7 +6582,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSArray *values = @[[NSString stringWithFormat:@"%ld",(long)hz], [NSString stringWithFormat:@"%ld",(long)((hz==fps)?hz:MAX(hz,fps))], [NSString stringWithFormat:@"%ld",(long)fps]];
     NSArray *colors = @[[UIColor colorWithRed:.98 green:.28 blue:.48 alpha:1], [UIColor colorWithRed:.55 green:.35 blue:1 alpha:1], [UIColor colorWithRed:.12 green:.82 blue:1 alpha:1]];
     for (NSInteger i=0;i<3;i++) {
-        UIButton *card = [UIButton buttonWithType:UIButtonTypeSystem]; card.frame = CGRectMake(14+i*(cardW+gap), 16, cardW, 94); card.tag=99400+i; card.layer.cornerRadius=20; card.layer.cornerCurve=kCACornerCurveContinuous; card.layer.borderWidth=(mode==i?2.4:1.0); card.layer.borderColor=[colors[i] colorWithAlphaComponent:(mode==i?1:.48)].CGColor; card.backgroundColor=[colors[i] colorWithAlphaComponent:(mode==i?.25:.075)]; card.layer.shadowColor=colors[i].CGColor; card.layer.shadowOpacity=(mode==i?.22:.08); card.layer.shadowRadius=(mode==i?12:5); card.layer.shadowOffset=CGSizeMake(0,4); card.titleLabel.numberOfLines=1;
+        UIColor *modeColor = (UIColor *)colors[i];
+        UIButton *card = [UIButton buttonWithType:UIButtonTypeSystem];
+        card.frame = CGRectMake(14+i*(cardW+gap), 16, cardW, 94);
+        card.tag=99400+i; card.layer.cornerRadius=20; card.layer.cornerCurve=kCACornerCurveContinuous;
+        card.layer.borderWidth=(mode==i?2.4:1.0);
+        card.layer.borderColor=[[modeColor colorWithAlphaComponent:(mode==i?1.0:0.48)] CGColor];
+        card.backgroundColor=[modeColor colorWithAlphaComponent:(mode==i?0.25:0.075)];
+        card.layer.shadowColor=[modeColor CGColor]; card.layer.shadowOpacity=(mode==i?0.22:0.08);
+        card.layer.shadowRadius=(mode==i?12:5); card.layer.shadowOffset=CGSizeMake(0,4); card.titleLabel.numberOfLines=1;
         UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(3,17,cardW-6,35)]; v.text=values[i]; v.textAlignment=NSTextAlignmentCenter; v.font=[UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; v.textColor=(mode==i?UIColor.whiteColor:[colors[i] colorWithAlphaComponent:.48]); v.tag=99410+i; [card addSubview:v];
         UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(2,56,cardW-4,20)]; n.text=names[i]; n.textAlignment=NSTextAlignmentCenter; n.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBold]; n.textColor=(mode==i?colors[i]:[UIColor colorWithWhite:.5 alpha:1]); n.tag=99420+i; [card addSubview:n];
         [card addTarget:self action:@selector(neonV12SelectMode:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:card];
