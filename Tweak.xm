@@ -67,17 +67,17 @@
 #import <WebKit/WebKit.h>
 
 // BẢO VỆ SDK: Chống lỗi fatal error nếu SDK thiếu thư mục Private Framework IOKit / IOSurface
-#if __has_include(<IOKitRO/IOKitLib.h>)
+#if __has_include(<IOKit/IOKitLib.h>)
 #import <IOKit/IOKitLib.h>
 #endif
 
-#if __has_UGinclude(<IOSurface/IOSurfaceRef.h>)
+#if __has_include(<IOSurface/IOSurfaceRef.h>)
 #import <IOSurface/IOSurfaceRef.h>
 #endif
 
-// =HP=================== CHỐT BẢO VỆ HẰNG SỐ KERNEL XNU (CHUTỐNG LỖI BUILD SDK) ====================
+// ==================== CHỐT BẢO VỆ HẰNG SỐ KERNEL XNU (CHỐNG LỖI BUILD SDK) ====================
 #ifndef LATENCY_QOS_TIER_0
-#define LAT_QENCY_QOS_TIER_0 ((0xFF << 16) | 1)
+#define LATENCY_QOS_TIER_0 ((0xFF << 16) | 1)
 #endif
 
 #ifndef LATENCY_QOS_TIER_1
@@ -89,17 +89,7 @@
 #endif
 
 #ifndef THROUGHPUT_QOS_TIER_1
-#define THOS_TIER_1 ((0xFE << 16) | 2)
-#endif
-
-// [THÊM] TASK_OVERRIDE_QOS_POLICY — SDK iOS không khai báo hằng này, cần define thủ công
-#ifndef TASK_OVERRIDE_QOS_POLICY
-#define TASK_OVERRIDE_QOS_POLICY 2
-#endif
-
-// [THÊM] TASK_BASE_QOS_POLICY — phòng khi SDK cũ thiếu
-#ifndef TASK_BASE_QOS_POLICY
-#define TASK_BASE_QOS_POLICY 1
+#define THROUGHPUT_QOS_TIER_1 ((0xFE << 16) | 2)
 #endif
 
 #ifndef VM_PURGABLE_PURGE_ALL
@@ -144,6 +134,22 @@
 
 #ifndef TASK_FOREGROUND_APPLICATION
 #define TASK_FOREGROUND_APPLICATION 2
+#endif
+
+#ifndef TASK_BASE_QOS_POLICY
+#define TASK_BASE_QOS_POLICY 1
+#endif
+
+#ifndef TASK_OVERRIDE_QOS_POLICY
+#define TASK_OVERRIDE_QOS_POLICY 2
+#endif
+
+#ifndef THREAD_AFFINITY_POLICY
+#define THREAD_AFFINITY_POLICY 4
+#endif
+
+#ifndef THREAD_AFFINITY_POLICY_COUNT
+#define THREAD_AFFINITY_POLICY_COUNT 1
 #endif
 
 // ====================================================================================================
@@ -1409,6 +1415,12 @@ static void Init_CAWindowServer_Hooks(void) {
     // Khởi tạo hook WindowServer tuyệt đối
 }
 
+#define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
+#define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
+static ApexV285ProPayload *g_sharedPayloadPtr = (ApexV285ProPayload *)MAP_FAILED;
+static int g_shmFd = -1;
+
+static void Titanium_TuneWindowServerDisplayDirectly(void);
 static inline void Titanium_ReloadSharedSyncStateV285(void);
 static inline void Titanium_ReapplyFrameRateToAllScenes(void);
 
@@ -1440,7 +1452,6 @@ static void Titanium_RegisterAppResumeRefreshV12(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
 static inline void Titanium_A20PrewarmAssetsAndGPU(void);
 static void Titanium_ForceInjectDynamicRefreshSupport(void);
-static void Titanium_TuneWindowServerDisplayDirectly(void);
 
 // Triển khai thực tế hàm kernel write-protect bypass sạch sẽ
 static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize) {
@@ -1723,10 +1734,21 @@ static inline void Titanium_EnforceThreadVIPPolicy(void) {
     if (__builtin_expect(s_vipApplied, 1)) return;
     s_vipApplied = YES;
 
-    // [QOS FIX] Set QoS cho MỌI thread (không chỉ main) — Metal/render/scroll
+    // 1. Khóa QoS luồng ở mức cao nhất (USER_INTERACTIVE)
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, IOPOL_IMPORTANT);
     setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_THREAD, IOPOL_ATIME_UPDATES_OFF);
+
+    // 2. [HẠNG MỤC #1 - TẦNG 5]: Ép P-Core (Performance Core Affinity) qua thread_policy_set + THREAD_AFFINITY_POLICY
+    mach_port_t selfThread = pthread_mach_thread_np(pthread_self());
+    if (selfThread != MACH_PORT_NULL) {
+        thread_affinity_policy_data_t affinityData;
+        affinityData.affinity_tag = 1; // Tag 1: Nhóm nhân hiệu năng cao (P-Core cluster)
+        thread_policy_set(selfThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinityData, THREAD_AFFINITY_POLICY_COUNT);
+    }
+
+    // 3. [HẠNG MỤC #3 - TẦNG 5]: Ép mức ưu tiên Nice -20 cao nhất của nhân Unix/XNU
+    setpriority(PRIO_DARWIN_THREAD, 0, -20);
 
     Titanium_DisableKernelThreadThrottling();
 }
@@ -1807,10 +1829,10 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
     NSFileManager *fm = [NSFileManager defaultManager];
     if (![fm fileExistsAtPath:directory]) {
         NSError *directoryError = nil;
-        if (![fm createDirectorystAtPath:directory
+        if (![fm createDirectoryAtPath:directory
            withIntermediateDirectories:YES
-                           emp attributes:@{NSFilePosixPermissions: @(0755)}
-                                (t error:&directoryError] && ![fm fileExistsAtPath:directoryemporary]) {
+                            attributes:@{NSFilePosixPermissions: @(0755)}
+                                 error:&directoryError] && ![fm fileExistsAtPath:directory]) {
             return NO;
         }
     }
@@ -1819,7 +1841,7 @@ static BOOL Titanium_WriteAtomicIPCFile(NSString *targetPath, const void *bytes,
     char *temporaryPath = strdup([temporaryNamePattern fileSystemRepresentation]);
     if (!temporaryPath) return NO;
 
-    int fd = mkPath);
+    int fd = mkstemp(temporaryPath);
     if (fd < 0) {
         free(temporaryPath);
         return NO;
@@ -1881,13 +1903,13 @@ static void Titanium_WriteSyncPayloadUniversal(const void *payloadData, size_t d
                 ssize_t count = read(fd, cursor, remaining);
                 if (count < 0 && errno == EINTR) continue;
                 if (count <= 0) { readOK = NO; break; }
-                cursor += payload (size_t)count;
+                cursor += (size_t)count;
                 remaining -= (size_t)count;
             }
-            close(fdData);
+            close(fd);
             // Ghi đè trực tiếp thông số mới nhất để cập nhật Hz/FPS ngay lập tức không bị kẹt bộ đệm cũ
         }
-        (void)Titanium_WriteAtomicIPCFile(path,, dataSize);
+        (void)Titanium_WriteAtomicIPCFile(path, payloadData, dataSize);
     }
 }
 
@@ -2713,8 +2735,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 #include <dlfcn.h>
 #include <pthread.h>
 
-#define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
-#define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
+// [ĐÃ KHAI BÁO Ở ĐẦU FILE]: g_sharedPayloadPtr & g_shmFd sẵn sàng cho toàn bộ hàm đồng bộ IPC
 
 static volatile BOOL g_isContinuousSwiping = NO;
 static volatile BOOL g_isUserTouchingScreen = NO;
@@ -2905,7 +2926,14 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
     dispatch_once(&onceToken, ^{
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
         setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
-        setpriority(PRIO_PROCESS, 0, -10);
+        // [HẠNG MỤC #3 - TẦNG 5]: Ép Nice -20 toàn tiến trình
+        setpriority(PRIO_PROCESS, 0, -20);
+        // [HẠNG MỤC #2 - TẦNG 5]: mlock (khóa vùng nhớ RAM vật lý, chống swap/nén bộ nhớ cấu hình IPC)
+        mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
+        mlock(&g_livePayload, sizeof(ApexV285ProPayload));
+        if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+            mlock(g_sharedPayloadPtr, sizeof(ApexV285ProPayload));
+        }
     });
 }
 
@@ -3343,7 +3371,6 @@ static void hooked_CAMetalLayer_setMaximumDrawableCount(id self, SEL _cmd, NSUIn
 }
 
 // Hook nextDrawable
-// [QOS FIX] Thêm pthread_set_qos_class_self_np cho thread render Metal
 static id (*orig_CAMetalLayer_nextDrawable)(id self, SEL _cmd) = NULL;
 static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     id drawable = nil;
@@ -3352,8 +3379,6 @@ static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     }
     if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
         g_lastInteractionMachTime = mach_absolute_time();
-        // QoS thread render Metal — ép USER_INTERACTIVE (cao nhất) cho thread đang xin drawable
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
     return drawable;
 }
@@ -3466,8 +3491,6 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
                 self.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
             }
         }
-        // [QOS FIX] Set QoS USER_INTERACTIVE cho thread display link
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     }
 }
 
@@ -5633,9 +5656,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
             }
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
-                    @try {
-                        [cfg setValue:@YES forKey:@"assumesHTTP3Capable"];
-                    } @catch (__unused NSException *e) {}
+                    @try { [cfg setValue:@YES forKey:@"assumesHTTP3Capable"]; } @catch (__unused NSException *e) {}
                 }
             }
         }
@@ -5656,9 +5677,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
             }
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
-                    @try {
-                        [cfg setValue:@YES forKey:@"assumesHTTP3Capable"];
-                    } @catch (__unused NSException *e) {}
+                    @try { [cfg setValue:@YES forKey:@"assumesHTTP3Capable"]; } @catch (__unused NSException *e) {}
                 }
             }
         }
@@ -5669,7 +5688,6 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 %end
 
 %end
-
 // ====================================================================================================
 // NHÓM 2: BẺ TẬN GỐC WINDOWSERVER DISPLAY & DISPLAY CONTROLLER (BUNG FULL 15-240HZ VIRTUAL MODES)
 // ====================================================================================================
@@ -6207,16 +6225,17 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &purgeState);
 
             // --- MỞ KHÓA 5 TẦNG CPU/GPU & CHIP IC MÀN HÌNH (MÁT ỔN ĐỊNH, KHÔNG BÓP XUNG) ---
-            // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0)
-            struct task_q_pos_policy qosinfo = {
+            // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0) cho cả BASE và OVERRIDE
+            struct task_qos_policy qosinfo = {
                 .task_latency_qos_tier = LATENCY_QOS_TIER_0,
-                .task_throughput_qolicyos_tier = THROUGHPUT_QOS_TIER_0
+                .task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0
             };
-            // [_tQOS FIX] Set BASE trước
-            task_policy_set(mach_task_self)&(), TASK_BASE_QOS_POLICY, (taskqosinfo, TASK_QOS_POLICY_COUNT);
-            // [QOS FIX] Set OVERRIDE để ép cứng — mạnh hơn BASE
+            task_policy_set(mach_task_self(), TASK_BASE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
             task_policy_set(mach_task_self(), TASK_OVERRIDE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
-            // Tầng 3: Cấp quyền ưu tiên I/O đọc ghi trực tiếp cho tài nguyên 3D nặng (App/Game 20GB)
+            // Tầng 3: Khóa mlock RAM & Nice -20
+            mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
+            setpriority(PRIO_PROCESS, 0, -20);
+            // Tầng 4: Cấp quyền ưu tiên I/O đọc ghi trực tiếp cho tài nguyên 3D nặng (App/Game 20GB)
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
             setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
         }
@@ -6224,6 +6243,47 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 }
 
 %group Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles
+
+// 0. [HẠNG MỤC #9 - TẦNG 6]: CHỐNG WATCHDOG KILL APP KHI TREO / TẢI NẶNG (FBProcessWatchdog & FBSceneWatchdog & BKSProcessAssertion)
+%hook FBProcessWatchdog
+
+- (void)start {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return; // Vô hiệu hóa bộ đếm thời gian kill app của FrontBoard Watchdog
+    }
+    %orig;
+}
+
+- (BOOL)_shouldWatchdog {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return NO;
+    }
+    return %orig;
+}
+
+%end
+
+%hook FBSceneWatchdog
+
+- (id)initWithTimeout:(double)timeout {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        timeout = 86400.0; // Kéo dài timeout lên 24 giờ, chống kill tiến trình khi tải tài nguyên 3D lớn
+    }
+    return %orig(timeout);
+}
+
+%end
+
+%hook BKSProcessAssertion
+
+- (BOOL)isValid {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return YES; // Giữ quyền sống sót cho tiến trình
+    }
+    return %orig;
+}
+
+%end
 
 // 1. CHIP IC MÀN HÌNH & ĐỒNG BỘ CON TẤT CẢ CADISPLAY (KÍCH HOẠT PROMOTION ẨN 15-240HZ, TẮT V-SYNC 5 TẦNG)
 %hook CADisplayProperties
@@ -6818,21 +6878,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
-
-        // [FIX SREBOOT/RESPIRING] Trì hoãn runCoreTweak để tránh treo lúc khởi động jailbreak
-        // Chờ SpringBoard ổn định xong mới hook — tránh bị watchdog kill khi vừa boot
-        if (isSpringBoard) {
-            // SpringBoard: đợi 1500ms (1.5s) cho SB ổn định, tránh treo ở lockscreen
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                @try {
-                    runCoreTweak(isSpringBoard, bundleID, progName);
-                } @catch (__unused NSException *e) {}
-            });
-        } else {
-            // App thứ ba: chạy ngay — không cần trì hoãn
-            @try {
-                runCoreTweak(isSpringBoard, bundleID, progName);
-            } @catch (__unused NSException *e) {}
-        }
+        runCoreTweak(isSpringBoard, bundleID, progName);
     }
 }
