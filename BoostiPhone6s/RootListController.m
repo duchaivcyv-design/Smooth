@@ -3828,10 +3828,14 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     UIViewController *wizard = [UIViewController new];
     wizard.modalPresentationStyle = UIModalPresentationFullScreen;
     wizard.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+    wizard.modalPresentationCapturesStatusBarAppearance = YES;
+    wizard.definesPresentationContext = YES;
+    wizard.providesPresentationContextTransitionStyle = YES;
     wizard.view.backgroundColor = [UIColor colorWithRed:0.012 green:0.018 blue:0.055 alpha:1.0];
 
     CAGradientLayer *background = [CAGradientLayer layer];
-    background.frame = wizard.view.bounds;
+    background.frame = UIScreen.mainScreen.bounds;
+    background.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
     background.colors = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
@@ -4001,8 +4005,16 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
             [d synchronize];
             [wizard dismissViewControllerAnimated:YES completion:^{
+                // Restore interaction explicitly; do not leave the app covered by a disabled view.
+                self.view.userInteractionEnabled = YES;
+                self.customTableView.userInteractionEnabled = YES;
+                self.customTableView.alpha = 1.0;
+                self.customTableView.transform = CGAffineTransformIdentity;
+                self.view.window.userInteractionEnabled = YES;
                 [self.customTableView setNeedsLayout];
                 [self.customTableView reloadData];
+                [self.view setNeedsLayout];
+                [self.view layoutIfNeeded];
             }];
         }
     }] forControlEvents:UIControlEventTouchUpInside];
@@ -4011,7 +4023,13 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
         [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; renderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
-    [self presentViewController:wizard animated:YES completion:^{ renderPage(); }];
+    [self presentViewController:wizard animated:YES completion:^{
+        // Force the wizard to occupy the complete presentation bounds on older iOS versions.
+        wizard.view.frame = UIScreen.mainScreen.bounds;
+        background.frame = wizard.view.bounds;
+        [wizard.view setNeedsLayout]; [wizard.view layoutIfNeeded];
+        renderPage();
+    }];
 }
 
 - (void)showAuthorIntroSequence {
