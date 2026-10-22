@@ -6800,18 +6800,6 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
 
 %end
 
-%hook SBBacklightController
-
-- (void)setBacklightFactor:(float)factor {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(1.0f); // Giữ độ sáng tối đa, chống giảm sáng do cảm biến/nhiệt độ ảo
-        return;
-    }
-    %orig(factor);
-}
-
-%end
-
 %end
 
 static void Titanium_StartIPCHearthbeatV12(void) {
