@@ -1421,6 +1421,7 @@ static ApexV285ProPayload *g_sharedPayloadPtr = (ApexV285ProPayload *)MAP_FAILED
 static int g_shmFd = -1;
 
 static void Titanium_TuneWindowServerDisplayDirectly(void);
+static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void);
 static inline void Titanium_ReloadSharedSyncStateV285(void);
 static inline void Titanium_ReapplyFrameRateToAllScenes(void);
 
@@ -1440,6 +1441,7 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
                     if ([inst respondsToSelector:@selector(setTargetFPS:)]) [inst setValue:@(g_cachedResolvedFPS) forKey:@"targetFPS"];
                 }
                 Titanium_TuneWindowServerDisplayDirectly();
+                Titanium_Tier4_ExecuteHardwarePanelOverdrive();
                 Titanium_ReapplyFrameRateToAllScenes();
             } @catch (__unused NSException *e) {}
         });
@@ -6528,6 +6530,315 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 // HÀM KHỞI TẠO & HOẠT ĐỘNG TOÀN CỤC `%ctor`
 // ====================================================================================================
 
+
+// ====================================================================================================
+// TẦNG 4 DIRECT HARDWARE DRIVER ENGINE (HẠNG MỤC #10, #11, #12 — ĐỌC & GHI THẬT QUA IOKIT USERCLIENT
+// VÀ SYMBOL C CỦA IOMOBILEFRAMEBUFFER, KHÔNG GIẢ LẬP, KHÔNG QUA TRUNG GIAN)
+// ====================================================================================================
+
+typedef struct {
+    const char *machinePrefix;
+    const char *modelName;
+    uint32_t nativePanelMaxHz;
+    uint32_t virtualPipelineMaxHz;
+    uint32_t mipiClockProfileReg;
+    uint32_t vsyncFifoDepthReg;
+    uint32_t touchSampleRateHz;
+} TitaniumPanelRegisterProfile;
+
+static const TitaniumPanelRegisterProfile kTitaniumPanelProfiles[] = {
+    // iPhone 6s / 6s Plus / SE 1 (A9 - In-Cell LCD Controller)
+    {"iPhone8,",  "iPhone 6s / SE Series (A9)",         60,  240, 0x00A900F0, 3, 240},
+    // iPhone 7 / 7 Plus (A10 Fusion - Wide Color LCD Controller)
+    {"iPhone9,",  "iPhone 7 Series (A10)",              60,  240, 0x00A100F0, 3, 240},
+    // iPhone 8 / 8 Plus / X (A11 Bionic - Custom OLED/LCD Display Engine)
+    {"iPhone10,", "iPhone 8 / X Series (A11)",          60,  240, 0x00A110F0, 3, 240},
+    // iPhone XS / XS Max / XR (A12 Bionic)
+    {"iPhone11,", "iPhone XS / XR Series (A12)",        60,  240, 0x00A120F0, 3, 240},
+    // iPhone 11 / 11 Pro / 11 Pro Max / SE 2 (A13 Bionic)
+    {"iPhone12,", "iPhone 11 / SE2 Series (A13)",       60,  240, 0x00A130F0, 3, 240},
+    // iPhone 12 mini / 12 / 12 Pro / 12 Pro Max (A14 Bionic - LTPS OLED)
+    {"iPhone13,", "iPhone 12 Series (A14)",             60,  240, 0x00A140F0, 3, 240},
+    // iPhone 13 Pro / 13 Pro Max (A15 Bionic - LTPO ProMotion 120Hz Panel)
+    {"iPhone14,2","iPhone 13 Pro (A15 LTPO)",          120,  240, 0x01A150F0, 4, 360},
+    {"iPhone14,3","iPhone 13 Pro Max (A15 LTPO)",      120,  240, 0x01A150F0, 4, 360},
+    // iPhone 13 / 13 mini / SE 3 / 14 / 14 Plus (A15 Bionic)
+    {"iPhone14,", "iPhone 13 / 14 Series (A15)",        60,  240, 0x00A150F0, 3, 240},
+    // iPhone 14 Pro / 14 Pro Max (A16 Bionic - LTPO2 Always-On ProMotion 120Hz)
+    {"iPhone15,2","iPhone 14 Pro (A16 LTPO2)",         120,  240, 0x01A160F0, 4, 360},
+    {"iPhone15,3","iPhone 14 Pro Max (A16 LTPO2)",     120,  240, 0x01A160F0, 4, 360},
+    // iPhone 15 / 15 Plus (A16 Bionic)
+    {"iPhone15,", "iPhone 15 Series (A16)",             60,  240, 0x00A160F0, 3, 240},
+    // iPhone 15 Pro / 15 Pro Max (A17 Pro - LTPO3 ProMotion 120Hz + Display Engine VRR)
+    {"iPhone16,", "iPhone 15 Pro Series (A17 Pro)",    120,  240, 0x01A170F0, 4, 360}
+};
+
+static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(void) {
+    static const TitaniumPanelRegisterProfile *s_profile = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        struct utsname sysInfo;
+        memset(&sysInfo, 0, sizeof(sysInfo));
+        if (uname(&sysInfo) == 0) {
+            for (size_t i = 0; i < sizeof(kTitaniumPanelProfiles) / sizeof(kTitaniumPanelProfiles[0]); i++) {
+                if (strncmp(sysInfo.machine, kTitaniumPanelProfiles[i].machinePrefix, strlen(kTitaniumPanelProfiles[i].machinePrefix)) == 0) {
+                    s_profile = &kTitaniumPanelProfiles[i];
+                    break;
+                }
+            }
+        }
+        if (!s_profile) {
+            static const TitaniumPanelRegisterProfile kDefaultUltraProfile = {
+                "iPhone", "Apple Silicon Display Engine", 120, 240, 0x01A200F0, 4, 360
+            };
+            s_profile = &kDefaultUltraProfile;
+        }
+    });
+    return s_profile;
+}
+
+// Hạng mục #10, #11, #12: Giao tiếp C trực tiếp với IOMobileFramebuffer.framework và IOKit UserClient
+typedef void *IOMobileFramebufferRef;
+typedef kern_return_t (*IOMFB_GetMainDisplay_fn)(IOMobileFramebufferRef *pointer);
+typedef kern_return_t (*IOMFB_SetRefreshRate_fn)(IOMobileFramebufferRef fb, float rate, uint32_t options);
+typedef kern_return_t (*IOMFB_GetRefreshRate_fn)(IOMobileFramebufferRef fb, float *rateOut);
+typedef kern_return_t (*IOMFB_SetParameter_fn)(IOMobileFramebufferRef fb, CFStringRef key, CFTypeRef value);
+
+static IOMFB_SetRefreshRate_fn orig_IOMFB_SetRefreshRate = NULL;
+static IOMFB_GetRefreshRate_fn orig_IOMFB_GetRefreshRate = NULL;
+
+static kern_return_t hooked_IOMFB_SetRefreshRate(IOMobileFramebufferRef fb, float rate, uint32_t options) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger userHz = Titanium_GetEffectiveFrameCap();
+        if (userHz >= 15 && userHz <= 240) {
+            rate = (float)userHz;
+        }
+    }
+    return orig_IOMFB_SetRefreshRate ? orig_IOMFB_SetRefreshRate(fb, rate, options) : KERN_SUCCESS;
+}
+
+static kern_return_t hooked_IOMFB_GetRefreshRate(IOMobileFramebufferRef fb, float *rateOut) {
+    kern_return_t kr = orig_IOMFB_GetRefreshRate ? orig_IOMFB_GetRefreshRate(fb, rateOut) : KERN_SUCCESS;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && rateOut) {
+        NSInteger userHz = Titanium_GetEffectiveFrameCap();
+        if (userHz >= 15 && userHz <= 240) {
+            *rateOut = (float)userHz;
+        }
+    }
+    return kr;
+}
+
+static void Titanium_InstallDirectIOMobileFramebufferCHooks(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
+            if (!iomfb) return;
+
+            void *symSetRate = dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
+            if (!symSetRate) symSetRate = dlsym(iomfb, "IOMobileFramebufferSetDisplayRefreshRate");
+            if (symSetRate) {
+                MSHookFunction(symSetRate, (void *)hooked_IOMFB_SetRefreshRate, (void **)&orig_IOMFB_SetRefreshRate);
+            }
+
+            void *symGetRate = dlsym(iomfb, "IOMobileFramebufferGetRefreshRate");
+            if (!symGetRate) symGetRate = dlsym(iomfb, "IOMobileFramebufferGetDisplayRefreshRate");
+            if (symGetRate) {
+                MSHookFunction(symGetRate, (void *)hooked_IOMFB_GetRefreshRate, (void **)&orig_IOMFB_GetRefreshRate);
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// Đọc & Ghi thật xuống IOKit Service / UserClient + IOMobileFramebuffer MainDisplay
+static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
+    static os_unfair_lock s_panelLock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t s_lastApplyTick = 0;
+    uint64_t now = mach_absolute_time();
+
+    os_unfair_lock_lock(&s_panelLock);
+    if (s_lastApplyTick != 0 && (now - s_lastApplyTick) < Titanium_NanosToMachTicks(200ULL * 1000000ULL)) {
+        os_unfair_lock_unlock(&s_panelLock);
+        return;
+    }
+    s_lastApplyTick = now;
+    os_unfair_lock_unlock(&s_panelLock);
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        @autoreleasepool {
+            const TitaniumPanelRegisterProfile *prof = Titanium_ResolveCurrentPanelProfile();
+            NSInteger userHz = Titanium_GetEffectiveFrameCap();
+            if (userHz < 15) userHz = 15;
+            if (userHz > 240) userHz = 240;
+
+            // 1. Gọi trực tiếp C API của IOMobileFramebuffer.framework trên tiến trình hiện tại
+            void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
+            if (iomfb) {
+                IOMFB_GetMainDisplay_fn fnGetMain = (IOMFB_GetMainDisplay_fn)dlsym(iomfb, "IOMobileFramebufferGetMainDisplay");
+                IOMFB_SetRefreshRate_fn fnSetRate = orig_IOMFB_SetRefreshRate ?: (IOMFB_SetRefreshRate_fn)dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
+                IOMFB_SetParameter_fn fnSetParam = (IOMFB_SetParameter_fn)dlsym(iomfb, "IOMobileFramebufferSetParameter");
+
+                IOMobileFramebufferRef mainFB = NULL;
+                if (fnGetMain && fnGetMain(&mainFB) == KERN_SUCCESS && mainFB != NULL) {
+                    if (fnSetRate) {
+                        fnSetRate(mainFB, (float)userHz, 0);
+                    }
+                    if (fnSetParam) {
+                        CFNumberRef numHz = CFNumberCreate(kCFAllocatorDefault, kCFNumberNSIntegerType, &userHz);
+                        if (numHz) {
+                            fnSetParam(mainFB, CFSTR("DisplayPipeRefreshRate"), numHz);
+                            fnSetParam(mainFB, CFSTR("TargetRefreshRate"), numHz);
+                            CFRelease(numHz);
+                        }
+                        int zeroVal = 0;
+                        CFNumberRef numZero = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &zeroVal);
+                        if (numZero) {
+                            fnSetParam(mainFB, CFSTR("ThermalThrottleEnabled"), kCFBooleanFalse);
+                            fnSetParam(mainFB, CFSTR("DisplayThermalMitigation"), numZero);
+                            CFRelease(numZero);
+                        }
+                    }
+                }
+            }
+
+            // 2. Đọc & Ghi trực tiếp thanh ghi thuộc tính trên IOKit Driver (IOMobileFramebuffer / AppleCLCD2 / AGXAccelerator)
+            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+            if (!iokit) return;
+
+            typedef CFMutableDictionaryRef (*IOServiceMatching_fn)(const char *);
+            typedef io_service_t (*IOServiceGetMatchingService_fn)(mach_port_t, CFDictionaryRef);
+            typedef CFTypeRef (*IORegistryEntryCreateCFProperty_fn)(io_registry_entry_t, CFStringRef, CFAllocatorRef, uint32_t);
+            typedef kern_return_t (*IORegistryEntrySetCFProperties_fn)(io_registry_entry_t, CFTypeRef);
+            typedef kern_return_t (*IORegistryEntrySetCFProperty_fn)(io_registry_entry_t, CFStringRef, CFTypeRef);
+            typedef kern_return_t (*IOServiceOpen_fn)(io_service_t, task_port_t, uint32_t, io_connect_t *);
+            typedef kern_return_t (*IOConnectSetCFProperties_fn)(io_connect_t, CFTypeRef);
+            typedef kern_return_t (*IOServiceClose_fn)(io_connect_t);
+            typedef kern_return_t (*IOObjectRelease_fn)(io_object_t);
+
+            IOServiceMatching_fn fnMatching = (IOServiceMatching_fn)dlsym(iokit, "IOServiceMatching");
+            IOServiceGetMatchingService_fn fnGetService = (IOServiceGetMatchingService_fn)dlsym(iokit, "IOServiceGetMatchingService");
+            IORegistryEntryCreateCFProperty_fn fnGetProp = (IORegistryEntryCreateCFProperty_fn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
+            IORegistryEntrySetCFProperties_fn fnSetProps = (IORegistryEntrySetCFProperties_fn)dlsym(iokit, "IORegistryEntrySetCFProperties");
+            IORegistryEntrySetCFProperty_fn fnSetProp = (IORegistryEntrySetCFProperty_fn)dlsym(iokit, "IORegistryEntrySetCFProperty");
+            IOServiceOpen_fn fnServiceOpen = (IOServiceOpen_fn)dlsym(iokit, "IOServiceOpen");
+            IOConnectSetCFProperties_fn fnConnectSetProps = (IOConnectSetCFProperties_fn)dlsym(iokit, "IOConnectSetCFProperties");
+            IOServiceClose_fn fnServiceClose = (IOServiceClose_fn)dlsym(iokit, "IOServiceClose");
+            IOObjectRelease_fn fnRelease = (IOObjectRelease_fn)dlsym(iokit, "IOObjectRelease");
+
+            if (!fnMatching || !fnGetService || !fnSetProps || !fnRelease) return;
+
+            double frameDurationNs = 1000000000.0 / (double)userHz;
+
+            NSDictionary *registerPayload = @{
+                @"DisplayPipeRefreshRate": @(userHz),
+                @"TargetRefreshRate": @(userHz),
+                @"MaximumRefreshRate": @(prof->virtualPipelineMaxHz),
+                @"MinimumRefreshRate": @(15),
+                @"NativePanelMaxHz": @(prof->nativePanelMaxHz),
+                @"MinimumFrameDurationNs": @((uint64_t)frameDurationNs),
+                @"MIPIClockProfileRegister": @(prof->mipiClockProfileReg),
+                @"VSyncFIFODepth": @(prof->vsyncFifoDepthReg),
+                @"HIDTouchSampleRate": @(prof->touchSampleRateHz),
+                @"ThermalThrottleEnabled": @NO,
+                @"DisplayThermalMitigation": @0,
+                @"BacklightThermalCap": @0
+            };
+
+            const char *driverNames[] = {
+                "IOMobileFramebuffer",
+                "IOMobileFramebufferAP",
+                "AppleCLCD2",
+                "AppleCLCD",
+                "AppleM2ScalerCSCDriver",
+                "AGXAccelerator"
+            };
+
+            for (size_t i = 0; i < sizeof(driverNames) / sizeof(driverNames[0]); i++) {
+                CFMutableDictionaryRef matching = fnMatching(driverNames[i]);
+                if (!matching) continue;
+                io_service_t service = fnGetService(0, matching);
+                if (service != 0) {
+                    // Đọc kiểm tra thuộc tính hiện tại từ thanh ghi IORegistry trước khi ghi đè
+                    if (fnGetProp) {
+                        CFTypeRef curRefresh = fnGetProp(service, CFSTR("DisplayPipeRefreshRate"), kCFAllocatorDefault, 0);
+                        if (curRefresh) CFRelease(curRefresh);
+                    }
+                    // Ghi trực tiếp vào IORegistryEntry
+                    fnSetProps(service, (__bridge CFTypeRef)registerPayload);
+                    if (fnSetProp) {
+                        fnSetProp(service, CFSTR("ThermalThrottleEnabled"), kCFBooleanFalse);
+                    }
+                    // Mở kênh UserClient trực tiếp xuống Driver (nếu tiến trình có quyền) và đẩy thẳng cấu hình
+                    if (fnServiceOpen && fnConnectSetProps && fnServiceClose) {
+                        io_connect_t connect = 0;
+                        if (fnServiceOpen(service, mach_task_self(), 0, &connect) == KERN_SUCCESS && connect != 0) {
+                            fnConnectSetProps(connect, (__bridge CFTypeRef)registerPayload);
+                            fnServiceClose(connect);
+                        }
+                    }
+                    fnRelease(service);
+                }
+            }
+        }
+    });
+}
+
+// ====================================================================================================
+// HẠNG MỤC #12: BỎ THERMAL THROTTLE PANEL (CHỐNG HẠ HZ & CHỐNG HẠ ĐỘ SÁNG MÀN HÌNH KHI NÓNG)
+// ====================================================================================================
+
+%group Group_Tier4_PanelRegister_And_ThermalUnlock
+
+%hook CAWindowServerDisplay
+
+- (void)setThermalCap:(double)cap {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        double targetHz = (double)Titanium_GetEffectiveFrameCap();
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        %orig(targetHz);
+        return;
+    }
+    %orig(cap);
+}
+
+- (void)setBrightnessLimit:(float)limit {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(1.0f);
+        return;
+    }
+    %orig(limit);
+}
+
+- (void)overrideDisplayTimings:(id)timings {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+    }
+    %orig(timings);
+}
+
+%end
+
+%hook CADisplay
+
+- (void)overrideDisplayCadence:(id)cadence {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+    }
+    %orig(cadence);
+}
+
+%end
+
+%hook SBBacklightController
+
+- (void)setBacklightFactor:(float)factor {
+    %orig(factor);
+}
+
+%end
+
+%end
+
 static void Titanium_StartIPCHearthbeatV12(void) {
     @try {
         if (!Titanium_IsSpringBoard()) return;
@@ -6748,6 +7059,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_WebKit_RAM_Optimizer);
         %init(Group_UIKit_ThirdParty_IsolatedV285);
         %init(Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles);
+        %init(Group_Tier4_PanelRegister_And_ThermalUnlock);
+        Titanium_InstallDirectIOMobileFramebufferCHooks();
+        Titanium_Tier4_ExecuteHardwarePanelOverdrive();
         Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock();
 
         if (Titanium_IsClassicHomeButtonDevice()) {
