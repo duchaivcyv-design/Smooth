@@ -3969,7 +3969,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
-                renderPage();
+                if (weakRenderPage) weakRenderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             next.hidden = NO;
@@ -3984,7 +3984,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             page++;
             CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromRight; transition.duration = .28;
             [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardForward"];
-            renderPage();
+            if (weakRenderPage) weakRenderPage();
         } else {
             if (!extractedReport.length) {
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
@@ -4022,7 +4022,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a; if (page <= 0) return; page--;
         CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
-        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; renderPage();
+        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; if (weakRenderPage) weakRenderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
     [self presentViewController:wizard animated:YES completion:^{
         // Force the wizard to occupy the complete presentation bounds on older iOS versions.
