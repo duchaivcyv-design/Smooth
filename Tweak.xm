@@ -3717,8 +3717,8 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if (js && js.length > 0) {
             WKUserScript *script = [[WKUserScript alloc] initWithSource:js
                                                           injectionTime:WKUserScriptInjectionTimeAtDocumentStart
-                                                       forMainFrameOnly (!:NO];
-            ifconfiguration.userContentController) {
+                                                       forMainFrameOnly:NO];
+            if (!configuration.userContentController) {
                 configuration.userContentController = [[WKUserContentController alloc] init];
             }
             [configuration.userContentController addUserScript:script];
@@ -3753,7 +3753,7 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
             }
         }
     } @catch (__unused NSException *e) {
-        if (!origạDone) %orig;
+        if (!origDone) %orig;
     }
 }
 
@@ -3768,11 +3768,11 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             WKProcessPool *pool = [NSThread isMainThread] ? self.configuration.processPool : nil;
             if ([pool respondsToSelector:@selector(_clearMemoryCache)]) {
-                [poolch _clearMemoryCache];
+                [pool _clearMemoryCache];
             }
             Titanium_BackgroundHeapRelief();
         }
-    } @catch ( 2 l__unused NSException *e) {
+    } @catch (__unused NSException *e) {
         if (!origDone) %orig;
     }
 }
