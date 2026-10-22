@@ -61,7 +61,7 @@ BoostiPhone6sCore_LDFLAGS = -Wl,-dead_strip \
 include $(THEOS_MAKE_PATH)/Phonelibrary.mk
 
 SUBPROJECTS += BoostiPhone6s
-include $(THEOS_MAKE_PATH)/aggregate6.mk
+include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
