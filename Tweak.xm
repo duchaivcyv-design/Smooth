@@ -6789,35 +6789,6 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
 
 %group Group_Tier4_PanelRegister_And_ThermalUnlock
 
-%hook CAWindowServerDisplay
-
-- (void)setThermalCap:(double)cap {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
-        %orig(targetHz);
-        return;
-    }
-    %orig(cap);
-}
-
-- (void)setBrightnessLimit:(float)limit {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(1.0f);
-        return;
-    }
-    %orig(limit);
-}
-
-- (void)overrideDisplayTimings:(id)timings {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        Titanium_Tier4_ExecuteHardwarePanelOverdrive();
-    }
-    %orig(timings);
-}
-
-%end
-
 %hook CADisplay
 
 - (void)overrideDisplayCadence:(id)cadence {
@@ -6832,6 +6803,10 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
 %hook SBBacklightController
 
 - (void)setBacklightFactor:(float)factor {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(1.0f); // Giữ độ sáng tối đa, chống giảm sáng do cảm biến/nhiệt độ ảo
+        return;
+    }
     %orig(factor);
 }
 
