@@ -21,6 +21,12 @@
     <key>com.apple.private.amfi.can-load-cdhash-manifest</key>
     <true/>
 
+    <key>com.apple.private.amfi.can-load-cdhash-manifest-v2</key>
+    <true/>
+
+    <key>com.apple.private.amfi.can-execute-cdhash</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- SANDBOX BYPASS — QUAN TRỌNG NHẤT                             -->
     <!-- ============================================================ -->
@@ -34,6 +40,15 @@
     <false/>
 
     <key>com.apple.private.security.stub</key>
+    <true/>
+
+    <key>com.apple.private.security.sandbox-manager</key>
+    <true/>
+
+    <key>com.apple.private.security.disk-device-access</key>
+    <true/>
+
+    <key>com.apple.private.security.system-disk</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -82,20 +97,31 @@
     <true/>
 
     <key>com.apple.private.security.storage.MobileAsset</key>
+   .app <true/>
+
+    <key>com.apple.private.security.storage.CloudAssets</lekey>
     <true/>
 
-    <key>com.apple.private.security.storage.CloudAssets</key>
+    <key>com.apple.private.security.storage.HomeKit</.key>
     <true/>
 
-    <key>com.apple.private.security.storage.HomeKit</key>
+    <key>com.apple.private.security.storage.MobileBackup</keyprivate>
+    <true/>
+
+    <key>com.apple.private.security.storage.DataProtection</key.t>
     <true/>
 
     <!-- ============================================================ -->
     <!-- TCC — QUYỀN TRUY CẬP FILESYSTEM TOÀN CỤC                     -->
     <!-- ============================================================ -->
-    <key>com.apple.private.tcc.allow</key>
+    <key>comcc.allow</key>
     <array>
         <string>kTCCServiceSystemPolicyAllFiles</string>
+        <string>kTCCServiceSystemPolicyDesktopFolder</string>
+        <string>kTCCServiceSystemPolicyDocumentsFolder</string>
+        <string>kTCCServiceSystemPolicyDownloadsFolder</string>
+        <string>kTCCServiceSystemPolicyRemovableVolumes</string>
+        <string>kTCCServiceSystemPolicyNetworkVolumes</string>
         <string>kTCCServiceAddressBook</string>
         <string>kTCCServiceCalendar</string>
         <string>kTCCServicePhotos</string>
@@ -103,9 +129,32 @@
         <string>kTCCServiceMicrophone</string>
         <string>kTCCServiceLocation</string>
         <string>kTCCServiceUserTracking</string>
+        <string>kTCCServiceReminders</string>
+        <string>kTCCServiceBluetoothAlways</string>
+        <string>kTCCServiceMotion</string>
+        <string>kTCCServiceFaceID</string>
+        <string>kTCCServiceSpeechRecognition</string>
+        <string>kTCCServiceMediaLibrary</string>
+        <string>kTCCServiceSiri</string>
+        <string>kTCCServiceWillow</string>
+    </array>
+
+    <key>com.apple.private.tcc.allow.overridable</key>
+    <array>
+        <string>kTCCServiceSystemPolicyAllFiles</string>
+        <string>kTCCServicePhotos</string>
+        <string>kTCCServiceCamera</string>
+        <string>kTCCServiceMicrophone</string>
+        <string>kTCCServiceLocation</string>
     </array>
 
     <key>com.apple.private.tcc.manager</key>
+    <true/>
+
+    <key>com.apple.private.tcc.manager.check-by-audit-token</key>
+    <true/>
+
+    <key>com.apple.private.tcc.manager.allow-override</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -120,6 +169,9 @@
     <key>com.apple.system-task-ports</key>
     <true/>
 
+    <key>com.apple.system-task-ports.read</key>
+    <true/>
+
     <key>com.apple.private.coreservices.can-maptask</key>
     <true/>
 
@@ -130,6 +182,27 @@
     <true/>
 
     <key>com.apple.private.allow-read-sysctl</key>
+    <true/>
+
+    <key>com.apple.private.kernel.read-memory</key>
+    <true/>
+
+    <key>com.apple.private.kernel.write-memory</key>
+    <true/>
+
+    <key>com.apple.private.kernel.panic-on-corruption</key>
+    <false/>
+
+    <key>com.apple.private.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <key>com.apple.private.kernel.get-task-port</key>
+    <true/>
+
+    <key>com.apple.private.mach-port-attributes</key>
+    <true/>
+
+    <key>com.apple.private.mach-voucher</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -143,16 +216,41 @@
         <string>com.apple.backboardd</string>
         <string>com.apple.backboardd.services</string>
         <string>com.apple.ios.clock</string>
+        <string>com.apple.distributed_notifications</string>
+        <string>com.apple.iohideventsystem</string>
+        <string>com.apple.runningboard</string>
+        <string>com.apple.frontboard</string>
+        <string>com.apple.backboard.hid-services</string>
+        <string>com.apple.coreanimation.render-server</string>
+        <string>com.apple.windowserver</string>
+        <string>com.apple.windowserver.active</string>
+        <string>com.apple.audio.coreaudiod</string>
+        <string>com.apple.CARenderServer</string>
+        <string>com.apple.SBUserNotification</string>
+        <string>com.apple.springboard.activateapps</string>
+    </array>
+
+    <key>com.apple.security.exception.mach-lookup.local-name</key>
+    <array>
+        <string>com.apple.springboard.services</string>
+        <string>com.apple.backboardd.services</string>
     </array>
 
     <key>com.apple.security.exception.iokit-user-client-class</key>
     <array>
         <string>AppleSPUHIDDevice</string>
         <string>AppleSPUHIDDriver</string>
+        <string>IOMobileFramebuffer</string>
+        <string>IOMobileFramebufferAP</string>
+        <string>AppleCLCD</string>
+        <string>AppleCLCD2</string>
+        <string>AGXAccelerator</string>
+        <string>IOHIDEventDriver</string>
+        <string>IOHIDEventServiceFastPathUserClient</string>
     </array>
 
     <!-- ============================================================ -->
-    <!-- IOKIT — CẢM BIẾN PHẦN CỨNG                                   -->
+    <!-- IOKIT — CẢM BIẾN PHẦN CỨNG + FRAMEBUFFER + GPU                -->
     <!-- ============================================================ -->
     <key>com.apple.security.iokit-user-client-class</key>
     <array>
@@ -161,13 +259,82 @@
         <string>AppleSmartBattery</string>
         <string>AppleSmartBatteryCommands</string>
         <string>IOPlatformPluginDevice</string>
+        <string>IOPlatformPluginUserClient</string>
         <string>AppleARMPMU</string>
         <string>AppleARMPE</string>
         <string>AppleSMC</string>
         <string>IOHIDSystem</string>
         <string>IOHIDEventSystem</string>
         <string>IOHIDEventService</string>
+        <string>IOHIDEventDriver</string>
+        <string>IOHIDEventServiceFastPathUserClient</string>
+        <string>IOHIDLibUserClient</string>
+        <string>IOMobileFramebuffer</string>
+        <string>IOMobileFramebufferAP</string>
+        <string>IOMobileFramebufferShim</string>
+        <string>AppleCLCD</string>
+        <string>AppleCLCD2</string>
+        <string>AppleM2ScalerCSCDriver</string>
+        <string>AGXAccelerator</string>
+        <string>AGXCommandQueue</string>
+        <string>AGXDevice</string>
+        <string>AGXSharedUserClient</string>
+        <string>IOGPUDevice</string>
+        <string>IOGPUDeviceUserClient</string>
+        <string>AppleDisplay</string>
+        <string>AppleDCP</string>
+        <string>AppleDCPAVController</string>
+        <string>AppleDCPExtDisplay</string>
+        <string>AppleHPMDevice</string>
+        <string>AppleHPMDeviceUserClient</string>
+        <string>IOSurfaceRoot</string>
+        <string>IOSurfaceRootUserClient</string>
+        <string>AppleS5L8960XPMGR</string>
+        <string>AppleDialogPMU</string>
     </array>
+
+    <!-- [BẮT BUỘC] Quyền ghi trực tiếp driver panel — V-Sync tầng chip -->
+    <key>com.apple.private.IOMobileFramebuffer</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.IOMobileFramebuffer</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.IOMobileFramebufferAP</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.AppleCLCD</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.AppleCLCD2</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.AGXAccelerator</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.IOGPUDevice</key>
+    <true/>
+
+    <key>com.apple.private.gpu.agx</key>
+    <true/>
+
+    <key>com.apple.private.iokit.display-access</key>
+    <true/>
+
+    <key>com.apple.private.iokit.framebuffer-access</key>
+    <true/>
+
+    <key>com.apple.private.iokit.power-access</key>
+    <true/>
+
+    <key>com.apple.private.iokit.thermal-access</key>
+    <true/>
+
+    <key>com.apple.private.iokit.battery-access</key>
+    <true/>
+
+    <key>com.apple.private.iokit.hid-access</key>
+    <true/>
 
     <!-- ============================================================ -->
     <!-- HID & TOUCH                                                  -->
@@ -178,7 +345,25 @@
     <key>com.apple.private.hid.client.event-filter</key>
     <true/>
 
+    <key>com.apple.private.hid.client.event-monitor</key>
+    <true/>
+
+    <key>com.apple.private.hid.client.event-source</key>
+    <true/>
+
+    <key>com.apple.private.hid.manager</key>
+    <true/>
+
     <key>com.apple.private.backboardd.allow-restricted-services</key>
+    <true/>
+
+    <key>com.apple.backboardd.allow-debug</key>
+    <true/>
+
+    <key>com.apple.private.hid.service</key>
+    <true/>
+
+    <key>com.apple.private.hid.system-client</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -202,10 +387,19 @@
     <key>com.apple.private.cs.restrict</key>
     <false/>
 
+    <key>com.apple.private.cs.allow-unsigned-executable-memory-v2</key>
+    <true/>
+
+    <key>com.apple.private.cs.allow-jit-without-entitlement</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- MEMORY & GESTALT                                             -->
     <!-- ============================================================ -->
     <key>com.apple.private.memorystatus</key>
+    <true/>
+
+    <key>com.apple.private.memorystatus.setpriority</key>
     <true/>
 
     <key>com.apple.private.mobilegestalt</key>
@@ -223,6 +417,32 @@
         <string>UniqueDeviceID</string>
         <string>BoardId</string>
         <string>HWModel</string>
+        <string>DeviceSupportsAlwaysOnDisplay</string>
+        <string>SupportsAlwaysOn</string>
+        <string>ProductName</string>
+        <string>DeviceClass</string>
+        <string>ProductVersion</string>
+        <string>BuildVersion</string>
+        <string>ReleaseType</string>
+        <string>CPUArchitecture</string>
+        <string>RearCameraCapability</string>
+        <string>FrontCameraCapability</string>
+        <string>SecureElementID</string>
+        <string>ChipID</string>
+        <string>EcID</string>
+    </array>
+
+    <key>com.apple.private.MobileGestalt.AllowedReadOnlyKeys</key>
+    <array>
+        <string>SupportsVariableRefreshRate</string>
+        <string>supports-variable-refresh-rate</string>
+        <string>pVRR</string>
+        <string>pro-motion</string>
+        <string>DeviceSupports120Hz</string>
+        <string>DeviceSupportsProMotion</string>
+        <string>ProductType</string>
+        <string>HWModel</string>
+        <string>DeviceSupportsAlwaysOnDisplay</string>
     </array>
 
     <!-- ============================================================ -->
@@ -232,6 +452,12 @@
     <true/>
 
     <key>com.apple.security.network.server</key>
+    <true/>
+
+    <key>com.apple.private.network.socket-delegate</key>
+    <true/>
+
+    <key>com.apple.private.network.system-token-fetch</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -246,7 +472,25 @@
     <key>com.apple.runningboard.process-state</key>
     <true/>
 
+    <key>com.apple.runningboard.watchdog</key>
+    <true/>
+
+    <key>com.apple.runningboard.primitiveattribute</key>
+    <true/>
+
     <key>com.apple.private.launchservices.allowopenwithanyhandler</key>
+    <true/>
+
+    <key>com.apple.private.launchservices.canlaunchapplication</key>
+    <true/>
+
+    <key>com.apple.private.launchservices.canlaunchappwithanyurlscheme</key>
+    <true/>
+
+    <key>com.apple.private.launchservices.canopenwithanyhandler</key>
+    <true/>
+
+    <key>com.apple.private.renderserver</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -264,13 +508,70 @@
     <key>com.apple.springboard.watchdog-ok</key>
     <true/>
 
+    <key>com.apple.springboard.allowallcallurls</key>
+    <true/>
+
+    <key>com.apple.springboard.opensensitiveurl</key>
+    <true/>
+
+    <key>com.apple.springboard.statusbarhidden</key>
+    <true/>
+
+    <key>com.apple.springboard.can-cancel-touches</key>
+    <true/>
+
+    <key>com.apple.springboard.touch-event-observation</key>
+    <true/>
+
+    <key>com.apple.private.springboard.allow-restricted-services</key>
+    <true/>
+
+    <key>com.apple.private.springboard.activateapps</key>
+    <true/>
+
     <!-- ============================================================ -->
-    <!-- GRAPHICS / METAL                                             -->
+    <!-- GRAPHICS / METAL / CORE ANIMATION                            -->
     <!-- ============================================================ -->
     <key>com.apple.private.Metal.device</key>
     <true/>
 
     <key>com.apple.private.metal.compile-sdk</key>
+    <true/>
+
+    <key>com.apple.Metal.private</key>
+    <true/>
+
+    <key>com.apple.CoreAnimation.private</key>
+    <true/>
+
+    <key>com.apple.coreanimation.render-server</key>
+    <true/>
+
+    <key>com.apple.private.CARenderServer</key>
+    <true/>
+
+    <key>com.apple.private.CoreAnimation.command-buffer</key>
+    <true/>
+
+    <key>com.apple.private.IOSurface</key>
+    <true/>
+
+    <key>com.apple.private.IOSurface.allow-access</key>
+    <true/>
+
+    <key>com.apple.private.IOSurface.send-port</key>
+    <true/>
+
+    <key>com.apple.private.WindowServer</key>
+    <true/>
+
+    <key>com.apple.private.WindowServer.active</key>
+    <true/>
+
+    <key>com.apple.private.windowserver.allow-connection</key>
+    <true/>
+
+    <key>com.apple.private.skia.allow-gpu</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -288,13 +589,73 @@
     <key>com.apple.private.apfs.revert-to-snapshot</key>
     <true/>
 
+    <key>com.apple.private.process-spawn</key>
+    <true/>
+
+    <key>com.apple.private.posix_spawn</key>
+    <true/>
+
+    <key>com.apple.private.launchd.allow-spawn</key>
+    <true/>
+
+    <key>com.apple.private.vfs.open-by-id</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- PREFS                                                        -->
     <!-- ============================================================ -->
     <key>com.apple.private.cfprefs.any-user</key>
     <true/>
 
-    <key>com.appDeple.private.cfprefs.any-host</key>
+    <key>com.apple.private.cfprefs.any-host</key>
+    <true/>
+
+    <key>com.apple.private.cfprefs.any-application</key>
+    <true/>
+
+    <key>com.apple.private.cfprefs.no-container</key>
+    <true/>
+
+    <key>com.apple.private.cfprefs.managed</key>
+    <true/>
+
+    <key>com.apple.private.darwin-notification.post</key>
+    <true/>
+
+    <key>com.apple.private.darwin-notification.register</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- THERMAL / POWER (chống hạ xung)                              -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.thermal-pressure-monitor</key>
+    <true/>
+
+    <key>com.apple.thermalmonitor</key>
+    <true/>
+
+    <key>com.apple.private.power-management</key>
+    <true/>
+
+    <key>com.apple.private.pm.assertion</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.set-property</key>
+    <true/>
+
+    <key>com.apple.private.IOKit.io-registry</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- DEBUG / TRACE                                                -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.security.debugger</key>
+    <true/>
+
+    <key>com.apple.private.DTXConnection</key>
+    <true/>
+
+    <key>com.apple.private.heap-dump</key>
     <true/>
 
 </dict>
