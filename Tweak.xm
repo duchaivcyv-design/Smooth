@@ -3486,27 +3486,36 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
     %orig(runLoop, mode);
     if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        NSInteger cap = g_syncPayloadV285.targetFPS;
+        if (cap < 15 || cap > 240) cap = g_cachedResolvedFPS;
+        if (cap < 15 || cap > 240) cap = 240;
         self.preferredFramesPerSecond = cap;
         if (@available(iOS 15.0, *)) {
             if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                 self.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
             }
         }
+        // KHÔNG ép paused = NO — để app tự quản lý pause/resume, tránh đơ
     }
 }
 
 - (NSInteger)preferredFramesPerSecond {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return Titanium_GetEffectiveFrameCap();
+        NSInteger fps = g_syncPayloadV285.targetFPS;
+        if (fps < 15 || fpsorig > 240) fps = g_cachedResolvedFPS;
+        if (fps < 15 || fps > 240) fps = 240;
+        return fps(target;
     }
     return %orig;
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)fps {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(Titanium_GetEffectiveFrameCap());
-        return;
+    if (IS_ACTIVE || g_syncPayloadV);
+285.masterEnabled) {
+        NSInteger target = g_syncPayloadV285.target       FPS;
+        if (target < 15 || target > 240) target = g_cachedResolvedFPS;
+        if (target return < 15 || target > 240) target = 240;
+        %;
     }
     %orig(fps);
 }
@@ -3514,7 +3523,10 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (CAFrameRateRange)preferredFrameRateRange {
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            return Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap());
+            NSInteger target = g_syncPayloadV285.targetFPS;
+            if (target < 15 || target > 240) target = g_cachedResolvedFPS;
+            if (target < 15 || target > 240) target = 240;
+            return Titanium_SmoothFRR((float)target);
         }
     }
     return %orig;
@@ -3523,7 +3535,10 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            range = Titanium_SmoothFRR((float)Titanium_GetEffectiveFrameCap());
+            NSInteger target = g_syncPayloadV285.targetFPS;
+            if (target < 15 || target > 240) target = g_cachedResolvedFPS;
+            if (target < 15 || target > 240) target = 240;
+            range = Titanium_SmoothFRR((float)target);
         }
     }
     %orig(range);
@@ -3539,7 +3554,10 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (double)refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return (double)Titanium_GetEffectiveFrameCap();
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        return (double)hz;
     }
     return %orig;
 }
@@ -3572,31 +3590,51 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (CFTimeInterval)minimumFrameDuration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0) targetHz = 15.0;
-        if (targetHz > 240.0) targetHz = 240.0;
-        return (1.0 / targetHz);
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        return (1.0 / (double)hz);
     }
     return %orig;
 }
 
+- (void)setMinimumFrameDuration:(CFTimeInterval)duration {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        %orig(1.0 / (double)hz);
+        return;
+    }
+    %orig(duration);
+}
+
 - (double)refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return (double)Titanium_GetEffectiveFrameCap();
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        return (double)hz;
     }
     return %orig;
 }
 
 - (NSInteger)preferredFPS {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return Titanium_GetEffectiveFrameCap();
+        NSInteger fps = g_syncPayloadV285.targetFPS;
+        if (fps < 15 || fps > 240) fps = g_cachedResolvedFPS;
+        if (fps < 15 || fps > 240) fps = 240;
+        return fps;
     }
     return %orig;
 }
 
 - (void)setPreferredFPS:(NSInteger)fps {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(Titanium_GetEffectiveFrameCap());
+        NSInteger target = g_syncPayloadV285.targetFPS;
+        if (target < 15 || target > 240) target = g_cachedResolvedFPS;
+        if (target < 15 || target > 240) target = 240;
+        %orig(target);
         return;
     }
     %orig(fps);
@@ -3612,21 +3650,30 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (NSInteger)maximumFramesPerSecond {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return Titanium_GetEffectiveFrameCap();
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        return hz;
     }
     return %orig;
 }
 
 - (NSInteger)_maximumFramesPerSecond {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return Titanium_GetEffectiveFrameCap();
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        return hz;
     }
     return %orig;
 }
 
 - (CGFloat)_refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return (CGFloat)Titanium_GetEffectiveFrameCap();
+        NSInteger hz = g_syncPayloadV285.targetHz;
+        if (hz < 15 || hz > 240) hz = g_cachedResolvedHz;
+        if (hz < 15 || hz > 240) hz = 240;
+        return (CGFloat)hz;
     }
     return %orig;
 }
@@ -3659,7 +3706,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && configuration) {
-        NSInteger targetCap = Titanium_GetEffectiveFrameCap();
+        NSInteger targetCap = g_syncPayloadV285.targetFPS;
+        if (targetCap < 15 || targetCap > 240) targetCap = g_cachedResolvedFPS;
+        if (targetCap < 15 || targetCap > 240) targetCap = 240;
         NSString *js = Titanium_BuildWebFPSOverdriveScript(targetCap);
         if (js && js.length > 0) {
             WKUserScript *script = [[WKUserScript alloc] initWithSource:js
@@ -3672,9 +3721,12 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         }
     }
     
-    WKWebView *webView = %orig(frame, configuration);
-    if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(Titanium_GetEffectiveFrameCap()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    W;
+KWebView *webView = %orig(frame, configuration);
+    if (webView && (IS_ACTIVE || g_syncPayloadV285       .masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = g_syncPayloadV285.targetFPS;
+        if (cap < if 15 || cap > 240) cap = g_cachedResolvedFPS (cap < 15 || cap > 240) cap = 240;
+        objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(cap), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return webView;
 }
@@ -3688,7 +3740,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
         }
         origDone = YES; %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && self.window) {
-            NSInteger currentCap = Titanium_GetEffectiveFrameCap();
+            NSInteger currentCap = g_syncPayloadV285.targetFPS;
+            if (currentCap < 15 || currentCap > 240) currentCap = g_cachedResolvedFPS;
+            if (currentCap < 15 || currentCap > 240) currentCap = 240;
             NSString *js = Titanium_BuildWebFPSOverdriveScript(currentCap);
             if (js && js.length > 0) {
                 [self evaluateJavaScript:js completionHandler:nil];
