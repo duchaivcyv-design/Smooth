@@ -3680,7 +3680,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
     // This flag unlocks local configuration UI only; it is not evidence of a kernel exploit.
     _isFeatureActivated = [self.settingsDict[@"FeatureActivationComplete"] boolValue];
-    if ((!_isFeatureActivated || (![savedServerMode isEqualToString:@"free"] && !_isAdminServer)) && _currentBottomTab != 0) _currentBottomTab = 4;
+    // Keep the selected tab; individual actions validate prerequisites.
     if (_isFeatureActivated) {
         struct utsname startupUts;
         memset(&startupUts, 0, sizeof(startupUts));
@@ -3703,7 +3703,7 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     NSString *initialServerChoice = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
     self.customTableView.userInteractionEnabled = YES;
     NSUserDefaults *creditsDefaults = [NSUserDefaults standardUserDefaults];
-    if (NO && ![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY] &&
+    if (![creditsDefaults boolForKey:TI_CREDITS_SHOWN_KEY] &&
         ![creditsDefaults boolForKey:TI_CREDITS_HIDDEN_KEY]) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.presentedViewController) return;
@@ -3774,6 +3774,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    self.view.userInteractionEnabled = YES;
+    self.customTableView.userInteractionEnabled = YES;
+    self.customTableView.alpha = 1.0;
     if (!_hasPlayedEntranceAnimation) {
         // Keep content visible; a full alpha fade looked like a screen-wide blur/flash.
         self.customTableView.alpha = 1.0;
@@ -4177,6 +4180,9 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    self.view.userInteractionEnabled = YES;
+    self.customTableView.userInteractionEnabled = YES;
+    self.view.window.userInteractionEnabled = YES;
     NSUserDefaults *welcomeDefaults = [NSUserDefaults standardUserDefaults];
     if (![welcomeDefaults boolForKey:@"TIV347FirstWelcomeCompleted"] && !self.presentedViewController) {
         [self showV347FirstLaunchWelcome];
@@ -5101,7 +5107,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (!url || ![url.scheme.lowercaseString isEqualToString:@"https"]) {
         _adminSessionRestorePending = NO;
         _isAdminServer = NO;
-        self.customTableView.userInteractionEnabled = NO;
+        self.customTableView.userInteractionEnabled = YES;
         if (self.view.window && !self.presentedViewController) {
             UIAlertController *invalid = [UIAlertController alertControllerWithTitle:@"Endpoint không hợp lệ" message:@"Không thể xác minh phiên Admin vì URL backend không phải HTTPS hợp lệ. Kiểm tra URL rồi đăng nhập lại." preferredStyle:UIAlertControllerStyleAlert];
             [invalid addAction:[UIAlertAction actionWithTitle:@"Đăng nhập lại" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [self showAdminServerLogin]; }]];
@@ -5147,7 +5153,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
             owner->_isAdminServer = NO;
             [owner updateRoleBadgeTitle:@"Server"];
-            owner.customTableView.userInteractionEnabled = NO;
+            owner.customTableView.userInteractionEnabled = YES;
             [owner refreshBottomTabsAvailability];
             [owner.customTableView reloadData];
             if (http.statusCode == 401 || http.statusCode == 403) {
@@ -5190,7 +5196,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [defaults synchronize];
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateRoleBadgeTitle:@"Server"];
-        self.customTableView.userInteractionEnabled = NO;
+        self.customTableView.userInteractionEnabled = YES;
         [self refreshBottomTabsAvailability];
         [self updateServerStatusIndicator];
         [self.customTableView reloadData];
@@ -5240,7 +5246,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"TIAdminRole"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             [strongSelf updateRoleBadgeTitle:@"Server"];
-            strongSelf.customTableView.userInteractionEnabled = NO;
+            strongSelf.customTableView.userInteractionEnabled = YES;
         } else {
             [[NSUserDefaults standardUserDefaults] synchronize];
         }
@@ -5960,22 +5966,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)refreshBottomTabsAvailability {
-    NSString *server = [[NSUserDefaults standardUserDefaults] stringForKey:TI_SELECTED_SERVER_KEY];
-    BOOL serverChosen = [server isEqualToString:@"free"] || _isAdminServer;
-    BOOL fullyUnlocked = serverChosen && _isFeatureActivated;
-    if (!fullyUnlocked && _tabButtons.count > 4 && _currentBottomTab != 0) _currentBottomTab = 4;
+    // All requested screens stay visible and navigable. This does not grant exploit/admin privileges.
     for (NSInteger i = 0; i < _tabButtons.count; i++) {
         LGGlassNavButton *button = _tabButtons[i];
-        BOOL enabled = fullyUnlocked || i == 4 || (serverChosen && i == 0);
-        button.userInteractionEnabled = YES; // locked tabs show the picker/warning, but can't enter a feature
-        button.alpha = enabled ? 1.0 : 0.38;
+        button.userInteractionEnabled = YES;
+        button.alpha = 1.0;
         [button updateTabSelected:(i == _currentBottomTab) animated:NO];
     }
     if (_activeGlassIndicator && _liquidNavBarContainer.bounds.size.width > 0.0) {
         CGFloat w = _liquidNavBarContainer.bounds.size.width / MAX(1, _tabButtons.count);
         _activeGlassIndicator.center = CGPointMake(_currentBottomTab * w + w * 0.5, _activeGlassIndicator.center.y);
     }
-    [self.customTableView setUserInteractionEnabled:serverChosen];
+    self.view.userInteractionEnabled = YES;
+    self.customTableView.userInteractionEnabled = YES;
 }
 
 - (void)layoutLiquidGlassControlsForCurrentBounds {
@@ -6020,7 +6023,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (self.customTableView.tableHeaderView && fabs(self.customTableView.tableHeaderView.bounds.size.width - headerWidth) > 1.0) {
             self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:headerWidth] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)])));
         }
-        UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, 10.0, 0.0);
+        // Reserve space for the floating bottom dock so the final cards remain scrollable
+        // and aren't visually hidden behind the navigation bar.
+        CGFloat dockReserve = CGRectGetHeight(_liquidNavBarContainer.bounds) + self.view.safeAreaInsets.bottom + 22.0;
+        UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, MAX(10.0, dockReserve), 0.0);
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.scrollIndicatorInsets, desiredInset)) self.customTableView.scrollIndicatorInsets = desiredInset;
     }
@@ -6103,9 +6109,26 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     // V23: no server-selection gate; UI navigation is local and does not grant admin privileges.
     // V23: diagnostics, app list and settings remain accessible without claiming exploit success.
     NSInteger oldTab = _currentBottomTab;
+    // Recovery guard: navigation must never inherit a disabled state from a previous modal/scan.
+    self.view.userInteractionEnabled = YES;
+    self.customTableView.userInteractionEnabled = YES;
+    self.customTableView.alpha = 1.0;
+    for (LGGlassNavButton *tabButton in _tabButtons) {
+        tabButton.userInteractionEnabled = YES;
+        tabButton.alpha = 1.0;
+    }
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
     UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)])));
     self.customTableView.tableHeaderView = nextHeader;
+    // Keep decorative header layers from becoming a full-width invisible touch shield.
+    // Interactive controls added by header builders retain their own interaction settings.
+    if (nextHeader) {
+        for (UIView *subview in nextHeader.subviews) {
+            if ([subview isKindOfClass:[UIVisualEffectView class]] || [subview isKindOfClass:[UIImageView class]]) {
+                subview.userInteractionEnabled = NO;
+            }
+        }
+    }
     if (_currentBottomTab == 0) {
         // Dashboard readouts stay live; the switch only controls the detailed monitor rows.
         [self startContinuousHardwareHUD];
@@ -6377,9 +6400,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSDictionary *all = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] ?: @{};
     NSDictionary *saved = [all[bundleID] isKindOfClass:NSDictionary.class] ? all[bundleID] : nil;
     __block NSInteger selected = saved ? [saved[@"preset"] integerValue] : 2;
-    NSArray *names = @[@"HIỆU SUẤT CAO", @"CÂN BẰNG", @"TIẾT KIỆM PIN"];
-    NSArray *descs = @[@"Ưu tiên mức mục tiêu cao nhất có thể áp dụng.", @"Cân bằng giữa độ mượt và mức tiêu thụ.", @"Ưu tiên giảm mức sử dụng và mục tiêu khung hình."];
-    NSArray *rates = @[@240, @90, @60];
+    NSArray *names = @[@"TỰ ĐỘNG", @"HIỆU SUẤT CAO", @"CÂN BẰNG", @"TIẾT KIỆM PIN"];
+    NSArray *descs = @[@"Điều chỉnh mục tiêu theo nhiệt độ iOS và chế độ nguồn điện thấp.", @"Ưu tiên mức mục tiêu cao nhất có thể áp dụng.", @"Cân bằng giữa độ mượt và mức tiêu thụ.", @"Ưu tiên giảm mức sử dụng và mục tiêu khung hình."];
+    NSArray *rates = @[@120, @240, @90, @60];
     UIViewController *page = [UIViewController new];
     page.view.backgroundColor = [UIColor colorWithRed:.035 green:.025 blue:.085 alpha:1];
     page.title = appName;
@@ -6408,7 +6431,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [forceSwitch addAction:[UIAction actionWithHandler:^(__kindof UIAction *action){ (void)action; savePolicy(); }] forControlEvents:UIControlEventValueChanged];
     [safeSwitch addAction:[UIAction actionWithHandler:^(__kindof UIAction *action){ (void)action; savePolicy(); }] forControlEvents:UIControlEventValueChanged];
     NSMutableArray<UIButton *> *cards=[NSMutableArray array];
-    for (NSInteger i=0;i<3;i++) {
+    for (NSInteger i=0;i<4;i++) {
         UIButton *card=[UIButton buttonWithType:UIButtonTypeSystem]; card.translatesAutoresizingMaskIntoConstraints=NO; card.tag=i; card.contentHorizontalAlignment=UIControlContentHorizontalAlignmentLeft; card.titleLabel.numberOfLines=0; card.layer.cornerRadius=22; card.layer.cornerCurve=kCACornerCurveContinuous; card.layer.borderWidth=1.25; card.backgroundColor=[UIColor colorWithRed:.075 green:.085 blue:.17 alpha:.88]; card.layer.shadowColor=[UIColor colorWithRed:.18 green:.55 blue:1 alpha:1].CGColor; card.layer.shadowOpacity=.16; card.layer.shadowRadius=12; card.layer.shadowOffset=CGSizeMake(0,5);
         NSString *title=[NSString stringWithFormat:@"%@\n%@\nMức mục tiêu: %@ Hz/FPS", names[i], descs[i], rates[i]];
         [card setTitle:title forState:UIControlStateNormal]; card.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]; card.titleLabel.lineBreakMode=NSLineBreakByWordWrapping; card.titleLabel.textAlignment=NSTextAlignmentLeft; card.contentEdgeInsets=UIEdgeInsetsMake(15,16,15,16);
@@ -6419,17 +6442,23 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     for (NSInteger i=0;i<cards.count;i++) { UIButton *b=cards[i]; b.layer.borderColor=(i==selected?[UIColor colorWithRed:.20 green:.84 blue:1 alpha:1]:[UIColor colorWithWhite:1 alpha:.12]).CGColor; b.backgroundColor=(i==selected?[UIColor colorWithRed:.12 green:.22 blue:.38 alpha:.95]:[UIColor colorWithWhite:1 alpha:.045]); }
     UILabel *notice=[UILabel new]; notice.translatesAutoresizingMaskIntoConstraints=NO; notice.numberOfLines=0; notice.font=[UIFont systemFontOfSize:11]; notice.textColor=[UIColor colorWithWhite:.65 alpha:1]; notice.text=@"Hồ sơ lưu riêng theo ứng dụng. Hz/FPS là mục tiêu yêu cầu; kết quả thực tế phụ thuộc phần cứng, iOS và bộ điều khiển tương thích. Các công tắc chính sách không tự bảo đảm chặn app trước frame hoặc phát hiện mọi màn hình đen."; [content addSubview:notice];
-    [NSLayoutConstraint activateConstraints:@[[hero.topAnchor constraintEqualToAnchor:content.topAnchor constant:22],[hero.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],[hero.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],[bundle.topAnchor constraintEqualToAnchor:hero.bottomAnchor constant:7],[bundle.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[bundle.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],[section.topAnchor constraintEqualToAnchor:bundle.bottomAnchor constant:22],[section.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[policyCard.topAnchor constraintEqualToAnchor:section.bottomAnchor constant:12],[policyCard.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:18],[policyCard.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-18],[policyCard.heightAnchor constraintEqualToConstant:104],[forceLabel.leadingAnchor constraintEqualToAnchor:policyCard.leadingAnchor constant:14],[forceLabel.centerYAnchor constraintEqualToAnchor:policyCard.centerYAnchor constant:-22],[forceSwitch.trailingAnchor constraintEqualToAnchor:policyCard.trailingAnchor constant:-14],[forceSwitch.centerYAnchor constraintEqualToAnchor:forceLabel.centerYAnchor],[safeLabel.leadingAnchor constraintEqualToAnchor:forceLabel.leadingAnchor],[safeLabel.centerYAnchor constraintEqualToAnchor:policyCard.centerYAnchor constant:22],[safeSwitch.trailingAnchor constraintEqualToAnchor:forceSwitch.trailingAnchor],[safeSwitch.centerYAnchor constraintEqualToAnchor:safeLabel.centerYAnchor],[cards[0].topAnchor constraintEqualToAnchor:policyCard.bottomAnchor constant:14],[cards[1].topAnchor constraintEqualToAnchor:cards[0].bottomAnchor constant:11],[cards[2].topAnchor constraintEqualToAnchor:cards[1].bottomAnchor constant:11],[notice.topAnchor constraintEqualToAnchor:cards[2].bottomAnchor constant:18],[notice.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[notice.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],[notice.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-24]]];
+    [NSLayoutConstraint activateConstraints:@[[hero.topAnchor constraintEqualToAnchor:content.topAnchor constant:22],[hero.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],[hero.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],[bundle.topAnchor constraintEqualToAnchor:hero.bottomAnchor constant:7],[bundle.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[bundle.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],[section.topAnchor constraintEqualToAnchor:bundle.bottomAnchor constant:22],[section.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[policyCard.topAnchor constraintEqualToAnchor:section.bottomAnchor constant:12],[policyCard.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:18],[policyCard.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-18],[policyCard.heightAnchor constraintEqualToConstant:104],[forceLabel.leadingAnchor constraintEqualToAnchor:policyCard.leadingAnchor constant:14],[forceLabel.centerYAnchor constraintEqualToAnchor:policyCard.centerYAnchor constant:-22],[forceSwitch.trailingAnchor constraintEqualToAnchor:policyCard.trailingAnchor constant:-14],[forceSwitch.centerYAnchor constraintEqualToAnchor:forceLabel.centerYAnchor],[safeLabel.leadingAnchor constraintEqualToAnchor:forceLabel.leadingAnchor],[safeLabel.centerYAnchor constraintEqualToAnchor:policyCard.centerYAnchor constant:22],[safeSwitch.trailingAnchor constraintEqualToAnchor:forceSwitch.trailingAnchor],[safeSwitch.centerYAnchor constraintEqualToAnchor:safeLabel.centerYAnchor],[cards[0].topAnchor constraintEqualToAnchor:policyCard.bottomAnchor constant:14],[cards[1].topAnchor constraintEqualToAnchor:cards[0].bottomAnchor constant:11],[cards[2].topAnchor constraintEqualToAnchor:cards[1].bottomAnchor constant:11],[cards[3].topAnchor constraintEqualToAnchor:cards[2].bottomAnchor constant:11],[notice.topAnchor constraintEqualToAnchor:cards[3].bottomAnchor constant:18],[notice.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],[notice.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],[notice.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-24]]];
     UIView *footer=[UIView new]; footer.translatesAutoresizingMaskIntoConstraints=NO; footer.backgroundColor=[UIColor colorWithRed:.055 green:.035 blue:.12 alpha:1]; [page.view addSubview:footer];
     UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.translatesAutoresizingMaskIntoConstraints=NO; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.22 green:.72 blue:1 alpha:1]; [apply setTitle:@"ÁP DỤNG CẤU HÌNH" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.blackColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightBlack]; [footer addSubview:apply];
     [NSLayoutConstraint activateConstraints:@[[footer.leadingAnchor constraintEqualToAnchor:page.view.leadingAnchor],[footer.trailingAnchor constraintEqualToAnchor:page.view.trailingAnchor],[footer.bottomAnchor constraintEqualToAnchor:page.view.bottomAnchor],[footer.heightAnchor constraintEqualToConstant:100],[apply.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:18],[apply.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor constant:-18],[apply.topAnchor constraintEqualToAnchor:footer.topAnchor constant:10],[apply.heightAnchor constraintEqualToConstant:52]]];
     [apply addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
-        NSArray *allNames=@[@"Hiệu suất",@"Cân bằng",@"Tiết kiệm pin"];
+        NSArray *allNames=@[@"Tự động",@"Hiệu suất",@"Cân bằng",@"Tiết kiệm pin"];
         NSMutableDictionary *profiles=[[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] mutableCopy] ?: [NSMutableDictionary dictionary];
-        profiles[bundleID]=@{@"preset":@(selected),@"rate":rates[selected],@"name":allNames[selected],@"applied":@YES};
+        NSInteger chosenRate = [rates[selected] integerValue];
+        if (selected == 0) {
+            NSProcessInfoThermalState thermal = NSProcessInfo.processInfo.thermalState;
+            BOOL lowPower = NSProcessInfo.processInfo.lowPowerModeEnabled;
+            chosenRate = (lowPower || thermal >= NSProcessInfoThermalStateSerious) ? 60 : (thermal == NSProcessInfoThermalStateFair ? 90 : 120);
+        }
+        profiles[bundleID]=@{@"preset":@(selected),@"rate":@(chosenRate),@"name":allNames[selected],@"applied":@YES};
         [[NSUserDefaults standardUserDefaults] setObject:profiles forKey:@"TIV11PerAppProfiles"];
         [[NSUserDefaults standardUserDefaults] synchronize];
-        [self dismissViewControllerAnimated:YES completion:^{ UIAlertController *done=[UIAlertController alertControllerWithTitle:@"Đã lưu hồ sơ ứng dụng" message:[NSString stringWithFormat:@"%@ · %@\nMục tiêu %@ Hz/FPS đã lưu. Việc áp dụng thực tế phụ thuộc bộ điều khiển tương thích.",appName,allNames[selected],rates[selected]] preferredStyle:UIAlertControllerStyleAlert]; [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil]; }];
+        [self dismissViewControllerAnimated:YES completion:^{ UIAlertController *done=[UIAlertController alertControllerWithTitle:@"Đã lưu hồ sơ ứng dụng" message:[NSString stringWithFormat:@"%@ · %@\nMục tiêu %@ Hz/FPS đã lưu. Việc áp dụng thực tế phụ thuộc bộ điều khiển tương thích.",appName,allNames[selected],@(chosenRate)] preferredStyle:UIAlertControllerStyleAlert]; [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil]; }];
     }] forControlEvents:UIControlEventTouchUpInside];
     [self presentViewController:page animated:YES completion:nil];
 }
@@ -6769,8 +6798,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1 && _currentBottomTab != 5) return 1;
-
     if (_currentBottomTab == 0) {
         if (section == 0) return 1;
         BOOL mA = [self.settingsDict[@"EnableSystemMonitoring"] boolValue];
@@ -6800,13 +6827,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         return MAX(1, _filteredAppsList.count);
     } else {
         if (section == 0) return 1; // Activation entry remains available.
-        if (section == 1 || section == 2) return 0; // Hide legacy device/network/Sandbox panels.
-        return 5; // Device info, author, reset, conflict toggle, appearance/language/sensor options.
+        if (section == 1) return 8; // Show all read-only device details; do not hide this panel.
+        if (section == 2) return [self isAdminDevRole] ? 7 : 5; // Network, theme, ping, and server controls remain visible; privileged actions still validate role.
+        return 6; // Device info, author, reset, conflict toggle, appearance/language, and author details.
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (!_isFeatureActivated && _currentBottomTab != 4 && _currentBottomTab != 0 && _currentBottomTab != 1 && _currentBottomTab != 5) return @"Chế độ chẩn đoán · chưa xác minh exploit";
     if (_currentBottomTab == 0) {
         if (section == 0) return @"TỔNG QUAN HỆ THỐNG";
         if (section == 1) return @"CPU";
@@ -6833,7 +6860,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (section == 1) return @"THƯ VIỆN ỨNG DỤNG";
         return @"Ứng dụng";
     } else {
-        if (section == 0) return @"KÍCH HOẠT";
+        if (section == 0) return _isFeatureActivated ? @"KÍCH HOẠT · ĐÃ XÁC NHẬN" : @"KÍCH HOẠT · CHẾ ĐỘ CHẨN ĐOÁN";
         if (section == 3) return @"THIẾT BỊ & HỖ TRỢ";
         return @"";
     }
@@ -7447,14 +7474,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     BOOL themeEntry = (_currentBottomTab == 4 && indexPath.section == 2 && indexPath.row == 3);
     BOOL serverAPIEntry = (_currentBottomTab == 4 && [self isAdminDevRole] && indexPath.section == 2 && indexPath.row == 4);
     BOOL simpleSettingsEntry = (_currentBottomTab == 4 && indexPath.section == 3);
-    if (!_isFeatureActivated && _currentBottomTab == 4 && !activationEntry && !simpleSettingsEntry) {
-        // Prevent accessory switches and segmented controls from being usable while locked.
-        if ([accessory isKindOfClass:[UIView class]]) accessory.userInteractionEnabled = NO;
-        cell.userInteractionEnabled = NO;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        cell.alpha = 0.38;
-        detail = @"🔒 Cần kích hoạt";
-    }
+    // Keep settings visible and tappable. Privileged actions validate their own prerequisites.
     NSString *accentChoice = [self.settingsDict[@"V35AccentColor"] isKindOfClass:NSString.class] ? self.settingsDict[@"V35AccentColor"] : @"cyan";
     if ([accentChoice isEqualToString:@"green"]) accent=[UIColor colorWithRed:.22 green:.96 blue:.48 alpha:1];
     else if ([accentChoice isEqualToString:@"blue"]) accent=[UIColor colorWithRed:.20 green:.52 blue:1 alpha:1];
@@ -8709,11 +8729,17 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         notify_post(NOTIFY_UIKIT_RELOAD);
         UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
         [fb notificationOccurred:UINotificationFeedbackTypeWarning];
-        [self.customTableView setUserInteractionEnabled:NO];
+        // V40.5: reset clears activation/server state, but must never leave the main UI
+        // touch-locked. The legacy server picker is intentionally a no-op in V23+.
+        self.view.userInteractionEnabled = YES;
+        self.customTableView.userInteractionEnabled = YES;
+        self.customTableView.alpha = 1.0;
+        self.customTableView.transform = CGAffineTransformIdentity;
         [self updateRoleBadgeTitle:@"Server"];
         [self refreshBottomTabsAvailability];
         [UIView performWithoutAnimation:^{ [self.customTableView reloadData]; }];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ if (!self.presentedViewController) [self showFirstInstallServerPicker]; });
+        // Do not call showFirstInstallServerPicker here: it returns immediately and
+        // previously left userInteractionEnabled set to NO forever.
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
