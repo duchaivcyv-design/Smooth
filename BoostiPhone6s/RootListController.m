@@ -6,6 +6,7 @@
 #import <spawn.h>
 #import <sys/wait.h>
 #import <sys/stat.h>
+#import <sys/mman.h>
 #import <sys/utsname.h>
 #import <sys/sysctl.h>
 #import <fcntl.h>
