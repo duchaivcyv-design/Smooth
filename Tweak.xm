@@ -6508,6 +6508,12 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 }
 
 // ====================================================================================================
+// TẦNG 5 (TIER 5): CHIP IC MÀN HÌNH, PHÁ TRẦN 120HZ LÊN 15-240HZ (QUARTZCORE + DCP + CLCD2 + IOGPU),
+// 5 TẦNG RAM (GIẢM TẢI XUỐNG MỨC TỐI THIỂU), 5 TẦNG CPU/GPU P-CORE REALTIME,
+// DYNAMIC ISLAND + DOCK + FOLDER + SHARE SHEET 0MS + 100K HẠT 3D + AI STREAM SIÊU MƯỢT
+// ====================================================================================================
+
+// ====================================================================================================
 // --- CẤU TRÚC SYSCALL JETSAM THẬT CỦA XNU KERNEL (sys/kern_memorystatus.h) ---
 #ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
 #define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
@@ -6727,6 +6733,106 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
 // TẦNG 5 (TIER 5 REAL): XNU MACH REALTIME SCHEDULER, P-CORE AFFINITY, KERNEL JETSAM & IOPM ASSERTION
 // ====================================================================================================
 
+// [BỔ SUNG TỪ BẢN THỪA] Hàm mở khóa QuartzCore 240Hz ceiling (bản gốc chưa có)
+static void Titanium_Tier5_UnlockQuartzCore240HzCeiling(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *qc = dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_LAZY | RTLD_LOCAL);
+            if (!qc) return;
+            void *symValid = dlsym(qc, "CAFrameRateRangeIsValid");
+            if (symValid) {
+                MSHookFunction(symValid, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// [BỔ SUNG TỪ BẢN THỪA] Ép trực tiếp driver Panel & GPU (AppleDCP / AppleCLCD2 / IOMobileFramebufferAP / IOGPU)
+static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSInteger targetFPS) {
+    if (targetHz < 15) targetHz = 15;
+    if (targetHz > 240) targetHz = 240;
+    if (targetFPS < 15) targetFPS = 15;
+    if (targetFPS > 240) targetFPS = 240;
+
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+    if (!iokit) return;
+
+    typedef CFMutableDictionaryRef (*IOServiceMatching_fn)(const char *);
+    typedef kern_return_t (*IOServiceGetMatchingServices_fn)(mach_port_t, CFDictionaryRef, io_iterator_t *);
+    typedef io_object_t (*IOIteratorNext_fn)(io_iterator_t);
+    typedef kern_return_t (*IORegistryEntrySetCFProperties_fn)(io_registry_entry_t, CFTypeRef);
+    typedef kern_return_t (*IOServiceOpen_fn)(io_service_t, task_port_t, uint32_t, io_connect_t *);
+    typedef kern_return_t (*IOConnectSetCFProperties_fn)(io_connect_t, CFTypeRef);
+    typedef kern_return_t (*IOServiceClose_fn)(io_connect_t);
+    typedef kern_return_t (*IOObjectRelease_fn)(io_object_t);
+
+    IOServiceMatching_fn fnMatching = (IOServiceMatching_fn)dlsym(iokit, "IOServiceMatching");
+    IOServiceGetMatchingServices_fn fnGetServices = (IOServiceGetMatchingServices_fn)dlsym(iokit, "IOServiceGetMatchingServices");
+    IOIteratorNext_fn fnNext = (IOIteratorNext_fn)dlsym(iokit, "IOIteratorNext");
+    IORegistryEntrySetCFProperties_fn fnSetProps = (IORegistryEntrySetCFProperties_fn)dlsym(iokit, "IORegistryEntrySetCFProperties");
+    IOServiceOpen_fn fnOpen = (IOServiceOpen_fn)dlsym(iokit, "IOServiceOpen");
+    IOConnectSetCFProperties_fn fnConnSetProps = (IOConnectSetCFProperties_fn)dlsym(iokit, "IOConnectSetCFProperties");
+    IOServiceClose_fn fnClose = (IOServiceClose_fn)dlsym(iokit, "IOServiceClose");
+    IOObjectRelease_fn fnRelease = (IOObjectRelease_fn)dlsym(iokit, "IOObjectRelease");
+
+    if (!fnMatching || !fnGetServices || !fnNext || !fnSetProps || !fnRelease) return;
+
+    uint64_t frameIntervalNs = (uint64_t)(1000000000ULL / (uint64_t)targetHz);
+    NSDictionary *panelBurstDict = @{
+        @"DisplayPipeRefreshRate": @(targetHz),
+        @"TargetRefreshRate": @(targetHz),
+        @"MaximumRefreshRate": @(240),
+        @"MinimumRefreshRate": @(15),
+        @"IdealRefreshRate": @(targetHz),
+        @"PreferredRefreshRate": @(targetHz),
+        @"FrameIntervalNs": @(frameIntervalNs),
+        @"MinimumFrameDurationNs": @(frameIntervalNs),
+        @"VRRModeEnabled": @YES,
+        @"ProMotionEnabled": @YES,
+        @"AllowsVirtualModes": @YES,
+        @"DisableDisplayIdleDownclock": @YES,
+        @"ThermalThrottleEnabled": @NO,
+        @"DisplayThermalMitigation": @0,
+        @"BacklightThermalCap": @0,
+        @"GPUPowerState": @1,
+        @"AGXBurstMode": @YES,
+        @"TargetFPS": @(targetFPS)
+    };
+
+    const char *tier5Drivers[] = {
+        "AppleDCP",
+        "AppleCLCD2",
+        "AppleCLCD",
+        "IOMobileFramebufferAP",
+        "IOMobileFramebuffer",
+        "IOGPU",
+        "AGXAccelerator",
+        "AppleM2ScalerCSCDriver"
+    };
+
+    for (size_t i = 0; i < sizeof(tier5Drivers) / sizeof(tier5Drivers[0]); i++) {
+        CFMutableDictionaryRef match = fnMatching(tier5Drivers[i]);
+        if (!match) continue;
+        io_iterator_t iter = 0;
+        if (fnGetServices(0, match, &iter) == KERN_SUCCESS && iter != 0) {
+            io_object_t service = 0;
+            while ((service = fnNext(iter)) != 0) {
+                fnSetProps(service, (__bridge CFTypeRef)panelBurstDict);
+                if (fnOpen && fnConnSetProps && fnClose) {
+                    io_connect_t conn = 0;
+                    if (fnOpen(service, mach_task_self(), 0, &conn) == KERN_SUCCESS && conn != 0) {
+                        fnConnSetProps(conn, (__bridge CFTypeRef)panelBurstDict);
+                        fnClose(conn);
+                    }
+                }
+                fnRelease(service);
+            }
+            fnRelease(iter);
+        }
+    }
+}
+
 // 1. Đưa luồng vào hàng đợi REALTIME của nhân XNU (THREAD_TIME_CONSTRAINT_POLICY thật của Apple Silicon)
 static void Titanium_Tier5_PromoteThreadToMachRealtime(thread_act_t threadPort, NSInteger targetHz) {
     if (threadPort == MACH_PORT_NULL) return;
@@ -6822,9 +6928,12 @@ static void Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity(void) {
 }
 
 // 4. Trình điều phối tổng hợp 5 Tầng RAM + 5 Tầng CPU/GPU + Panel IC thật
+// [ĐÃ GỘP] Giữ thân hàm bản gốc, BỔ SUNG 2 dòng gọi hàm mới từ bản thừa
 static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
     Titanium_InstallDirectIOMobileFramebufferCHooks();
     Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity();
+    // [BỔ SUNG TỪ BẢN THỪA] Gọi thêm 2 hàm mới
+    Titanium_Tier5_UnlockQuartzCore240HzCeiling();
 
     static os_unfair_lock s_t5Lock = OS_UNFAIR_LOCK_INIT;
     static uint64_t s_lastT5Tick = 0;
@@ -6881,6 +6990,9 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             Titanium_Tier5_PinAllThreadsToPCoreAndRealtime();
 
             // Tầng 5: Đồng bộ tần số 15-240Hz xuống IOMobileFramebuffer, CADisplay & IOHID
+            // [BỔ SUNG TỪ BẢN THỪA] Ép thêm driver Panel & GPU (AppleDCP/CLCD2/IOGPU)
+            NSInteger targetHz = Titanium_GetEffectiveFrameCap();
+            Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(targetHz, targetHz);
             Titanium_Tier4_ExecuteHardwarePanelOverdrive();
         }
     });
