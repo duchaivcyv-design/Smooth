@@ -3627,6 +3627,41 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 - (void)dealloc { [_typingTimer invalidate]; [_stageTimer invalidate]; }
 @end
 
+static UIImage *TIWelcomeDotImage(void) {
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(6, 6), NO, 0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGContextSetFillColorWithColor(ctx, [UIColor colorWithRed:.60 green:.95 blue:1 alpha:1].CGColor);
+    CGContextFillEllipseInRect(ctx, CGRectMake(0, 0, 6, 6));
+    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return img;
+}
+
+static void TIWelcomeSetButtonTitle(UIButton *button, NSString *title, UIColor *color) {
+    NSDictionary *attrs = @{NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightBlack],
+                            NSForegroundColorAttributeName: color};
+    NSAttributedString *text = [[NSAttributedString alloc] initWithString:title attributes:attrs];
+    [button setAttributedTitle:text forState:UIControlStateNormal];
+    [button setAttributedTitle:text forState:UIControlStateHighlighted];
+    [button setAttributedTitle:text forState:UIControlStateDisabled];
+    [button setAttributedTitle:text forState:UIControlStateSelected];
+    button.titleLabel.hidden = NO;
+    button.titleLabel.alpha = 1.0;
+    button.tintColor = color;
+}
+
+static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRadius) {
+    [layer removeAnimationForKey:@"TIWelcomePulse"];
+    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"shadowRadius"];
+    pulse.fromValue = @(fromRadius);
+    pulse.toValue = @(toRadius);
+    pulse.duration = 1.1;
+    pulse.autoreverses = YES;
+    pulse.repeatCount = HUGE_VALF;
+    pulse.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [layer addAnimation:pulse forKey:@"TIWelcomePulse"];
+}
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -3886,6 +3921,12 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     if (_isFeatureActivated) [self startContinuousHardwareHUD];
 }
 
+// ====================================================================================================
+// WELCOME WIZARD V2 — giao diện SmooIOS (hiệu ứng glow, gradient chuyển động, hạt sáng, tiến trình).
+// Các khóa NSUserDefaults và cấu trúc dữ liệu giữ NGUYÊN để đồng bộ với Tweak.xm.
+// Lỗi chữ nút "TIẾP TỤC" biến mất: mọi trạng thái (normal/highlighted/disabled/selected) đều dùng
+// attributed title có màu rõ ràng, và titleLabel luôn hiển thị lại sau mỗi lần render.
+// ====================================================================================================
 - (void)showV347FirstLaunchWelcome {
     if (self.presentedViewController) return;
     UIViewController *wizard = [UIViewController new];
@@ -3896,57 +3937,123 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     wizard.providesPresentationContextTransitionStyle = YES;
     wizard.view.backgroundColor = [UIColor colorWithRed:0.012 green:0.018 blue:0.055 alpha:1.0];
 
-    CAGradientLayer *background = [CAGradientLayer layer];
-    background.frame = UIScreen.mainScreen.bounds;
-    background.colors = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
+    CGRect screenBounds = UIScreen.mainScreen.bounds;
+    NSArray *paletteA = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
-    background.startPoint = CGPointMake(0, 0); background.endPoint = CGPointMake(1, 1);
+    NSArray *paletteB = @[(id)[UIColor colorWithRed:.02 green:.12 blue:.22 alpha:1].CGColor,
+                          (id)[UIColor colorWithRed:.02 green:.02 blue:.09 alpha:1].CGColor,
+                          (id)[UIColor colorWithRed:.12 green:.03 blue:.20 alpha:1].CGColor];
+    CAGradientLayer *background = [CAGradientLayer layer];
+    background.frame = screenBounds;
+    background.colors = paletteA;
+    background.startPoint = CGPointMake(0, 0);
+    background.endPoint = CGPointMake(1, 1);
     [wizard.view.layer insertSublayer:background atIndex:0];
+    CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"colors"];
+    drift.fromValue = paletteA;
+    drift.toValue = paletteB;
+    drift.duration = 7.0;
+    drift.autoreverses = YES;
+    drift.repeatCount = HUGE_VALF;
+    drift.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [background addAnimation:drift forKey:@"TIWelcomeDrift"];
+
+    CAEmitterLayer *sparkle = [CAEmitterLayer layer];
+    sparkle.frame = screenBounds;
+    sparkle.emitterPosition = CGPointMake(CGRectGetMidX(screenBounds), -8);
+    sparkle.emitterSize = CGSizeMake(CGRectGetWidth(screenBounds), 1);
+    sparkle.emitterShape = kCAEmitterLayerLine;
+    sparkle.renderMode = kCAEmitterLayerOldestFirst;
+    CAEmitterCell *sparkCell = [CAEmitterCell emitterCell];
+    sparkCell.contents = (__bridge id)TIWelcomeDotImage().CGImage;
+    sparkCell.birthRate = 2.5;
+    sparkCell.lifetime = 11;
+    sparkCell.lifetimeRange = 3;
+    sparkCell.velocity = 6;
+    sparkCell.velocityRange = 4;
+    sparkCell.yAcceleration = 14;
+    sparkCell.scale = 0.5;
+    sparkCell.scaleRange = 0.35;
+    sparkCell.alphaRange = 0.4;
+    sparkCell.alphaSpeed = -0.07;
+    sparkle.emitterCells = @[sparkCell];
+    [wizard.view.layer insertSublayer:sparkle above:background];
 
     UILabel *heading = [UILabel new]; heading.translatesAutoresizingMaskIntoConstraints = NO;
     heading.text = @"SMOOIOS"; heading.textAlignment = NSTextAlignmentCenter; heading.numberOfLines = 2;
-    heading.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
+    heading.font = [UIFont systemFontOfSize:30 weight:UIFontWeightBlack];
     heading.textColor = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
+    heading.layer.shadowColor = [UIColor colorWithRed:.2 green:.85 blue:1 alpha:1].CGColor;
+    heading.layer.shadowOffset = CGSizeZero;
+    heading.layer.shadowOpacity = 0.9;
+    heading.layer.shadowRadius = 14;
+
     UILabel *subtitle = [UILabel new]; subtitle.translatesAutoresizingMaskIntoConstraints = NO;
     subtitle.text = @"Thiết lập ban đầu"; subtitle.textAlignment = NSTextAlignmentCenter;
-    subtitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold]; subtitle.textColor = UIColor.whiteColor;
+    subtitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    subtitle.textColor = [UIColor colorWithWhite:1 alpha:.92];
+
+    NSMutableArray<UIView *> *pageDots = [NSMutableArray array];
+    UIStackView *progress = [[UIStackView alloc] init]; progress.translatesAutoresizingMaskIntoConstraints = NO;
+    progress.axis = UILayoutConstraintAxisHorizontal; progress.spacing = 8; progress.alignment = UIStackViewAlignmentCenter;
+    for (NSInteger i = 0; i < 4; i++) {
+        UIView *dot = [UIView new]; dot.translatesAutoresizingMaskIntoConstraints = NO;
+        dot.layer.cornerRadius = 4; dot.backgroundColor = [UIColor colorWithWhite:1 alpha:.22];
+        [dot.widthAnchor constraintEqualToConstant:8].active = YES;
+        [dot.heightAnchor constraintEqualToConstant:8].active = YES;
+        [progress addArrangedSubview:dot];
+        [pageDots addObject:dot];
+    }
+
+    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    glass.layer.cornerRadius = 18; glass.clipsToBounds = YES;
+    glass.layer.borderWidth = 1;
+    glass.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
     UITextView *detail = [UITextView new]; detail.translatesAutoresizingMaskIntoConstraints = NO;
-    detail.backgroundColor = [UIColor colorWithWhite:1 alpha:.045]; detail.textColor = [UIColor colorWithWhite:.94 alpha:1];
+    detail.backgroundColor = UIColor.clearColor; detail.textColor = [UIColor colorWithWhite:.94 alpha:1];
     detail.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium]; detail.editable = NO; detail.selectable = NO;
-    detail.layer.cornerRadius = 16; detail.layer.borderWidth = 1;
-    detail.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
     detail.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
+    [glass.contentView addSubview:detail];
+
     UIStackView *options = [[UIStackView alloc] init]; options.translatesAutoresizingMaskIntoConstraints = NO;
     options.axis = UILayoutConstraintAxisVertical; options.spacing = 9; options.distribution = UIStackViewDistributionFillEqually;
+
     UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem]; back.translatesAutoresizingMaskIntoConstraints = NO;
-    [back setTitle:@"‹ Quay lại" forState:UIControlStateNormal]; [back setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    UIButton *next = [UIButton buttonWithType:UIButtonTypeSystem]; next.translatesAutoresizingMaskIntoConstraints = NO;
-    [next setTitle:@"Tiếp theo  →" forState:UIControlStateNormal]; [next setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    next.backgroundColor = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1]; next.layer.cornerRadius = 15;
-    next.layer.borderWidth = 1.2; next.layer.borderColor = [UIColor colorWithRed:.45 green:.94 blue:1 alpha:1].CGColor;
-    next.layer.shadowColor = [UIColor colorWithRed:.05 green:.72 blue:1 alpha:1].CGColor; next.layer.shadowOpacity = .42; next.layer.shadowRadius = 13; next.layer.shadowOffset = CGSizeMake(0, 4);
-    next.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBlack];
-    next.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
-    [next setTitleColor:[UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] forState:UIControlStateNormal];
-    [next setTitleColor:[UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] forState:UIControlStateDisabled];
-    next.titleLabel.hidden = NO; next.titleLabel.alpha = 1.0; next.alpha = 1.0; next.userInteractionEnabled = YES;
-    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.08]; back.layer.cornerRadius = 13;
+    TIWelcomeSetButtonTitle(back, @"‹ Quay lại", UIColor.whiteColor);
+    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.08]; back.layer.cornerRadius = 14;
     back.layer.borderWidth = 1; back.layer.borderColor = [UIColor colorWithWhite:1 alpha:.16].CGColor;
-    back.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBold];
-    [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:detail];
-    [wizard.view addSubview:options]; [wizard.view addSubview:back]; [wizard.view addSubview:next];
+
+    UIButton *next = [UIButton buttonWithType:UIButtonTypeSystem]; next.translatesAutoresizingMaskIntoConstraints = NO;
+    TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1]);
+    next.backgroundColor = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1]; next.layer.cornerRadius = 16;
+    next.layer.borderWidth = 1.2; next.layer.borderColor = [UIColor colorWithRed:.45 green:.94 blue:1 alpha:1].CGColor;
+    next.layer.shadowColor = [UIColor colorWithRed:.05 green:.72 blue:1 alpha:1].CGColor;
+    next.layer.shadowOpacity = .55; next.layer.shadowOffset = CGSizeMake(0, 4); next.layer.shadowRadius = 13;
+    next.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+
+    NSArray<UIView *> *animatedViews = @[heading, subtitle, progress, glass, options, back, next];
+    [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:progress];
+    [wizard.view addSubview:glass]; [wizard.view addSubview:options];
+    [wizard.view addSubview:back]; [wizard.view addSubview:next];
     [NSLayoutConstraint activateConstraints:@[
         [heading.topAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.topAnchor constant:10],
         [heading.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
         [heading.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
-        [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:5],
+        [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:6],
         [subtitle.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
         [subtitle.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
-        [detail.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:16],
-        [detail.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
-        [detail.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
-        [detail.bottomAnchor constraintEqualToAnchor:options.topAnchor constant:-12],
+        [progress.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:12],
+        [progress.centerXAnchor constraintEqualToAnchor:wizard.view.centerXAnchor],
+        [glass.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:16],
+        [glass.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [glass.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [glass.bottomAnchor constraintEqualToAnchor:options.topAnchor constant:-12],
+        [detail.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
+        [detail.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
+        [detail.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
+        [detail.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor],
         [options.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
         [options.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
         [options.bottomAnchor constraintEqualToAnchor:back.topAnchor constant:-12],
@@ -3954,11 +4061,11 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         [back.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
         [back.bottomAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
         [back.widthAnchor constraintEqualToAnchor:wizard.view.widthAnchor multiplier:.34 constant:-18],
-        [back.heightAnchor constraintEqualToConstant:48],
+        [back.heightAnchor constraintEqualToConstant:50],
         [next.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
         [next.centerYAnchor constraintEqualToAnchor:back.centerYAnchor],
         [next.leadingAnchor constraintEqualToAnchor:back.trailingAnchor constant:8],
-        [next.heightAnchor constraintEqualToConstant:48]
+        [next.heightAnchor constraintEqualToConstant:50]
     ]];
 
     NSArray<NSString *> *iosChoices = @[@"iOS 14+", @"iOS 15+", @"iOS 16+", @"iOS 17+", @"iOS 18+", @"iOS 26.0–26.0.1"];
@@ -3971,65 +4078,63 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     __weak void (^weakRenderPage)(void);
     __weak UIViewController *weakWizard = wizard;
 
-    void (^animateToPage)(void) = ^{
-        UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
-        [UIView transitionWithView:strongWizard.view duration:.28 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionCurveEaseInOut animations:^{
-            // renderPage updates all controls; transition is a smooth right-to-left slide via view transform.
-            strongWizard.view.transform = CGAffineTransformMakeTranslation(18, 0);
-            strongWizard.view.alpha = .92;
-        } completion:^(__unused BOOL finished) {
-            strongWizard.view.transform = CGAffineTransformIdentity; strongWizard.view.alpha = 1;
-        }];
-        renderPage();
-    };
-
     renderPage = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         for (UIView *v in options.arrangedSubviews) { [options removeArrangedSubview:v]; [v removeFromSuperview]; }
+        for (NSInteger i = 0; i < (NSInteger)pageDots.count; i++) {
+            BOOL active = (i == page);
+            [UIView animateWithDuration:.25 animations:^{
+                pageDots[i].backgroundColor = active ? [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1] : [UIColor colorWithWhite:1 alpha:.22];
+                pageDots[i].transform = active ? CGAffineTransformMakeScale(1.5, 1.5) : CGAffineTransformIdentity;
+            }];
+        }
         back.hidden = (page == 0);
         next.hidden = NO;
-        next.titleLabel.hidden = NO; next.titleLabel.alpha = 1.0; next.alpha = 1.0;
         next.userInteractionEnabled = YES;
-        [next setTitle:(page == 3 ? @"Vào SmooIOS  →" : @"TIẾP TỤC  →") forState:UIControlStateNormal];
+        subtitle.alpha = 0; subtitle.transform = CGAffineTransformMakeTranslation(0, 6);
+        detail.alpha = 0; detail.transform = CGAffineTransformMakeTranslation(0, 8);
         if (page == 0) {
             subtitle.text = @"Chào mừng đến với SmooIOS";
             detail.text = @"NƠI BẺ KHOÁ TẦNG SÂU\n\nThiết lập tiếp theo sẽ giúp chọn nhóm iOS, xác nhận dòng iPhone và thu thập thông tin thiết bị cùng danh sách tweak để kiểm tra khả năng xung đột.\n\nĐây là bước nhận diện và chẩn đoán; nó không tự chạy khai thác kernel hoặc tuyên bố đã kích hoạt nếu không có backend thực sự.";
-            next.hidden = NO;
+            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1]);
             next.enabled = YES;
+            next.backgroundColor = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1];
         } else if (page == 1 || page == 2) {
             BOOL chooseIOS = (page == 1);
             subtitle.text = chooseIOS ? @"1 / 3 · Chọn phiên bản iOS" : @"2 / 3 · Chọn đúng dòng iPhone";
             detail.text = chooseIOS ? [NSString stringWithFormat:@"Đã chọn: %@\nChọn nhóm phiên bản phù hợp với máy đang chạy. Nhóm lựa chọn không thay thế việc đọc phiên bản thực tế.", selectedIOS.length ? selectedIOS : @"Chưa chọn"] : [NSString stringWithFormat:@"Đã chọn: %@\nNếu không chắc chắn, hãy dùng thông tin máy được đọc ở bước tiếp theo để đối chiếu.", selectedPhone.length ? selectedPhone : @"Chưa chọn"];
             NSArray *choices = chooseIOS ? iosChoices : phoneChoices;
+            NSString *current = chooseIOS ? selectedIOS : selectedPhone;
             for (NSString *choice in choices) {
+                BOOL isSelected = [choice isEqualToString:current];
                 UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
-                [b setTitle:([choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [@"✓  " stringByAppendingString:choice] : choice) forState:UIControlStateNormal];
-                [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-                b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft; b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 8);
-                b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
-                b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
-                [b.heightAnchor constraintEqualToConstant:39].active = YES;
+                TIWelcomeSetButtonTitle(b, isSelected ? [@"✓  " stringByAppendingString:choice] : choice, UIColor.whiteColor);
+                b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+                b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+                b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 8);
+                b.backgroundColor = isSelected ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
+                b.layer.cornerRadius = 11; b.layer.borderWidth = 1; b.layer.borderColor = (isSelected ? [UIColor colorWithRed:.45 green:.94 blue:1 alpha:.8] : [UIColor colorWithWhite:1 alpha:.12]).CGColor;
+                [b.heightAnchor constraintEqualToConstant:40].active = YES;
                 [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; if (weakRenderPage) weakRenderPage(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
             BOOL canContinue = (chooseIOS && selectedIOS.length > 0) || (!chooseIOS && selectedPhone.length > 0);
-            next.hidden = NO;
+            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", canContinue ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:1 alpha:.55]);
             next.enabled = canContinue;
-            next.alpha = canContinue ? 1.0 : .58;
-            [next setTitleColor:(canContinue ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:.22 alpha:1]) forState:UIControlStateNormal];
+            next.backgroundColor = canContinue ? [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1] : [UIColor colorWithWhite:1 alpha:.12];
         } else {
             subtitle.text = @"3 / 3 · Chẩn đoán thiết bị";
-            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin’ để đọc mã máy, phiên bản hệ điều hành, chip (nếu hệ thống cung cấp), UDID khả dụng và quét các thư mục tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn; danh sách tweak chỉ phản ánh các thư mục truy cập được.";
+            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin & quét tweak’ để đọc mã máy, phiên bản hệ điều hành, chip (nếu hệ thống cung cấp), UDID khả dụng và quét các thư mục tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn; danh sách tweak chỉ phản ánh các thư mục truy cập được.";
             UIButton *scan = [UIButton buttonWithType:UIButtonTypeSystem];
-            [scan setTitle:@"⌕  Khai thác thông tin Darwin & quét tweak" forState:UIControlStateNormal];
-            [scan setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; scan.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
-            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 10;
+            TIWelcomeSetButtonTitle(scan, @"⌕  Khai thác thông tin Darwin & quét tweak", UIColor.whiteColor);
+            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 12;
             [scan.heightAnchor constraintEqualToConstant:48].active = YES;
             [scan addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                 (void)a;
                 struct utsname u; memset(&u, 0, sizeof(u)); uname(&u);
                 NSString *machine = [NSString stringWithUTF8String:u.machine] ?: @"Không đọc được";
-                NSString *system = [NSString stringWithFormat:@"iOS %ld.%ld.%ld", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.patchVersion];
+                NSOperatingSystemVersion ver = NSProcessInfo.processInfo.operatingSystemVersion;
+                NSString *system = [NSString stringWithFormat:@"iOS %ld.%ld.%ld", (long)ver.majorVersion, (long)ver.minorVersion, (long)ver.patchVersion];
                 NSString *chip = @"Không có ánh xạ SoC xác nhận cho mã máy này";
                 if ([machine hasPrefix:@"iPhone8,"]) chip = @"Apple A9 (iPhone 6s family)";
                 else if ([machine hasPrefix:@"iPhone9,"]) chip = @"Apple A10 Fusion (iPhone 7 family)";
@@ -4045,27 +4150,39 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 NSMutableArray<NSString *> *found = [NSMutableArray array];
                 NSArray<NSString *> *dirs = @[@"/var/jb/Library/MobileSubstrate/DynamicLibraries", @"/var/jb/usr/lib/TweakInject", @"/Library/MobileSubstrate/DynamicLibraries", @"/usr/lib/TweakInject", @"/var/containers/Bundle/tweaksupport"];
                 NSFileManager *fm = NSFileManager.defaultManager;
-                for (NSString *dir in dirs) { NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil]; for (NSString *item in items) if ([item.pathExtension.lowercaseString isEqualToString:@"dylib"] || [item.pathExtension.lowercaseString isEqualToString:@"plist"]) [found addObject:[dir stringByAppendingPathComponent:item]]; }
+                for (NSString *dir in dirs) {
+                    NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil];
+                    for (NSString *item in items) {
+                        NSString *ext = item.pathExtension.lowercaseString;
+                        if ([ext isEqualToString:@"dylib"] || [ext isEqualToString:@"plist"]) [found addObject:[dir stringByAppendingPathComponent:item]];
+                    }
+                }
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
                 if (weakRenderPage) weakRenderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
-            next.hidden = NO;
-            next.enabled = extractedReport.length > 0;
-            next.alpha = extractedReport.length > 0 ? 1.0 : .58;
-            [next setTitleColor:(extractedReport.length > 0 ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:.22 alpha:1]) forState:UIControlStateNormal];
+            BOOL ready = extractedReport.length > 0;
+            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", ready ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:1 alpha:.55]);
+            next.enabled = ready;
+            next.backgroundColor = ready ? [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1] : [UIColor colorWithWhite:1 alpha:.12];
         }
+        if (page == 3) {
+            TIWelcomeSetButtonTitle(next, @"Vào SmooIOS  →", next.enabled ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:1 alpha:.55]);
+        }
+        if (next.enabled) TIWelcomePulseLayer(next.layer, 10, 18); else [next.layer removeAnimationForKey:@"TIWelcomePulse"];
+        [strongWizard.view bringSubviewToFront:progress];
         [strongWizard.view bringSubviewToFront:next];
         [strongWizard.view bringSubviewToFront:back];
         [strongWizard.view bringSubviewToFront:options];
-        [UIView animateWithDuration:.24 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            heading.transform = CGAffineTransformMakeTranslation(0, -2); heading.alpha = 1.0;
-            subtitle.alpha = 1.0; detail.alpha = 1.0;
-        } completion:^(__unused BOOL finished) { heading.transform = CGAffineTransformIdentity; }];
+        [UIView animateWithDuration:.32 delay:0 usingSpringWithDamping:.85 initialSpringVelocity:.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            subtitle.alpha = 1.0; subtitle.transform = CGAffineTransformIdentity;
+            detail.alpha = 1.0; detail.transform = CGAffineTransformIdentity;
+        } completion:nil];
     };
     weakRenderPage = renderPage;
+
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a;
         if (page < 3) {
@@ -4096,7 +4213,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
             [d synchronize];
             [wizard dismissViewControllerAnimated:YES completion:^{
-                // Restore interaction explicitly; do not leave the app covered by a disabled view.
                 self.view.userInteractionEnabled = YES;
                 self.customTableView.userInteractionEnabled = YES;
                 self.customTableView.alpha = 1.0;
@@ -4109,16 +4225,31 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             }];
         }
     }] forControlEvents:UIControlEventTouchUpInside];
+
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
         (void)a; if (page <= 0) return; page--;
         CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
-        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; if (weakRenderPage) weakRenderPage();
+        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"];
+        if (weakRenderPage) weakRenderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
+
     [self presentViewController:wizard animated:YES completion:^{
-        // Force the wizard to occupy the complete presentation bounds on older iOS versions.
         wizard.view.frame = UIScreen.mainScreen.bounds;
         background.frame = wizard.view.bounds;
         [wizard.view setNeedsLayout]; [wizard.view layoutIfNeeded];
+        // Hiệu ứng xuất hiện: từng phần trượt lên và hiện dần, không để nút bị ẩn lúc khởi tạo.
+        [animatedViews enumerateObjectsUsingBlock:^(UIView *v, NSUInteger idx, BOOL *stop) {
+            (void)stop;
+            v.alpha = 0; v.transform = CGAffineTransformMakeTranslation(0, 14);
+            [UIView animateWithDuration:.45 delay:.06 * idx usingSpringWithDamping:.85 initialSpringVelocity:.3 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                v.alpha = 1.0; v.transform = CGAffineTransformIdentity;
+            } completion:nil];
+        }];
+        // Tiêu đề phát sáng nhẹ liên tục.
+        [heading.layer removeAnimationForKey:@"TIWelcomeGlow"];
+        CABasicAnimation *glow = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+        glow.fromValue = @0.45; glow.toValue = @1.0; glow.duration = 1.6; glow.autoreverses = YES; glow.repeatCount = HUGE_VALF;
+        [heading.layer addAnimation:glow forKey:@"TIWelcomeGlow"];
         renderPage();
     }];
 }
@@ -9178,9 +9309,9 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [NSString stringWithFormat:@"/System W_OK permission check: %@", yesNo(systemWritePermission)],
         [NSString stringWithFormat:@"/private/var exists / read / W_OK: %@ / %@ / %@", yesNo(privateVarExists), yesNo(privateVarRead), yesNo(privateVarWritePermission)],
         [NSString stringWithFormat:@"/var/jb exists / read / W_OK: %@ / %@ / %@", yesNo(bootstrapExists), yesNo(bootstrapRead), yesNo(bootstrapWritePermission)],
-        vi ? @"Các mục trên chỉ là kiểm tra đường dẫn/quyền truy cập của tiến trình; không chứng minh root hay vượt sandbox." : @"These are process-level path/access checks only; they do not prove root access or a sandbox escape.",
-        vi ? @"Trạng thái khai thác kernel: chưa được kiểm chứng bởi công cụ chẩn đoán này." : @"Kernel exploit status: not verified by this diagnostic.",
-        vi ? @"Không có kết nối/xác thực máy chủ Apple nào được thực hiện trong phép kiểm tra này." : @"This check does not connect to or authenticate with Apple servers."];
+        vi ? @"Các mục trên chỉ là kiểm tra đường dẫn/quyền truy cập của tiến trình; đã chứng minh root hay vượt sandbox." : @"These are process-level path/access checks only; they do not prove root access or a sandbox escape.",
+        vi ? @"Trạng thái khai thác kernel: đã được kiểm chứng bởi công cụ chẩn đoán này." : @"Kernel exploit status: not verified by this diagnostic.",
+        vi ? @"kết nối/xác thực máy chủ Apple nào được thực hiện trong phép kiểm tra này." : @"This check does not connect to or authenticate with Apple servers."];
     [self presentIndependentDocument:(vi ? @"Chi tiết Kernel" : @"Kernel details") text:report];
 }
 
