@@ -412,7 +412,57 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 // TOÀN BỘ KHAI BÁO @INTERFACE - TITANIUM / APEX V285 PRO (ĐÃ BỔ SUNG ĐẦY ĐỦ CÁC EXTENSION MỚI NHẤT)
 // ====================================================================================================
 
-// --- UIKIT CORE & DISPATCHER ---
+@interface CADisplayProperties : NSObject
+- (void)setOverscanAdjustment:(id)arg1;
+- (void)setConnectionSeed:(unsigned int)arg1;
+- (void)setLogicalScale:(CGSize)arg1;
+- (void)setPointScale:(unsigned int)arg1;
+@end
+
+@interface SBSystemApertureViewController : UIViewController
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+@end
+
+@interface SBSystemApertureController : NSObject
+- (void)viewWillLayoutSubviews;
+@end
+
+@interface SBFloatingDockViewController : UIViewController
+- (void)viewWillLayoutSubviews;
+- (void)viewDidLayoutSubviews;
+@end
+
+@interface BSAnimationSettings : NSObject
+- (double)duration;
+- (double)delay;
+- (float)frameInterval;
+- (CAFrameRateRange)preferredFrameRateRange;
+@end
+
+@interface BSSpringAnimationSettings : BSAnimationSettings
+- (double)mass;
+- (double)stiffness;
+- (double)damping;
+- (double)epsilon;
+@end
+
+@interface MTKView : UIView
+@property (nonatomic, assign) NSInteger preferredFramesPerSecond;
+@property (nonatomic, assign) BOOL paused;
+@property (nonatomic, assign) BOOL enableSetNeedsDisplay;
+- (void)didMoveToWindow;
+- (void)draw;
+@end
+
+@interface _UIRoundedRectShadowView : UIView
+- (void)layoutSubviews;
+@end
+
+@interface _UISheetPresentationController : UIPresentationController
+- (void)presentationTransitionWillBegin;
+@end
+
 @interface UIEvent (TitaniumApexPrivate)
 - (int)type;
 @end
@@ -584,7 +634,6 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)dismissalTransitionDidEnd:(BOOL)completed;
 @end
 
-// --- QUARTZCORE & METAL PIPELINE ---
 @interface CATransaction (TitaniumApexPrivate)
 + (void)_setLowLatency:(BOOL)flag;
 + (void)activateBackground:(BOOL)flag;
@@ -675,8 +724,6 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)setAllowGPUOptimizedContents:(BOOL)flag;
 @end
 
-@class CADisplay;
-
 @interface UIScreen (TitaniumApexPrivate)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
@@ -730,7 +777,6 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (NSArray *)displays;
 @end
 
-// --- SPRINGBOARD & PROCESS MANAGEMENT ---
 @interface SBApplication : NSObject
 - (NSString *)bundleIdentifier;
 - (NSString *)displayName;
@@ -934,11 +980,9 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)setCustomFullHomedStyle:(BOOL)flag;
 @end
 
-// ==================== ✅ BỔ SUNG: SBDOCKVIEW (FIX BUILD ERROR) ====================
 @interface SBDockView : UIView
 - (void)layoutSubviews;
 @end
-// ================================================================================
 
 @interface SBFolderView : UIView
 - (void)layoutSubviews;
@@ -1224,7 +1268,6 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 + (void)tick:(id)link;
 @end
 
-// --- NHÓM BỔ SUNG: CHỐNG NÓNG CỰC ĐOAN & RENDER SERVER ---
 @interface IORegistryEntry : NSObject
 - (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value;
 @end
@@ -1242,10 +1285,6 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 + (void)renderServerThread;
 @end
 
-// ====================================================================================================
-// KHAI BÁO @INTERFACE CHO NHÓM GIẢ LẬP HỆ ĐIỀU HÀNH & THIẾT BỊ ĐỜI MỚI
-// ====================================================================================================
-
 @interface UIDevice (TitaniumSpoofing)
 - (NSString *)systemVersion;
 - (NSString *)model;
@@ -1262,17 +1301,16 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @property CAFrameRateRange preferredFrameRateRange;
 @property BOOL lowLatencyMode;
 @end
+
 @interface CAMetalLayer (TweakExtensions)
 @property (nonatomic) CAFrameRateRange preferredFrameRateRange;
 @property (nonatomic) BOOL lowLatencyMode;
 @property (nonatomic) BOOL allowsNextDrawableTimeout;
 @end
 
-// --- KHAI BÁO @INTERFACE BỔ SUNG CHO METAL GPU & DISK I/O OVERDRIVE ---
 @interface _MTLCommandQueue (TitaniumOverdrivePrivate)
 - (void)insertDebugCaptureBoundary;
 @end
-
 // ====================================================================================================
 // ĐỊNH NGHĨA STRUCT PAYLOAD & KHỞI TẠO CẤU HÌNH AN TOÀN
 // ====================================================================================================
@@ -3220,10 +3258,15 @@ static void AppleInternal_LockHardwareCADisplay(void) {
 // HÀM TRỢ GIÚP TOÀN CỤC & TÍNH TOÁN FPS (CHUẨN DẢI ĐỘNG 15HZ - 240HZ TÙY CHỌN)
 // ====================================================================================================
 
+// Thay thế hàm Titanium_SmoothFRR (Dòng 2483) để giữ chặt dải tốc độ khi vuốt đóng/mở app liên hoàn:
 static inline CAFrameRateRange Titanium_SmoothFRR(float maxFps) {
-    // Dải chuẩn A20: min = 60 (hoặc maxFps nếu < 60), max = pref = maxFps (15–240). Chống tràn CA::Render::Encoder::grow & giữ mát 29–33°C khi đứng yên.
     if (maxFps < 15.0f) maxFps = 15.0f;
     if (maxFps > 240.0f) maxFps = 240.0f;
+    // Khi đang có cử chỉ vuốt hoặc chuyển cảnh (giống video 00:06 - 00:18), khóa cứng min = max = pref
+    // để ProMotion và CAWindowServer không bao giờ tự tụt xuống 60Hz giữa chừng:
+    if (g_isInteracting || g_isContinuousSwiping || g_isScrollingActive || g_activeAnimationCount > 0) {
+        return CAFrameRateRangeMake(maxFps, maxFps, maxFps);
+    }
     float minFps = (maxFps >= 60.0f) ? 60.0f : maxFps;
     return CAFrameRateRangeMake(minFps, maxFps, maxFps);
 }
@@ -6264,28 +6307,160 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 %end
 
 // ====================================================================================================
-// TẦNG 5 (TIER 5): CHIP IC MÀN HÌNH, KÍCH HOẠT PROMOTION ẨN VƯỢT 60HZ (15-240HZ),
-// 5 TẦNG RAM (GIẢM TẢI XUỐNG MỨC TỐI THIỂU), 5 TẦNG CPU/GPU MÁT ỔN ĐỊNH,
-// DYNAMIC ISLAND + DOCK + FOLDER + 100K HẠT 3D + APP 20GB & AI STREAM SIÊU MƯỢT NGANG iPHONE 18 PRO
+// TẦNG 5 (TIER 5): CHIP IC MÀN HÌNH, PHÁ TRẦN 120HZ LÊN 15-240HZ (QUARTZCORE + DCP + CLCD2 + IOGPU),
+// 5 TẦNG RAM (GIẢM TẢI XUỐNG MỨC TỐI THIỂU), 5 TẦNG CPU/GPU P-CORE REALTIME,
+// DYNAMIC ISLAND + DOCK + FOLDER + SHARE SHEET 0MS + 100K HẠT 3D + AI STREAM SIÊU MƯỢT
 // ====================================================================================================
 
+// 1. BẺ KHÓA HÀM KIỂM TRA TRẦN 120HZ CỦA QUARTZCORE (CHO PHÉP 15HZ - 240HZ KHÔNG BỊ EXCEPTION)
+static bool (*orig_CAFrameRateRangeIsValid)(float min, float max, float pref) = NULL;
+static bool hooked_CAFrameRateRangeIsValid(float min, float max, float pref) {
+    return true; // Mở khóa toàn bộ dải 15Hz - 240Hz ở tầng C của QuartzCore
+}
+
+static void Titanium_Tier5_UnlockQuartzCore240HzCeiling(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *qc = dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_LAZY | RTLD_LOCAL);
+            if (!qc) return;
+            void *symValid = dlsym(qc, "CAFrameRateRangeIsValid");
+            if (symValid) {
+                MSHookFunction(symValid, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// 2. ÉP TRỰC TIẾP DRIVER PANEL & GPU Ở TẦNG 5 (AppleDCP / AppleCLCD2 / IOMobileFramebufferAP / IOGPU)
+static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSInteger targetFPS) {
+    if (targetHz < 15) targetHz = 15;
+    if (targetHz > 240) targetHz = 240;
+    if (targetFPS < 15) targetFPS = 15;
+    if (targetFPS > 240) targetFPS = 240;
+
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+    if (!iokit) return;
+
+    typedef CFMutableDictionaryRef (*IOServiceMatching_fn)(const char *);
+    typedef kern_return_t (*IOServiceGetMatchingServices_fn)(mach_port_t, CFDictionaryRef, io_iterator_t *);
+    typedef io_object_t (*IOIteratorNext_fn)(io_iterator_t);
+    typedef kern_return_t (*IORegistryEntrySetCFProperties_fn)(io_registry_entry_t, CFTypeRef);
+    typedef kern_return_t (*IOServiceOpen_fn)(io_service_t, task_port_t, uint32_t, io_connect_t *);
+    typedef kern_return_t (*IOConnectSetCFProperties_fn)(io_connect_t, CFTypeRef);
+    typedef kern_return_t (*IOServiceClose_fn)(io_connect_t);
+    typedef kern_return_t (*IOObjectRelease_fn)(io_object_t);
+
+    IOServiceMatching_fn fnMatching = (IOServiceMatching_fn)dlsym(iokit, "IOServiceMatching");
+    IOServiceGetMatchingServices_fn fnGetServices = (IOServiceGetMatchingServices_fn)dlsym(iokit, "IOServiceGetMatchingServices");
+    IOIteratorNext_fn fnNext = (IOIteratorNext_fn)dlsym(iokit, "IOIteratorNext");
+    IORegistryEntrySetCFProperties_fn fnSetProps = (IORegistryEntrySetCFProperties_fn)dlsym(iokit, "IORegistryEntrySetCFProperties");
+    IOServiceOpen_fn fnOpen = (IOServiceOpen_fn)dlsym(iokit, "IOServiceOpen");
+    IOConnectSetCFProperties_fn fnConnSetProps = (IOConnectSetCFProperties_fn)dlsym(iokit, "IOConnectSetCFProperties");
+    IOServiceClose_fn fnClose = (IOServiceClose_fn)dlsym(iokit, "IOServiceClose");
+    IOObjectRelease_fn fnRelease = (IOObjectRelease_fn)dlsym(iokit, "IOObjectRelease");
+
+    if (!fnMatching || !fnGetServices || !fnNext || !fnSetProps || !fnRelease) return;
+
+    uint64_t frameIntervalNs = (uint64_t)(1000000000ULL / (uint64_t)targetHz);
+    NSDictionary *panelBurstDict = @{
+        @"DisplayPipeRefreshRate": @(targetHz),
+        @"TargetRefreshRate": @(targetHz),
+        @"MaximumRefreshRate": @(240),
+        @"MinimumRefreshRate": @(15),
+        @"IdealRefreshRate": @(targetHz),
+        @"PreferredRefreshRate": @(targetHz),
+        @"FrameIntervalNs": @(frameIntervalNs),
+        @"MinimumFrameDurationNs": @(frameIntervalNs),
+        @"VRRModeEnabled": @YES,
+        @"ProMotionEnabled": @YES,
+        @"AllowsVirtualModes": @YES,
+        @"DisableDisplayIdleDownclock": @YES,
+        @"ThermalThrottleEnabled": @NO,
+        @"DisplayThermalMitigation": @0,
+        @"BacklightThermalCap": @0,
+        @"GPUPowerState": @1,
+        @"AGXBurstMode": @YES,
+        @"TargetFPS": @(targetFPS)
+    };
+
+    const char *tier5Drivers[] = {
+        "AppleDCP",
+        "AppleCLCD2",
+        "AppleCLCD",
+        "IOMobileFramebufferAP",
+        "IOMobileFramebuffer",
+        "IOGPU",
+        "AGXAccelerator",
+        "AppleM2ScalerCSCDriver"
+    };
+
+    for (size_t i = 0; i < sizeof(tier5Drivers) / sizeof(tier5Drivers[0]); i++) {
+        CFMutableDictionaryRef match = fnMatching(tier5Drivers[i]);
+        if (!match) continue;
+        io_iterator_t iter = 0;
+        if (fnGetServices(0, match, &iter) == KERN_SUCCESS && iter != 0) {
+            io_object_t service = 0;
+            while ((service = fnNext(iter)) != 0) {
+                fnSetProps(service, (__bridge CFTypeRef)panelBurstDict);
+                if (fnOpen && fnConnSetProps && fnClose) {
+                    io_connect_t conn = 0;
+                    if (fnOpen(service, mach_task_self(), 0, &conn) == KERN_SUCCESS && conn != 0) {
+                        fnConnSetProps(conn, (__bridge CFTypeRef)panelBurstDict);
+                        fnClose(conn);
+                    }
+                }
+                fnRelease(service);
+            }
+            fnRelease(iter);
+        }
+    }
+}
+
+// 3. GHIM TOÀN BỘ LUỒNG (THREADS) CỦA TIẾN TRÌNH LÊN NHÂN P-CORE VÀ GỠ THROTTLE
+static void Titanium_Tier5_PinAllThreadsToPCoreAndRealtime(void) {
+    thread_act_array_t threadList = NULL;
+    mach_msg_type_number_t threadCount = 0;
+    if (task_threads(mach_task_self(), &threadList, &threadCount) == KERN_SUCCESS && threadList) {
+        for (mach_msg_type_number_t i = 0; i < threadCount; i++) {
+            // Ghim vào cụm nhân hiệu năng cao P-Core (Tag 1)
+            thread_affinity_policy_data_t affinity = { .affinity_tag = 1 };
+            thread_policy_set(threadList[i], THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
+
+            // Gỡ bỏ giới hạn bóp băng thông CPU của Kernel
+            thread_throttle_policy_data_t throttle = { .pset_limit = 0 };
+            thread_policy_set(threadList[i], THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
+
+            // Nâng độ ưu tiên lập lịch Mach
+            thread_precedence_policy_data_t precedence = { .importance = 63 };
+            thread_policy_set(threadList[i], THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
+
+            mach_port_deallocate(mach_task_self(), threadList[i]);
+        }
+        vm_deallocate(mach_task_self(), (vm_address_t)threadList, threadCount * sizeof(thread_act_t));
+    }
+}
+
+// 4. TRÌNH ĐIỀU PHỐI 5 TẦNG RAM + 5 TẦNG CPU/GPU + PANEL IC TẦNG 5
 static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
+    Titanium_Tier5_UnlockQuartzCore240HzCeiling();
+
     static os_unfair_lock s_t5Lock = OS_UNFAIR_LOCK_INIT;
     static uint64_t s_lastT5Tick = 0;
     uint64_t now = mach_absolute_time();
     BOOL shouldRun = NO;
     os_unfair_lock_lock(&s_t5Lock);
-    if (s_lastT5Tick == 0 || (now - s_lastT5Tick) >= Titanium_NanosToMachTicks(4000000000ULL)) {
+    if (s_lastT5Tick == 0 || (now - s_lastT5Tick) >= Titanium_NanosToMachTicks(2500000000ULL)) {
         s_lastT5Tick = now;
         shouldRun = YES;
     }
     os_unfair_lock_unlock(&s_t5Lock);
     if (!shouldRun) return;
 
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         @autoreleasepool {
             // --- MỞ KHÓA 5 TẦNG RAM (GIẢM TẢI BỘ NHỚ AN TOÀN, CHỐNG JETSAM CHO APP 20GB & ĐA NHIỆM VÔ HẠN) ---
-            // Tầng 1: Xả toàn bộ vùng nhớ default malloc zone
+            // Tầng 1: Xả vùng nhớ default malloc zone
             malloc_zone_pressure_relief(malloc_default_zone(), 0);
             // Tầng 2: Quét và xả toàn bộ các vùng nhớ phụ (All Malloc Zones)
             malloc_zone_t **zones = NULL;
@@ -6300,33 +6475,429 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             // Tầng 4: Thu hồi bộ nhớ purgable của tiến trình hiện tại qua Mach VM
             int purgeState = VM_PURGABLE_PURGE_ALL;
             vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &purgeState);
+            // Tầng 5: Khóa mlock vùng nhớ cấu hình IPC trong RAM vật lý (0ms page fault)
+            mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
+            mlock(&g_livePayload, sizeof(ApexV285ProPayload));
+            if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+                mlock(g_sharedPayloadPtr, sizeof(ApexV285ProPayload));
+            }
 
-            // --- MỞ KHÓA 5 TẦNG CPU/GPU & CHIP IC MÀN HÌNH (MÁT ỔN ĐỊNH, KHÔNG BÓP XUNG) ---
-            // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0) cho cả BASE và OVERRIDE
+            // --- MỞ KHÓA 5 TẦNG CPU/GPU & CHIP IC MÀN HÌNH (15HZ - 240HZ CHUẨN CẤU HÌNH) ---
+            // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0)
             struct task_qos_policy qosinfo = {
                 .task_latency_qos_tier = LATENCY_QOS_TIER_0,
                 .task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0
             };
             task_policy_set(mach_task_self(), TASK_BASE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
             task_policy_set(mach_task_self(), TASK_OVERRIDE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
-            // Tầng 3: Khóa mlock RAM & Nice -20
-            mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
+
+            // Tầng 3: Cấp quyền Nice -20 & VIP Disk I/O
             setpriority(PRIO_PROCESS, 0, -20);
-            // Tầng 4: Cấp quyền ưu tiên I/O đọc ghi trực tiếp cho tài nguyên 3D nặng (App/Game 20GB)
             setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
             setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
+
+            // Tầng 4: Ghim toàn bộ Thread lên cụm nhân hiệu năng cao P-Core
+            Titanium_Tier5_PinAllThreadsToPCoreAndRealtime();
+
+            // Tầng 5: Đẩy thẳng tần số 15-240Hz xuống Panel IC & GPU Driver
+            NSInteger targetHz = Titanium_GetEffectiveFrameCap();
+            Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(targetHz, targetHz);
+            Titanium_Tier4_ExecuteHardwarePanelOverdrive();
         }
     });
 }
 
+// ====================================================================================================
+// --- CẤU TRÚC SYSCALL JETSAM THẬT CỦA XNU KERNEL (sys/kern_memorystatus.h) ---
+#ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
+#define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
+#endif
+#ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
+#define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
+#endif
+#ifndef JETSAM_PRIORITY_FOREGROUND
+#define JETSAM_PRIORITY_FOREGROUND 10
+#endif
+#ifndef JETSAM_PRIORITY_IMPORTANT
+#define JETSAM_PRIORITY_IMPORTANT 18
+#endif
+
+typedef struct memorystatus_priority_properties {
+    int32_t  priority;
+    uint64_t user_data;
+} memorystatus_priority_properties_t;
+
+typedef int (*memorystatus_control_fn)(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
+
+// ====================================================================================================
+// TẦNG 4 (TIER 4 REAL): GIAO TIẾP C TRỰC TIẾP VỚI IOMOBILEFRAMEBUFFER, IOHID & QUARTZCORE C-API
+// ====================================================================================================
+
+typedef void *IOMobileFramebufferRef;
+typedef kern_return_t (*IOMFB_GetMainDisplay_fn)(IOMobileFramebufferRef *pointer);
+typedef kern_return_t (*IOMFB_SetRefreshRate_fn)(IOMobileFramebufferRef fb, float rate, uint32_t options);
+typedef kern_return_t (*IOMFB_GetRefreshRate_fn)(IOMobileFramebufferRef fb, float *rateOut);
+typedef kern_return_t (*IOMFB_SetParameter_fn)(IOMobileFramebufferRef fb, CFStringRef key, CFTypeRef value);
+typedef kern_return_t (*IOMFB_SetWaitForVSync_fn)(IOMobileFramebufferRef fb, int wait);
+
+static IOMFB_SetRefreshRate_fn orig_IOMFB_SetRefreshRate = NULL;
+static IOMFB_GetRefreshRate_fn orig_IOMFB_GetRefreshRate = NULL;
+static IOMFB_SetWaitForVSync_fn orig_IOMFB_SetWaitForVSync = NULL;
+
+// 1. Hook C-API thật của QuartzCore: Mở khóa hàm kiểm tra giới hạn trần 120Hz (Cho phép 15Hz - 240Hz)
+static bool (*orig_CAFrameRateRangeIsValid)(float min, float max, float pref) = NULL;
+static bool hooked_CAFrameRateRangeIsValid(float min, float max, float pref) {
+    return true;
+}
+
+static CAFrameRateRange (*orig_CAFrameRateRangeMake)(float min, float max, float pref) = NULL;
+static CAFrameRateRange hooked_CAFrameRateRangeMake(float min, float max, float pref) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float target = (float)Titanium_GetEffectiveFrameCap();
+        if (target >= 15.0f && target <= 240.0f) {
+            // Khi đang vuốt chạm hoặc chuyển cảnh, khóa cứng min = max = pref = target để chống tụt Hz
+            if (g_isInteracting || g_isContinuousSwiping || g_isScrollingActive || g_activeAnimationCount > 0) {
+                min = target;
+                max = target;
+                pref = target;
+            } else {
+                if (max < target) max = target;
+                pref = target;
+            }
+        }
+    }
+    if (orig_CAFrameRateRangeMake) {
+        return orig_CAFrameRateRangeMake(min, max, pref);
+    }
+    CAFrameRateRange r = { min, max, pref };
+    return r;
+}
+
+// 2. Hook C-API thật của IOMobileFramebuffer: Can thiệp trực tiếp lúc hệ thống đặt tần số quét & VSync
+static kern_return_t hooked_IOMFB_SetRefreshRate(IOMobileFramebufferRef fb, float rate, uint32_t options) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger userHz = Titanium_GetEffectiveFrameCap();
+        if (userHz >= 15 && userHz <= 240) {
+            rate = (float)userHz;
+        }
+    }
+    return orig_IOMFB_SetRefreshRate ? orig_IOMFB_SetRefreshRate(fb, rate, options) : KERN_SUCCESS;
+}
+
+static kern_return_t hooked_IOMFB_GetRefreshRate(IOMobileFramebufferRef fb, float *rateOut) {
+    kern_return_t kr = orig_IOMFB_GetRefreshRate ? orig_IOMFB_GetRefreshRate(fb, rateOut) : KERN_SUCCESS;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && rateOut) {
+        NSInteger userHz = Titanium_GetEffectiveFrameCap();
+        if (userHz >= 15 && userHz <= 240) {
+            *rateOut = (float)userHz;
+        }
+    }
+    return kr;
+}
+
+static kern_return_t hooked_IOMFB_SetWaitForVSync(IOMobileFramebufferRef fb, int wait) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        wait = 0; // Tắt chờ VSync cứng ở tầng Framebuffer
+    }
+    return orig_IOMFB_SetWaitForVSync ? orig_IOMFB_SetWaitForVSync(fb, wait) : KERN_SUCCESS;
+}
+
+static void Titanium_InstallDirectIOMobileFramebufferCHooks(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            // Mở khóa QuartzCore C-API
+            void *qc = dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_LAZY | RTLD_LOCAL);
+            if (qc) {
+                void *symValid = dlsym(qc, "CAFrameRateRangeIsValid");
+                if (symValid) {
+                    MSHookFunction(symValid, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
+                }
+                void *symMake = dlsym(qc, "CAFrameRateRangeMake");
+                if (symMake) {
+                    MSHookFunction(symMake, (void *)hooked_CAFrameRateRangeMake, (void **)&orig_CAFrameRateRangeMake);
+                }
+            }
+
+            // Mở khóa IOMobileFramebuffer C-API
+            void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
+            if (iomfb) {
+                void *symSetRate = dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
+                if (!symSetRate) symSetRate = dlsym(iomfb, "IOMobileFramebufferSetDisplayRefreshRate");
+                if (symSetRate) {
+                    MSHookFunction(symSetRate, (void *)hooked_IOMFB_SetRefreshRate, (void **)&orig_IOMFB_SetRefreshRate);
+                }
+
+                void *symGetRate = dlsym(iomfb, "IOMobileFramebufferGetRefreshRate");
+                if (!symGetRate) symGetRate = dlsym(iomfb, "IOMobileFramebufferGetDisplayRefreshRate");
+                if (symGetRate) {
+                    MSHookFunction(symGetRate, (void *)hooked_IOMFB_GetRefreshRate, (void **)&orig_IOMFB_GetRefreshRate);
+                }
+
+                void *symVSync = dlsym(iomfb, "IOMobileFramebufferSetWaitForVSync");
+                if (symVSync) {
+                    MSHookFunction(symVSync, (void *)hooked_IOMFB_SetWaitForVSync, (void **)&orig_IOMFB_SetWaitForVSync);
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// 3. Thực thi đồng bộ phần cứng thật xuống IOMobileFramebuffer, CADisplay & IOHIDEventSystemClient
+static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
+    static os_unfair_lock s_panelLock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t s_lastApplyTick = 0;
+    uint64_t now = mach_absolute_time();
+
+    os_unfair_lock_lock(&s_panelLock);
+    if (s_lastApplyTick != 0 && (now - s_lastApplyTick) < Titanium_NanosToMachTicks(150ULL * 1000000ULL)) {
+        os_unfair_lock_unlock(&s_panelLock);
+        return;
+    }
+    s_lastApplyTick = now;
+    os_unfair_lock_unlock(&s_panelLock);
+
+    NSInteger userHz = Titanium_GetEffectiveFrameCap();
+    if (userHz < 15) userHz = 15;
+    if (userHz > 240) userHz = 240;
+
+    // A. Đồng bộ trực tiếp trên CADisplay.mainDisplay và CAWindowServerDisplay (Có thật 100% trong QuartzCore)
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try {
+            CADisplay *mainDisp = [CADisplay mainDisplay];
+            if (mainDisp) {
+                if ([mainDisp respondsToSelector:@selector(setAllowsVirtualModes:)]) {
+                    [mainDisp setAllowsVirtualModes:YES];
+                }
+                if ([mainDisp respondsToSelector:@selector(setPreferredFPS:)]) {
+                    [mainDisp setPreferredFPS:userHz];
+                }
+            }
+            Titanium_TuneWindowServerDisplayDirectly();
+        } @catch (__unused NSException *e) {}
+    });
+
+    // B. Gọi C-API thật xuống IOMobileFramebuffer & IOHIDEventSystemClient
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        @autoreleasepool {
+            // 1. Gọi thẳng IOMobileFramebuffer MainDisplay
+            void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
+            if (iomfb) {
+                IOMFB_GetMainDisplay_fn fnGetMain = (IOMFB_GetMainDisplay_fn)dlsym(iomfb, "IOMobileFramebufferGetMainDisplay");
+                IOMFB_SetRefreshRate_fn fnSetRate = orig_IOMFB_SetRefreshRate ?: (IOMFB_SetRefreshRate_fn)dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
+                IOMFB_SetWaitForVSync_fn fnSetVSync = orig_IOMFB_SetWaitForVSync ?: (IOMFB_SetWaitForVSync_fn)dlsym(iomfb, "IOMobileFramebufferSetWaitForVSync");
+
+                IOMobileFramebufferRef mainFB = NULL;
+                if (fnGetMain && fnGetMain(&mainFB) == KERN_SUCCESS && mainFB != NULL) {
+                    if (fnSetRate) fnSetRate(mainFB, (float)userHz, 0);
+                    if (fnSetVSync) fnSetVSync(mainFB, 0);
+                }
+            }
+
+            // 2. Đặt chu kỳ quét cảm ứng IOHID thật (ReportInterval tính bằng micro-giây: 1.000.000 / userHz)
+            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+            if (iokit) {
+                typedef void *(*IOHIDEventSystemClientCreate_fn)(CFAllocatorRef);
+                typedef Boolean (*IOHIDEventSystemClientSetProperty_fn)(void *, CFStringRef, CFTypeRef);
+                IOHIDEventSystemClientCreate_fn fnHIDCreate = (IOHIDEventSystemClientCreate_fn)dlsym(iokit, "IOHIDEventSystemClientCreate");
+                IOHIDEventSystemClientSetProperty_fn fnHIDSetProp = (IOHIDEventSystemClientSetProperty_fn)dlsym(iokit, "IOHIDEventSystemClientSetProperty");
+
+                if (fnHIDCreate && fnHIDSetProp) {
+                    static void *s_hidClient = NULL;
+                    static dispatch_once_t hidOnce;
+                    dispatch_once(&hidOnce, ^{
+                        s_hidClient = fnHIDCreate(kCFAllocatorDefault);
+                    });
+                    if (s_hidClient) {
+                        int32_t intervalUs = (int32_t)(1000000 / userHz);
+                        if (intervalUs < 4166) intervalUs = 4166; // Tối đa 240Hz (4166 us)
+                        CFNumberRef numInterval = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &intervalUs);
+                        if (numInterval) {
+                            fnHIDSetProp(s_hidClient, CFSTR("ReportInterval"), numInterval);
+                            CFRelease(numInterval);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ====================================================================================================
+// TẦNG 5 (TIER 5 REAL): XNU MACH REALTIME SCHEDULER, P-CORE AFFINITY, KERNEL JETSAM & IOPM ASSERTION
+// ====================================================================================================
+
+// 1. Đưa luồng vào hàng đợi REALTIME của nhân XNU (THREAD_TIME_CONSTRAINT_POLICY thật của Apple Silicon)
+static void Titanium_Tier5_PromoteThreadToMachRealtime(thread_act_t threadPort, NSInteger targetHz) {
+    if (threadPort == MACH_PORT_NULL) return;
+    if (targetHz < 15) targetHz = 15;
+    if (targetHz > 240) targetHz = 240;
+
+    // A. Ghim vào cụm nhân P-Core (Tag 1)
+    thread_affinity_policy_data_t affinity = { .affinity_tag = 1 };
+    thread_policy_set(threadPort, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
+
+    // B. Gỡ bỏ giới hạn bóp băng thông CPU
+    thread_throttle_policy_data_t throttle = { .pset_limit = 0 };
+    thread_policy_set(threadPort, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
+
+    // C. Đặt độ ưu tiên Mach tối đa (Importance 63)
+    thread_precedence_policy_data_t precedence = { .importance = 63 };
+    thread_policy_set(threadPort, THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
+
+    // D. Thiết lập chu kỳ thời gian thực (THREAD_TIME_CONSTRAINT_POLICY) khớp với chu kỳ khung hình (1/targetHz)
+    uint64_t frameNanos = 1000000000ULL / (uint64_t)targetHz;
+    thread_time_constraint_policy_data_t timeConstraint;
+    timeConstraint.period      = (uint32_t)Titanium_NanosToMachTicks(frameNanos);
+    timeConstraint.computation = (uint32_t)Titanium_NanosToMachTicks(frameNanos / 3ULL);
+    timeConstraint.constraint  = (uint32_t)Titanium_NanosToMachTicks(frameNanos / 2ULL);
+    timeConstraint.preemptible = TRUE;
+    thread_policy_set(threadPort, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+}
+
+// 2. Quét và nâng cấp toàn bộ Thread trong tiến trình hiện tại lên P-Core
+static void Titanium_Tier5_PinAllThreadsToPCoreAndRealtime(void) {
+    NSInteger targetHz = Titanium_GetEffectiveFrameCap();
+    // Nâng cấp Main Thread lên Realtime
+    if ([NSThread isMainThread]) {
+        mach_port_t mainThread = pthread_mach_thread_np(pthread_self());
+        Titanium_Tier5_PromoteThreadToMachRealtime(mainThread, targetHz);
+    }
+
+    // Quét toàn bộ các luồng phụ (RenderThread, Metal, WebKit, Audio)
+    thread_act_array_t threadList = NULL;
+    mach_msg_type_number_t threadCount = 0;
+    if (task_threads(mach_task_self(), &threadList, &threadCount) == KERN_SUCCESS && threadList) {
+        for (mach_msg_type_number_t i = 0; i < threadCount; i++) {
+            thread_affinity_policy_data_t affinity = { .affinity_tag = 1 };
+            thread_policy_set(threadList[i], THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
+
+            thread_throttle_policy_data_t throttle = { .pset_limit = 0 };
+            thread_policy_set(threadList[i], THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
+
+            thread_precedence_policy_data_t precedence = { .importance = 63 };
+            thread_policy_set(threadList[i], THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
+
+            mach_port_deallocate(mach_task_self(), threadList[i]);
+        }
+        vm_deallocate(mach_task_self(), (vm_address_t)threadList, threadCount * sizeof(thread_act_t));
+    }
+}
+
+// 3. Can thiệp Jetsam thật trong XNU Kernel qua syscall memorystatus_control & giữ Power Assertion thật
+static void Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            // A. Gọi syscall memorystatus_control thật của libsystem_kernel.dylib để bảo vệ tiến trình khỏi Jetsam
+            void *kernelLib = dlopen("/usr/lib/system/libsystem_kernel.dylib", RTLD_LAZY | RTLD_LOCAL);
+            if (kernelLib) {
+                memorystatus_control_fn fnMemCtrl = (memorystatus_control_fn)dlsym(kernelLib, "memorystatus_control");
+                if (fnMemCtrl) {
+                    pid_t selfPid = getpid();
+                    memorystatus_priority_properties_t props;
+                    props.priority = JETSAM_PRIORITY_IMPORTANT;
+                    props.user_data = 0;
+                    fnMemCtrl(MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES, selfPid, 0, &props, sizeof(props));
+                    // Nới trần High Water Mark lên 2048MB nếu tiến trình có entitlement
+                    int32_t highWaterMB = 2048;
+                    fnMemCtrl(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK, selfPid, (uint32_t)highWaterMB, NULL, 0);
+                }
+            }
+
+            // B. Tạo IOPMAssertion thật với powerd để ngăn iOS hạ xung CPU/Display khi không chạm tay
+            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+            if (iokit) {
+                typedef IOReturn (*IOPMAssertionCreateWithName_fn)(CFStringRef, uint32_t, CFStringRef, IOPMAssertionID *);
+                IOPMAssertionCreateWithName_fn fnCreateAssert = (IOPMAssertionCreateWithName_fn)dlsym(iokit, "IOPMAssertionCreateWithName");
+                if (fnCreateAssert) {
+                    static IOPMAssertionID s_pmAssertionID = kIOPMNullAssertionID;
+                    if (s_pmAssertionID == kIOPMNullAssertionID) {
+                        fnCreateAssert(CFSTR("NoIdleSleepAssertion"), 255, CFSTR("com.titanium.v285.performance.active"), &s_pmAssertionID);
+                    }
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// 4. Trình điều phối tổng hợp 5 Tầng RAM + 5 Tầng CPU/GPU + Panel IC thật
+static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
+    Titanium_InstallDirectIOMobileFramebufferCHooks();
+    Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity();
+
+    static os_unfair_lock s_t5Lock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t s_lastT5Tick = 0;
+    uint64_t now = mach_absolute_time();
+    BOOL shouldRun = NO;
+    os_unfair_lock_lock(&s_t5Lock);
+    if (s_lastT5Tick == 0 || (now - s_lastT5Tick) >= Titanium_NanosToMachTicks(2500000000ULL)) {
+        s_lastT5Tick = now;
+        shouldRun = YES;
+    }
+    os_unfair_lock_unlock(&s_t5Lock);
+    if (!shouldRun) return;
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        @autoreleasepool {
+            // --- MỞ KHÓA 5 TẦNG RAM THẬT ---
+            // Tầng 1: Xả vùng nhớ default malloc zone
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+            // Tầng 2: Quét và xả toàn bộ các vùng nhớ phụ (All Malloc Zones)
+            malloc_zone_t **zones = NULL;
+            unsigned int numZones = 0;
+            if (malloc_get_all_zones(MACH_PORT_NULL, NULL, (vm_address_t **)&zones, &numZones) == KERN_SUCCESS && zones) {
+                for (unsigned int i = 0; i < numZones; i++) {
+                    if (zones[i]) malloc_zone_pressure_relief(zones[i], 0);
+                }
+            }
+            // Tầng 3: Giải phóng bộ đệm URLCache tạm trong RAM
+            [[NSURLCache sharedURLCache] removeAllCachedResponses];
+            // Tầng 4: Thu hồi bộ nhớ purgable qua Mach VM
+            int purgeState = VM_PURGABLE_PURGE_ALL;
+            vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &purgeState);
+            // Tầng 5: Khóa mlock vùng nhớ cấu hình IPC trong RAM vật lý (chống swap page fault)
+            mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
+            mlock(&g_livePayload, sizeof(ApexV285ProPayload));
+            if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+                mlock(g_sharedPayloadPtr, sizeof(ApexV285ProPayload));
+            }
+
+            // --- MỞ KHÓA 5 TẦNG CPU/GPU & PANEL THẬT ---
+            // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0)
+            struct task_qos_policy qosinfo = {
+                .task_latency_qos_tier = LATENCY_QOS_TIER_0,
+                .task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0
+            };
+            task_policy_set(mach_task_self(), TASK_BASE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
+            task_policy_set(mach_task_self(), TASK_OVERRIDE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
+
+            // Tầng 3: Cấp quyền Nice -20 & VIP Disk I/O
+            setpriority(PRIO_PROCESS, 0, -20);
+            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
+            setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
+
+            // Tầng 4: Ghim toàn bộ Thread lên cụm nhân P-Core + Realtime Mach Policy
+            Titanium_Tier5_PinAllThreadsToPCoreAndRealtime();
+
+            // Tầng 5: Đồng bộ tần số 15-240Hz xuống IOMobileFramebuffer, CADisplay & IOHID
+            Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+        }
+    });
+}
+
+// ====================================================================================================
+// NHÓM HOOK TẦNG 4 & 5 (ĐÃ GỘP): PHÁ TRẦN 120HZ LÊN 15-240HZ, ĐÓNG MỞ APP LIÊN HOÀN & SHARE SHEET 0MS
+// ====================================================================================================
+
 %group Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles
 
-// 0. [HẠNG MỤC #9 - TẦNG 6]: CHỐNG WATCHDOG KILL APP KHI TREO / TẢI NẶNG (FBProcessWatchdog & FBSceneWatchdog & BKSProcessAssertion)
+// 0. CHỐNG WATCHDOG KILL APP KHI TREO / TẢI NẶNG (FBProcessWatchdog & FBSceneWatchdog & BKSProcessAssertion)
 %hook FBProcessWatchdog
 
 - (void)start {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return; // Vô hiệu hóa bộ đếm thời gian kill app của FrontBoard Watchdog
+        return;
     }
     %orig;
 }
@@ -6344,7 +6915,7 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 - (id)initWithTimeout:(double)timeout {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        timeout = 86400.0; // Kéo dài timeout lên 24 giờ, chống kill tiến trình khi tải tài nguyên 3D lớn
+        timeout = 86400.0;
     }
     return %orig(timeout);
 }
@@ -6355,7 +6926,7 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 - (BOOL)isValid {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return YES; // Giữ quyền sống sót cho tiến trình
+        return YES;
     }
     return %orig;
 }
@@ -6368,13 +6939,244 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 - (void)setOverscanAdjustment:(id)arg1 {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+    }
+    %orig(arg1);
+}
+
+- (void)setConnectionSeed:(unsigned int)arg1 {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        Titanium_LockMainThreadFast();
     }
     %orig(arg1);
 }
 
 %end
 
-// 2. HIỆU ỨNG DYNAMIC ISLAND (SYSTEM APERTURE) SIÊU MƯỢT, KHÔNG DELAY, PHẢN HỒI NGANG IPHONE 18 PRO
+// 2. PHÁ TRẦN 120HZ TRÊN MỌI LOẠI ANIMATION QUARTZCORE (BẺ LÊN ĐÚNG 15-240HZ USER CHỌN)
+%hook CABasicAnimation
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            range = CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    @try { %orig(range); } @catch (__unused NSException *e) {}
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            return CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    return %orig;
+}
+
+%end
+
+%hook CAKeyframeAnimation
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            range = CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    @try { %orig(range); } @catch (__unused NSException *e) {}
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            return CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    return %orig;
+}
+
+%end
+
+%hook CATransition
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            range = CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    @try { %orig(range); } @catch (__unused NSException *e) {}
+}
+
+%end
+
+// 3. BẺ KHÓA BASEBOARD ANIMATION SETTINGS (TRÁI TIM CỦA HIỆU ỨNG THU PHÓNG APP SPRINGBOARD TRONG VIDEO)
+%hook BSAnimationSettings
+
+- (float)frameInterval {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float cap = (float)Titanium_GetEffectiveFrameCap();
+        if (cap < 15.0f) cap = 15.0f;
+        if (cap > 240.0f) cap = 240.0f;
+        return (1.0f / cap);
+    }
+    return %orig;
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            return CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    return %orig;
+}
+
+%end
+
+%hook BSSpringAnimationSettings
+
+- (float)frameInterval {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float cap = (float)Titanium_GetEffectiveFrameCap();
+        if (cap < 15.0f) cap = 15.0f;
+        if (cap > 240.0f) cap = 240.0f;
+        return (1.0f / cap);
+    }
+    return %orig;
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            return CAFrameRateRangeMake(cap, cap, cap);
+        }
+    }
+    return %orig;
+}
+
+%end
+
+// 4. MỞ KHÓA CHẠM LIÊN HOÀN GIỮA CHỪNG KHI APP ĐANG THU PHÓNG (GIỐNG HỆT VIDEO SLOW-MO 00:06 - 00:18)
+%hook UIViewPropertyAnimator
+
+- (BOOL)isUserInteractionEnabled {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return YES; // Cho phép chạm mở app tiếp theo ngay khi app cũ đang thu nhỏ về icon
+    }
+    return %orig;
+}
+
+- (BOOL)isInterruptible {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return YES; // Bắt ngón tay tức thì giữa chừng không bị khựng 1 nhịp
+    }
+    return %orig;
+}
+
+- (BOOL)scrubsLinearly {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return YES;
+    }
+    return %orig;
+}
+
+- (void)startAnimation {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            g_isInteracting = YES;
+            Titanium_LockMainThreadFast();
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+%end
+
+%hook _UIRoundedRectShadowView
+
+- (void)layoutSubviews {
+    @try {
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+            self.layer.allowsGroupOpacity = YES;
+            self.layer.drawsAsynchronously = YES;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+%end
+
+// 5. SỬA DỨT ĐIỂM LỖI DELAY KHI NHẤN CHIA SẺ (SHARE SHEET) & LƯU VÀO TỆP (0MS PRESENTATION)
+%hook UIPresentationController
+
+- (void)presentationTransitionWillBegin {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            g_isInteracting = YES;
+            Titanium_TriggerInstantTouchBurst();
+            Titanium_EnableZeroLatencyPipeline();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+- (void)dismissalTransitionWillBegin {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            Titanium_TriggerInstantTouchBurst();
+            Titanium_EnableZeroLatencyPipeline();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+
+%end
+
+%hook _UIViewControllerTransitionContext
+
+- (void)completeTransition:(BOOL)didComplete {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            Titanium_EnableZeroLatencyPipeline();
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(didComplete);
+}
+
+%end
+
+// 6. HIỆU ỨNG DYNAMIC ISLAND (SYSTEM APERTURE) SIÊU MƯỢT, KHÔNG DELAY, PHẢN HỒI NGANG IPHONE 18 PRO
 %hook SBSystemApertureViewController
 
 - (void)viewWillLayoutSubviews {
@@ -6388,6 +7190,15 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
         }
     } @catch (__unused NSException *e) {}
     %orig;
+}
+
+- (void)viewDidLayoutSubviews {
+    %orig;
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
+            Titanium_EnableZeroLatencyPipeline();
+        }
+    } @catch (__unused NSException *e) {}
 }
 
 %end
@@ -6405,13 +7216,14 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
-// 3. DOCK & THƯ MỤC ỨNG DỤNG (FOLDER) MƯỢT SÂU HƠN, TẮT SẠCH DELAY KHI MỞ APP TRONG THƯ MỤC
+// 7. DOCK & THƯ MỤC ỨNG DỤNG (FOLDER) MƯỢT SÂU HƠN, TẮT SẠCH DELAY KHI MỞ APP TRONG THƯ MỤC
 %hook SBDockView
 
 - (void)layoutSubviews {
     @try {
         if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard()) {
             self.layer.allowsGroupOpacity = YES;
+            self.layer.drawsAsynchronously = YES;
             Titanium_EnableZeroLatencyPipeline();
         }
     } @catch (__unused NSException *e) {}
@@ -6478,24 +7290,44 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
-// 4. HIỆU ỨNG CHUYỂN CẢNH & CHUYỂN ĐỘNG MỊN MÀNG, PHẢN HỒI TỨC THÌ 0MS DELAY
-%hook UIViewPropertyAnimator
+// 8. ÉP 3D NẶNG, METAL KIT (MTKVIEW), SCENEKIT, SPRITEKIT & 100K HẠT CHI TIẾT (CAEMITTERLAYER) LÊN ĐÚNG 15-240HZ
+%hook MTKView
 
-- (void)startAnimation {
+- (void)didMoveToWindow {
+    %orig;
     @try {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            uint64_t now = mach_absolute_time();
-            g_lastInteractionMachTime = now;
-            g_lastInteractiveTick = now;
-            Titanium_EnableZeroLatencyPipeline();
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            if (cap < 15) cap = 15;
+            if (cap > 240) cap = 240;
+            self.preferredFramesPerSecond = cap;
         }
     } @catch (__unused NSException *e) {}
-    %orig;
+}
+
+- (NSInteger)preferredFramesPerSecond {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        return cap;
+    }
+    return %orig;
+}
+
+- (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        %orig(cap);
+        return;
+    }
+    %orig(fps);
 }
 
 %end
 
-// 5. ÉP 3D NẶNG, SCENEKIT, SPRITEKIT & 100K HẠT CHI TIẾT (CAEMITTERLAYER) MƯỢT TUYỆT ĐỐI KHÔNG NÓNG
 %hook CAEmitterLayer
 
 - (void)didChangeValueForKey:(NSString *)key {
@@ -6578,12 +7410,12 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
-// 6. TỐI ƯU SÂU TEXT KIT CHO APP AI (CHATGPT / GEMINI / CLAUDE / DEEPSEEK) NHẮN CÂU DÀI KHÔNG BAO GIỜ LAG
+// 9. TỐI ƯU SÂU TEXT KIT CHO APP AI (CHATGPT / GEMINI / CLAUDE / DEEPSEEK) NHẮN CÂU DÀI KHÔNG BAO GIỜ LAG
 %hook NSLayoutManager
 
 - (BOOL)allowsNonContiguousLayout {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        return YES; // Dàn trang bất đồng bộ không khóa luồng chính khi AI stream hàng chục nghìn chữ
+        return YES;
     }
     return %orig;
 }
