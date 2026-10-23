@@ -3694,6 +3694,13 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
     return s;
 }
 
+static char kTIWelcomeRenderKey;
+static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
+    if (!wizard) return;
+    void (^render)(void) = objc_getAssociatedObject(wizard, &kTIWelcomeRenderKey);
+    if (render) render();
+}
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -4085,7 +4092,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
         [glass.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:16],
         [glass.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
         [glass.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
-        [glass.heightAnchor constraintEqualToConstant:200],
+        [glass.heightAnchor constraintEqualToConstant:270],
         [detail.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
         [detail.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
         [detail.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
@@ -4116,7 +4123,6 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
     __block NSString *extractedReport = nil;
     __block void (^renderPage)(void) = nil;
     __block void (^advance)(void) = nil;
-    __weak void (^weakRenderPage)(void) = nil;
     __weak UIViewController *weakWizard = wizard;
 
     renderPage = ^{
@@ -4138,7 +4144,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
         subtitle.alpha = 0; detail.alpha = 0;
         if (page == 0) {
             subtitle.text = @"Chào mừng đến với SmooIOS";
-            detail.text = @"NƠI BẺ KHOÁ TẦNG SÂU\n\nThiết lập tiếp theo sẽ giúp chọn nhóm iOS, xác nhận dòng iPhone và thu thập thông tin thiết bị cùng danh sách tweak để kiểm tra khả năng xung đột.\n\nĐây là bước nhận diện và chẩn đoán; nó không tự chạy khai thác kernel hoặc tuyên bố đã kích hoạt nếu không có backend thực sự.";
+            detail.text = @"TẦNG BẺ KHOÁ 1 · Nhận diện: đọc mã máy và phiên bản iOS thực tế.\n\nTẦNG 2 · Đối chiếu nhóm iOS và dòng iPhone bạn chọn.\n\nTẦNG 3 · Quét thư mục tweak có thể đọc được.\n\nTẦNG 4 · Đọc GPU, mức nhiệt hệ thống, pin và RAM.\n\nTẦNG 5 · Tổng hợp báo cáo. Không khai thác kernel và không tự xác nhận đã kích hoạt.";
             TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", inkDark);
             next.enabled = YES;
             next.backgroundColor = accentDeep;
@@ -4165,7 +4171,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
                 [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                     (void)a;
                     if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
-                    if (weakRenderPage) weakRenderPage();
+                    TIWelcomeRenderFromWizard(weakWizard);
                 }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
@@ -4211,7 +4217,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [found componentsJoinedByString:@"\n"] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THIẾT BỊ\nMã máy: %@\nHệ điều hành: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nBootstrap: %@\n\nGPU · NHIỆT · PIN · RAM\n%@\nTWEAK / FILE CÓ THỂ ĐỌC (tối đa 80 mục, hiện %lu)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel.", machine, system, selectedIOS, selectedPhone, chip, Titanium_DetectJailbreakTypeForUI(), hardware, (unsigned long)found.count, tweaks];
-                if (weakRenderPage) weakRenderPage();
+                TIWelcomeRenderFromWizard(weakWizard);
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             BOOL ready = extractedReport.length > 0;
@@ -4226,7 +4232,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
         } completion:nil];
     };
 
-    weakRenderPage = renderPage;
+    objc_setAssociatedObject(wizard, &kTIWelcomeRenderKey, renderPage, OBJC_ASSOCIATION_COPY_NONATOMIC);
 
     advance = ^{
         if (page < 3) {
@@ -4235,7 +4241,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
             page++;
             UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
             [haptic prepare]; [haptic impactOccurred];
-            if (weakRenderPage) weakRenderPage();
+            TIWelcomeRenderFromWizard(weakWizard);
             return;
         }
         if (!extractedReport.length) {
@@ -4278,7 +4284,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
         page--;
         UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         [haptic impactOccurred];
-        if (weakRenderPage) weakRenderPage();
+        TIWelcomeRenderFromWizard(weakWizard);
     }] forControlEvents:UIControlEventTouchUpInside];
 
     [self presentViewController:wizard animated:YES completion:^{
