@@ -6962,10 +6962,13 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             float cap = (float)Titanium_GetEffectiveFrameCap();
             if (cap < 15.0f) cap = 15.0f;
             if (cap > 240.0f) cap = 240.0f;
-            range = CAFrameRateRangeMake(cap, cap, cap);
+            CAFrameRateRange r; r.minimum = cap; r.maximum = cap; r.preferred = cap;
+            range = r;
         }
     }
-    @try { %orig(range); } @catch (__unused NSException *e) {}
+    @try {
+        ((void (*)(id, SEL, CAFrameRateRange))objc_msgSend)(self, _cmd, range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
@@ -6974,10 +6977,16 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             float cap = (float)Titanium_GetEffectiveFrameCap();
             if (cap < 15.0f) cap = 15.0f;
             if (cap > 240.0f) cap = 240.0f;
-            return CAFrameRateRangeMake(cap, cap, cap);
+            CAFrameRateRange r; r.minimum = cap; r.maximum = cap; r.preferred = cap;
+            return r;
         }
     }
-    return %orig;
+    CAFrameRateRange empty = {0, 0, 0};
+    @try {
+        return ((CAFrameRateRange (*)(id, SEL))objc_msgSend)(self, _cmd);
+    } @catch (__unused NSException *e) {
+        return empty;
+    }
 }
 
 %end
@@ -6990,10 +6999,13 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             float cap = (float)Titanium_GetEffectiveFrameCap();
             if (cap < 15.0f) cap = 15.0f;
             if (cap > 240.0f) cap = 240.0f;
-            range = CAFrameRateRangeMake(cap, cap, cap);
+            CAFrameRateRange r; r.minimum = cap; r.maximum = cap; r.preferred = cap;
+            range = r;
         }
     }
-    @try { %orig(range); } @catch (__unused NSException *e) {}
+    @try {
+        ((void (*)(id, SEL, CAFrameRateRange))objc_msgSend)(self, _cmd, range);
+    } @catch (__unused NSException *e) {}
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
@@ -7002,10 +7014,16 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             float cap = (float)Titanium_GetEffectiveFrameCap();
             if (cap < 15.0f) cap = 15.0f;
             if (cap > 240.0f) cap = 240.0f;
-            return CAFrameRateRangeMake(cap, cap, cap);
+            CAFrameRateRange r; r.minimum = cap; r.maximum = cap; r.preferred = cap;
+            return r;
         }
     }
-    return %orig;
+    CAFrameRateRange empty = {0, 0, 0};
+    @try {
+        return ((CAFrameRateRange (*)(id, SEL))objc_msgSend)(self, _cmd);
+    } @catch (__unused NSException *e) {
+        return empty;
+    }
 }
 
 %end
