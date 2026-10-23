@@ -6098,12 +6098,17 @@ static float Titanium_ForceUserFPS(float requestedRate) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
             Titanium_TriggerInstantTouchBurst();
+            // [V38 FIX DEN APP FRAME DAU]: KHONG ep frame rate ngay — delay 150ms de iOS render frame dau tu nhien (dung iOS), sau do moi ep
             if (@available(iOS 15.0, *)) {
                 if (!g_isCurrentAppBlacklisted && [self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    float targetCap = (float)Titanium_GetEffectiveFrameCap();
-                    if (targetCap < 15.0f || targetCap > 240.0f) targetCap = 240.0f;
-                    CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
-                    self.preferredFrameRateRange = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                        @try {
+                            float targetCap = (float)Titanium_GetEffectiveFrameCap();
+                            if (targetCap < 15.0f || targetCap > 240.0f) targetCap = 240.0f;
+                            CAFrameRateRange smoothRange = Titanium_SmoothFRR(targetCap);
+                            self.preferredFrameRateRange = SafeMakeFRR(smoothRange.minimum, smoothRange.maximum, smoothRange.preferred);
+                        } @catch (__unused NSException *e) {}
+                    });
                 }
             }
         }
