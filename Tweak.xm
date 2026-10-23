@@ -6601,7 +6601,7 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 %end
 
 // ====================================================================================================
-// TẦNG 4 DIRECT HARDWARE DRIVER ENGINE (HẠNG MỤC #10, #11, #12 — ĐỌC & GHI THẬT QUA IOKIT USERCLIENT
+// TẦNG 4 DIRECT HARDWARE DRIVER ENGINE (HẠNG MỤC #10, #11, #12 — ĐỌC & GHI THẬT QUA IOKI USERCLIENT
 // VÀ SYMBOL C CỦA IOMOBILEFRAMEBUFFER, KHÔNG GIẢ LẬP, KHÔNG QUA TRUNG GIAN)
 // ====================================================================================================
 
