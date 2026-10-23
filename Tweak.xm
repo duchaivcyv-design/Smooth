@@ -6479,7 +6479,8 @@ static CAFrameRateRange hooked_CAFrameRateRangeMake(float min, float max, float 
             }
         }
     }
-    if (orig_CAFrameRateRangeMake) {
+    // [FIX ĐỆ QUY]: nếu orig trỏ lại chính hàm hook thì gọi orig sẽ tự gọi lại vô hạn -> tràn stack (SIGSEGV)
+    if (orig_CAFrameRateRangeMake && (void *)orig_CAFrameRateRangeMake != (void *)hooked_CAFrameRateRangeMake) {
         return orig_CAFrameRateRangeMake(min, max, pref);
     }
     CAFrameRateRange r = { min, max, pref };
@@ -7593,7 +7594,24 @@ void Titanium_TriggerRespringAction(void) {
     });
 }
 
+// [SREBOOT DELAY]: đánh dấu thời điểm userspace reboot; các tiến trình khởi động lại trong vài chục giây
+// sau đó sẽ chờ TITANIUM_SREBOOT_LOAD_DELAY giây rồi mới nạp tweak, tránh treo logo táo.
+#define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
+#define TITANIUM_SREBOOT_LOAD_DELAY 5.0
+#define TITANIUM_SREBOOT_WINDOW     90.0
+
+static BOOL Titanium_ShouldDelayLoadAfterSreboot(void) {
+    NSDictionary *marker = [NSDictionary dictionaryWithContentsOfFile:TITANIUM_SREBOOT_MARKER];
+    NSNumber *t = marker[@"time"];
+    if (![t isKindOfClass:[NSNumber class]]) return NO;
+    NSTimeInterval age = [[NSDate date] timeIntervalSince1970] - [t doubleValue];
+    return (age >= 0.0 && age < TITANIUM_SREBOOT_WINDOW);
+}
+
 void Titanium_TriggerSrebootAction(void) {
+    NSDictionary *marker = @{@"time": @([[NSDate date] timeIntervalSince1970])};
+    [marker writeToFile:TITANIUM_SREBOOT_MARKER atomically:YES];
+
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeWarning];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
@@ -7827,6 +7845,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
-        runCoreTweak(isSpringBoard, bundleID, progName);
+        if (Titanium_ShouldDelayLoadAfterSreboot()) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(TITANIUM_SREBOOT_LOAD_DELAY * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                runCoreTweak(isSpringBoard, bundleID, progName);
+            });
+        } else {
+            runCoreTweak(isSpringBoard, bundleID, progName);
+        }
     }
 }
