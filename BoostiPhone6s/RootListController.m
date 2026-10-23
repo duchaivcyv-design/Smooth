@@ -3641,9 +3641,10 @@ static void TIWelcomeSetButtonTitle(UIButton *button, NSString *title, UIColor *
     NSDictionary *attrs = @{NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightBlack],
                             NSForegroundColorAttributeName: color};
     NSAttributedString *text = [[NSAttributedString alloc] initWithString:title attributes:attrs];
-    for (UIControlState st in @[@(UIControlStateNormal), @(UIControlStateHighlighted), @(UIControlStateDisabled), @(UIControlStateSelected)]) {
-        [button setAttributedTitle:text forState:(UIControlState)[st unsignedIntegerValue]];
-    }
+    [button setAttributedTitle:text forState:UIControlStateNormal];
+    [button setAttributedTitle:text forState:UIControlStateHighlighted];
+    [button setAttributedTitle:text forState:UIControlStateDisabled];
+    [button setAttributedTitle:text forState:UIControlStateSelected];
     button.titleLabel.hidden = NO;
     button.titleLabel.alpha = 1.0;
 }
@@ -4115,6 +4116,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
     __block NSString *extractedReport = nil;
     __block void (^renderPage)(void) = nil;
     __block void (^advance)(void) = nil;
+    __weak void (^weakRenderPage)(void) = nil;
     __weak UIViewController *weakWizard = wizard;
 
     renderPage = ^{
@@ -4163,7 +4165,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
                 [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                     (void)a;
                     if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
-                    if (renderPage) renderPage();
+                    if (weakRenderPage) weakRenderPage();
                 }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
@@ -4209,7 +4211,7 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
                 NSString *tweaks = found.count ? [found componentsJoinedByString:@"\n"] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
                 extractedReport = [NSString stringWithFormat:@"DARWIN / THIẾT BỊ\nMã máy: %@\nHệ điều hành: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nBootstrap: %@\n\nGPU · NHIỆT · PIN · RAM\n%@\nTWEAK / FILE CÓ THỂ ĐỌC (tối đa 80 mục, hiện %lu)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel.", machine, system, selectedIOS, selectedPhone, chip, Titanium_DetectJailbreakTypeForUI(), hardware, (unsigned long)found.count, tweaks];
-                if (renderPage) renderPage();
+                if (weakRenderPage) weakRenderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             BOOL ready = extractedReport.length > 0;
@@ -4224,12 +4226,16 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
         } completion:nil];
     };
 
+    weakRenderPage = renderPage;
+
     advance = ^{
         if (page < 3) {
             if (page == 1 && !selectedIOS.length) return;
             if (page == 2 && !selectedPhone.length) return;
             page++;
-            renderPage();
+            UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+            [haptic prepare]; [haptic impactOccurred];
+            if (weakRenderPage) weakRenderPage();
             return;
         }
         if (!extractedReport.length) {
@@ -4270,7 +4276,9 @@ static NSString *TIWelcomeHardwareDiagnostics(void) {
         (void)a;
         if (page <= 0) return;
         page--;
-        if (renderPage) renderPage();
+        UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [haptic impactOccurred];
+        if (weakRenderPage) weakRenderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
 
     [self presentViewController:wizard animated:YES completion:^{
