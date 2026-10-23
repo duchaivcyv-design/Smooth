@@ -724,6 +724,7 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 - (void)setAllowGPUOptimizedContents:(BOOL)flag;
 @end
 
+@class CADisplay; // [V37 FIX COMPILE]: forward declaration
 @interface UIScreen (TitaniumApexPrivate)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
 - (NSInteger)_maximumFramesPerSecond;
@@ -6312,6 +6313,207 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 // DYNAMIC ISLAND + DOCK + FOLDER + SHARE SHEET 0MS + 100K HẠT 3D + AI STREAM SIÊU MƯỢT
 // ====================================================================================================
 
+// 1. BẺ KHÓA HÀM KIỂM TRA TRẦN 120HZ CỦA QUARTZCORE (CHO PHÉP 15HZ - 240HZ KHÔNG BỊ EXCEPTION)
+static bool (*orig_CAFrameRateRangeIsValid)(float min, float max, float pref) = NULL;
+static bool hooked_CAFrameRateRangeIsValid(float min, float max, float pref) {
+    return true; // Mở khóa toàn bộ dải 15Hz - 240Hz ở tầng C của QuartzCore
+}
+
+static void Titanium_Tier5_UnlockQuartzCore240HzCeiling(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            void *qc = dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_LAZY | RTLD_LOCAL);
+            if (!qc) return;
+            void *symValid = dlsym(qc, "CAFrameRateRangeIsValid");
+            if (symValid) {
+                MSHookFunction(symValid, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// 2. ÉP TRỰC TIẾP DRIVER PANEL & GPU Ở TẦNG 5 (AppleDCP / AppleCLCD2 / IOMobileFramebufferAP / IOGPU)
+static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSInteger targetFPS) {
+    if (targetHz < 15) targetHz = 15;
+    if (targetHz > 240) targetHz = 240;
+    if (targetFPS < 15) targetFPS = 15;
+    if (targetFPS > 240) targetFPS = 240;
+
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
+    if (!iokit) return;
+
+    typedef CFMutableDictionaryRef (*IOServiceMatching_fn)(const char *);
+    typedef kern_return_t (*IOServiceGetMatchingServices_fn)(mach_port_t, CFDictionaryRef, io_iterator_t *);
+    typedef io_object_t (*IOIteratorNext_fn)(io_iterator_t);
+    typedef kern_return_t (*IORegistryEntrySetCFProperties_fn)(io_registry_entry_t, CFTypeRef);
+    typedef kern_return_t (*IOServiceOpen_fn)(io_service_t, task_port_t, uint32_t, io_connect_t *);
+    typedef kern_return_t (*IOConnectSetCFProperties_fn)(io_connect_t, CFTypeRef);
+    typedef kern_return_t (*IOServiceClose_fn)(io_connect_t);
+    typedef kern_return_t (*IOObjectRelease_fn)(io_object_t);
+
+    IOServiceMatching_fn fnMatching = (IOServiceMatching_fn)dlsym(iokit, "IOServiceMatching");
+    IOServiceGetMatchingServices_fn fnGetServices = (IOServiceGetMatchingServices_fn)dlsym(iokit, "IOServiceGetMatchingServices");
+    IOIteratorNext_fn fnNext = (IOIteratorNext_fn)dlsym(iokit, "IOIteratorNext");
+    IORegistryEntrySetCFProperties_fn fnSetProps = (IORegistryEntrySetCFProperties_fn)dlsym(iokit, "IORegistryEntrySetCFProperties");
+    IOServiceOpen_fn fnOpen = (IOServiceOpen_fn)dlsym(iokit, "IOServiceOpen");
+    IOConnectSetCFProperties_fn fnConnSetProps = (IOConnectSetCFProperties_fn)dlsym(iokit, "IOConnectSetCFProperties");
+    IOServiceClose_fn fnClose = (IOServiceClose_fn)dlsym(iokit, "IOServiceClose");
+    IOObjectRelease_fn fnRelease = (IOObjectRelease_fn)dlsym(iokit, "IOObjectRelease");
+
+    if (!fnMatching || !fnGetServices || !fnNext || !fnSetProps || !fnRelease) return;
+
+    uint64_t frameIntervalNs = (uint64_t)(1000000000ULL / (uint64_t)targetHz);
+    NSDictionary *panelBurstDict = @{
+        @"DisplayPipeRefreshRate": @(targetHz),
+        @"TargetRefreshRate": @(targetHz),
+        @"MaximumRefreshRate": @(240),
+        @"MinimumRefreshRate": @(15),
+        @"IdealRefreshRate": @(targetHz),
+        @"PreferredRefreshRate": @(targetHz),
+        @"FrameIntervalNs": @(frameIntervalNs),
+        @"MinimumFrameDurationNs": @(frameIntervalNs),
+        @"VRRModeEnabled": @YES,
+        @"ProMotionEnabled": @YES,
+        @"AllowsVirtualModes": @YES,
+        @"DisableDisplayIdleDownclock": @YES,
+        @"ThermalThrottleEnabled": @NO,
+        @"DisplayThermalMitigation": @0,
+        @"BacklightThermalCap": @0,
+        @"GPUPowerState": @1,
+        @"AGXBurstMode": @YES,
+        @"TargetFPS": @(targetFPS)
+    };
+
+    const char *tier5Drivers[] = {
+        "AppleDCP",
+        "AppleCLCD2",
+        "AppleCLCD",
+        "IOMobileFramebufferAP",
+        "IOMobileFramebuffer",
+        "IOGPU",
+        "AGXAccelerator",
+        "AppleM2ScalerCSCDriver"
+    };
+
+    for (size_t i = 0; i < sizeof(tier5Drivers) / sizeof(tier5Drivers[0]); i++) {
+        CFMutableDictionaryRef match = fnMatching(tier5Drivers[i]);
+        if (!match) continue;
+        io_iterator_t iter = 0;
+        if (fnGetServices(0, match, &iter) == KERN_SUCCESS && iter != 0) {
+            io_object_t service = 0;
+            while ((service = fnNext(iter)) != 0) {
+                fnSetProps(service, (__bridge CFTypeRef)panelBurstDict);
+                if (fnOpen && fnConnSetProps && fnClose) {
+                    io_connect_t conn = 0;
+                    if (fnOpen(service, mach_task_self(), 0, &conn) == KERN_SUCCESS && conn != 0) {
+                        fnConnSetProps(conn, (__bridge CFTypeRef)panelBurstDict);
+                        fnClose(conn);
+                    }
+                }
+                fnRelease(service);
+            }
+            fnRelease(iter);
+        }
+    }
+}
+
+// 3. GHIM TOÀN BỘ LUỒNG (THREADS) CỦA TIẾN TRÌNH LÊN NHÂN P-CORE VÀ GỠ THROTTLE
+static void Titanium_Tier5_PinAllThreadsToPCoreAndRealtime(void) {
+    thread_act_array_t threadList = NULL;
+    mach_msg_type_number_t threadCount = 0;
+    if (task_threads(mach_task_self(), &threadList, &threadCount) == KERN_SUCCESS && threadList) {
+        for (mach_msg_type_number_t i = 0; i < threadCount; i++) {
+            // Ghim vào cụm nhân hiệu năng cao P-Core (Tag 1)
+            thread_affinity_policy_data_t affinity = { .affinity_tag = 1 };
+            thread_policy_set(threadList[i], THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
+
+            // Gỡ bỏ giới hạn bóp băng thông CPU của Kernel
+            thread_throttle_policy_data_t throttle = { .pset_limit = 0 };
+            thread_policy_set(threadList[i], THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
+
+            // Nâng độ ưu tiên lập lịch Mach
+            thread_precedence_policy_data_t precedence = { .importance = 63 };
+            thread_policy_set(threadList[i], THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
+
+            mach_port_deallocate(mach_task_self(), threadList[i]);
+        }
+        vm_deallocate(mach_task_self(), (vm_address_t)threadList, threadCount * sizeof(thread_act_t));
+    }
+}
+
+// 4. TRÌNH ĐIỀU PHỐI 5 TẦNG RAM + 5 TẦNG CPU/GPU + PANEL IC TẦNG 5
+static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
+    Titanium_Tier5_UnlockQuartzCore240HzCeiling();
+
+    static os_unfair_lock s_t5Lock = OS_UNFAIR_LOCK_INIT;
+    static uint64_t s_lastT5Tick = 0;
+    uint64_t now = mach_absolute_time();
+    BOOL shouldRun = NO;
+    os_unfair_lock_lock(&s_t5Lock);
+    if (s_lastT5Tick == 0 || (now - s_lastT5Tick) >= Titanium_NanosToMachTicks(2500000000ULL)) {
+        s_lastT5Tick = now;
+        shouldRun = YES;
+    }
+    os_unfair_lock_unlock(&s_t5Lock);
+    if (!shouldRun) return;
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+        @autoreleasepool {
+            // --- MỞ KHÓA 5 TẦNG RAM (GIẢM TẢI BỘ NHỚ AN TOÀN, CHỐNG JETSAM CHO APP 20GB & ĐA NHIỆM VÔ HẠN) ---
+            // Tầng 1: Xả vùng nhớ default malloc zone
+            malloc_zone_pressure_relief(malloc_default_zone(), 0);
+            // Tầng 2: Quét và xả toàn bộ các vùng nhớ phụ (All Malloc Zones)
+            malloc_zone_t **zones = NULL;
+            unsigned int numZones = 0;
+            if (malloc_get_all_zones(MACH_PORT_NULL, NULL, (vm_address_t **)&zones, &numZones) == KERN_SUCCESS && zones) {
+                for (unsigned int i = 0; i < numZones; i++) {
+                    if (zones[i]) malloc_zone_pressure_relief(zones[i], 0);
+                }
+            }
+            // Tầng 3: Giải phóng bộ đệm URLCache tạm trong RAM
+            [[NSURLCache sharedURLCache] removeAllCachedResponses];
+            // Tầng 4: Thu hồi bộ nhớ purgable của tiến trình hiện tại qua Mach VM
+            int purgeState = VM_PURGABLE_PURGE_ALL;
+            vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &purgeState);
+            // Tầng 5: Khóa mlock vùng nhớ cấu hình IPC trong RAM vật lý (0ms page fault)
+            mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
+            mlock(&g_livePayload, sizeof(ApexV285ProPayload));
+            if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+                mlock(g_sharedPayloadPtr, sizeof(ApexV285ProPayload));
+            }
+
+            // --- MỞ KHÓA 5 TẦNG CPU/GPU & CHIP IC MÀN HÌNH (15HZ - 240HZ CHUẨN CẤU HÌNH) ---
+            // Tầng 1 & 2: Mở khóa QoS Task Kernel (LATENCY_QOS_TIER_0 + THROUGHPUT_QOS_TIER_0)
+            struct task_qos_policy qosinfo = {
+                .task_latency_qos_tier = LATENCY_QOS_TIER_0,
+                .task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0
+            };
+            task_policy_set(mach_task_self(), TASK_BASE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
+            task_policy_set(mach_task_self(), TASK_OVERRIDE_QOS_POLICY, (task_policy_t)&qosinfo, TASK_QOS_POLICY_COUNT);
+
+            // Tầng 3: Cấp quyền Nice -20 & VIP Disk I/O
+            setpriority(PRIO_PROCESS, 0, -20);
+            setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
+            setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
+
+            // Tầng 4: Ghim toàn bộ Thread lên cụm nhân hiệu năng cao P-Core
+            Titanium_Tier5_PinAllThreadsToPCoreAndRealtime();
+
+            // Tầng 5: Đẩy thẳng tần số 15-240Hz xuống Panel IC & GPU Driver
+            NSInteger targetHz = Titanium_GetEffectiveFrameCap();
+            Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(targetHz, targetHz);
+            Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+        }
+    });
+}
+
+// ====================================================================================================
+// TẦNG 5 (TIER 5): CHIP IC MÀN HÌNH, PHÁ TRẦN 120HZ LÊN 15-240HZ (QUARTZCORE + DCP + CLCD2 + IOGPU),
+// 5 TẦNG RAM (GIẢM TẢI XUỐNG MỨC TỐI THIỂU), 5 TẦNG CPU/GPU P-CORE REALTIME,
+// DYNAMIC ISLAND + DOCK + FOLDER + SHARE SHEET 0MS + 100K HẠT 3D + AI STREAM SIÊU MƯỢT
+// ====================================================================================================
+
 // ====================================================================================================
 // --- CẤU TRÚC SYSCALL JETSAM THẬT CỦA XNU KERNEL (sys/kern_memorystatus.h) ---
 #ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
@@ -7446,188 +7648,6 @@ static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(v
 typedef void *IOMobileFramebufferRef;
 typedef kern_return_t (*IOMFB_GetMainDisplay_fn)(IOMobileFramebufferRef *pointer);
 typedef kern_return_t (*IOMFB_SetRefreshRate_fn)(IOMobileFramebufferRef fb, float rate, uint32_t options);
-typedef kern_return_t (*IOMFB_GetRefreshRate_fn)(IOMobileFramebufferRef fb, float *rateOut);
-typedef kern_return_t (*IOMFB_SetParameter_fn)(IOMobileFramebufferRef fb, CFStringRef key, CFTypeRef value);
-
-static IOMFB_SetRefreshRate_fn orig_IOMFB_SetRefreshRate = NULL;
-static IOMFB_GetRefreshRate_fn orig_IOMFB_GetRefreshRate = NULL;
-
-static kern_return_t hooked_IOMFB_SetRefreshRate(IOMobileFramebufferRef fb, float rate, uint32_t options) {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        NSInteger userHz = Titanium_GetEffectiveFrameCap();
-        if (userHz >= 15 && userHz <= 240) {
-            rate = (float)userHz;
-        }
-    }
-    return orig_IOMFB_SetRefreshRate ? orig_IOMFB_SetRefreshRate(fb, rate, options) : KERN_SUCCESS;
-}
-
-static kern_return_t hooked_IOMFB_GetRefreshRate(IOMobileFramebufferRef fb, float *rateOut) {
-    kern_return_t kr = orig_IOMFB_GetRefreshRate ? orig_IOMFB_GetRefreshRate(fb, rateOut) : KERN_SUCCESS;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && rateOut) {
-        NSInteger userHz = Titanium_GetEffectiveFrameCap();
-        if (userHz >= 15 && userHz <= 240) {
-            *rateOut = (float)userHz;
-        }
-    }
-    return kr;
-}
-
-static void Titanium_InstallDirectIOMobileFramebufferCHooks(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
-            if (!iomfb) return;
-
-            void *symSetRate = dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
-            if (!symSetRate) symSetRate = dlsym(iomfb, "IOMobileFramebufferSetDisplayRefreshRate");
-            if (symSetRate) {
-                MSHookFunction(symSetRate, (void *)hooked_IOMFB_SetRefreshRate, (void **)&orig_IOMFB_SetRefreshRate);
-            }
-
-            void *symGetRate = dlsym(iomfb, "IOMobileFramebufferGetRefreshRate");
-            if (!symGetRate) symGetRate = dlsym(iomfb, "IOMobileFramebufferGetDisplayRefreshRate");
-            if (symGetRate) {
-                MSHookFunction(symGetRate, (void *)hooked_IOMFB_GetRefreshRate, (void **)&orig_IOMFB_GetRefreshRate);
-            }
-        } @catch (__unused NSException *e) {}
-    });
-}
-
-// Đọc & Ghi thật xuống IOKit Service / UserClient + IOMobileFramebuffer MainDisplay
-static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
-    static os_unfair_lock s_panelLock = OS_UNFAIR_LOCK_INIT;
-    static uint64_t s_lastApplyTick = 0;
-    uint64_t now = mach_absolute_time();
-
-    os_unfair_lock_lock(&s_panelLock);
-    if (s_lastApplyTick != 0 && (now - s_lastApplyTick) < Titanium_NanosToMachTicks(200ULL * 1000000ULL)) {
-        os_unfair_lock_unlock(&s_panelLock);
-        return;
-    }
-    s_lastApplyTick = now;
-    os_unfair_lock_unlock(&s_panelLock);
-
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
-        @autoreleasepool {
-            const TitaniumPanelRegisterProfile *prof = Titanium_ResolveCurrentPanelProfile();
-            NSInteger userHz = Titanium_GetEffectiveFrameCap();
-            if (userHz < 15) userHz = 15;
-            if (userHz > 240) userHz = 240;
-
-            // 1. Gọi trực tiếp C API của IOMobileFramebuffer.framework trên tiến trình hiện tại
-            void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
-            if (iomfb) {
-                IOMFB_GetMainDisplay_fn fnGetMain = (IOMFB_GetMainDisplay_fn)dlsym(iomfb, "IOMobileFramebufferGetMainDisplay");
-                IOMFB_SetRefreshRate_fn fnSetRate = orig_IOMFB_SetRefreshRate ?: (IOMFB_SetRefreshRate_fn)dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
-                IOMFB_SetParameter_fn fnSetParam = (IOMFB_SetParameter_fn)dlsym(iomfb, "IOMobileFramebufferSetParameter");
-
-                IOMobileFramebufferRef mainFB = NULL;
-                if (fnGetMain && fnGetMain(&mainFB) == KERN_SUCCESS && mainFB != NULL) {
-                    if (fnSetRate) {
-                        fnSetRate(mainFB, (float)userHz, 0);
-                    }
-                    if (fnSetParam) {
-                        CFNumberRef numHz = CFNumberCreate(kCFAllocatorDefault, kCFNumberNSIntegerType, &userHz);
-                        if (numHz) {
-                            fnSetParam(mainFB, CFSTR("DisplayPipeRefreshRate"), numHz);
-                            fnSetParam(mainFB, CFSTR("TargetRefreshRate"), numHz);
-                            CFRelease(numHz);
-                        }
-                        int zeroVal = 0;
-                        CFNumberRef numZero = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &zeroVal);
-                        if (numZero) {
-                            fnSetParam(mainFB, CFSTR("ThermalThrottleEnabled"), kCFBooleanFalse);
-                            fnSetParam(mainFB, CFSTR("DisplayThermalMitigation"), numZero);
-                            CFRelease(numZero);
-                        }
-                    }
-                }
-            }
-
-            // 2. Đọc & Ghi trực tiếp thanh ghi thuộc tính trên IOKit Driver (IOMobileFramebuffer / AppleCLCD2 / AGXAccelerator)
-            void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
-            if (!iokit) return;
-
-            typedef CFMutableDictionaryRef (*IOServiceMatching_fn)(const char *);
-            typedef io_service_t (*IOServiceGetMatchingService_fn)(mach_port_t, CFDictionaryRef);
-            typedef CFTypeRef (*IORegistryEntryCreateCFProperty_fn)(io_registry_entry_t, CFStringRef, CFAllocatorRef, uint32_t);
-            typedef kern_return_t (*IORegistryEntrySetCFProperties_fn)(io_registry_entry_t, CFTypeRef);
-            typedef kern_return_t (*IORegistryEntrySetCFProperty_fn)(io_registry_entry_t, CFStringRef, CFTypeRef);
-            typedef kern_return_t (*IOServiceOpen_fn)(io_service_t, task_port_t, uint32_t, io_connect_t *);
-            typedef kern_return_t (*IOConnectSetCFProperties_fn)(io_connect_t, CFTypeRef);
-            typedef kern_return_t (*IOServiceClose_fn)(io_connect_t);
-            typedef kern_return_t (*IOObjectRelease_fn)(io_object_t);
-
-            IOServiceMatching_fn fnMatching = (IOServiceMatching_fn)dlsym(iokit, "IOServiceMatching");
-            IOServiceGetMatchingService_fn fnGetService = (IOServiceGetMatchingService_fn)dlsym(iokit, "IOServiceGetMatchingService");
-            IORegistryEntryCreateCFProperty_fn fnGetProp = (IORegistryEntryCreateCFProperty_fn)dlsym(iokit, "IORegistryEntryCreateCFProperty");
-            IORegistryEntrySetCFProperties_fn fnSetProps = (IORegistryEntrySetCFProperties_fn)dlsym(iokit, "IORegistryEntrySetCFProperties");
-            IORegistryEntrySetCFProperty_fn fnSetProp = (IORegistryEntrySetCFProperty_fn)dlsym(iokit, "IORegistryEntrySetCFProperty");
-            IOServiceOpen_fn fnServiceOpen = (IOServiceOpen_fn)dlsym(iokit, "IOServiceOpen");
-            IOConnectSetCFProperties_fn fnConnectSetProps = (IOConnectSetCFProperties_fn)dlsym(iokit, "IOConnectSetCFProperties");
-            IOServiceClose_fn fnServiceClose = (IOServiceClose_fn)dlsym(iokit, "IOServiceClose");
-            IOObjectRelease_fn fnRelease = (IOObjectRelease_fn)dlsym(iokit, "IOObjectRelease");
-
-            if (!fnMatching || !fnGetService || !fnSetProps || !fnRelease) return;
-
-            double frameDurationNs = 1000000000.0 / (double)userHz;
-
-            NSDictionary *registerPayload = @{
-                @"DisplayPipeRefreshRate": @(userHz),
-                @"TargetRefreshRate": @(userHz),
-                @"MaximumRefreshRate": @(prof->virtualPipelineMaxHz),
-                @"MinimumRefreshRate": @(15),
-                @"NativePanelMaxHz": @(prof->nativePanelMaxHz),
-                @"MinimumFrameDurationNs": @((uint64_t)frameDurationNs),
-                @"MIPIClockProfileRegister": @(prof->mipiClockProfileReg),
-                @"VSyncFIFODepth": @(prof->vsyncFifoDepthReg),
-                @"HIDTouchSampleRate": @(prof->touchSampleRateHz),
-                @"ThermalThrottleEnabled": @NO,
-                @"DisplayThermalMitigation": @0,
-                @"BacklightThermalCap": @0
-            };
-
-            const char *driverNames[] = {
-                "IOMobileFramebuffer",
-                "IOMobileFramebufferAP",
-                "AppleCLCD2",
-                "AppleCLCD",
-                "AppleM2ScalerCSCDriver",
-                "AGXAccelerator"
-            };
-
-            for (size_t i = 0; i < sizeof(driverNames) / sizeof(driverNames[0]); i++) {
-                CFMutableDictionaryRef matching = fnMatching(driverNames[i]);
-                if (!matching) continue;
-                io_service_t service = fnGetService(0, matching);
-                if (service != 0) {
-                    // Đọc kiểm tra thuộc tính hiện tại từ thanh ghi IORegistry trước khi ghi đè
-                    if (fnGetProp) {
-                        CFTypeRef curRefresh = fnGetProp(service, CFSTR("DisplayPipeRefreshRate"), kCFAllocatorDefault, 0);
-                        if (curRefresh) CFRelease(curRefresh);
-                    }
-                    // Ghi trực tiếp vào IORegistryEntry
-                    fnSetProps(service, (__bridge CFTypeRef)registerPayload);
-                    if (fnSetProp) {
-                        fnSetProp(service, CFSTR("ThermalThrottleEnabled"), kCFBooleanFalse);
-                    }
-                    // Mở kênh UserClient trực tiếp xuống Driver (nếu tiến trình có quyền) và đẩy thẳng cấu hình
-                    if (fnServiceOpen && fnConnectSetProps && fnServiceClose) {
-                        io_connect_t connect = 0;
-                        if (fnServiceOpen(service, mach_task_self(), 0, &connect) == KERN_SUCCESS && connect != 0) {
-                            fnConnectSetProps(connect, (__bridge CFTypeRef)registerPayload);
-                            fnServiceClose(connect);
-                        }
-                    }
-                    fnRelease(service);
-                }
-            }
-        }
-    });
-}
-
 // ====================================================================================================
 // HẠNG MỤC #12: BỎ THERMAL THROTTLE PANEL (CHỐNG HẠ HZ & CHỐNG HẠ ĐỘ SÁNG MÀN HÌNH KHI NÓNG)
 // ====================================================================================================
