@@ -3641,13 +3641,11 @@ static void TIWelcomeSetButtonTitle(UIButton *button, NSString *title, UIColor *
     NSDictionary *attrs = @{NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightBlack],
                             NSForegroundColorAttributeName: color};
     NSAttributedString *text = [[NSAttributedString alloc] initWithString:title attributes:attrs];
-    [button setAttributedTitle:text forState:UIControlStateNormal];
-    [button setAttributedTitle:text forState:UIControlStateHighlighted];
-    [button setAttributedTitle:text forState:UIControlStateDisabled];
-    [button setAttributedTitle:text forState:UIControlStateSelected];
+    for (UIControlState st in @[@(UIControlStateNormal), @(UIControlStateHighlighted), @(UIControlStateDisabled), @(UIControlStateSelected)]) {
+        [button setAttributedTitle:text forState:(UIControlState)[st unsignedIntegerValue]];
+    }
     button.titleLabel.hidden = NO;
     button.titleLabel.alpha = 1.0;
-    button.tintColor = color;
 }
 
 static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRadius) {
@@ -3660,6 +3658,39 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
     pulse.repeatCount = HUGE_VALF;
     pulse.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [layer addAnimation:pulse forKey:@"TIWelcomePulse"];
+}
+
+// Chẩn đoán phần cứng bằng API công khai. iOS không công khai nhiệt độ chip theo độ C;
+// chỉ có mức nhiệt (thermalState) và thông tin GPU qua Metal.
+static NSString *TIWelcomeHardwareDiagnostics(void) {
+    NSMutableString *s = [NSMutableString string];
+    NSProcessInfo *pi = NSProcessInfo.processInfo;
+    NSString *thermal = @"Không rõ";
+    switch (pi.thermalState) {
+        case NSProcessInfoThermalStateNominal:  thermal = @"Bình thường"; break;
+        case NSProcessInfoThermalStateFair:     thermal = @"Hơi nóng"; break;
+        case NSProcessInfoThermalStateSerious:  thermal = @"Nóng nghiêm trọng"; break;
+        case NSProcessInfoThermalStateCritical: thermal = @"Quá nhiệt (critical)"; break;
+        default: break;
+    }
+    [s appendFormat:@"Mức nhiệt hệ thống: %@ (iOS không công khai nhiệt độ °C của chip)\n", thermal];
+    [s appendFormat:@"Chế độ tiết kiệm pin: %@\n", pi.isLowPowerModeEnabled ? @"Bật" : @"Tắt"];
+    [s appendFormat:@"Số nhân CPU đang hoạt động: %lu\n", (unsigned long)pi.activeProcessorCount];
+    [s appendFormat:@"RAM vật lý: %.2f GB\n", (double)pi.physicalMemory / 1073741824.0];
+    UIDevice *dev = UIDevice.currentDevice;
+    dev.batteryMonitoringEnabled = YES;
+    if (dev.batteryState != UIDeviceBatteryStateUnknown) {
+        [s appendFormat:@"Pin: %.0f%%\n", dev.batteryLevel * 100.0];
+    }
+    dev.batteryMonitoringEnabled = NO;
+    id<MTLDevice> gpu = MTLCreateSystemDefaultDevice();
+    if (gpu) {
+        [s appendFormat:@"GPU (Metal): %@\n", gpu.name ?: @"Không rõ tên"];
+        [s appendFormat:@"Bộ đệm buffer tối đa: %.0f MB\n", (double)gpu.maxBufferLength / 1048576.0];
+    } else {
+        [s appendString:@"GPU (Metal): không khởi tạo được thiết bị Metal\n"];
+    }
+    return s;
 }
 
 @implementation RootListController
@@ -3936,8 +3967,16 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
     wizard.definesPresentationContext = YES;
     wizard.providesPresentationContextTransitionStyle = YES;
     wizard.view.backgroundColor = [UIColor colorWithRed:0.012 green:0.018 blue:0.055 alpha:1.0];
+    UIColor *accent = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
+    UIColor *accentDeep = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1];
+    UIColor *inkDark = [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1];
 
-    CGRect screenBounds = UIScreen.mainScreen.bounds;
+    // Lớp trang trí: không nhận chạm, đặt dưới cùng để không che nút.
+    UIView *decor = [UIView new];
+    decor.frame = UIScreen.mainScreen.bounds;
+    decor.userInteractionEnabled = NO;
+    decor.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [wizard.view addSubview:decor];
     NSArray *paletteA = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
@@ -3945,49 +3984,38 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
                           (id)[UIColor colorWithRed:.02 green:.02 blue:.09 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.12 green:.03 blue:.20 alpha:1].CGColor];
     CAGradientLayer *background = [CAGradientLayer layer];
-    background.frame = screenBounds;
+    background.frame = decor.bounds;
     background.colors = paletteA;
     background.startPoint = CGPointMake(0, 0);
     background.endPoint = CGPointMake(1, 1);
-    [wizard.view.layer insertSublayer:background atIndex:0];
+    [decor.layer addSublayer:background];
     CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"colors"];
-    drift.fromValue = paletteA;
-    drift.toValue = paletteB;
-    drift.duration = 7.0;
-    drift.autoreverses = YES;
-    drift.repeatCount = HUGE_VALF;
+    drift.fromValue = paletteA; drift.toValue = paletteB;
+    drift.duration = 7.0; drift.autoreverses = YES; drift.repeatCount = HUGE_VALF;
     drift.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [background addAnimation:drift forKey:@"TIWelcomeDrift"];
 
     CAEmitterLayer *sparkle = [CAEmitterLayer layer];
-    sparkle.frame = screenBounds;
-    sparkle.emitterPosition = CGPointMake(CGRectGetMidX(screenBounds), -8);
-    sparkle.emitterSize = CGSizeMake(CGRectGetWidth(screenBounds), 1);
+    sparkle.frame = decor.bounds;
+    sparkle.emitterPosition = CGPointMake(CGRectGetMidX(decor.bounds), -8);
+    sparkle.emitterSize = CGSizeMake(CGRectGetWidth(decor.bounds), 1);
     sparkle.emitterShape = kCAEmitterLayerLine;
     sparkle.renderMode = kCAEmitterLayerOldestFirst;
     CAEmitterCell *sparkCell = [CAEmitterCell emitterCell];
     sparkCell.contents = (__bridge id)TIWelcomeDotImage().CGImage;
-    sparkCell.birthRate = 2.5;
-    sparkCell.lifetime = 11;
-    sparkCell.lifetimeRange = 3;
-    sparkCell.velocity = 6;
-    sparkCell.velocityRange = 4;
-    sparkCell.yAcceleration = 14;
-    sparkCell.scale = 0.5;
-    sparkCell.scaleRange = 0.35;
-    sparkCell.alphaRange = 0.4;
-    sparkCell.alphaSpeed = -0.07;
+    sparkCell.birthRate = 2.5; sparkCell.lifetime = 11; sparkCell.lifetimeRange = 3;
+    sparkCell.velocity = 6; sparkCell.velocityRange = 4; sparkCell.yAcceleration = 14;
+    sparkCell.scale = 0.5; sparkCell.scaleRange = 0.35;
+    sparkCell.alphaRange = 0.4; sparkCell.alphaSpeed = -0.07;
     sparkle.emitterCells = @[sparkCell];
-    [wizard.view.layer insertSublayer:sparkle above:background];
+    [decor.layer addSublayer:sparkle];
 
     UILabel *heading = [UILabel new]; heading.translatesAutoresizingMaskIntoConstraints = NO;
-    heading.text = @"SMOOIOS"; heading.textAlignment = NSTextAlignmentCenter; heading.numberOfLines = 2;
+    heading.text = @"SMOOIOS"; heading.textAlignment = NSTextAlignmentCenter;
     heading.font = [UIFont systemFontOfSize:30 weight:UIFontWeightBlack];
-    heading.textColor = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
+    heading.textColor = accent;
     heading.layer.shadowColor = [UIColor colorWithRed:.2 green:.85 blue:1 alpha:1].CGColor;
-    heading.layer.shadowOffset = CGSizeZero;
-    heading.layer.shadowOpacity = 0.9;
-    heading.layer.shadowRadius = 14;
+    heading.layer.shadowOffset = CGSizeZero; heading.layer.shadowOpacity = 0.9; heading.layer.shadowRadius = 14;
 
     UILabel *subtitle = [UILabel new]; subtitle.translatesAutoresizingMaskIntoConstraints = NO;
     subtitle.text = @"Thiết lập ban đầu"; subtitle.textAlignment = NSTextAlignmentCenter;
@@ -4002,43 +4030,50 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
         dot.layer.cornerRadius = 4; dot.backgroundColor = [UIColor colorWithWhite:1 alpha:.22];
         [dot.widthAnchor constraintEqualToConstant:8].active = YES;
         [dot.heightAnchor constraintEqualToConstant:8].active = YES;
+        dot.userInteractionEnabled = NO;
         [progress addArrangedSubview:dot];
         [pageDots addObject:dot];
     }
 
     UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
     glass.translatesAutoresizingMaskIntoConstraints = NO;
-    glass.layer.cornerRadius = 18; glass.clipsToBounds = YES;
-    glass.layer.borderWidth = 1;
-    glass.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
+    glass.layer.cornerRadius = 20; glass.clipsToBounds = YES;
+    glass.layer.borderWidth = 1; glass.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
     UITextView *detail = [UITextView new]; detail.translatesAutoresizingMaskIntoConstraints = NO;
     detail.backgroundColor = UIColor.clearColor; detail.textColor = [UIColor colorWithWhite:.94 alpha:1];
-    detail.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium]; detail.editable = NO; detail.selectable = NO;
-    detail.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
+    detail.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    detail.editable = NO; detail.selectable = NO; detail.scrollEnabled = YES;
+    detail.textContainerInset = UIEdgeInsetsMake(16, 14, 16, 14);
     [glass.contentView addSubview:detail];
 
+    // Vùng lựa chọn cuộn được: danh sách iOS/iPhone dài không còn bị đẩy ra ngoài màn hình.
+    UIScrollView *scroll = [UIScrollView new]; scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.showsVerticalScrollIndicator = YES;
     UIStackView *options = [[UIStackView alloc] init]; options.translatesAutoresizingMaskIntoConstraints = NO;
-    options.axis = UILayoutConstraintAxisVertical; options.spacing = 9; options.distribution = UIStackViewDistributionFillEqually;
+    options.axis = UILayoutConstraintAxisVertical; options.spacing = 9; options.distribution = UIStackViewDistributionFill;
+    [scroll addSubview:options];
 
     UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem]; back.translatesAutoresizingMaskIntoConstraints = NO;
     TIWelcomeSetButtonTitle(back, @"‹ Quay lại", UIColor.whiteColor);
-    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.08]; back.layer.cornerRadius = 14;
-    back.layer.borderWidth = 1; back.layer.borderColor = [UIColor colorWithWhite:1 alpha:.16].CGColor;
+    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.10]; back.layer.cornerRadius = 16;
+    back.layer.borderWidth = 1; back.layer.borderColor = [UIColor colorWithWhite:1 alpha:.18].CGColor;
 
     UIButton *next = [UIButton buttonWithType:UIButtonTypeSystem]; next.translatesAutoresizingMaskIntoConstraints = NO;
-    TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1]);
-    next.backgroundColor = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1]; next.layer.cornerRadius = 16;
+    next.exclusiveTouch = YES;
+    TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", inkDark);
+    next.backgroundColor = accentDeep; next.layer.cornerRadius = 16;
     next.layer.borderWidth = 1.2; next.layer.borderColor = [UIColor colorWithRed:.45 green:.94 blue:1 alpha:1].CGColor;
-    next.layer.shadowColor = [UIColor colorWithRed:.05 green:.72 blue:1 alpha:1].CGColor;
-    next.layer.shadowOpacity = .55; next.layer.shadowOffset = CGSizeMake(0, 4); next.layer.shadowRadius = 13;
-    next.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+    next.layer.shadowColor = accentDeep.CGColor; next.layer.shadowOpacity = .55;
+    next.layer.shadowOffset = CGSizeMake(0, 4); next.layer.shadowRadius = 13;
 
-    NSArray<UIView *> *animatedViews = @[heading, subtitle, progress, glass, options, back, next];
+    NSArray<UIView *> *animatedViews = @[heading, subtitle, progress, glass, scroll, back, next];
     [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:progress];
-    [wizard.view addSubview:glass]; [wizard.view addSubview:options];
+    [wizard.view addSubview:glass]; [wizard.view addSubview:scroll];
     [wizard.view addSubview:back]; [wizard.view addSubview:next];
+
+    UILayoutGuide *safe = wizard.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [heading.topAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.topAnchor constant:10],
+        [heading.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12],
         [heading.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
         [heading.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
         [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:6],
@@ -4049,17 +4084,21 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
         [glass.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:16],
         [glass.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
         [glass.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
-        [glass.bottomAnchor constraintEqualToAnchor:options.topAnchor constant:-12],
+        [glass.heightAnchor constraintEqualToConstant:200],
         [detail.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
         [detail.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
         [detail.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
         [detail.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor],
-        [options.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
-        [options.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
-        [options.bottomAnchor constraintEqualToAnchor:back.topAnchor constant:-12],
-        [options.heightAnchor constraintGreaterThanOrEqualToConstant:60],
+        [scroll.topAnchor constraintEqualToAnchor:glass.bottomAnchor constant:12],
+        [scroll.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [scroll.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [scroll.bottomAnchor constraintEqualToAnchor:back.topAnchor constant:-12],
+        [options.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
+        [options.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
+        [options.leadingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.leadingAnchor],
+        [options.trailingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.trailingAnchor],
         [back.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
-        [back.bottomAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [back.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-10],
         [back.widthAnchor constraintEqualToAnchor:wizard.view.widthAnchor multiplier:.34 constant:-18],
         [back.heightAnchor constraintEqualToConstant:50],
         [next.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
@@ -4074,8 +4113,8 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
     __block NSString *selectedIOS = @"";
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
-    __block void (^renderPage)(void);
-    __weak void (^weakRenderPage)(void);
+    __block void (^renderPage)(void) = nil;
+    __block void (^advance)(void) = nil;
     __weak UIViewController *weakWizard = wizard;
 
     renderPage = ^{
@@ -4084,50 +4123,61 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
         for (NSInteger i = 0; i < (NSInteger)pageDots.count; i++) {
             BOOL active = (i == page);
             [UIView animateWithDuration:.25 animations:^{
-                pageDots[i].backgroundColor = active ? [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1] : [UIColor colorWithWhite:1 alpha:.22];
+                pageDots[i].backgroundColor = active ? accent : [UIColor colorWithWhite:1 alpha:.22];
                 pageDots[i].transform = active ? CGAffineTransformMakeScale(1.5, 1.5) : CGAffineTransformIdentity;
             }];
         }
         back.hidden = (page == 0);
+        back.userInteractionEnabled = YES;
         next.hidden = NO;
         next.userInteractionEnabled = YES;
-        subtitle.alpha = 0; subtitle.transform = CGAffineTransformMakeTranslation(0, 6);
-        detail.alpha = 0; detail.transform = CGAffineTransformMakeTranslation(0, 8);
+        scroll.contentOffset = CGPointZero;
+        detail.contentOffset = CGPointZero;
+        subtitle.alpha = 0; detail.alpha = 0;
         if (page == 0) {
             subtitle.text = @"Chào mừng đến với SmooIOS";
             detail.text = @"NƠI BẺ KHOÁ TẦNG SÂU\n\nThiết lập tiếp theo sẽ giúp chọn nhóm iOS, xác nhận dòng iPhone và thu thập thông tin thiết bị cùng danh sách tweak để kiểm tra khả năng xung đột.\n\nĐây là bước nhận diện và chẩn đoán; nó không tự chạy khai thác kernel hoặc tuyên bố đã kích hoạt nếu không có backend thực sự.";
-            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1]);
+            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", inkDark);
             next.enabled = YES;
-            next.backgroundColor = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1];
+            next.backgroundColor = accentDeep;
         } else if (page == 1 || page == 2) {
             BOOL chooseIOS = (page == 1);
             subtitle.text = chooseIOS ? @"1 / 3 · Chọn phiên bản iOS" : @"2 / 3 · Chọn đúng dòng iPhone";
-            detail.text = chooseIOS ? [NSString stringWithFormat:@"Đã chọn: %@\nChọn nhóm phiên bản phù hợp với máy đang chạy. Nhóm lựa chọn không thay thế việc đọc phiên bản thực tế.", selectedIOS.length ? selectedIOS : @"Chưa chọn"] : [NSString stringWithFormat:@"Đã chọn: %@\nNếu không chắc chắn, hãy dùng thông tin máy được đọc ở bước tiếp theo để đối chiếu.", selectedPhone.length ? selectedPhone : @"Chưa chọn"];
-            NSArray *choices = chooseIOS ? iosChoices : phoneChoices;
             NSString *current = chooseIOS ? selectedIOS : selectedPhone;
+            detail.text = [NSString stringWithFormat:@"Đã chọn: %@\n%@", current.length ? current : @"Chưa chọn",
+                           chooseIOS ? @"Chọn nhóm phiên bản phù hợp với máy đang chạy. Nhóm lựa chọn không thay thế việc đọc phiên bản thực tế."
+                                     : @"Nếu không chắc chắn, hãy dùng thông tin máy được đọc ở bước tiếp theo để đối chiếu."];
+            NSArray *choices = chooseIOS ? iosChoices : phoneChoices;
             for (NSString *choice in choices) {
                 BOOL isSelected = [choice isEqualToString:current];
                 UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+                b.translatesAutoresizingMaskIntoConstraints = NO;
                 TIWelcomeSetButtonTitle(b, isSelected ? [@"✓  " stringByAppendingString:choice] : choice, UIColor.whiteColor);
                 b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
                 b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
                 b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 8);
                 b.backgroundColor = isSelected ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
-                b.layer.cornerRadius = 11; b.layer.borderWidth = 1; b.layer.borderColor = (isSelected ? [UIColor colorWithRed:.45 green:.94 blue:1 alpha:.8] : [UIColor colorWithWhite:1 alpha:.12]).CGColor;
-                [b.heightAnchor constraintEqualToConstant:40].active = YES;
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; if (weakRenderPage) weakRenderPage(); }] forControlEvents:UIControlEventTouchUpInside];
+                b.layer.cornerRadius = 12; b.layer.borderWidth = 1;
+                b.layer.borderColor = (isSelected ? [UIColor colorWithRed:.45 green:.94 blue:1 alpha:.8] : [UIColor colorWithWhite:1 alpha:.12]).CGColor;
+                [b.heightAnchor constraintEqualToConstant:42].active = YES;
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+                    (void)a;
+                    if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
+                    if (renderPage) renderPage();
+                }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
-            BOOL canContinue = (chooseIOS && selectedIOS.length > 0) || (!chooseIOS && selectedPhone.length > 0);
-            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", canContinue ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:1 alpha:.55]);
+            BOOL canContinue = current.length > 0;
+            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", canContinue ? inkDark : [UIColor colorWithWhite:1 alpha:.6]);
             next.enabled = canContinue;
-            next.backgroundColor = canContinue ? [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1] : [UIColor colorWithWhite:1 alpha:.12];
+            next.backgroundColor = canContinue ? accentDeep : [UIColor colorWithWhite:1 alpha:.12];
         } else {
             subtitle.text = @"3 / 3 · Chẩn đoán thiết bị";
-            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin & quét tweak’ để đọc mã máy, phiên bản hệ điều hành, chip (nếu hệ thống cung cấp), UDID khả dụng và quét các thư mục tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn; danh sách tweak chỉ phản ánh các thư mục truy cập được.";
+            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin & quét tweak’ để đọc mã máy, phiên bản hệ điều hành, chip, GPU, nhiệt độ hệ thống, pin, RAM và danh sách tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn.";
             UIButton *scan = [UIButton buttonWithType:UIButtonTypeSystem];
+            scan.translatesAutoresizingMaskIntoConstraints = NO;
             TIWelcomeSetButtonTitle(scan, @"⌕  Khai thác thông tin Darwin & quét tweak", UIColor.whiteColor);
-            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 12;
+            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 14;
             [scan.heightAnchor constraintEqualToConstant:48].active = YES;
             [scan addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                 (void)a;
@@ -4145,8 +4195,7 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
                 else if ([machine hasPrefix:@"iPhone14,"]) chip = @"Apple A15 Bionic (iPhone 13 family / SE 3)";
                 else if ([machine hasPrefix:@"iPhone15,"]) chip = @"Apple A16 Bionic (một số iPhone 14/15; đối chiếu mã máy)";
                 else if ([machine hasPrefix:@"iPhone16,"]) chip = @"Apple A17 Pro / A16 tuỳ mã máy; cần đối chiếu chính xác";
-                NSString *udid = @"Không được API ứng dụng công khai cung cấp";
-                NSString *serial = @"Không đọc được qua API công khai";
+                NSString *hardware = TIWelcomeHardwareDiagnostics();
                 NSMutableArray<NSString *> *found = [NSMutableArray array];
                 NSArray<NSString *> *dirs = @[@"/var/jb/Library/MobileSubstrate/DynamicLibraries", @"/var/jb/usr/lib/TweakInject", @"/Library/MobileSubstrate/DynamicLibraries", @"/usr/lib/TweakInject", @"/var/containers/Bundle/tweaksupport"];
                 NSFileManager *fm = NSFileManager.defaultManager;
@@ -4158,95 +4207,86 @@ static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRa
                     }
                 }
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
-                NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
-                extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
-                if (weakRenderPage) weakRenderPage();
+                NSString *tweaks = found.count ? [found componentsJoinedByString:@"\n"] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
+                extractedReport = [NSString stringWithFormat:@"DARWIN / THIẾT BỊ\nMã máy: %@\nHệ điều hành: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nBootstrap: %@\n\nGPU · NHIỆT · PIN · RAM\n%@\nTWEAK / FILE CÓ THỂ ĐỌC (tối đa 80 mục, hiện %lu)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel.", machine, system, selectedIOS, selectedPhone, chip, Titanium_DetectJailbreakTypeForUI(), hardware, (unsigned long)found.count, tweaks];
+                if (renderPage) renderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             BOOL ready = extractedReport.length > 0;
-            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", ready ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:1 alpha:.55]);
+            TIWelcomeSetButtonTitle(next, page == 3 ? @"Vào SmooIOS  →" : @"TIẾP TỤC  →", ready ? inkDark : [UIColor colorWithWhite:1 alpha:.6]);
             next.enabled = ready;
-            next.backgroundColor = ready ? [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1] : [UIColor colorWithWhite:1 alpha:.12];
+            next.backgroundColor = ready ? accentDeep : [UIColor colorWithWhite:1 alpha:.12];
         }
-        if (page == 3) {
-            TIWelcomeSetButtonTitle(next, @"Vào SmooIOS  →", next.enabled ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:1 alpha:.55]);
-        }
+        if (page == 3 && next.enabled) TIWelcomeSetButtonTitle(next, @"Vào SmooIOS  →", inkDark);
         if (next.enabled) TIWelcomePulseLayer(next.layer, 10, 18); else [next.layer removeAnimationForKey:@"TIWelcomePulse"];
-        [strongWizard.view bringSubviewToFront:progress];
-        [strongWizard.view bringSubviewToFront:next];
-        [strongWizard.view bringSubviewToFront:back];
-        [strongWizard.view bringSubviewToFront:options];
         [UIView animateWithDuration:.32 delay:0 usingSpringWithDamping:.85 initialSpringVelocity:.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            subtitle.alpha = 1.0; subtitle.transform = CGAffineTransformIdentity;
-            detail.alpha = 1.0; detail.transform = CGAffineTransformIdentity;
+            subtitle.alpha = 1.0; detail.alpha = 1.0;
         } completion:nil];
     };
-    weakRenderPage = renderPage;
 
-    [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-        (void)a;
+    advance = ^{
         if (page < 3) {
             if (page == 1 && !selectedIOS.length) return;
             if (page == 2 && !selectedPhone.length) return;
             page++;
-            CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromRight; transition.duration = .28;
-            [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardForward"];
-            if (weakRenderPage) weakRenderPage();
-        } else {
-            if (!extractedReport.length) {
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
-                [alert addAction:[UIAlertAction actionWithTitle:@"Đã hiểu" style:UIAlertActionStyleDefault handler:nil]];
-                [wizard presentViewController:alert animated:YES completion:nil];
-                return;
-            }
-            NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-            [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
-            [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
-            [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
-            [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
-            [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
-            [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
-            if ([d objectForKey:@"SmooIOSProfileV36"] == nil) [d setObject:@"auto" forKey:@"SmooIOSProfileV36"];
-            if ([d objectForKey:@"SmooIOSAutoTuneEnabledV36"] == nil) [d setBool:NO forKey:@"SmooIOSAutoTuneEnabledV36"];
-            if ([d objectForKey:@"SmooIOSAutoInspectTweaksV36"] == nil) [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
-            if ([d objectForKey:@"SmooIOSHzV36"] == nil) [d setInteger:120 forKey:@"SmooIOSHzV36"];
-            if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
-            [d synchronize];
-            [wizard dismissViewControllerAnimated:YES completion:^{
-                self.view.userInteractionEnabled = YES;
-                self.customTableView.userInteractionEnabled = YES;
-                self.customTableView.alpha = 1.0;
-                self.customTableView.transform = CGAffineTransformIdentity;
-                self.view.window.userInteractionEnabled = YES;
-                [self.customTableView setNeedsLayout];
-                [self.customTableView reloadData];
-                [self.view setNeedsLayout];
-                [self.view layoutIfNeeded];
-            }];
+            renderPage();
+            return;
         }
+        if (!extractedReport.length) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Đã hiểu" style:UIAlertActionStyleDefault handler:nil]];
+            [wizard presentViewController:alert animated:YES completion:nil];
+            return;
+        }
+        NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+        [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
+        [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
+        [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
+        [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
+        [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
+        [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
+        if ([d objectForKey:@"SmooIOSProfileV36"] == nil) [d setObject:@"auto" forKey:@"SmooIOSProfileV36"];
+        if ([d objectForKey:@"SmooIOSHzV36"] == nil) [d setInteger:120 forKey:@"SmooIOSHzV36"];
+        if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
+        [d synchronize];
+        [wizard dismissViewControllerAnimated:YES completion:^{
+            self.view.userInteractionEnabled = YES;
+            self.customTableView.userInteractionEnabled = YES;
+            self.customTableView.alpha = 1.0;
+            self.customTableView.transform = CGAffineTransformIdentity;
+            self.view.window.userInteractionEnabled = YES;
+            [self.customTableView reloadData];
+            [self.view setNeedsLayout];
+            [self.view layoutIfNeeded];
+        }];
+    };
+
+    [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        (void)a;
+        if (advance) advance();
     }] forControlEvents:UIControlEventTouchUpInside];
 
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-        (void)a; if (page <= 0) return; page--;
-        CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
-        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"];
-        if (weakRenderPage) weakRenderPage();
+        (void)a;
+        if (page <= 0) return;
+        page--;
+        if (renderPage) renderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
 
     [self presentViewController:wizard animated:YES completion:^{
-        wizard.view.frame = UIScreen.mainScreen.bounds;
-        background.frame = wizard.view.bounds;
-        [wizard.view setNeedsLayout]; [wizard.view layoutIfNeeded];
-        // Hiệu ứng xuất hiện: từng phần trượt lên và hiện dần, không để nút bị ẩn lúc khởi tạo.
+        decor.frame = wizard.view.bounds;
+        background.frame = decor.bounds;
+        sparkle.frame = decor.bounds;
+        sparkle.emitterPosition = CGPointMake(CGRectGetMidX(decor.bounds), -8);
+        sparkle.emitterSize = CGSizeMake(CGRectGetWidth(decor.bounds), 1);
+        // Hiệu ứng xuất hiện: từng phần hiện dần, luôn để alpha = 1 khi xong.
         [animatedViews enumerateObjectsUsingBlock:^(UIView *v, NSUInteger idx, BOOL *stop) {
             (void)stop;
             v.alpha = 0; v.transform = CGAffineTransformMakeTranslation(0, 14);
-            [UIView animateWithDuration:.45 delay:.06 * idx usingSpringWithDamping:.85 initialSpringVelocity:.3 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            [UIView animateWithDuration:.45 delay:.06 * (double)idx usingSpringWithDamping:.85 initialSpringVelocity:.3 options:UIViewAnimationOptionCurveEaseOut animations:^{
                 v.alpha = 1.0; v.transform = CGAffineTransformIdentity;
-            } completion:nil];
+            } completion:^(BOOL finished) { (void)finished; v.alpha = 1.0; v.transform = CGAffineTransformIdentity; }];
         }];
-        // Tiêu đề phát sáng nhẹ liên tục.
-        [heading.layer removeAnimationForKey:@"TIWelcomeGlow"];
         CABasicAnimation *glow = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
         glow.fromValue = @0.45; glow.toValue = @1.0; glow.duration = 1.6; glow.autoreverses = YES; glow.repeatCount = HUGE_VALF;
         [heading.layer addAnimation:glow forKey:@"TIWelcomeGlow"];
@@ -9309,9 +9349,9 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [NSString stringWithFormat:@"/System W_OK permission check: %@", yesNo(systemWritePermission)],
         [NSString stringWithFormat:@"/private/var exists / read / W_OK: %@ / %@ / %@", yesNo(privateVarExists), yesNo(privateVarRead), yesNo(privateVarWritePermission)],
         [NSString stringWithFormat:@"/var/jb exists / read / W_OK: %@ / %@ / %@", yesNo(bootstrapExists), yesNo(bootstrapRead), yesNo(bootstrapWritePermission)],
-        vi ? @"Các mục trên chỉ là kiểm tra đường dẫn/quyền truy cập của tiến trình; đã chứng minh root hay vượt sandbox." : @"These are process-level path/access checks only; they do not prove root access or a sandbox escape.",
-        vi ? @"Trạng thái khai thác kernel: đã được kiểm chứng bởi công cụ chẩn đoán này." : @"Kernel exploit status: not verified by this diagnostic.",
-        vi ? @"kết nối/xác thực máy chủ Apple nào được thực hiện trong phép kiểm tra này." : @"This check does not connect to or authenticate with Apple servers."];
+        vi ? @"Các mục trên chỉ là kiểm tra đường dẫn/quyền truy cập của tiến trình; không chứng minh root hay vượt sandbox." : @"These are process-level path/access checks only; they do not prove root access or a sandbox escape.",
+        vi ? @"Trạng thái khai thác kernel: chưa được kiểm chứng bởi công cụ chẩn đoán này." : @"Kernel exploit status: not verified by this diagnostic.",
+        vi ? @"Không có kết nối/xác thực máy chủ Apple nào được thực hiện trong phép kiểm tra này." : @"This check does not connect to or authenticate with Apple servers."];
     [self presentIndependentDocument:(vi ? @"Chi tiết Kernel" : @"Kernel details") text:report];
 }
 
