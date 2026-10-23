@@ -3923,8 +3923,17 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
     [back setTitle:@"‹ Quay lại" forState:UIControlStateNormal]; [back setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     UIButton *next = [UIButton buttonWithType:UIButtonTypeSystem]; next.translatesAutoresizingMaskIntoConstraints = NO;
     [next setTitle:@"Tiếp theo  →" forState:UIControlStateNormal]; [next setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    next.backgroundColor = [UIColor colorWithRed:.06 green:.42 blue:.64 alpha:1]; next.layer.cornerRadius = 13;
+    next.backgroundColor = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1]; next.layer.cornerRadius = 15;
+    next.layer.borderWidth = 1.2; next.layer.borderColor = [UIColor colorWithRed:.45 green:.94 blue:1 alpha:1].CGColor;
+    next.layer.shadowColor = [UIColor colorWithRed:.05 green:.72 blue:1 alpha:1].CGColor; next.layer.shadowOpacity = .42; next.layer.shadowRadius = 13; next.layer.shadowOffset = CGSizeMake(0, 4);
+    next.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBlack];
+    next.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+    [next setTitleColor:[UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] forState:UIControlStateNormal];
+    [next setTitleColor:[UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] forState:UIControlStateDisabled];
+    next.titleLabel.hidden = NO; next.titleLabel.alpha = 1.0; next.alpha = 1.0; next.userInteractionEnabled = YES;
     back.backgroundColor = [UIColor colorWithWhite:1 alpha:.08]; back.layer.cornerRadius = 13;
+    back.layer.borderWidth = 1; back.layer.borderColor = [UIColor colorWithWhite:1 alpha:.16].CGColor;
+    back.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBold];
     [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:detail];
     [wizard.view addSubview:options]; [wizard.view addSubview:back]; [wizard.view addSubview:next];
     [NSLayoutConstraint activateConstraints:@[
@@ -3978,11 +3987,15 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         for (UIView *v in options.arrangedSubviews) { [options removeArrangedSubview:v]; [v removeFromSuperview]; }
         back.hidden = (page == 0);
-        [next setTitle:(page == 3 ? @"Vào SmooIOS  →" : @"Tiếp theo  →") forState:UIControlStateNormal];
+        next.hidden = NO;
+        next.titleLabel.hidden = NO; next.titleLabel.alpha = 1.0; next.alpha = 1.0;
+        next.userInteractionEnabled = YES;
+        [next setTitle:(page == 3 ? @"Vào SmooIOS  →" : @"TIẾP TỤC  →") forState:UIControlStateNormal];
         if (page == 0) {
             subtitle.text = @"Chào mừng đến với SmooIOS";
             detail.text = @"NƠI BẺ KHOÁ TẦNG SÂU\n\nThiết lập tiếp theo sẽ giúp chọn nhóm iOS, xác nhận dòng iPhone và thu thập thông tin thiết bị cùng danh sách tweak để kiểm tra khả năng xung đột.\n\nĐây là bước nhận diện và chẩn đoán; nó không tự chạy khai thác kernel hoặc tuyên bố đã kích hoạt nếu không có backend thực sự.";
             next.hidden = NO;
+            next.enabled = YES;
         } else if (page == 1 || page == 2) {
             BOOL chooseIOS = (page == 1);
             subtitle.text = chooseIOS ? @"1 / 3 · Chọn phiên bản iOS" : @"2 / 3 · Chọn đúng dòng iPhone";
@@ -3999,7 +4012,11 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
                 [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; if (weakRenderPage) weakRenderPage(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
-            next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
+            BOOL canContinue = (chooseIOS && selectedIOS.length > 0) || (!chooseIOS && selectedPhone.length > 0);
+            next.hidden = NO;
+            next.enabled = canContinue;
+            next.alpha = canContinue ? 1.0 : .58;
+            [next setTitleColor:(canContinue ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:.22 alpha:1]) forState:UIControlStateNormal];
         } else {
             subtitle.text = @"3 / 3 · Chẩn đoán thiết bị";
             detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin’ để đọc mã máy, phiên bản hệ điều hành, chip (nếu hệ thống cung cấp), UDID khả dụng và quét các thư mục tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn; danh sách tweak chỉ phản ánh các thư mục truy cập được.";
@@ -4036,7 +4053,17 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
             next.hidden = NO;
+            next.enabled = extractedReport.length > 0;
+            next.alpha = extractedReport.length > 0 ? 1.0 : .58;
+            [next setTitleColor:(extractedReport.length > 0 ? [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1] : [UIColor colorWithWhite:.22 alpha:1]) forState:UIControlStateNormal];
         }
+        [strongWizard.view bringSubviewToFront:next];
+        [strongWizard.view bringSubviewToFront:back];
+        [strongWizard.view bringSubviewToFront:options];
+        [UIView animateWithDuration:.24 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            heading.transform = CGAffineTransformMakeTranslation(0, -2); heading.alpha = 1.0;
+            subtitle.alpha = 1.0; detail.alpha = 1.0;
+        } completion:^(__unused BOOL finished) { heading.transform = CGAffineTransformIdentity; }];
     };
     weakRenderPage = renderPage;
     [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
@@ -6466,7 +6493,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSString *appName = [app[@"name"] isKindOfClass:NSString.class] ? app[@"name"] : bundleID;
     NSDictionary *all = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] ?: @{};
     NSDictionary *saved = [all[bundleID] isKindOfClass:NSDictionary.class] ? all[bundleID] : nil;
-    __block NSInteger selected = saved ? [saved[@"preset"] integerValue] : 2;
+    __block NSInteger selected = saved ? MAX(0, MIN(3, [saved[@"preset"] integerValue])) : 0;
     NSArray *names = @[@"TỰ ĐỘNG", @"HIỆU SUẤT CAO", @"CÂN BẰNG", @"TIẾT KIỆM PIN"];
     NSArray *descs = @[@"Điều chỉnh mục tiêu theo nhiệt độ iOS và chế độ nguồn điện thấp.", @"Ưu tiên mức mục tiêu cao nhất có thể áp dụng.", @"Cân bằng giữa độ mượt và mức tiêu thụ.", @"Ưu tiên giảm mức sử dụng và mục tiêu khung hình."];
     NSArray *rates = @[@0, @240, @90, @60];
@@ -6480,7 +6507,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [NSLayoutConstraint activateConstraints:@[[scroll.topAnchor constraintEqualToAnchor:page.view.safeAreaLayoutGuide.topAnchor], [scroll.leadingAnchor constraintEqualToAnchor:page.view.leadingAnchor], [scroll.trailingAnchor constraintEqualToAnchor:page.view.trailingAnchor], [scroll.bottomAnchor constraintEqualToAnchor:page.view.safeAreaLayoutGuide.bottomAnchor constant:-88]]];
     UIView *content = [UIView new]; content.translatesAutoresizingMaskIntoConstraints = NO; [scroll addSubview:content];
     [NSLayoutConstraint activateConstraints:@[[content.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor], [content.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor], [content.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor], [content.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor], [content.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor]]];
-    UILabel *hero = [UILabel new]; hero.translatesAutoresizingMaskIntoConstraints=NO; hero.text=appName; hero.font=[UIFont systemFontOfSize:27 weight:UIFontWeightBlack]; hero.textColor=UIColor.whiteColor; hero.lineBreakMode=NSLineBreakByTruncatingTail; [content addSubview:hero];
+    UILabel *hero = [UILabel new]; hero.translatesAutoresizingMaskIntoConstraints=NO; hero.text=appName; hero.font=[UIFont systemFontOfSize:27 weight:UIFontWeightBlack]; hero.textColor=[UIColor colorWithRed:.88 green:.96 blue:1 alpha:1]; hero.numberOfLines=2; hero.lineBreakMode=NSLineBreakByTruncatingTail; [content addSubview:hero];
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem]; closeButton.translatesAutoresizingMaskIntoConstraints=NO; closeButton.layer.cornerRadius=18; closeButton.backgroundColor=[UIColor colorWithRed:.16 green:.20 blue:.32 alpha:.95]; closeButton.layer.borderWidth=1.2; closeButton.layer.borderColor=[UIColor colorWithRed:.20 green:.84 blue:1 alpha:1].CGColor; [closeButton setTitle:@"×" forState:UIControlStateNormal]; [closeButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; closeButton.titleLabel.font=[UIFont systemFontOfSize:28 weight:UIFontWeightMedium]; [content addSubview:closeButton];
     [closeButton addAction:[UIAction actionWithHandler:^(__kindof UIAction *action){ (void)action; [page dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
     UILabel *bundle = [UILabel new]; bundle.translatesAutoresizingMaskIntoConstraints=NO; bundle.text=bundleID; bundle.font=[UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightMedium]; bundle.textColor=[UIColor colorWithWhite:.62 alpha:1]; bundle.numberOfLines=2; [content addSubview:bundle];
@@ -6546,7 +6573,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSMutableDictionary *profiles=[[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] mutableCopy] ?: [NSMutableDictionary dictionary];
         NSInteger chosenRate = [rates[selected] integerValue];
         if (selected == 0) chosenRate = 0; // 0 is the persisted Auto mode, not a claimed live refresh rate.
-        profiles[bundleID]=@{@"preset":@(selected),@"rate":@(chosenRate),@"name":allNames[selected],@"applied":@YES};
+        NSDictionary *storedRates = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV42PerAppRates"] ?: @{};
+        NSDictionary *appRates = [storedRates[bundleID] isKindOfClass:NSDictionary.class] ? storedRates[bundleID] : @{@"hz":@0,@"fps":@0};
+        profiles[bundleID]=@{@"preset":@(selected),@"rate":@(chosenRate),@"hz":appRates[@"hz"] ?: @0,@"fps":appRates[@"fps"] ?: @0,@"name":allNames[selected],@"applied":@YES};
         [[NSUserDefaults standardUserDefaults] setObject:profiles forKey:@"TIV11PerAppProfiles"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self dismissViewControllerAnimated:YES completion:^{ UIAlertController *done=[UIAlertController alertControllerWithTitle:@"Đã lưu hồ sơ ứng dụng" message:[NSString stringWithFormat:@"%@ · %@\nMục tiêu %@ Hz/FPS đã lưu (0 = Tự động). Việc áp dụng thực tế phụ thuộc bộ điều khiển tương thích.",appName,allNames[selected],@(chosenRate)] preferredStyle:UIAlertControllerStyleAlert]; [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil]; }];
@@ -6612,7 +6641,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w=MAX(320.0,width), side=14.0, cw=w-side*2.0;
     UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,1125.0)]; root.backgroundColor=UIColor.clearColor;
-    UILabel *eyebrow=[[UILabel alloc] initWithFrame:CGRectMake(side,10,cw,14)]; eyebrow.text=@"SMOOIOS PRO / LIVE MONITOR V42"; eyebrow.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor=[UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    UILabel *eyebrow=[[UILabel alloc] initWithFrame:CGRectMake(side,10,cw,14)]; eyebrow.text=@"SMOOIOS PRO / LIVE MONITOR V43"; eyebrow.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor=[UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title=[[UILabel alloc] initWithFrame:CGRectMake(side,28,cw,31)]; title.text=@"BẢNG ĐIỀU KHIỂN"; title.font=[UIFont systemFontOfSize:24 weight:UIFontWeightBlack]; title.textColor=UIColor.whiteColor; [root addSubview:title];
     UILabel *sub=[[UILabel alloc] initWithFrame:CGRectMake(side,61,cw,18)]; sub.text=@"Biểu đồ cập nhật liên tục · chỉ dùng số đo đọc được"; sub.font=[UIFont systemFontOfSize:11]; sub.textColor=[UIColor secondaryLabelColor]; [root addSubview:sub];
     UILabel *runtime=[[UILabel alloc] initWithFrame:CGRectMake(side,76,cw,15)]; runtime.tag=8730; runtime.textAlignment=NSTextAlignmentRight; runtime.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightMedium]; runtime.textColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; runtime.text=@"Runtime · 00:00:00"; [root addSubview:runtime];
@@ -6710,7 +6739,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 505.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
-    eyebrow.text = @"SMOOIOS PRO / LIQUID GLASS V42"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    eyebrow.text = @"SMOOIOS PRO / LIQUID GLASS V43"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; title.text = @"Hz · FPS · Đồng bộ"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 300)]; panel.backgroundColor = [UIColor colorWithRed:.035 green:.045 blue:.105 alpha:.88]; panel.layer.cornerRadius = 27; panel.layer.cornerCurve = kCACornerCurveContinuous; panel.layer.borderWidth = 1.25; panel.layer.borderColor = [UIColor colorWithRed:.20 green:.78 blue:1 alpha:.88].CGColor; panel.layer.shadowColor = [UIColor colorWithRed:.38 green:.16 blue:1 alpha:1].CGColor; panel.layer.shadowOpacity = .22; panel.layer.shadowRadius = 18; panel.layer.shadowOffset = CGSizeMake(0, 8); [root addSubview:panel];
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
