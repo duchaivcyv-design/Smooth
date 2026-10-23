@@ -158,8 +158,12 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
     return until > now ? (until - now) : 0;
 }
 
-#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
-#define _APEX_V285_PRO_PAYLOAD_DEFINED
+// Use a translation-unit-local payload type. RootListController.h in some project
+// revisions defines the legacy, shorter ApexV285ProPayloadRLCV285 and sets the old guard.
+// A unique guard/type prevents that header definition from silently shadowing this
+// 34-toggle IPC layout, keeping the bytes written here compatible with Tweak.xm.
+#ifndef _APEX_V285_PRO_PAYLOAD_RLC_V285_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_RLC_V285_DEFINED
 typedef struct __attribute__((packed)) {
     uint32_t magic;
     uint32_t masterEnabled;
@@ -225,7 +229,7 @@ typedef struct __attribute__((packed)) {
     uint64_t updateSeq;
     uint64_t lastHeartbeat;
     char     reserved[200];
-} ApexV285ProPayload;
+} ApexV285ProPayloadRLCV285;
 #endif
 
 static NSInteger Titanium_GetCrashCount(void) { return [[NSUserDefaults standardUserDefaults] integerForKey:TI_CRASH_COUNT_KEY]; }
@@ -2534,11 +2538,11 @@ static NSString *Titanium_SandboxDiagnosticForUI(void) {
 static NSString *Titanium_IPCDiagnosticForUI(void) {
     struct stat st;
     if (stat([PRIMARY_SYNC_FILE fileSystemRepresentation], &st) == 0) {
-        if (st.st_size == (off_t)sizeof(ApexV285ProPayload)) return @"Payload có mặt tại /tmp";
+        if (st.st_size == (off_t)sizeof(ApexV285ProPayloadRLCV285)) return @"Payload có mặt tại /tmp";
         return @"Payload tại /tmp sai kích thước";
     }
     if (stat([SECONDARY_SYNC_FILE fileSystemRepresentation], &st) == 0) {
-        if (st.st_size == (off_t)sizeof(ApexV285ProPayload)) return @"Payload có mặt tại /var/jb/tmp";
+        if (st.st_size == (off_t)sizeof(ApexV285ProPayloadRLCV285)) return @"Payload có mặt tại /var/jb/tmp";
         return @"Payload tại /var/jb/tmp sai kích thước";
     }
     if (access("/tmp", W_OK | X_OK) == 0) return @"Chưa có payload; /tmp truy cập được";
@@ -2628,7 +2632,7 @@ static BOOL Titanium_WriteAtomicBytesAtPath(NSString *path, const void *data, si
 // Atomic replacement prevents Tweak.xm from reading a partly written payload. Each write gets
 // its own temporary file, so rapid UI toggles cannot overwrite one another's staging file.
 static void Titanium_WriteSyncPayloadUniversal(const void *data, size_t size) {
-    if (!data || size != sizeof(ApexV285ProPayload)) return;
+    if (!data || size != sizeof(ApexV285ProPayloadRLCV285)) return;
     (void)Titanium_WriteAtomicBytesAtPath(PRIMARY_SYNC_FILE, data, size);
     (void)Titanium_WriteAtomicBytesAtPath(SECONDARY_SYNC_FILE, data, size);
 }
@@ -8158,8 +8162,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
 
-    ApexV285ProPayload p;
-    memset(&p, 0, sizeof(ApexV285ProPayload));
+    ApexV285ProPayloadRLCV285 p;
+    memset(&p, 0, sizeof(ApexV285ProPayloadRLCV285));
     p.magic = APEX_SYNC_MAGIC_V285;
 
     BOOL masterEnabled = (enabled && _isFeatureActivated && !_serverDown && ![self.settingsDict[@"AvoidTweakConflicts"] boolValue]);
@@ -8264,10 +8268,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }];
     }
     NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
-    ApexV285ProPayload payloadCopy = p;
+    ApexV285ProPayloadRLCV285 payloadCopy = p;
 
     dispatch_async(Titanium_IPCWriterQueue(), ^{
-        Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayload));
+        Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayloadRLCV285));
         Titanium_WriteDisabledAppsFile(disabledJoined);
 
         // Notify only after both atomic IPC files are replaced, then send the legacy reload events.
