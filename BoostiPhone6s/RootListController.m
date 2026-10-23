@@ -6,7 +6,6 @@
 #import <spawn.h>
 #import <sys/wait.h>
 #import <sys/stat.h>
-#import <sys/mman.h>
 #import <sys/utsname.h>
 #import <sys/sysctl.h>
 #import <fcntl.h>
@@ -158,78 +157,19 @@ static NSTimeInterval Titanium_PersistentServerStateRemaining(void) {
     return until > now ? (until - now) : 0;
 }
 
-// Use a translation-unit-local payload type. RootListController.h in some project
-// revisions defines the legacy, shorter ApexV285ProPayloadRLCV285 and sets the old guard.
-// A unique guard/type prevents that header definition from silently shadowing this
-// 34-toggle IPC layout, keeping the bytes written here compatible with Tweak.xm.
-#ifndef _APEX_V285_PRO_PAYLOAD_RLC_V285_DEFINED
-#define _APEX_V285_PRO_PAYLOAD_RLC_V285_DEFINED
+#ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
+#define _APEX_V285_PRO_PAYLOAD_DEFINED
 typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint32_t masterEnabled;
-    int32_t  targetHz;
-    int32_t  targetFPS;
-    uint32_t forceOverclock;
-    uint32_t pipSyncEnabled;
-    uint32_t thermalShield;
-    uint32_t antiStutterExit;
-    uint32_t smartBufferingLevel;
-    uint32_t zeroLatencyTouch;
-    uint32_t shaderOptimization;
-    uint32_t dynamicInterpolation;
-    uint32_t fastAppLaunch;
-    uint32_t lowLatencyAudio;
-    uint32_t memoryPressureRelief;
-    uint32_t metalPacingEnabled;
-    uint32_t runloopHangGuard;
-    uint32_t keyboardZeroLagV3;
-    uint32_t aggressiveRamCleaner;
-    uint32_t lockFixedFpsWhenThermal;
-    uint32_t antiGhostTouch;
-    uint32_t diskIOPriorityBoost;
-    uint32_t rawTouchDirectDelivery;
-    uint32_t powerSaveModeActive;
-    
-    // ====== 34 CÔNG TẮC ĐIỀU KHIỂN NHÓM ======
-    uint32_t enableAppleInternalProMotion;        // Group_Apple_Internal_ProMotion_Apex
-    uint32_t enableZeroLatencyTouch;              // Group_ZeroLatency_Touch_Opt
-    uint32_t enableMetalZeroTearing;              // Group_Metal_ZeroTearing_Pacing
-    uint32_t enableFluidTransitions;              // Group_FluidTransitions_Pacing
-    uint32_t enableTitaniumGameMetalOverdrive;    // Group_Titanium_Game_Metal_Overdrive
-    uint32_t enableAIStreamOptimization;          // Group_AI_Stream_Optimization
-    uint32_t enableFastLaunchSuperEngine;         // Group_FastLaunch_SuperEngineV285
-    uint32_t enableScrollAndKeyboard;             // Group_Scroll_And_Keyboard_Opt
-    uint32_t enableInstantActionTransitions;      // Group_InstantActionAndMenuTransitions_Boost
-    uint32_t enableGlobalThreadGovernor;          // Group_Global_Thread_Governor_Unthrottled
-    uint32_t enableSiliconSchedulerTouch;         // Group_Silicon_Scheduler_Touch_Governor
-    uint32_t enableCoreAnimationRenderServer;     // Group_CoreAnimation_RenderServer_Governor
-    uint32_t enableCAWindowServerDominance;       // Group_CAWindowServer_Absolute_Dominance
-    uint32_t enableForceRenderRecovery;           // Group_Force_Render_Recovery_Overdrive
-    uint32_t enableWindowLevelOverdrive;          // Group_Window_Level_Overdrive
-    uint32_t enableSystemMemoryGovernor;          // Group_System_Memory_And_RunLoop_Governor
-    uint32_t enableThermalCryoPacing;             // Group_Thermal_CryoPacing_ZeroDrop
-    uint32_t enableDeepRamCompaction;             // Group_Deep_RAM_Compaction_Engine
-    uint32_t enableWebKitRamOptimizer;            // Group_WebKit_RAM_Optimizer
-    uint32_t enableSiliconHardwarePipeline;       // Group_Silicon_Hardware_Pipeline_Overdrive
-    uint32_t enableHardwareProMotionOverclock;    // Group_Hardware_ProMotion_Overclock
-    uint32_t enableNeuralTouchEdgeZeroLatency;    // Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285
-    uint32_t enableNativeColdBootOverdrive;       // Group_Apple_Native_ColdBoot_Overdrive
-    uint32_t enableTitaniumV12SmoothExit;         // Group_TitaniumV12_SmoothExit_And_DisplayLink
-    uint32_t enableDisplaySpringBoard;            // Group_Display_SpringBoardV285
-    uint32_t enableLiquidGlassOpt;                // Group_LiquidGlass_Opt
-    uint32_t enableSwitcher30Apps;                // Group_Switcher30Apps_Virtualization
-    uint32_t enableSpringBoardSwitcherOpt;        // Group_SpringBoard_Switcher_Opt
-    uint32_t enableFloatingWindowPiP;             // Group_V285_FloatingWindow_PiP
-    uint32_t enableHardwareSegregationHome;       // Group_HardwareSegregation_ClassicHomeV285
-    uint32_t enableSpringBoardProcessManager;     // Group_SpringBoard_ProcessManagerV285
-    uint32_t enableKeepAppsAlive;                 // Group_KeepAppsAlive_NoKill
-    uint32_t enableTitaniumV10LayoutBoost;        // Group_TitaniumV10_SpringBoard_Layout_Boost
-    uint32_t enableUIKitThirdPartyIsolated;       // Group_UIKit_ThirdParty_IsolatedV285
-    
-    uint64_t updateSeq;
-    uint64_t lastHeartbeat;
-    char     reserved[200];
-} ApexV285ProPayloadRLCV285;
+    uint32_t magic, masterEnabled;
+    int32_t targetHz, targetFPS;
+    uint32_t forceOverclock, pipSyncEnabled, thermalShield, antiStutterExit;
+    uint32_t smartBufferingLevel, zeroLatencyTouch, shaderOptimization, dynamicInterpolation;
+    uint32_t fastAppLaunch, lowLatencyAudio, memoryPressureRelief, metalPacingEnabled;
+    uint32_t runloopHangGuard, keyboardZeroLagV3, aggressiveRamCleaner, lockFixedFpsWhenThermal;
+    uint32_t antiGhostTouch, diskIOPriorityBoost, rawTouchDirectDelivery, powerSaveModeActive;
+    uint64_t updateSeq, lastHeartbeat;
+    char reserved[48];
+} ApexV285ProPayload;
 #endif
 
 static NSInteger Titanium_GetCrashCount(void) { return [[NSUserDefaults standardUserDefaults] integerForKey:TI_CRASH_COUNT_KEY]; }
@@ -2538,11 +2478,11 @@ static NSString *Titanium_SandboxDiagnosticForUI(void) {
 static NSString *Titanium_IPCDiagnosticForUI(void) {
     struct stat st;
     if (stat([PRIMARY_SYNC_FILE fileSystemRepresentation], &st) == 0) {
-        if (st.st_size == (off_t)sizeof(ApexV285ProPayloadRLCV285)) return @"Payload có mặt tại /tmp";
+        if (st.st_size == (off_t)sizeof(ApexV285ProPayload)) return @"Payload có mặt tại /tmp";
         return @"Payload tại /tmp sai kích thước";
     }
     if (stat([SECONDARY_SYNC_FILE fileSystemRepresentation], &st) == 0) {
-        if (st.st_size == (off_t)sizeof(ApexV285ProPayloadRLCV285)) return @"Payload có mặt tại /var/jb/tmp";
+        if (st.st_size == (off_t)sizeof(ApexV285ProPayload)) return @"Payload có mặt tại /var/jb/tmp";
         return @"Payload tại /var/jb/tmp sai kích thước";
     }
     if (access("/tmp", W_OK | X_OK) == 0) return @"Chưa có payload; /tmp truy cập được";
@@ -2632,7 +2572,7 @@ static BOOL Titanium_WriteAtomicBytesAtPath(NSString *path, const void *data, si
 // Atomic replacement prevents Tweak.xm from reading a partly written payload. Each write gets
 // its own temporary file, so rapid UI toggles cannot overwrite one another's staging file.
 static void Titanium_WriteSyncPayloadUniversal(const void *data, size_t size) {
-    if (!data || size != sizeof(ApexV285ProPayloadRLCV285)) return;
+    if (!data || size != sizeof(ApexV285ProPayload)) return;
     (void)Titanium_WriteAtomicBytesAtPath(PRIMARY_SYNC_FILE, data, size);
     (void)Titanium_WriteAtomicBytesAtPath(SECONDARY_SYNC_FILE, data, size);
 }
@@ -3135,7 +3075,7 @@ static NSString *TIRateDescription(NSInteger r, BOOL isHz) {
 }
 
 static NSArray<NSNumber *> *TIExpandedRateValues(void) {
-    // SmooIOS V37: extended list uses 5-step presets and retains 90 as explicitly requested.
+    // SmooTHIOS Pro: extended list uses 5-step presets and retains 90 as explicitly requested.
     NSMutableArray<NSNumber *> *values = [NSMutableArray array];
     for (NSInteger rate = 20; rate <= 235; rate += 5) {
         if (rate == 30 || rate == 60 || rate == 120 || rate == 144 || rate == 240) continue;
@@ -3627,80 +3567,6 @@ static void Titanium_ShowExploitScreen(UIViewController *fromVC, void (^completi
 - (void)dealloc { [_typingTimer invalidate]; [_stageTimer invalidate]; }
 @end
 
-static UIImage *TIWelcomeDotImage(void) {
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(6, 6), NO, 0);
-    CGContextRef ctx = UIGraphicsGetCurrentContext();
-    CGContextSetFillColorWithColor(ctx, [UIColor colorWithRed:.60 green:.95 blue:1 alpha:1].CGColor);
-    CGContextFillEllipseInRect(ctx, CGRectMake(0, 0, 6, 6));
-    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return img;
-}
-
-static void TIWelcomeSetButtonTitle(UIButton *button, NSString *title, UIColor *color) {
-    NSDictionary *attrs = @{NSFontAttributeName: [UIFont systemFontOfSize:15 weight:UIFontWeightBlack],
-                            NSForegroundColorAttributeName: color};
-    NSAttributedString *text = [[NSAttributedString alloc] initWithString:title attributes:attrs];
-    [button setAttributedTitle:text forState:UIControlStateNormal];
-    [button setAttributedTitle:text forState:UIControlStateHighlighted];
-    [button setAttributedTitle:text forState:UIControlStateDisabled];
-    [button setAttributedTitle:text forState:UIControlStateSelected];
-    button.titleLabel.hidden = NO;
-    button.titleLabel.alpha = 1.0;
-}
-
-static void TIWelcomePulseLayer(CALayer *layer, CGFloat fromRadius, CGFloat toRadius) {
-    [layer removeAnimationForKey:@"TIWelcomePulse"];
-    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"shadowRadius"];
-    pulse.fromValue = @(fromRadius);
-    pulse.toValue = @(toRadius);
-    pulse.duration = 1.1;
-    pulse.autoreverses = YES;
-    pulse.repeatCount = HUGE_VALF;
-    pulse.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [layer addAnimation:pulse forKey:@"TIWelcomePulse"];
-}
-
-// Chẩn đoán phần cứng bằng API công khai. iOS không công khai nhiệt độ chip theo độ C;
-// chỉ có mức nhiệt (thermalState) và thông tin GPU qua Metal.
-static NSString *TIWelcomeHardwareDiagnostics(void) {
-    NSMutableString *s = [NSMutableString string];
-    NSProcessInfo *pi = NSProcessInfo.processInfo;
-    NSString *thermal = @"Không rõ";
-    switch (pi.thermalState) {
-        case NSProcessInfoThermalStateNominal:  thermal = @"Bình thường"; break;
-        case NSProcessInfoThermalStateFair:     thermal = @"Hơi nóng"; break;
-        case NSProcessInfoThermalStateSerious:  thermal = @"Nóng nghiêm trọng"; break;
-        case NSProcessInfoThermalStateCritical: thermal = @"Quá nhiệt (critical)"; break;
-        default: break;
-    }
-    [s appendFormat:@"Mức nhiệt hệ thống: %@ (iOS không công khai nhiệt độ °C của chip)\n", thermal];
-    [s appendFormat:@"Chế độ tiết kiệm pin: %@\n", pi.isLowPowerModeEnabled ? @"Bật" : @"Tắt"];
-    [s appendFormat:@"Số nhân CPU đang hoạt động: %lu\n", (unsigned long)pi.activeProcessorCount];
-    [s appendFormat:@"RAM vật lý: %.2f GB\n", (double)pi.physicalMemory / 1073741824.0];
-    UIDevice *dev = UIDevice.currentDevice;
-    dev.batteryMonitoringEnabled = YES;
-    if (dev.batteryState != UIDeviceBatteryStateUnknown) {
-        [s appendFormat:@"Pin: %.0f%%\n", dev.batteryLevel * 100.0];
-    }
-    dev.batteryMonitoringEnabled = NO;
-    id<MTLDevice> gpu = MTLCreateSystemDefaultDevice();
-    if (gpu) {
-        [s appendFormat:@"GPU (Metal): %@\n", gpu.name ?: @"Không rõ tên"];
-        [s appendFormat:@"Bộ đệm buffer tối đa: %.0f MB\n", (double)gpu.maxBufferLength / 1048576.0];
-    } else {
-        [s appendString:@"GPU (Metal): không khởi tạo được thiết bị Metal\n"];
-    }
-    return s;
-}
-
-static char kTIWelcomeRenderKey;
-static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
-    if (!wizard) return;
-    void (^render)(void) = objc_getAssociatedObject(wizard, &kTIWelcomeRenderKey);
-    if (render) render();
-}
-
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -3960,12 +3826,6 @@ static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
     if (_isFeatureActivated) [self startContinuousHardwareHUD];
 }
 
-// ====================================================================================================
-// WELCOME WIZARD V2 — giao diện SmooIOS (hiệu ứng glow, gradient chuyển động, hạt sáng, tiến trình).
-// Các khóa NSUserDefaults và cấu trúc dữ liệu giữ NGUYÊN để đồng bộ với Tweak.xm.
-// Lỗi chữ nút "TIẾP TỤC" biến mất: mọi trạng thái (normal/highlighted/disabled/selected) đều dùng
-// attributed title có màu rõ ràng, và titleLabel luôn hiển thị lại sau mỗi lần render.
-// ====================================================================================================
 - (void)showV347FirstLaunchWelcome {
     if (self.presentedViewController) return;
     UIViewController *wizard = [UIViewController new];
@@ -3975,144 +3835,61 @@ static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
     wizard.definesPresentationContext = YES;
     wizard.providesPresentationContextTransitionStyle = YES;
     wizard.view.backgroundColor = [UIColor colorWithRed:0.012 green:0.018 blue:0.055 alpha:1.0];
-    UIColor *accent = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
-    UIColor *accentDeep = [UIColor colorWithRed:.05 green:.68 blue:.88 alpha:1];
-    UIColor *inkDark = [UIColor colorWithRed:.015 green:.035 blue:.075 alpha:1];
 
-    // Lớp trang trí: không nhận chạm, đặt dưới cùng để không che nút.
-    UIView *decor = [UIView new];
-    decor.frame = UIScreen.mainScreen.bounds;
-    decor.userInteractionEnabled = NO;
-    decor.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [wizard.view addSubview:decor];
-    NSArray *paletteA = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
+    CAGradientLayer *background = [CAGradientLayer layer];
+    background.frame = UIScreen.mainScreen.bounds;
+    background.colors = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
-    NSArray *paletteB = @[(id)[UIColor colorWithRed:.02 green:.12 blue:.22 alpha:1].CGColor,
-                          (id)[UIColor colorWithRed:.02 green:.02 blue:.09 alpha:1].CGColor,
-                          (id)[UIColor colorWithRed:.12 green:.03 blue:.20 alpha:1].CGColor];
-    CAGradientLayer *background = [CAGradientLayer layer];
-    background.frame = decor.bounds;
-    background.colors = paletteA;
-    background.startPoint = CGPointMake(0, 0);
-    background.endPoint = CGPointMake(1, 1);
-    [decor.layer addSublayer:background];
-    CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"colors"];
-    drift.fromValue = paletteA; drift.toValue = paletteB;
-    drift.duration = 7.0; drift.autoreverses = YES; drift.repeatCount = HUGE_VALF;
-    drift.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [background addAnimation:drift forKey:@"TIWelcomeDrift"];
-
-    CAEmitterLayer *sparkle = [CAEmitterLayer layer];
-    sparkle.frame = decor.bounds;
-    sparkle.emitterPosition = CGPointMake(CGRectGetMidX(decor.bounds), -8);
-    sparkle.emitterSize = CGSizeMake(CGRectGetWidth(decor.bounds), 1);
-    sparkle.emitterShape = kCAEmitterLayerLine;
-    sparkle.renderMode = kCAEmitterLayerOldestFirst;
-    CAEmitterCell *sparkCell = [CAEmitterCell emitterCell];
-    sparkCell.contents = (__bridge id)TIWelcomeDotImage().CGImage;
-    sparkCell.birthRate = 2.5; sparkCell.lifetime = 11; sparkCell.lifetimeRange = 3;
-    sparkCell.velocity = 6; sparkCell.velocityRange = 4; sparkCell.yAcceleration = 14;
-    sparkCell.scale = 0.5; sparkCell.scaleRange = 0.35;
-    sparkCell.alphaRange = 0.4; sparkCell.alphaSpeed = -0.07;
-    sparkle.emitterCells = @[sparkCell];
-    [decor.layer addSublayer:sparkle];
+    background.startPoint = CGPointMake(0, 0); background.endPoint = CGPointMake(1, 1);
+    [wizard.view.layer insertSublayer:background atIndex:0];
 
     UILabel *heading = [UILabel new]; heading.translatesAutoresizingMaskIntoConstraints = NO;
-    heading.text = @"SMOOIOS"; heading.textAlignment = NSTextAlignmentCenter;
-    heading.font = [UIFont systemFontOfSize:30 weight:UIFontWeightBlack];
-    heading.textColor = accent;
-    heading.layer.shadowColor = [UIColor colorWithRed:.2 green:.85 blue:1 alpha:1].CGColor;
-    heading.layer.shadowOffset = CGSizeZero; heading.layer.shadowOpacity = 0.9; heading.layer.shadowRadius = 14;
-
+    heading.text = @"SMOOIOS"; heading.textAlignment = NSTextAlignmentCenter; heading.numberOfLines = 2;
+    heading.font = [UIFont systemFontOfSize:27 weight:UIFontWeightBlack];
+    heading.textColor = [UIColor colorWithRed:.38 green:.9 blue:1 alpha:1];
     UILabel *subtitle = [UILabel new]; subtitle.translatesAutoresizingMaskIntoConstraints = NO;
     subtitle.text = @"Thiết lập ban đầu"; subtitle.textAlignment = NSTextAlignmentCenter;
-    subtitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    subtitle.textColor = [UIColor colorWithWhite:1 alpha:.92];
-
-    NSMutableArray<UIView *> *pageDots = [NSMutableArray array];
-    UIStackView *progress = [[UIStackView alloc] init]; progress.translatesAutoresizingMaskIntoConstraints = NO;
-    progress.axis = UILayoutConstraintAxisHorizontal; progress.spacing = 8; progress.alignment = UIStackViewAlignmentCenter;
-    for (NSInteger i = 0; i < 4; i++) {
-        UIView *dot = [UIView new]; dot.translatesAutoresizingMaskIntoConstraints = NO;
-        dot.layer.cornerRadius = 4; dot.backgroundColor = [UIColor colorWithWhite:1 alpha:.22];
-        [dot.widthAnchor constraintEqualToConstant:8].active = YES;
-        [dot.heightAnchor constraintEqualToConstant:8].active = YES;
-        dot.userInteractionEnabled = NO;
-        [progress addArrangedSubview:dot];
-        [pageDots addObject:dot];
-    }
-
-    UIVisualEffectView *glass = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
-    glass.translatesAutoresizingMaskIntoConstraints = NO;
-    glass.layer.cornerRadius = 20; glass.clipsToBounds = YES;
-    glass.layer.borderWidth = 1; glass.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
+    subtitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold]; subtitle.textColor = UIColor.whiteColor;
     UITextView *detail = [UITextView new]; detail.translatesAutoresizingMaskIntoConstraints = NO;
-    detail.backgroundColor = UIColor.clearColor; detail.textColor = [UIColor colorWithWhite:.94 alpha:1];
-    detail.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-    detail.editable = NO; detail.selectable = NO; detail.scrollEnabled = YES;
-    detail.textContainerInset = UIEdgeInsetsMake(16, 14, 16, 14);
-    [glass.contentView addSubview:detail];
-
-    // Vùng lựa chọn cuộn được: danh sách iOS/iPhone dài không còn bị đẩy ra ngoài màn hình.
-    UIScrollView *scroll = [UIScrollView new]; scroll.translatesAutoresizingMaskIntoConstraints = NO;
-    scroll.showsVerticalScrollIndicator = YES;
+    detail.backgroundColor = [UIColor colorWithWhite:1 alpha:.045]; detail.textColor = [UIColor colorWithWhite:.94 alpha:1];
+    detail.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium]; detail.editable = NO; detail.selectable = NO;
+    detail.layer.cornerRadius = 16; detail.layer.borderWidth = 1;
+    detail.layer.borderColor = [UIColor colorWithRed:.18 green:.62 blue:.9 alpha:.45].CGColor;
+    detail.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
     UIStackView *options = [[UIStackView alloc] init]; options.translatesAutoresizingMaskIntoConstraints = NO;
-    options.axis = UILayoutConstraintAxisVertical; options.spacing = 9; options.distribution = UIStackViewDistributionFill;
-    [scroll addSubview:options];
-
+    options.axis = UILayoutConstraintAxisVertical; options.spacing = 9; options.distribution = UIStackViewDistributionFillEqually;
     UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem]; back.translatesAutoresizingMaskIntoConstraints = NO;
-    TIWelcomeSetButtonTitle(back, @"‹ Quay lại", UIColor.whiteColor);
-    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.10]; back.layer.cornerRadius = 16;
-    back.layer.borderWidth = 1; back.layer.borderColor = [UIColor colorWithWhite:1 alpha:.18].CGColor;
-
+    [back setTitle:@"‹ Quay lại" forState:UIControlStateNormal]; [back setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     UIButton *next = [UIButton buttonWithType:UIButtonTypeSystem]; next.translatesAutoresizingMaskIntoConstraints = NO;
-    next.exclusiveTouch = YES;
-    TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", inkDark);
-    next.backgroundColor = accentDeep; next.layer.cornerRadius = 16;
-    next.layer.borderWidth = 1.2; next.layer.borderColor = [UIColor colorWithRed:.45 green:.94 blue:1 alpha:1].CGColor;
-    next.layer.shadowColor = accentDeep.CGColor; next.layer.shadowOpacity = .55;
-    next.layer.shadowOffset = CGSizeMake(0, 4); next.layer.shadowRadius = 13;
-
-    NSArray<UIView *> *animatedViews = @[heading, subtitle, progress, glass, scroll, back, next];
-    [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:progress];
-    [wizard.view addSubview:glass]; [wizard.view addSubview:scroll];
-    [wizard.view addSubview:back]; [wizard.view addSubview:next];
-
-    UILayoutGuide *safe = wizard.view.safeAreaLayoutGuide;
+    [next setTitle:@"Tiếp theo  →" forState:UIControlStateNormal]; [next setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    next.backgroundColor = [UIColor colorWithRed:.06 green:.42 blue:.64 alpha:1]; next.layer.cornerRadius = 13;
+    back.backgroundColor = [UIColor colorWithWhite:1 alpha:.08]; back.layer.cornerRadius = 13;
+    [wizard.view addSubview:heading]; [wizard.view addSubview:subtitle]; [wizard.view addSubview:detail];
+    [wizard.view addSubview:options]; [wizard.view addSubview:back]; [wizard.view addSubview:next];
     [NSLayoutConstraint activateConstraints:@[
-        [heading.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12],
+        [heading.topAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.topAnchor constant:10],
         [heading.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
         [heading.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
-        [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:6],
+        [subtitle.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:5],
         [subtitle.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:18],
         [subtitle.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-18],
-        [progress.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:12],
-        [progress.centerXAnchor constraintEqualToAnchor:wizard.view.centerXAnchor],
-        [glass.topAnchor constraintEqualToAnchor:progress.bottomAnchor constant:16],
-        [glass.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
-        [glass.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
-        [glass.heightAnchor constraintEqualToConstant:270],
-        [detail.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
-        [detail.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
-        [detail.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
-        [detail.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor],
-        [scroll.topAnchor constraintEqualToAnchor:glass.bottomAnchor constant:12],
-        [scroll.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
-        [scroll.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
-        [scroll.bottomAnchor constraintEqualToAnchor:back.topAnchor constant:-12],
-        [options.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
-        [options.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
-        [options.leadingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.leadingAnchor],
-        [options.trailingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.trailingAnchor],
+        [detail.topAnchor constraintEqualToAnchor:subtitle.bottomAnchor constant:16],
+        [detail.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [detail.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [detail.bottomAnchor constraintEqualToAnchor:options.topAnchor constant:-12],
+        [options.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
+        [options.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
+        [options.bottomAnchor constraintEqualToAnchor:back.topAnchor constant:-12],
+        [options.heightAnchor constraintGreaterThanOrEqualToConstant:60],
         [back.leadingAnchor constraintEqualToAnchor:wizard.view.leadingAnchor constant:14],
-        [back.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-10],
+        [back.bottomAnchor constraintEqualToAnchor:wizard.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
         [back.widthAnchor constraintEqualToAnchor:wizard.view.widthAnchor multiplier:.34 constant:-18],
-        [back.heightAnchor constraintEqualToConstant:50],
+        [back.heightAnchor constraintEqualToConstant:48],
         [next.trailingAnchor constraintEqualToAnchor:wizard.view.trailingAnchor constant:-14],
         [next.centerYAnchor constraintEqualToAnchor:back.centerYAnchor],
         [next.leadingAnchor constraintEqualToAnchor:back.trailingAnchor constant:8],
-        [next.heightAnchor constraintEqualToConstant:50]
+        [next.heightAnchor constraintEqualToConstant:48]
     ]];
 
     NSArray<NSString *> *iosChoices = @[@"iOS 14+", @"iOS 15+", @"iOS 16+", @"iOS 17+", @"iOS 18+", @"iOS 26.0–26.0.1"];
@@ -4121,78 +3898,61 @@ static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
     __block NSString *selectedIOS = @"";
     __block NSString *selectedPhone = @"";
     __block NSString *extractedReport = nil;
-    __block void (^renderPage)(void) = nil;
-    __block void (^advance)(void) = nil;
+    __block void (^renderPage)(void);
+    __weak void (^weakRenderPage)(void);
     __weak UIViewController *weakWizard = wizard;
+
+    void (^animateToPage)(void) = ^{
+        UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
+        [UIView transitionWithView:strongWizard.view duration:.28 options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionCurveEaseInOut animations:^{
+            // renderPage updates all controls; transition is a smooth right-to-left slide via view transform.
+            strongWizard.view.transform = CGAffineTransformMakeTranslation(18, 0);
+            strongWizard.view.alpha = .92;
+        } completion:^(__unused BOOL finished) {
+            strongWizard.view.transform = CGAffineTransformIdentity; strongWizard.view.alpha = 1;
+        }];
+        renderPage();
+    };
 
     renderPage = ^{
         UIViewController *strongWizard = weakWizard; if (!strongWizard) return;
         for (UIView *v in options.arrangedSubviews) { [options removeArrangedSubview:v]; [v removeFromSuperview]; }
-        for (NSInteger i = 0; i < (NSInteger)pageDots.count; i++) {
-            BOOL active = (i == page);
-            [UIView animateWithDuration:.25 animations:^{
-                pageDots[i].backgroundColor = active ? accent : [UIColor colorWithWhite:1 alpha:.22];
-                pageDots[i].transform = active ? CGAffineTransformMakeScale(1.5, 1.5) : CGAffineTransformIdentity;
-            }];
-        }
         back.hidden = (page == 0);
-        back.userInteractionEnabled = YES;
-        next.hidden = NO;
-        next.userInteractionEnabled = YES;
-        scroll.contentOffset = CGPointZero;
-        detail.contentOffset = CGPointZero;
-        subtitle.alpha = 0; detail.alpha = 0;
+        [next setTitle:(page == 3 ? @"Vào SmooTHIOS →" : @"Tiếp theo  →") forState:UIControlStateNormal];
         if (page == 0) {
-            subtitle.text = @"Chào mừng đến với SmooIOS";
-            detail.text = @"TẦNG BẺ KHOÁ 1 · Nhận diện: đọc mã máy và phiên bản iOS thực tế.\n\nTẦNG 2 · Đối chiếu nhóm iOS và dòng iPhone bạn chọn.\n\nTẦNG 3 · Quét thư mục tweak có thể đọc được.\n\nTẦNG 4 · Đọc GPU, mức nhiệt hệ thống, pin và RAM.\n\nTẦNG 5 · Tổng hợp báo cáo. Không khai thác kernel và không tự xác nhận đã kích hoạt.";
-            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", inkDark);
-            next.enabled = YES;
-            next.backgroundColor = accentDeep;
+            subtitle.text = @"Chào mừng đến với SmooTHIOS Pro";
+            detail.text = @"NƠI BẺ KHOÁ TẦNG SÂU\n\nThiết lập tiếp theo sẽ giúp chọn nhóm iOS, xác nhận dòng iPhone và thu thập thông tin thiết bị cùng danh sách tweak để kiểm tra khả năng xung đột.\n\nĐây là bước nhận diện và chẩn đoán; nó không tự chạy khai thác kernel hoặc tuyên bố đã kích hoạt nếu không có backend thực sự.";
+            next.hidden = NO;
         } else if (page == 1 || page == 2) {
             BOOL chooseIOS = (page == 1);
             subtitle.text = chooseIOS ? @"1 / 3 · Chọn phiên bản iOS" : @"2 / 3 · Chọn đúng dòng iPhone";
-            NSString *current = chooseIOS ? selectedIOS : selectedPhone;
-            detail.text = [NSString stringWithFormat:@"Đã chọn: %@\n%@", current.length ? current : @"Chưa chọn",
-                           chooseIOS ? @"Chọn nhóm phiên bản phù hợp với máy đang chạy. Nhóm lựa chọn không thay thế việc đọc phiên bản thực tế."
-                                     : @"Nếu không chắc chắn, hãy dùng thông tin máy được đọc ở bước tiếp theo để đối chiếu."];
+            detail.text = chooseIOS ? [NSString stringWithFormat:@"Đã chọn: %@\nChọn nhóm phiên bản phù hợp với máy đang chạy. Nhóm lựa chọn không thay thế việc đọc phiên bản thực tế.", selectedIOS.length ? selectedIOS : @"Chưa chọn"] : [NSString stringWithFormat:@"Đã chọn: %@\nNếu không chắc chắn, hãy dùng thông tin máy được đọc ở bước tiếp theo để đối chiếu.", selectedPhone.length ? selectedPhone : @"Chưa chọn"];
             NSArray *choices = chooseIOS ? iosChoices : phoneChoices;
             for (NSString *choice in choices) {
-                BOOL isSelected = [choice isEqualToString:current];
                 UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
-                b.translatesAutoresizingMaskIntoConstraints = NO;
-                TIWelcomeSetButtonTitle(b, isSelected ? [@"✓  " stringByAppendingString:choice] : choice, UIColor.whiteColor);
-                b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-                b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-                b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 8);
-                b.backgroundColor = isSelected ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
-                b.layer.cornerRadius = 12; b.layer.borderWidth = 1;
-                b.layer.borderColor = (isSelected ? [UIColor colorWithRed:.45 green:.94 blue:1 alpha:.8] : [UIColor colorWithWhite:1 alpha:.12]).CGColor;
-                [b.heightAnchor constraintEqualToConstant:42].active = YES;
-                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-                    (void)a;
-                    if (chooseIOS) selectedIOS = choice; else selectedPhone = choice;
-                    TIWelcomeRenderFromWizard(weakWizard);
-                }] forControlEvents:UIControlEventTouchUpInside];
+                [b setTitle:([choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [@"✓  " stringByAppendingString:choice] : choice) forState:UIControlStateNormal];
+                [b setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+                b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft; b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 8);
+                b.backgroundColor = [choice isEqualToString:(chooseIOS ? selectedIOS : selectedPhone)] ? [UIColor colorWithRed:.05 green:.43 blue:.48 alpha:1] : [UIColor colorWithWhite:1 alpha:.07];
+                b.layer.cornerRadius = 10; b.layer.borderWidth = 1; b.layer.borderColor = [UIColor colorWithWhite:1 alpha:.12].CGColor;
+                [b.heightAnchor constraintEqualToConstant:39].active = YES;
+                [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) { (void)a; if (chooseIOS) selectedIOS = choice; else selectedPhone = choice; if (weakRenderPage) weakRenderPage(); }] forControlEvents:UIControlEventTouchUpInside];
                 [options addArrangedSubview:b];
             }
-            BOOL canContinue = current.length > 0;
-            TIWelcomeSetButtonTitle(next, @"TIẾP TỤC  →", canContinue ? inkDark : [UIColor colorWithWhite:1 alpha:.6]);
-            next.enabled = canContinue;
-            next.backgroundColor = canContinue ? accentDeep : [UIColor colorWithWhite:1 alpha:.12];
+            next.hidden = !((chooseIOS && selectedIOS.length) || (!chooseIOS && selectedPhone.length));
         } else {
             subtitle.text = @"3 / 3 · Chẩn đoán thiết bị";
-            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin & quét tweak’ để đọc mã máy, phiên bản hệ điều hành, chip, GPU, nhiệt độ hệ thống, pin, RAM và danh sách tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn.";
+            detail.text = extractedReport ?: @"Nhấn ‘Khai thác thông tin Darwin’ để đọc mã máy, phiên bản hệ điều hành, chip (nếu hệ thống cung cấp), UDID khả dụng và quét các thư mục tweak có thể đọc được.\n\nKhông thực hiện khai thác kernel. UDID có thể bị iOS giới hạn hoặc ẩn; danh sách tweak chỉ phản ánh các thư mục truy cập được.";
             UIButton *scan = [UIButton buttonWithType:UIButtonTypeSystem];
-            scan.translatesAutoresizingMaskIntoConstraints = NO;
-            TIWelcomeSetButtonTitle(scan, @"⌕  Khai thác thông tin Darwin & quét tweak", UIColor.whiteColor);
-            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 14;
+            [scan setTitle:@"⌕  Khai thác thông tin Darwin & quét tweak" forState:UIControlStateNormal];
+            [scan setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; scan.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+            scan.backgroundColor = [UIColor colorWithRed:.25 green:.22 blue:.55 alpha:1]; scan.layer.cornerRadius = 10;
             [scan.heightAnchor constraintEqualToConstant:48].active = YES;
             [scan addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
                 (void)a;
                 struct utsname u; memset(&u, 0, sizeof(u)); uname(&u);
                 NSString *machine = [NSString stringWithUTF8String:u.machine] ?: @"Không đọc được";
-                NSOperatingSystemVersion ver = NSProcessInfo.processInfo.operatingSystemVersion;
-                NSString *system = [NSString stringWithFormat:@"iOS %ld.%ld.%ld", (long)ver.majorVersion, (long)ver.minorVersion, (long)ver.patchVersion];
+                NSString *system = [NSString stringWithFormat:@"iOS %ld.%ld.%ld", (long)NSProcessInfo.processInfo.operatingSystemVersion.majorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.minorVersion, (long)NSProcessInfo.processInfo.operatingSystemVersion.patchVersion];
                 NSString *chip = @"Không có ánh xạ SoC xác nhận cho mã máy này";
                 if ([machine hasPrefix:@"iPhone8,"]) chip = @"Apple A9 (iPhone 6s family)";
                 else if ([machine hasPrefix:@"iPhone9,"]) chip = @"Apple A10 Fusion (iPhone 7 family)";
@@ -4203,107 +3963,75 @@ static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
                 else if ([machine hasPrefix:@"iPhone14,"]) chip = @"Apple A15 Bionic (iPhone 13 family / SE 3)";
                 else if ([machine hasPrefix:@"iPhone15,"]) chip = @"Apple A16 Bionic (một số iPhone 14/15; đối chiếu mã máy)";
                 else if ([machine hasPrefix:@"iPhone16,"]) chip = @"Apple A17 Pro / A16 tuỳ mã máy; cần đối chiếu chính xác";
-                NSString *hardware = TIWelcomeHardwareDiagnostics();
+                NSString *udid = @"Đang được API ứng dụng công khai cung cấp";
+                NSString *serial = @"Đang đọc được qua API công khai";
                 NSMutableArray<NSString *> *found = [NSMutableArray array];
                 NSArray<NSString *> *dirs = @[@"/var/jb/Library/MobileSubstrate/DynamicLibraries", @"/var/jb/usr/lib/TweakInject", @"/Library/MobileSubstrate/DynamicLibraries", @"/usr/lib/TweakInject", @"/var/containers/Bundle/tweaksupport"];
                 NSFileManager *fm = NSFileManager.defaultManager;
-                for (NSString *dir in dirs) {
-                    NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil];
-                    for (NSString *item in items) {
-                        NSString *ext = item.pathExtension.lowercaseString;
-                        if ([ext isEqualToString:@"dylib"] || [ext isEqualToString:@"plist"]) [found addObject:[dir stringByAppendingPathComponent:item]];
-                    }
-                }
+                for (NSString *dir in dirs) { NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil]; for (NSString *item in items) if ([item.pathExtension.lowercaseString isEqualToString:@"dylib"] || [item.pathExtension.lowercaseString isEqualToString:@"plist"]) [found addObject:[dir stringByAppendingPathComponent:item]]; }
                 if (found.count > 80) [found removeObjectsInRange:NSMakeRange(80, found.count - 80)];
-                NSString *tweaks = found.count ? [found componentsJoinedByString:@"\n"] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
-                extractedReport = [NSString stringWithFormat:@"DARWIN / THIẾT BỊ\nMã máy: %@\nHệ điều hành: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nBootstrap: %@\n\nGPU · NHIỆT · PIN · RAM\n%@\nTWEAK / FILE CÓ THỂ ĐỌC (tối đa 80 mục, hiện %lu)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel.", machine, system, selectedIOS, selectedPhone, chip, Titanium_DetectJailbreakTypeForUI(), hardware, (unsigned long)found.count, tweaks];
-                TIWelcomeRenderFromWizard(weakWizard);
+                NSString *tweaks = found.count ? [[found componentsJoinedByString:@"\n"] description] : @"Không thấy thư mục tweak có thể đọc được; sandbox/quyền truy cập có thể giới hạn kết quả.";
+                extractedReport = [NSString stringWithFormat:@"DARWIN / THÔNG TIN THIẾT BỊ\nMã máy: %@\nHệ điều hành thực tế: %@\nNhóm iOS đã chọn: %@\nDòng iPhone đã chọn: %@\nChip (ước lượng theo mã máy): %@\nUDID: %@\nSerial: %@\nBootstrap: %@\n\nTWEAK / FILE CÓ THỂ ĐỌC (%lu mục tối đa)\n%@\n\nĐây là chẩn đoán đọc thông tin, không phải khai thác kernel. Danh sách file không đủ để kết luận chắc chắn tweak nào xung đột.", machine, system, selectedIOS, selectedPhone, chip, udid, serial, Titanium_DetectJailbreakTypeForUI(), (unsigned long)found.count, tweaks];
+                if (weakRenderPage) weakRenderPage();
             }] forControlEvents:UIControlEventTouchUpInside];
             [options addArrangedSubview:scan];
-            BOOL ready = extractedReport.length > 0;
-            TIWelcomeSetButtonTitle(next, page == 3 ? @"Vào SmooIOS  →" : @"TIẾP TỤC  →", ready ? inkDark : [UIColor colorWithWhite:1 alpha:.6]);
-            next.enabled = ready;
-            next.backgroundColor = ready ? accentDeep : [UIColor colorWithWhite:1 alpha:.12];
+            next.hidden = NO;
         }
-        if (page == 3 && next.enabled) TIWelcomeSetButtonTitle(next, @"Vào SmooIOS  →", inkDark);
-        if (next.enabled) TIWelcomePulseLayer(next.layer, 10, 18); else [next.layer removeAnimationForKey:@"TIWelcomePulse"];
-        [UIView animateWithDuration:.32 delay:0 usingSpringWithDamping:.85 initialSpringVelocity:.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            subtitle.alpha = 1.0; detail.alpha = 1.0;
-        } completion:nil];
     };
-
-    objc_setAssociatedObject(wizard, &kTIWelcomeRenderKey, renderPage, OBJC_ASSOCIATION_COPY_NONATOMIC);
-
-    advance = ^{
+    weakRenderPage = renderPage;
+    [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        (void)a;
         if (page < 3) {
             if (page == 1 && !selectedIOS.length) return;
             if (page == 2 && !selectedPhone.length) return;
             page++;
-            UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-            [haptic prepare]; [haptic impactOccurred];
-            TIWelcomeRenderFromWizard(weakWizard);
-            return;
+            CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromRight; transition.duration = .28;
+            [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardForward"];
+            if (weakRenderPage) weakRenderPage();
+        } else {
+            if (!extractedReport.length) {
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"Đã hiểu" style:UIAlertActionStyleDefault handler:nil]];
+                [wizard presentViewController:alert animated:YES completion:nil];
+                return;
+            }
+            NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+            [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
+            [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
+            [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
+            [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
+            [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
+            [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
+            if ([d objectForKey:@"SmooIOSProfileV36"] == nil) [d setObject:@"auto" forKey:@"SmooIOSProfileV36"];
+            if ([d objectForKey:@"SmooIOSAutoTuneEnabledV36"] == nil) [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
+            if ([d objectForKey:@"SmooIOSAutoInspectTweaksV36"] == nil) [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
+            if ([d objectForKey:@"SmooIOSHzV36"] == nil) [d setInteger:120 forKey:@"SmooIOSHzV36"];
+            if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
+            [d synchronize];
+            [wizard dismissViewControllerAnimated:YES completion:^{
+                // Restore interaction explicitly; do not leave the app covered by a disabled view.
+                self.view.userInteractionEnabled = YES;
+                self.customTableView.userInteractionEnabled = YES;
+                self.customTableView.alpha = 1.0;
+                self.customTableView.transform = CGAffineTransformIdentity;
+                self.view.window.userInteractionEnabled = YES;
+                [self.customTableView setNeedsLayout];
+                [self.customTableView reloadData];
+                [self.view setNeedsLayout];
+                [self.view layoutIfNeeded];
+            }];
         }
-        if (!extractedReport.length) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Chưa chẩn đoán thiết bị" message:@"Hãy nhấn ‘Khai thác thông tin Darwin & quét tweak’ trước khi tiếp tục." preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"Đã hiểu" style:UIAlertActionStyleDefault handler:nil]];
-            [wizard presentViewController:alert animated:YES completion:nil];
-            return;
-        }
-        NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
-        [d setBool:YES forKey:@"TIV347FirstWelcomeCompleted"];
-        [d setBool:YES forKey:@"TIWelcomeAuthorsLanguageDismissed_v1"];
-        [d setObject:selectedIOS forKey:@"SmooIOSSelectedIOSGroupV36"];
-        [d setObject:selectedPhone forKey:@"SmooIOSSelectedPhoneGroupV36"];
-        [d setBool:YES forKey:@"SmooIOSAutoTuneEnabledV36"];
-        [d setBool:YES forKey:@"SmooIOSAutoInspectTweaksV36"];
-        if ([d objectForKey:@"SmooIOSProfileV36"] == nil) [d setObject:@"auto" forKey:@"SmooIOSProfileV36"];
-        if ([d objectForKey:@"SmooIOSHzV36"] == nil) [d setInteger:120 forKey:@"SmooIOSHzV36"];
-        if ([d objectForKey:@"SmooIOSFPSV36"] == nil) [d setInteger:120 forKey:@"SmooIOSFPSV36"];
-        [d synchronize];
-        [wizard dismissViewControllerAnimated:YES completion:^{
-            self.view.userInteractionEnabled = YES;
-            self.customTableView.userInteractionEnabled = YES;
-            self.customTableView.alpha = 1.0;
-            self.customTableView.transform = CGAffineTransformIdentity;
-            self.view.window.userInteractionEnabled = YES;
-            [self.customTableView reloadData];
-            [self.view setNeedsLayout];
-            [self.view layoutIfNeeded];
-        }];
-    };
-
-    [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-        (void)a;
-        if (advance) advance();
     }] forControlEvents:UIControlEventTouchUpInside];
-
     [back addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-        (void)a;
-        if (page <= 0) return;
-        page--;
-        UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-        [haptic impactOccurred];
-        TIWelcomeRenderFromWizard(weakWizard);
+        (void)a; if (page <= 0) return; page--;
+        CATransition *transition = [CATransition animation]; transition.type = kCATransitionPush; transition.subtype = kCATransitionFromLeft; transition.duration = .28;
+        [wizard.view.layer addAnimation:transition forKey:@"SmooIOSWizardBack"]; if (weakRenderPage) weakRenderPage();
     }] forControlEvents:UIControlEventTouchUpInside];
-
     [self presentViewController:wizard animated:YES completion:^{
-        decor.frame = wizard.view.bounds;
-        background.frame = decor.bounds;
-        sparkle.frame = decor.bounds;
-        sparkle.emitterPosition = CGPointMake(CGRectGetMidX(decor.bounds), -8);
-        sparkle.emitterSize = CGSizeMake(CGRectGetWidth(decor.bounds), 1);
-        // Hiệu ứng xuất hiện: từng phần hiện dần, luôn để alpha = 1 khi xong.
-        [animatedViews enumerateObjectsUsingBlock:^(UIView *v, NSUInteger idx, BOOL *stop) {
-            (void)stop;
-            v.alpha = 0; v.transform = CGAffineTransformMakeTranslation(0, 14);
-            [UIView animateWithDuration:.45 delay:.06 * (double)idx usingSpringWithDamping:.85 initialSpringVelocity:.3 options:UIViewAnimationOptionCurveEaseOut animations:^{
-                v.alpha = 1.0; v.transform = CGAffineTransformIdentity;
-            } completion:^(BOOL finished) { (void)finished; v.alpha = 1.0; v.transform = CGAffineTransformIdentity; }];
-        }];
-        CABasicAnimation *glow = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
-        glow.fromValue = @0.45; glow.toValue = @1.0; glow.duration = 1.6; glow.autoreverses = YES; glow.repeatCount = HUGE_VALF;
-        [heading.layer addAnimation:glow forKey:@"TIWelcomeGlow"];
+        // Force the wizard to occupy the complete presentation bounds on older iOS versions.
+        wizard.view.frame = UIScreen.mainScreen.bounds;
+        background.frame = wizard.view.bounds;
+        [wizard.view setNeedsLayout]; [wizard.view layoutIfNeeded];
         renderPage();
     }];
 }
@@ -4340,7 +4068,7 @@ static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
 
     UILabel *heading = [UILabel new];
     heading.translatesAutoresizingMaskIntoConstraints = NO;
-    heading.text = @"SMOOIOS PRO · CHÀO MỪNG";
+    heading.text = @"SMOOTHIOS PRO · CHÀO MỪNG";
     heading.numberOfLines = 0;
     heading.textAlignment = NSTextAlignmentCenter;
     heading.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBlack];
@@ -6118,7 +5846,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             case 1:
                 self.settingsDict[@"TargetRefreshRate"] = @240;
                 self.settingsDict[@"TargetFPSRate"] = @240;
-                self.settingsDict[@"ForceOverclock144Hz"] = @NO;
+                self.settingsDict[@"ForceOverclock144Hz"] = @YES;
                 _lastAppliedHz = 240;
                 _lastAppliedFPS = 240;
                 [self saveSettingsDataAndSync];
@@ -6591,13 +6319,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
     [d setInteger:rate forKey:@"TIV10SelectedRate"];
     [d setInteger:rate forKey:@"TIV10SelectedFPS"];
-    // The dashboard slider is live control, not just a preview. Persist and publish
-    // both targets together so a stale FPS/Hz value cannot overwrite the next refresh.
-    if (!_isRateLocked && _isFeatureActivated) {
-        [self applyRateValue:rate isDynamic:NO isFPS:NO];
-        [self applyRateValue:rate isDynamic:NO isFPS:YES];
-        [self applyDeepSpringBoardAndUIKitTweaks];
-    }
 }
 
 - (void)neonV10ChoosePreset:(UIButton *)sender {
@@ -6610,8 +6331,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [d setInteger:rate forKey:@"TIV11SelectedPreset"];
     // Keep the dashboard preset and power-related switch configuration in sync.
     NSMutableDictionary *presetSettings = [self.settingsDict mutableCopy] ?: [NSMutableDictionary dictionary];
-    if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"PowerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
-    else { presetSettings[@"powerSaveMode"] = @NO; presetSettings[@"PowerSaveMode"] = @NO; presetSettings[@"batterySaver60Hz"] = @NO; }
+    if (idx == 3) { presetSettings[@"powerSaveMode"] = @YES; presetSettings[@"batterySaver60Hz"] = @YES; }
+    else { presetSettings[@"powerSaveMode"] = @NO; presetSettings[@"batterySaver60Hz"] = @NO; }
     self.settingsDict = presetSettings;
     [self saveSettingsDataAndSync];
     UISlider *slider = (UISlider *)[self.view viewWithTag:99119];
@@ -6678,7 +6399,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSString *appName = [app[@"name"] isKindOfClass:NSString.class] ? app[@"name"] : bundleID;
     NSDictionary *all = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] ?: @{};
     NSDictionary *saved = [all[bundleID] isKindOfClass:NSDictionary.class] ? all[bundleID] : nil;
-    __block NSInteger selected = saved ? MAX(0, MIN(3, [saved[@"preset"] integerValue])) : 0;
+    __block NSInteger selected = saved ? [saved[@"preset"] integerValue] : 2;
     NSArray *names = @[@"TỰ ĐỘNG", @"HIỆU SUẤT CAO", @"CÂN BẰNG", @"TIẾT KIỆM PIN"];
     NSArray *descs = @[@"Điều chỉnh mục tiêu theo nhiệt độ iOS và chế độ nguồn điện thấp.", @"Ưu tiên mức mục tiêu cao nhất có thể áp dụng.", @"Cân bằng giữa độ mượt và mức tiêu thụ.", @"Ưu tiên giảm mức sử dụng và mục tiêu khung hình."];
     NSArray *rates = @[@0, @240, @90, @60];
@@ -6692,7 +6413,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [NSLayoutConstraint activateConstraints:@[[scroll.topAnchor constraintEqualToAnchor:page.view.safeAreaLayoutGuide.topAnchor], [scroll.leadingAnchor constraintEqualToAnchor:page.view.leadingAnchor], [scroll.trailingAnchor constraintEqualToAnchor:page.view.trailingAnchor], [scroll.bottomAnchor constraintEqualToAnchor:page.view.safeAreaLayoutGuide.bottomAnchor constant:-88]]];
     UIView *content = [UIView new]; content.translatesAutoresizingMaskIntoConstraints = NO; [scroll addSubview:content];
     [NSLayoutConstraint activateConstraints:@[[content.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor], [content.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor], [content.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor], [content.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor], [content.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor]]];
-    UILabel *hero = [UILabel new]; hero.translatesAutoresizingMaskIntoConstraints=NO; hero.text=appName; hero.font=[UIFont systemFontOfSize:27 weight:UIFontWeightBlack]; hero.textColor=[UIColor colorWithRed:.88 green:.96 blue:1 alpha:1]; hero.numberOfLines=2; hero.lineBreakMode=NSLineBreakByTruncatingTail; [content addSubview:hero];
+    UILabel *hero = [UILabel new]; hero.translatesAutoresizingMaskIntoConstraints=NO; hero.text=appName; hero.font=[UIFont systemFontOfSize:27 weight:UIFontWeightBlack]; hero.textColor=UIColor.whiteColor; hero.lineBreakMode=NSLineBreakByTruncatingTail; [content addSubview:hero];
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem]; closeButton.translatesAutoresizingMaskIntoConstraints=NO; closeButton.layer.cornerRadius=18; closeButton.backgroundColor=[UIColor colorWithRed:.16 green:.20 blue:.32 alpha:.95]; closeButton.layer.borderWidth=1.2; closeButton.layer.borderColor=[UIColor colorWithRed:.20 green:.84 blue:1 alpha:1].CGColor; [closeButton setTitle:@"×" forState:UIControlStateNormal]; [closeButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; closeButton.titleLabel.font=[UIFont systemFontOfSize:28 weight:UIFontWeightMedium]; [content addSubview:closeButton];
     [closeButton addAction:[UIAction actionWithHandler:^(__kindof UIAction *action){ (void)action; [page dismissViewControllerAnimated:YES completion:nil]; }] forControlEvents:UIControlEventTouchUpInside];
     UILabel *bundle = [UILabel new]; bundle.translatesAutoresizingMaskIntoConstraints=NO; bundle.text=bundleID; bundle.font=[UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightMedium]; bundle.textColor=[UIColor colorWithWhite:.62 alpha:1]; bundle.numberOfLines=2; [content addSubview:bundle];
@@ -6758,9 +6479,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSMutableDictionary *profiles=[[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV11PerAppProfiles"] mutableCopy] ?: [NSMutableDictionary dictionary];
         NSInteger chosenRate = [rates[selected] integerValue];
         if (selected == 0) chosenRate = 0; // 0 is the persisted Auto mode, not a claimed live refresh rate.
-        NSDictionary *storedRates = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"TIV42PerAppRates"] ?: @{};
-        NSDictionary *appRates = [storedRates[bundleID] isKindOfClass:NSDictionary.class] ? storedRates[bundleID] : @{@"hz":@0,@"fps":@0};
-        profiles[bundleID]=@{@"preset":@(selected),@"rate":@(chosenRate),@"hz":appRates[@"hz"] ?: @0,@"fps":appRates[@"fps"] ?: @0,@"name":allNames[selected],@"applied":@YES};
+        profiles[bundleID]=@{@"preset":@(selected),@"rate":@(chosenRate),@"name":allNames[selected],@"applied":@YES};
         [[NSUserDefaults standardUserDefaults] setObject:profiles forKey:@"TIV11PerAppProfiles"];
         [[NSUserDefaults standardUserDefaults] synchronize];
         [self dismissViewControllerAnimated:YES completion:^{ UIAlertController *done=[UIAlertController alertControllerWithTitle:@"Đã lưu hồ sơ ứng dụng" message:[NSString stringWithFormat:@"%@ · %@\nMục tiêu %@ Hz/FPS đã lưu (0 = Tự động). Việc áp dụng thực tế phụ thuộc bộ điều khiển tương thích.",appName,allNames[selected],@(chosenRate)] preferredStyle:UIAlertControllerStyleAlert]; [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]]; [self presentViewController:done animated:YES completion:nil]; }];
@@ -6826,7 +6545,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w=MAX(320.0,width), side=14.0, cw=w-side*2.0;
     UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,1125.0)]; root.backgroundColor=UIColor.clearColor;
-    UILabel *eyebrow=[[UILabel alloc] initWithFrame:CGRectMake(side,10,cw,14)]; eyebrow.text=@"SMOOIOS PRO / LIVE MONITOR V43"; eyebrow.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor=[UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    UILabel *eyebrow=[[UILabel alloc] initWithFrame:CGRectMake(side,10,cw,14)]; eyebrow.text=@"SMOOIOS PRO / LIVE MONITOR V42"; eyebrow.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor=[UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title=[[UILabel alloc] initWithFrame:CGRectMake(side,28,cw,31)]; title.text=@"BẢNG ĐIỀU KHIỂN"; title.font=[UIFont systemFontOfSize:24 weight:UIFontWeightBlack]; title.textColor=UIColor.whiteColor; [root addSubview:title];
     UILabel *sub=[[UILabel alloc] initWithFrame:CGRectMake(side,61,cw,18)]; sub.text=@"Biểu đồ cập nhật liên tục · chỉ dùng số đo đọc được"; sub.font=[UIFont systemFontOfSize:11]; sub.textColor=[UIColor secondaryLabelColor]; [root addSubview:sub];
     UILabel *runtime=[[UILabel alloc] initWithFrame:CGRectMake(side,76,cw,15)]; runtime.tag=8730; runtime.textAlignment=NSTextAlignmentRight; runtime.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightMedium]; runtime.textColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; runtime.text=@"Runtime · 00:00:00"; [root addSubview:runtime];
@@ -6924,7 +6643,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 505.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
-    eyebrow.text = @"SMOOIOS PRO / LIQUID GLASS V43"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    eyebrow.text = @"SMOOIOS PRO / LIQUID GLASS V42"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; title.text = @"Hz · FPS · Đồng bộ"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 300)]; panel.backgroundColor = [UIColor colorWithRed:.035 green:.045 blue:.105 alpha:.88]; panel.layer.cornerRadius = 27; panel.layer.cornerCurve = kCACornerCurveContinuous; panel.layer.borderWidth = 1.25; panel.layer.borderColor = [UIColor colorWithRed:.20 green:.78 blue:1 alpha:.88].CGColor; panel.layer.shadowColor = [UIColor colorWithRed:.38 green:.16 blue:1 alpha:1].CGColor; panel.layer.shadowOpacity = .22; panel.layer.shadowRadius = 18; panel.layer.shadowOffset = CGSizeMake(0, 8); [root addSubview:panel];
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
@@ -7324,8 +7043,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     CGRect nativeBounds = UIScreen.mainScreen.nativeBounds;
                     CGFloat nativeScale = UIScreen.mainScreen.nativeScale;
                     NSString *deviceHW = Titanium_DeviceHardwareIdentifier();
-                    NSInteger targetHzSetting = [self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
-                    NSInteger targetFPSSetting = [self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
+                    NSInteger targetHzSetting = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
+                    NSInteger targetFPSSetting = [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
                     if (indexPath.row == 0) {
                         NSInteger displayedIOSHz2 = maximumHz;
                         title = _isScreenExpanded ? @"Màn hình ▼" : @"Màn hình ▶";
@@ -7334,11 +7053,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                     else if (indexPath.row == 1) { title = @"   Độ phân giải / scale"; detail = [NSString stringWithFormat:@"%.0f×%.0f px · scale %.2fx · vùng %.0f×%.0f pt", nativeBounds.size.width, nativeBounds.size.height, nativeScale, logicalBounds.size.width, logicalBounds.size.height]; }
                     else if (indexPath.row == 2) {
                         // [V30 FIX]: Nếu tweak đã ép vượt trần iOS, hiển thị giá trị đã ép thay vì 60
-                        NSInteger displayedIOSHz = maximumHz;
+                        NSInteger displayedIOSHz = (targetHzSetting > maximumHz) ? targetHzSetting : maximumHz;
                         title = @"   Tần số iOS báo / Tweak ép";
-                        detail = [NSString stringWithFormat:@"iOS: %ld Hz · Tweak: %ld Hz · Máy: %@%@", (long)displayedIOSHz, (long)targetHzSetting, deviceHW, (targetHzSetting > maximumHz) ? @" (mục tiêu vượt mức iOS báo; không xác nhận phần cứng)" : @""];
+                        detail = [NSString stringWithFormat:@"iOS: %ld Hz · Tweak: %ld Hz · Máy: %@%@", (long)displayedIOSHz, (long)targetHzSetting, deviceHW, (targetHzSetting > maximumHz) ? @" (đã ép vượt trần)" : @""];
                     }
-                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld FPS đang cấu hình · mục tiêu cấu hình; phần cứng quyết định mức thực tế", (long)targetFPSSetting]; }
+                    else if (indexPath.row == 3) { title = @"   FPS mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld FPS đang cấu hình · Tweak.xm ép phần cứng", (long)targetFPSSetting]; }
                     else { title = @"   Hz mục tiêu (60-240)"; detail = [NSString stringWithFormat:@"%ld Hz đang cấu hình · TITANIUM_SPOOF vượt trần iOS", (long)targetHzSetting]; }
                 }
             }
@@ -8149,10 +7868,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)applyRateValue:(NSInteger)rate isDynamic:(BOOL)d isFPS:(BOOL)isFPS {
     rate = MAX(15, MIN(240, rate));
     NSUserDefaults *rateDefaults = [NSUserDefaults standardUserDefaults];
-    // A direct slider change is manual control; automatic thermal policy must not overwrite it.
-    self.settingsDict[@"SmooIOSProfileV36"] = @"manual";
-    [rateDefaults setObject:@"manual" forKey:@"SmooIOSProfileV36"];
-    [rateDefaults setBool:NO forKey:@"SmooIOSAutoTuneEnabledV36"];
     if (isFPS) {
         self.settingsDict[@"TargetFPSRate"] = @(rate);
         self.settingsDict[@"EnableFPSControl"] = @YES;
@@ -8271,7 +7986,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSString *profile = [self.settingsDict[@"SmooIOSProfileV36"] isKindOfClass:NSString.class] ? self.settingsDict[@"SmooIOSProfileV36"] : ([defaults stringForKey:@"SmooIOSProfileV36"] ?: @"auto");
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 120;
     NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 120;
-    BOOL autoTune = [defaults objectForKey:@"SmooIOSAutoTuneEnabledV36"] ? [defaults boolForKey:@"SmooIOSAutoTuneEnabledV36"] : NO;
+    BOOL autoTune = [defaults objectForKey:@"SmooIOSAutoTuneEnabledV36"] ? [defaults boolForKey:@"SmooIOSAutoTuneEnabledV36"] : YES;
     if (!autoTune || ![profile isEqualToString:@"auto"]) return;
 
     // Use Apple's published thermal state and Low Power Mode, not guessed Celsius values.
@@ -8376,15 +8091,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
 
-    ApexV285ProPayloadRLCV285 p;
-    memset(&p, 0, sizeof(ApexV285ProPayloadRLCV285));
+    ApexV285ProPayload p;
+    memset(&p, 0, sizeof(ApexV285ProPayload));
     p.magic = APEX_SYNC_MAGIC_V285;
 
     BOOL masterEnabled = (enabled && _isFeatureActivated && !_serverDown && ![self.settingsDict[@"AvoidTweakConflicts"] boolValue]);
     p.masterEnabled = masterEnabled ? 1 : 0;
 
-    NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
-    NSInteger requestedFPS = [self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue];
+    NSInteger requestedHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
+    NSInteger requestedFPS = [self.settingsDict[@"TargetFPSRate"] ?: @240 integerValue];
     if (requestedHz < 15) requestedHz = 15;
     if (requestedHz > 240) requestedHz = 240;
     if (requestedFPS < 15) requestedFPS = 15;
@@ -8393,8 +8108,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     BOOL hzControlEnabled = self.settingsDict[@"EnableHzControl"] ? [self.settingsDict[@"EnableHzControl"] boolValue] : YES;
     BOOL fpsControlEnabled = self.settingsDict[@"EnableFPSControl"] ? [self.settingsDict[@"EnableFPSControl"] boolValue] : YES;
-    BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] ?: self.settingsDict[@"powerSaveMode"] ?: @NO boolValue] ||
-                     [self.settingsDict[@"powerSaveMode"] ?: @NO boolValue] ||
+    BOOL powerSave = [self.settingsDict[@"PowerSaveMode"] ?: @NO boolValue] ||
                      [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
 
     NSInteger resolvedHz = (!masterEnabled || !hzControlEnabled || powerSave) ? 60 : requestedHz;
@@ -8402,7 +8116,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
-    p.forceOverclock = 0; // Request flag only; physical panel rate remains controlled by iOS/driver.
+    p.forceOverclock = 0; // No supported API can overclock the physical display/CPU.
     p.pipSyncEnabled = 1;
     p.thermalShield = [self.settingsDict[@"AntiThermalThrottling"] ?: @NO boolValue] ? 1 : 0;
     p.antiStutterExit = [self.settingsDict[@"FixAppExitStutter"] ?: @NO boolValue] ? 1 : 0;
@@ -8422,42 +8136,6 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     p.diskIOPriorityBoost = 1;
     p.rawTouchDirectDelivery = 1;
     p.powerSaveModeActive = powerSave ? 1 : 0;
-
-    // Publish each UI group switch through the shared payload.
-    p.enableAppleInternalProMotion = [self.settingsDict[@"Group_Apple_Internal_ProMotion_Apex"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableZeroLatencyTouch = [self.settingsDict[@"Group_ZeroLatency_Touch_Opt"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableMetalZeroTearing = [self.settingsDict[@"Group_Metal_ZeroTearing_Pacing"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableFluidTransitions = [self.settingsDict[@"Group_FluidTransitions_Pacing"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableTitaniumGameMetalOverdrive = [self.settingsDict[@"Group_Titanium_Game_Metal_Overdrive"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableAIStreamOptimization = [self.settingsDict[@"Group_AI_Stream_Optimization"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableFastLaunchSuperEngine = [self.settingsDict[@"Group_FastLaunch_SuperEngineV285"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableScrollAndKeyboard = [self.settingsDict[@"Group_Scroll_And_Keyboard_Opt"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableInstantActionTransitions = [self.settingsDict[@"Group_InstantActionAndMenuTransitions_Boost"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableGlobalThreadGovernor = [self.settingsDict[@"Group_Global_Thread_Governor_Unthrottled"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableSiliconSchedulerTouch = [self.settingsDict[@"Group_Silicon_Scheduler_Touch_Governor"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableCoreAnimationRenderServer = [self.settingsDict[@"Group_CoreAnimation_RenderServer_Governor"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableCAWindowServerDominance = [self.settingsDict[@"Group_CAWindowServer_Absolute_Dominance"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableForceRenderRecovery = [self.settingsDict[@"Group_Force_Render_Recovery_Overdrive"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableWindowLevelOverdrive = [self.settingsDict[@"Group_Window_Level_Overdrive"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableSystemMemoryGovernor = [self.settingsDict[@"Group_System_Memory_And_RunLoop_Governor"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableThermalCryoPacing = [self.settingsDict[@"Group_Thermal_CryoPacing_ZeroDrop"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableDeepRamCompaction = [self.settingsDict[@"Group_Deep_RAM_Compaction_Engine"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableWebKitRamOptimizer = [self.settingsDict[@"Group_WebKit_RAM_Optimizer"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableSiliconHardwarePipeline = [self.settingsDict[@"Group_Silicon_Hardware_Pipeline_Overdrive"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableHardwareProMotionOverclock = [self.settingsDict[@"Group_Hardware_ProMotion_Overclock"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableNeuralTouchEdgeZeroLatency = [self.settingsDict[@"Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableNativeColdBootOverdrive = [self.settingsDict[@"Group_Apple_Native_ColdBoot_Overdrive"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableTitaniumV12SmoothExit = [self.settingsDict[@"Group_TitaniumV12_SmoothExit_And_DisplayLink"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableDisplaySpringBoard = [self.settingsDict[@"Group_Display_SpringBoardV285"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableLiquidGlassOpt = [self.settingsDict[@"Group_LiquidGlass_Opt"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableSwitcher30Apps = [self.settingsDict[@"Group_Switcher30Apps_Virtualization"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableSpringBoardSwitcherOpt = [self.settingsDict[@"Group_SpringBoard_Switcher_Opt"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableFloatingWindowPiP = [self.settingsDict[@"Group_V285_FloatingWindow_PiP"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableHardwareSegregationHome = [self.settingsDict[@"Group_HardwareSegregation_ClassicHomeV285"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableSpringBoardProcessManager = [self.settingsDict[@"Group_SpringBoard_ProcessManagerV285"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableKeepAppsAlive = [self.settingsDict[@"Group_KeepAppsAlive_NoKill"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableTitaniumV10LayoutBoost = [self.settingsDict[@"Group_TitaniumV10_SpringBoard_Layout_Boost"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
-    p.enableUIKitThirdPartyIsolated = [self.settingsDict[@"Group_UIKit_ThirdParty_IsolatedV285"] ?: @(!powerSave && masterEnabled) boolValue] ? 1 : 0;
 
     // Match Tweak.xm's V12 language marker format in reserved[0..47].
     NSString *languageCode = Titanium_ResolvePayloadLanguage(self.settingsDict);
@@ -8482,10 +8160,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }];
     }
     NSString *disabledJoined = [disabledIDs componentsJoinedByString:@"\n"];
-    ApexV285ProPayloadRLCV285 payloadCopy = p;
+    ApexV285ProPayload payloadCopy = p;
 
     dispatch_async(Titanium_IPCWriterQueue(), ^{
-        Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayloadRLCV285));
+        Titanium_WriteSyncPayloadUniversal(&payloadCopy, sizeof(ApexV285ProPayload));
         Titanium_WriteDisabledAppsFile(disabledJoined);
 
         // Notify only after both atomic IPC files are replaced, then send the legacy reload events.
@@ -8507,8 +8185,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.04 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (generation != self->_v22ApplyGeneration) return;
         if (@available(iOS 15.0, *)) {
-            NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
-            if (targetHz < 15) targetHz = 15;
+            NSInteger targetHz = [self.settingsDict[@"TargetRefreshRate"] ?: @240 integerValue];
+            if (targetHz < 60) targetHz = 60;
             if (targetHz > 240) targetHz = 240;
             // Không clamp theo nativeMax — Tweak.xm ép vượt trần phần cứng (TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL)
             SEL sel = NSSelectorFromString(@"setPreferredFrameRateRange:");
@@ -8888,8 +8566,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     }
     // Preserve user-selected values: defaults are applied only when keys are absent.
     // Closing the app from the switcher must not reset these persisted settings.
-    if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @60;
-    if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @60;
+    if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @240;
+    if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @240;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"FeatureActivationComplete"]) self.settingsDict[@"FeatureActivationComplete"] = @NO;
     if (!self.settingsDict[TI_AUTO_THEME_KEY]) {
