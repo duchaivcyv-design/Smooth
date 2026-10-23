@@ -6523,7 +6523,8 @@ static void Titanium_InstallDirectIOMobileFramebufferCHooks(void) {
             void *qc = dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_LAZY | RTLD_LOCAL);
             if (qc) {
                 void *symValid = dlsym(qc, "CAFrameRateRangeIsValid");
-                if (symValid) {
+                // [FIX ĐỆ QUY]: đã hook ở Titanium_Tier5_UnlockQuartzCore240HzCeiling; hook lần 2 làm orig_ trỏ vào hook => tràn stack
+                if (symValid && !orig_CAFrameRateRangeIsValid) {
                     MSHookFunction(symValid, (void *)hooked_CAFrameRateRangeIsValid, (void **)&orig_CAFrameRateRangeIsValid);
                 }
                 void *symMake = dlsym(qc, "CAFrameRateRangeMake");
