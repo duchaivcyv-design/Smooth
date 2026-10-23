@@ -1274,15 +1274,15 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 @end
 
 // ====================================================================================================
-// ĐỊNH NGHĨA CHUẨN STRUCT PAYLOAD & KHỞI TẠO BIẾN TOÀN CỤC (ĐÃ TỐI ƯU 240HZ & BẢO VỆ SANDBOX)
+// ĐỊNH NGHĨA STRUCT PAYLOAD & KHỞI TẠO CẤU HÌNH AN TOÀN
 // ====================================================================================================
 
 static ApexV285ProPayload g_syncPayloadV285 = {
     .magic = APEX_SYNC_MAGIC_V285,
     .masterEnabled = 1,
-    .targetHz = 240,
-    .targetFPS = 240,
-    .forceOverclock = 1,
+    .targetHz = 60,
+    .targetFPS = 60,
+    .forceOverclock = 0,
     .pipSyncEnabled = 1,
     .thermalShield = 1,
     .antiStutterExit = 1,
@@ -1361,8 +1361,8 @@ static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfo
 
 static BOOL g_SystemMasterReady = YES;
 
-static volatile NSInteger g_cachedResolvedHz = 240;
-static volatile NSInteger g_cachedResolvedFPS = 240;
+static volatile NSInteger g_cachedResolvedHz = 60;
+static volatile NSInteger g_cachedResolvedFPS = 60;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
@@ -1987,7 +1987,7 @@ static inline void Titanium_ReloadSharedSyncStateV285(void) {
             NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
             if (dict) {
                 BOOL master = (dict[@"Enabled"] != nil) ? [dict[@"Enabled"] boolValue] : YES;
-                NSInteger hz = (dict[@"TargetRefreshRate"] != nil) ? [dict[@"TargetRefreshRate"] integerValue] : 240;
+                NSInteger hz = (dict[@"TargetRefreshRate"] != nil) ? [dict[@"TargetRefreshRate"] integerValue] : 60;
                 NSInteger fps = (dict[@"TargetFPSRate"] != nil) ? [dict[@"TargetFPSRate"] integerValue] : hz;
 
                 if (hz < 15) hz = 15;
@@ -2302,8 +2302,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     self = [super init];
     if (self) {
         self.enabled = YES;
-        self.targetHz = 240;
-        self.targetFPS = 240;
+        self.targetHz = 60;
+        self.targetFPS = 60;
         self.enableHzControl = YES;
         self.enableFPSControl = YES;
         self.forceOverclock144Hz = YES;
@@ -2429,8 +2429,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                                 NSLog(@"[BoostTW] %@ src=ipc:%@ enabled=%d hz=%ld fps=%ld", bidDiag, sf, self.enabled, (long)self.targetHz, (long)self.targetFPS);
                                 
                                 // === CHỐNG KẸT 60HZ TỪ IPC PAYLOAD ===
-                                self.targetHz = (pRead.targetHz >= 15 && pRead.targetHz <= 240) ? pRead.targetHz : 240;
-                                self.targetFPS = (pRead.targetFPS >= 15 && pRead.targetFPS <= 240) ? pRead.targetFPS : 240;
+                                self.targetHz = (pRead.targetHz >= 15 && pRead.targetHz <= 240) ? pRead.targetHz : 60;
+                                self.targetFPS = (pRead.targetFPS >= 15 && pRead.targetFPS <= 240) ? pRead.targetFPS : 60;
                                 
                                 self.forceOverclock144Hz = (pRead.forceOverclock != 0);
                                 self.proMotionEngineBeta7 = (pRead.dynamicInterpolation != 0);
@@ -2455,9 +2455,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
                                 self.machVMPurgeRam = self.aggressiveRamClean;
                                 self.antiGhostTouch = (pRead.antiGhostTouch != 0);
                                 
-                                // === VÔ HIỆU HÓA CỜ TIẾT KIỆM PIN ÉP 60HZ ===
-                                self.powerSaveMode = NO;
-                                self.batterySaver60Hz = NO;
+                                self.powerSaveMode = (pRead.powerSaveModeActive != 0);
+                                self.batterySaver60Hz = self.powerSaveMode;
 
                                 // Giải mã 19 cờ công tắc mở rộng qua IPC Payload
                                 uint32_t exFlags = Titanium_GetIPCExtraFlags(&pRead);
@@ -2545,12 +2544,12 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.enableHzControl = GetLiveBool(@"EnableHzControl", YES);
         
         // === ÉP MẶC ĐỊNH 240HZ CHO PLIST NẾU KHÔNG TÌM THẤY THÔNG SỐ ===
-        self.targetHz = GetLiveInt(@"TargetRefreshRate", 240);
-        if (self.targetHz < 15) self.targetHz = 240;
+        self.targetHz = GetLiveInt(@"TargetRefreshRate", 60);
+        if (self.targetHz < 15 || self.targetHz > 240) self.targetHz = 60;
 
         self.enableFPSControl = GetLiveBool(@"EnableFPSControl", YES);
-        self.targetFPS = GetLiveInt(@"TargetFPSRate", 240);
-        if (self.targetFPS < 15) self.targetFPS = 240;
+        self.targetFPS = GetLiveInt(@"TargetFPSRate", 60);
+        if (self.targetFPS < 15 || self.targetFPS > 240) self.targetFPS = 60;
 
         self.forceOverclock144Hz = GetLiveBool(@"ForceOverclock144Hz", (self.targetHz > 60));
         self.proMotionEngineBeta7 = GetLiveBool(@"ProMotionEngineBeta7", YES);
@@ -2580,9 +2579,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
         self.antiThermalThrottling = GetLiveBool(@"AntiThermalThrottling", YES);
         self.antiThermalThrottle = self.antiThermalThrottling;
         
-        // === VÔ HIỆU HÓA CỜ TIẾT KIỆM PIN TỪ PLIST ===
-        self.powerSaveMode = NO;
-        self.batterySaver60Hz = NO;
+        // Respect the saved power mode; the shared payload may override it below.
+        self.powerSaveMode = GetLiveBool(@"PowerSaveMode", GetLiveBool(@"powerSaveMode", NO));
+        self.batterySaver60Hz = GetLiveBool(@"batterySaver60Hz", NO);
 
         self.antiGhostTouch = GetLiveBool(@"AntiGhostTouch", YES);
         self.chargerRippleRejection = GetLiveBool(@"ChargerRippleRejection", YES);
@@ -2612,13 +2611,11 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
 
         // === BUNG TRẦN TUYỆT ĐỐI HZ/FPS ===
         NSInteger safeHz = self.targetHz;
-        if (safeHz < 15) safeHz = 240;
-        if (safeHz > 240) safeHz = 240;
+        if (safeHz < 15 || safeHz > 240) safeHz = 60;
         g_cachedResolvedHz = safeHz;
 
         NSInteger safeFPS = self.targetFPS;
-        if (safeFPS < 15) safeFPS = 240;
-        if (safeFPS > 240) safeFPS = 240;
+        if (safeFPS < 15 || safeFPS > 240) safeFPS = 60;
         g_cachedResolvedFPS = safeFPS;
 
         if (Titanium_IsSpringBoard()) {
@@ -2628,7 +2625,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.masterEnabled = self.enabled ? 1 : 0;
             p.targetHz = (int32_t)g_cachedResolvedHz;
             p.targetFPS = (int32_t)g_cachedResolvedFPS;
-            p.forceOverclock = 1;
+            p.forceOverclock = 0; // Do not advertise an unsupported hardware overclock.
             p.pipSyncEnabled = 1;
             p.thermalShield = 1;
             p.antiStutterExit = 1;
@@ -2644,7 +2641,7 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
             p.antiGhostTouch = 1;
             p.diskIOPriorityBoost = 1;
             p.rawTouchDirectDelivery = 1;
-            p.powerSaveModeActive = 0;
+            p.powerSaveModeActive = (self.powerSaveMode || self.batterySaver60Hz) ? 1 : 0;
 
             uint32_t exFlags = 0;
             if (self.flatTintBlur)           exFlags |= IPC_FLAG_FLAT_BLUR;
@@ -2787,18 +2784,33 @@ static inline void Titanium_InitZeroCopyIPC(BOOL isSpringBoard) {
     }
 
     if (g_shmFd != -1) {
-        if (isSpringBoard) {
-            ftruncate(g_shmFd, TITANIUM_SHARED_MEM_SIZE);
+        struct stat shmStat;
+        if (fstat(g_shmFd, &shmStat) != 0) {
+            close(g_shmFd);
+            g_shmFd = -1;
+            return;
+        }
+        if (isSpringBoard && (shmStat.st_size < (off_t)TITANIUM_SHARED_MEM_SIZE)) {
+            if (ftruncate(g_shmFd, (off_t)TITANIUM_SHARED_MEM_SIZE) != 0) {
+                close(g_shmFd);
+                g_shmFd = -1;
+                return;
+            }
+        } else if (shmStat.st_size < (off_t)TITANIUM_SHARED_MEM_SIZE) {
+            // A client must not map past an old, shorter shared-memory object: that can SIGBUS.
+            close(g_shmFd);
+            g_shmFd = -1;
+            return;
         }
 
         void *mapped = mmap(NULL, TITANIUM_SHARED_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, g_shmFd, 0);
         if (mapped != MAP_FAILED) {
             g_sharedPayloadPtr = (ApexV285ProPayload *)mapped;
             if (isSpringBoard) {
-                // Đọc đúng giá trị thực tế từ file cấu hình, mặc định ép lên 240Hz nếu chưa có
+                // Đọc giá trị mục tiêu từ file cấu hình; mặc định an toàn 60Hz nếu chưa có
                 NSString *prefPath = Titanium_ResolvePrefPath();
-                NSInteger userHz = 240;
-                NSInteger userFPS = 240;
+                NSInteger userHz = 60;
+                NSInteger userFPS = 60;
                 BOOL userEnabled = YES;
                 
                 if (prefPath && [[NSFileManager defaultManager] fileExistsAtPath:prefPath]) {
@@ -2810,10 +2822,10 @@ static inline void Titanium_InitZeroCopyIPC(BOOL isSpringBoard) {
                     }
                 }
                 
-                // === BẺ TRẦN 240HZ, CHỐNG KẸT DƯỚI MỌI HÌNH THỨC ===
-                if (userHz < 15) userHz = 240;
+                // Giữ giá trị yêu cầu trong miền hợp lệ; driver/panel vẫn quyết định Hz thực tế.
+                if (userHz < 15) userHz = 60;
                 if (userHz > 240) userHz = 240;
-                if (userFPS < 15) userFPS = 240;
+                if (userFPS < 15) userFPS = 60;
                 if (userFPS > 240) userFPS = 240;
 
                 g_sharedPayloadPtr->targetHz = (int32_t)userHz;
@@ -2823,6 +2835,9 @@ static inline void Titanium_InitZeroCopyIPC(BOOL isSpringBoard) {
                 g_cachedResolvedHz = userHz;
                 g_cachedResolvedFPS = userFPS;
             }
+        } else {
+            close(g_shmFd);
+            g_shmFd = -1;
         }
     }
 }
@@ -2833,8 +2848,8 @@ static inline int Titanium_GetSharedTargetHz(void) {
         if (hz >= 15 && hz <= 240) return hz;
     }
     Titanium_ReloadSharedSyncStateV285();
-    // Ép mặc định về 240Hz thay vì để lọt về mức thấp
-    return (int)(g_cachedResolvedHz > 0 ? g_cachedResolvedHz : 240);
+    // Không tự đặt 240 khi IPC chưa sẵn sàng; dùng giá trị mặc định thực tế an toàn.
+    return (int)(g_cachedResolvedHz >= 15 && g_cachedResolvedHz <= 240 ? g_cachedResolvedHz : 60);
 }
 
 static inline void Titanium_PublishSharedConfig(int32_t targetHz, uint32_t enabled) {
@@ -5769,7 +5784,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (double)refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         return targetHz;
     }
     return %orig;
@@ -5778,7 +5793,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (void)setRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         %orig(targetHz);
         return;
     }
@@ -5805,7 +5820,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (double)minimumFrameDuration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         return (1.0 / targetHz);
     }
     return %orig;
@@ -5814,7 +5829,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (void)setMinimumFrameDuration:(double)duration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         %orig(1.0 / targetHz);
         return;
     }
@@ -5824,7 +5839,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (double)maximumRefreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         return targetHz;
     }
     return %orig;
@@ -5833,7 +5848,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (void)setMaximumRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         %orig(targetHz);
         return;
     }
@@ -5843,7 +5858,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (double)minimumRefreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         return targetHz;
     }
     return %orig;
@@ -5852,7 +5867,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (void)setMinimumRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         %orig(targetHz);
         return;
     }
@@ -5862,7 +5877,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (double)idealRefreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         return targetHz;
     }
     return %orig;
@@ -5871,7 +5886,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (void)setIdealRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         %orig(targetHz);
         return;
     }
@@ -5881,7 +5896,7 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 - (double)refreshRate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         double targetHz = (double)Titanium_GetEffectiveFrameCap();
-        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 240.0;
+        if (targetHz < 15.0 || targetHz > 240.0) targetHz = 60.0;
         return targetHz;
     }
     return %orig;
