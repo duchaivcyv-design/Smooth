@@ -1463,6 +1463,9 @@ static void Titanium_TuneWindowServerDisplayDirectly(void);
 static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void);
 static inline void Titanium_ReloadSharedSyncStateV285(void);
 static inline void Titanium_ReapplyFrameRateToAllScenes(void);
+static void Titanium_RestoreFirstDrawDefaultsOnce(void);
+#define TITANIUM_BOOT_SETTLE_DELAY_APP 1.2
+#define TITANIUM_BOOT_SETTLE_DELAY_SB 2.5
 
 // Callback nhận thông báo từ app cấu hình (SpringBoard, backboardd và app thứ 3 đều đăng ký).
 // Nạp lại Hz/FPS từ file cấu hình ngay, không chờ throttle, rồi áp dụng lên các scene đang chạy.
@@ -7771,6 +7774,27 @@ static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
     }
 }
 
+// Khôi phục render mặc định của iOS cho app đúng 1 lần (lần mở đầu tiên của bundle đó).
+static void Titanium_RestoreFirstDrawDefaultsOnce(void) {
+    @try {
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+        if (!bid) return;
+        NSString *key = [NSString stringWithFormat:@"TI_FIRSTDRAW_RESTORED_%@", bid];
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:key]) return;
+        if (@available(iOS 15.0, *)) {
+            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                if ([scene isKindOfClass:[UIWindowScene class]]) {
+                    UIWindowScene *ws = (UIWindowScene *)scene;
+                    if ([ws respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                        ws.preferredFrameRateRange = CAFrameRateRangeDefault;
+                    }
+                }
+            }
+        }
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:key];
+    } @catch (__unused NSException *e) {}
+}
+
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
@@ -7866,7 +7890,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             });
 
         } else {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(TITANIUM_BOOT_SETTLE_DELAY_APP * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                Titanium_RestoreFirstDrawDefaultsOnce();
                 Titanium_ReloadSharedSyncStateV285();
                 if (CFG285) {
                     CFG285.enabled = (g_syncPayloadV285.masterEnabled != 0);
@@ -7882,7 +7907,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             });
         }
 
-        g_SystemMasterReady = YES;
+        double settleDelay = isSpringBoard ? TITANIUM_BOOT_SETTLE_DELAY_SB : TITANIUM_BOOT_SETTLE_DELAY_APP;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(settleDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            g_SystemMasterReady = YES;
+        });
     }
 }
 
