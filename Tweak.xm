@@ -7520,6 +7520,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles);
         %init(Group_Tier4_PanelRegister_And_ThermalUnlock);
         Titanium_InstallDirectIOMobileFramebufferCHooks();
+        Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(); // [V39] Kich hoat mo khoa Filza/Sandbox
         Titanium_Tier4_ExecuteHardwarePanelOverdrive();
         Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock();
 
@@ -7571,6 +7572,124 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         g_SystemMasterReady = YES;
     }
 }
+
+
+// ====================================================================================================
+// [V39 MERGE] CÁC HÀM MỚI CHƯA CÓ TRONG FILE (gộp từ bản nâng cấp): Sửa đen app + Mở khóa Filza/Sandbox
+// ====================================================================================================
+
+typedef int (*sandbox_check_fn)(pid_t pid, const char *operation, int type, ...);
+static sandbox_check_fn orig_sandbox_check = NULL;
+
+// PHẦN A: SỬA DỨT ĐIỂM LỖI ĐEN MÀN HÌNH APP (thay thế hàm cũ Titanium_ForceApplyMetalOverdriveUltimate)
+static void Titanium_ForceApplyMetalOverdriveUltimate_FixedBlackScreen(id self) {
+    if (!self) return;
+    CAMetalLayer *metalLayer = (CAMetalLayer *)self;
+
+    // Bảo vệ 1: Nếu layer chưa có superlayer hoặc bounds = 0 (đang khởi tạo frame đầu), tuyệt đối không can thiệp -> tránh đen màn hình
+    if (!metalLayer.superlayer || CGRectIsEmpty(metalLayer.bounds)) {
+        return;
+    }
+
+    BOOL isSB = Titanium_IsSpringBoard();
+    BOOL isMedia = Titanium_IsVideoOrMediaMetalLayer(metalLayer);
+
+    // Bảo vệ 2: Chỉ bật Triple Buffering = 3, giữ nguyên presentsWithTransaction của App (KHÔNG gán = NO gây đen)
+    if ([metalLayer respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+        metalLayer.maximumDrawableCount = 3;
+    }
+
+    if (!isSB && !isMedia) {
+        // Cho phép timeout nhẹ để GPU bận ở frame đầu cũng không trả về nil drawable gây đen
+        if ([metalLayer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+            metalLayer.allowsNextDrawableTimeout = YES;
+        }
+
+        if (@available(iOS 15.0, *)) {
+            if ([metalLayer respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
+                if (maxTarget < 15.0f) maxTarget = 15.0f;
+                if (maxTarget > 240.0f) maxTarget = 240.0f;
+                float minTarget = (maxTarget >= 60.0f) ? 60.0f : maxTarget;
+                metalLayer.preferredFrameRateRange = CAFrameRateRangeMake(minTarget, maxTarget, maxTarget);
+            }
+        }
+    }
+
+    // Tắt V-Sync an toàn sau khi layer đã hiển thị ổn định
+    if (!isSB && [metalLayer respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
+        metalLayer.displaySyncEnabled = NO;
+    }
+}
+
+// Mở khóa Filza / trình quản lý file: nhận diện tiến trình
+static inline BOOL Titanium_IsFilzaOrFileManagerProcess(void) {
+    static BOOL s_isFilza = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        const char *prog = Titanium_SafeGetProgName();
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+        if ((prog && (strcasestr(prog, "Filza") != NULL || strcasestr(prog, "Santander") != NULL || strcasestr(prog, "NewTerm") != NULL)) ||
+            [bid rangeOfString:@"com.tigisoftware.Filza" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [bid rangeOfString:@"filza" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            s_isFilza = YES;
+        }
+    });
+    return s_isFilza;
+}
+
+// Hook C-API sandbox_check: Mở khóa quyền đọc/ghi file cho Filza & tiến trình tweak
+static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (Titanium_IsFilzaOrFileManagerProcess() || pid == getpid()) {
+            if (!operation ||
+                strncmp(operation, "file-", 5) == 0 ||
+                strncmp(operation, "mach-", 5) == 0 ||
+                strncmp(operation, "ipc-", 4) == 0 ||
+                strncmp(operation, "process-", 8) == 0 ||
+                strncmp(operation, "sysctl-", 7) == 0 ||
+                strncmp(operation, "iokit-", 6) == 0) {
+                return 0; // SANDBOX_ALLOW
+            }
+        }
+    }
+    return 0;
+}
+
+// Tầng 6: Mở khóa System & Sandbox cho Filza (đọc/ghi/sửa/xóa file toàn hệ thống)
+static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            umask(0000);
+
+            void *sbLib = dlopen("/usr/lib/system/libsystem_sandbox.dylib", RTLD_LAZY | RTLD_LOCAL);
+            if (!sbLib) sbLib = RTLD_DEFAULT;
+            void *symSbCheck = dlsym(sbLib, "sandbox_check");
+            if (symSbCheck && !orig_sandbox_check) {
+                MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
+            }
+
+            if (Titanium_IsFilzaOrFileManagerProcess()) {
+                setuid(0); setgid(0); seteuid(0); setegid(0);
+            }
+
+            const char *writablePaths[] = {
+                "/tmp/.boost_hz_sync", "/var/jb/tmp/.boost_hz_sync",
+                "/tmp/.boost_hz_apps", "/var/jb/tmp/.boost_hz_apps",
+                "/tmp/.boost_hz_per_app.plist", "/var/jb/tmp/.boost_hz_per_app.plist",
+                "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist",
+                "/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+            };
+            for (size_t i = 0; i < sizeof(writablePaths) / sizeof(writablePaths[0]); i++) {
+                if (access(writablePaths[i], F_OK) == 0) {
+                    chmod(writablePaths[i], 0666);
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
 
 %ctor {
     @autoreleasepool {
