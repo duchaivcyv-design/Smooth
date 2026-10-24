@@ -1464,7 +1464,8 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void);
 static inline void Titanium_ReloadSharedSyncStateV285(void);
 static inline void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_RestoreFirstDrawDefaultsOnce(void);
-#define TITANIUM_BOOT_SETTLE_DELAY_APP 1.2
+static void Titanium_RestoreOnFirstFrame(void);
+#define TITANIUM_BOOT_SETTLE_DELAY_APP 0.0
 #define TITANIUM_BOOT_SETTLE_DELAY_SB 2.5
 
 // Callback nhận thông báo từ app cấu hình (SpringBoard, backboardd và app thứ 3 đều đăng ký).
@@ -7795,6 +7796,17 @@ static void Titanium_RestoreFirstDrawDefaultsOnce(void) {
     } @catch (__unused NSException *e) {}
 }
 
+// Chạy đúng sau khi frame đầu tiên của app được vẽ xong (run loop chuẩn bị chờ), không dùng hẹn giờ.
+static void Titanium_RestoreOnFirstFrame(void) {
+    CFRunLoopObserverRef obs = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, kCFRunLoopBeforeWaiting, false, 0, ^(CFRunLoopObserverRef o, CFRunLoopActivity activity) {
+        CFRunLoopRemoveObserver(CFRunLoopGetMain(), o, kCFRunLoopCommonModes);
+        Titanium_RestoreFirstDrawDefaultsOnce();
+        Titanium_ReapplyFrameRateToAllScenes();
+    });
+    if (obs) CFRunLoopAddObserver(CFRunLoopGetMain(), obs, kCFRunLoopCommonModes);
+    if (obs) CFRelease(obs);
+}
+
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
@@ -7891,7 +7903,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
         } else {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(TITANIUM_BOOT_SETTLE_DELAY_APP * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                Titanium_RestoreFirstDrawDefaultsOnce();
                 Titanium_ReloadSharedSyncStateV285();
                 if (CFG285) {
                     CFG285.enabled = (g_syncPayloadV285.masterEnabled != 0);
@@ -7903,7 +7914,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 AppleInternal_EnforceZeroLatencyKernelTier();
                 Titanium_ApplySiliconDeepOptimizations();
                 Titanium_RegisterAppResumeRefreshV12();
-                Titanium_ReapplyFrameRateToAllScenes();
+                Titanium_RestoreOnFirstFrame();
             });
         }
 
