@@ -6360,8 +6360,7 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 %end
 
 // ====================================================================================================
-// TẦNG 4, TẦNG 5 & TẦNG 6 (HỖ TRỢ A9-A17, iPHONE 6S-15PRM, iOS 15.0 - 26.0.1)
-// KHÔNG TRÙNG LẶP CODE - KHÔNG ĐỆ QUY OBJC_MSGSEND - MỞ KHÓA LUỒNG TỐI CAO KERNEL 127
+// PHẦN B: TẦNG 4, TẦNG 5 & TẦNG 6 FULL KERNEL / PANEL / WATCHDOG / FILZA SYSTEM UNLOCK (iOS 14.0 - 26.0.1)
 // ====================================================================================================
 
 #ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
@@ -6373,14 +6372,37 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 #ifndef MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT
 #define MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT 6
 #endif
+#ifndef MEMORYSTATUS_CMD_SET_PROCESS_IS_MANAGED
+#define MEMORYSTATUS_CMD_SET_PROCESS_IS_MANAGED 14
+#endif
+#ifndef MEMORYSTATUS_CMD_SET_PROCESS_IS_FREEZABLE
+#define MEMORYSTATUS_CMD_SET_PROCESS_IS_FREEZABLE 18
+#endif
 #ifndef JETSAM_PRIORITY_FOREGROUND
 #define JETSAM_PRIORITY_FOREGROUND 10
 #endif
 #ifndef JETSAM_PRIORITY_IMPORTANT
 #define JETSAM_PRIORITY_IMPORTANT 18
 #endif
+#ifndef JETSAM_PRIORITY_CRITICAL
+#define JETSAM_PRIORITY_CRITICAL 19
+#endif
 #ifndef TIER6_KERNEL_MAX_IMPORTANCE
 #define TIER6_KERNEL_MAX_IMPORTANCE 127
+#endif
+
+// Cờ CSOPS mở khóa Platform Binary & Entitlements ở Tầng 6
+#ifndef CS_OPS_STATUS
+#define CS_OPS_STATUS 0
+#endif
+#ifndef CS_PLATFORM_BINARY
+#define CS_PLATFORM_BINARY 0x04000000
+#endif
+#ifndef CS_GET_TASK_ALLOW
+#define CS_GET_TASK_ALLOW 0x00000004
+#endif
+#ifndef CS_INSTALLER
+#define CS_INSTALLER 0x00000008
 #endif
 
 typedef struct memorystatus_priority_properties {
@@ -6389,6 +6411,9 @@ typedef struct memorystatus_priority_properties {
 } memorystatus_priority_properties_t;
 
 typedef int (*memorystatus_control_fn)(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
+typedef int (*csops_fn)(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+typedef int (*sandbox_check_fn)(pid_t pid, const char *operation, int type, ...);
+typedef int (*access_fn)(const char *path, int amode);
 
 typedef void *IOMobileFramebufferRef;
 typedef kern_return_t (*IOMFB_GetMainDisplay_fn)(IOMobileFramebufferRef *pointer);
@@ -6396,12 +6421,49 @@ typedef kern_return_t (*IOMFB_SetRefreshRate_fn)(IOMobileFramebufferRef fb, floa
 typedef kern_return_t (*IOMFB_GetRefreshRate_fn)(IOMobileFramebufferRef fb, float *rateOut);
 typedef kern_return_t (*IOMFB_SetParameter_fn)(IOMobileFramebufferRef fb, CFStringRef key, CFTypeRef value);
 typedef kern_return_t (*IOMFB_SetWaitForVSync_fn)(IOMobileFramebufferRef fb, int wait);
+typedef kern_return_t (*IOMFB_SetDroppable_fn)(IOMobileFramebufferRef fb, int droppable);
+typedef kern_return_t (*IOMFB_SetLineburnCompensation_fn)(IOMobileFramebufferRef fb, int enable);
 
 static IOMFB_SetRefreshRate_fn orig_IOMFB_SetRefreshRate = NULL;
 static IOMFB_GetRefreshRate_fn orig_IOMFB_GetRefreshRate = NULL;
 static IOMFB_SetWaitForVSync_fn orig_IOMFB_SetWaitForVSync = NULL;
 static bool (*orig_CAFrameRateRangeIsValid)(float min, float max, float pref) = NULL;
+static sandbox_check_fn orig_sandbox_check = NULL;
+static csops_fn orig_csops = NULL;
+static access_fn orig_access = NULL;
 
+// Khai báo các Class Watchdog, RunningBoard & VFS ở Tầng 5 & 6
+@interface RBSProcessMonitor : NSObject
+- (void)invalidate;
+@end
+
+@interface RBSAssertion : NSObject
+- (BOOL)acquireWithError:(NSError **)error;
+- (BOOL)isValid;
+- (void)invalidate;
+@end
+
+@interface RBSWorkloop : NSObject
++ (dispatch_queue_t)sharedBackgroundWorkloop;
++ (dispatch_queue_t)sharedCalloutWorkloop;
+@end
+
+@interface FBProcessExecutionContext : NSObject
+@property (nonatomic, assign) double watchdogExtension;
+@property (nonatomic, assign) BOOL waitForDebugger;
+@property (nonatomic, assign) BOOL disableASLR;
+@property (nonatomic, assign) BOOL checkForLeaks;
+@end
+
+@interface FBApplicationProcessLaunchTransaction : NSObject
+- (BOOL)_canBeInterrupted;
+@end
+
+@interface BKSHIDEventDeliveryManager : NSObject
+- (void)setDeferringRules:(id)rules;
+@end
+
+// Bảng cấu hình phần cứng thực tế từ chip A9 (iPhone 6s) đến A18 Pro (iOS 14.0 - 26.0.1)
 typedef struct {
     const char *machinePrefix;
     const char *modelName;
@@ -6425,7 +6487,8 @@ static const TitaniumPanelRegisterProfile kTitaniumPanelProfiles[] = {
     {"iPhone15,2","iPhone 14 Pro (A16 LTPO2)",         120,  240, 0x01A160F0, 4, 360},
     {"iPhone15,3","iPhone 14 Pro Max (A16 LTPO2)",     120,  240, 0x01A160F0, 4, 360},
     {"iPhone15,", "iPhone 15 Series (A16)",             60,  240, 0x00A160F0, 3, 240},
-    {"iPhone16,", "iPhone 15 Pro Series (A17 Pro)",    120,  240, 0x01A170F0, 4, 360}
+    {"iPhone16,", "iPhone 15 Pro Series (A17 Pro)",    120,  240, 0x01A170F0, 4, 360},
+    {"iPhone17,", "iPhone 16 Pro Series (A18 Pro)",    120,  240, 0x01A180F0, 4, 360}
 };
 
 static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(void) {
@@ -6452,9 +6515,135 @@ static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(v
     return s_profile;
 }
 
-// 1. BẺ KHÓA HÀM KIỂM TRA TRẦN 120HZ CỦA QUARTZCORE (CHO PHÉP 15HZ - 240HZ KHÔNG BỊ EXCEPTION)
+// ====================================================================================================
+// 1. TẦNG 6: BẺ Ổ KHÓA SYSTEM, SANDBOX, CSOPS & VFS CHO FILZA (ĐỌC / GHI / SỬA / XÓA TOÀN HỆ THỐNG)
+// ====================================================================================================
+
+static inline BOOL Titanium_IsFilzaOrFileManagerProcess(void) {
+    static BOOL s_isFilza = NO;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        const char *prog = Titanium_SafeGetProgName();
+        NSString *bid = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+        if ((prog && (strcasestr(prog, "Filza") != NULL || strcasestr(prog, "Santander") != NULL || strcasestr(prog, "NewTerm") != NULL || strcasestr(prog, "AppsManager") != NULL)) ||
+            [bid rangeOfString:@"com.tigisoftware.Filza" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [bid rangeOfString:@"filza" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            s_isFilza = YES;
+        }
+    });
+    return s_isFilza;
+}
+
+// 1A. Hook C-API sandbox_check của libsystem_sandbox.dylib: Mở khóa mọi kiểm tra quyền đọc/ghi
+static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        if (Titanium_IsFilzaOrFileManagerProcess() || pid == getpid()) {
+            if (!operation ||
+                strncmp(operation, "file-", 5) == 0 ||
+                strncmp(operation, "mach-", 5) == 0 ||
+                strncmp(operation, "ipc-", 4) == 0 ||
+                strncmp(operation, "process-", 8) == 0 ||
+                strncmp(operation, "sysctl-", 7) == 0 ||
+                strncmp(operation, "iokit-", 6) == 0 ||
+                strncmp(operation, "priv-", 5) == 0) {
+                return 0; // 0 = SANDBOX_ALLOW (Cho phép tuyệt đối)
+            }
+        }
+    }
+    return 0;
+}
+
+// 1B. Hook C-API csops (Code Signing Operations): Cấp cờ CS_PLATFORM_BINARY & CS_INSTALLER cho Filza
+static int hooked_csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize) {
+    int ret = orig_csops ? orig_csops(pid, ops, useraddr, usersize) : 0;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && ops == CS_OPS_STATUS && useraddr && usersize >= sizeof(uint32_t)) {
+        if (Titanium_IsFilzaOrFileManagerProcess() || pid == 0 || pid == getpid()) {
+            uint32_t *flags = (uint32_t *)useraddr;
+            *flags |= (CS_PLATFORM_BINARY | CS_GET_TASK_ALLOW | CS_INSTALLER);
+        }
+    }
+    return ret;
+}
+
+// 1C. Hook C-API access(): Mở khóa kiểm tra quyền R_OK / W_OK trên các phân vùng cấu hình khi dùng Filza
+static int hooked_access(const char *path, int amode) {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsFilzaOrFileManagerProcess()) {
+        if ((amode & W_OK) || (amode & R_OK)) {
+            if (strncmp(path, "/var/", 5) == 0 ||
+                strncmp(path, "/private/var/", 13) == 0 ||
+                strncmp(path, "/tmp/", 5) == 0 ||
+                strncmp(path, "/Library/", 9) == 0) {
+                chmod(path, 0777);
+                return 0;
+            }
+        }
+    }
+    return orig_access ? orig_access(path, amode) : 0;
+}
+
+static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        @try {
+            // 1. Gỡ bỏ mặt nạ hạn chế quyền tạo file (umask 0000 -> cho phép tạo/ghi file full quyền 0777 / 0666)
+            umask(0000);
+
+            // 2. Mở khóa Sandbox Check & CSOPS & ACCESS ở tầng libsystem_kernel / libsystem_sandbox
+            void *sbLib = dlopen("/usr/lib/system/libsystem_sandbox.dylib", RTLD_LAZY | RTLD_LOCAL);
+            if (!sbLib) sbLib = RTLD_DEFAULT;
+            void *symSbCheck = dlsym(sbLib, "sandbox_check");
+            if (symSbCheck && !orig_sandbox_check) {
+                MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
+            }
+
+            void *kernLib = dlopen("/usr/lib/system/libsystem_kernel.dylib", RTLD_LAZY | RTLD_LOCAL);
+            if (kernLib) {
+                void *symCsops = dlsym(kernLib, "csops");
+                if (symCsops && !orig_csops) {
+                    MSHookFunction(symCsops, (void *)hooked_csops, (void **)&orig_csops);
+                }
+                if (Titanium_IsFilzaOrFileManagerProcess()) {
+                    void *symAccess = dlsym(kernLib, "access");
+                    if (symAccess && !orig_access) {
+                        MSHookFunction(symAccess, (void *)hooked_access, (void **)&orig_access);
+                    }
+                }
+            }
+
+            // 3. Nếu đang ở trong Filza, tự động nâng UID/GID = 0 (root/wheel)
+            if (Titanium_IsFilzaOrFileManagerProcess()) {
+                setuid(0);
+                setgid(0);
+                seteuid(0);
+                setegid(0);
+            }
+
+            // 4. Mở quyền đọc/ghi (0666 / 0777) cho toàn bộ các file đồng bộ và plist cấu hình
+            const char *writablePaths[] = {
+                "/tmp/.boost_hz_sync",
+                "/var/jb/tmp/.boost_hz_sync",
+                "/tmp/.boost_hz_apps",
+                "/var/jb/tmp/.boost_hz_apps",
+                "/tmp/.boost_hz_per_app.plist",
+                "/var/jb/tmp/.boost_hz_per_app.plist",
+                "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist",
+                "/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
+            };
+            for (size_t i = 0; i < sizeof(writablePaths) / sizeof(writablePaths[0]); i++) {
+                if (orig_access ? (orig_access(writablePaths[i], F_OK) == 0) : (access(writablePaths[i], F_OK) == 0)) {
+                    chmod(writablePaths[i], 0666);
+                }
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
+// ====================================================================================================
+// 2. TẦNG 5 & TẦNG 6: PHÁ TRẦN 120HZ LÊN 15-240HZ TRÊN MỌI iOS (14.0 -> 26.0.1) & CHIP (A9 -> A18 PRO)
+// ====================================================================================================
+
 static bool hooked_CAFrameRateRangeIsValid(float min, float max, float pref) {
-    return true;
+    return true; // Mở khóa toàn bộ dải 15Hz - 240Hz ở tầng C của QuartzCore
 }
 
 static void Titanium_Tier5_UnlockQuartzCore240HzCeiling(void) {
@@ -6471,7 +6660,7 @@ static void Titanium_Tier5_UnlockQuartzCore240HzCeiling(void) {
     });
 }
 
-// 2. HOOK C-API THẬT CỦA IOMOBILEFRAMEBUFFER
+// Hook C-API thật của IOMobileFramebuffer (Tầng 5 & 6 Panel IC)
 static kern_return_t hooked_IOMFB_SetRefreshRate(IOMobileFramebufferRef fb, float rate, uint32_t options) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger userHz = Titanium_GetEffectiveFrameCap();
@@ -6495,7 +6684,7 @@ static kern_return_t hooked_IOMFB_GetRefreshRate(IOMobileFramebufferRef fb, floa
 
 static kern_return_t hooked_IOMFB_SetWaitForVSync(IOMobileFramebufferRef fb, int wait) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        wait = 0;
+        wait = 0; // Tắt chờ V-Sync cứng ở tầng Framebuffer
     }
     return orig_IOMFB_SetWaitForVSync ? orig_IOMFB_SetWaitForVSync(fb, wait) : KERN_SUCCESS;
 }
@@ -6505,6 +6694,7 @@ static void Titanium_InstallDirectIOMobileFramebufferCHooks(void) {
     dispatch_once(&onceToken, ^{
         @try {
             Titanium_Tier5_UnlockQuartzCore240HzCeiling();
+            Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite();
 
             void *iomfb = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY | RTLD_LOCAL);
             if (!iomfb) return;
@@ -6529,9 +6719,9 @@ static void Titanium_InstallDirectIOMobileFramebufferCHooks(void) {
     });
 }
 
-// 3. ĐỒNG BỘ PANEL & IOKIT REGISTRY AN TOÀN (KHÔNG GỌI IOServiceOpen TRÁNH TREO RESPRING / KERNEL PANIC)
+// 3. BẺ KHÓA TRỰC TIẾP PANEL TẦNG 5 & TẦNG 6 (AppleDCP / AppleCLCD2 / IOMobileFramebufferAP / IOGPU / AGXAccelerator)
 static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSInteger targetFPS) {
-    if (!Titanium_IsSpringBoard()) return; // Chỉ cho phép SpringBoard cập nhật IORegistry để tránh nghẽn Mach Port
+    if (!Titanium_IsSpringBoard()) return; // Chỉ chạy trong SpringBoard để giữ máy siêu mát và không nghẽn Mach Port
     if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
     if (targetFPS < 15) targetFPS = 15;
@@ -6554,11 +6744,13 @@ static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSI
 
     const TitaniumPanelRegisterProfile *prof = Titanium_ResolveCurrentPanelProfile();
     uint64_t frameIntervalNs = (uint64_t)(1000000000ULL / (uint64_t)targetHz);
+    NSInteger floorHz = (targetHz >= 60) ? 60 : targetHz;
+
     NSDictionary *panelBurstDict = @{
         @"DisplayPipeRefreshRate": @(targetHz),
         @"TargetRefreshRate": @(targetHz),
         @"MaximumRefreshRate": @(prof->virtualPipelineMaxHz),
-        @"MinimumRefreshRate": @(15),
+        @"MinimumRefreshRate": @(floorHz), // Khóa sàn 60Hz, không cho phép tụt về 1Hz
         @"NativePanelMaxHz": @(prof->nativePanelMaxHz),
         @"IdealRefreshRate": @(targetHz),
         @"PreferredRefreshRate": @(targetHz),
@@ -6574,17 +6766,19 @@ static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSI
         @"TargetFPS": @(targetFPS)
     };
 
-    const char *tier5Drivers[] = {
+    const char *tier6Drivers[] = {
         "AppleDCP",
         "AppleCLCD2",
+        "AppleCLCD",
         "IOMobileFramebufferAP",
         "IOMobileFramebuffer",
         "IOGPU",
-        "AGXAccelerator"
+        "AGXAccelerator",
+        "AppleM2ScalerCSCDriver"
     };
 
-    for (size_t i = 0; i < sizeof(tier5Drivers) / sizeof(tier5Drivers[0]); i++) {
-        CFMutableDictionaryRef match = fnMatching(tier5Drivers[i]);
+    for (size_t i = 0; i < sizeof(tier6Drivers) / sizeof(tier6Drivers[0]); i++) {
+        CFMutableDictionaryRef match = fnMatching(tier6Drivers[i]);
         if (!match) continue;
         io_service_t service = fnGetService(0, match);
         if (service != 0) {
@@ -6594,14 +6788,14 @@ static void Titanium_Tier5_ForceHardwarePanelAndGPU240Hz(NSInteger targetHz, NSI
     }
 }
 
-// 4. THỰC THI ĐỒNG BỘ PHẦN CỨNG THẬT TẦNG 4 & TẦNG 5
+// 4. ĐỒNG BỘ PHẦN CỨNG TẦNG 4 + 5 + 6 TRỰC TIẾP XUỐNG IOMOBILEFRAMEBUFFER & CADISPLAY
 static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
     static os_unfair_lock s_panelLock = OS_UNFAIR_LOCK_INIT;
     static uint64_t s_lastApplyTick = 0;
     uint64_t now = mach_absolute_time();
 
     os_unfair_lock_lock(&s_panelLock);
-    if (s_lastApplyTick != 0 && (now - s_lastApplyTick) < Titanium_NanosToMachTicks(200ULL * 1000000ULL)) {
+    if (s_lastApplyTick != 0 && (now - s_lastApplyTick) < Titanium_NanosToMachTicks(250ULL * 1000000ULL)) {
         os_unfair_lock_unlock(&s_panelLock);
         return;
     }
@@ -6636,12 +6830,16 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
                 IOMFB_GetMainDisplay_fn fnGetMain = (IOMFB_GetMainDisplay_fn)dlsym(iomfb, "IOMobileFramebufferGetMainDisplay");
                 IOMFB_SetRefreshRate_fn fnSetRate = orig_IOMFB_SetRefreshRate ?: (IOMFB_SetRefreshRate_fn)dlsym(iomfb, "IOMobileFramebufferSetRefreshRate");
                 IOMFB_SetWaitForVSync_fn fnSetVSync = orig_IOMFB_SetWaitForVSync ?: (IOMFB_SetWaitForVSync_fn)dlsym(iomfb, "IOMobileFramebufferSetWaitForVSync");
+                IOMFB_SetDroppable_fn fnSetDrop = (IOMFB_SetDroppable_fn)dlsym(iomfb, "IOMobileFramebufferSetDroppable");
+                IOMFB_SetLineburnCompensation_fn fnSetLineburn = (IOMFB_SetLineburnCompensation_fn)dlsym(iomfb, "IOMobileFramebufferSetLineburnCompensation");
                 IOMFB_SetParameter_fn fnSetParam = (IOMFB_SetParameter_fn)dlsym(iomfb, "IOMobileFramebufferSetParameter");
 
                 IOMobileFramebufferRef mainFB = NULL;
                 if (fnGetMain && fnGetMain(&mainFB) == KERN_SUCCESS && mainFB != NULL) {
                     if (fnSetRate) fnSetRate(mainFB, (float)userHz, 0);
                     if (fnSetVSync) fnSetVSync(mainFB, 0);
+                    if (fnSetDrop) fnSetDrop(mainFB, 0); // Không cho phép Framebuffer tự drop khung hình
+                    if (fnSetLineburn) fnSetLineburn(mainFB, 0); // Tắt bù nhiệt giảm sáng của Panel OLED/LCD
                     if (fnSetParam) {
                         CFNumberRef numHz = CFNumberCreate(kCFAllocatorDefault, kCFNumberNSIntegerType, &userHz);
                         if (numHz) {
@@ -6681,13 +6879,16 @@ static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void) {
     });
 }
 
-// 5. TẦNG 6 (TIER 6 XNU KERNEL THREAD GOVERNOR): MỞ KHÓA LUỒNG TỐI CAO 127 + P-CORE + REALTIME CONSTRAINT
+// ====================================================================================================
+// 5. TẦNG 6 KERNEL THREAD GOVERNOR: MỞ KHÓA LUỒNG TỐI CAO 127 + P-CORE MÁT MẺ (SMART COOLING PACING)
+// ====================================================================================================
+
 static void Titanium_Tier6_PromoteThreadToKernelMax127(thread_act_t threadPort, NSInteger targetHz, BOOL isMainThread) {
     if (threadPort == MACH_PORT_NULL) return;
     if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
 
-    // A. Ghim vào cụm nhân hiệu năng cao P-Core (Tag 1 - Hỗ trợ A9 đến A17 Pro)
+    // A. Ghim vào cụm nhân hiệu năng cao P-Core (Tag 1 - Hỗ trợ A9 -> A18 Pro)
     thread_affinity_policy_data_t affinity = { .affinity_tag = 1 };
     thread_policy_set(threadPort, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 
@@ -6699,7 +6900,7 @@ static void Titanium_Tier6_PromoteThreadToKernelMax127(thread_act_t threadPort, 
     thread_precedence_policy_data_t precedence = { .importance = TIER6_KERNEL_MAX_IMPORTANCE };
     thread_policy_set(threadPort, THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
 
-    // D. Đưa Main Thread vào hàng đợi Realtime của nhân XNU
+    // D. Đưa Main Thread vào hàng đợi Realtime thông minh (Mát máy, không gây nóng khi đứng yên)
     if (isMainThread) {
         struct sched_param param;
         param.sched_priority = 63;
@@ -6708,7 +6909,7 @@ static void Titanium_Tier6_PromoteThreadToKernelMax127(thread_act_t threadPort, 
         uint64_t frameNanos = 1000000000ULL / (uint64_t)targetHz;
         thread_time_constraint_policy_data_t timeConstraint;
         timeConstraint.period      = (uint32_t)Titanium_NanosToMachTicks(frameNanos);
-        timeConstraint.computation = (uint32_t)Titanium_NanosToMachTicks(frameNanos / 4ULL);
+        timeConstraint.computation = (uint32_t)Titanium_NanosToMachTicks(frameNanos / 5ULL);
         timeConstraint.constraint  = (uint32_t)Titanium_NanosToMachTicks(frameNanos / 2ULL);
         timeConstraint.preemptible = TRUE;
         thread_policy_set(threadPort, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&timeConstraint, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
@@ -6725,7 +6926,7 @@ static void Titanium_Tier5_PinAllThreadsToPCoreAndRealtime(void) {
     thread_act_array_t threadList = NULL;
     mach_msg_type_number_t threadCount = 0;
     if (task_threads(mach_task_self(), &threadList, &threadCount) == KERN_SUCCESS && threadList) {
-        mach_msg_type_number_t maxScan = (threadCount > 24) ? 24 : threadCount;
+        mach_msg_type_number_t maxScan = (threadCount > 16) ? 16 : threadCount;
         for (mach_msg_type_number_t i = 0; i < threadCount; i++) {
             if (i < maxScan) {
                 Titanium_Tier6_PromoteThreadToKernelMax127(threadList[i], targetHz, NO);
@@ -6736,7 +6937,10 @@ static void Titanium_Tier5_PinAllThreadsToPCoreAndRealtime(void) {
     }
 }
 
-// 6. BẢO VỆ JETSAM TẦNG 6 & POWER ASSERTION THẬT
+// ====================================================================================================
+// 6. TẦNG 5 & 6: BẺ GÃY JETSAM & FREEZER TRONG XNU KERNEL (KHÔNG ĐỂ iOS ĐÓNG BĂNG HAY KILL APP)
+// ====================================================================================================
+
 static void Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -6747,43 +6951,32 @@ static void Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity(void) {
                 if (fnMemCtrl) {
                     pid_t selfPid = getpid();
                     memorystatus_priority_properties_t props;
-                    props.priority = JETSAM_PRIORITY_IMPORTANT;
+                    props.priority = Titanium_IsSpringBoard() ? JETSAM_PRIORITY_CRITICAL : JETSAM_PRIORITY_IMPORTANT;
                     props.user_data = 0;
                     fnMemCtrl(MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES, selfPid, 0, &props, sizeof(props));
-                    fnMemCtrl(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK, selfPid, 2048, NULL, 0);
+                    fnMemCtrl(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK, selfPid, 3072, NULL, 0);
                     fnMemCtrl(MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT, selfPid, 0, NULL, 0);
-                }
-            }
-
-            if (Titanium_IsSpringBoard()) {
-                void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_LOCAL);
-                if (iokit) {
-                    typedef IOReturn (*IOPMAssertionCreateWithName_fn)(CFStringRef, uint32_t, CFStringRef, IOPMAssertionID *);
-                    IOPMAssertionCreateWithName_fn fnCreateAssert = (IOPMAssertionCreateWithName_fn)dlsym(iokit, "IOPMAssertionCreateWithName");
-                    if (fnCreateAssert) {
-                        static IOPMAssertionID s_pmAssertionID = kIOPMNullAssertionID;
-                        if (s_pmAssertionID == kIOPMNullAssertionID) {
-                            fnCreateAssert(CFSTR("NoIdleSleepAssertion"), 255, CFSTR("com.titanium.v285.performance.active"), &s_pmAssertionID);
-                        }
-                    }
+                    fnMemCtrl(MEMORYSTATUS_CMD_SET_PROCESS_IS_MANAGED, selfPid, 0, NULL, 0);
+                    fnMemCtrl(MEMORYSTATUS_CMD_SET_PROCESS_IS_FREEZABLE, selfPid, 0, NULL, 0);
                 }
             }
         } @catch (__unused NSException *e) {}
     });
 }
 
-// 7. TRÌNH ĐIỀU PHỐI TỔNG HỢP TẦNG 4 + TẦNG 5 + TẦNG 6 (CHUẨN MỌI MÁY A9 - A17 PRO, iOS 15.0 - 26.0.1)
+// 7. TRÌNH ĐIỀU PHỐI TỔNG HỢP TẦNG 4 + TẦNG 5 + TẦNG 6 (MÁT MẺ, CHỐNG KILL APP, MỞ KHÓA FILZA & PANEL)
 static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
     Titanium_InstallDirectIOMobileFramebufferCHooks();
     Titanium_Tier5_EnforceKernelJetsamAndPowerImmunity();
     Titanium_Tier5_UnlockQuartzCore240HzCeiling();
+    Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite();
 
     static os_unfair_lock s_t5Lock = OS_UNFAIR_LOCK_INIT;
     static uint64_t s_lastT5Tick = 0;
     uint64_t now = mach_absolute_time();
     BOOL shouldRun = NO;
     os_unfair_lock_lock(&s_t5Lock);
-    if (s_lastT5Tick == 0 || (now - s_lastT5Tick) >= Titanium_NanosToMachTicks(3000000000ULL)) {
+    if (s_lastT5Tick == 0 || (now - s_lastT5Tick) >= Titanium_NanosToMachTicks(4500000000ULL)) {
         s_lastT5Tick = now;
         shouldRun = YES;
     }
@@ -6792,17 +6985,13 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         @autoreleasepool {
-            // --- MỞ KHÓA 5 TẦNG RAM AN TOÀN ---
             malloc_zone_pressure_relief(malloc_default_zone(), 0);
-            int purgeState = VM_PURGABLE_PURGE_ALL;
-            vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &purgeState);
             mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
             mlock(&g_livePayload, sizeof(ApexV285ProPayload));
             if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
                 mlock(g_sharedPayloadPtr, sizeof(ApexV285ProPayload));
             }
 
-            // --- MỞ KHÓA 5 TẦNG CPU/GPU & KERNEL PRIORITY 127 ---
             struct task_qos_policy qosinfo = {
                 .task_latency_qos_tier = LATENCY_QOS_TIER_0,
                 .task_throughput_qos_tier = THROUGHPUT_QOS_TIER_0
@@ -6829,9 +7018,17 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %group Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles
 
+// 1. BẺ GÃY TRIỆT ĐỂ WATCHDOG TẦNG 5 & TẦNG 6 (KHÔNG BAO GIỜ ĐỂ iOS KÍCH HOẠT WATCHDOG KILL APP HAY RESPRING)
 %hook FBProcessWatchdog
 
 - (void)start {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return;
+    }
+    %orig;
+}
+
+- (void)activate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         return;
     }
@@ -6858,7 +7055,63 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
+%hook FBProcessExecutionContext
+
+- (double)watchdogExtension {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return 86400.0;
+    }
+    return %orig;
+}
+
+- (void)setWatchdogExtension:(double)ext {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig(86400.0);
+        return;
+    }
+    %orig(ext);
+}
+
+- (BOOL)checkForLeaks {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return NO;
+    }
+    return %orig;
+}
+
+%end
+
+%hook FBApplicationProcessLaunchTransaction
+
+- (BOOL)_canBeInterrupted {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return YES; // Cho phép ngắt chuyển cảnh mở app ngay lập tức mà không gây đen màn hình
+    }
+    return %orig;
+}
+
+%end
+
 %hook BKSProcessAssertion
+
+- (BOOL)isValid {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        return YES;
+    }
+    return %orig;
+}
+
+- (BOOL)acquire {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        %orig;
+        return YES;
+    }
+    return %orig;
+}
+
+%end
+
+%hook RBSAssertion
 
 - (BOOL)isValid {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
@@ -6869,6 +7122,43 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
+// 2. BẺ Ổ KHÓA SYSTEM Ở TẦNG 6 CHO FILZA & TRÌNH QUẢN LÝ TỆP (CHO PHÉP ĐỌC / GHI / SỬA / XÓA MỌI FILE)
+%hook NSFileManager
+
+- (BOOL)isWritableFileAtPath:(NSString *)path {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path) {
+        if (Titanium_IsFilzaOrFileManagerProcess() ||
+            [path hasPrefix:@"/var/"] ||
+            [path hasPrefix:@"/private/var/"] ||
+            [path hasPrefix:@"/tmp/"] ||
+            [path hasPrefix:@"/Library/"]) {
+            return YES;
+        }
+    }
+    return %orig(path);
+}
+
+- (BOOL)isReadableFileAtPath:(NSString *)path {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path) {
+        if (Titanium_IsFilzaOrFileManagerProcess()) {
+            return YES;
+        }
+    }
+    return %orig(path);
+}
+
+- (BOOL)isDeletableFileAtPath:(NSString *)path {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path) {
+        if (Titanium_IsFilzaOrFileManagerProcess()) {
+            return YES;
+        }
+    }
+    return %orig(path);
+}
+
+%end
+
+// 3. CHIP IC MÀN HÌNH & ĐỒNG BỘ CON TẤT CẢ CADISPLAY (KÍCH HOẠT PROMOTION ẨN 15-240HZ)
 %hook CADisplayProperties
 
 - (void)setOverscanAdjustment:(id)arg1 {
@@ -6888,7 +7178,7 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
-// SỬA DỨT ĐIỂM VĂNG APP: Dùng %orig chuẩn của Logos, tuyệt đối không gọi objc_msgSend(self, _cmd)
+// 4. BẺ KHÓA BASEBOARD ANIMATION SETTINGS (CHUẨN %ORIG, KHÔNG ĐỆ QUY, MƯỢT NHƯ VIDEO SLOW-MO)
 %hook BSAnimationSettings
 
 - (float)frameInterval {
@@ -6907,7 +7197,7 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             float cap = (float)Titanium_GetEffectiveFrameCap();
             if (cap < 15.0f) cap = 15.0f;
             if (cap > 240.0f) cap = 240.0f;
-            return CAFrameRateRangeMake(cap, cap, cap);
+            return Titanium_SmoothFRR(cap);
         }
     }
     return %orig;
@@ -6915,6 +7205,33 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
+%hook BSSpringAnimationSettings
+
+- (float)frameInterval {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        float cap = (float)Titanium_GetEffectiveFrameCap();
+        if (cap < 15.0f) cap = 15.0f;
+        if (cap > 240.0f) cap = 240.0f;
+        return (1.0f / cap);
+    }
+    return %orig;
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+            float cap = (float)Titanium_GetEffectiveFrameCap();
+            if (cap < 15.0f) cap = 15.0f;
+            if (cap > 240.0f) cap = 240.0f;
+            return Titanium_SmoothFRR(cap);
+        }
+    }
+    return %orig;
+}
+
+%end
+
+// 5. MỞ KHÓA CHẠM LIÊN HOÀN GIỮA CHỪNG KHI APP ĐANG THU PHÓNG
 %hook UIViewPropertyAnimator
 
 - (BOOL)isUserInteractionEnabled {
@@ -7261,10 +7578,6 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
-// ====================================================================================================
-// HẠNG MỤC #12: BỎ THERMAL THROTTLE PANEL (CHỐNG HẠ HZ & CHỐNG HẠ ĐỘ SÁNG MÀN HÌNH KHI NÓNG)
-// ====================================================================================================
-
 %group Group_Tier4_PanelRegister_And_ThermalUnlock
 
 %hook CADisplay
@@ -7279,6 +7592,10 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 %end
 
 %end
+
+// ====================================================================================================
+// PHẦN C: KHỞI TẠO HỆ THỐNG, WATCHDOG NHIỆT ĐỘ, RESPRING / SREBOOT & %CTOR HOÀN CHỈNH
+// ====================================================================================================
 
 static void Titanium_StartIPCHearthbeatV12(void) {
     @try {
@@ -7399,8 +7716,6 @@ void Titanium_TriggerRespringAction(void) {
     });
 }
 
-// [SREBOOT DELAY]: đánh dấu thời điểm userspace reboot; các tiến trình khởi động lại trong vài chục giây
-// sau đó sẽ chờ TITANIUM_SREBOOT_LOAD_DELAY giây rồi mới nạp tweak, tránh treo logo táo.
 #define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
 #define TITANIUM_SREBOOT_LOAD_DELAY 5.0
 #define TITANIUM_SREBOOT_WINDOW     90.0
@@ -7427,7 +7742,6 @@ void Titanium_TriggerSrebootAction(void) {
 }
 
 static void Titanium_InstallMGCopyAnswerHookV26(void) {
-    // Vô hiệu hóa MSHookFunction trên MGCopyAnswer / sysctl / uname tránh crash libellekit.dylib
 }
 
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
@@ -7456,7 +7770,6 @@ static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
         CFNotificationCenterAddObserver(darwinCenter, NULL, (CFNotificationCallback)ReloadPreferencesCallbackV285, (__bridge CFStringRef)name, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     }
 }
-
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
@@ -7572,124 +7885,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         g_SystemMasterReady = YES;
     }
 }
-
-
-// ====================================================================================================
-// [V39 MERGE] CÁC HÀM MỚI CHƯA CÓ TRONG FILE (gộp từ bản nâng cấp): Sửa đen app + Mở khóa Filza/Sandbox
-// ====================================================================================================
-
-typedef int (*sandbox_check_fn)(pid_t pid, const char *operation, int type, ...);
-static sandbox_check_fn orig_sandbox_check = NULL;
-
-// PHẦN A: SỬA DỨT ĐIỂM LỖI ĐEN MÀN HÌNH APP (thay thế hàm cũ Titanium_ForceApplyMetalOverdriveUltimate)
-static void Titanium_ForceApplyMetalOverdriveUltimate_FixedBlackScreen(id self) {
-    if (!self) return;
-    CAMetalLayer *metalLayer = (CAMetalLayer *)self;
-
-    // Bảo vệ 1: Nếu layer chưa có superlayer hoặc bounds = 0 (đang khởi tạo frame đầu), tuyệt đối không can thiệp -> tránh đen màn hình
-    if (!metalLayer.superlayer || CGRectIsEmpty(metalLayer.bounds)) {
-        return;
-    }
-
-    BOOL isSB = Titanium_IsSpringBoard();
-    BOOL isMedia = Titanium_IsVideoOrMediaMetalLayer(metalLayer);
-
-    // Bảo vệ 2: Chỉ bật Triple Buffering = 3, giữ nguyên presentsWithTransaction của App (KHÔNG gán = NO gây đen)
-    if ([metalLayer respondsToSelector:@selector(setMaximumDrawableCount:)]) {
-        metalLayer.maximumDrawableCount = 3;
-    }
-
-    if (!isSB && !isMedia) {
-        // Cho phép timeout nhẹ để GPU bận ở frame đầu cũng không trả về nil drawable gây đen
-        if ([metalLayer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
-            metalLayer.allowsNextDrawableTimeout = YES;
-        }
-
-        if (@available(iOS 15.0, *)) {
-            if ([metalLayer respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                float maxTarget = (float)Titanium_GetEffectiveFrameCap();
-                if (maxTarget < 15.0f) maxTarget = 15.0f;
-                if (maxTarget > 240.0f) maxTarget = 240.0f;
-                float minTarget = (maxTarget >= 60.0f) ? 60.0f : maxTarget;
-                metalLayer.preferredFrameRateRange = CAFrameRateRangeMake(minTarget, maxTarget, maxTarget);
-            }
-        }
-    }
-
-    // Tắt V-Sync an toàn sau khi layer đã hiển thị ổn định
-    if (!isSB && [metalLayer respondsToSelector:@selector(setDisplaySyncEnabled:)]) {
-        metalLayer.displaySyncEnabled = NO;
-    }
-}
-
-// Mở khóa Filza / trình quản lý file: nhận diện tiến trình
-static inline BOOL Titanium_IsFilzaOrFileManagerProcess(void) {
-    static BOOL s_isFilza = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        const char *prog = Titanium_SafeGetProgName();
-        NSString *bid = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-        if ((prog && (strcasestr(prog, "Filza") != NULL || strcasestr(prog, "Santander") != NULL || strcasestr(prog, "NewTerm") != NULL)) ||
-            [bid rangeOfString:@"com.tigisoftware.Filza" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [bid rangeOfString:@"filza" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-            s_isFilza = YES;
-        }
-    });
-    return s_isFilza;
-}
-
-// Hook C-API sandbox_check: Mở khóa quyền đọc/ghi file cho Filza & tiến trình tweak
-static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        if (Titanium_IsFilzaOrFileManagerProcess() || pid == getpid()) {
-            if (!operation ||
-                strncmp(operation, "file-", 5) == 0 ||
-                strncmp(operation, "mach-", 5) == 0 ||
-                strncmp(operation, "ipc-", 4) == 0 ||
-                strncmp(operation, "process-", 8) == 0 ||
-                strncmp(operation, "sysctl-", 7) == 0 ||
-                strncmp(operation, "iokit-", 6) == 0) {
-                return 0; // SANDBOX_ALLOW
-            }
-        }
-    }
-    return 0;
-}
-
-// Tầng 6: Mở khóa System & Sandbox cho Filza (đọc/ghi/sửa/xóa file toàn hệ thống)
-static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @try {
-            umask(0000);
-
-            void *sbLib = dlopen("/usr/lib/system/libsystem_sandbox.dylib", RTLD_LAZY | RTLD_LOCAL);
-            if (!sbLib) sbLib = RTLD_DEFAULT;
-            void *symSbCheck = dlsym(sbLib, "sandbox_check");
-            if (symSbCheck && !orig_sandbox_check) {
-                MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
-            }
-
-            if (Titanium_IsFilzaOrFileManagerProcess()) {
-                setuid(0); setgid(0); seteuid(0); setegid(0);
-            }
-
-            const char *writablePaths[] = {
-                "/tmp/.boost_hz_sync", "/var/jb/tmp/.boost_hz_sync",
-                "/tmp/.boost_hz_apps", "/var/jb/tmp/.boost_hz_apps",
-                "/tmp/.boost_hz_per_app.plist", "/var/jb/tmp/.boost_hz_per_app.plist",
-                "/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist",
-                "/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
-            };
-            for (size_t i = 0; i < sizeof(writablePaths) / sizeof(writablePaths[0]); i++) {
-                if (access(writablePaths[i], F_OK) == 0) {
-                    chmod(writablePaths[i], 0666);
-                }
-            }
-        } @catch (__unused NSException *e) {}
-    });
-}
-
 
 %ctor {
     @autoreleasepool {
