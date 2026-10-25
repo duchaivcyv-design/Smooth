@@ -3712,7 +3712,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (double)refreshRate { return %orig; }
 - (double)heartbeatRate { return %orig; }
 - (NSInteger)preferredFPS { return %orig; }
-- (void)setPreferredFPS:(NSInteger)fps { %orig(fps); }
+- (void)setPreferredFPS:(NSInteger)fps { %orig; }
 
 %end
 
