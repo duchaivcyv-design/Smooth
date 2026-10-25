@@ -3782,8 +3782,6 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 
 %end
 
-%end
-
 // ====================================================================================================
 // METAL FASTMATH — ÉP fastMathEnabled=YES cho MTLCompileOptions (shader biên dịch nhanh hơn, GPU mượt)
 // ====================================================================================================
