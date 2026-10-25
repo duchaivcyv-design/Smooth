@@ -5700,16 +5700,22 @@ static float Titanium_ForceUserFPS(float requestedRate) {
 
 %end
 
+// Keep CPU/thread-priority forcing, but defer it until FrontBoard's native
+// process-registration call stack has returned to the main run loop.
 %hook FBApplicationProcess
 
 - (void)_finishInit {
     %orig;
-    @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            Titanium_EnforceThreadVIPPolicy();
-            EnforceMaxCPUPower();
+    if (!(IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @autoreleasepool {
+            if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+                Titanium_EnforceThreadVIPPolicy();
+                EnforceMaxCPUPower();
+            }
         }
-    } @catch (__unused NSException *e) {}
+    });
 }
 
 %end
@@ -7021,109 +7027,12 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %group Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles
 
-// 1. BẺ GÃY TRIỆT ĐỂ WATCHDOG TẦNG 5 & TẦNG 6 (KHÔNG BAO GIỜ ĐỂ iOS KÍCH HOẠT WATCHDOG KILL APP HAY RESPRING)
-%hook FBProcessWatchdog
-
-- (void)start {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return;
-    }
-    %orig;
-}
-
-- (void)activate {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return;
-    }
-    %orig;
-}
-
-- (BOOL)_shouldWatchdog {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return NO;
-    }
-    return %orig;
-}
-
-%end
-
-%hook FBSceneWatchdog
-
-- (id)initWithTimeout:(double)timeout {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        timeout = 86400.0;
-    }
-    return %orig(timeout);
-}
-
-%end
-
-%hook FBProcessExecutionContext
-
-- (double)watchdogExtension {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return 86400.0;
-    }
-    return %orig;
-}
-
-- (void)setWatchdogExtension:(double)ext {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig(86400.0);
-        return;
-    }
-    %orig(ext);
-}
-
-- (BOOL)checkForLeaks {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return NO;
-    }
-    return %orig;
-}
-
-%end
-
-%hook FBApplicationProcessLaunchTransaction
-
-- (BOOL)_canBeInterrupted {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return YES; // Cho phép ngắt chuyển cảnh mở app ngay lập tức mà không gây đen màn hình
-    }
-    return %orig;
-}
-
-%end
-
-%hook BKSProcessAssertion
-
-- (BOOL)isValid {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return YES;
-    }
-    return %orig;
-}
-
-- (BOOL)acquire {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        %orig;
-        return YES;
-    }
-    return %orig;
-}
-
-%end
-
-%hook RBSAssertion
-
-- (BOOL)isValid {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        return YES;
-    }
-    return %orig;
-}
-
-%end
+// 1. GIỮ NGUYÊN HÀNH VI WATCHDOG / VÒNG ĐỜI TIẾN TRÌNH CỦA iOS
+// CRASH-LOG FIX (iOS 16.7.16): removed process-lifecycle overrides here.
+// The attached SpringBoard reports show repeat SIGSEGV/EXC_BAD_ACCESS during
+// FrontBoard process registration and FBSProcessResourceProvision allowance checks.
+// Do not spoof watchdog state, process assertions, or launch-transaction results;
+// let iOS run its original implementations. Other display/UI hooks in this group remain.
 
 // 2. BẺ Ổ KHÓA SYSTEM Ở TẦNG 6 CHO FILZA & TRÌNH QUẢN LÝ TỆP (CHO PHÉP ĐỌC / GHI / SỬA / XÓA MỌI FILE)
 %hook NSFileManager
