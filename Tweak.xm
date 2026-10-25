@@ -7915,6 +7915,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
+        %init; // [V45.2] Init tat ca ungrouped hooks NGAY (bao gom hook UIView chan crash). THAT SU, khong phai comment.
         // [V42 DELAY NAP CHINH XAC]: SpringBoard delay 2.5s (sau khoi tao xong, hien man hinh chinh), app thu 3 delay 1.0s (sau frame dau). Khong qua cham, khong qua nhanh.
         NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 1.0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(bootDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
