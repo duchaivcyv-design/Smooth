@@ -3699,14 +3699,10 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 
 %end
 
-// ====================================================================================================
-// 3. CADISPLAY — CHỐNG HẠ XUỐNG 1HZ (GIỮ SÀN TỐI THIỂU 60HZ HOẶC THEO MỨC USER CHỌN)
-// ====================================================================================================
-
 %hook CADisplay
 
 - (BOOL)allowsVirtualModes { return %orig; }
-- (void)setAllowsVirtualModes:(BOOL)allows { %orig(allows); }
+- (void)setAllowsVirtualModes:(BOOL)allows { %orig; }
 - (BOOL)supportsDynamicRefresh { return %orig; }
 - (BOOL)hasDynamicDisplayMode { return %orig; }
 - (NSInteger)minimumFPS { return %orig; }
