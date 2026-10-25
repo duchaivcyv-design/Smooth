@@ -3991,6 +3991,8 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 %hook CALayer
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
+    // [V45 VAN EP NHUNG KHONG CRASH]: Ep moi animation. Crash da duoc chan bang hook
+    // +[UIView _modifyAnimationsWithPreferredFrameRateRange:updateReason:animations:] (ungrouped, init ngay trong %ctor, khong delay).
     @try {
         if (anim && Titanium_DisplayRateOverrideReady() &&
             (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted &&
@@ -7792,6 +7794,24 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     }
 }
 
+
+// ====================================================================================================
+// [V45 CHAN CRASH EP ANIMATION] Hook +[UIView _modifyAnimationsWithPreferredFrameRateRange:updateReason:animations:]
+// UNGROUPED -> %init; trong %ctor se init NGAY (khong bi delay 2.5s nhu runCoreTweak).
+// Neu updateReason == 0 ma range khong phai CAFrameRateRangeDefault -> doi reason = 1 -> khong bi NSInvalidArgumentException.
+// Cho phep ep preferredFrameRateRange cho MOI animation ma khong crash khi mo khoa lock screen.
+// ====================================================================================================
+%hook UIView
++ (void)_modifyAnimationsWithPreferredFrameRateRange:(CAFrameRateRange)range updateReason:(NSInteger)reason animations:(void (^)(void))animations {
+    if (@available(iOS 15.0, *)) {
+        if (reason == 0 && (range.minimum > 0.0f || range.maximum > 0.0f || range.preferred > 0.0f)) {
+            reason = 1; // iOS yeu cau reason != 0 neu range khong phai default
+        }
+    }
+    %orig(range, reason, animations);
+}
+%end
+
 %ctor {
     @autoreleasepool {
         const char *progName = Titanium_SafeGetProgName();
@@ -7895,7 +7915,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
-        %init; // [V43.5 FIX COMPILE]: Init tat ca ungrouped hooks -> sua loi "non-initialized hook group: _ungrouped". KHONG them group moi.
         // [V42 DELAY NAP CHINH XAC]: SpringBoard delay 2.5s (sau khoi tao xong, hien man hinh chinh), app thu 3 delay 1.0s (sau frame dau). Khong qua cham, khong qua nhanh.
         NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 1.0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(bootDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
