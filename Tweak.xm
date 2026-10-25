@@ -4349,9 +4349,8 @@ static void Titanium_ForceInjectDynamicRefreshSupport(void) {
 %hook SBSplashBoardController
 
 - (double)splashScreenDelay {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && (CFG285.turboAppLaunch || g_syncPayloadV285.fastAppLaunch)) {
-        return 0.0;
-    }
+    // Giữ launch snapshot/launch screen mặc định của iOS để tránh khung đen.
+    // Không ép delay về 0; để SpringBoard quyết định thời điểm chuyển sang app.
     return %orig;
 }
 
@@ -7710,19 +7709,22 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 void Titanium_TriggerRespringAction(void) {
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
     [fb impactOccurred];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        pid_t pid;
-        const char *args[] = {"sbreload", NULL, NULL};
-        if (posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)args, environ) != 0) {
-            const char *fallbackArgs[] = {"killall", "SpringBoard", NULL};
-            posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)fallbackArgs, environ);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(700 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        // Chỉ gọi công cụ respring chuyên dụng; không killall SpringBoard làm phương án dự phòng,
+        // vì việc kill trực tiếp có thể gây vòng khởi động hoặc treo giao diện.
+        pid_t pid = 0;
+        const char *argsJB[] = {"sbreload", NULL};
+        const char *argsSystem[] = {"sbreload", NULL};
+        int result = posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)argsJB, environ);
+        if (result != 0) {
+            posix_spawn(&pid, "/usr/bin/sbreload", NULL, NULL, (char *const *)argsSystem, environ);
         }
     });
 }
 
 #define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
-#define TITANIUM_SREBOOT_LOAD_DELAY 5.0
-#define TITANIUM_SREBOOT_WINDOW     90.0
+// Keep tweak hooks disabled during early userspace-reboot startup.
+#define TITANIUM_SREBOOT_WINDOW     180.0
 
 static BOOL Titanium_ShouldDelayLoadAfterSreboot(void) {
     NSDictionary *marker = [NSDictionary dictionaryWithContentsOfFile:TITANIUM_SREBOOT_MARKER];
@@ -7734,14 +7736,21 @@ static BOOL Titanium_ShouldDelayLoadAfterSreboot(void) {
 
 void Titanium_TriggerSrebootAction(void) {
     NSDictionary *marker = @{@"time": @([[NSDate date] timeIntervalSince1970])};
-    [marker writeToFile:TITANIUM_SREBOOT_MARKER atomically:YES];
+    // Fail closed: do not start userspace reboot if the safety marker cannot be saved.
+    if (![marker writeToFile:TITANIUM_SREBOOT_MARKER atomically:YES]) {
+        return;
+    }
 
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
     [fb notificationOccurred:UINotificationFeedbackTypeWarning];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1200 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        pid_t pid;
+        pid_t pid = 0;
         const char *args[] = {"launchctl", "reboot", "userspace", NULL};
-        posix_spawn(&pid, "/bin/launchctl", NULL, NULL, (char *const *)args, environ);
+        int spawnResult = posix_spawn(&pid, "/bin/launchctl", NULL, NULL, (char *const *)args, environ);
+        if (spawnResult != 0) {
+            // Undo the safety marker if launchctl could not even be started.
+            [[NSFileManager defaultManager] removeItemAtPath:TITANIUM_SREBOOT_MARKER error:nil];
+        }
     });
 }
 
@@ -7796,17 +7805,57 @@ static void Titanium_RestoreFirstDrawDefaultsOnce(void) {
     } @catch (__unused NSException *e) {}
 }
 
-// Chạy đúng sau khi frame đầu tiên của app được vẽ xong (run loop chuẩn bị chờ), không dùng hẹn giờ.
-static void Titanium_RestoreOnFirstFrame(void) {
-    CFRunLoopObserverRef obs = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, kCFRunLoopBeforeWaiting, false, 0, ^(CFRunLoopObserverRef o, CFRunLoopActivity activity) {
-        CFRunLoopRemoveObserver(CFRunLoopGetMain(), o, kCFRunLoopCommonModes);
-        Titanium_RestoreFirstDrawDefaultsOnce();
-        Titanium_ReapplyFrameRateToAllScenes();
-    });
-    if (obs) CFRunLoopAddObserver(CFRunLoopGetMain(), obs, kCFRunLoopCommonModes);
-    if (obs) CFRelease(obs);
-}
+// CADisplayLink target giữ block xử lý frame trong suốt thời gian chờ.
+@interface TitaniumFirstFrameTarget : NSObject
+@property (nonatomic, copy) void (^handler)(CADisplayLink *link);
+- (void)tick:(CADisplayLink *)link;
+@end
 
+@implementation TitaniumFirstFrameTarget
+- (void)tick:(CADisplayLink *)link {
+    if (self.handler) self.handler(link);
+}
+@end
+
+// Chờ app active, có cửa sổ hiển thị và qua ít nhất 2 nhịp display-link trước khi
+// khôi phục giới hạn frame rate. Đây không phải xác nhận tuyệt đối GPU đã present frame.
+static void Titanium_RestoreOnFirstFrame(void) {
+    static BOOL s_waitingForFirstFrame = NO;
+    if (s_waitingForFirstFrame) return;
+    s_waitingForFirstFrame = YES;
+    TitaniumFirstFrameTarget *target = [TitaniumFirstFrameTarget new];
+    __block NSUInteger visibleTicks = 0;
+    __block CADisplayLink *displayLink = nil;
+    target.handler = ^(CADisplayLink *link) {
+        UIApplication *app = [UIApplication sharedApplication];
+        BOOL hasVisibleWindow = NO;
+        for (UIScene *scene in app.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]] || scene.activationState != UISceneActivationStateForegroundActive) continue;
+            for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+                if (window.isKeyWindow && !window.hidden && window.alpha > 0.01) {
+                    hasVisibleWindow = YES;
+                    break;
+                }
+            }
+            if (hasVisibleWindow) break;
+        }
+        if (app.applicationState == UIApplicationStateActive && hasVisibleWindow) {
+            visibleTicks++;
+        } else {
+            visibleTicks = 0;
+        }
+        if (visibleTicks >= 2) {
+            [link invalidate];
+            displayLink = nil;
+            target.handler = nil;
+            Titanium_RestoreFirstDrawDefaultsOnce();
+            Titanium_ReapplyFrameRateToAllScenes();
+        }
+    };
+    displayLink = [CADisplayLink displayLinkWithTarget:target selector:@selector(tick:)];
+    displayLink.preferredFramesPerSecond = 60;
+    [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
@@ -7997,6 +8046,13 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]) ||
                              (strcasecmp(progName, "SpringBoard") == 0);
 
+        // Critical userspace-reboot guard: don't initialize any tweak hooks in processes
+        // started during the safety window. A delayed full initialization can still trigger
+        // the same SpringBoard/system-process boot hang after the delay expires.
+        if (Titanium_ShouldDelayLoadAfterSreboot()) {
+            return;
+        }
+
         if (isSpringBoard) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
                 (void)Titanium_CheckAndPreventBootloopUniversal();
@@ -8004,12 +8060,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
-        if (Titanium_ShouldDelayLoadAfterSreboot()) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(TITANIUM_SREBOOT_LOAD_DELAY * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                runCoreTweak(isSpringBoard, bundleID, progName);
-            });
-        } else {
-            runCoreTweak(isSpringBoard, bundleID, progName);
-        }
+        runCoreTweak(isSpringBoard, bundleID, progName);
     }
 }
