@@ -3704,7 +3704,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (BOOL)allowsVirtualModes { return %orig; }
 - (void)setAllowsVirtualModes:(BOOL)allows { %orig; }
 - (BOOL)supportsDynamicRefresh { return %orig; }
-- (BOOL)hasDynamicDisplayMode { return %orig(); }
+- (BOOL)hasDynamicDisplayMode { return %orig; }
 - (NSInteger)minimumFPS { return %orig; }
 - (double)latency { return %orig; }
 - (CFTimeInterval)minimumFrameDuration { return %orig; }
