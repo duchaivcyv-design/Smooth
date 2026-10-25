@@ -7796,6 +7796,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     @autoreleasepool {
         const char *progName = Titanium_SafeGetProgName();
         if (!progName) return;
+        // [V41 FIX TREO RESPRING / DAEMON CRASH]: Chan ngay tu dau — chi process .app that (SpringBoard + app thu 3) moi chay tweak.
+        // Daemon (khong co .app bundle) goi CADisplay/UIScreen trong +[UIScreen initialize] -> abort query_displays() -> treo respring.
+        if (!Titanium_IsUIProcess()) return;
 
         if (strcasestr(progName, "BoostiPhone6sApp") != NULL ||
             strcasestr(progName, "AccessibilityUIServer") != NULL ||
@@ -7892,6 +7895,10 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
-        runCoreTweak(isSpringBoard, bundleID, progName);
+        // [V42 DELAY NAP CHINH XAC]: SpringBoard delay 2.5s (sau khoi tao xong, hien man hinh chinh), app thu 3 delay 1.0s (sau frame dau). Khong qua cham, khong qua nhanh.
+        NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 1.0;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(bootDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            runCoreTweak(isSpringBoard, bundleID, progName);
+        });
     }
 }
