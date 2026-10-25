@@ -3757,6 +3757,63 @@ static void TIRevealLabelLetters(UILabel *label, NSString *full, NSTimeInterval 
     });
 }
 
+static char kTIDeckFrontKey;
+
+static NSInteger TIDeckFront(UIScrollView *pages) {
+    NSNumber *n = objc_getAssociatedObject(pages, &kTIDeckFrontKey);
+    return n ? n.integerValue : 0;
+}
+
+// Sắp xếp các thẻ thành một chồng: thẻ trên cùng ở giữa, các thẻ sau lùi xuống và mờ dần.
+static void TIDeckLayout(UIScrollView *pages, NSInteger front, BOOL animated) {
+    const NSInteger count = 7;
+    objc_setAssociatedObject(pages, &kTIDeckFrontKey, @(front), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    void (^apply)(void) = ^{
+        for (NSInteger k = count - 1; k >= 0; k--) {
+            NSInteger p = (front + k) % count;
+            UIView *sub = [pages viewWithTag:9300 + p];
+            if (!sub) continue;
+            if (k == 0) {
+                sub.transform = CGAffineTransformIdentity;
+                sub.alpha = 1.0;
+            } else if (k <= 2) {
+                CGFloat sc = 1.0 - 0.05 * k;
+                CGAffineTransform t = CGAffineTransformMakeTranslation(0, 14.0 * k);
+                sub.transform = CGAffineTransformScale(t, sc, sc);
+                sub.alpha = 1.0 - 0.28 * k;
+            } else {
+                sub.transform = CGAffineTransformMakeScale(0.9, 0.9);
+                sub.alpha = 0.0;
+            }
+            [pages bringSubviewToFront:sub];
+        }
+    };
+    if (animated) {
+        [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.4 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:apply completion:nil];
+    } else {
+        apply();
+    }
+}
+
+static void TIDeckAdvance(UIScrollView *pages, NSInteger dir) {
+    if (!pages) return;
+    const NSInteger count = 7;
+    NSInteger front = TIDeckFront(pages);
+    NSInteger next = ((front + dir) % count + count) % count;
+    UIView *top = [pages viewWithTag:9300 + front];
+    CGFloat w = MAX(1.0, pages.bounds.size.width);
+    [UIView animateWithDuration:0.24 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+        top.transform = CGAffineTransformMakeTranslation(-dir * w * 1.05, 0);
+        top.alpha = 0.0;
+    } completion:^(BOOL f) {
+        (void)f;
+        top.transform = CGAffineTransformIdentity;
+        TIDeckLayout(pages, next, YES);
+        UIPageControl *dots = (UIPageControl *)[pages.superview viewWithTag:9168];
+        if (dots) dots.currentPage = next;
+    }];
+}
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -6900,7 +6957,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSArray *metricDetails=@[@"Tải CPU hệ thống",@"Tải GPU từ bộ đếm GPU hệ thống",@"RAM hệ thống",@"Tần số tối đa iOS báo",@"FPS của giao diện ứng dụng",@"Mức pin hệ thống"];
     NSArray *metricSymbols=@[@"cpu",@"sparkles",@"memorychip",@"display",@"speedometer",@"battery.100"];
     for(NSInteger page=0;page<7;page++){
-        UIScrollView *inner=[[UIScrollView alloc] initWithFrame:CGRectMake(page*cw,0,cw,375)]; inner.showsVerticalScrollIndicator=YES; inner.alwaysBounceVertical=YES; inner.tag=9300+page; [pages addSubview:inner];
+        UIScrollView *inner=[[UIScrollView alloc] initWithFrame:CGRectMake(0,0,cw,375)]; inner.scrollEnabled=NO; inner.tag=9300+page; [pages addSubview:inner];
         if(page<6){
             TIFullMetricPageInto(inner, page, cw, metricNames[page], metricDetails[page], metricSymbols[page]);
             inner.contentSize=CGSizeMake(cw,375);
@@ -6923,18 +6980,19 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,304,cw-8,50)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,365);
         }
     }
-    pages.contentSize=CGSizeMake(cw*7,375);
-    // Tự chuyển biểu đồ mỗi 60 giây, vòng lại từ đầu sau trang cuối.
+    pages.contentSize=CGSizeMake(cw,375);
+    pages.scrollEnabled=NO;
+    UIPanGestureRecognizer *deckPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(tiDeckPan:)];
+    [pages addGestureRecognizer:deckPan];
+    TIDeckLayout(pages, 0, NO);
+    // Tự chuyển biểu đồ mỗi 60 giây, vòng lại từ đầu sau thẻ cuối.
     [gDashboardCycleTimer invalidate];
-    __weak UIView *weakRoot = root;
+    __weak UIScrollView *weakPages = pages;
     gDashboardCycleTimer = [NSTimer scheduledTimerWithTimeInterval:60.0 repeats:YES block:^(NSTimer *t) {
         (void)t;
-        UIScrollView *ps = (UIScrollView *)[weakRoot viewWithTag:9160];
+        UIScrollView *ps = weakPages;
         if (!ps || !ps.window) return;
-        CGFloat w = MAX(1.0, ps.bounds.size.width);
-        NSInteger cur = (NSInteger)llround(ps.contentOffset.x / w);
-        NSInteger nxt = (cur + 1) % 7;
-        [ps setContentOffset:CGPointMake(nxt * w, 0) animated:YES];
+        TIDeckAdvance(ps, 1);
     }];
     UIPageControl *dots=[[UIPageControl alloc] initWithFrame:CGRectMake(side,580,cw,20)]; dots.numberOfPages=7; dots.currentPage=0; dots.tag=9168; dots.pageIndicatorTintColor=[UIColor colorWithWhite:.35 alpha:1]; dots.currentPageIndicatorTintColor=[UIColor colorWithRed:.35 green:.78 blue:1 alpha:1]; [root addSubview:dots];
     UILabel *rateTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,596,cw,19)]; rateTitle.text=@"HZ / FPS MỤC TIÊU"; rateTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; rateTitle.textColor=UIColor.whiteColor; [root addSubview:rateTitle];
@@ -6989,25 +7047,26 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if (scrollView.tag != 9160) return;
-    UIPageControl *pages = [self.view viewWithTag:9168];
-    CGFloat w = MAX(1.0, scrollView.bounds.size.width);
-    CGFloat f = scrollView.contentOffset.x / w;
-    if (pages) pages.currentPage = (NSInteger)llround(f);
-    // Hiệu ứng xếp chồng: thẻ đang xem nằm trên, các thẻ kế bên lệch nhẹ, mờ dần và thu nhỏ.
-    NSInteger front = (NSInteger)llround(f);
-    for (UIView *sub in scrollView.subviews) {
-        NSInteger p = sub.tag - 9300;
-        if (p < 0 || p >= 6) continue;
-        CGFloat d = (CGFloat)p - f;
-        CGFloat ad = MIN(fabs(d), 1.0);
-        UIView *card = sub.subviews.firstObject;
-        if (!card) continue;
-        CGAffineTransform t = CGAffineTransformMakeTranslation(d * w * 0.08, 0);
-        t = CGAffineTransformScale(t, 1.0 - 0.06 * ad, 1.0 - 0.06 * ad);
-        card.transform = t;
-        card.alpha = 1.0 - 0.45 * ad;
-        if (p == front) [scrollView bringSubviewToFront:sub];
+    (void)scrollView; // Thẻ biểu đồ dùng TIDeckLayout, không còn cuộn ngang.
+}
+
+- (void)tiDeckPan:(UIPanGestureRecognizer *)g {
+    UIScrollView *pages = (UIScrollView *)g.view;
+    if (![pages isKindOfClass:UIScrollView.class]) return;
+    CGFloat tx = [g translationInView:pages].x;
+    NSInteger front = TIDeckFront(pages);
+    UIView *top = [pages viewWithTag:9300 + front];
+    if (g.state == UIGestureRecognizerStateChanged) {
+        top.transform = CGAffineTransformMakeTranslation(tx, 0);
+    } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
+        CGFloat vx = [g velocityInView:pages].x;
+        if (fabs(tx) > 70.0 || fabs(vx) > 600.0) {
+            TIDeckAdvance(pages, tx < 0 ? 1 : -1);
+        } else {
+            [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.3 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                top.transform = CGAffineTransformIdentity;
+            } completion:nil];
+        }
     }
 }
 
@@ -7327,17 +7386,32 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (!gTabLandingPending) return;
-    NSTimeInterval rowDelay = 0.05 * MIN(indexPath.row, 8);
+    // Đặt trạng thái ẩn ngay, rồi chạy hoạt ảnh ở vòng lặp kế tiếp (ra khỏi performWithoutAnimation).
+    NSTimeInterval base = 0.30 * MIN(indexPath.row, 7);
     cell.alpha = 0.0;
-    cell.transform = CGAffineTransformMakeTranslation(0, -26.0);
-    [UIView animateWithDuration:0.55 delay:rowDelay usingSpringWithDamping:0.72 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        cell.alpha = 1.0;
-        cell.transform = CGAffineTransformIdentity;
-    } completion:nil];
-    if ([cell isKindOfClass:LGGlassTableViewCell.class]) {
-        LGGlassTableViewCell *lc = (LGGlassTableViewCell *)cell;
-        TIRevealLabelLetters(lc.titleL, lc.titleL.text, rowDelay + 0.45);
+    cell.transform = CGAffineTransformMakeTranslation(0, -42.0);
+    LGGlassTableViewCell *lc = [cell isKindOfClass:LGGlassTableViewCell.class] ? (LGGlassTableViewCell *)cell : nil;
+    NSString *fullTitle = lc.titleL.text;
+    if (lc) {
+        lc.detailL.alpha = 0.0;
+        lc.detailL.transform = CGAffineTransformMakeTranslation(0, -10.0);
     }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [UIView setAnimationsEnabled:YES];
+        // 1) Hàng đáp xuống từ trên.
+        [UIView animateWithDuration:0.5 delay:base usingSpringWithDamping:0.78 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
+            cell.alpha = 1.0;
+            cell.transform = CGAffineTransformIdentity;
+        } completion:nil];
+        if (!lc) return;
+        // 2) Chữ nhỏ hiện trước, sau khi hàng đã đáp gần xong.
+        [UIView animateWithDuration:0.32 delay:base + 0.36 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            lc.detailL.alpha = 1.0;
+            lc.detailL.transform = CGAffineTransformIdentity;
+        } completion:nil];
+        // 3) Tiêu đề gõ từng chữ sau khi chữ nhỏ đã hiện xong.
+        TIRevealLabelLetters(lc.titleL, fullTitle, base + 0.7);
+    });
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -7603,48 +7677,52 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 3) {
         if (indexPath.section == 0) {
-            title = @"ỨNG DỤNG · CHỌN DANH MỤC";
-            UIView *categoryCards = [[UIView alloc] initWithFrame:CGRectMake(0, 0, MAX(280.0, CGRectGetWidth(self.view.bounds) - 34.0), 100.0)];
-            categoryCards.backgroundColor = UIColor.clearColor;
-            categoryCards.tag = 334;
-            NSArray<NSString *> *cardTitles = @[@"App mặc định", @"App Store", @"App ẩn", @"App chạy riêng"];
-            NSArray<NSString *> *cardSymbols = @[@"gearshape.fill", @"square.and.arrow.down.fill", @"eye.slash.fill", @"square.stack.3d.up.fill"];
-            CGFloat gap = 7.0;
-            CGFloat cardW = (CGRectGetWidth(categoryCards.bounds) - gap * 3.0) / 4.0;
-            __weak typeof(self) weakCategorySelf = self;
-            for (NSInteger i = 0; i < 4; i++) {
-                UIButton *tile = [UIButton buttonWithType:UIButtonTypeSystem];
-                tile.frame = CGRectMake(i * (cardW + gap), 2.0, cardW, 92.0);
-                tile.tag = i;
-                tile.titleLabel.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightBold];
-                tile.titleLabel.numberOfLines = 2;
-                tile.titleLabel.textAlignment = NSTextAlignmentCenter;
-                tile.titleLabel.adjustsFontSizeToFitWidth = YES;
-                tile.titleLabel.minimumScaleFactor = 0.72;
-                [tile setTitle:cardTitles[i] forState:UIControlStateNormal];
-                [tile setImage:[UIImage systemImageNamed:cardSymbols[i]] forState:UIControlStateNormal];
-                tile.imageView.contentMode = UIViewContentModeScaleAspectFit;
-                tile.titleEdgeInsets = UIEdgeInsetsMake(46.0, -25.0, 0.0, -25.0);
-                tile.imageEdgeInsets = UIEdgeInsetsMake(-13.0, (cardW - 25.0) / 2.0, 19.0, (cardW - 25.0) / 2.0);
-                tile.imageView.tintColor = [UIColor colorWithRed:0.38 green:0.86 blue:1.0 alpha:1.0];
-                tile.layer.cornerRadius = 15.0;
-                tile.layer.cornerCurve = kCACornerCurveContinuous;
-                tile.layer.borderWidth = (_appCategoryIndex == i) ? 1.2 : 0.6;
-                tile.layer.borderColor = (_appCategoryIndex == i) ? [UIColor colorWithRed:0.25 green:0.82 blue:1.0 alpha:0.95].CGColor : [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
-                tile.backgroundColor = (_appCategoryIndex == i) ? [UIColor colorWithRed:0.08 green:0.25 blue:0.40 alpha:0.95] : [UIColor colorWithWhite:1.0 alpha:0.045];
-                [tile setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-                [tile addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
-                    (void)action;
-                    __strong typeof(weakCategorySelf) strongSelf = weakCategorySelf;
-                    if (!strongSelf) return;
-                    strongSelf->_appCategoryIndex = action.sender ? ((UIButton *)action.sender).tag : i;
-                    [[NSUserDefaults standardUserDefaults] setInteger:strongSelf->_appCategoryIndex forKey:@"TIAppCategoryCard_v1"];
-                    [strongSelf applyAppFilter];
-                    [strongSelf.customTableView reloadData];
-                }] forControlEvents:UIControlEventTouchUpInside];
-                [categoryCards addSubview:tile];
-            }
-            accessory = categoryCards;
+            title = @"";
+            UIView *categoryCards = [[UIView alloc] initWithFrame:CGRectMake(0, 0, MAX(280.0, tableView.bounds.size.width - 40.0), 88.0)];
+        categoryCards.backgroundColor = UIColor.clearColor;
+        categoryCards.tag = 334;
+        NSArray<NSString *> *cardTitles = @[@"App mặc định", @"App Store", @"App ẩn", @"App chạy riêng"];
+        NSArray<NSString *> *cardSymbols = @[@"gearshape.fill", @"square.and.arrow.down.fill", @"eye.slash.fill", @"square.stack.3d.up.fill"];
+        CGFloat gap = 6.0;
+        CGFloat cardW = (CGRectGetWidth(categoryCards.bounds) - gap * 3.0) / 4.0;
+        __weak typeof(self) weakCategorySelf = self;
+        for (NSInteger i = 0; i < 4; i++) {
+            UIButton *tile = [UIButton buttonWithType:UIButtonTypeCustom];
+            tile.frame = CGRectMake(i * (cardW + gap), 0.0, cardW, 88.0);
+            tile.tag = i;
+            tile.layer.cornerRadius = 15.0;
+            tile.layer.cornerCurve = kCACornerCurveContinuous;
+            tile.layer.borderWidth = (_appCategoryIndex == i) ? 1.2 : 0.6;
+            tile.layer.borderColor = (_appCategoryIndex == i) ? [UIColor colorWithRed:0.25 green:0.82 blue:1.0 alpha:0.95].CGColor : [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
+            tile.backgroundColor = (_appCategoryIndex == i) ? [UIColor colorWithRed:0.08 green:0.25 blue:0.40 alpha:0.95] : [UIColor colorWithWhite:1.0 alpha:0.045];
+            UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:cardSymbols[i]]];
+            icon.contentMode = UIViewContentModeScaleAspectFit;
+            icon.tintColor = [UIColor colorWithRed:0.38 green:0.86 blue:1.0 alpha:1.0];
+            icon.frame = CGRectMake((cardW - 26.0) / 2.0, 12.0, 26.0, 26.0);
+            icon.userInteractionEnabled = NO;
+            [tile addSubview:icon];
+            UILabel *lab = [[UILabel alloc] initWithFrame:CGRectMake(4.0, 46.0, cardW - 8.0, 34.0)];
+            lab.text = cardTitles[i];
+            lab.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightBold];
+            lab.textColor = UIColor.whiteColor;
+            lab.textAlignment = NSTextAlignmentCenter;
+            lab.numberOfLines = 2;
+            lab.adjustsFontSizeToFitWidth = YES;
+            lab.minimumScaleFactor = 0.7;
+            lab.userInteractionEnabled = NO;
+            [tile addSubview:lab];
+            [tile addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+                (void)action;
+                __strong typeof(weakCategorySelf) strongSelf = weakCategorySelf;
+                if (!strongSelf) return;
+                strongSelf->_appCategoryIndex = action.sender ? ((UIButton *)action.sender).tag : i;
+                [[NSUserDefaults standardUserDefaults] setInteger:strongSelf->_appCategoryIndex forKey:@"TIAppCategoryCard_v1"];
+                [strongSelf applyAppFilter];
+                [strongSelf.customTableView reloadData];
+            }] forControlEvents:UIControlEventTouchUpInside];
+            [categoryCards addSubview:tile];
+        }
+        accessory = categoryCards;
         } else if (indexPath.section == 1) {
             UITextField *searchField = [[UITextField alloc] init];
             searchField.placeholder = @"Tìm app...";
@@ -7899,7 +7977,23 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     else if ([accentChoice isEqualToString:@"pink"]) accent=[UIColor colorWithRed:1 green:.30 blue:.72 alpha:1];
     else if ([accentChoice isEqualToString:@"orange"]) accent=[UIColor colorWithRed:1 green:.58 blue:.16 alpha:1];
     else if ([accentChoice isEqualToString:@"random"]) accent=[UIColor colorWithHue:(CGFloat)arc4random_uniform(1000)/1000.0 saturation:.82 brightness:1 alpha:1];
+    NSString *appBundleLine = nil;
+    if (_currentBottomTab == 3 && indexPath.section == 2 && [accessory isKindOfClass:UIButton.class] && detail.length) {
+        appBundleLine = detail;
+        detail = nil;
+    }
     [cell configureWithTitle:title detail:detail accessory:accessory accent:accent];
+    if (appBundleLine && [cell isKindOfClass:LGGlassTableViewCell.class]) {
+        LGGlassTableViewCell *lc = (LGGlassTableViewCell *)cell;
+        NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:(title ?: @"") attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:15.5 weight:UIFontWeightSemibold], NSForegroundColorAttributeName: UIColor.whiteColor}];
+        NSAttributedString *bundleText = [[NSAttributedString alloc] initWithString:[@"\n" stringByAppendingString:appBundleLine] attributes:@{NSFontAttributeName: [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor colorWithWhite:0.62 alpha:1.0]}];
+        [text appendAttributedString:bundleText];
+        lc.titleL.attributedText = text;
+        lc.titleL.numberOfLines = 2;
+        lc.titleL.lineBreakMode = NSLineBreakByTruncatingMiddle;
+        lc.titleL.adjustsFontSizeToFitWidth = NO;
+        lc.detailL.hidden = YES;
+    }
     return cell;
 }
 
@@ -8480,7 +8574,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if(value) value.text=sampleTexts[i];
         if([graph isKindOfClass:TITrendGraphView.class] && [samples[i] doubleValue]>=0){ [graph addSample:[samples[i] doubleValue]]; CGFloat fraction=[samples[i] doubleValue]/100.0; NSString *choice = [self.settingsDict[@"V35GraphColor"] isKindOfClass:NSString.class] ? self.settingsDict[@"V35GraphColor"] : @"auto"; UIColor *c = nil; if ([choice isEqualToString:@"green"]) c=[UIColor colorWithRed:.22 green:.96 blue:.48 alpha:1]; else if ([choice isEqualToString:@"blue"]) c=[UIColor colorWithRed:.20 green:.52 blue:1 alpha:1]; else if ([choice isEqualToString:@"purple"]) c=[UIColor colorWithRed:.68 green:.38 blue:1 alpha:1]; else if ([choice isEqualToString:@"pink"]) c=[UIColor colorWithRed:1 green:.30 blue:.72 alpha:1]; else if ([choice isEqualToString:@"random"]) c=[UIColor colorWithHue:(CGFloat)arc4random_uniform(1000)/1000.0 saturation:.82 brightness:1 alpha:1]; else c=fraction>=.8?[UIColor systemRedColor]:(fraction>=.55?[UIColor systemOrangeColor]:[UIColor systemCyanColor]); graph.lineLayer.strokeColor=c.CGColor; graph.glowLayer.strokeColor=[c colorWithAlphaComponent:.18].CGColor; }
     }
-    UIPageControl *dots=(UIPageControl *)[headerNow viewWithTag:9168]; UIScrollView *pageScroll=(UIScrollView *)[headerNow viewWithTag:9160]; if(dots && pageScroll) dots.currentPage=(NSInteger)round(pageScroll.contentOffset.x/MAX(1,pageScroll.bounds.size.width));
+    UIPageControl *dots=(UIPageControl *)[headerNow viewWithTag:9168]; UIScrollView *pageScroll=(UIScrollView *)[headerNow viewWithTag:9160]; (void)dots; (void)pageScroll;
 }
 
 - (void)syncSharedMemoryFile:(BOOL)enabled {
