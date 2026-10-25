@@ -3701,18 +3701,42 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 
 %hook CADisplay
 
-- (BOOL)allowsVirtualModes { return %orig; }
-- (void)setAllowsVirtualModes:(BOOL)allows { %orig; }
-- (BOOL)supportsDynamicRefresh { return %orig; }
-- (BOOL)hasDynamicDisplayMode { return %orig; }
-- (NSInteger)minimumFPS { return %orig; }
-- (double)latency { return %orig; }
-- (CFTimeInterval)minimumFrameDuration { return %orig; }
-- (void)setMinimumFrameDuration:(CFTimeInterval)duration { %orig; }
-- (double)refreshRate { return %orig; }
-- (double)heartbeatRate { return %orig; }
-- (NSInteger)preferredFPS { return %orig; }
-- (void)setPreferredFPS:(NSInteger)fps { %orig; }
+- (BOOL)allowsVirtualModes {
+    return %orig;
+}
+- (void)setAllowsVirtualModes:(BOOL)allows {
+    %orig;
+}
+- (BOOL)supportsDynamicRefresh {
+    return %orig;
+}
+- (BOOL)hasDynamicDisplayMode {
+    return %orig;
+}
+- (NSInteger)minimumFPS {
+    return %orig;
+}
+- (double)latency {
+    return %orig;
+}
+- (CFTimeInterval)minimumFrameDuration {
+    return %orig;
+}
+- (void)setMinimumFrameDuration:(CFTimeInterval)duration {
+    %orig;
+}
+- (double)refreshRate {
+    return %orig;
+}
+- (double)heartbeatRate {
+    return %orig;
+}
+- (NSInteger)preferredFPS {
+    return %orig;
+}
+- (void)setPreferredFPS:(NSInteger)fps {
+    %orig;
+}
 
 %end
 
@@ -6201,7 +6225,9 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 
 %hook CAWindowServerDisplay
 
-- (BOOL)allowsVirtualModes { return %orig; } // [REAL FIX] getter giữ nguyên
+- (BOOL)allowsVirtualModes {
+    return %orig;
+} // [REAL FIX] getter giữ nguyên
 
 - (void)setAllowsVirtualModes:(BOOL)flag {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
@@ -6211,7 +6237,9 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     %orig(flag);
 }
 
-- (double)minimumFrameDuration { return %orig; } // [REAL FIX] không spoof
+- (double)minimumFrameDuration {
+    return %orig;
+} // [REAL FIX] không spoof
 
 - (void)setMinimumFrameDuration:(double)duration {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
@@ -6222,7 +6250,9 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     %orig(duration);
 }
 
-- (double)maximumRefreshRate { return %orig; }
+- (double)maximumRefreshRate {
+    return %orig;
+}
 
 - (void)setMaximumRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
@@ -6233,7 +6263,9 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     %orig(rate);
 }
 
-- (double)minimumRefreshRate { return %orig; }
+- (double)minimumRefreshRate {
+    return %orig;
+}
 
 - (void)setMinimumRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
@@ -6243,7 +6275,9 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     %orig(rate);
 }
 
-- (double)idealRefreshRate { return %orig; }
+- (double)idealRefreshRate {
+    return %orig;
+}
 
 - (void)setIdealRefreshRate:(double)rate {
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
@@ -6254,7 +6288,9 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     %orig(rate);
 }
 
-- (double)refreshRate { return %orig; }
+- (double)refreshRate {
+    return %orig;
+}
 
 - (unsigned int)controllerId {
     return %orig;
