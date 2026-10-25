@@ -3708,7 +3708,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (NSInteger)minimumFPS { return %orig; }
 - (double)latency { return %orig; }
 - (CFTimeInterval)minimumFrameDuration { return %orig; }
-- (void)setMinimumFrameDuration:(CFTimeInterval)duration { %orig(duration); }
+- (void)setMinimumFrameDuration:(CFTimeInterval)duration { %orig; }
 - (double)refreshRate { return %orig; }
 - (double)heartbeatRate { return %orig; }
 - (NSInteger)preferredFPS { return %orig; }
