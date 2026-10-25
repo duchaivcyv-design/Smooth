@@ -7808,7 +7808,24 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             strcasestr(progName, "CoreAuthUI") != NULL ||
             strcasestr(progName, "assistivetouchd") != NULL ||
             strcasestr(progName, "sharingd") != NULL ||
-            strcasestr(progName, "zinitd") != NULL) {
+            strcasestr(progName, "zinitd") != NULL ||
+            // [V40 FIX TREO RESPRING]: Daemon goi CADisplay/UIScreen som trong +[UIScreen initialize] -> abort query_displays()
+            strcasestr(progName, "nanotimekitcompaniond") != NULL ||
+            strcasestr(progName, "nanotimekitd") != NULL ||
+            strcasestr(progName, "nanoregistryd") != NULL ||
+            strcasestr(progName, "nanopreferencesd") != NULL ||
+            strcasestr(progName, "bridgeproxyd") != NULL ||
+            strcasestr(progName, "bridged") != NULL ||
+            strcasestr(progName, "mobileassetd") != NULL ||
+            strcasestr(progName, "mobileinstallationd") != NULL ||
+            strcasestr(progName, "installd") != NULL ||
+            strcasestr(progName, "systemstatusd") != NULL ||
+            strcasestr(progName, "aggregated") != NULL ||
+            strcasestr(progName, "powerlogd") != NULL ||
+            strcasestr(progName, "osanalyticsd") != NULL ||
+            strcasestr(progName, "diagnosticd") != NULL ||
+            strcasestr(progName, "logd") != NULL ||
+            strcasestr(progName, "syslogd") != NULL) {
             return;
         }
 
