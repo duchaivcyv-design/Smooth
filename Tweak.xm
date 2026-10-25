@@ -5578,9 +5578,17 @@ void Titanium_ForcePanelModeDirect(NSInteger hz);   // khai báo trước khi d�
 }
 @end
 
+// Chỉ tiến trình có bundle .app (SpringBoard, app) có window server để tạo CADisplayLink.
+// Daemon (ví dụ nanotimekitcompaniond) gọi CADisplay mainDisplay sẽ abort trong query_displays() lúc nạp dylib.
+static BOOL Titanium_IsUIProcess(void) {
+    NSString *path = [[NSBundle mainBundle] bundlePath];
+    return path != nil && [path hasSuffix:@".app"];
+}
+
 static TitaniumOverdriveVSyncProbe *g_tioProbe = nil;
 
 static void Titanium_StartOverdriveProbe(void) {
+    if (!Titanium_IsUIProcess()) return;   // daemon: không có display, tạo CADisplayLink sẽ abort
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         TitaniumOverdriveVSyncProbe *p = [TitaniumOverdriveVSyncProbe new];
@@ -7616,6 +7624,7 @@ static void Titanium_RestoreFirstDrawDefaultsOnce(void) {
 @end
 
 static void Titanium_RestoreOnFirstFrame(void) {
+    if (!Titanium_IsUIProcess()) return;   // daemon: không có display
     static BOOL s_waitingForFirstFrame = NO;
     if (s_waitingForFirstFrame) return;
     s_waitingForFirstFrame = YES;
