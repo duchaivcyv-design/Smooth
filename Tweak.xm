@@ -3991,18 +3991,12 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 %hook CALayer
 
 - (void)addAnimation:(CAAnimation *)anim forKey:(NSString *)key {
-    // [V43.2 VAN EP NHUNG KHONG CRASH]: Chi ep preferredFrameRateRange khi animation goc da co range tuy chinh (minimum > 0).
-    // Neu goc la CAFrameRateRangeDefault (minimum=0, lock screen/control center he thong), he thong se goi
-    // _modifyAnimationsWithPreferredFrameRateRange:updateReason: voi updateReason=0 -> NSInvalidArgumentException -> crash.
-    // Animation game/app co range tuy chinh -> van ep duoc 15-240Hz binh thuong.
     @try {
         if (anim && Titanium_DisplayRateOverrideReady() &&
             (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted &&
             !Titanium_IsVideoOrMediaMetalLayer(self)) {
             if (@available(iOS 15.0, *)) {
                 if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    // [V43.3 EP HET ANIMATION]: Ep moi animation, khong con dieu kien min>0.
-                    // Crash updateReason=0 da duoc chan o hook +[UIView _modifyAnimationsWithPreferredFrameRateRange:updateReason:animations:] ben duoi.
                     NSInteger cap = Titanium_ClampDisplayFrameRate(Titanium_GetEffectiveFrameCap());
                     anim.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
                 }
@@ -7742,7 +7736,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_UIKit_ThirdParty_IsolatedV285);
         %init(Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles);
         %init(Group_Tier4_PanelRegister_And_ThermalUnlock);
-        %init(Group_UIView_ModifyAnimations); // [V43.3] Chan crash updateReason=0 khi ep het animation
         Titanium_InstallDirectIOMobileFramebufferCHooks();
         Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite();
         // [REAL] Thay 2 stub cũ bằng pipeline thật: probe vsync + jetsam + realtime + IOMFB try-modes
@@ -7798,25 +7791,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         });
     }
 }
-
-
-// ====================================================================================================
-// [V43.3 CHAN CRASH EP HET ANIMATION]: Hook +[UIView _modifyAnimationsWithPreferredFrameRateRange:updateReason:animations:]
-// Neu updateReason == 0 ma range khong phai CAFrameRateRangeDefault -> doi reason = 1 -> khong bi NSInvalidArgumentException.
-// Cho phep ep preferredFrameRateRange cho MOI animation (ke ca lock screen/control center) ma khong crash.
-// ====================================================================================================
-%group Group_UIView_ModifyAnimations
-%hook UIView
-+ (void)_modifyAnimationsWithPreferredFrameRateRange:(CAFrameRateRange)range updateReason:(NSInteger)reason animations:(void (^)(void))animations {
-    if (@available(iOS 15.0, *)) {
-        if (reason == 0 && (range.minimum > 0.0f || range.maximum > 0.0f || range.preferred > 0.0f)) {
-            reason = 1; // iOS yeu cau reason != 0 neu range khong phai default
-        }
-    }
-    %orig(range, reason, animations);
-}
-%end
-%end
 
 %ctor {
     @autoreleasepool {
@@ -7921,6 +7895,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_RegisterPrefsObservers(isSpringBoard);
+        %init; // [V43.5 FIX COMPILE]: Init tat ca ungrouped hooks -> sua loi "non-initialized hook group: _ungrouped". KHONG them group moi.
         // [V42 DELAY NAP CHINH XAC]: SpringBoard delay 2.5s (sau khoi tao xong, hien man hinh chinh), app thu 3 delay 1.0s (sau frame dau). Khong qua cham, khong qua nhanh.
         NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 1.0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(bootDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
