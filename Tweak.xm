@@ -7747,8 +7747,8 @@ static void Titanium_RestoreOnFirstFrame(void) {
     if (s_waitingForFirstFrame) return;
     s_waitingForFirstFrame = YES;
     TitaniumFirstFrameTarget *target = [TitaniumFirstFrameTarget new];
+    __weak TitaniumFirstFrameTarget *weakTarget = target;
     __block NSUInteger visibleTicks = 0;
-    __block CADisplayLink *displayLink = nil;
     target.handler = ^(CADisplayLink *link) {
         UIApplication *app = [UIApplication sharedApplication];
         BOOL hasVisibleWindow = NO;
@@ -7774,13 +7774,12 @@ static void Titanium_RestoreOnFirstFrame(void) {
             AppleInternal_LockHardwareCADisplay();
             Titanium_ApplySiliconDeepOptimizations();
             [link invalidate];
-            displayLink = nil;
-            target.handler = nil;
+            weakTarget.handler = nil;
             Titanium_RestoreFirstDrawDefaultsOnce();
             Titanium_ReapplyFrameRateToAllScenes();
         }
     };
-    displayLink = [CADisplayLink displayLinkWithTarget:target selector:@selector(tick:)];
+    CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:target selector:@selector(tick:)];
     displayLink.preferredFramesPerSecond = 60;
     [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
