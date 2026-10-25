@@ -3704,7 +3704,7 @@ static void TIWelcomeRenderFromWizard(UIViewController *wizard) {
 static NSTimer *gDashboardCycleTimer = nil;
 
 static void TIFullMetricPageInto(UIScrollView *inner, NSInteger i, CGFloat pageWidth, NSString *name, NSString *detailText, NSString *symbol) {
-    CGFloat pad = 10.0, cardW = pageWidth - pad * 2.0, cardH = 495.0;
+    CGFloat pad = 10.0, cardW = pageWidth - pad * 2.0, cardH = 355.0;
     UIView *card = [[UIView alloc] initWithFrame:CGRectMake(pad, 6, cardW, cardH)];
     card.backgroundColor = [UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1];
     card.layer.cornerRadius = 18; card.layer.borderWidth = 1;
@@ -3722,14 +3722,39 @@ static void TIFullMetricPageInto(UIScrollView *inner, NSInteger i, CGFloat pageW
     detailL.text = detailText; detailL.numberOfLines = 2;
     detailL.font = [UIFont systemFontOfSize:12]; detailL.textColor = [UIColor secondaryLabelColor];
     [card addSubview:detailL];
-    TITrendGraphView *graph = [[TITrendGraphView alloc] initWithFrame:CGRectMake(14, 96, cardW - 28, 300)];
+    TITrendGraphView *graph = [[TITrendGraphView alloc] initWithFrame:CGRectMake(14, 88, cardW - 28, 190)];
     graph.tag = 9200 + i;
     [card addSubview:graph];
-    UILabel *reading = [[UILabel alloc] initWithFrame:CGRectMake(16, 410, cardW - 32, 44)];
+    UILabel *reading = [[UILabel alloc] initWithFrame:CGRectMake(16, 292, cardW - 32, 44)];
     reading.tag = 9190 + i; reading.text = @"Đang lấy mẫu…"; reading.numberOfLines = 2;
     reading.font = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightBold];
     reading.textColor = UIColor.whiteColor;
     [card addSubview:reading];
+}
+
+static BOOL gTabLandingPending = NO;
+
+static void TIRevealLabelLetters(UILabel *label, NSString *full, NSTimeInterval delay) {
+    if (!label || full.length == 0) return;
+    NSMutableArray<NSString *> *chars = [NSMutableArray array];
+    [full enumerateSubstringsInRange:NSMakeRange(0, full.length)
+                             options:NSStringEnumerationByComposedCharacterSequences
+                          usingBlock:^(NSString *sub, NSRange r, NSRange er, BOOL *stop) {
+        (void)r; (void)er; (void)stop;
+        if (sub) [chars addObject:sub];
+    }];
+    label.text = @"";
+    __weak UILabel *weakLabel = label;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __block NSUInteger shown = 0;
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *tm) {
+            UILabel *l = weakLabel;
+            if (!l) { [tm invalidate]; return; }
+            shown++;
+            if (shown >= chars.count) { l.text = full; [tm invalidate]; return; }
+            l.text = [[chars subarrayWithRange:NSMakeRange(0, shown)] componentsJoinedByString:@""];
+        }];
+    });
 }
 
 @implementation RootListController
@@ -6423,6 +6448,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         tabButton.alpha = 1.0;
     }
     _currentBottomTab = [_tabConfigs[index][@"tab"] integerValue];
+    gTabLandingPending = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ gTabLandingPending = NO; });
     UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)])));
     self.customTableView.tableHeaderView = nextHeader;
     // Keep decorative header layers from becoming a full-width invisible touch shield.
@@ -6858,7 +6885,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w=MAX(320.0,width), side=14.0, cw=w-side*2.0;
-    UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,1125.0)]; root.backgroundColor=UIColor.clearColor;
+    UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,995.0)]; root.backgroundColor=UIColor.clearColor;
     UILabel *eyebrow=[[UILabel alloc] initWithFrame:CGRectMake(side,10,cw,14)]; eyebrow.text=@"SMOOIOS PRO / LIVE MONITOR V43"; eyebrow.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor=[UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title=[[UILabel alloc] initWithFrame:CGRectMake(side,28,cw,31)]; title.text=@"BẢNG ĐIỀU KHIỂN"; title.font=[UIFont systemFontOfSize:24 weight:UIFontWeightBlack]; title.textColor=UIColor.whiteColor; [root addSubview:title];
     UILabel *sub=[[UILabel alloc] initWithFrame:CGRectMake(side,61,cw,18)]; sub.text=@"Biểu đồ cập nhật liên tục · chỉ dùng số đo đọc được"; sub.font=[UIFont systemFontOfSize:11]; sub.textColor=[UIColor secondaryLabelColor]; [root addSubview:sub];
@@ -6868,15 +6895,15 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     for(NSInteger i=0;i<5;i++){ CGFloat tw=cw/5.0; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(i*tw,5,tw,13)]; n.text=names[i]; n.textAlignment=NSTextAlignmentCenter; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor secondaryLabelColor]; [values addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(i*tw,20,tw,27)]; v.tag=8710+i; v.text=@"—"; v.textAlignment=NSTextAlignmentCenter; v.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBlack]; v.textColor=UIColor.whiteColor; v.adjustsFontSizeToFitWidth=YES; v.minimumScaleFactor=.6; [values addSubview:v]; }
     UILabel *chartTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,163,cw,19)]; chartTitle.text=@"GIÁM SÁT LIÊN TỤC"; chartTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; chartTitle.textColor=UIColor.whiteColor; [root addSubview:chartTitle];
     UILabel *chartHint=[[UILabel alloc] initWithFrame:CGRectMake(side,183,cw,16)]; chartHint.text=@"Vuốt ngang đổi bảng · vuốt dọc xem hết biểu đồ"; chartHint.font=[UIFont systemFontOfSize:10]; chartHint.textColor=[UIColor secondaryLabelColor]; [root addSubview:chartHint];
-    UIScrollView *pages=[[UIScrollView alloc] initWithFrame:CGRectMake(side,204,cw,505)]; pages.pagingEnabled=YES; pages.showsHorizontalScrollIndicator=NO; pages.alwaysBounceHorizontal=YES; pages.directionalLockEnabled=YES; pages.tag=9160; pages.delegate=(id<UIScrollViewDelegate>)self; [root addSubview:pages];
+    UIScrollView *pages=[[UIScrollView alloc] initWithFrame:CGRectMake(side,204,cw,375)]; pages.pagingEnabled=YES; pages.showsHorizontalScrollIndicator=NO; pages.alwaysBounceHorizontal=YES; pages.directionalLockEnabled=YES; pages.tag=9160; pages.delegate=(id<UIScrollViewDelegate>)self; [root addSubview:pages];
     NSArray *metricNames=@[@"CPU",@"GPU",@"RAM",@"MÀN HÌNH / HZ",@"FPS GIAO DIỆN",@"PIN"];
     NSArray *metricDetails=@[@"Tải CPU hệ thống",@"Tải GPU từ bộ đếm GPU hệ thống",@"RAM hệ thống",@"Tần số tối đa iOS báo",@"FPS của giao diện ứng dụng",@"Mức pin hệ thống"];
     NSArray *metricSymbols=@[@"cpu",@"sparkles",@"memorychip",@"display",@"speedometer",@"battery.100"];
     for(NSInteger page=0;page<7;page++){
-        UIScrollView *inner=[[UIScrollView alloc] initWithFrame:CGRectMake(page*cw,0,cw,505)]; inner.showsVerticalScrollIndicator=YES; inner.alwaysBounceVertical=YES; inner.tag=9300+page; [pages addSubview:inner];
+        UIScrollView *inner=[[UIScrollView alloc] initWithFrame:CGRectMake(page*cw,0,cw,375)]; inner.showsVerticalScrollIndicator=YES; inner.alwaysBounceVertical=YES; inner.tag=9300+page; [pages addSubview:inner];
         if(page<6){
             TIFullMetricPageInto(inner, page, cw, metricNames[page], metricDetails[page], metricSymbols[page]);
-            inner.contentSize=CGSizeMake(cw,505);
+            inner.contentSize=CGSizeMake(cw,375);
         } else if(page==-1){
             CGFloat gap=9, cardW=(cw-gap)/2.0, cardH=137.0;
             for(NSInteger i=0;i<6;i++){
@@ -6896,7 +6923,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             UILabel *state=[[UILabel alloc] initWithFrame:CGRectMake(4,304,cw-8,50)]; state.tag=8715; state.numberOfLines=2; state.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBold]; state.textColor=UIColor.systemGreenColor; state.text=@"Trạng thái nhiệt iOS: đang đọc…"; [inner addSubview:state]; inner.contentSize=CGSizeMake(cw,365);
         }
     }
-    pages.contentSize=CGSizeMake(cw*7,505);
+    pages.contentSize=CGSizeMake(cw*7,375);
     // Tự chuyển biểu đồ mỗi 60 giây, vòng lại từ đầu sau trang cuối.
     [gDashboardCycleTimer invalidate];
     __weak UIView *weakRoot = root;
@@ -6909,13 +6936,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         NSInteger nxt = (cur + 1) % 7;
         [ps setContentOffset:CGPointMake(nxt * w, 0) animated:YES];
     }];
-    UIPageControl *dots=[[UIPageControl alloc] initWithFrame:CGRectMake(side,710,cw,20)]; dots.numberOfPages=7; dots.currentPage=0; dots.tag=9168; dots.pageIndicatorTintColor=[UIColor colorWithWhite:.35 alpha:1]; dots.currentPageIndicatorTintColor=[UIColor colorWithRed:.35 green:.78 blue:1 alpha:1]; [root addSubview:dots];
-    UILabel *rateTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,726,cw,19)]; rateTitle.text=@"HZ / FPS MỤC TIÊU"; rateTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; rateTitle.textColor=UIColor.whiteColor; [root addSubview:rateTitle];
+    UIPageControl *dots=[[UIPageControl alloc] initWithFrame:CGRectMake(side,580,cw,20)]; dots.numberOfPages=7; dots.currentPage=0; dots.tag=9168; dots.pageIndicatorTintColor=[UIColor colorWithWhite:.35 alpha:1]; dots.currentPageIndicatorTintColor=[UIColor colorWithRed:.35 green:.78 blue:1 alpha:1]; [root addSubview:dots];
+    UILabel *rateTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,596,cw,19)]; rateTitle.text=@"HZ / FPS MỤC TIÊU"; rateTitle.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; rateTitle.textColor=UIColor.whiteColor; [root addSubview:rateTitle];
     NSInteger hz=[self.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue], fps=[self.settingsDict[@"TargetFPSRate"] ?: @60 integerValue]; NSArray *rn=@[@"TẦN SỐ MÀN HÌNH",@"FPS MỤC TIÊU"], *rv=@[[NSString stringWithFormat:@"%ld Hz",(long)hz],[NSString stringWithFormat:@"%ld FPS",(long)fps]];
-    for(NSInteger i=0;i<2;i++){ CGFloat gap=9,rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),751,rw,62)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=14; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(6,6,rw-12,14)]; n.text=rn[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor secondaryLabelColor]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(6,23,rw-12,30)]; v.text=rv[i]; v.font=[UIFont monospacedSystemFontOfSize:19 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor systemPinkColor]:[UIColor systemCyanColor]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
-    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,823,cw,42)]; note.numberOfLines=0; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor secondaryLabelColor]; note.text=@"Biểu đồ chỉ vẽ số đo có nguồn thực. GPU utilization và nhiệt độ từng linh kiện (°C) hiện không có số đo đọc được đáng tin cậy trên phiên này; trạng thái nhiệt iOS không phải nhiệt độ. Hz/FPS mục tiêu không bảo đảm game đạt đúng mức đó."; [root addSubview:note];
+    for(NSInteger i=0;i<2;i++){ CGFloat gap=9,rw=(cw-gap)/2; UIView *c=[[UIView alloc] initWithFrame:CGRectMake(side+i*(rw+gap),621,rw,62)]; c.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; c.layer.cornerRadius=14; c.layer.borderWidth=1; c.layer.borderColor=[UIColor colorWithRed:.5 green:.2 blue:.8 alpha:1].CGColor; [root addSubview:c]; UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(6,6,rw-12,14)]; n.text=rn[i]; n.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBold]; n.textColor=[UIColor secondaryLabelColor]; n.textAlignment=NSTextAlignmentCenter; [c addSubview:n]; UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(6,23,rw-12,30)]; v.text=rv[i]; v.font=[UIFont monospacedSystemFontOfSize:19 weight:UIFontWeightBlack]; v.textColor=i==0?[UIColor systemPinkColor]:[UIColor systemCyanColor]; v.textAlignment=NSTextAlignmentCenter; v.tag=9170+i; [c addSubview:v]; }
+    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(side,693,cw,42)]; note.numberOfLines=0; note.font=[UIFont systemFontOfSize:10]; note.textColor=[UIColor secondaryLabelColor]; note.text=@"Biểu đồ chỉ vẽ số đo có nguồn thực. GPU utilization và nhiệt độ từng linh kiện (°C) hiện không có số đo đọc được đáng tin cậy trên phiên này; trạng thái nhiệt iOS không phải nhiệt độ. Hz/FPS mục tiêu không bảo đảm game đạt đúng mức đó."; [root addSubview:note];
     // V33.2: live Now Playing card reads the system media session (Apple Music and apps that publish Now Playing metadata).
-    UIView *musicCard=[[UIView alloc] initWithFrame:CGRectMake(side,872,cw,94)];
+    UIView *musicCard=[[UIView alloc] initWithFrame:CGRectMake(side,742,cw,94)];
     musicCard.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.12 alpha:1];
     musicCard.layer.cornerRadius=17; musicCard.layer.borderWidth=1;
     musicCard.layer.borderColor=[UIColor colorWithRed:.18 green:.72 blue:.92 alpha:.8].CGColor;
@@ -6964,7 +6991,24 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
     if (scrollView.tag != 9160) return;
     UIPageControl *pages = [self.view viewWithTag:9168];
-    if (pages) pages.currentPage = (NSInteger)llround(scrollView.contentOffset.x / MAX(1.0, scrollView.bounds.size.width));
+    CGFloat w = MAX(1.0, scrollView.bounds.size.width);
+    CGFloat f = scrollView.contentOffset.x / w;
+    if (pages) pages.currentPage = (NSInteger)llround(f);
+    // Hiệu ứng xếp chồng: thẻ đang xem nằm trên, các thẻ kế bên lệch nhẹ, mờ dần và thu nhỏ.
+    NSInteger front = (NSInteger)llround(f);
+    for (UIView *sub in scrollView.subviews) {
+        NSInteger p = sub.tag - 9300;
+        if (p < 0 || p >= 6) continue;
+        CGFloat d = (CGFloat)p - f;
+        CGFloat ad = MIN(fabs(d), 1.0);
+        UIView *card = sub.subviews.firstObject;
+        if (!card) continue;
+        CGAffineTransform t = CGAffineTransformMakeTranslation(d * w * 0.08, 0);
+        t = CGAffineTransformScale(t, 1.0 - 0.06 * ad, 1.0 - 0.06 * ad);
+        card.transform = t;
+        card.alpha = 1.0 - 0.45 * ad;
+        if (p == front) [scrollView bringSubviewToFront:sub];
+    }
 }
 
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
@@ -7279,6 +7323,21 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     // Hàng công tắc vẫn cao hơn một chút để mỗi công tắc là một ô bo tròn riêng.
     if (_currentBottomTab == 2 && indexPath.section == 1) return 72.0;
     return 64.0;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (!gTabLandingPending) return;
+    NSTimeInterval rowDelay = 0.05 * MIN(indexPath.row, 8);
+    cell.alpha = 0.0;
+    cell.transform = CGAffineTransformMakeTranslation(0, -26.0);
+    [UIView animateWithDuration:0.55 delay:rowDelay usingSpringWithDamping:0.72 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        cell.alpha = 1.0;
+        cell.transform = CGAffineTransformIdentity;
+    } completion:nil];
+    if ([cell isKindOfClass:LGGlassTableViewCell.class]) {
+        LGGlassTableViewCell *lc = (LGGlassTableViewCell *)cell;
+        TIRevealLabelLetters(lc.titleL, lc.titleL.text, rowDelay + 0.45);
+    }
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
