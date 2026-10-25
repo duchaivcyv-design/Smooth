@@ -5561,6 +5561,7 @@ NSInteger Titanium_ActualPanelHz(void) {
 @end
 
 @implementation TitaniumOverdriveVSyncProbe
+void Titanium_ForcePanelModeDirect(NSInteger hz);   // khai báo trước khi dùng; định nghĩa bên dưới
 - (void)tick:(CADisplayLink *)link {
     CFTimeInterval d = link.targetTimestamp - link.timestamp;
     if (d > 0.004 && d < 0.2) { // lọc nhiễu 5Hz..250Hz
@@ -5626,8 +5627,8 @@ static void Titanium_LoadIOMFBDirect(void) {
 // Ép panel về mode chỉ định (rollback + recovery dùng chung). Không dispatch_async — gọi thẳng.
 void Titanium_ForcePanelModeDirect(NSInteger hz) {
     if (!tio_iomfb_setmode || !tio_iomfb_handle) return;
-    CGFloat pw = [UIScreen mainScreen].nativeBounds.width;
-    CGFloat ph = [UIScreen mainScreen].nativeBounds.height;
+    CGFloat pw = [UIScreen mainScreen].nativeBounds.size.width;
+    CGFloat ph = [UIScreen mainScreen].nativeBounds.size.height;
     kern_return_t kr = tio_iomfb_setmode(tio_iomfb_handle, (uint32_t)pw, (uint32_t)ph, (float)hz);
     if (kr == KERN_SUCCESS) g_tioActiveHz = hz;
     NSLog(@"[Titanium T5] ForcePanelMode(%ld) -> kr=0x%x active=%ld", (long)hz, kr, (long)g_tioActiveHz);
@@ -5655,8 +5656,8 @@ void Titanium_ForcePanelModeDirect(NSInteger hz) {
 // Quét dải mode khả thi THẬT: 120 -> 90 -> 80 -> 75 -> 70 -> 65. Dừng ở mode đầu DCP nhận.
 static NSInteger Titanium_IOMFBTryAlternateModes(NSInteger targetHz) {
     if (!tio_iomfb_setmode || !tio_iomfb_handle) return 0;
-    uint32_t w = (uint32_t)[UIScreen mainScreen].nativeBounds.width;
-    uint32_t h = (uint32_t)[UIScreen mainScreen].nativeBounds.height;
+    uint32_t w = (uint32_t)[UIScreen mainScreen].nativeBounds.size.width;
+    uint32_t h = (uint32_t)[UIScreen mainScreen].nativeBounds.size.height;
     NSInteger upper = MIN(targetHz, (NSInteger)120);
     NSInteger candidates[6] = {120, 90, 80, 75, 70, 65};
     for (int i = 0; i < 6; i++) {
@@ -5733,9 +5734,8 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
             "IOService:/AppleARMPE/display0/AppleCLCD2",
         };
         for (size_t i = 0; i < 2; i++) {
-            io_registry_entry_t entry = IO_OBJECT_NULL;
-            if (IORegistryEntryFromPath(kIOMasterPortDefault, paths[i], &entry) == KERN_SUCCESS &&
-                entry != IO_OBJECT_NULL) {
+            io_registry_entry_t entry = IORegistryEntryFromPath(kIOMasterPortDefault, paths[i]);
+            if (entry != IO_OBJECT_NULL) {
                 NSDictionary *props = @{
                     @"target-refresh-rate"   : @(hz),
                     @"preferred-refresh-rate": @(hz),
@@ -6764,7 +6764,7 @@ static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...)
             return 0;
         }
     }
-    return orig_sandbox_check ? orig_sandbox_check(pid, operation, type, __builtin_va_arg_pack_len() ? 0 : 0) : 0;
+    return orig_sandbox_check ? orig_sandbox_check(pid, operation, type) : 0;
 }
 
 static int hooked_csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize) {
