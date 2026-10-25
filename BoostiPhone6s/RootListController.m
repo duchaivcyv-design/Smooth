@@ -3853,26 +3853,303 @@ static NSString *gMusicPlayingURL = nil;
 }
 @end
 
-static void TIMusicPlayPreview(NSDictionary *item) {
-    NSString *urlText = item[@"previewUrl"];
-    if (urlText.length == 0) return;
-    if ([gMusicPlayingURL isEqualToString:urlText] && gMusicPlayer) {
-        if (gMusicPlayer.rate > 0) [gMusicPlayer pause]; else [gMusicPlayer play];
-        return;
+static UIWindow *TIKeyWindow(void) {
+    for (UIScene *sc in UIApplication.sharedApplication.connectedScenes) {
+        if ([sc isKindOfClass:UIWindowScene.class]) {
+            for (UIWindow *w in ((UIWindowScene *)sc).windows) if (w.isKeyWindow) return w;
+        }
     }
-    NSURL *u = [NSURL URLWithString:urlText];
-    if (!u) return;
-    gMusicPlayingURL = urlText;
-    gMusicPlayer = [AVPlayer playerWithURL:u];
-    [gMusicPlayer play];
+    return UIApplication.sharedApplication.windows.firstObject;
 }
 
-static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *items)) {
+static NSString *TIFormatTime(NSTimeInterval t) {
+    if (!isfinite(t) || t < 0) t = 0;
+    int total = (int)t;
+    return [NSString stringWithFormat:@"%d:%02d", total / 60, total % 60];
+}
+
+@interface TIMiniPlayer : UIView
+@property (nonatomic, strong) AVPlayer *player;
+@property (nonatomic, strong) id timeObserver;
+@property (nonatomic, strong) UIView *card;
+@property (nonatomic, strong) UIView *expanded;
+@property (nonatomic, strong) UIImageView *artwork;
+@property (nonatomic, strong) UIImageView *bigArtwork;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *artistLabel;
+@property (nonatomic, strong) UILabel *timeLabel;
+@property (nonatomic, strong) UIButton *playButton;
+@property (nonatomic, strong) UIButton *closeButton;
+@property (nonatomic, strong) UIButton *backButton;
+@property (nonatomic, strong) UIButton *fwdButton;
+@property (nonatomic, strong) UISlider *slider;
+@property (nonatomic, assign) BOOL isExpanded;
+@property (nonatomic, assign) BOOL dragging;
++ (instancetype)shared;
+- (void)playItem:(NSDictionary *)item;
+@end
+
+@implementation TIMiniPlayer
++ (instancetype)shared {
+    static TIMiniPlayer *instance = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ instance = [[TIMiniPlayer alloc] initWithFrame:CGRectMake(0, 0, 320, 64)]; });
+    return instance;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (!self) return nil;
+    self.backgroundColor = UIColor.clearColor;
+    self.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    UIColor *cyan = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:1.0];
+
+    _card = [UIView new];
+    _card.backgroundColor = [UIColor colorWithRed:0.07 green:0.04 blue:0.16 alpha:0.97];
+    _card.layer.cornerRadius = 18;
+    _card.layer.borderWidth = 1;
+    _card.layer.borderColor = [UIColor colorWithRed:0.45 green:0.25 blue:0.9 alpha:0.9].CGColor;
+    _card.layer.shadowColor = cyan.CGColor;
+    _card.layer.shadowOpacity = 0.35;
+    _card.layer.shadowRadius = 12;
+    _card.layer.shadowOffset = CGSizeMake(0, 4);
+    [self addSubview:_card];
+    [_card addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(toggleExpanded)]];
+
+    _artwork = [UIImageView new];
+    _artwork.contentMode = UIViewContentModeScaleAspectFill;
+    _artwork.clipsToBounds = YES;
+    _artwork.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1];
+    [_card addSubview:_artwork];
+
+    _titleLabel = [UILabel new];
+    _titleLabel.textColor = UIColor.whiteColor;
+    _titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBold];
+    _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [_card addSubview:_titleLabel];
+
+    _artistLabel = [UILabel new];
+    _artistLabel.textColor = [UIColor colorWithWhite:0.72 alpha:1];
+    _artistLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    _artistLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [_card addSubview:_artistLabel];
+
+    _playButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _playButton.tintColor = cyan;
+    [_playButton setImage:[UIImage systemImageNamed:@"pause.fill"] forState:UIControlStateNormal];
+    [_playButton addTarget:self action:@selector(togglePlay) forControlEvents:UIControlEventTouchUpInside];
+    [_card addSubview:_playButton];
+
+    _closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _closeButton.tintColor = [UIColor colorWithWhite:0.8 alpha:1];
+    [_closeButton setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
+    [_closeButton addTarget:self action:@selector(closePlayer) forControlEvents:UIControlEventTouchUpInside];
+    [_card addSubview:_closeButton];
+
+    _expanded = [UIView new];
+    _expanded.alpha = 0;
+    [self addSubview:_expanded];
+
+    _bigArtwork = [UIImageView new];
+    _bigArtwork.contentMode = UIViewContentModeScaleAspectFill;
+    _bigArtwork.clipsToBounds = YES;
+    _bigArtwork.layer.cornerRadius = 70;
+    _bigArtwork.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1];
+    [_expanded addSubview:_bigArtwork];
+
+    _slider = [UISlider new];
+    _slider.minimumTrackTintColor = cyan;
+    _slider.thumbTintColor = cyan;
+    [_slider addTarget:self action:@selector(sliderDown) forControlEvents:UIControlEventTouchDown];
+    [_slider addTarget:self action:@selector(sliderDragged) forControlEvents:UIControlEventValueChanged];
+    [_slider addTarget:self action:@selector(sliderUp) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+    [_expanded addSubview:_slider];
+
+    _timeLabel = [UILabel new];
+    _timeLabel.textAlignment = NSTextAlignmentCenter;
+    _timeLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1];
+    _timeLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightMedium];
+    [_expanded addSubview:_timeLabel];
+
+    _backButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _backButton.tintColor = cyan;
+    [_backButton setImage:[UIImage systemImageNamed:@"gobackward.10"] forState:UIControlStateNormal];
+    [_backButton addTarget:self action:@selector(skipBack) forControlEvents:UIControlEventTouchUpInside];
+    [_expanded addSubview:_backButton];
+
+    _fwdButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _fwdButton.tintColor = cyan;
+    [_fwdButton setImage:[UIImage systemImageNamed:@"goforward.10"] forState:UIControlStateNormal];
+    [_fwdButton addTarget:self action:@selector(skipForward) forControlEvents:UIControlEventTouchUpInside];
+    [_expanded addSubview:_fwdButton];
+
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat w = self.bounds.size.width;
+    _card.frame = CGRectMake(0, 0, w, 64);
+    _artwork.frame = CGRectMake(10, 10, 44, 44);
+    _artwork.layer.cornerRadius = 22;
+    _titleLabel.frame = CGRectMake(64, 12, w - 64 - 110, 20);
+    _artistLabel.frame = CGRectMake(64, 34, w - 64 - 110, 16);
+    _playButton.frame = CGRectMake(w - 100, 12, 40, 40);
+    _closeButton.frame = CGRectMake(w - 52, 12, 40, 40);
+    _expanded.frame = CGRectMake(0, 72, w, 200);
+    _bigArtwork.frame = CGRectMake(w / 2 - 70, 0, 140, 140);
+    _slider.frame = CGRectMake(16, 150, w - 32, 22);
+    _timeLabel.frame = CGRectMake(16, 174, w - 32, 16);
+    _backButton.frame = CGRectMake(w / 2 - 110, 92, 56, 44);
+    _fwdButton.frame = CGRectMake(w / 2 + 54, 92, 56, 44);
+    _playButton.frame = self.isExpanded ? CGRectMake(w / 2 - 28, 96, 56, 56) : CGRectMake(w - 100, 12, 40, 40);
+}
+
+- (void)toggleExpanded {
+    self.isExpanded = !self.isExpanded;
+    CGFloat h = self.isExpanded ? 272 : 64;
+    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.frame = CGRectMake(self.frame.origin.x, self.frame.origin.y, self.frame.size.width, h);
+        self.expanded.alpha = self.isExpanded ? 1.0 : 0.0;
+        [self setNeedsLayout];
+        [self layoutIfNeeded];
+    } completion:nil];
+}
+
+- (void)updatePlayIcon {
+    BOOL playing = self.player.rate > 0;
+    NSString *name = playing ? @"pause.fill" : @"play.fill";
+    [self.playButton setImage:[UIImage systemImageNamed:name] forState:UIControlStateNormal];
+    if (playing) {
+        if (![self.artwork.layer animationForKey:@"TISpin"]) {
+            CABasicAnimation *spin = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+            spin.fromValue = @0; spin.toValue = @(M_PI * 2);
+            spin.duration = 8; spin.repeatCount = HUGE_VALF;
+            [self.artwork.layer addAnimation:spin forKey:@"TISpin"];
+            [self.bigArtwork.layer addAnimation:spin forKey:@"TISpin"];
+        }
+    } else {
+        [self.artwork.layer removeAnimationForKey:@"TISpin"];
+        [self.bigArtwork.layer removeAnimationForKey:@"TISpin"];
+    }
+}
+
+- (void)tick {
+    if (!self.player.currentItem) return;
+    NSTimeInterval cur = CMTimeGetSeconds(self.player.currentTime);
+    NSTimeInterval dur = CMTimeGetSeconds(self.player.currentItem.duration);
+    if (isfinite(dur) && dur > 0) self.slider.maximumValue = (float)dur;
+    if (!self.dragging) self.slider.value = (float)cur;
+    self.timeLabel.text = [NSString stringWithFormat:@"%@ / %@", TIFormatTime(cur), TIFormatTime(isfinite(dur) ? dur : 0)];
+    [self updatePlayIcon];
+}
+
+- (void)playItem:(NSDictionary *)item {
+    NSURL *u = [NSURL URLWithString:item[@"previewUrl"] ?: @""];
+    if (!u) return;
+    if (self.timeObserver && self.player) [self.player removeTimeObserver:self.timeObserver];
+    [self.player pause];
+    self.player = [AVPlayer playerWithURL:u];
+    self.titleLabel.text = item[@"title"] ?: @"";
+    self.artistLabel.text = item[@"artist"] ?: @"";
+    self.artwork.image = nil;
+    self.bigArtwork.image = nil;
+    NSString *art = item[@"artwork"] ?: @"";
+    if (art.length) {
+        NSString *big = [art stringByReplacingOccurrencesOfString:@"100x100bb" withString:@"300x300bb"];
+        NSURL *artURL = [NSURL URLWithString:big];
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            NSData *data = artURL ? [NSData dataWithContentsOfURL:artURL] : nil;
+            UIImage *img = data ? [UIImage imageWithData:data] : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                weakSelf.artwork.image = img;
+                weakSelf.bigArtwork.image = img;
+            });
+        });
+    }
+    __weak typeof(self) weakSelf2 = self;
+    self.timeObserver = [self.player addPeriodicTimeObserverForInterval:CMTimeMake(1, 4) queue:dispatch_get_main_queue() usingBlock:^(CMTime time) {
+        (void)time;
+        [weakSelf2 tick];
+    }];
+    [self.player play];
+
+    UIWindow *win = TIKeyWindow();
+    if (self.superview != win) {
+        [self removeFromSuperview];
+        self.frame = CGRectMake(12, win.safeAreaInsets.top + 50, win.bounds.size.width - 24, 64);
+        self.isExpanded = NO;
+        self.alpha = 0;
+        self.transform = CGAffineTransformMakeTranslation(0, -20);
+        [win addSubview:self];
+        [UIView animateWithDuration:0.45 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            self.alpha = 1.0;
+            self.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }
+    [self updatePlayIcon];
+}
+
+- (void)togglePlay {
+    if (!self.player) return;
+    if (self.player.rate > 0) [self.player pause]; else [self.player play];
+    [self updatePlayIcon];
+}
+
+- (void)skipBack {
+    [self seekBy:-10];
+}
+
+- (void)skipForward {
+    [self seekBy:10];
+}
+
+- (void)seekBy:(NSTimeInterval)delta {
+    if (!self.player.currentItem) return;
+    NSTimeInterval cur = CMTimeGetSeconds(self.player.currentTime);
+    NSTimeInterval dur = CMTimeGetSeconds(self.player.currentItem.duration);
+    NSTimeInterval target = MAX(0, MIN(isfinite(dur) ? dur : cur + delta, cur + delta));
+    [self.player seekToTime:CMTimeMakeWithSeconds(target, 600) toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+}
+
+- (void)sliderDown { self.dragging = YES; }
+
+- (void)sliderDragged {
+    [self.player seekToTime:CMTimeMakeWithSeconds(self.slider.value, 600) toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+}
+
+- (void)sliderUp { self.dragging = NO; }
+
+- (void)closePlayer {
+    if (self.timeObserver && self.player) [self.player removeTimeObserver:self.timeObserver];
+    self.timeObserver = nil;
+    [self.player pause];
+    self.player = nil;
+    [self.artwork.layer removeAnimationForKey:@"TISpin"];
+    [self.bigArtwork.layer removeAnimationForKey:@"TISpin"];
+    [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+        self.alpha = 0;
+        self.transform = CGAffineTransformMakeTranslation(0, -24);
+    } completion:^(BOOL finished) {
+        (void)finished;
+        [self removeFromSuperview];
+        self.transform = CGAffineTransformIdentity;
+    }];
+}
+@end
+
+static void TIMusicPlayPreview(NSDictionary *item) {
+    [[TIMiniPlayer shared] playItem:item];
+}
+
+static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArray<NSDictionary *> *items)) {
     NSURLComponents *c = [NSURLComponents componentsWithString:@"https://itunes.apple.com/search"];
     c.queryItems = @[[NSURLQueryItem queryItemWithName:@"term" value:term],
                      [NSURLQueryItem queryItemWithName:@"media" value:@"music"],
                      [NSURLQueryItem queryItemWithName:@"entity" value:@"song"],
-                     [NSURLQueryItem queryItemWithName:@"limit" value:@"30"]];
+                     [NSURLQueryItem queryItemWithName:@"limit" value:@"200"]];
+    if (country.length) c.queryItems = [c.queryItems arrayByAddingObject:[NSURLQueryItem queryItemWithName:@"country" value:country]];
     NSURL *url = c.URL;
     if (!url) { dispatch_async(dispatch_get_main_queue(), ^{ done(@[]); }); return; }
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
@@ -3884,7 +4161,8 @@ static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *
                 NSString *title = r[@"trackName"] ?: @"";
                 NSString *artist = r[@"artistName"] ?: @"";
                 NSString *preview = r[@"previewUrl"] ?: @"";
-                [out addObject:@{@"title": title, @"artist": artist, @"previewUrl": preview}];
+                NSString *art = r[@"artworkUrl100"] ?: @"";
+                [out addObject:@{@"title": title, @"artist": artist, @"previewUrl": preview, @"artwork": art}];
             }
         }
         dispatch_async(dispatch_get_main_queue(), ^{ done(out); });
@@ -5123,7 +5401,7 @@ static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *
     search.leftViewMode = UITextFieldViewModeAlways;
     [browser.view addSubview:search];
 
-    UISegmentedControl *categories = [[UISegmentedControl alloc] initWithItems:@[@"PHONK", @"SOUNDCLOUD", @"APPLE MUSIC", @"YOUTUBE"]];
+    UISegmentedControl *categories = [[UISegmentedControl alloc] initWithItems:@[@"PHONK", @"NHẠC TRẺ", @"CHILL", @"LOFI"]];
     categories.translatesAutoresizingMaskIntoConstraints = NO;
     categories.selectedSegmentIndex = 0;
     categories.selectedSegmentTintColor = purple;
@@ -5191,6 +5469,7 @@ static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *
     ]];
 
     __block NSInteger category = 0;
+    NSArray<NSString *> *categoryTerms = @[@"phonk drift", @"nhạc trẻ hot", @"chill vibes", @"lofi chill"];
     void (^loadSearch)(NSString *) = ^(NSString *term) {
         NSString *q = [term stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (q.length == 0) {
@@ -5201,7 +5480,8 @@ static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *
                 default: q = @"chill lofi music"; break;
             }
         }
-        TIMusicSearch(q, ^(NSArray<NSDictionary *> *items) {
+        NSString *country = (category == 1) ? @"VN" : nil;
+    TIMusicSearch(q, country, ^(NSArray<NSDictionary *> *items) {
         musicSource.items = items;
         [musicTable reloadData];
     });
@@ -5233,6 +5513,7 @@ static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *
     [search addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) { loadSearch(search.text ?: @""); }] forControlEvents:UIControlEventEditingDidEndOnExit];
     [categories addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
         category = categories.selectedSegmentIndex;
+        search.text = categoryTerms[category];
         NSString *placeholder = @"  Tìm bài hát, nghệ sĩ hoặc playlist…";
         if (category == 0) placeholder = @"  Tìm phonk / drift / bass trên YouTube…";
         else if (category == 1) placeholder = @"  Tìm trên SoundCloud…";
@@ -7491,7 +7772,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (_currentBottomTab == 3 && indexPath.section == 0) return 100.0;
     if (_currentBottomTab == 3 && indexPath.section == 1) return 50.0;
     // Hàng công tắc vẫn cao hơn một chút để mỗi công tắc là một ô bo tròn riêng.
-    if (_currentBottomTab == 2 && indexPath.section == 1) return 72.0;
+    if (_currentBottomTab == 2 && indexPath.section == 0) return 84.0;
+    if (_currentBottomTab == 2 && indexPath.section == 1) return 84.0;
     return 64.0;
 }
 
