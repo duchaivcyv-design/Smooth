@@ -7742,6 +7742,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_UIKit_ThirdParty_IsolatedV285);
         %init(Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles);
         %init(Group_Tier4_PanelRegister_And_ThermalUnlock);
+        %init(Group_UIView_ModifyAnimations); // [V43.3] Chan crash updateReason=0 khi ep het animation
         Titanium_InstallDirectIOMobileFramebufferCHooks();
         Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite();
         // [REAL] Thay 2 stub cũ bằng pipeline thật: probe vsync + jetsam + realtime + IOMFB try-modes
@@ -7804,6 +7805,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 // Neu updateReason == 0 ma range khong phai CAFrameRateRangeDefault -> doi reason = 1 -> khong bi NSInvalidArgumentException.
 // Cho phep ep preferredFrameRateRange cho MOI animation (ke ca lock screen/control center) ma khong crash.
 // ====================================================================================================
+%group Group_UIView_ModifyAnimations
 %hook UIView
 + (void)_modifyAnimationsWithPreferredFrameRateRange:(CAFrameRateRange)range updateReason:(NSInteger)reason animations:(void (^)(void))animations {
     if (@available(iOS 15.0, *)) {
@@ -7813,6 +7815,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
     }
     %orig(range, reason, animations);
 }
+%end
 %end
 
 %ctor {
