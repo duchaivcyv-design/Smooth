@@ -1,6 +1,7 @@
 #import "RootListController.h"
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
+#import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <spawn.h>
@@ -3743,6 +3744,8 @@ static void TIRevealLabelLetters(UILabel *label, NSString *full, NSTimeInterval 
         (void)r; (void)er; (void)stop;
         if (sub) [chars addObject:sub];
     }];
+    label.adjustsFontSizeToFitWidth = NO;
+    label.minimumScaleFactor = 1.0;
     label.text = @"";
     __weak UILabel *weakLabel = label;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -3812,6 +3815,81 @@ static void TIDeckAdvance(UIScrollView *pages, NSInteger dir) {
         UIPageControl *dots = (UIPageControl *)[pages.superview viewWithTag:9168];
         if (dots) dots.currentPage = next;
     }];
+}
+
+static char kTIMusicSourceKey;
+static AVPlayer *gMusicPlayer = nil;
+static NSString *gMusicPlayingURL = nil;
+
+@interface TIMusicResultsSource : NSObject <UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, strong) NSArray<NSDictionary *> *items;
+@property (nonatomic, copy) void (^onPick)(NSDictionary *item);
+@end
+
+@implementation TIMusicResultsSource
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    (void)tableView; (void)section;
+    return self.items.count;
+}
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *cid = @"TIMusicResultCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cid];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cid];
+    NSDictionary *item = self.items[indexPath.row];
+    cell.backgroundColor = UIColor.clearColor;
+    cell.textLabel.text = item[@"title"];
+    cell.textLabel.textColor = UIColor.whiteColor;
+    cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.text = item[@"artist"];
+    cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1];
+    cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
+    cell.accessoryType = [item[@"previewUrl"] length] ? UITableViewCellAccessoryNone : UITableViewCellAccessoryNone;
+    cell.textLabel.textColor = [item[@"previewUrl"] length] ? UIColor.whiteColor : [UIColor colorWithWhite:0.5 alpha:1];
+    return cell;
+}
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.onPick) self.onPick(self.items[indexPath.row]);
+}
+@end
+
+static void TIMusicPlayPreview(NSDictionary *item) {
+    NSString *urlText = item[@"previewUrl"];
+    if (urlText.length == 0) return;
+    if ([gMusicPlayingURL isEqualToString:urlText] && gMusicPlayer) {
+        if (gMusicPlayer.rate > 0) [gMusicPlayer pause]; else [gMusicPlayer play];
+        return;
+    }
+    NSURL *u = [NSURL URLWithString:urlText];
+    if (!u) return;
+    gMusicPlayingURL = urlText;
+    gMusicPlayer = [AVPlayer playerWithURL:u];
+    [gMusicPlayer play];
+}
+
+static void TIMusicSearch(NSString *term, void (^done)(NSArray<NSDictionary *> *items)) {
+    NSURLComponents *c = [NSURLComponents componentsWithString:@"https://itunes.apple.com/search"];
+    c.queryItems = @[[NSURLQueryItem queryItemWithName:@"term" value:term],
+                     [NSURLQueryItem queryItemWithName:@"media" value:@"music"],
+                     [NSURLQueryItem queryItemWithName:@"entity" value:@"song"],
+                     [NSURLQueryItem queryItemWithName:@"limit" value:@"30"]];
+    NSURL *url = c.URL;
+    if (!url) { dispatch_async(dispatch_get_main_queue(), ^{ done(@[]); }); return; }
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+        (void)resp;
+        NSMutableArray *out = [NSMutableArray array];
+        if (!err && data) {
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            for (NSDictionary *r in json[@"results"]) {
+                NSString *title = r[@"trackName"] ?: @"";
+                NSString *artist = r[@"artistName"] ?: @"";
+                NSString *preview = r[@"previewUrl"] ?: @"";
+                [out addObject:@{@"title": title, @"artist": artist, @"previewUrl": preview}];
+            }
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ done(out); });
+    }];
+    [task resume];
 }
 
 @implementation RootListController
@@ -5092,6 +5170,26 @@ static void TIDeckAdvance(UIScrollView *pages, NSInteger dir) {
     close.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
     [browser.view addSubview:close];
 
+    TIMusicResultsSource *musicSource = [TIMusicResultsSource new];
+    UITableView *musicTable = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    musicTable.translatesAutoresizingMaskIntoConstraints = NO;
+    musicTable.backgroundColor = web.backgroundColor;
+    musicTable.separatorColor = [UIColor colorWithWhite:1 alpha:0.08];
+    musicTable.layer.cornerRadius = 16;
+    musicTable.clipsToBounds = YES;
+    musicTable.dataSource = musicSource;
+    musicTable.delegate = musicSource;
+    objc_setAssociatedObject(musicTable, &kTIMusicSourceKey, musicSource, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    musicSource.onPick = ^(NSDictionary *item) { TIMusicPlayPreview(item); };
+    [browser.view addSubview:musicTable];
+    web.hidden = YES;
+    [NSLayoutConstraint activateConstraints:@[
+        [musicTable.topAnchor constraintEqualToAnchor:categories.bottomAnchor constant:12],
+        [musicTable.leadingAnchor constraintEqualToAnchor:search.leadingAnchor],
+        [musicTable.trailingAnchor constraintEqualToAnchor:search.trailingAnchor],
+        [musicTable.bottomAnchor constraintEqualToAnchor:go.topAnchor constant:-12]
+    ]];
+
     __block NSInteger category = 0;
     void (^loadSearch)(NSString *) = ^(NSString *term) {
         NSString *q = [term stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -5103,7 +5201,12 @@ static void TIDeckAdvance(UIScrollView *pages, NSInteger dir) {
                 default: q = @"chill lofi music"; break;
             }
         }
-        // URLComponents safely encodes spaces, accents and punctuation in search terms.
+        TIMusicSearch(q, ^(NSArray<NSDictionary *> *items) {
+        musicSource.items = items;
+        [musicTable reloadData];
+    });
+    return;
+    // URLComponents safely encodes spaces, accents and punctuation in search terms.
         NSURLComponents *components = [NSURLComponents new];
         switch (category) {
             case 0: // YouTube is a reliable default for Phonk/drift mixes.
@@ -5200,8 +5303,11 @@ static void TIDeckAdvance(UIScrollView *pages, NSInteger dir) {
         [close.heightAnchor constraintEqualToConstant:44]
     ]];
     search.text = @"phonk drift playlist";
-    loadSearch(search.text);
-    [self presentViewController:browser animated:YES completion:nil];
+    UIViewController *presenter = self;
+    while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+    [presenter presentViewController:browser animated:YES completion:^{
+        loadSearch(search.text);
+    }];
 }
 
 - (void)updateRoleBadgeTitle:(NSString *)title {
@@ -7372,12 +7478,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
     NSString *heading = [self tableView:tableView titleForHeaderInSection:section];
     if (heading.length == 0) return 10.0;
+    // Đệm thêm ở các tiêu đề đang sát hàng phía trên (tab Cài đặt, Tối ưu, Ứng dụng).
+    if (_currentBottomTab == 4 && section == 3) return 58.0;
+    if (_currentBottomTab == 2 && section == 1) return 54.0;
+    if (_currentBottomTab == 3 && section == 1) return 54.0;
+    if (_currentBottomTab == 3 && section == 2) return 46.0;
     return (heading.length > 38) ? 46.0 : 38.0;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     // Thu gọn chiều cao hàng để hiển thị được nhiều mục hơn trên một màn hình.
-    if (_currentBottomTab == 3 && indexPath.section == 0) return 92.0;
+    if (_currentBottomTab == 3 && indexPath.section == 0) return 100.0;
     if (_currentBottomTab == 3 && indexPath.section == 1) return 50.0;
     // Hàng công tắc vẫn cao hơn một chút để mỗi công tắc là một ô bo tròn riêng.
     if (_currentBottomTab == 2 && indexPath.section == 1) return 72.0;
@@ -7390,9 +7501,11 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSTimeInterval base = 0.30 * MIN(indexPath.row, 7);
     cell.alpha = 0.0;
     cell.transform = CGAffineTransformMakeTranslation(0, -42.0);
+    cell.userInteractionEnabled = NO;
     LGGlassTableViewCell *lc = [cell isKindOfClass:LGGlassTableViewCell.class] ? (LGGlassTableViewCell *)cell : nil;
     NSString *fullTitle = lc.titleL.text;
     if (lc) {
+        lc.titleL.adjustsFontSizeToFitWidth = NO;
         lc.detailL.alpha = 0.0;
         lc.detailL.transform = CGAffineTransformMakeTranslation(0, -10.0);
     }
@@ -7402,7 +7515,16 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         [UIView animateWithDuration:0.5 delay:base usingSpringWithDamping:0.78 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
             cell.alpha = 1.0;
             cell.transform = CGAffineTransformIdentity;
-        } completion:nil];
+        } completion:^(BOOL finished) {
+            (void)finished;
+            cell.userInteractionEnabled = YES;
+            CABasicAnimation *ready = [CABasicAnimation animationWithKeyPath:@"shadowOpacity"];
+            ready.fromValue = @0.0; ready.toValue = @0.6; ready.duration = 0.25; ready.autoreverses = YES;
+            cell.layer.shadowColor = [UIColor colorWithRed:.2 green:.85 blue:1 alpha:1].CGColor;
+            cell.layer.shadowOffset = CGSizeZero;
+            cell.layer.shadowRadius = 10.0;
+            [cell.layer addAnimation:ready forKey:@"TIReadyGlow"];
+        }];
         if (!lc) return;
         // 2) Chữ nhỏ hiện trước, sau khi hàng đã đáp gần xong.
         [UIView animateWithDuration:0.32 delay:base + 0.36 options:UIViewAnimationOptionCurveEaseOut animations:^{
