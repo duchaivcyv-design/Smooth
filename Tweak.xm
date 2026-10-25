@@ -3561,7 +3561,7 @@ static void Titanium_InstallDynamicMetalOverdriveGroup2(void) {
 // TẦNG 3: BẺ KHÓA HZ/FPS CHO MỌI APP, APP ĐO FPS & WEB (SAFARI/WKWEBVIEW) KHÔNG LOCK 60HZ, SÀN 60HZ
 // ====================================================================================================
 
-%group Group_FluidTransitions_Pacing
+%group Group_FluidTransitions_Pacing_PreScreen
 
 static inline NSInteger Titanium_GetTargetConfiguredHz(void) {
     if (!IS_ACTIVE && g_syncPayloadV285.masterEnabled == 0) return 240;
@@ -3644,10 +3644,9 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     }
 }
 
+// Report the value CoreAnimation actually negotiated; do not claim the requested cap
+// is already the real presentation rate on hardware that may clamp it.
 - (NSInteger)preferredFramesPerSecond {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
-        return Titanium_GetEffectiveFrameCap();
-    }
     return %orig;
 }
 
@@ -3675,29 +3674,18 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
     %orig(interval);
 }
 
+// Keep timing values supplied by CoreAnimation. Fabricating duration/targetTimestamp
+// can make the app schedule frames faster than the display can actually present them.
 - (CFTimeInterval)duration {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return (1.0 / (double)cap);
-    }
     return %orig;
 }
 
 - (CFTimeInterval)targetTimestamp {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
-        NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return [self timestamp] + (1.0 / (double)cap);
-    }
     return %orig;
 }
 
+// Keep the negotiated range truthful; only the setter requests the configured cap.
 - (CAFrameRateRange)preferredFrameRateRange {
-    if (@available(iOS 15.0, *)) {
-        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
-            NSInteger target = Titanium_GetEffectiveFrameCap();
-            return Titanium_SmoothFRR((float)target);
-        }
-    }
     return %orig;
 }
 
@@ -3819,6 +3807,11 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 
 %end
 
+%end
+
+// Install this class hook only after UIKit has brought up the first visible app window.
+%group Group_UIScreen_FirstFrameOnly
+
 // ====================================================================================================
 // 4. UISCREEN — BẺ KHÓA TRẦN FPS CHO MỌI APP & CÔNG CỤ ĐO
 // ====================================================================================================
@@ -3855,6 +3848,10 @@ static const void *kTitaniumWebLastSyncFPSKey = &kTitaniumWebLastSyncFPSKey;
 }
 
 %end
+
+%end
+
+%group Group_FluidTransitions_Pacing_PostScreen
 
 // ====================================================================================================
 // 5. NSBUNDLE — MỞ KHÓA PRO MOTION TRÊN TẤT CẢ APP THỨ BA & GAME
@@ -7767,7 +7764,12 @@ static void Titanium_RestoreOnFirstFrame(void) {
         } else {
             visibleTicks = 0;
         }
-        if (visibleTicks >= 2) {
+        if (visibleTicks >= 4) {
+            // UIKit has been active with a visible key window for several real display ticks.
+            // Only now install UIScreen hooks; doing so during dylib startup can deadlock in
+            // +[UIScreen initialize] while ElleKit resolves the method hook.
+            %init(Group_UIScreen_FirstFrameOnly);
+            Titanium_RestoreFirstDrawDefaultsOnce();
             __atomic_store_n(&g_titaniumFirstFrameReady, 1, __ATOMIC_RELEASE);
             Titanium_KillVSyncCompletelyAtRoot();
             Titanium_ForceInjectDynamicRefreshSupport();
@@ -7775,7 +7777,6 @@ static void Titanium_RestoreOnFirstFrame(void) {
             Titanium_ApplySiliconDeepOptimizations();
             [link invalidate];
             weakTarget.handler = nil;
-            Titanium_RestoreFirstDrawDefaultsOnce();
             Titanium_ReapplyFrameRateToAllScenes();
         }
     };
@@ -7814,7 +7815,8 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         Titanium_InstallDynamicMetalOverdriveGroup2();
 
         %init(Group_ZeroLatency_Touch_Opt);
-        %init(Group_FluidTransitions_Pacing);
+        %init(Group_FluidTransitions_Pacing_PreScreen);
+        %init(Group_FluidTransitions_Pacing_PostScreen);
         %init(Group_AI_Stream_Optimization);
         %init(Group_FastLaunch_SuperEngineV285);
         %init(Group_Scroll_And_Keyboard_Opt);
