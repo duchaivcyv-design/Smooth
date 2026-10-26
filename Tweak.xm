@@ -1805,8 +1805,8 @@ static inline void Titanium_EnforceThreadVIPPolicy(void) {
         thread_policy_set(selfThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinityData, THREAD_AFFINITY_POLICY_COUNT);
     }
 
-    // 3. [HẠNG MỤC #3 - TẦNG 5]: Ép mức ưu tiên Nice -20 cao nhất của nhân Unix/XNU
-    setpriority(PRIO_DARWIN_THREAD, 0, -20);
+    // 3. [TUNE] Nice -10 (hạ từ -20 để giảm nóng)
+    setpriority(PRIO_DARWIN_THREAD, 0, -10); // [TUNE] nice -20 -> -10
 
     Titanium_DisableKernelThreadThrottling();
 }
@@ -2688,7 +2688,7 @@ static void PrefsChangedCallback(CFNotificationCenterRef center, void *observer,
 }
 
 // ====================================================================================================
-// TẦNG SÂU BẺ KHÓA LUỒNG XNU (FULL UNTHROTTLED UIKIT): BUNG CÔNG SUẤT 127, NICE -20, MƯỢT SIÊU CẤP
+// TẦNG SÂU BẺ KHÓA LUỒNG XNU (FULL UNTHROTTLED UIKIT): BUNG CÔNG SUẤT 90, NICE -10 (TUNE GIẢM NÓNG)
 // BẢN NÂNG CẤP TẦNG 1-2-3-5-6: TẮT V-SYNC TRIỆT ĐỂ, SÀN 60HZ (KHÔNG TỤT 1HZ), BẺ WEB & APP ĐO CHUẨN
 // ====================================================================================================
 
@@ -2895,7 +2895,7 @@ static inline BOOL Titanium_ShouldLockTargetRate(void) {
 }
 
 // ==============================================================================
-// TẦNG 5 & 6: BẺ KHÓA LUỒNG TỐI CAO KERNEL 127 + NICE -20 + P-CORE + MLOCK
+// TẦNG 5 & 6: BẺ KHÓA LUỒNG KERNEL 90 + NICE -10 + P-CORE + MLOCK (TUNE)
 // ==============================================================================
 
 static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
@@ -2903,7 +2903,7 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
     dispatch_once(&onceToken, ^{
         setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
         setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
-        setpriority(PRIO_PROCESS, 0, -20);
+        setpriority(PRIO_PROCESS, 0, -10); // [TUNE] nice -20 -> -10
         mlock(&g_syncPayloadV285, sizeof(ApexV285ProPayload));
         mlock(&g_livePayload, sizeof(ApexV285ProPayload));
         if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
@@ -2929,7 +2929,7 @@ static inline void Titanium_LockMainThreadFast(void) {
 
     Titanium_EnforceThreadVIPPolicy();
 
-    // Bẻ khóa luồng chính lên mức ưu tiên Kernel 127 + P-Core (Tag 1) một lần duy nhất
+    // Bẻ khóa luồng chính lên mức ưu tiên Kernel 90 + P-Core (Tag 1) một lần duy nhất
     static __thread BOOL s_kernel127Locked = NO;
     if (__builtin_expect(!s_kernel127Locked, 0)) {
         s_kernel127Locked = YES;
@@ -2938,7 +2938,7 @@ static inline void Titanium_LockMainThreadFast(void) {
             thread_affinity_policy_data_t affinity = { .affinity_tag = 1 };
             thread_policy_set(selfThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 
-            thread_precedence_policy_data_t precedence = { .importance = 127 };
+            thread_precedence_policy_data_t precedence = { .importance = 90 }; // [TUNE] 127 -> 90
             thread_policy_set(selfThread, THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
 
             thread_throttle_policy_data_t throttle = { .pset_limit = 0 };
@@ -7322,7 +7322,7 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 #define JETSAM_PRIORITY_CRITICAL 19
 #endif
 #ifndef TIER6_KERNEL_MAX_IMPORTANCE
-#define TIER6_KERNEL_MAX_IMPORTANCE 127
+#define TIER6_KERNEL_MAX_IMPORTANCE 90   // [TUNE] 127 -> 90
 #endif
 
 #ifndef CS_OPS_STATUS
@@ -7666,7 +7666,7 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             // [V49 GIAM NONG / GIAM BI KILL]: Chi ep CPU/GPU manh (priority -20, pin P-core, realtime) cho SpringBoard.
             // App thu ba CHI ep frame rate (da ep o CADisplayLink/UIWindowScene) -> giam nhiet, giam bi watchdog kill, giam mang lag.
             if (Titanium_IsSpringBoard()) {
-                setpriority(PRIO_PROCESS, 0, -20);
+                setpriority(PRIO_PROCESS, 0, -10); // [TUNE] nice -20 -> -10
                 setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_PROCESS, IOPOL_IMPORTANT);
                 setiopolicy_np(IOPOL_TYPE_VFS_ATIME_UPDATES, IOPOL_SCOPE_PROCESS, IOPOL_ATIME_UPDATES_OFF);
                 Titanium_Tier5_PinAllThreadsToPCoreAndRealtime();
