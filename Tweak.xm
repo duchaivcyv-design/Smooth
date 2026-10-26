@@ -3822,22 +3822,48 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 %end
 
 %hook CADisplayMode
-- (double)refreshRate { return %orig; }
+- (double)refreshRate {
+    return %orig;
+}
 %end
 
 %hook CADisplay
-- (BOOL)allowsVirtualModes { return %orig; }
-- (void)setAllowsVirtualModes:(BOOL)allows { %orig; }
-- (BOOL)supportsDynamicRefresh { return %orig; }
-- (BOOL)hasDynamicDisplayMode { return %orig; }
-- (NSInteger)minimumFPS { return %orig; }
-- (double)latency { return %orig; }
-- (CFTimeInterval)minimumFrameDuration { return %orig; }
-- (void)setMinimumFrameDuration:(CFTimeInterval)duration { %orig; }
-- (double)refreshRate { return %orig; }
-- (double)heartbeatRate { return %orig; }
-- (NSInteger)preferredFPS { return %orig; }
-- (void)setPreferredFPS:(NSInteger)fps { %orig; }
+- (BOOL)allowsVirtualModes {
+    return %orig;
+}
+- (void)setAllowsVirtualModes:(BOOL)allows {
+    %orig;
+}
+- (BOOL)supportsDynamicRefresh {
+    return %orig;
+}
+- (BOOL)hasDynamicDisplayMode {
+    return %orig;
+}
+- (NSInteger)minimumFPS {
+    return %orig;
+}
+- (double)latency {
+    return %orig;
+}
+- (CFTimeInterval)minimumFrameDuration {
+    return %orig;
+}
+- (void)setMinimumFrameDuration:(CFTimeInterval)duration {
+    %orig;
+}
+- (double)refreshRate {
+    return %orig;
+}
+- (double)heartbeatRate {
+    return %orig;
+}
+- (NSInteger)preferredFPS {
+    return %orig;
+}
+- (void)setPreferredFPS:(NSInteger)fps {
+    %orig;
+}
 %end
 
 %end
@@ -6740,7 +6766,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
     %orig(arg1);
 }
 
-- (double)refreshRate { return %orig; }
+- (double)refreshRate {
+    return %orig;
+}
 
 - (void)setRefreshRate:(double)rate {
     @try {
@@ -6758,7 +6786,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 
 %hook CAWindowServerDisplay
 
-- (BOOL)allowsVirtualModes { return %orig; }
+- (BOOL)allowsVirtualModes {
+    return %orig;
+}
 
 - (void)setAllowsVirtualModes:(BOOL)flag {
     @try {
@@ -6770,7 +6800,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
     %orig(flag);
 }
 
-- (double)minimumFrameDuration { return %orig; }
+- (double)minimumFrameDuration {
+    return %orig;
+}
 
 - (void)setMinimumFrameDuration:(double)duration {
     @try {
@@ -6784,7 +6816,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
     %orig(duration);
 }
 
-- (double)maximumRefreshRate { return %orig; }
+- (double)maximumRefreshRate {
+    return %orig;
+}
 
 - (void)setMaximumRefreshRate:(double)rate {
     @try {
@@ -6798,7 +6832,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
     %orig(rate);
 }
 
-- (double)minimumRefreshRate { return %orig; }
+- (double)minimumRefreshRate {
+    return %orig;
+}
 
 - (void)setMinimumRefreshRate:(double)rate {
     @try {
@@ -6813,7 +6849,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
     %orig(rate);
 }
 
-- (double)idealRefreshRate { return %orig; }
+- (double)idealRefreshRate {
+    return %orig;
+}
 
 - (void)setIdealRefreshRate:(double)rate {
     @try {
@@ -6827,9 +6865,15 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
     %orig(rate);
 }
 
-- (double)refreshRate { return %orig; }
-- (unsigned int)controllerId { return %orig; }
-- (BOOL)isExternal { return %orig; }
+- (double)refreshRate {
+    return %orig;
+}
+- (unsigned int)controllerId {
+    return %orig;
+}
+- (BOOL)isExternal {
+    return %orig;
+}
 
 - (unsigned int)rendererFlags {
     @try {
@@ -6849,7 +6893,9 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 
 %hook CAWindowServer
 
-- (NSArray *)displays { return %orig; }
+- (NSArray *)displays {
+    return %orig;
+}
 
 - (id)displayForScreen:(id)screen {
     id disp = %orig(screen);
