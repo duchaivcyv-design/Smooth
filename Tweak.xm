@@ -3565,7 +3565,7 @@ NSInteger Titanium_GetEffectiveFrameCap(void) {
 }
 
 static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
-    if (targetFPS < 60) targetFPS = 60; // SÀN 60HZ
+    if (targetFPS < 15) targetFPS = 15; // [WEB] dải 15-240, không khóa 60
     if (targetFPS > 240) targetFPS = 240;
     return [NSString stringWithFormat:
         @"(function() {"
@@ -3622,27 +3622,39 @@ static NSString *Titanium_BuildWebFPSOverdriveScript(NSInteger targetFPS) {
         @"    return origPlay.apply(this, arguments);"
         @"  };"
         @"  "
-        @"  /* 4. Hard Lock requestAnimationFrame */"
+        @"  /* 4. requestAnimationFrame: gom callback theo nhịp, không cộng dồn độ trễ */"
+        @"  var rafPending = {};"
+        @"  var rafScheduled = false;"
+        @"  var lastRafTime = 0;"
+        @"  function rafFlush() {"
+        @"    rafScheduled = false;"
+        @"    var ts = performance.now();"
+        @"    if (lastRafTime > 0 && ts > lastRafTime) {"
+        @"      var inst = 1000.0 / (ts - lastRafTime);"
+        @"      var prevM = window.__titaniumMeasuredFPS || inst;"
+        @"      window.__titaniumMeasuredFPS = prevM * 0.8 + inst * 0.2;"
+        @"    }"
+        @"    lastRafTime = ts;"
+        @"    var batch = rafPending;"
+        @"    rafPending = {};"
+        @"    for (var k in batch) {"
+        @"      try { batch[k](ts); } catch (e) { console.error(e); }"
+        @"    }"
+        @"  }"
         @"  window.requestAnimationFrame = function(callback) {"
         @"    if (typeof callback !== 'function') return 0;"
         @"    var id = ++rafIdCounter;"
-        @"    var now = performance.now();"
-        @"    var nextTime = Math.max(lastFrameTime + targetInterval, now);"
-        @"    var delay = Math.max(0, nextTime - now);"
-        @"    lastFrameTime = nextTime;"
-        @"    activeTimers[id] = window.setTimeout(function() {"
-        @"      delete activeTimers[id];"
-        @"      callback(lastFrameTime);"
-        @"    }, delay);"
+        @"    rafPending[id] = callback;"
+        @"    if (!rafScheduled) {"
+        @"      rafScheduled = true;"
+        @"      var now = performance.now();"
+        @"      var due = Math.max(now, lastRafTime + targetInterval);"
+        @"      setTimeout(rafFlush, due - now);"
+        @"    }"
         @"    return id;"
         @"  };"
         @"  window.webkitRequestAnimationFrame = window.requestAnimationFrame;"
-        @"  window.cancelAnimationFrame = function(id) {"
-        @"    if (activeTimers[id]) {"
-        @"      window.clearTimeout(activeTimers[id]);"
-        @"      delete activeTimers[id];"
-        @"    }"
-        @"  };"
+        @"  window.cancelAnimationFrame = function(id) { delete rafPending[id]; };"
         @"  window.webkitCancelAnimationFrame = window.cancelAnimationFrame;"
         @"})();", (long)targetFPS];
 }
@@ -3864,6 +3876,13 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (void)setPreferredFPS:(NSInteger)fps {
     %orig;
 }
+
+- (void)overrideDisplayCadence:(id)cadence {
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        Titanium_Tier4_ExecuteHardwarePanelOverdrive(); // [REAL] ghi cadence thật xuống CA/IOMFB
+    }
+    %orig(cadence);
+}
 %end
 
 %end
@@ -4002,7 +4021,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted && configuration) {
         NSInteger targetCap = Titanium_GetEffectiveFrameCap();
-        if (targetCap < 60) targetCap = 60;
+        if (targetCap < 15) targetCap = 15;
         NSString *js = Titanium_BuildWebFPSOverdriveScript(targetCap);
         if (js && js.length > 0) {
             WKUserScript *script = [[WKUserScript alloc] initWithSource:js
@@ -4018,7 +4037,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
     WKWebView *webView = %orig(frame, configuration);
     if (webView && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 60) cap = 60;
+        if (cap < 15) cap = 15;
         objc_setAssociatedObject(webView, kTitaniumWebLastSyncFPSKey, @(cap), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return webView;
@@ -4034,7 +4053,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
         origDone = YES; %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted && self.window) {
             NSInteger currentCap = Titanium_GetEffectiveFrameCap();
-            if (currentCap < 60) currentCap = 60;
+            if (currentCap < 15) currentCap = 15;
             NSString *js = Titanium_BuildWebFPSOverdriveScript(currentCap);
             if (js && js.length > 0) {
                 [self evaluateJavaScript:js completionHandler:nil];
@@ -4050,7 +4069,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
             NSInteger currentCap = Titanium_GetEffectiveFrameCap();
-            if (currentCap < 60) currentCap = 60;
+            if (currentCap < 15) currentCap = 15;
             NSString *js = Titanium_BuildWebFPSOverdriveScript(currentCap);
             if (js && js.length > 0) {
                 [self evaluateJavaScript:js completionHandler:nil];
@@ -5175,13 +5194,6 @@ static int hooked_IOPSGetPercentRemaining(void) {
 
 %hook NSProcessInfo
 
-- (NSProcessInfoThermalState)thermalState {
-    @try {
-        return NSProcessInfoThermalStateNominal;
-    } @catch (__unused NSException *e) {}
-    return %orig;
-}
-
 - (BOOL)isLowPowerModeEnabled {
     @try {
         return NO;
@@ -6158,15 +6170,19 @@ static void Titanium_BypassDCPMethod(void) {
 %hook NSProcessInfo
 
 - (NSProcessInfoThermalState)thermalState {
-    NSProcessInfoThermalState state = %orig;
-    if (IS_ACTIVE || Apex_IsMasterEnabled()) {
-        if (state >= NSProcessInfoThermalStateSerious) {
-            Titanium_HardwareDriverOverride(60);
-        } else {
-            Titanium_HardwareDriverOverride(Titanium_GetUserTargetHz());
+    // [MERGED] Gộp 2 hook trùng: watchdog đọc nhiệt THẬT từ %orig,
+    // còn app luôn nhận Nominal (giữ hành vi của group Unthrottled).
+    NSProcessInfoThermalState real = %orig;
+    @try {
+        if (IS_ACTIVE || Apex_IsMasterEnabled()) {
+            if (real >= NSProcessInfoThermalStateSerious) {
+                Titanium_HardwareDriverOverride(60);
+            } else {
+                Titanium_HardwareDriverOverride(Titanium_GetUserTargetHz());
+            }
         }
-    }
-    return state;
+    } @catch (__unused NSException *e) {}
+    return NSProcessInfoThermalStateNominal;
 }
 
 %end
@@ -6403,9 +6419,7 @@ static void Titanium_BypassDCPMethod(void) {
             if (cfg.HTTPMaximumConnectionsPerHost < 4) {
                 cfg.HTTPMaximumConnectionsPerHost = 4;
             }
-            if (@available(iOS 11.0, *)) {
-                cfg.waitsForConnectivity = YES;
-            }
+            // [FIX] Đã bỏ waitsForConnectivity: request chờ vô hạn khi mạng chưa sẵn sàng -> treo loading
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
                     @try { [cfg setValue:@YES forKey:@"assumesHTTP3Capable"]; } @catch (__unused NSException *e) {}
@@ -6424,9 +6438,7 @@ static void Titanium_BypassDCPMethod(void) {
             if (cfg.HTTPMaximumConnectionsPerHost < 4) {
                 cfg.HTTPMaximumConnectionsPerHost = 4;
             }
-            if (@available(iOS 11.0, *)) {
-                cfg.waitsForConnectivity = YES;
-            }
+            // [FIX] Đã bỏ waitsForConnectivity: request chờ vô hạn khi mạng chưa sẵn sàng -> treo loading
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
                     @try { [cfg setValue:@YES forKey:@"assumesHTTP3Capable"]; } @catch (__unused NSException *e) {}
@@ -7239,12 +7251,6 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 
 %end
 
-%group Group_CryoQuantum_Thermal_Bypass
-%end
-
-%group Group_Aggressive_RAM_Purge
-%end
-
 #include <sys/utsname.h>
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -7254,9 +7260,6 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
     }
     return YES;
 }
-
-%group Group_UltimateDevice_And_OS_Spoofing
-%end
 
 %group Group_Safari_And_Animation_Safety
 
@@ -8079,21 +8082,6 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 
 %end
 
-%group Group_Tier4_PanelRegister_And_ThermalUnlock
-
-%hook CADisplay
-
-- (void)overrideDisplayCadence:(id)cadence {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        Titanium_Tier4_ExecuteHardwarePanelOverdrive(); // [REAL] ghi cadence thật xuống CA/IOMFB
-    }
-    %orig(cadence);
-}
-
-%end
-
-%end
-
 // ====================================================================================================
 // PHẦN C: KHỞI TẠO HỆ THỐNG, WATCHDOG NHIỆT ĐỘ, RESPRING / SREBOOT & %CTOR HOÀN CHỈNH
 // ====================================================================================================
@@ -8408,7 +8396,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_Apple_NeuralTouch_And_EdgeZeroLatency_V285);
         %init(Group_Hardware_Deep_Core_Bypass);
         %init(Group_Safari_And_Animation_Safety);
-        %init(Group_Aggressive_RAM_Purge);
 
         // [REAL FIX — BẬT LẠI] Hook IOMFBClient refresh-rate giờ được init:
         // setDisplayRefreshRate ghi rate người dùng chọn thật xuống driver.
@@ -8420,14 +8407,12 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_CoreAnimation_RenderServer_Governor);
         %init(Group_System_Memory_And_RunLoop_Governor);
         %init(Group_Thermal_CryoPacing_ZeroDrop);
-        if (!g_avoidTweakConflicts) %init(Group_CryoQuantum_Thermal_Bypass);
         %init(Group_Deep_RAM_Compaction_Engine);
         %init(Group_TitaniumV12_SmoothExit_And_DisplayLink);
         %init(Group_Window_Level_Overdrive);
         %init(Group_WebKit_RAM_Optimizer);
         %init(Group_UIKit_ThirdParty_IsolatedV285);
         %init(Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles);
-        %init(Group_Tier4_PanelRegister_And_ThermalUnlock);
         Titanium_InstallDirectIOMobileFramebufferCHooks();
         Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite();
         // [REAL] Thay 2 stub cũ bằng pipeline thật: probe vsync + jetsam + realtime + IOMFB try-modes
