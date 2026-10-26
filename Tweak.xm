@@ -6464,7 +6464,6 @@ static void Titanium_BypassDCPMethod(void) {
 #include <mach/mach_time.h>
 
 extern ApexV285ProPayload g_syncPayloadV285;
-static inline BOOL Apex_IsMasterEnabled(void) { return g_syncPayloadV285.masterEnabled != 0; }
 extern BOOL g_isCurrentAppBlacklisted;
 extern NSInteger Titanium_GetUserTargetHz(void);
 extern NSInteger Titanium_ActualPanelHz(void);
@@ -6567,7 +6566,7 @@ static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz) {
     for (uint32_t i = 0; i < (uint32_t)(sizeof(kSels)/sizeof(kSels[0])); i++) {
         uint32_t sel = (s_goodSel != 0) ? s_goodSel : kSels[i];
         uint64_t in = (uint64_t)hz;
-        size_t outLen = 0;
+        uint32_t outLen = 0;
         kern_return_t kr = IOConnectCallScalarMethod(g_dcpDispConn, sel, &in, 1, NULL, &outLen);
         NSLog(@"[Titanium T5E] IODC sel=%u %ldHz -> kr=%d", sel, (long)hz, kr);
         if (kr == KERN_SUCCESS) { s_goodSel = sel; return kr; }
@@ -6642,7 +6641,7 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     NSInteger target = Tio_ClampTarget15_240(g_tioUserTargetHz);
 
     if (target <= 60) {
-        Titanium_Tier4_WriteRenderServerCadence(target);
+        Titanium_Tier4WriteCadence(target);
         Titanium_Tier4_WriteCADisplayRefresh(target);
         g_tioActiveHz = 60;
         return;
@@ -6664,8 +6663,8 @@ static void Titanium_Tier5C_RunSweepV4(void) {
                 __atomic_fetch_add(&g_tioFailStreak, 1, __ATOMIC_RELAXED);
                 continue;   // cả 3 đường đều bị từ chối — giải này chết chắc
             }
-            Titanium_Tier5B_WriteIORegistryTiming(hz);
-            Titanium_Tier4_WriteRenderServerCadence(hz);
+            Titanium_Tier5WriteIORegistryTiming(hz);
+            Titanium_Tier4WriteCadence(hz);
             Titanium_Tier4_WriteCADisplayRefresh(hz);
 
             g_tioAttemptedHz  = hz;
@@ -6688,7 +6687,7 @@ static void Titanium_Tier5C_RunSweepV4(void) {
               @"DCP firmware là tầng duy nhất từ chối, không có đường userland nào còn lại.");
         g_tioActiveHz = 60;
         g_tioCooldownUntil = mach_absolute_time() + Tio_NS2Mach(300000000ULL);
-        Titanium_Tier4_WriteRenderServerCadence(target);
+        Titanium_Tier4WriteCadence(target);
         g_tioSweepRunning = NO; g_tioBusy = NO;
     });
 }
