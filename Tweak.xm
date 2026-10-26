@@ -6642,7 +6642,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 
 %hook CADisplayController
 
-- (void)displayLinkDidFire:(id)arg1 {
+- (void)displayLinkDidFire:(id)sender {
     @try {
         if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
             !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
@@ -6651,7 +6651,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
             Push_NoteCompositorTick();
         }
     } @catch (__unused NSException *e) {}
-    %orig(arg1);
+    %orig(sender);
 }
 
 - (double)refreshRate { return %orig; }
