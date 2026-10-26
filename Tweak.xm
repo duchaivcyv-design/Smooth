@@ -6762,7 +6762,10 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 
 - (void)setAllowsVirtualModes:(BOOL)flag {
     @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) { %orig(YES); return; }
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            %orig(YES);
+            return;
+        }
     } @catch (__unused NSException *e) {}
     %orig(flag);
 }
@@ -6867,7 +6870,10 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 
 - (void)setCommitPriority:(uint32_t)priority {
     @try {
-        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) { %orig(priority | 0x1); return; }
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            %orig(priority | 0x1);
+            return;
+        }
     } @catch (__unused NSException *e) {}
     %orig(priority);
 }
