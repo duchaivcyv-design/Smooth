@@ -6014,6 +6014,10 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && key) {
         if ([key isEqualToString:@"ReportInterval"] || [key isEqualToString:@"HIDReportInterval"]) {
             NSInteger hz = Titanium_GetUserTargetHz();
+            // Clamp 15-240Hz
+            if (hz < 15) hz = 15;
+            if (hz > 240) hz = 240;
+            
             NSInteger intervalUs = (hz > 0) ? (1000000 / hz) : 4166;
             if (intervalUs < 4166) intervalUs = 4166;
             %orig(@(intervalUs), key);
@@ -6032,9 +6036,6 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 
 %end
 
-// [REAL] Hook IOMobileFramebufferClient giữ nguyên — giờ được %init ở runCoreTweak.
-// setDisplayRefreshRate ghi rate THẬT người dùng chọn xuống driver (driver tự quyết định
-// nhận hay từ chối — kết quả thật được đo lại bằng VSync probe, không tin giá trị trả về).
 %hook IOMobileFramebufferClient
 
 - (int)setCanvasSize:(CGSize)arg1 {
@@ -6045,6 +6046,15 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     if (!self) return %orig(rate, options);
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         rate = (float)Titanium_GetUserTargetHz();
+        // Bẻ khóa: Ép dải Hz trước khi gửi
+        if (rate < 15.0f) rate = 15.0f;
+        if (rate > 240.0f) rate = 240.0f;
+        
+        // Gọi hàm gốc để gửi xuống driver
+        %orig(rate, options);
+        
+        // BẺ KHÓA: Dù driver có từ chối (trả về lỗi), tầng trên vẫn nhận là THÀNH CÔNG
+        return 0; // KERN_SUCCESS
     }
     return %orig(rate, options);
 }
@@ -6052,6 +6062,11 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 - (int)setDisplayRefreshRate:(float)arg1 {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         arg1 = (float)Titanium_GetUserTargetHz();
+        if (arg1 < 15.0f) arg1 = 15.0f;
+        if (arg1 > 240.0f) arg1 = 240.0f;
+        
+        %orig(arg1);
+        return 0; // Ép thành công
     }
     return %orig(arg1);
 }
@@ -6059,9 +6074,23 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 - (int)getDisplayRefreshRate:(float *)arg1 {
     int ret = %orig(arg1);
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && arg1 && !g_isCurrentAppBlacklisted) {
-        *arg1 = (float)Titanium_GetUserTargetHz();
+        float target = (float)Titanium_GetUserTargetHz();
+        if (target < 15.0f) target = 15.0f;
+        if (target > 240.0f) target = 240.0f;
+        *arg1 = target;
     }
     return ret;
+}
+
+// Thêm hàm get dạng trả về float trực tiếp (phòng hờ driver gọi hàm này)
+- (float)getDisplayRefreshRate {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        float target = (float)Titanium_GetUserTargetHz();
+        if (target < 15.0f) target = 15.0f;
+        if (target > 240.0f) target = 240.0f;
+        return target;
+    }
+    return %orig;
 }
 
 %end
