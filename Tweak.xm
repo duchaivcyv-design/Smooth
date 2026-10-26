@@ -5980,7 +5980,7 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     Titanium_Tier6JetsamImmunityReal();
 
     UIScreen *ms = [UIScreen mainScreen];
-    NSInteger nativeMax = 60;
+    NSInteger nativeMax __unused = 60;
     @try { nativeMax = ms.maximumFramesPerSecond; } @catch (__unused NSException *e) {}
     // Native max đọc GỐC ở đây có thể đã bị spoof hook UIScreen của file chính đè.
     // Nếu target <= nativeMax đã spoof: vẫn ghi cadence thật (ProMotion sẽ nhận 120).
@@ -6620,6 +6620,74 @@ typedef enum {
 
 static volatile TioDriverPath g_tioBestPath = TioPathNone;
 
+// ====================================================================================================
+// [BUILDFIX] Trạng thái + helper của sweep engine v4 (trước đây dùng nhưng chưa được khai báo)
+// ====================================================================================================
+static volatile BOOL      g_tioBusy           = NO;
+static volatile BOOL      g_tioSweepRunning   = NO;
+static volatile NSInteger g_tioUserTargetHz   = 0;   // 0 = lấy theo cấu hình người dùng hiện tại
+static volatile NSInteger g_tioLastAcceptedHz = 0;   // Hz gần nhất panel xác nhận
+static volatile int32_t   g_tioFailStreak     = 0;
+static volatile NSInteger g_tioAttemptedHz    = 0;
+static volatile uint64_t  g_tioStableSince    = 0;
+
+static inline uint64_t Tio_NS2Mach(uint64_t ns) {
+    return Titanium_NanosToMachTicks(ns);
+}
+
+static inline BOOL Tio_Elapsed(uint64_t since, uint64_t ms) {
+    return tio_elapsed_ms(since, ms);
+}
+
+static inline BOOL Tio_InCooldown(void) {
+    return g_tioCooldownUntil != 0 && mach_absolute_time() < (uint64_t)g_tioCooldownUntil;
+}
+
+static inline NSInteger Tio_ClampTarget15_240(NSInteger hz) {
+    if (hz < 15) hz = Titanium_GetUserTargetHz();   // chưa đặt -> dùng cấu hình hiện tại
+    if (hz < 15)  hz = 15;
+    if (hz > 240) hz = 240;
+    return hz;
+}
+
+static inline NSInteger Tio_ProfileMaxSweep(void) { return 240; }
+
+static inline NSInteger Tio_SweepStartForTarget(NSInteger target) {
+    if (target < 65)  target = 65;
+    if (target > 240) target = 240;
+    return target;
+}
+
+static inline BOOL Tio_HzBlacklisted(NSInteger hz) {
+    return hz < 65 || hz > 240;
+}
+
+// Đường "framework wrapper": gọi IOMobileFramebufferSetDisplayMode đã dlsym ở Titanium_LoadIOMFBDirect
+static BOOL Titanium_IOMFBTryMode(NSInteger hz) {
+    Titanium_LoadIOMFBDirect();
+    if (!tio_iomfb_setmode || !tio_iomfb_handle) return NO;
+    uint32_t w = (uint32_t)[UIScreen mainScreen].nativeBounds.size.width;
+    uint32_t h = (uint32_t)[UIScreen mainScreen].nativeBounds.size.height;
+    kern_return_t kr = tio_iomfb_setmode(tio_iomfb_handle, w, h, (float)hz);
+    NSLog(@"[Titanium T5C v4] wrapper SetDisplayMode %ux%u@%ldHz -> kr=0x%x", w, h, (long)hz, kr);
+    return kr == KERN_SUCCESS;
+}
+
+// Ghi nhịp xuống CADisplay (preferredFPS + virtual modes)
+static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz) {
+    if (hz < 15) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try {
+            id cad = [%c(CADisplay) mainDisplay];
+            if (!cad) return;
+            if ([cad respondsToSelector:@selector(setAllowsVirtualModes:)])
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(cad, @selector(setAllowsVirtualModes:), YES);
+            if ([cad respondsToSelector:@selector(setPreferredFPS:)])
+                ((void (*)(id, SEL, NSInteger))objc_msgSend)(cad, @selector(setPreferredFPS:), hz);
+        } @catch (__unused NSException *e) {}
+    });
+}
+
 static BOOL Tio_SubmitModeAllPaths(NSInteger hz) {
     // Thứ tự: raw MIG (sâu nhất) -> framework wrapper -> IODisplayConnect
     if (Tio_IomfbRawSetMode(hz) == KERN_SUCCESS)          { g_tioBestPath = TioPathRawMIG;        return YES; }
@@ -6679,6 +6747,7 @@ static void Titanium_Tier5C_RunSweepV4(void) {
             }
             if (confirmed) {
                 NSLog(@"[Titanium T5C v4] LOCKED %ldHz via path=%d", (long)hz, g_tioBestPath);
+                g_tioLastAcceptedHz = hz;
                 g_tioSweepRunning = NO; g_tioBusy = NO;
                 return;
             }
@@ -6724,6 +6793,31 @@ static void Tio_KeepConnectionsAlive(void) {
 // ====================================================================================================
 // GROUP 2: WINDOWSERVER DISPLAY — v4: PASS-THROUGH + PUSH RAW-MIG TRƯỚC, WRAPPER SAU
 // ====================================================================================================
+
+// [BUILDFIX] Trạng thái + helper của cơ chế push nhịp xuống driver (trước đây chưa được khai báo)
+static volatile NSInteger g_pushPendingHz      = 0;
+static volatile uint64_t  g_pushLastFireTick   = 0;
+static volatile BOOL      g_pushScheduled      = NO;
+static volatile uint64_t  g_pushLastCompositorTick = 0;
+
+static inline NSInteger Push_ResolveTargetHz(void) {
+    NSInteger hz = Titanium_GetUserTargetHz();
+    if (hz < 15)  hz = 15;
+    if (hz > 240) hz = 240;
+    return hz;
+}
+
+static inline void Push_NoteCompositorTick(void) {
+    g_pushLastCompositorTick = mach_absolute_time();
+}
+
+static void Push_FlushToDriver(void) {
+    g_pushScheduled = NO;
+    NSInteger hz = g_pushPendingHz;
+    if (hz < 15) return;
+    if (hz > 240) hz = 240;
+    Titanium_Tier4WriteCadence(hz);
+}
 
 static void Titanium_PushRateToDriverV4(NSInteger hz) {
     g_pushPendingHz = hz;
