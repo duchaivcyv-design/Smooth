@@ -6642,7 +6642,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 
 %hook CADisplayController
 
-- (void)displayLinkDidFire:(id)sender {
+- (void)displayLinkDidFire:(id)arg1 {
     @try {
         if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
             !g_isCurrentAppBlacklisted && !g_isVideoPlayingActive) {
@@ -6651,7 +6651,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
             Push_NoteCompositorTick();
         }
     } @catch (__unused NSException *e) {}
-    %orig(sender);
+    %orig(arg1);
 }
 
 - (double)refreshRate { return %orig; }
@@ -6836,7 +6836,8 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
             }
         } @catch (__unused NSException *e) {}
     }
-    %orig(range);
+    // SỬA TẠI ĐÂY: Ép kiểu con trỏ để Theos chấp nhận struct CAFrameRateRange
+    %orig(*(CAFrameRateRange *)&range);
 }
 
 - (void)_processUpdateWithFrameContext:(id)context {
