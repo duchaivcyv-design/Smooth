@@ -6779,7 +6779,7 @@ static void Tio_KeepConnectionsAlive(void) {
                 // Ping nhẹ: IORegistryEntryGetName — xác nhận connection còn sống
                 io_name_t name;
                 if (g_dcpIomfbSvc != IO_OBJECT_NULL &&
-                    IORegistryEntryGetKernel(g_dcpIomfbSvc) == IO_OBJECT_NULL) {
+                    IORegistryEntryGetName(g_dcpIomfbSvc, name) != KERN_SUCCESS) {
                     NSLog(@"[Titanium T6+] IOMFB connection lost — resolve lại");
                     g_dcpIomfbConn = IO_OBJECT_NULL;
                     g_dcpConnReady = NO;
