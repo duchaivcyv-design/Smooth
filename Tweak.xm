@@ -5618,15 +5618,15 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 }
 
 // ====================================================================================================
-// TITANIUM V57 — FULL TẦNG 4->6 + APP SYNC FIX + TOUCH FAIL-OPEN
+// TITANIUM V58 — FULL TẦNG 4->6 — FIX CRASH csops WHEN KEYBOARD SHOWS
 // ====================================================================================================
-// [V57 SO VỚI V56]:
-//  · FIX: Hz/FPS trong app kẹt 60 vì IPC không reload → throttle 500ms reload
-//  · FIX: cảm ứng chết trong app vì firstFrame không bao giờ bật → fail-open 2s
-//  · Overdrive result chia sẻ qua IPC file /tmp/.boost_best_hz
-//  · Force reapply scene mỗi 1s trong app third-party
-//  · Bỏ gate keyboard khỏi cadence hook, chỉ giữ ở touch hook
-//  · DisplayLink preferredFPS force sync mỗi tick (không chỉ lúc add)
+// [V58 SO VỚI V57]:
+//  · CRITICAL FIX: hook csops crash trên ARM64E (PAC) khi bất kỳ app nào gọi
+//    xpc_copy_entitlement_for_token lần đầu — keyboard trigger → 8BADF00D watchdog kill
+//  · BỎ HOÀN TOÀN hook csops — syscall wrapper kernel, không cần cho boost
+//  · BỎ HOÀN TOÀN hook access — cùng lý do
+//  · GIỮ hook sandbox_check (chỉ Filza trigger, không crash)
+//  · Giữ tất cả V57: Hz/FPS sync, touch fail-open, panel-safe, V-Sync off, network fix
 // ====================================================================================================
 
 extern ApexV285ProPayload g_syncPayloadV285;
@@ -5663,7 +5663,6 @@ static volatile uint64_t g_v55WakeTick      = 0;
 static volatile BOOL     g_v56KeyboardVisible  = NO;
 static volatile uint64_t g_v56KeyboardHideTick = 0;
 
-// [V57] Sync state
 static volatile uint64_t  g_v57AppLaunchTick   = 0;
 static volatile uint64_t  g_v57LastIPCReload   = 0;
 static volatile uint64_t  g_v57LastReapply     = 0;
@@ -5673,7 +5672,6 @@ static inline uint64_t v55_ns(uint64_t ns) {
     return Titanium_NanosToMachTicks(ns);
 }
 
-// [V57] Fail-open: nếu app chưa firstFrame sau 2s, tự bật
 static inline BOOL Titanium_V57_TouchReady(void) {
     if (!g_v55ScreenOn) return NO;
     if (g_v55WakeSettling) return NO;
@@ -5682,7 +5680,6 @@ static inline BOOL Titanium_V57_TouchReady(void) {
     if (g_v57AppLaunchTick != 0 &&
         (mach_absolute_time() - g_v57AppLaunchTick) > v55_ns(2000000000ULL)) {
         g_v55FirstFrame = YES;
-        NSLog(@"[Titanium V57] TouchReady fail-open (2s no firstFrame)");
         return YES;
     }
     return NO;
@@ -5700,7 +5697,6 @@ static inline BOOL Titanium_V56_KeyboardBusy(void) {
     return NO;
 }
 
-// [V57] IPC reload throttle 500ms
 static void Titanium_V57_ReloadIPCIfStale(void) {
     uint64_t now = mach_absolute_time();
     if (g_v57LastIPCReload != 0 &&
@@ -5711,7 +5707,6 @@ static void Titanium_V57_ReloadIPCIfStale(void) {
     Titanium_ReloadSharedSyncStateV285();
 }
 
-// [V57] Read shared bestHz (do SpringBoard ghi sau sweep)
 static NSInteger Titanium_V57_ReadSharedBestHz(void) {
     if (g_v57SharedBestHz > 0) return g_v57SharedBestHz;
     @try {
@@ -5736,7 +5731,6 @@ static void Titanium_V57_WriteSharedBestHz(NSInteger hz) {
     [d writeToFile:TITANIUM_V57_BEST_HZ_FILE atomically:YES];
 }
 
-// [V57] Force reapply scene mỗi 1s trong app third-party
 static void Titanium_V57_ForceReapplyIfNeeded(void) {
     if (Titanium_IsSpringBoard()) return;
     if (!Titanium_V57_TouchReady()) return;
@@ -5781,7 +5775,7 @@ static void Titanium_V56_InstallKeyboardState(void) {
 }
 
 // ====================================================================================================
-// [TARGET HELPERS — reload IPC trước khi trả giá trị]
+// [TARGET HELPERS]
 // ====================================================================================================
 
 static NSInteger Titanium_GetUserTargetHz(void) {
@@ -5887,7 +5881,7 @@ static void Titanium_LoadIOMFBDirect(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         void *lib = dlopen("/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", RTLD_LAZY);
-        if (!lib) { NSLog(@"[Titanium V57] IOMFB not loadable"); return; }
+        if (!lib) return;
         tio_iomfb_main    = (tio_iomfb_main_fn)dlsym(lib, "IOMobileFramebufferGetMainDisplay");
         tio_iomfb_setmode = (tio_iomfb_setmode_fn)dlsym(lib, "IOMobileFramebufferSetDisplayMode");
         if (tio_iomfb_main && tio_iomfb_main(&tio_iomfb_handle) != KERN_SUCCESS) {
@@ -6023,9 +6017,7 @@ static void Titanium_Tier4WriteCadence(NSInteger hz) {
                 if ([cad respondsToSelector:@selector(setPreferredFPS:)])
                     ((void (*)(id, SEL, NSInteger))objc_msgSend)(cad, @selector(setPreferredFPS:), hz);
             }
-        } @catch (NSException *e) {
-            NSLog(@"[Titanium V57 T4] exception: %@", e);
-        }
+        } @catch (NSException *e) {}
     });
 }
 
@@ -6068,9 +6060,7 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
                 return;
             }
         }
-    } @catch (NSException *e) {
-        NSLog(@"[Titanium V57 T5B] exception: %@", e);
-    }
+    } @catch (NSException *e) {}
 }
 
 // ====================================================================================================
@@ -6114,11 +6104,10 @@ static void Titanium_Tier6RealtimeFrameConstraint(NSInteger hz) {
 }
 
 // ====================================================================================================
-// [OVERDRIVE PIPELINE — shared bestHz across process]
+// [OVERDRIVE PIPELINE]
 // ====================================================================================================
 
 static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
-    // [V57] Nếu đã biết panel best từ process khác → dùng luôn, không sweep lại
     NSInteger sharedBest = Titanium_V57_ReadSharedBestHz();
     if (sharedBest > 60) {
         g_tioCachedBestHz = sharedBest;
@@ -6149,7 +6138,7 @@ static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
                 Titanium_Tier4WriteCadence(achieved);
                 Titanium_Tier5WriteIORegistryTiming(achieved);
                 g_tioOverdriveDone = YES;
-                Titanium_V57_WriteSharedBestHz(achieved);   // share cho app khác
+                Titanium_V57_WriteSharedBestHz(achieved);
 
                 NSInteger confirmed = achieved;
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
@@ -6700,19 +6689,6 @@ static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz) {
     return KERN_FAILURE;
 }
 
-static NSInteger Tio_DCPReadDeclaredMaxHz(void) {
-    if (g_dcpIomfbSvc == IO_OBJECT_NULL) return 0;
-    @try {
-        CFTypeRef maxRef = IORegistryEntryCreateCFProperty(
-            g_dcpIomfbSvc, CFSTR("MaximumTargetRefreshRate"), kCFAllocatorDefault, 0);
-        if (maxRef) {
-            NSInteger v = [(NSNumber *)CFBridgingRelease(maxRef) integerValue];
-            if (v > 0) return v;
-        }
-    } @catch (__unused NSException *e) {}
-    return 0;
-}
-
 typedef enum {
     TioPathNone = 0,
     TioPathFramework,
@@ -6779,7 +6755,6 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     if (g_tioOverdriveDone) return;
     if (!Titanium_V55_PanelWritable()) return;
 
-    // [V57] Nếu shared best tồn tại → dùng luôn
     NSInteger sharedBest = Titanium_V57_ReadSharedBestHz();
     if (sharedBest > 60) {
         g_tioCachedBestHz = sharedBest;
@@ -6790,7 +6765,6 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     }
 
     Tio_DCPResolveConnections();
-    (void)Tio_DCPReadDeclaredMaxHz();
 
     NSInteger target = Tio_ClampTarget15_240(g_tioUserTargetHz);
     if (target <= 60) {
@@ -6905,7 +6879,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 }
 
 // ====================================================================================================
-// [GROUP: CAWindowServer — cadence sync mỗi tick]
+// [GROUP: CAWindowServer]
 // ====================================================================================================
 
 %group Group_CAWindowServer_Absolute_Dominance
@@ -7080,7 +7054,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz) {
 %end
 
 // ====================================================================================================
-// [GROUP: UIWindowScene — sync mỗi processUpdate]
+// [GROUP: UIWindowScene]
 // ====================================================================================================
 
 %group Group_Window_Level_Overdrive
@@ -7364,14 +7338,10 @@ typedef struct memorystatus_priority_properties {
     uint64_t user_data;
 } memorystatus_priority_properties_t;
 
-typedef int (*memorystatus_control_fn)(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
-typedef int (*csops_fn)(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 typedef int (*sandbox_check_fn)(pid_t pid, const char *operation, int type, ...);
-typedef int (*access_fn)(const char *path, int amode);
 
+// [V58 CRITICAL] BỎ csops_fn + access_fn typedef — không dùng nữa
 static sandbox_check_fn orig_sandbox_check = NULL;
-static csops_fn orig_csops = NULL;
-static access_fn orig_access = NULL;
 
 @interface RBSProcessMonitor : NSObject
 - (void)invalidate;
@@ -7478,31 +7448,10 @@ static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...)
     return orig_sandbox_check ? orig_sandbox_check(pid, operation, type) : 0;
 }
 
-static int hooked_csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize) {
-    int ret = orig_csops ? orig_csops(pid, ops, useraddr, usersize) : 0;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && ops == CS_OPS_STATUS &&
-        useraddr && usersize >= sizeof(uint32_t)) {
-        if (Titanium_IsFilzaOrFileManagerProcess()) {
-            uint32_t *flags = (uint32_t *)useraddr;
-            *flags |= (CS_PLATFORM_BINARY | CS_GET_TASK_ALLOW | CS_INSTALLER);
-        }
-    }
-    return ret;
-}
-
-static int hooked_access(const char *path, int amode) {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsFilzaOrFileManagerProcess()) {
-        if ((amode & W_OK) || (amode & R_OK)) {
-            if (strncmp(path, "/var/", 5) == 0 ||
-                strncmp(path, "/private/var/", 13) == 0 ||
-                strncmp(path, "/tmp/", 5) == 0 ||
-                strncmp(path, "/Library/", 9) == 0) {
-                return 0;
-            }
-        }
-    }
-    return orig_access ? orig_access(path, amode) : 0;
-}
+// [V58 CRITICAL FIX] BỎ hoàn toàn hooked_csops + hooked_access
+// Nguyên nhân crash 8BADF00D: hook csops trên ARM64E gây PAC mismatch trong ElleKit trampoline
+// Bất kỳ app nào gọi xpc_copy_entitlement_for_token lần đầu (keyboard trigger) đều crash
+// csops và access KHÔNG cần thiết cho boost — bỏ hoàn toàn
 
 static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
     static dispatch_once_t onceToken;
@@ -7514,19 +7463,8 @@ static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
             if (symSbCheck && !orig_sandbox_check) {
                 MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
             }
-            void *kernLib = dlopen("/usr/lib/system/libsystem_kernel.dylib", RTLD_LAZY | RTLD_LOCAL);
-            if (kernLib) {
-                void *symCsops = dlsym(kernLib, "csops");
-                if (symCsops && !orig_csops) {
-                    MSHookFunction(symCsops, (void *)hooked_csops, (void **)&orig_csops);
-                }
-                if (Titanium_IsFilzaOrFileManagerProcess()) {
-                    void *symAccess = dlsym(kernLib, "access");
-                    if (symAccess && !orig_access) {
-                        MSHookFunction(symAccess, (void *)hooked_access, (void **)&orig_access);
-                    }
-                }
-            }
+            // [V58] KHÔNG hook csops — crash keyboard trên ARM64E
+            // [V58] KHÔNG hook access — cùng lý do
         } @catch (__unused NSException *e) {}
     });
 }
@@ -8073,7 +8011,6 @@ static void Titanium_StartIPCHearthbeatV12(void) {
     } @catch (__unused NSException *e) {}
 }
 
-// [V57] Timer reapply trong app third-party mỗi 1.5s
 static void Titanium_V57_StartAppReapplyTimer(void) {
     if (Titanium_IsSpringBoard()) return;
     static dispatch_once_t once;
@@ -8187,13 +8124,13 @@ static void Titanium_StartThermalAndChargingWatchdog(void) {
 __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
     @autoreleasepool {
         @try {
-            g_v57AppLaunchTick = mach_absolute_time();   // [V57] launch tick cho fail-open
+            g_v57AppLaunchTick = mach_absolute_time();
             Titanium_V55_InstallScreenState();
             Titanium_V56_InstallKeyboardState();
             Titanium_LoadIOMFBDirect();
             Titanium_StartIPCHearthbeatV12();
             Titanium_RegisterAppResumeRefreshV12();
-            Titanium_V57_StartAppReapplyTimer();   // [V57] timer reapply cho app third-party
+            Titanium_V57_StartAppReapplyTimer();
             Titanium_StartThermalAndChargingWatchdog();
         } @catch (__unused NSException *e) {}
     }
