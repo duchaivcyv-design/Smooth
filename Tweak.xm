@@ -8428,7 +8428,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 AppleInternal_EnforceZeroLatencyKernelTier();
                 Titanium_ApplySiliconDeepOptimizations();
                 AppleInternal_LockHardwareCADisplay();
-                if (Titanium_V55_TouchReady()) Titanium_ReapplyFrameRateToAllScenes();
+                if (Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) Titanium_ReapplyFrameRateToAllScenes();
                 Titanium_ExecuteRealPanelOverdrive();
             });
         } else {
@@ -8547,6 +8547,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
 
         Titanium_V55_InstallScreenState();
+        Titanium_V56_InstallKeyboardState();
         Titanium_RegisterPrefsObservers(isSpringBoard);
         %init;
         NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 1.0;
