@@ -5657,6 +5657,7 @@ static void Titanium_ReloadSharedSyncStateV285(void);
 static volatile BOOL     g_v55ScreenOn      = YES;
 static volatile BOOL     g_v55WakeSettling  = NO;
 static volatile BOOL     g_v55FirstFrame    = NO;
+static volatile BOOL     g_v55ThermalSafe   = YES; // Fix undeclared identifier
 
 static volatile BOOL     g_v56KeyboardVisible  = NO;
 static volatile uint64_t g_v56KeyboardHideTick = 0;
