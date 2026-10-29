@@ -7853,7 +7853,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 505.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
-    eyebrow.text = @"SMOOTHIOS PRO / DRIVER CHIP V10; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    eyebrow.text = @"SMOOTHIOS PRO / DRIVER CHIP V10"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; title.text = @"Hz · FPS · Đồng bộ"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 300)]; panel.backgroundColor = [UIColor colorWithRed:.035 green:.045 blue:.105 alpha:.88]; panel.layer.cornerRadius = 27; panel.layer.cornerCurve = kCACornerCurveContinuous; panel.layer.borderWidth = 1.25; panel.layer.borderColor = [UIColor colorWithRed:.20 green:.78 blue:1 alpha:.88].CGColor; panel.layer.shadowColor = [UIColor colorWithRed:.38 green:.16 blue:1 alpha:1].CGColor; panel.layer.shadowOpacity = .22; panel.layer.shadowRadius = 18; panel.layer.shadowOffset = CGSizeMake(0, 8); [root addSubview:panel];
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
