@@ -2172,8 +2172,8 @@ static void Titanium_TuneWindowServerDisplayDirectly(void) {
     self = [super init];
     if (self) {
         self.enabled = YES;
-        self.targetHz = 60;
-        self.targetFPS = 60;
+        self.targetHz = 240; // mặc định của tweak; được ghi đè bằng mức người dùng chọn khi tải cấu hình
+        self.targetFPS = 240;
         self.enableHzControl = YES;
         self.enableFPSControl = YES;
         self.forceOverclock144Hz = YES;
