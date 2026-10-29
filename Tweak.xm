@@ -287,7 +287,7 @@ static volatile BOOL g_isRateLockedV285 = NO;
 #define IPC_FLAG_RATE_LOCKED        (1U << 18)
 
 // ====================================================================================================
-// CẤU TRÚC PAYLOAD APEX V285 PRO
+// CẤU TRÚC PAYLOAD APEX V285
 // ====================================================================================================
 
 #ifndef _APEX_V285_PRO_PAYLOAD_DEFINED
