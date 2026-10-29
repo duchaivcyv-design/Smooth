@@ -3163,7 +3163,9 @@ static inline NSInteger Titanium_ClampDisplayFrameRate(NSInteger requestedFPS) {
     if (requestedFPS > chipMax) requestedFPS = chipMax;
     NSInteger nativeMax = __atomic_load_n(&g_titaniumNativeDisplayMaxFPS, __ATOMIC_ACQUIRE);
     if (nativeMax < 15 || nativeMax > 240) nativeMax = 60;
+    #if !TITANIUM_SPOOF_DISPLAY_ON_60HZ_PANEL
     if (requestedFPS > nativeMax) requestedFPS = nativeMax;
+    #endif
     return requestedFPS;
 }
 
@@ -3544,7 +3546,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
             snapshot = [[links allObjects] copy];
         }
         NSInteger cap = Titanium_ClampDisplayFrameRate(Titanium_GetEffectiveFrameCap());
-        if (cap < 60) cap = 60; 
+        if (cap < 15) cap = 15; 
         NSInteger nativeMax = __atomic_load_n(&g_titaniumNativeDisplayMaxFPS, __ATOMIC_ACQUIRE);
         if (nativeMax < 15 || nativeMax > 240) nativeMax = 60;
         for (CADisplayLink *displayLink in snapshot) {
@@ -3566,7 +3568,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         Titanium_TrackDisplayLink(self);
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 60) cap = 60;
+        if (cap < 15) cap = 15;
         self.preferredFramesPerSecond = cap;
         if (@available(iOS 15.0, *)) {
             if ([self respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
@@ -3584,7 +3586,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (NSInteger)preferredFramesPerSecond {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        return (cap < 60) ? 60 : cap;
+        return (cap < 15) ? 15 : cap;
     }
     return %orig;
 }
@@ -3593,7 +3595,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         Titanium_TrackDisplayLink(self);
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 60) cap = 60;
+        if (cap < 15) cap = 15;
         %orig(cap);
         return;
     }
@@ -3618,7 +3620,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (CFTimeInterval)duration {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 60) cap = 60;
+        if (cap < 15) cap = 15;
         return (1.0 / (double)cap);
     }
     return %orig;
@@ -3627,7 +3629,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (CFTimeInterval)targetTimestamp {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger cap = Titanium_GetEffectiveFrameCap();
-        if (cap < 60) cap = 60;
+        if (cap < 15) cap = 15;
         return [self timestamp] + (1.0 / (double)cap);
     }
     return %orig;
@@ -3637,7 +3639,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             NSInteger target = Titanium_GetEffectiveFrameCap();
-            if (target < 60) target = 60;
+            if (target < 15) target = 15;
             return Titanium_SmoothFRR((float)target);
         }
     }
@@ -3649,7 +3651,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             Titanium_TrackDisplayLink(self);
             NSInteger target = Titanium_GetEffectiveFrameCap();
-            if (target < 60) target = 60;
+            if (target < 15) target = 15;
             range = Titanium_SmoothFRR((float)target);
         }
     }
@@ -3710,7 +3712,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (NSInteger)maximumFramesPerSecond {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && __atomic_load_n(&g_titaniumScreenRateSpoofReady, __ATOMIC_ACQUIRE) != 0 && !g_isCurrentAppBlacklisted) {
         NSInteger target = Titanium_GetTargetConfiguredHz();
-        return (target < 60) ? 60 : target;
+        return (target < 15) ? 15 : target;
     }
     return %orig;
 }
@@ -3718,7 +3720,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (NSInteger)_maximumFramesPerSecond {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && __atomic_load_n(&g_titaniumScreenRateSpoofReady, __ATOMIC_ACQUIRE) != 0 && !g_isCurrentAppBlacklisted) {
         NSInteger target = Titanium_GetTargetConfiguredHz();
-        return (target < 60) ? 60 : target;
+        return (target < 15) ? 15 : target;
     }
     return %orig;
 }
@@ -3726,7 +3728,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
 - (CGFloat)_refreshRate {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && __atomic_load_n(&g_titaniumScreenRateSpoofReady, __ATOMIC_ACQUIRE) != 0 && !g_isCurrentAppBlacklisted) {
         NSInteger target = Titanium_GetTargetConfiguredHz();
-        return (CGFloat)((target < 60) ? 60 : target);
+        return (CGFloat)((target < 15) ? 15 : target);
     }
     return %orig;
 }
@@ -3747,7 +3749,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
             Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
             
             NSInteger target = Titanium_ClampDisplayFrameRate(Titanium_GetEffectiveFrameCap());
-            if (target < 60) target = 60;
+            if (target < 15) target = 15;
             
             NSInteger nativeMax = __atomic_load_n(&g_titaniumNativeDisplayMaxFPS, __ATOMIC_ACQUIRE);
             if (range.maximum <= 0.0f || range.maximum >= (float)nativeMax || range.maximum > (float)target) {
@@ -3797,7 +3799,7 @@ static void Titanium_RegisterUIScreenRateSpoofAfterLaunch(void) {
 static inline BOOL Titanium_ShouldExposeHighFrameRateEntitlement(void) {
     return !Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted &&
            (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
-           Titanium_GetTargetConfiguredHz() >= 60;
+           Titanium_GetTargetConfiguredHz() >= 15;
 }
 
 static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrameRateInfoDictionaryKey;
@@ -3921,7 +3923,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
         if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
             Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
             NSInteger target = Titanium_GetEffectiveFrameCap();
-            if (target < 60) target = 60;
+            if (target < 15) target = 15;
             range = Titanium_SmoothFRR((float)target);
         }
     }
@@ -3933,7 +3935,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
         if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
             Titanium_ShouldApplyAppDisplayOverrides() && !g_isCurrentAppBlacklisted) {
             NSInteger target = Titanium_GetEffectiveFrameCap();
-            if (target < 60) target = 60;
+            if (target < 15) target = 15;
             return Titanium_SmoothFRR((float)target);
         }
     }
@@ -3951,7 +3953,7 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
             if (@available(iOS 15.0, *)) {
                 if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     NSInteger cap = Titanium_ClampDisplayFrameRate(Titanium_GetEffectiveFrameCap());
-                    if (cap < 60) cap = 60;
+                    if (cap < 15) cap = 15;
                     anim.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
                 }
             }
@@ -5724,7 +5726,7 @@ static NSInteger Titanium_V57_ReadSharedBestHz(void) {
 }
 
 static void Titanium_V57_WriteSharedBestHz(NSInteger hz) {
-    if (hz < 60 || hz > 240) return;
+    if (hz < 15 || hz > 240) return;
     g_v57SharedBestHz = hz;
     int32_t v = (int32_t)hz;
     NSData *d = [NSData dataWithBytes:&v length:sizeof(v)];
@@ -8116,7 +8118,7 @@ static void Titanium_RestoreOnFirstFrame(void) {
         }
     };
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:target selector:@selector(tick:)];
-    displayLink.preferredFramesPerSecond = 60;
+    displayLink.preferredFramesPerSecond = Titanium_GetEffectiveFrameCap();
     [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
