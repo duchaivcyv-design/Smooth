@@ -1,4 +1,4 @@
-name: build deb1
+name: build
 
 on:
   push:
@@ -18,19 +18,32 @@ on:
           - rootful
           - roothide
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: set matrix
+        id: set-matrix
+        run: |
+          SCHEME="${{ github.event.inputs.scheme }}"
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "all" ]; then
+            echo 'matrix=["rootless","rootful","roothide"]' >> $GITHUB_OUTPUT
+          else
+            echo "matrix=[\"$SCHEME\"]" >> $GITHUB_OUTPUT
+          fi
+
   build:
-    name: build (${{ github.event.inputs.scheme || 'all' }})
-    runs-on: macos-14
+    needs: setup
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        scheme: ${{ fromJson(needs.setup.outputs.matrix) }}
+      fail-fast: false
 
     env:
       DEVICE_TARGET: "iphone:clang:16.5:14.0"
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      HOMEBREW_NO_INSTALL_CLEANUP: 1
 
     steps:
       - name: checkout
@@ -38,7 +51,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: setup theos (roothide/theos)
+      - name: setup theos
         uses: actions/checkout@v4
         with:
           repository: roothide/theos
@@ -55,7 +68,7 @@ jobs:
       - name: download sdks
         if: steps.cache-sdks.outputs.cache-hit != 'true'
         run: |
-          curl -sLO https://github.com/theos/sdks/archive/master.zip
+          curl -LO https://github.com/theos/sdks/archive/master.zip
           unzip -q master.zip
           mkdir -p theos/sdks
           mv sdks-master/*.sdk theos/sdks/
@@ -64,90 +77,31 @@ jobs:
       - name: set THEOS env var
         run: echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
 
-      - name: install deps (Fast Mode)
+      - name: install deps
         run: |
           brew install ldid make
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: build rootless
-        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
+      - name: build (${{ matrix.scheme }})
         run: |
-          mkdir -p ./all-packages/rootless
+          SCHEME_FLAG=""
+          if [ "${{ matrix.scheme }}" = "rootless" ]; then
+            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=rootless"
+          elif [ "${{ matrix.scheme }}" = "roothide" ]; then
+            SCHEME_FLAG="THEOS_PACKAGE_SCHEME=roothide"
+          fi
           make clean
-          set -o pipefail
-          make package -j$(sysctl -n hw.ncpu) \
+          make package \
             ARCHS="arm64 arm64e" \
             TARGET="$DEVICE_TARGET" \
             FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=rootless 2>&1 | tee build_rootless.log || {
-              echo "======================================================="
-              echo " [LỖI BIÊN DỊCH ROOTLESS] - CHI TIẾT LỖI VÀ DÒNG CODE:"
-              echo "======================================================="
-              cat build_rootless.log
-              exit 1
-            }
-          mv packages/*.deb ./all-packages/rootless/
-          rm -rf packages .theos build_rootless.log
+            $SCHEME_FLAG
 
-      - name: build rootful
-        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootful' }}
-        run: |
-          mkdir -p ./all-packages/rootful
-          make clean
-          set -o pipefail
-          make package -j$(sysctl -n hw.ncpu) \
-            ARCHS="arm64 arm64e" \
-            TARGET="$DEVICE_TARGET" \
-            FINALPACKAGE=1 2>&1 | tee build_rootful.log || {
-              echo "======================================================="
-              echo " [LỖI BIÊN DỊCH ROOTFUL] - CHI TIẾT LỖI VÀ DÒNG CODE:"
-              echo "======================================================="
-              cat build_rootful.log
-              exit 1
-            }
-          mv packages/*.deb ./all-packages/rootful/
-          rm -rf packages .theos build_rootful.log
-
-      - name: build roothide
-        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'roothide' }}
-        run: |
-          mkdir -p ./all-packages/roothide
-          make clean
-          set -o pipefail
-          make package -j$(sysctl -n hw.ncpu) \
-            ARCHS="arm64 arm64e" \
-            TARGET="$DEVICE_TARGET" \
-            FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=roothide 2>&1 | tee build_roothide.log || {
-              echo "======================================================="
-              echo " [LỖI BIÊN DỊCH ROOTHIDE] - CHI TIẾT LỖI VÀ DÒNG CODE:"
-              echo "======================================================="
-              cat build_roothide.log
-              exit 1
-            }
-          mv packages/*.deb ./all-packages/roothide/
-          rm -rf packages .theos build_roothide.log
-
-      - name: upload rootless-package
-        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootless' }}
+      - name: upload package (${{ matrix.scheme }})
         uses: actions/upload-artifact@v4
         with:
-          name: rootless-package
-          path: ./all-packages/rootless/*.deb
-
-      - name: upload rootful-package
-        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'rootful' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: rootful-package
-          path: ./all-packages/rootful/*.deb
-
-      - name: upload roothide-package
-        if: ${{ github.event.inputs.scheme == '' || github.event.inputs.scheme == 'all' || github.event.inputs.scheme == 'roothide' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: roothide-package
-          path: ./all-packages/roothide/*.deb
+          name: ${{ matrix.scheme }}-package
+          path: packages/*.deb
 
   release:
     needs: build
