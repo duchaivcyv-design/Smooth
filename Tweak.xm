@@ -382,7 +382,6 @@ static NSInteger Titanium_GetUserTargetHz(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
 static void Titanium_V57_ForceReapplyIfNeeded(void);
-static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz);
 
 // ====================================================================================================
 // KHAI BÁO @INTERFACE
@@ -1380,7 +1379,6 @@ static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
-static void Tio_DCPResolveConnections(void);
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
 
@@ -6792,6 +6790,9 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 // ====================================================================================================
 // [DEEP DRIVER BREAK] - V109 FIX KILL APP (NO SWEEP, SAFE STRUCT)
 // ====================================================================================================
+static void Tio_DCPResolveConnections(void);
+static io_connect_t g_dcpIomfbConn;
+static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz);
 
 static io_connect_t   g_dcpIomfbConn   = IO_OBJECT_NULL;
 static io_service_t   g_dcpIomfbSvc    = IO_OBJECT_NULL;
