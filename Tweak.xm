@@ -1379,6 +1379,7 @@ static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
+static volatile BOOL g_isRebooting = NO;
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
 
@@ -6795,7 +6796,6 @@ static io_connect_t   g_dcpIomfbConn   = IO_OBJECT_NULL;
 static io_service_t   g_dcpIomfbSvc    = IO_OBJECT_NULL;
 static io_connect_t   g_dcpDispConn    = IO_OBJECT_NULL;
 static io_service_t   g_dcpDispSvc     = IO_OBJECT_NULL;
-static volatile BOOL  g_dcpConnReady   = NO;
 
 // [V109] Sử dụng đúng struct Timing (có pixelClock)
 typedef struct __attribute__((packed)) {
