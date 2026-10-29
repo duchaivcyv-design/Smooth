@@ -7795,7 +7795,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
 - (UIView *)ti_rateWarningViewWithWidth:(CGFloat)cw rate:(NSInteger)rate {
     if (!TI_RateWarningShouldShow(self.settingsDict, rate)) return nil;
     UIColor *tint = TI_RateWarningColor(rate);
-    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cw, 96)];
+    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cw, 128)];
     box.tag = 9810;
     box.backgroundColor = [tint colorWithAlphaComponent:0.10];
     box.layer.cornerRadius = 14;
@@ -7809,11 +7809,11 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
 
     UILabel *head = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, cw - 56, 18)];
     head.text = [NSString stringWithFormat:TI_T(@"Mục tiêu %ld Hz/FPS: lưu ý", @"Target %ld Hz/FPS: note"), (long)rate];
-    head.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBlack];
+    head.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBlack];
     head.textColor = tint;
     [box addSubview:head];
 
-    UILabel *body = [[UILabel alloc] initWithFrame:CGRectMake(12, 28, cw - 56, 62)];
+    UILabel *body = [[UILabel alloc] initWithFrame:CGRectMake(12, 40, cw - 24, 84)];
     body.numberOfLines = 0;
     body.font = [UIFont systemFontOfSize:10.5];
     body.textColor = [UIColor colorWithWhite:0.85 alpha:1];
@@ -7905,7 +7905,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     {
         NSInteger warnRate = MAX(hz, fps);
         UIView *warn = [self ti_rateWarningViewWithWidth:cw rate:warnRate];
-        if (warn) { warn.frame = CGRectMake(side, 436, cw, 96); [root addSubview:warn]; }
+        if (warn) { warn.frame = CGRectMake(side, 436, cw, 128); [root addSubview:warn]; }
     }
     UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,704,cw,18)];
     infoTitle.text=@"THÔNG TIN THIẾT BỊ · CHẠM ĐỂ XEM CHI TIẾT";
@@ -8364,7 +8364,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                         return;
                     }
                     NSInteger rate = [sS.settingsDict[@"TargetRefreshRate"] ?: @60 integerValue];
-                    rate = MAX(60, MIN(240, rate));
+                    rate = MAX(15, MIN(240, rate));
                     [sS applyRateValue:rate isDynamic:NO isFPS:NO];
                     [sS applyRateValue:rate isDynamic:NO isFPS:YES];
                     sS->_currentHzFpsSubTab = 0;
@@ -9307,12 +9307,12 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     // Use Apple's published thermal state and Low Power Mode, not guessed Celsius values.
     NSProcessInfo *info = NSProcessInfo.processInfo;
     NSInteger resolved = 240;
-    if (info.isLowPowerModeEnabled || info.thermalState >= NSProcessInfoThermalStateCritical) resolved = 60;
-    else if (info.thermalState >= NSProcessInfoThermalStateSerious) resolved = 60;
+    if (info.isLowPowerModeEnabled || info.thermalState >= NSProcessInfoThermalStateCritical) resolved = 15;
+    else if (info.thermalState >= NSProcessInfoThermalStateSerious) resolved = 15;
     else if (info.thermalState == NSProcessInfoThermalStateFair) resolved = 90;
     else if (info.thermalState == NSProcessInfoThermalStateNominal) resolved = 120;
     // Do not claim to read an exact die temperature; the OS thermal state is the available signal here.
-    resolved = MAX(60, MIN(240, resolved));
+    resolved = MAX(15, MIN(240, resolved));
     if (hz == resolved && fps == resolved) return;
     self.settingsDict[@"TargetRefreshRate"] = @(resolved);
     self.settingsDict[@"TargetFPSRate"] = @(resolved);
@@ -9430,8 +9430,9 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                      [self.settingsDict[@"powerSaveMode"] ?: @NO boolValue] ||
                      [self.settingsDict[@"batterySaver60Hz"] ?: @NO boolValue];
 
-    NSInteger resolvedHz = (!masterEnabled || !hzControlEnabled || powerSave) ? 60 : requestedHz;
-    NSInteger resolvedFPS = (!masterEnabled || !fpsControlEnabled || powerSave) ? 60 : requestedFPS;
+    // Đã bỏ ghim 60: luôn gửi đúng mức người dùng đã chọn (15–240). Trạng thái tắt master được xử lý ở masterEnabled.
+    NSInteger resolvedHz = requestedHz;
+    NSInteger resolvedFPS = requestedFPS;
 
     p.targetHz = (int32_t)resolvedHz;
     p.targetFPS = (int32_t)resolvedFPS;
