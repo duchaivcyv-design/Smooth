@@ -1,12 +1,12 @@
 Package: com.taojb.boostiphone6s
 Name: SmoothIOS Pro
-Version: 1.4.0
+Version: 1.4.0-1-debug
 Architecture: iphoneos-arm64
-Description: System fluidity redefined, eliminating micro-stutters. ProMotion-grade frame pacing and adaptive refresh rate engine engineered for precise hardware synchronization, zero-latency touch response, and low thermal footprint. / Tái định nghĩa độ mượt hệ thống, triệt tiêu hiện tượng khựng hình. Động cơ điều phối khung hình chuẩn ProMotion và tần số quét thích ứng, tối ưu đồng bộ phần cứng, phản hồi chạm tức thời và duy trì nhiệt độ mát mẻ.Tương thích: iOS 14.0 – 26.0.1 (iPhone 6s – iPhone 15 Pro Max)
-Maintainer: TaoJB, NoJB,NoNo
+Description: Redefining system fluidity and eliminating micro-stutters. A ProMotion-grade frame pacing and adaptive refresh rate engine engineered for precise hardware synchronization, instantaneous touch response, and minimal thermal footprint.( ios 15-18.0
+Maintainer: TaoJB, NoJB,NoNo9
 Author: TaoJB, NoJB, NoNo
 Section: Tweaks
-Depends: mobilesubstrate, firmware (>= 14.0), firmware (<= 26.0.1), preferenceloader
+Depends: mobilesubstrate, firmware (>= 14.0), firmware (<= 18.0), preferenceloader
 Priority: optional
 Tag: role::hacker, purpose::extension, cydia::requires=respring
 Filename: pool/main/b/boostiphone6s/com.taojb.boostiphone6s_5.2.0_iphoneos-arm64.deb
