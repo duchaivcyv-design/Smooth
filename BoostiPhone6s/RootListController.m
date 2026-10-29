@@ -60,6 +60,142 @@ extern char **environ;
 #define TI_FREE_SERVER_PING_URL_KEY @"ti_free_server_ping_url_v1"
 #define TI_GLASS_TRANSPARENCY_KEY @"ti_glass_transparency_enabled_v20"
 #define TI_THEME_MODE_KEY          @"ti_theme_mode_v25" // system | light | dark
+
+// ====================================================================================================
+// NGÔN NGỮ: "auto" theo ngôn ngữ máy; "vi" / "en" chọn tay. Tiếng Anh => toàn bộ chữ là tiếng Anh.
+// ====================================================================================================
+static NSString *g_tiLangCache = nil;
+static NSString *TI_ResolvedLanguage(NSString *selected) {
+    if (selected.length > 0 && ![selected isEqualToString:@"auto"]) return selected;
+    if (g_tiLangCache) return g_tiLangCache;
+    NSString *pref = [[NSLocale preferredLanguages] firstObject] ?: @"en";
+    NSString *base = [[[pref componentsSeparatedByString:@"-"] firstObject] lowercaseString];
+    g_tiLangCache = [base isEqualToString:@"vi"] ? @"vi" : @"en";
+    return g_tiLangCache;
+}
+static inline BOOL TI_IsVietnameseNow(void) {
+    return [TI_ResolvedLanguage(nil) isEqualToString:@"vi"];
+}
+static inline NSString *TI_TrV(NSString *vi, NSString *en) {
+    return TI_IsVietnameseNow() ? (vi ?: en) : (en ?: vi);
+}
+#define TI_T(vi, en) TI_TrV((vi), (en))
+
+// ====================================================================================================
+// POPUP TỰ VẼ: thay cảnh báo mặc định của iOS bằng thẻ kính cùng màu với app.
+// Hook 1 điểm (presentViewController) nên mọi chỗ gọi UIAlertController đều dùng giao diện mới.
+// ====================================================================================================
+static UIWindow *TIKeyWindow(void);
+@interface TIThemedPopup : UIView
++ (void)showTitle:(NSString *)title message:(NSString *)message actions:(NSArray<UIAlertAction *> *)actions;
+@end
+
+@implementation TIThemedPopup
++ (void)showTitle:(NSString *)title message:(NSString *)message actions:(NSArray<UIAlertAction *> *)actions {
+    UIWindow *win = TIKeyWindow();
+    if (!win) return;
+    UIView *dim = [[UIView alloc] initWithFrame:win.bounds];
+    dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.45];
+    dim.alpha = 0;
+    dim.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+    CGFloat w = MIN(win.bounds.size.width - 56.0, 320.0);
+    UIView *card = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 100)];
+    card.backgroundColor = [UIColor colorWithRed:0.07 green:0.09 blue:0.14 alpha:0.97];
+    card.layer.cornerRadius = 22;
+    if (@available(iOS 13.0, *)) card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    card.layer.borderColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:0.55].CGColor;
+    card.layer.masksToBounds = YES;
+
+    CGFloat y = 22;
+    UILabel *t = [[UILabel alloc] initWithFrame:CGRectMake(20, y, w - 40, 0)];
+    t.text = title ?: @"";
+    t.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
+    t.textColor = [UIColor colorWithRed:0.55 green:0.90 blue:1.0 alpha:1];
+    t.numberOfLines = 0;
+    [t sizeToFit];
+    t.frame = CGRectMake(20, y, w - 40, CGRectGetHeight(t.frame));
+    [card addSubview:t];
+    y = CGRectGetMaxY(t.frame) + 10;
+
+    if (message.length) {
+        UILabel *m = [[UILabel alloc] initWithFrame:CGRectMake(20, y, w - 40, 0)];
+        m.text = message;
+        m.font = [UIFont systemFontOfSize:14];
+        m.textColor = [UIColor colorWithWhite:0.80 alpha:1];
+        m.numberOfLines = 0;
+        [m sizeToFit];
+        m.frame = CGRectMake(20, y, w - 40, CGRectGetHeight(m.frame));
+        [card addSubview:m];
+        y = CGRectGetMaxY(m.frame) + 16;
+    } else {
+        y += 6;
+    }
+
+    for (UIAlertAction *act in actions) {
+        BOOL destructive = (act.style == UIAlertActionStyleDestructive);
+        BOOL cancel = (act.style == UIAlertActionStyleCancel);
+        UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+        b.frame = CGRectMake(20, y, w - 40, 44);
+        b.layer.cornerRadius = 14;
+        if (@available(iOS 13.0, *)) b.layer.cornerCurve = kCACornerCurveContinuous;
+        b.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+        b.layer.borderColor = (destructive ? [UIColor colorWithRed:1 green:0.35 blue:0.35 alpha:0.7]
+                                           : [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:0.6]).CGColor;
+        b.backgroundColor = cancel ? [UIColor colorWithWhite:1 alpha:0.06]
+                                   : [UIColor colorWithRed:0.10 green:0.20 blue:0.30 alpha:0.9];
+        [b setTitle:act.title forState:UIControlStateNormal];
+        [b setTitleColor:(destructive ? [UIColor colorWithRed:1 green:0.45 blue:0.45 alpha:1] : UIColor.whiteColor) forState:UIControlStateNormal];
+        b.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+        // Lấy handler gốc của UIAlertAction để giữ đúng hành vi từng nút.
+        void (^handler)(UIAlertAction *) = nil;
+        @try { handler = [act valueForKey:@"handler"]; } @catch (NSException *e) { handler = nil; }
+        objc_setAssociatedObject(b, "ti_action", act, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(b, "ti_handler", handler, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        [b addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+            void (^h)(UIAlertAction *) = objc_getAssociatedObject(b, "ti_handler");
+            UIAlertAction *ac = objc_getAssociatedObject(b, "ti_action");
+            [UIView animateWithDuration:0.18 animations:^{ dim.alpha = 0; card.transform = CGAffineTransformMakeScale(0.94, 0.94); }
+                             completion:^(BOOL f){ [dim removeFromSuperview]; if (h) h(ac); }];
+        }] forControlEvents:UIControlEventTouchUpInside];
+        [card addSubview:b];
+        y = CGRectGetMaxY(b.frame) + 8;
+    }
+    CGRect cf = card.frame;
+    cf.size.height = y + 10;
+    card.frame = cf;
+    card.center = CGPointMake(CGRectGetMidX(win.bounds), CGRectGetMidY(win.bounds));
+    [dim addSubview:card];
+    [win addSubview:dim];
+    card.transform = CGAffineTransformMakeScale(0.92, 0.92);
+    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.78 initialSpringVelocity:0.6 options:0 animations:^{
+        dim.alpha = 1; card.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+@end
+
+@interface UIViewController (TIThemedAlerts)
+@end
+@implementation UIViewController (TIThemedAlerts)
++ (void)load {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Method a = class_getInstanceMethod(self, @selector(presentViewController:animated:completion:));
+        Method b = class_getInstanceMethod(self, @selector(ti_presentViewController:animated:completion:));
+        method_exchangeImplementations(a, b);
+    });
+}
+- (void)ti_presentViewController:(UIViewController *)vc animated:(BOOL)flag completion:(void (^)(void))completion {
+    if ([vc isKindOfClass:UIAlertController.class]) {
+        UIAlertController *ac = (UIAlertController *)vc;
+        [TIThemedPopup showTitle:ac.title message:ac.message actions:ac.actions];
+        if (completion) completion();
+        return;
+    }
+    [self ti_presentViewController:vc animated:flag completion:completion];
+}
+@end
 #define TI_HZFPS_WARNING_SUPPRESS_UNTIL_KEY @"ti_hzfps_warning_suppress_until_v1"
 #define TI_CREDITS_SHOWN_KEY @"ti_credits_shown_v1"
 #define TI_CREDITS_HIDDEN_KEY @"ti_credits_hidden_permanently_v1"
@@ -2651,9 +2787,28 @@ static dispatch_queue_t Titanium_IPCWriterQueue(void) {
     dispatch_once(&onceToken, ^{ queue = dispatch_queue_create("com.taojb.boostiphone6s.ipc-writer", DISPATCH_QUEUE_SERIAL); });
     return queue;
 }
+// Phạm vi hỗ trợ: iOS 15.0 – 18.0.x
 static inline BOOL Titanium_IsSupportedIOSVersion(void) {
     NSOperatingSystemVersion os = [[NSProcessInfo processInfo] operatingSystemVersion];
-    return (os.majorVersion >= 15 && os.majorVersion <= 26);
+    if (os.majorVersion < 15) return NO;
+    if (os.majorVersion > 18) return NO;
+    if (os.majorVersion == 18 && os.minorVersion > 0) return NO;
+    return YES;
+}
+// Phạm vi máy: iPhone 6s (iPhone8,1) đến iPhone 12 Pro Max (iPhone13,4)
+static inline BOOL Titanium_IsSupportedDeviceMachine(NSString *machine) {
+    static NSSet *supported = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        supported = [NSSet setWithObjects:
+            @"iPhone8,1",@"iPhone8,2",@"iPhone8,4",
+            @"iPhone9,1",@"iPhone9,2",@"iPhone9,3",@"iPhone9,4",
+            @"iPhone10,1",@"iPhone10,2",@"iPhone10,3",@"iPhone10,4",@"iPhone10,5",@"iPhone10,6",
+            @"iPhone11,2",@"iPhone11,4",@"iPhone11,6",@"iPhone11,8",
+            @"iPhone12,1",@"iPhone12,3",@"iPhone12,5",@"iPhone12,8",
+            @"iPhone13,1",@"iPhone13,2",@"iPhone13,3",@"iPhone13,4", nil];
+    });
+    return [supported containsObject:machine ?: @""];
 }
 // Hardware identity: read the machine identifier from uname and map known iPhone board IDs
 // to their marketed model and Apple SoC family. Unknown identifiers stay explicitly unknown.
@@ -3827,6 +3982,22 @@ static NSString *gMusicPlayingURL = nil;
 @end
 
 @implementation TIMusicResultsSource
+@interface RootListController (ThemeRow)
+- (NSString *)themeRowTitle;
+- (NSString *)themeRowDetail;
+@end
+@implementation RootListController (ThemeRow)
+- (NSString *)themeRowTitle {
+    return TI_T(@"Màu sắc · ngôn ngữ · dữ liệu", @"Colors · language · data");
+}
+- (NSString *)themeRowDetail {
+    NSString *accent = self.settingsDict[@"V35AccentColor"] ?: @"cyan";
+    NSString *graph  = self.settingsDict[@"V35GraphColor"] ?: @"auto";
+    NSString *lang   = self.settingsDict[@"SelectedLanguage"] ?: @"auto";
+    return [NSString stringWithFormat:TI_T(@"Điểm nhấn: %@ · Biểu đồ: %@ · Ngôn ngữ: %@", @"Accent: %@ · Chart: %@ · Language: %@"), accent, graph, lang];
+}
+@end
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView; (void)section;
     return self.items.count;
@@ -4179,9 +4350,20 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
 
 #pragma mark - Lifecycle
 
+- (void)ti_persistOnExit {
+    if (self.settingsDict) [self saveSettingsDataAndSync];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"";
+    // Lưu cấu hình ngay khi app vào nền / bị đóng để công tắc và Hz/FPS không bị mất khi vuốt tắt app.
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(ti_persistOnExit)
+                                                 name:UIApplicationWillResignActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(ti_persistOnExit)
+                                                 name:UIApplicationDidEnterBackgroundNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(ti_persistOnExit)
+                                                 name:UIApplicationWillTerminateNotification object:nil];
 
     [self detectTweakDeletionIfNeeded];
 
@@ -4727,10 +4909,11 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
         // Chế độ thủ công: giữ đúng Hz/FPS người dùng chọn, auto không ghi đè.
         [d setObject:@"manual" forKey:@"SmooIOSProfileV36"];
         // Chỉ đặt mặc định cho đúng key mà Tweak.xm đọc.
-        if ([d objectForKey:@"TargetRefreshRate"] == nil) [d setInteger:120 forKey:@"TargetRefreshRate"];
-        if ([d objectForKey:@"TargetFPSRate"] == nil) [d setInteger:120 forKey:@"TargetFPSRate"];
-        if ([d objectForKey:@"EnableHzControl"] == nil) [d setBool:YES forKey:@"EnableHzControl"];
-        if ([d objectForKey:@"EnableFPSControl"] == nil) [d setBool:YES forKey:@"EnableFPSControl"];
+if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
+if (!self.settingsDict[@"TargetFPSRate"])     self.settingsDict[@"TargetFPSRate"]     = @144;
+if (!self.settingsDict[@"EnableHzControl"])   self.settingsDict[@"EnableHzControl"]   = @YES;
+if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSControl"]  = @YES;
+[self saveSettingsDataAndSync];
         [d synchronize];
         [wizard dismissViewControllerAnimated:YES completion:^{
             self.view.userInteractionEnabled = YES;
@@ -7327,6 +7510,62 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if(self.customTableView){ [self.customTableView reloadData]; [self.customTableView setContentOffset:CGPointZero animated:NO]; }
 }
 
+// ====================================================================================================
+// THU NHỎ BIỂU ĐỒ (Trang chủ): mặc định TẮT = giữ khung lướt như cũ.
+// BẬT = hiện cả 6 biểu đồ thu nhỏ trong một lưới 2 cột x 3 hàng, không cần vuốt.
+// Lưu tại settingsDict[@"ti_compactCharts"], lưu vĩnh viễn; chỉ đổi khi người dùng bấm.
+// ====================================================================================================
+static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
+    return [d[@"ti_compactCharts"] boolValue];
+}
+
+- (UIView *)ti_buildCompactChartsWithWidth:(CGFloat)cw {
+    NSArray *names   = @[@"CPU", @"GPU", @"RAM", @"MÀN HÌNH / HZ", @"FPS GIAO DIỆN", @"PIN"];
+    NSArray *symbols = @[@"cpu", @"sparkles", @"memorychip", @"display", @"speedometer", @"battery.100"];
+    CGFloat gap = 9.0, cardW = (cw - gap) / 2.0, cardH = 116.0;
+    UIView *grid = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cw, 3 * cardH + 2 * gap)];
+    grid.backgroundColor = UIColor.clearColor;
+    grid.tag = 9700;
+    for (NSInteger i = 0; i < 6; i++) {
+        NSInteger col = i % 2, row = i / 2;
+        UIView *card = [[UIView alloc] initWithFrame:CGRectMake(col * (cardW + gap), row * (cardH + gap), cardW, cardH)];
+        card.backgroundColor = [UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1];
+        card.layer.cornerRadius = 14;
+        card.layer.borderWidth = 1;
+        card.layer.borderColor = [UIColor colorWithRed:.35 green:.82 blue:1 alpha:.30].CGColor;
+        UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbols[i]]];
+        icon.frame = CGRectMake(9, 8, 15, 15);
+        icon.tintColor = [UIColor colorWithRed:.35 green:.82 blue:1 alpha:1];
+        [card addSubview:icon];
+        UILabel *name = [[UILabel alloc] initWithFrame:CGRectMake(28, 7, cardW - 34, 17)];
+        name.text = names[i];
+        name.font = [UIFont systemFontOfSize:9.5 weight:UIFontWeightBlack];
+        name.textColor = UIColor.whiteColor;
+        name.adjustsFontSizeToFitWidth = YES;
+        [card addSubview:name];
+        TITrendGraphView *graph = [[TITrendGraphView alloc] initWithFrame:CGRectMake(8, 30, cardW - 16, 56)];
+        graph.tag = 9500 + i;
+        [card addSubview:graph];
+        UILabel *reading = [[UILabel alloc] initWithFrame:CGRectMake(8, 92, cardW - 16, 16)];
+        reading.tag = 9590 + i;
+        reading.text = @"Đang lấy mẫu…";
+        reading.font = [UIFont monospacedSystemFontOfSize:8.5 weight:UIFontWeightBold];
+        reading.textColor = UIColor.whiteColor;
+        reading.adjustsFontSizeToFitWidth = YES;
+        [card addSubview:reading];
+        [grid addSubview:card];
+    }
+    return grid;
+}
+
+- (void)ti_toggleCompactCharts:(UISwitch *)sender {
+    self.settingsDict[@"ti_compactCharts"] = @(sender.on);
+    [self saveSettingsDataAndSync];
+    if (_currentBottomTab == 0) {
+        self.customTableView.tableHeaderView = [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width];
+    }
+}
+
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w=MAX(320.0,width), side=14.0, cw=w-side*2.0;
     UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,995.0)]; root.backgroundColor=UIColor.clearColor;
@@ -7372,6 +7611,26 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     UIPanGestureRecognizer *deckPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(tiDeckPan:)];
     [pages addGestureRecognizer:deckPan];
     TIDeckLayout(pages, 0, NO);
+    // Công tắc thu nhỏ biểu đồ (mặc định tắt)
+    BOOL compactOn = TI_CompactChartsOn(self.settingsDict);
+    UIView *compactGrid = [self ti_buildCompactChartsWithWidth:cw];
+    compactGrid.frame = CGRectMake(side, 204, cw, CGRectGetHeight(compactGrid.frame));
+    compactGrid.hidden = !compactOn;
+    pages.hidden = compactOn;
+    [root addSubview:compactGrid];
+    UILabel *compactLbl = [[UILabel alloc] initWithFrame:CGRectMake(side + cw - 150, 161, 96, 16)];
+    compactLbl.text = @"Thu nhỏ biểu đồ";
+    compactLbl.font = [UIFont systemFontOfSize:10 weight:UIFontWeightSemibold];
+    compactLbl.textColor = [UIColor secondaryLabelColor];
+    compactLbl.textAlignment = NSTextAlignmentRight;
+    [root addSubview:compactLbl];
+    UISwitch *compactSwitch = [[UISwitch alloc] init];
+    compactSwitch.transform = CGAffineTransformMakeScale(0.78, 0.78);
+    compactSwitch.frame = CGRectMake(side + cw - 52, 158, 51, 31);
+    compactSwitch.on = compactOn;
+    compactSwitch.onTintColor = [UIColor colorWithRed:.25 green:.85 blue:1 alpha:1];
+    [compactSwitch addTarget:self action:@selector(ti_toggleCompactCharts:) forControlEvents:UIControlEventValueChanged];
+    [root addSubview:compactSwitch];
     // Tự chuyển biểu đồ mỗi 60 giây, vòng lại từ đầu sau thẻ cuối.
     [gDashboardCycleTimer invalidate];
     __weak UIScrollView *weakPages = pages;
@@ -7676,7 +7935,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         // Đã gỡ mục "Thông tin" và mục "Server" khỏi cài đặt (thông tin thiết bị đã có ở trang chủ).
         if (section == 1) return 0;
         if (section == 2) return 0;
-        return 6; // Device info, author, reset, conflict toggle, appearance/language, and author details.
+        return 5; // Thiết lập, tác giả, đặt lại, tránh xung đột, màu sắc · ngôn ngữ (mỗi mục một hàng).
     }
 }
 
@@ -7762,6 +8021,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     // Đệm thêm ở các tiêu đề đang sát hàng phía trên (tab Cài đặt, Tối ưu, Ứng dụng).
     if (_currentBottomTab == 4 && section == 3) return 58.0;
     if (_currentBottomTab == 2 && section == 1) return 54.0;
+    if (_currentBottomTab == 3 && section == 0) return 58.0;
     if (_currentBottomTab == 3 && section == 1) return 54.0;
     if (_currentBottomTab == 3 && section == 2) return 46.0;
     return (heading.length > 38) ? 46.0 : 38.0;
@@ -7772,8 +8032,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (_currentBottomTab == 3 && indexPath.section == 0) return 100.0;
     if (_currentBottomTab == 3 && indexPath.section == 1) return 50.0;
     // Hàng công tắc vẫn cao hơn một chút để mỗi công tắc là một ô bo tròn riêng.
-    if (_currentBottomTab == 2 && indexPath.section == 0) return 84.0;
-    if (_currentBottomTab == 2 && indexPath.section == 1) return 84.0;
+    // Hàng công tắc có thêm dòng mô tả nhỏ nên cao hơn để chữ không đè sang hàng dưới.
+    if (_currentBottomTab == 2 && indexPath.section == 0) return 96.0;
+    if (_currentBottomTab == 2 && indexPath.section == 1) return 96.0;
+    if (_currentBottomTab == 4) return 72.0;
     return 64.0;
 }
 
@@ -8009,8 +8271,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }
     else if (_currentBottomTab == 2) {
         if (indexPath.section == 0) {
-            title = @"MUSIC STUDIO · TÌM VÀ CHỌN NHẠC";
-            detail = @"Tìm và chọn nhạc · Phonk · SoundCloud · Apple Music · YouTube";
+            title = @"MUSIC STUDIO";
+            detail = @"Chọn nhạc";
             UIButton *musicTile = [UIButton buttonWithType:UIButtonTypeSystem];
             musicTile.frame = CGRectMake(0, 0, 92, 38);
             musicTile.layer.cornerRadius = 12.0;
@@ -8024,47 +8286,49 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             accent = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:1.0];
         } else {
             NSString *prefKey = @"";
+            NSString *hint = @"";
+            // Tên key = ĐÚNG tên tweak đọc (GetLiveBool trong Tweak_xm_2). Tên hiển thị = chức năng thật.
             if (_currentSwitchSubTab == 0) {
-                if (indexPath.row == 0) { title = @"Ưu Tiên P-Core"; prefKey = @"pCoreRealtimePriority"; }
-                else if (indexPath.row == 1) { title = @"CPU Scheduler"; prefKey = @"schedulerGovernor"; }
-                else if (indexPath.row == 2) { title = @"Quantum Sync"; prefKey = @"quantumCoreSync"; }
-                else if (indexPath.row == 3) { title = @"CPU Sàn"; prefKey = @"lockHighIdleFloor"; }
-                else if (indexPath.row == 4) { title = @"Anti Thermal"; prefKey = @"AntiThermalThrottling"; }
-                else if (indexPath.row == 5) { title = @"I/O Disk VIP"; prefKey = @"iopolVipPriority"; }
-                else { title = @"Cool Down"; prefKey = @"coolDownHeavyLoad"; }
+                if (indexPath.row == 0)      { title = @"Ưu tiên P-Core";        prefKey = @"RealtimeThreadSched";     hint = @"Ưu tiên luồng chạy trên nhân hiệu năng cao"; }
+                else if (indexPath.row == 1) { title = @"Bộ lập lịch CPU";        prefKey = @"IOSchedulerEngine";       hint = @"Tối ưu hàng đợi lập lịch tiến trình"; }
+                else if (indexPath.row == 2) { title = @"Đồng bộ lượng tử";       prefKey = @"QuantumCoreSync";         hint = @"Đồng bộ nhịp giữa các nhân CPU"; }
+                else if (indexPath.row == 3) { title = @"Sàn tải CPU";            prefKey = @"CPUGPUFreqOptimizer";     hint = @"Giữ tần số CPU/GPU tối thiểu khi đang dùng"; }
+                else if (indexPath.row == 4) { title = @"Chống bóp xung nhiệt";   prefKey = @"AntiThermalThrottling";   hint = @"Giảm việc hệ thống hạ xung khi máy nóng"; }
+                else if (indexPath.row == 5) { title = @"Ưu tiên I/O đĩa";        prefKey = @"SystemProcessOpt";        hint = @"Ưu tiên ghi/đọc đĩa cho tiến trình chính"; }
+                else                         { title = @"Làm mát khi tải nặng";   prefKey = @"HeavyLoadCooling";        hint = @"Giảm tải khi CPU quá nóng trong lúc tải nặng"; }
             } else if (_currentSwitchSubTab == 1) {
-                if (indexPath.row == 0) { title = @"Triple Buffering"; prefKey = @"MetalHexBuffering"; }
-                else if (indexPath.row == 1) { title = @"Isolate Pipeline"; prefKey = @"IsolateRenderPipeline"; }
-                else if (indexPath.row == 2) { title = @"Bỏ V-Sync"; prefKey = @"vsyncAdaptiveBuffer"; }
-                else if (indexPath.row == 3) { title = @"Game FPS"; prefKey = @"gameFPSStabilizer"; }
-                else if (indexPath.row == 4) { title = @"Flat Blur"; prefKey = @"flatTintBlur"; }
-                else { title = @"Neural Buffer"; prefKey = @"neuralBufferOpt"; }
+                if (indexPath.row == 0)      { title = @"Đệm ba tầng Metal";      prefKey = @"MetalHexBuffering";       hint = @"Thêm bộ đệm khung để giảm giật hình"; }
+                else if (indexPath.row == 1) { title = @"Tách luồng render";      prefKey = @"FixAppLaunchBlackScreen"; hint = @"Chống màn hình đen khi mở app"; }
+                else if (indexPath.row == 2) { title = @"Tắt V-Sync thích ứng";   prefKey = @"FixAppExitStutter";      hint = @"Giảm khựng khi thoát app"; }
+                else if (indexPath.row == 3) { title = @"Ổn định FPS trong game"; prefKey = @"GameFPSStabilizer";      hint = @"Giữ khung hình đều khi chơi game"; }
+                else if (indexPath.row == 4) { title = @"Chắn hiệu ứng mờ";       prefKey = @"QuantumRenderShield";     hint = @"Bảo vệ luồng vẽ khi có hiệu ứng kính mờ"; }
+                else                         { title = @"Đệm neural";             prefKey = @"MetalHexBuffering";       hint = @"Bộ đệm dự đoán khung tiếp theo"; }
             } else if (_currentSwitchSubTab == 2) {
-                if (indexPath.row == 0) { title = @"Ép 144Hz"; prefKey = @"ForceOverclock144Hz"; }
-                else if (indexPath.row == 1) { title = @"ProMotion Beta 7"; prefKey = @"ProMotionEngineBeta7"; }
-                else if (indexPath.row == 2) { title = @"0ms Touch"; prefKey = @"TouchResponseBoost"; }
-                else if (indexPath.row == 3) { title = @"ColorOS 17"; prefKey = @"ColorOs17SmoothEngine"; }
-                else if (indexPath.row == 4) { title = @"Neural Touch"; prefKey = @"zeroLagNeural"; }
-                else { title = @"Ultra Responsive"; prefKey = @"ultraResponsiveness"; }
+                if (indexPath.row == 0)      { title = @"Ép 144Hz";               prefKey = @"ForceOverclock144Hz";     hint = @"Cho phép tần số làm tươi 144Hz"; }
+                else if (indexPath.row == 1) { title = @"ProMotion Beta 7";       prefKey = @"ProMotionEngineBeta7";    hint = @"Điều phối tần số ProMotion"; }
+                else if (indexPath.row == 2) { title = @"Phản hồi cảm ứng";       prefKey = @"TouchResponseBoost";      hint = @"Giảm độ trễ khi chạm màn hình"; }
+                else if (indexPath.row == 3) { title = @"Hiệu ứng ColorOS";       prefKey = @"ColorOs17SmoothEngine";   hint = @"Làm mượt hiệu ứng chuyển cảnh"; }
+                else if (indexPath.row == 4) { title = @"Cảm ứng thông minh";     prefKey = @"ZeroLagNeuralBooster";    hint = @"Dự đoán thao tác chạm để phản hồi nhanh"; }
+                else                         { title = @"Phản hồi tối đa";        prefKey = @"UltraResponsiveness";     hint = @"Ưu tiên luồng giao diện trên các luồng nền"; }
             } else if (_currentSwitchSubTab == 3) {
-                if (indexPath.row == 0) { title = @"Anti Ghost"; prefKey = @"AntiGhostTouch"; }
-                else if (indexPath.row == 1) { title = @"Charger Ripple"; prefKey = @"ChargerRippleRejection"; }
-                else if (indexPath.row == 2) { title = @"Fake Full Battery"; prefKey = @"fakeFullBatteryState"; }
-                else if (indexPath.row == 3) { title = @"Lock 30FPS"; prefKey = @"lock30FpsOnOverheat"; }
-                else if (indexPath.row == 4) { title = @"Battery Saver 60Hz"; prefKey = @"batterySaver60Hz"; }
-                else { title = @"Power Save"; prefKey = @"powerSaveMode"; }
+                if (indexPath.row == 0)      { title = @"Chống chạm ma";          prefKey = @"AntiGhostTouch";          hint = @"Lọc cảm ứng ảo khi màn hình bị ẩm"; }
+                else if (indexPath.row == 1) { title = @"Chống nhiễu sạc";        prefKey = @"ChargerRippleRejection";  hint = @"Giảm nhiễu cảm ứng khi đang cắm sạc"; }
+                else if (indexPath.row == 2) { title = @"Giả pin đầy";            prefKey = @"DeviceSpoofer";           hint = @"Hiển thị trạng thái pin giả để tắt bớt tiết kiệm pin"; }
+                else if (indexPath.row == 3) { title = @"Khóa 30 FPS khi nóng";   prefKey = @"SmartThermalDispatch";    hint = @"Hạ xuống 30 FPS khi máy quá nóng"; }
+                else if (indexPath.row == 4) { title = @"Pin tiết kiệm 60Hz";     prefKey = @"DynamicThermalEngine";    hint = @"Giới hạn 60Hz khi pin yếu"; }
+                else                         { title = @"Tiết kiệm pin";          prefKey = @"PowerSaveMode";           hint = @"Khóa tần số ở 60Hz để tiết kiệm pin"; }
             } else {
-                if (indexPath.row == 0) { title = @"Turbo App Launch"; prefKey = @"TurboAppLaunch"; }
-                else if (indexPath.row == 1) { title = @"Fix Black Screen"; prefKey = @"FixAppLaunchBlackScreen"; }
-                else if (indexPath.row == 2) { title = @"Reduce Multitask Lag"; prefKey = @"ReduceMultiTaskLag"; }
-                else if (indexPath.row == 3) { title = @"Fix Exit Stutter"; prefKey = @"FixAppExitStutter"; }
-                else if (indexPath.row == 4) { title = @"Hyper Memory"; prefKey = @"hyperMemoryGuardian"; }
-                else if (indexPath.row == 5) { title = @"Auto Kill Background"; prefKey = @"autoKillBackground"; }
-                else if (indexPath.row == 6) { title = @"Periodic RAM Clean"; prefKey = @"periodicRamClean"; }
-                else if (indexPath.row == 7) { title = @"Mach VM Purge"; prefKey = @"machVMPurgeRam"; }
-                else { title = @"Background Pacing"; prefKey = @"backgroundPacingDaemon"; }
+                if (indexPath.row == 0)      { title = @"Mở app nhanh";           prefKey = @"TurboAppLaunch";          hint = @"Tăng tốc khởi chạy ứng dụng"; }
+                else if (indexPath.row == 1) { title = @"Sửa màn hình đen";       prefKey = @"FixAppLaunchBlackScreen"; hint = @"Khắc phục màn hình đen khi mở app"; }
+                else if (indexPath.row == 2) { title = @"Giảm lag đa nhiệm";      prefKey = @"ReduceMultiTaskLag";      hint = @"Giảm khựng khi chuyển qua lại giữa các app"; }
+                else if (indexPath.row == 3) { title = @"Sửa khựng khi thoát";    prefKey = @"FixAppExitStutter";       hint = @"Giảm khựng khi đóng app"; }
+                else if (indexPath.row == 4) { title = @"Bộ nhớ đệm mở rộng";     prefKey = @"HyperMemoryGuardian";     hint = @"Giữ bộ nhớ cho app đang dùng"; }
+                else if (indexPath.row == 5) { title = @"Tự đóng app nền";        prefKey = @"AutoCloseBackgroundApp";  hint = @"Đóng app nền khi thiếu RAM"; }
+                else if (indexPath.row == 6) { title = @"Dọn RAM định kỳ";        prefKey = @"AggressiveRamClean";      hint = @"Dọn RAM theo chu kỳ"; }
+                else if (indexPath.row == 7) { title = @"Bàn phím không trễ";     prefKey = @"KeyboardZeroLagV24";      hint = @"Giảm trễ khi gõ phím"; }
+                else                         { title = @"Nhịp tiến trình nền";    prefKey = @"BackgroundPacingDaemon";  hint = @"Điều tiết tiến trình chạy nền"; }
             }
-            detail = @"Công tắc cấu hình · chạm để bật hoặc tắt";
+            detail = hint;
             LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
             s.on = [self.settingsDict[prefKey] ?: @NO boolValue];
             __weak typeof(self) wS = self;
@@ -8128,6 +8392,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         }
         accessory = categoryCards;
         } else if (indexPath.section == 1) {
+            title = @"";
+            detail = nil;
             UITextField *searchField = [[UITextField alloc] init];
             searchField.placeholder = @"Tìm app...";
             searchField.text = _appSearchQuery;
@@ -8169,7 +8435,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             appSettingsButton.layer.shadowOffset = CGSizeMake(0, 3);
             appSettingsButton.layer.masksToBounds = NO;
             appSettingsButton.tintColor = UIColor.whiteColor;
-            [appSettingsButton setTitle:@"THIẾT LẬP  ›" forState:UIControlStateNormal];
+            [appSettingsButton setTitle:@"THIẾT LẬP" forState:UIControlStateNormal];
             [appSettingsButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
             appSettingsButton.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBlack];
             appSettingsButton.titleLabel.adjustsFontSizeToFitWidth = YES;
@@ -8202,12 +8468,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 cell.userInteractionEnabled = YES;
             } else {
                 NSString *curIOS = [[UIDevice currentDevice] systemVersion];
-                if (Titanium_IsSupportedIOSVersion()) {
+                struct utsname mu; uname(&mu);
+                NSString *mach = [NSString stringWithCString:mu.machine encoding:NSUTF8StringEncoding];
+                BOOL okOS = Titanium_IsSupportedIOSVersion();
+                BOOL okDev = Titanium_IsSupportedDeviceMachine(mach);
+                if (okOS && okDev) {
                     title = [NSString stringWithFormat:@"iOS %@ — OK", curIOS];
-                    detail = @"15-26";
+                    detail = @"iOS 15–18.0 · iPhone 6s–12 Pro Max";
                     accent = [UIColor colorWithRed:0.4 green:1.0 blue:0.6 alpha:1.0];
                 } else {
                     title = [NSString stringWithFormat:@"iOS %@ — Không Hỗ Trợ", curIOS];
+                    detail = okOS ? @"Máy ngoài phạm vi iPhone 6s–12 Pro Max" : @"Chỉ hỗ trợ iOS 15–18.0";
                     accent = [UIColor colorWithRed:1.0 green:0.35 blue:0.35 alpha:1.0];
                 }
             }
@@ -8348,7 +8619,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
             } else if (indexPath.row == 3) {
                 BOOL avoidConflicts = [self.settingsDict[@"AvoidTweakConflicts"] boolValue];
                 title = @"Tránh xung đột Tweak";
-                detail = avoidConflicts ? @"Bật · tạm tắt payload ghi đè của SmoothIOS" : @"Tắt · dùng cấu hình SmoothIOS bình thường";
+                detail = avoidConflicts ? @"Đang bật" : @"Đang tắt";
                 UISwitch *conflictSwitch = [[UISwitch alloc] init];
                 conflictSwitch.on = avoidConflicts;
                 conflictSwitch.tag = 27431;
@@ -8356,11 +8627,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
                 accessory = conflictSwitch;
                 cell.selectionStyle = UITableViewCellSelectionStyleNone;
             } else {
-                NSString *accentName = self.settingsDict[@"V35AccentColor"] ?: @"cyan";
-                NSString *graphName = self.settingsDict[@"V35GraphColor"] ?: @"auto";
-                NSString *language = self.settingsDict[@"SelectedLanguage"] ?: @"vi";
-                title = @"Màu sắc · ngôn ngữ · dữ liệu";
-                detail = [NSString stringWithFormat:@"Điểm nhấn: %@ · Biểu đồ: %@ · Ngôn ngữ: %@", accentName, graphName, language];
+                // Mục "Màu sắc · ngôn ngữ · dữ liệu" chỉ hiển thị MỘT lần (đã bỏ bản sao trùng)
+                title = [self themeRowTitle];
+                detail = [self themeRowDetail];
                 cell.selectionStyle = UITableViewCellSelectionStyleDefault;
             }
         }
@@ -8579,6 +8848,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)applyAppFilter {
     [_filteredAppsList removeAllObjects];
+    NSMutableSet<NSString *> *shownIDs = [NSMutableSet set];
     NSString *q = Titanium_NormalizeAppSearchText(_appSearchQuery ?: @"");
     NSDictionary *hiddenMap = [self.settingsDict[@"HiddenApps"] isKindOfClass:[NSDictionary class]] ? self.settingsDict[@"HiddenApps"] : @{};
     for (NSDictionary *app in _scannedAppsList) {
@@ -8596,6 +8866,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (_appCategoryIndex == 2 && !isHidden) continue;
         if (_appCategoryIndex == 3 && !isSeparate) continue;
         if (q.length && ![name containsString:q] && ![bid containsString:q]) continue;
+        if (bidRaw.length && [shownIDs containsObject:bidRaw]) continue;
+        if (bidRaw.length) [shownIDs addObject:bidRaw];
         [_filteredAppsList addObject:app];
     }
 }
@@ -8879,8 +9151,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 - (void)applySmooIOSAdaptivePerformancePolicy {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSString *profile = [self.settingsDict[@"SmooIOSProfileV36"] isKindOfClass:NSString.class] ? self.settingsDict[@"SmooIOSProfileV36"] : ([defaults stringForKey:@"SmooIOSProfileV36"] ?: @"auto");
-    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 120;
-    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 120;
+    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 144;
+    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 144;
     BOOL autoTune = [defaults objectForKey:@"SmooIOSAutoTuneEnabledV36"] ? [defaults boolForKey:@"SmooIOSAutoTuneEnabledV36"] : NO;
     if (!autoTune || ![profile isEqualToString:@"auto"]) return;
 
@@ -8975,6 +9247,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     NSArray<NSString *> *sampleTexts=@[cpu>=0?[NSString stringWithFormat:@"CPU · %.0f%%",cpu]:@"CPU · N/A",gpuPercent>=0?[NSString stringWithFormat:@"GPU · %.0f%% · IOReport",gpuPercent]:@"GPU · IOReport chưa cung cấp bộ đếm tương thích",ramPercent>=0?[NSString stringWithFormat:@"RAM hệ thống · %.0f%% · tiến trình %@",ramPercent,Titanium_ByteCountString(memory)]:[NSString stringWithFormat:@"RAM tiến trình · %@ · tổng tải N/A",Titanium_ByteCountString(memory)],[NSString stringWithFormat:@"Màn hình · %ld Hz tối đa",(long)UIScreen.mainScreen.maximumFramesPerSecond],[NSString stringWithFormat:@"FPS giao diện · %ld",(long)_uiFPSMeasured],battery>=0?[NSString stringWithFormat:@"Pin · %.0f%% mức sạc",battery*100.0]:@"Pin · N/A"];
     for(NSInteger i=0;i<6;i++){
         TITrendGraphView *graph=(TITrendGraphView *)[headerNow viewWithTag:9200+i]; UILabel *value=(UILabel *)[headerNow viewWithTag:9190+i];
+        TITrendGraphView *cgraph=(TITrendGraphView *)[headerNow viewWithTag:9500+i]; UILabel *cvalue=(UILabel *)[headerNow viewWithTag:9590+i];
+        if(cvalue) cvalue.text=sampleTexts[i];
+        if(cgraph && [samples[i] doubleValue]>=0) [cgraph addSample:[samples[i] doubleValue]];
         if(value) value.text=sampleTexts[i];
         if([graph isKindOfClass:TITrendGraphView.class] && [samples[i] doubleValue]>=0){ [graph addSample:[samples[i] doubleValue]]; CGFloat fraction=[samples[i] doubleValue]/100.0; NSString *choice = [self.settingsDict[@"V35GraphColor"] isKindOfClass:NSString.class] ? self.settingsDict[@"V35GraphColor"] : @"auto"; UIColor *c = nil; if ([choice isEqualToString:@"green"]) c=[UIColor colorWithRed:.22 green:.96 blue:.48 alpha:1]; else if ([choice isEqualToString:@"blue"]) c=[UIColor colorWithRed:.20 green:.52 blue:1 alpha:1]; else if ([choice isEqualToString:@"purple"]) c=[UIColor colorWithRed:.68 green:.38 blue:1 alpha:1]; else if ([choice isEqualToString:@"pink"]) c=[UIColor colorWithRed:1 green:.30 blue:.72 alpha:1]; else if ([choice isEqualToString:@"random"]) c=[UIColor colorWithHue:(CGFloat)arc4random_uniform(1000)/1000.0 saturation:.82 brightness:1 alpha:1]; else c=fraction>=.8?[UIColor systemRedColor]:(fraction>=.55?[UIColor systemOrangeColor]:[UIColor systemCyanColor]); graph.lineLayer.strokeColor=c.CGColor; graph.glowLayer.strokeColor=[c colorWithAlphaComponent:.18].CGColor; }
     }
