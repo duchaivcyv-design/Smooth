@@ -86,6 +86,48 @@ static inline NSString *TI_TrV(NSString *vi, NSString *en) {
 // Hook 1 điểm (presentViewController) nên mọi chỗ gọi UIAlertController đều dùng giao diện mới.
 // ====================================================================================================
 static UIWindow *TIKeyWindow(void);
+// Thông báo tự vẽ (kính mờ, tự ẩn), thay cho cảnh báo mặc định của iOS khi chỉ cần báo kết quả.
+@interface TIThemedToast : NSObject
++ (void)showText:(NSString *)text tint:(UIColor *)tint;
+@end
+@implementation TIThemedToast
++ (void)showText:(NSString *)text tint:(UIColor *)tint {
+    UIWindow *win = TIKeyWindow();
+    if (!win || text.length == 0) return;
+    UIColor *c = tint ?: [UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1];
+    UILabel *lab = [[UILabel alloc] init];
+    lab.text = text;
+    lab.numberOfLines = 0;
+    lab.textAlignment = NSTextAlignmentCenter;
+    lab.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    lab.textColor = UIColor.whiteColor;
+    CGFloat maxW = MIN(win.bounds.size.width - 48.0, 340.0);
+    CGSize fit = [lab sizeThatFits:CGSizeMake(maxW - 28.0, CGFLOAT_MAX)];
+    UIView *pill = [[UIView alloc] initWithFrame:CGRectMake(0, 0, fit.width + 28.0, fit.height + 20.0)];
+    pill.backgroundColor = [UIColor colorWithRed:0.06 green:0.07 blue:0.12 alpha:0.94];
+    pill.layer.cornerRadius = 16;
+    if (@available(iOS 13.0, *)) pill.layer.cornerCurve = kCACornerCurveContinuous;
+    pill.layer.borderWidth = 1;
+    pill.layer.borderColor = [c colorWithAlphaComponent:0.7].CGColor;
+    pill.layer.shadowColor = c.CGColor;
+    pill.layer.shadowOpacity = 0.35;
+    pill.layer.shadowRadius = 10;
+    pill.layer.shadowOffset = CGSizeZero;
+    lab.frame = CGRectMake(14, 10, fit.width, fit.height);
+    [pill addSubview:lab];
+    pill.center = CGPointMake(CGRectGetMidX(win.bounds), win.safeAreaInsets.top + 60.0);
+    pill.alpha = 0;
+    pill.transform = CGAffineTransformMakeTranslation(0, -18);
+    [win addSubview:pill];
+    [UIView animateWithDuration:0.42 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.5 options:0 animations:^{
+        pill.alpha = 1; pill.transform = CGAffineTransformIdentity;
+    } completion:nil];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.3 animations:^{ pill.alpha = 0; pill.transform = CGAffineTransformMakeTranslation(0, -12); }
+                         completion:^(BOOL f){ [pill removeFromSuperview]; }];
+    });
+}
+@end
 @interface TIThemedPopup : UIView
 + (void)showTitle:(NSString *)title message:(NSString *)message actions:(NSArray<UIAlertAction *> *)actions;
 @end
@@ -6861,6 +6903,20 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)runApplyWithLoading {
     if (!_isFeatureActivated) { [self showUnexploitedWarningAlert]; return; }
+    // Áp dụng nghĩa là người dùng muốn Hz/FPS có hiệu lực:
+    // 1) Nếu "Tránh xung đột Tweak" đang bật, payload Hz bị ép về 60 => tắt nó đi và báo rõ.
+    // 2) Bật master "Enabled" để payload mang đúng Hz/FPS đã chọn.
+    BOOL wasConflictOn = [self.settingsDict[@"AvoidTweakConflicts"] boolValue];
+    self.settingsDict[@"AvoidTweakConflicts"] = @NO;
+    self.settingsDict[@"Enabled"] = @YES;
+    [self saveSettingsDataAndSync];
+    if (wasConflictOn) {
+        [TIThemedToast showText:TI_T(@"Đã tắt \"Tránh xung đột Tweak\" để Hz/FPS có hiệu lực", @"Turned off \"Avoid tweak conflicts\" so Hz/FPS can apply")
+                           tint:[UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1]];
+    } else {
+        [TIThemedToast showText:TI_T(@"Đã áp dụng Hz/FPS", @"Hz/FPS applied")
+                           tint:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1]];
+    }
     // V23: avoid a 5-second full-screen dim overlay and per-frame car timer.
     // The actual preference/payload work is coalesced and applied by applyDeepSpringBoardAndUIKitTweaks.
     [self applyDeepSpringBoardAndUIKitTweaks];
@@ -7716,6 +7772,82 @@ static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
     }
 }
 
+// ====================================================================================================
+// CẢNH BÁO HZ/FPS CAO (nội dung đúng với thực tế: pin, nhiệt, khả năng máy/iOS không đạt đúng mức)
+// Chỉ hiện khi mục tiêu > 60. Nút X ẩn cảnh báo 24 giờ. Đổi màu theo mức, 240 có icon ⚠️ rung.
+// ====================================================================================================
+static NSString *const kTIRateWarnDismissKey = @"ti_rateWarnDismissedAt";
+
+static BOOL TI_RateWarningShouldShow(NSDictionary *d, NSInteger rate) {
+    if (rate <= 60) return NO;
+    NSNumber *ts = d[kTIRateWarnDismissKey];
+    if (ts && [[NSDate date] timeIntervalSince1970] - ts.doubleValue < 24 * 3600) return NO;
+    return YES;
+}
+
+static UIColor *TI_RateWarningColor(NSInteger rate) {
+    if (rate >= 240) return [UIColor colorWithRed:1.0 green:0.25 blue:0.25 alpha:1];
+    if (rate >= 180) return [UIColor colorWithRed:1.0 green:0.45 blue:0.20 alpha:1];
+    if (rate >= 120) return [UIColor colorWithRed:1.0 green:0.72 blue:0.25 alpha:1];
+    return [UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1];
+}
+
+- (UIView *)ti_rateWarningViewWithWidth:(CGFloat)cw rate:(NSInteger)rate {
+    if (!TI_RateWarningShouldShow(self.settingsDict, rate)) return nil;
+    UIColor *tint = TI_RateWarningColor(rate);
+    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cw, 96)];
+    box.tag = 9810;
+    box.backgroundColor = [tint colorWithAlphaComponent:0.10];
+    box.layer.cornerRadius = 14;
+    box.layer.borderWidth = 1;
+    box.layer.borderColor = [tint colorWithAlphaComponent:0.75].CGColor;
+
+    // Icon ⚠️ mờ làm nền
+    UILabel *bg = [[UILabel alloc] initWithFrame:CGRectMake(cw/2 - 40, 8, 80, 80)];
+    bg.text = @"⚠️"; bg.font = [UIFont systemFontOfSize:64]; bg.textAlignment = NSTextAlignmentCenter; bg.alpha = 0.12;
+    [box addSubview:bg];
+
+    UILabel *head = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, cw - 56, 18)];
+    head.text = [NSString stringWithFormat:TI_T(@"Mục tiêu %ld Hz/FPS: lưu ý", @"Target %ld Hz/FPS: note"), (long)rate];
+    head.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBlack];
+    head.textColor = tint;
+    [box addSubview:head];
+
+    UILabel *body = [[UILabel alloc] initWithFrame:CGRectMake(12, 28, cw - 56, 62)];
+    body.numberOfLines = 0;
+    body.font = [UIFont systemFontOfSize:10.5];
+    body.textColor = [UIColor colorWithWhite:0.85 alpha:1];
+    body.text = TI_T(@"CẢNH BÁO: Tweak can thiệp trực tiếp vào nhân Kernel và ép cứng Driver phần cứng (DCP/IOMobileFramebuffer). Nó bắt tấm nền vật lý chạy vượt giới hạn thiết kế (ví dụ: ép màn 60Hz gồng lên 240Hz) đồng thời vô hiệu hóa hoàn toàn hệ thống bảo vệ nhiệt độ và dòng điện. Dùng lâu dài sẽ dẫn đến hỏng hóc phần cứng không thể cứu vãn: cháy sọc màn hình (dọc/ngang), lưu ảnh (burn-in), chết điểm ảnh, hỏng GPU, và làm pin phồng rộp. Mày đang phá bỏ giới hạn vật lý của phần cứng. Tự chịu trách nhiệm.",
+                     @"WARNING: This tweak operates at the deepest level, directly hooking Kernel syscalls and overriding the hardware panel driver (DCP/IOMobileFramebuffer). It forces the physical display to exceed its factory limits (e.g., pushing a 60Hz panel to 240Hz) while completely bypassing thermal throttling and battery safety protocols. Prolonged use will cause severe hardware degradation: permanent screen burn-in, vertical/horizontal lines, dead pixels, GPU/peripheral burnout, and rapid battery swelling. You are overriding physical hardware limits. Use at your own risk.");
+    [box addSubview:body];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeCustom];
+    close.frame = CGRectMake(cw - 38, 6, 30, 30);
+    [close setTitle:@"✕" forState:UIControlStateNormal];
+    [close setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    close.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBold];
+    [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        self.settingsDict[kTIRateWarnDismissKey] = @([[NSDate date] timeIntervalSince1970]);
+        [self saveSettingsDataAndSync];
+        [box removeFromSuperview];
+    }] forControlEvents:UIControlEventTouchUpInside];
+    [box addSubview:close];
+
+    // Mức 240: icon ⚠️ ở giữa, rung nhẹ
+    if (rate >= 240) {
+        UILabel *icon = [[UILabel alloc] initWithFrame:CGRectMake(cw/2 - 16, 60, 32, 32)];
+        icon.text = @"⚠️"; icon.font = [UIFont systemFontOfSize:26]; icon.textAlignment = NSTextAlignmentCenter;
+        [box addSubview:icon];
+        CAKeyframeAnimation *shake = [CAKeyframeAnimation animationWithKeyPath:@"transform.translation.x"];
+        shake.values = @[@0, @-3, @3, @-3, @3, @0];
+        shake.duration = 0.45;
+        shake.repeatCount = HUGE_VALF;
+        shake.beginTime = CACurrentMediaTime() + 0.3;
+        [icon.layer addAnimation:shake forKey:@"ti_shake"];
+    }
+    return box;
+}
+
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width), side = 14.0, cw = w - side * 2.0;
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 505.0)];
@@ -7770,6 +7902,11 @@ static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
     UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,378,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
     UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Chỉ số mục tiêu được lưu vào cấu hình; FPS LIVE bên dưới là tốc độ khung hình của giao diện ứng dụng, không phải phép đo FPS mọi game."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
     // V23: six compact information tiles are always visible on the dashboard.
+    {
+        NSInteger warnRate = MAX(hz, fps);
+        UIView *warn = [self ti_rateWarningViewWithWidth:cw rate:warnRate];
+        if (warn) { warn.frame = CGRectMake(side, 436, cw, 96); [root addSubview:warn]; }
+    }
     UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,704,cw,18)];
     infoTitle.text=@"THÔNG TIN THIẾT BỊ · CHẠM ĐỂ XEM CHI TIẾT";
     infoTitle.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack];
@@ -9050,6 +9187,17 @@ static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
     }
     [rateDefaults synchronize];
     [self saveSettingsDataAndSync];
+    // Chọn mức trên 60: hiện thông báo lưu ý ngay giữa màn hình (tự vẽ, không dùng hộp thoại mặc định).
+    static NSTimeInterval s_lastRateNote = 0;
+    NSTimeInterval nowT = [[NSDate date] timeIntervalSince1970];
+    if (rate > 60 && nowT - s_lastRateNote > 0.6) {
+        s_lastRateNote = nowT;
+        NSString *msg = TI_T(@"Mức cao hơn 60 làm pin hao nhanh hơn và máy nóng hơn khi dùng lâu. Màn hình và iOS chỉ đạt mức đã chọn khi phần cứng và hệ thống hỗ trợ, nên tốc độ thực có thể thấp hơn. Sau khi khởi động lại hoặc cập nhật iOS, hãy áp dụng lại.",
+                             @"Rates above 60 drain the battery faster and make the device hotter during long use. The display and iOS only reach the chosen rate when the hardware and system support it, so the real rate can be lower. After a restart or iOS update, apply it again.");
+        NSString *title = [NSString stringWithFormat:TI_T(@"Lưu ý %@ %ld", @"Note %@ %ld"), isFPS ? @"FPS" : @"Hz", (long)rate];
+        UIAlertAction *ok = [UIAlertAction actionWithTitle:TI_T(@"Đã hiểu", @"Got it") style:UIAlertActionStyleDefault handler:nil];
+        [TIThemedPopup showTitle:title message:msg actions:@[ok]];
+    }
 }
 
 - (void)smoothReloadTable {
