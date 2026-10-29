@@ -381,6 +381,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz);
 static NSInteger Titanium_GetUserTargetHz(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
+static void Titanium_V57_ForceReapplyIfNeeded(void);
 
 // ====================================================================================================
 // KHAI BÁO @INTERFACE
