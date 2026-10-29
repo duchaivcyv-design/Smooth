@@ -3981,7 +3981,6 @@ static NSString *gMusicPlayingURL = nil;
 @property (nonatomic, copy) void (^onPick)(NSDictionary *item);
 @end
 
-@implementation TIMusicResultsSource
 @interface RootListController (ThemeRow)
 - (NSString *)themeRowTitle;
 - (NSString *)themeRowDetail;
@@ -3998,6 +3997,7 @@ static NSString *gMusicPlayingURL = nil;
 }
 @end
 
+@implementation TIMusicResultsSource
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView; (void)section;
     return self.items.count;
