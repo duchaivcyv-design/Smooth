@@ -6098,12 +6098,26 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
 }
 
 // ====================================================================================================
-// [JETSAM + REALTIME]
+// [JETSAM + REALTIME - BẺ THẲNG CƯỠNG CHẾ]
 // ====================================================================================================
 
 #ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
 #define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
 #endif
+
+#ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
+#define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
+#endif
+
+#ifndef JETSAM_PRIORITY_CRITICAL
+#define JETSAM_PRIORITY_CRITICAL 19
+#endif
+
+// [FIX LỖI BUILD] Phải có struct này thì mới dùng được con trỏ props
+typedef struct memorystatus_priority_properties {
+    int32_t  priority;
+    uint64_t user_data;
+} memorystatus_priority_properties_t;
 
 static void Titanium_Tier6JetsamImmunityReal(void) {
     static dispatch_once_t once;
@@ -6546,7 +6560,12 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
         // [ÉP CƯỠNG CHẾ] Nếu đang bật tweak VÀ ĐÉO PHẢI user kill -> Chặn đứng!
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             if (!isUserKill) {
-                // Đéo cho iOS kill app vì bất kỳ lý do gì (RAM, Jetsam, Watchdog, v.v.)
+                // [FIX DELAY 3-4S] Phải gọi completion handler thì iOS mới nhả ra
+                // để chuyển sang app tiếp theo. Thiếu dòng này là nó treo chờ timeout.
+                if (comp) {
+                    void (^completionBlock)(id) = comp;
+                    completionBlock(nil);
+                }
                 return; 
             }
         }
@@ -6562,38 +6581,87 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 %end
 
 // ====================================================================================================
-// [GROUP: V12 Smooth Exit - V106 FIX]
+// [GROUP: V12 Smooth Exit - BẺ THẲNG VẬT LÝ LÒ XO]
 // ====================================================================================================
 
 %group Group_TitaniumV12_SmoothExit_And_DisplayLink
 
 %hook CASpringAnimation
 
+// 1. Ép Khối lượng (Mass) nhẹ hơn -> Phản hồi tức thì
+- (CGFloat)mass {
+    CGFloat orig = %orig;
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return orig * 0.75; // Giảm 25% khối lượng
+    }
+    return orig;
+}
+
+- (void)setMass:(CGFloat)mass {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        %orig(mass * 0.75);
+        return;
+    }
+    %orig(mass);
+}
+
+// 2. Ép Độ cứng (Stiffness) cao hơn -> Lò xo bung mạnh, nhanh dứt điểm
+- (CGFloat)stiffness {
+    CGFloat orig = %orig;
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return orig * 1.5; // Tăng 50% độ cứng
+    }
+    return orig;
+}
+
+- (void)setStiffness:(CGFloat)stiffness {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        %orig(stiffness * 1.5);
+        return;
+    }
+    %orig(stiffness);
+}
+
+// 3. Ép Lực cản (Damping) tăng vừa phải -> Chống nảy quá đà gây lật icon
 - (CGFloat)damping {
     CGFloat orig = %orig;
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        // [V106] Tăng damping nhẹ để giảm độ rung (bounce), làm animation dứt khoát hơn
-        // Giúp app "bật" ra/vào nhanh hơn, đéo bị cảm giác lề mề
-        return orig * 1.15;
+        return orig * 1.25; // Tăng 25% lực cản
     }
     return orig;
 }
 
 - (void)setDamping:(CGFloat)damping {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(damping * 1.15);
+        %orig(damping * 1.25);
         return;
     }
     %orig(damping);
 }
 
-// [V106] Ép Frame Rate cho Spring Animation (Khử nhoè khi chuyển cảnh)
+// 4. Ép Vận tốc ban đầu (Initial Velocity) -> Bắn đi nhanh hơn
+- (CGFloat)initialVelocity {
+    CGFloat orig = %orig;
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return orig * 1.5;
+    }
+    return orig;
+}
+
+- (void)setInitialVelocity:(CGFloat)initialVelocity {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        %orig(initialVelocity * 1.5);
+        return;
+    }
+    %orig(initialVelocity);
+}
+
+// 5. Ép Frame Rate (Giữ nguyên khử nhoè)
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
             NSInteger target = Titanium_GetEffectiveFrameCap();
             if (target < 15) target = 15;
-            // Đấm dải Max vào, không cho OS tự động kéo xuống 60Hz
             range = Titanium_SmoothFRR((float)target);
         }
     }
