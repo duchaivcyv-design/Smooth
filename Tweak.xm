@@ -3781,18 +3781,6 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
     }
     return %orig(key);
 }
-- (NSDictionary *)infoDictionary {
-    NSDictionary *original = %orig;
-    if (!original || !Titanium_ShouldExposeHighFrameRateEntitlement()) return original;
-    NSDictionary *cached = objc_getAssociatedObject(self, kTitaniumHighFrameRateInfoDictionaryKey);
-    if (cached) return cached;
-    NSMutableDictionary *copy = [original mutableCopy];
-    if (!copy) return original;
-    copy[@"CADisableMinimumFrameDurationOnPhone"] = @YES;
-    NSDictionary *result = [copy copy];
-    objc_setAssociatedObject(self, kTitaniumHighFrameRateInfoDictionaryKey, result, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    return result;
-}
 %end
 
 %hook WKWebView
