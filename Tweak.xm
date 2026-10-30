@@ -2865,7 +2865,6 @@ static inline void Titanium_LockMainThreadFast(void) {
     if (![NSThread isMainThread]) return;
 
     // [ÉP MƯỢT TUYỆT ĐỐI] Dùng cờ Thread-Local để chỉ set Thread Policy ĐÚNG 1 LẦN.
-    // Nếu đã set rồi, nó bỏ qua toàn bộ, trả về ngay lập tức, đéo tốn 1 chu kỳ CPU nào.
     static __thread BOOL s_isThreadOptimized = NO;
     if (__builtin_expect(s_isThreadOptimized, 1)) return;
     s_isThreadOptimized = YES;
@@ -2886,7 +2885,7 @@ static inline void Titanium_LockMainThreadFast(void) {
         thread_policy_set(selfThread, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
     }
 
-    // Vẫn giữ logic bơm xung nhưng đẩy vào background để không block Main Thread
+    // Bơm xung đẩy vào background để không block Main Thread
     if (Titanium_ShouldApplyAppDisplayOverrides()) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             AppleInternal_LockHardwareCADisplay();
@@ -2895,19 +2894,6 @@ static inline void Titanium_LockMainThreadFast(void) {
         });
     }
 }
-
-    static uint64_t s_lastNanoBurstTick = 0;
-    uint64_t now = mach_absolute_time();
-    if (__builtin_expect(s_lastNanoBurstTick == 0 || (now - s_lastNanoBurstTick) > Titanium_NanosToMachTicks(250000000ULL), 0)) {
-        s_lastNanoBurstTick = now;
-        if (Titanium_ShouldApplyAppDisplayOverrides()) {
-            AppleInternal_LockHardwareCADisplay();
-            Titanium_EnableZeroLatencyPipeline();
-            Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
-        }
-    }
-}
-
 static inline void Titanium_TriggerInstantTouchBurst(void) {
     if (__builtin_expect(g_burstDurationMachTicks == 0, 0)) {
         Titanium_InitUnifiedMachTimebase();
