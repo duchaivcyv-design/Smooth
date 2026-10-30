@@ -1,6 +1,5 @@
 // ====================================================================================================
-// BOOSTIPHONE6S APP - APPDELEGATE IMPLEMENTATION (CHẾ ĐỘ ĐÃ ÉP TOÀN DIỆN - CHUẨN ĐỒNG BỘ 0MS)
-// (AN TOÀN TUYỆT ĐỐI: KHÔNG ĐEN MÀN HÌNH, TỰ BẬT PROMOTION CAO NHẤT, ĐỒNG BỘ REALTIME)
+// BOOSTIPHONE6S APP - APPDELEGATE IMPLEMENTATION
 // ====================================================================================================
 
 #import "AppDelegate.h"
@@ -18,18 +17,18 @@
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    // [ĐÃ ÉP TOÀN DIỆN]: Đẩy quyền luồng chính lên mức cao nhất
+    // Boost Main Thread
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
-    // 1. [ĐÃ ÉP TOÀN DIỆN]: Khởi tạo cửa sổ chính phủ toàn bộ kích thước màn hình
+    // 1. Khởi tạo cửa sổ chính
     self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     self.window.backgroundColor = [UIColor colorWithRed:0.01 green:0.02 blue:0.05 alpha:1.0];
 
-    // 2. Khởi tạo Controller điều khiển chính
+    // 2. Khởi tạo Controller
     self.rootListVC = [[RootListController alloc] init];
     self.mainNavController = [[UINavigationController alloc] initWithRootViewController:self.rootListVC];
 
-    // [ĐÃ ÉP]: Cấu hình giao diện kính mờ tối ưu cho iOS 13 - 17+
+    // Cấu hình giao diện Navigation Bar (iOS 13+)
     if (@available(iOS 13.0, *)) {
         UINavigationBarAppearance *navBarAppearance = [[UINavigationBarAppearance alloc] init];
         [navBarAppearance configureWithDefaultBackground];
@@ -56,20 +55,27 @@
     // 3. Hiển thị cửa sổ
     [self.window makeKeyAndVisible];
 
-    // 4. [ĐÃ SỬA CHUẨN]: Gọi động selector ProMotion qua runtime tránh lỗi thiếu header ở SDK 14
+    // 4. Ép Frame Rate (Target: UIWindowScene thay vì UIWindow.layer)
     if (@available(iOS 15.0, *)) {
-        SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
-        if ([self.window.layer respondsToSelector:setRangeSel]) {
-            CAFrameRateRange range = CAFrameRateRangeMake(30.0f, 120.0f, 120.0f);
-            void (*setFrameRateRangeFunc)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
-            setFrameRateRangeFunc(self.window.layer, setRangeSel, range);
-        }
+        // Phải đợi 1 nhịp để windowScene được gắn vào window
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindowScene *scene = self.window.windowScene;
+            if (scene) {
+                SEL setRangeSel = NSSelectorFromString(@"setPreferredFrameRateRange:");
+                if ([scene respondsToSelector:setRangeSel]) {
+                    // Ép dải 15-240Hz (Lấy mức 120 làm preferred cho app mượt)
+                    CAFrameRateRange range = CAFrameRateRangeMake(15.0f, 240.0f, 120.0f);
+                    void (*setFrameRateRangeFunc)(id, SEL, CAFrameRateRange) = (void (*)(id, SEL, CAFrameRateRange))objc_msgSend;
+                    setFrameRateRangeFunc(scene, setRangeSel, range);
+                }
+            }
+        });
     }
 
     return YES;
 }
 
-// [ĐÃ ÉP TOÀN DIỆN]: Tự động làm mới khi người dùng mở lại app từ chạy nền
+// Làm mới khi mở lại app từ background
 - (void)applicationWillEnterForeground:(UIApplication *)application {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
@@ -82,7 +88,7 @@
         });
     }
 
-    // Bắn thông báo đồng bộ lại IPC trên background thread để không giật lag giao diện
+    // Bắn thông báo đồng bộ IPC trên background thread
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         notify_post(NOTIFY_RELOAD);
         notify_post(NOTIFY_TITANIUM_CHANGED);
@@ -90,7 +96,7 @@
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
-    // Để hệ điều hành tự điều phối chu kỳ render tự nhiên
+    // Để OS tự điều phối render, đéo can thiệp sâu ở đây để tránh khựng app.
 }
 
 @end
