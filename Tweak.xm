@@ -6878,6 +6878,26 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 static void Tio_DCPResolveConnections(void);
 static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz);
 
+// [FIX WARNING] Thêm phần thân hàm bị thiếu để hết warning undefined-internal
+static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz) {
+    if (hz < 15) return;
+    if (!Titanium_V55_PanelWritable()) return;
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try {
+            id cad = [%c(CADisplay) mainDisplay];
+            if (!cad) return;
+            
+            if ([cad respondsToSelector:@selector(setAllowsVirtualModes:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(cad, @selector(setAllowsVirtualModes:), YES);
+            }
+            if ([cad respondsToSelector:@selector(setPreferredFPS:)]) {
+                ((void (*)(id, SEL, NSInteger))objc_msgSend)(cad, @selector(setPreferredFPS:), hz);
+            }
+        } @catch (__unused NSException *e) {}
+    });
+}
+
 static io_service_t   g_dcpIomfbSvc    = IO_OBJECT_NULL;
 static io_service_t   g_dcpDispSvc     = IO_OBJECT_NULL;
 
