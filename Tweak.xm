@@ -6097,16 +6097,6 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
     } @catch (NSException *e) {}
 }
 
-// ====================================================================================================
-// [JETSAM + REALTIME - BẺ THẲNG CƯỠNG CHẾ]
-// ====================================================================================================
-
-#ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
-#define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
-#endif
-#ifndef JETSAM_PRIORITY_CRITICAL
-#define JETSAM_PRIORITY_CRITICAL 19
-#endif
 #ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
 #define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
 #endif
@@ -6119,11 +6109,6 @@ static void Titanium_Tier6JetsamImmunityReal(void) {
         typedef int (*msc_fn)(uint32_t, int32_t, uint32_t, void *, size_t);
         msc_fn msc = (msc_fn)dlsym(kern, "memorystatus_control");
         if (!msc) return;
-        
-        // [BẺ THẲNG] Ép Priority lên CRITICAL (19) -> Đéo cho OS kill
-        memorystatus_priority_properties_t props = {JETSAM_PRIORITY_CRITICAL, 0};
-        (void)msc(MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES, getpid(), 0, &props, sizeof(props));
-
         (void)msc(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK, getpid(), 0, NULL, 0);
     });
 }
@@ -6133,24 +6118,16 @@ static void Titanium_Tier6RealtimeFrameConstraint(NSInteger hz) {
     if (Titanium_V56_KeyboardBusy()) return;
     if (![NSThread isMainThread]) return;
     if (hz < 15 || hz > 240) return;
-    
-    // [BẺ THẲNG] Bốc sạch cooldown 500ms. Đéo chờ. Gọi là đấm.
+    static uint64_t s_last = 0;
+    uint64_t now = mach_absolute_time();
+    if (s_last != 0 && (now - s_last) < v55_ns(500ULL * 1000000ULL)) return;
+    s_last = now;
     mach_port_t thread = pthread_mach_thread_np(pthread_self());
     uint64_t periodNs = 1000000000ULL / (uint64_t)hz;
-    
-    // [ÉP PRECEDENCE MAX] Ép độ ưu tiên CPU lên 63 (tối đa)
-    thread_precedence_policy_data_t precedence = { .importance = 63 };
-    thread_policy_set(thread, THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
-
     thread_time_constraint_policy_data_t tc;
     tc.period      = (uint32_t)tio_mach_nanos(periodNs);
-    
-    // [BẺ THẲNG 75%] Ép computation = 75% thay vì 1/4
-    tc.computation = (uint32_t)tio_mach_nanos(periodNs * 0.75);
-    
-    // [BẺ THẲNG 95%] Ép constraint = 95% thay vì 1/2
-    tc.constraint  = (uint32_t)tio_mach_nanos(periodNs * 0.95);
-    
+    tc.computation = (uint32_t)tio_mach_nanos(periodNs / 4);
+    tc.constraint  = (uint32_t)tio_mach_nanos(periodNs / 2);
     tc.preemptible = TRUE;
     thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY,
                       (thread_policy_t)&tc, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
