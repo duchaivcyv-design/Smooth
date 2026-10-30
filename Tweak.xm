@@ -3766,7 +3766,6 @@ static void Titanium_InstallUIScreenRateSpoofNow(void) {
         if (@available(iOS 15.0, *)) {
             Class metalLayerClass = NSClassFromString(@"CAMetalLayer");
             if (metalLayerClass && [metalLayerClass instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
-                %init(Group_CapabilityAwareMetalPacing);
             }
         }
     }
