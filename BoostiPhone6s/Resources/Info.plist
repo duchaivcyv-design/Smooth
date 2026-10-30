@@ -10,10 +10,10 @@
 	<string>BoostiPhone6sApp</string>
 	<key>CFBundleIconFiles</key>
 	<array>
-		<string>AppIcon60x60</string>
+		<string>icon.png</string>
+		<string>icon@2x.png</string>
+		<string>icon@3x.png</string>
 	</array>
-	<key>CFBundleIconName</key>
-	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.taojb.boostiphone6s</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -39,21 +39,6 @@
 		<integer>1</integer>
 		<integer>2</integer>
 	</array>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
-				</dict>
-			</array>
-		</dict>
-	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
