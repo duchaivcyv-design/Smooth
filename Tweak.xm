@@ -6101,6 +6101,21 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
 // [JETSAM + REALTIME - BẺ THẲNG CƯỠNG CHẾ]
 // ====================================================================================================
 
+#ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
+#define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
+#endif
+#ifndef JETSAM_PRIORITY_CRITICAL
+#define JETSAM_PRIORITY_CRITICAL 19
+#endif
+#ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
+#define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
+#endif
+
+typedef struct memorystatus_priority_properties {
+    int32_t  priority;
+    uint64_t user_data;
+} memorystatus_priority_properties_t;
+
 static void Titanium_Tier6JetsamImmunityReal(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
