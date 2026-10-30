@@ -2,13 +2,14 @@ Package: com.taojb.boostiphone6s
 Name: SmoothIOS Pro
 Version: 1.4.0-1t
 Architecture: iphoneos-arm64
-Description: System fluidity redefined, eliminating micro-stutters. ProMotion-grade frame pacing and adaptive refresh rate engine engineered for precise hardware synchronization, zero-latency touch response, and low thermal footprint. / Tái định nghĩa độ mượt hệ thống, triệt tiêu hiện tượng khựng hình. Động cơ điều phối khung hình chuẩn ProMotion và tần số quét thích ứng, tối ưu đồng bộ phần cứng, phản hồi chạm tức thời và duy trì nhiệt độ mát mẻ.Tương thích: iOS 14.0 – 18.0 (iPhone 6s – iPhone 12 Pro Max)
-Maintainer: TaoJB, NoJB,NoNo
+Description: Low-level display and scheduling modification for iOS. Direct IOMFB and IORegistry manipulation to enforce a hard-locked 15-240Hz refresh rate, bypassing OS native throttling. Overrides XNU thread scheduling (QoS Tier 0, max precedence) and grants Jetsam immunity for absolute 0ms touch latency. Force-enables Native ContentsScale and disables offscreen rendering to eliminate motion blur, combined with a complete bypass of thermal and power limits.
+Can thiệp sâu tầng phần cứng và scheduler. Ghi đè trực tiếp lên IOMFB và IORegistry để ép cứng tần số quét 15-240Hz, vô hiệu hóa cơ chế tự hạ xung của OS. Ghi đè tiến trình XNU (QoS Tier 0, precedence tối đa), miễn nhiễm Jetsam đảm bảo phản hồi chạm 0ms. Ép Native ContentsScale, tắt render offscreen để khử nhoè, kết hợp bypass hoàn toàn giới hạn nhiệt độ và nguồn. Tương thích: iOS 14.0 – 18.0 (iPhone 6s – iPhone 12 Pro Max)
+Maintainer: TaoJB, NoJB, NoNo
 Author: TaoJB, NoJB, NoNo
 Section: Tweaks
-Depends: mobilesubstrate, firmware (>= 14.0), firmware (<= 18.0), preferenceloader
+Depends: mobilesubstrate, preferenceloader, firmware (>= 14.0), firmware (<= 18.0)
 Priority: optional
-Tag: role::hacker, purpose::extension, cydia::requires=respring
-Filename: pool/main/b/boostiphone6s/com.taojb.boostiphone6s_5.2.0_iphoneos-arm64.deb
+Tag: purpose::extension, cydia::requires=respring
+Filename: pool/main/b/boostiphone6s/com.taojb.boostiphone6s_1.4.0-1t_iphoneos-arm64.deb
 Homepage: https://github.com/duchaivcyv-design/Smooth
-Icon: https://github.com/duchaivcyv-design/Smooth/blob/44fe7df07d032007f33a7172df3383a6e2b2e336/BoostiPhone6s/Resources/icon.png
+Icon: https://raw.githubusercontent.com/duchaivcyv-design/Smooth/44fe7df07d032007f33a7172df3383a6e2b2e336/BoostiPhone6s/Resources/icon.png
