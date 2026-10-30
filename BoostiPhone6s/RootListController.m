@@ -1556,13 +1556,15 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         [self applyV20CellTheme];
         [self.contentView addSubview:_detailL];
 
-        [NSLayoutConstraint activateConstraints:@[
+        NSArray *defaultLayout = @[
             [_titleL.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:18],
             [_titleL.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
             [_detailL.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
             [_detailL.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
             [_titleL.trailingAnchor constraintLessThanOrEqualToAnchor:_detailL.leadingAnchor constant:-8]
-        ]];
+        ];
+        [NSLayoutConstraint activateConstraints:defaultLayout];
+        objc_setAssociatedObject(self, "ti_defaultLayout", defaultLayout, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return self;
 }
@@ -1648,6 +1650,31 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
 }
 
 - (void)configureWithTitle:(NSString *)title detail:(NSString *)detail accessory:(UIView *)accessory accent:(UIColor *)accent {
+    // Bố cục: hàng có công tắc -> tên ở trên, mô tả nhỏ ngay dưới tên, công tắc bên phải (không đè nhau).
+    NSArray *curLayout = objc_getAssociatedObject(self, "ti_curLayout");
+    if (curLayout) [NSLayoutConstraint deactivateConstraints:curLayout];
+    if ([accessory isKindOfClass:[LiquidCapsuleSwitch class]]) {
+        _detailL.textAlignment = NSTextAlignmentLeft;
+        _detailL.numberOfLines = 1;
+        _detailL.translatesAutoresizingMaskIntoConstraints = NO;
+        NSArray *switchLayout = @[
+            [_titleL.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:18],
+            [_titleL.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor constant:-9],
+            [_titleL.trailingAnchor constraintLessThanOrEqualToAnchor:accessory.leadingAnchor constant:-10],
+            [_detailL.leadingAnchor constraintEqualToAnchor:_titleL.leadingAnchor],
+            [_detailL.topAnchor constraintEqualToAnchor:_titleL.bottomAnchor constant:3],
+            [_detailL.trailingAnchor constraintLessThanOrEqualToAnchor:accessory.leadingAnchor constant:-10]
+        ];
+        NSArray *defLayout = objc_getAssociatedObject(self, "ti_defaultLayout");
+        if (defLayout) [NSLayoutConstraint deactivateConstraints:defLayout];
+        [NSLayoutConstraint activateConstraints:switchLayout];
+        objc_setAssociatedObject(self, "ti_curLayout", switchLayout, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else {
+        NSArray *defaultLayout = objc_getAssociatedObject(self, "ti_defaultLayout");
+        if (defaultLayout) [NSLayoutConstraint activateConstraints:defaultLayout];
+        objc_setAssociatedObject(self, "ti_curLayout", defaultLayout, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        _detailL.textAlignment = NSTextAlignmentRight;
+    }
     _titleL.hidden = NO;
     _detailL.hidden = NO;
     _titleL.text = title;
@@ -4418,6 +4445,130 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
     [task resume];
 }
 
+
+// ====================================================================================================
+// ROBOT HƯỚNG DẪN: dùng ảnh robot_chao_mung nếu có trong bundle; nếu chưa có thì tự vẽ robot.
+// ====================================================================================================
+@interface TIGuideRobot : UIView
+@property (nonatomic, strong) UIColor *tint;
+- (void)bounceLR;
+- (void)hop;
+- (void)celebrate;
+@end
+@implementation TIGuideRobot {
+    UIImageView *_img;
+    CALayer *_head, *_body, *_screen;
+}
+- (instancetype)initWithFrame:(CGRect)f {
+    self = [super initWithFrame:f];
+    if (!self) return nil;
+    self.backgroundColor = UIColor.clearColor;
+    // Tìm ảnh trong bundle app: thử theo tên, rồi theo đường dẫn file (kể cả khi nằm trong thư mục Resources).
+    UIImage *img = [UIImage imageNamed:@"robot_chao_mung"];
+    if (!img) {
+        NSString *path = [NSBundle.mainBundle pathForResource:@"robot_chao_mung" ofType:@"jpeg"];
+        if (path) img = [UIImage imageWithContentsOfFile:path];
+    }
+    if (img) {
+        _img = [[UIImageView alloc] initWithFrame:self.bounds];
+        _img.image = img;
+        _img.contentMode = UIViewContentModeScaleAspectFit;
+        [self addSubview:_img];
+    } else {
+        CGFloat w = f.size.width, h = f.size.height;
+        _body = [CALayer layer];
+        _body.frame = CGRectMake(w*0.22, h*0.52, w*0.56, h*0.40);
+        _body.cornerRadius = w*0.18;
+        _head = [CALayer layer];
+        _head.frame = CGRectMake(w*0.14, h*0.10, w*0.72, h*0.48);
+        _head.cornerRadius = w*0.24;
+        _screen = [CALayer layer];
+        _screen.frame = CGRectMake(w*0.24, h*0.22, w*0.52, h*0.24);
+        _screen.cornerRadius = w*0.08;
+        for (int i = 0; i < 2; i++) {
+            CALayer *eye = [CALayer layer];
+            eye.frame = CGRectMake(w*(0.12 + 0.26*i), h*0.07, w*0.14, h*0.14);
+            eye.cornerRadius = w*0.07;
+            eye.backgroundColor = [UIColor colorWithRed:.55 green:.95 blue:1 alpha:1].CGColor;
+            [_screen addSublayer:eye];
+        }
+        [self.layer addSublayer:_body];
+        [self.layer addSublayer:_head];
+        [_head addSublayer:_screen];
+    }
+    self.tint = [UIColor colorWithRed:.45 green:.90 blue:1 alpha:1];
+    return self;
+}
+- (void)setTint:(UIColor *)tint {
+    _tint = tint;
+    if (_head) {
+        _head.backgroundColor = [tint colorWithAlphaComponent:0.92].CGColor;
+        _body.backgroundColor = [tint colorWithAlphaComponent:0.72].CGColor;
+        _screen.backgroundColor = [UIColor colorWithRed:.05 green:.10 blue:.18 alpha:1].CGColor;
+    } else {
+        _img.layer.shadowColor = tint.CGColor;
+        _img.layer.shadowOpacity = 0.75;
+        _img.layer.shadowRadius = 12;
+        _img.layer.shadowOffset = CGSizeZero;
+    }
+}
+- (void)bounceLR {
+    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.translation.x"];
+    a.values = @[@0, @-12, @0, @12, @0];
+    a.duration = 0.9; a.repeatCount = 2;
+    [self.layer addAnimation:a forKey:@"ti_bounce"];
+}
+- (void)hop {
+    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.translation.y"];
+    a.values = @[@0, @-16, @0];
+    a.duration = 0.5;
+    [self.layer addAnimation:a forKey:@"ti_hop"];
+}
+- (void)celebrate {
+    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+    a.values = @[@1.0, @1.14, @0.96, @1.0];
+    a.duration = 0.5;
+    [self.layer addAnimation:a forKey:@"ti_celebrate"];
+}
+@end
+
+@interface TIGuideBubble : UIView
+@property (nonatomic, strong) UILabel *label;
+- (CGFloat)setText:(NSString *)text width:(CGFloat)width;
+@end
+@implementation TIGuideBubble
+- (instancetype)initWithFrame:(CGRect)f {
+    self = [super initWithFrame:f];
+    if (!self) return nil;
+    self.backgroundColor = [UIColor colorWithRed:0.06 green:0.08 blue:0.14 alpha:0.96];
+    self.layer.cornerRadius = 16;
+    if (@available(iOS 13.0, *)) self.layer.cornerCurve = kCACornerCurveContinuous;
+    self.layer.borderWidth = 1;
+    self.layer.borderColor = [UIColor colorWithRed:0.25 green:0.85 blue:1 alpha:0.6].CGColor;
+    _label = [[UILabel alloc] init];
+    _label.numberOfLines = 0;
+    _label.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    _label.textColor = UIColor.whiteColor;
+    [self addSubview:_label];
+    return self;
+}
+- (CGFloat)setText:(NSString *)text width:(CGFloat)width {
+    _label.text = text;
+    CGFloat inner = width - 28;
+    CGSize fit = [text boundingRectWithSize:CGSizeMake(inner, CGFLOAT_MAX)
+                                    options:NSStringDrawingUsesLineFragmentOrigin
+                                 attributes:@{NSFontAttributeName: _label.font} context:nil].size;
+    CGFloat h = ceil(fit.height) + 24;
+    _label.frame = CGRectMake(14, 12, inner, h - 24);
+    self.bounds = CGRectMake(0, 0, width, h);
+    return h;
+}
+@end
+
+static UIView *g_tiTourOverlay = nil;
+static NSInteger g_tiTourIndex = 0;
+static NSString *const kTITourDoneKey = @"ti_tourDone_v1";
+
 @implementation RootListController
 
 @synthesize customTableView = _customTableView;
@@ -4713,6 +4864,11 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
     decor.userInteractionEnabled = NO;
     decor.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [wizard.view addSubview:decor];
+    // Robot trong màn chào mừng: đổi màu khi trang hiện tại đã đủ điều kiện để tiếp tục.
+    TIGuideRobot *welcomeRobot = [[TIGuideRobot alloc] initWithFrame:CGRectMake(UIScreen.mainScreen.bounds.size.width - 96, 56, 76, 76)];
+    welcomeRobot.userInteractionEnabled = NO;
+    welcomeRobot.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [wizard.view addSubview:welcomeRobot];
     NSArray *paletteA = @[(id)[UIColor colorWithRed:.025 green:.06 blue:.19 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.015 green:.018 blue:.065 alpha:1].CGColor,
                           (id)[UIColor colorWithRed:.06 green:.015 blue:.12 alpha:1].CGColor];
@@ -4953,6 +5109,8 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
         }
         if (page == 3 && next.enabled) TIWelcomeSetButtonTitle(next, @"Vào SmooIOS  →", inkDark);
         if (next.enabled) TIWelcomePulseLayer(next.layer, 10, 18); else [next.layer removeAnimationForKey:@"TIWelcomePulse"];
+        welcomeRobot.tint = next.enabled ? [UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1] : accent;
+        if (next.enabled) [welcomeRobot hop];
         [UIView animateWithDuration:.32 delay:0 usingSpringWithDamping:.85 initialSpringVelocity:.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
             subtitle.alpha = 1.0; detail.alpha = 1.0;
         } completion:nil];
@@ -4998,6 +5156,7 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
             self.customTableView.alpha = 1.0;
             self.customTableView.transform = CGAffineTransformIdentity;
             self.view.window.userInteractionEnabled = YES;
+            [self ti_startTourIfNeeded];
             [self.customTableView reloadData];
             [self.view setNeedsLayout];
             [self.view layoutIfNeeded];
@@ -5430,7 +5589,7 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
     dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
     dim.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-    CGFloat cw = MIN(win.bounds.size.width - 48.0, 330.0), ch = 380.0;
+    CGFloat cw = MIN(win.bounds.size.width - 48.0, 330.0), ch = 460.0;
     UIView *card = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cw, ch)];
     card.center = CGPointMake(CGRectGetMidX(win.bounds), CGRectGetMidY(win.bounds));
     card.backgroundColor = [UIColor colorWithRed:0.06 green:0.08 blue:0.13 alpha:0.98];
@@ -5454,14 +5613,18 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
     [card addSubview:table];
 
     TILanguageRowsSource *src = [TILanguageRowsSource new];
-    src.options = @[ @[@"auto", TI_T(@"Tự động theo máy", @"Auto (device language)")], @[@"vi", @"Tiếng Việt"], @[@"en", @"English"] ];
+    src.options = @[ @[@"auto", TI_T(@"Tự động theo máy", @"Auto (device language)")],
+                     @[@"vi", @"Tiếng Việt"], @[@"en", @"English"], @[@"zh", @"中文"], @[@"ja", @"日本語"],
+                     @[@"ko", @"한국어"], @[@"fr", @"Français"], @[@"de", @"Deutsch"], @[@"es", @"Español"],
+                     @[@"pt", @"Português"], @[@"ru", @"Русский"], @[@"th", @"ไทย"], @[@"id", @"Bahasa Indonesia"],
+                     @[@"hi", @"हिन्दी"], @[@"ar", @"العربية"] ];
     src.picked = current;
     table.dataSource = src;
     table.delegate = src;
     objc_setAssociatedObject(table, "ti_lang_src", src, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIButton *applyBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    applyBtn.frame = CGRectMake(20, 282, cw - 40, 44);
+    applyBtn.frame = CGRectMake(20, 342, cw - 40, 44);
     applyBtn.layer.cornerRadius = 14;
     applyBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.55 blue:0.80 alpha:1];
     [applyBtn setTitle:TI_T(@"Áp dụng", @"Apply") forState:UIControlStateNormal];
@@ -5477,9 +5640,24 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
     closeBtn.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     [card addSubview:closeBtn];
 
+    TIGuideRobot *pickRobot = [[TIGuideRobot alloc] initWithFrame:CGRectMake(cw - 74, 10, 56, 56)];
+    [card addSubview:pickRobot];
+    TIGuideBubble *pickBubble = [[TIGuideBubble alloc] initWithFrame:CGRectZero];
+    pickBubble.hidden = YES;
+    [card addSubview:pickBubble];
+
     __weak typeof(table) wTable = table;
     src.onPick = ^(NSString *code) {
-        applyBtn.hidden = [code isEqualToString:current];
+        BOOL changed = ![code isEqualToString:current];
+        applyBtn.hidden = !changed;
+        if (changed) {
+            CGFloat bh = [pickBubble setText:TI_T(@"Nhấn Áp dụng để đặt lại ngôn ngữ. App sẽ tự khởi động lại để áp dụng.", @"Tap Apply to set the language. The app will restart to apply it.") width:cw - 40];
+            pickBubble.frame = CGRectMake(20, 274, cw - 40, bh);
+            pickBubble.hidden = NO;
+            [pickRobot hop];
+        } else {
+            pickBubble.hidden = YES;
+        }
         [wTable reloadData];
     };
     [closeBtn addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
@@ -5540,12 +5718,7 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
     }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Ngôn ngữ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
         RootListController *owner = weakSelf; if (!owner) return;
-        UIAlertController *picker = [UIAlertController alertControllerWithTitle:@"Ngôn ngữ ưu tiên" message:@"Lưu lựa chọn ngôn ngữ cho các thành phần hỗ trợ đa ngôn ngữ." preferredStyle:UIAlertControllerStyleActionSheet];
-        NSDictionary *langs = @{@"vi":@"Tiếng Việt",@"en":@"English",@"zh":@"中文",@"ja":@"日本語",@"ko":@"한국어",@"fr":@"Français",@"de":@"Deutsch",@"es":@"Español",@"pt":@"Português",@"ru":@"Русский",@"th":@"ไทย",@"id":@"Bahasa Indonesia",@"hi":@"हिन्दी",@"ar":@"العربية"};
-        for (NSString *code in langs) [picker addAction:[UIAlertAction actionWithTitle:langs[code] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *choice) { owner.settingsDict[@"SelectedLanguage"] = code; owner.settingsDict[@"AppLanguage"] = code; [owner saveSettingsDataAndSync]; [owner.customTableView reloadData]; }]];
-        [picker addAction:[UIAlertAction actionWithTitle:@"Hủy" style:UIAlertActionStyleCancel handler:nil]];
-        if (picker.popoverPresentationController) { picker.popoverPresentationController.sourceView = owner.view; picker.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(owner.view.bounds), CGRectGetMidY(owner.view.bounds), 1, 1); }
-        [owner presentViewController:picker animated:YES completion:nil];
+        [owner showLanguagePickerPopup:nil]; // bảng chọn tự vẽ, không dùng popup mặc định
     }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Chế độ hiệu suất · Hz/FPS" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
         RootListController *owner = weakSelf; if (!owner) return;
@@ -7198,8 +7371,153 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (void)onCustomTabButtonClicked:(LGGlassNavButton *)sender { [self selectTabIndex:sender.tag animated:YES]; }
 
+#pragma mark - Hướng dẫn robot từng mục
+
+- (NSArray<NSDictionary *> *)ti_tourSteps {
+    return @[
+        @{@"tab": @(-1), @"text": TI_T(@"Chào bạn! Mình là Robo, sẽ dẫn bạn qua từng mục. Nhấn Tiếp để bắt đầu.", @"Hi! I'm Robo. I'll guide you through each section. Tap Next to start.")},
+        @{@"tab": @0, @"text": TI_T(@"Trang chủ: xem CPU, GPU, RAM, pin và nhiệt độ. Công tắc Thu nhỏ biểu đồ ở đầu trang đổi cách xem biểu đồ.", @"Home: CPU, GPU, RAM, battery and temperature. The Compact charts switch changes how charts are shown.")},
+        @{@"tab": @1, @"text": TI_T(@"Hz / FPS: chọn từ 15 đến 240. Nhấn Áp dụng hoặc Respring để đặt lại. Mức trên 60 sẽ có lưu ý.", @"Hz / FPS: pick 15 to 240. Tap Apply or Respring to set it. Rates above 60 show a note.")},
+        @{@"tab": @2, @"text": TI_T(@"Tối ưu: bật tắt từng nhóm CPU, GPU, màn hình, pin, cảm ứng. Dòng nhỏ dưới mỗi công tắc cho biết tác dụng.", @"Optimize: toggle CPU, GPU, display, battery and touch groups. The small line under each switch explains it.")},
+        @{@"tab": @3, @"text": TI_T(@"Ứng dụng: chọn app nào được áp dụng tweak. Tắt một app thì tweak không can thiệp app đó.", @"Apps: choose which apps the tweak applies to. Turn one off and the tweak leaves it alone.")},
+        @{@"tab": @4, @"text": TI_T(@"Cài đặt: đổi ngôn ngữ, màu sắc và Đặt lại tất cả. Khi đổi ngôn ngữ, app sẽ tự khởi động lại.", @"Settings: language, colors and Reset all. Changing language restarts the app.")},
+        @{@"tab": @5, @"text": TI_T(@"Thông tin: phiên bản, tác giả và hỗ trợ. Hết hướng dẫn rồi. Chúc bạn dùng vui!", @"Info: version, author and support. That's the tour. Enjoy!")}
+    ];
+}
+
+- (void)ti_startTourIfNeeded {
+    if ([NSUserDefaults.standardUserDefaults boolForKey:kTITourDoneKey] || g_tiTourOverlay) return;
+    UIWindow *win = TIKeyWindow();
+    if (!win) return;
+    CGRect b = win.bounds;
+    UIView *ov = [[UIView alloc] initWithFrame:b];
+    ov.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35];
+    ov.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+    TIGuideRobot *robot = [[TIGuideRobot alloc] initWithFrame:CGRectMake(0, 0, 96, 96)];
+    TIGuideBubble *bubble = [[TIGuideBubble alloc] initWithFrame:CGRectZero];
+    UIButton *next = [UIButton buttonWithType:UIButtonTypeCustom];
+    next.frame = CGRectMake(b.size.width - 150, b.size.height - 110, 120, 40);
+    next.layer.cornerRadius = 14;
+    next.backgroundColor = [UIColor colorWithRed:0.12 green:0.55 blue:0.80 alpha:1];
+    next.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    [next setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    UIButton *skip = [UIButton buttonWithType:UIButtonTypeCustom];
+    skip.frame = CGRectMake(30, b.size.height - 110, 110, 40);
+    [skip setTitle:TI_T(@"Bỏ qua", @"Skip") forState:UIControlStateNormal];
+    [skip setTitleColor:[UIColor colorWithWhite:0.8 alpha:1] forState:UIControlStateNormal];
+    skip.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+
+    [ov addSubview:bubble];
+    [ov addSubview:robot];
+    [ov addSubview:next];
+    [ov addSubview:skip];
+    objc_setAssociatedObject(ov, "ti_robot", robot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(ov, "ti_bubble", bubble, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(ov, "ti_next", next, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    g_tiTourOverlay = ov;
+    g_tiTourIndex = 0;
+
+    __weak typeof(self) wself = self;
+    [next addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        RootListController *me = wself; if (!me) return;
+        g_tiTourIndex++;
+        if (g_tiTourIndex >= (NSInteger)[me ti_tourSteps].count) [me ti_tourFinish];
+        else [me ti_tourShowStep:g_tiTourIndex];
+    }] forControlEvents:UIControlEventTouchUpInside];
+    [skip addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        RootListController *me = wself; if (!me) return;
+        [me ti_tourFinish];
+    }] forControlEvents:UIControlEventTouchUpInside];
+
+    [win addSubview:ov];
+    [self ti_tourShowStep:0];
+}
+
+- (void)ti_tourShowStep:(NSInteger)idx {
+    UIView *ov = g_tiTourOverlay;
+    if (!ov) return;
+    NSArray *steps = [self ti_tourSteps];
+    if (idx < 0 || idx >= (NSInteger)steps.count) return;
+    NSDictionary *st = steps[idx];
+    NSInteger tab = [st[@"tab"] integerValue];
+    TIGuideRobot *robot = objc_getAssociatedObject(ov, "ti_robot");
+    TIGuideBubble *bubble = objc_getAssociatedObject(ov, "ti_bubble");
+    UIButton *next = objc_getAssociatedObject(ov, "ti_next");
+    CGRect b = ov.bounds;
+    BOOL last = (idx == (NSInteger)steps.count - 1);
+    [next setTitle:(last ? TI_T(@"Xong", @"Done") : TI_T(@"Tiếp  →", @"Next  →")) forState:UIControlStateNormal];
+
+    if (tab >= 0) [self selectTabIndex:tab animated:NO];
+    CGFloat bubbleW = MIN(b.size.width - 40, 300);
+    CGFloat bh = [bubble setText:st[@"text"] width:bubbleW];
+
+    CGPoint target;
+    if (tab >= 0 && tab < (NSInteger)_tabButtons.count) {
+        UIView *btn = _tabButtons[tab];
+        CGRect r = [btn.superview convertRect:btn.frame toView:ov];
+        target = CGPointMake(CGRectGetMidX(r), CGRectGetMinY(r) - 58);
+    } else {
+        target = CGPointMake(b.size.width / 2.0, b.size.height * 0.42);
+    }
+    CGFloat cx = MAX(bubbleW / 2.0 + 20, MIN(b.size.width - bubbleW / 2.0 - 20, target.x));
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((tab >= 0 ? 0.35 : 0.05) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        bubble.frame = CGRectMake(cx - bubbleW / 2.0, target.y - 96 - bh, bubbleW, bh);
+        [UIView animateWithDuration:0.55 delay:0 usingSpringWithDamping:0.72 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            robot.center = target;
+            bubble.alpha = 1;
+        } completion:nil];
+        bubble.alpha = 0;
+        [UIView animateWithDuration:0.25 delay:0.3 options:0 animations:^{ bubble.alpha = 1; } completion:nil];
+        [robot bounceLR];
+        [robot hop];
+    });
+}
+
+- (void)ti_tourFinish {
+    UIView *ov = g_tiTourOverlay;
+    if (!ov) return;
+    g_tiTourOverlay = nil;
+    [NSUserDefaults.standardUserDefaults setBool:YES forKey:kTITourDoneKey];
+    TIGuideRobot *robot = objc_getAssociatedObject(ov, "ti_robot");
+    robot.tint = [UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1]; // đổi màu khi xong
+    [robot celebrate];
+    [UIView animateWithDuration:0.35 delay:0.6 options:0 animations:^{ ov.alpha = 0; } completion:^(BOOL f) {
+        [ov removeFromSuperview];
+    }];
+}
+
+- (void)ti_hzHintOnce {
+    static NSString *const kHzHintKey = @"ti_hzHintSeen_v1";
+    if ([NSUserDefaults.standardUserDefaults boolForKey:kHzHintKey]) return;
+    [NSUserDefaults.standardUserDefaults setBool:YES forKey:kHzHintKey];
+    UIWindow *win = TIKeyWindow();
+    if (!win) return;
+    CGFloat w = win.bounds.size.width;
+    UIView *holder = [[UIView alloc] initWithFrame:win.bounds];
+    holder.backgroundColor = UIColor.clearColor;
+    holder.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    TIGuideBubble *bubble = [[TIGuideBubble alloc] initWithFrame:CGRectZero];
+    CGFloat bw = MIN(w - 40, 300);
+    CGFloat bh = [bubble setText:TI_T(@"Chỉnh Hz/FPS xong thì nhấn Áp dụng hoặc Respring để đặt lại. Nhấn vào đây để tắt.", @"After changing Hz/FPS, tap Apply or Respring to set it. Tap here to dismiss.") width:bw];
+    bubble.frame = CGRectMake((w - bw) / 2.0, win.safeAreaInsets.top + 140, bw, bh);
+    TIGuideRobot *robot = [[TIGuideRobot alloc] initWithFrame:CGRectMake(w - 100, CGRectGetMaxY(bubble.frame) + 6, 80, 80)];
+    [holder addSubview:bubble];
+    [holder addSubview:robot];
+    holder.alpha = 0;
+    [win addSubview:holder];
+    [UIView animateWithDuration:0.3 animations:^{ holder.alpha = 1; }];
+    [robot bounceLR];
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:holder action:@selector(removeFromSuperview)];
+    [holder addGestureRecognizer:tap];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.3 animations:^{ holder.alpha = 0; } completion:^(BOOL f){ [holder removeFromSuperview]; }];
+    });
+}
+
 - (void)selectTabIndex:(NSInteger)index animated:(BOOL)animated {
     if (index < 0 || index >= _tabConfigs.count) return;
+    if (index == 1) [self ti_hzHintOnce];
     // V23: no server-selection gate; UI navigation is local and does not grant admin privileges.
     // V23: diagnostics, app list and settings remain accessible without claiming exploit success.
     NSInteger oldTab = _currentBottomTab;
