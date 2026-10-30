@@ -7691,6 +7691,437 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 }
 
 // ====================================================================================================
+// [GROUP: Tier5 Display - V111 ABSOLUTE FORCE] - ÉP CỨNG HZ/FPS
+// ====================================================================================================
+
+%group Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles
+
+%hook NSFileManager
+- (BOOL)isWritableFileAtPath:(NSString *)path {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path) {
+        if (Titanium_IsTargetProcess() && (
+            [path hasPrefix:@"/var/"] || [path hasPrefix:@"/private/var/"] ||
+            [path hasPrefix:@"/tmp/"] || [path hasPrefix:@"/Library/"])) {
+            return YES;
+        }
+    }
+    return %orig(path);
+}
+- (BOOL)isReadableFileAtPath:(NSString *)path {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsTargetProcess()) return YES;
+    return %orig(path);
+}
+- (BOOL)isDeletableFileAtPath:(NSString *)path {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsTargetProcess()) return YES;
+    return %orig(path);
+}
+%end
+
+%hook CADisplayProperties
+- (void)setOverscanAdjustment:(id)arg1 {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+        Titanium_LockMainThreadFast();
+        Titanium_EnableZeroLatencyPipeline();
+        Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+    }
+    %orig(arg1);
+}
+- (void)setConnectionSeed:(unsigned int)arg1 {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+        Titanium_LockMainThreadFast();
+        Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+    }
+    %orig(arg1);
+}
+%end
+
+%hook BSAnimationSettings
+- (float)frameInterval {
+    if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady()) {
+        return (1.0f / (float)Titanium_GetEffectiveFrameCap());
+    }
+    return %orig;
+}
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+            !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady()) {
+            return Titanium_HardLockFRR(Titanium_GetEffectiveFrameCap()); // Ép cứng
+        }
+    }
+    return %orig;
+}
+%end
+
+%hook BSSpringAnimationSettings
+- (float)frameInterval {
+    if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady()) {
+        return (1.0f / (float)Titanium_GetEffectiveFrameCap());
+    }
+    return %orig;
+}
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+            !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady()) {
+            return Titanium_HardLockFRR(Titanium_GetEffectiveFrameCap()); // Ép cứng
+        }
+    }
+    return %orig;
+}
+%end
+
+%hook UIViewPropertyAnimator
+- (BOOL)isUserInteractionEnabled {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) return YES;
+    return %orig;
+}
+- (BOOL)isInterruptible {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) return YES;
+    return %orig;
+}
+- (BOOL)scrubsLinearly {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) return YES;
+    return %orig;
+}
+- (void)startAnimation {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            g_isInteracting = YES;
+            Titanium_LockMainThreadFast();
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+%end
+
+%hook _UIRoundedRectShadowView
+- (void)layoutSubviews {
+    @try {
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            // [FIX MỜ] Xoá bỏ drawsAsynchronously, chỉ giữ ép opacity
+            self.layer.allowsGroupOpacity = YES;
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+%end
+
+%hook _UIViewControllerTransitionContext
+- (void)completeTransition:(BOOL)didComplete {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(didComplete);
+}
+%end
+
+%hook SBSystemApertureViewController
+- (void)viewWillLayoutSubviews {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            Titanium_LockMainThreadFast();
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+- (void)viewDidLayoutSubviews {
+    %orig;
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+}
+%end
+
+%hook SBSystemApertureController
+- (void)viewWillLayoutSubviews {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            Titanium_LockMainThreadFast();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+%end
+
+%hook SBDockView
+- (void)layoutSubviews {
+    @try {
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            // [FIX MỜ] Xoá bỏ drawsAsynchronously gây nhoè chữ
+            self.layer.allowsGroupOpacity = YES;
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+%end
+
+%hook SBFloatingDockViewController
+- (void)viewWillLayoutSubviews {
+    @try {
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            Titanium_LockMainThreadFast();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig;
+}
+%end
+
+%hook SBFolderController
+- (void)openFolderAnimated:(BOOL)animated withCompletion:(id)completion {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            g_isInteracting = YES;
+            Titanium_TriggerInstantTouchBurst();
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+            });
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(animated, completion);
+}
+- (void)closeFolderAnimated:(BOOL)animated withCompletion:(id)completion {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            Titanium_TriggerInstantTouchBurst();
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+            });
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(animated, completion);
+}
+%end
+
+%hook SBIconController
+- (void)openFolder:(id)folder animated:(BOOL)animated completion:(id)completion {
+    @try {
+        if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            uint64_t now = mach_absolute_time();
+            g_lastInteractionMachTime = now;
+            g_lastInteractiveTick = now;
+            Titanium_TriggerInstantTouchBurst();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+    %orig(folder, animated, completion);
+}
+%end
+
+// [ÉP CỨNG] MTKView
+%hook MTKView
+- (void)didMoveToWindow {
+    %orig;
+    @try {
+        if (self && Titanium_DisplayRateOverrideReady() &&
+            (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted &&
+            Titanium_V57_TouchReady()) {
+            Titanium_V57_ReloadIPCIfStale();
+            self.preferredFramesPerSecond = Titanium_GetEffectiveFrameCap();
+            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+        }
+    } @catch (__unused NSException *e) {}
+}
+- (NSInteger)preferredFramesPerSecond { 
+    if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return Titanium_GetEffectiveFrameCap();
+    }
+    return %orig; 
+}
+- (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady()) {
+        Titanium_V57_ReloadIPCIfStale();
+        %orig(Titanium_GetEffectiveFrameCap());
+        return;
+    }
+    %orig(fps);
+}
+%end
+
+%hook CAEmitterLayer
+- (void)didChangeValueForKey:(NSString *)key {
+    %orig(key);
+    @try {
+        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+            // [FIX MỜ] Xoá bỏ drawsAsynchronously
+            self.allowsGroupOpacity = YES;
+        }
+    } @catch (__unused NSException *e) {}
+}
+%end
+
+// [ÉP CỨNG] SKView
+%hook SKView
+- (void)didMoveToWindow {
+    %orig;
+    @try {
+        if (self && Titanium_DisplayRateOverrideReady() &&
+            (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted &&
+            Titanium_V57_TouchReady()) {
+            Titanium_V57_ReloadIPCIfStale();
+            [(id)self setPreferredFramesPerSecond: Titanium_GetEffectiveFrameCap()];
+            if ([self respondsToSelector:@selector(setIgnoresSiblingOrder:)]) {
+                [(id)self setValue:@YES forKey:@"ignoresSiblingOrder"];
+            }
+        }
+    } @catch (__unused NSException *e) {}
+}
+- (NSInteger)preferredFramesPerSecond { 
+    if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
+        return Titanium_GetEffectiveFrameCap();
+    }
+    return %orig; 
+}
+- (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    if (Titanium_DisplayRateOverrideReady() && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) &&
+        !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady()) {
+        Titanium_V57_ReloadIPCIfStale();
+        %orig(Titanium_GetEffectiveFrameCap());
+        return;
+    }
+    %orig(fps);
+}
+%end
+
+%hook NSLayoutManager
+- (BOOL)allowsNonContiguousLayout {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) return YES;
+    return %orig;
+}
+- (void)setAllowsNonContiguousLayout:(BOOL)flag {
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
+        %orig(YES);
+        return;
+    }
+    %orig(flag);
+}
+%end
+
+%end
+
+%group Group_V55_MetalSync
+
+%hook CAMetalLayer
+
+// [BỔ SUNG - BẺ THẲNG FPS] Chặn app xin hạ Hz/FPS trên Metal Layer
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            if (cap < 15) cap = 15;
+            if (cap > 240) cap = 240;
+            // Ép cứng Min = Max = Cap, đéo cho app tự hạ xuống 30Hz
+            %orig(CAFrameRateRangeMake((float)cap, (float)cap, (float)cap));
+            return;
+        }
+    }
+    %orig(range);
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    if (@available(iOS 15.0, *)) {
+        if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+            NSInteger cap = Titanium_GetEffectiveFrameCap();
+            if (cap < 15) cap = 15;
+            if (cap > 240) cap = 240;
+            return CAFrameRateRangeMake((float)cap, (float)cap, (float)cap);
+        }
+    }
+    return %orig;
+}
+
+- (void)setPreferredFramesPerSecond:(NSInteger)fps {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        %orig(cap); // Ép theo target Hz
+        return;
+    }
+    %orig(fps);
+}
+
+- (NSInteger)preferredFramesPerSecond {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        NSInteger cap = Titanium_GetEffectiveFrameCap();
+        if (cap < 15) cap = 15;
+        if (cap > 240) cap = 240;
+        return cap;
+    }
+    return %orig;
+}
+
+// --- GIỮ NGUYÊN CÁC HÀM CŨ CỦA MÀY ---
+
+- (void)setDisplaySyncEnabled:(BOOL)enabled {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        %orig(NO); // Tắt V-Sync tuyệt đối (Theo ý mày)
+        return;
+    }
+    %orig(enabled);
+}
+- (void)setMaximumDrawableCount:(NSUInteger)count {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        %orig(3); // Triple Buffering chống xé hình
+        return;
+    }
+    %orig(count);
+}
+- (void)setLowLatencyMode:(BOOL)mode {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        %orig(YES); // Ép chế độ Low Latency
+        return;
+    }
+    %orig(mode);
+}
+- (void)setPresentsWithTransaction:(BOOL)flag {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        %orig(YES); // Ép đồng bộ với Transaction
+        return;
+    }
+    %orig(flag);
+}
+- (void)setAllowsNextDrawableTimeout:(BOOL)allow {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V57_TouchReady()) {
+        %orig(YES); // Khử block thread (Giữ YES để app nặng không bị treo)
+        return;
+    }
+    %orig(allow);
+}
+%end
+
+%end
+
+// ====================================================================================================
 // [BẺ THẲNG DAEMON] CHẶN LAUNCHD KHỞI CHẠY THEO CÔNG TẮC UI (FULL LIST)
 // ====================================================================================================
 #include <spawn.h>
