@@ -4511,8 +4511,11 @@ static void Titanium_RunOnNextVsync(void (^work)(void)) {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_lastInteractionMachTime = mach_absolute_time();
             Titanium_TriggerInstantTouchBurst();
-            Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
-            Titanium_ReapplyFrameRateToAllScenes();
+            // [SỬA CHẬM KHI MỞ APP] Ghi driver đúng nhịp vsync kế tiếp, không chặn lúc app đang kích hoạt.
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+                Titanium_ReapplyFrameRateToAllScenes();
+            });
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -6510,6 +6513,9 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
             Titanium_TriggerInstantTouchBurst();
             dispatch_async(dispatch_get_main_queue(), ^{
                 Titanium_ReapplyFrameRateToAllScenes();
+            });
+            // [SỬA XÁM KHI MỞ APP] Overdrive IOMFB chạy nền để khung đầu của app không bị chờ.
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                 Titanium_ExecuteRealPanelOverdrive();
             });
         }
