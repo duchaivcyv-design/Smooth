@@ -5824,21 +5824,18 @@ static int (*orig_kill)(pid_t, int) = NULL;
 static int hooked_kill(pid_t pid, int sig) {
     if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
         if (pid == getpid() && sig == SIGKILL) {
+            // [FIX] SIGKILL tự gửi = respring intent (HardButton, watchdog, ...).
+            // Ghi marker để boot guard biết đây là respring chủ đích, không phải bootloop.
+            // KHÔNG return 0: HardButton nhận 0 -> tưởng thành công -> cleanup tiếp
+            // -> NULL deref -> SIGSEGV (crash 1 trong log).
+            // Passthrough: rơi xuống orig_kill ở cuối -> kernel kill process thật.
+            // HardButton bị kill cùng process -> không cleanup -> không crash.
             g_isRebooting = YES;
             NSDictionary *marker = @{@"time": @([[NSDate date] timeIntervalSince1970])};
             [marker writeToFile:@"/tmp/.titanium_sreboot_marker" atomically:YES];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120 * NSEC_PER_MSEC)),
-                           dispatch_get_main_queue(), ^{
-                pid_t rpid = 0;
-                const char *a1[] = {"sbreload", NULL};
-                const char *a2[] = {"sbreload", NULL};
-                int r = posix_spawn(&rpid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)a1, environ);
-                if (r != 0) posix_spawn(&rpid, "/usr/bin/sbreload", NULL, NULL, (char *const *)a2, environ);
-            });
-            return 0;
-        }
-        if (pid == getpid() && sig == SIGSTOP) {
-            return 0; // chặn watchdog freeze
+            // KHÔNG return. Rơi xuống orig_kill.
+        } else if (pid == getpid() && sig == SIGSTOP) {
+            return 0; // chặn watchdog freeze — vẫn ép cứng như cũ
         }
     }
     return orig_kill ? orig_kill(pid, sig) : -1;
