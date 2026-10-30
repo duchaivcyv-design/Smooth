@@ -20,6 +20,10 @@ BoostiPhone6sApp_FILES = main.m \
 BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox IOKit
 BoostiPhone6sApp_INSTALL_PATH = $(_THEOS_PREFIX)/Applications
 
+# [MỚI] Thư mục Resources: nội dung được copy thẳng vào bundle app.
+# Đặt robot_chao_mung.jpeg vào thư mục này để app đọc được ảnh.
+BoostiPhone6sApp_RESOURCE_DIRS = Resources
+
 # CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
 BoostiPhone6sApp_CFLAGS = -fobjc-arc \
                           -O3 \
