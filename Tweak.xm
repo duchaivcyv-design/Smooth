@@ -1369,6 +1369,7 @@ static volatile CFTimeInterval g_lastTouchMediaTimeV285 = 0.0;
 static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfoThermalStateNominal;
 
 static BOOL g_SystemMasterReady = YES;
+static volatile BOOL g_isRebooting = NO; // [FIX] Trạng thái bảo vệ khi respring/reboot
 static volatile int g_titaniumFirstFrameReady = 0;
 static volatile NSInteger g_titaniumNativeDisplayMaxFPS = 60;
 static volatile int g_titaniumNativeDisplayRateReady = 0;
