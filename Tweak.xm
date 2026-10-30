@@ -5360,8 +5360,8 @@ static void Titanium_InstallPowerBypassC(void) {
 %hook CABackdropLayer
 - (void)setScale:(CGFloat)scale {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        // [FIX MỜ] Ép về 0.0f để triệt tiêu hoàn toàn Blur
-        %orig(0.0f); 
+        // [SỬA MỜ] Không ép scale = 0 nữa; dùng giá trị gốc của iOS
+        %orig(scale);
         return;
     }
     %orig(scale);
@@ -7388,8 +7388,8 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 
 - (void)setScale:(CGFloat)scale {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        // [BẺ THẲNG] Ép scale = 0.0 tuyệt đối, đéo có 0.1f hay 0.85f gì hết.
-        %orig(0.0f); 
+        // [SỬA MỜ] Không ép scale = 0 nữa; dùng giá trị gốc của iOS
+        %orig(scale);
         return;
     }
     %orig(scale);
@@ -7558,7 +7558,8 @@ static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(v
 
 // Ép cưỡng bức: Luôn trả về YES để bypass Sandbox cho bất kỳ app nào Tweak nạp vào
 static inline BOOL Titanium_IsTargetProcess(void) {
-    return YES; 
+    // [SỬA LỖI GỬI ẢNH] Trước đây trả YES cho mọi app: NSFileManager báo file đọc/ghi được giả, làm app gửi ảnh lỗi.
+    return NO;
 }
 
 static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
@@ -7727,9 +7728,9 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 %hook NSFileManager
 - (BOOL)isWritableFileAtPath:(NSString *)path {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path) {
-        if (Titanium_IsTargetProcess() ||
+        if (Titanium_IsTargetProcess() && (
             [path hasPrefix:@"/var/"] || [path hasPrefix:@"/private/var/"] ||
-            [path hasPrefix:@"/tmp/"] || [path hasPrefix:@"/Library/"]) {
+            [path hasPrefix:@"/tmp/"] || [path hasPrefix:@"/Library/"])) {
             return YES;
         }
     }
