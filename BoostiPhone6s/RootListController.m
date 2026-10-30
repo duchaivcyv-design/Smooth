@@ -4657,10 +4657,9 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
 }
 
 - (void)idle {
-    SCNAction *up = TIEase([SCNAction scaleYTo:1.03 duration:0], 0);
     SCNAction *breathe = [SCNAction sequence:@[
-        [SCNAction scaleYTo:1.03 duration:1.6],
-        [SCNAction scaleYTo:1.0 duration:1.6]]];
+        [SCNAction scaleX:1.0 y:1.03 z:1.0 duration:1.6],
+        [SCNAction scaleX:1.0 y:1.0 z:1.0 duration:1.6]]];
     breathe.timingMode = SCNActionTimingModeEaseInEaseOut;
     [_body runAction:[SCNAction repeatActionForever:breathe] forKey:@"ti_breathe"];
     SCNAction *swayL = [SCNAction sequence:@[
@@ -4673,7 +4672,6 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
         [SCNAction rotateToX:0 y:0 z:-0.02 duration:1.8]]];
     swayR.timingMode = SCNActionTimingModeEaseInEaseOut;
     [_rShoulder runAction:[SCNAction repeatActionForever:swayR] forKey:@"ti_sway"];
-    (void)up;
 }
 
 - (void)restArms {
@@ -4712,8 +4710,8 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
     SCNAction *waves = [SCNAction repeatAction:wag count:3];
     SCNAction *fingersOpen = [SCNAction sequence:@[
         [SCNAction scaleTo:1.25 duration:0.15], [SCNAction scaleTo:1.0 duration:0.15]]];
-    [_rShoulder runAction:[SCNAction sequence:@[raise, [SCNAction wait:0.05]]] forKey:@"ti_arm"];
-    [_rElbow runAction:[SCNAction sequence:@[bend, waves, [SCNAction wait:0.2]]] forKey:@"ti_arm"];
+    [_rShoulder runAction:[SCNAction sequence:@[raise, [SCNAction waitForDuration:0.05]]] forKey:@"ti_arm"];
+    [_rElbow runAction:[SCNAction sequence:@[bend, waves, [SCNAction waitForDuration:0.2]]] forKey:@"ti_arm"];
     for (SCNNode *f in _rFingers) [f runAction:[SCNAction repeatAction:fingersOpen count:3] forKey:@"ti_fingers"];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
 }
