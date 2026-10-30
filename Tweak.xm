@@ -6105,14 +6105,6 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
 #define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
 #endif
 
-#ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
-#define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
-#endif
-
-#ifndef JETSAM_PRIORITY_CRITICAL
-#define JETSAM_PRIORITY_CRITICAL 19
-#endif
-
 // [FIX LỖI BUILD] Phải có struct này thì mới dùng được con trỏ props
 typedef struct memorystatus_priority_properties {
     int32_t  priority;
@@ -8177,6 +8169,83 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 %end
 
 // ====================================================================================================
+// [BẺ THẲNG DAEMON] CHẶN LAUNCHD KHỞI CHẠY THEO CÔNG TẮC UI (FULL LIST)
+// ====================================================================================================
+#include <spawn.h>
+#include <errno.h>
+#include <string.h>
+
+// Con trỏ hàm gốc
+static int (*orig_posix_spawn)(pid_t *pid, const char *path, const posix_spawn_file_actions_t *file_actions, const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]);
+
+// Hàm check UI
+static BOOL Titanium_IsDaemonDisabled(const char *path) {
+    if (!path) return NO;
+    
+    static NSString *prefPath = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // [LƯU Ý] Hàm Titanium_GetRootHidePrefixPath() phải được khai báo TRƯỚC block này ở trên đầu file
+        prefPath = [Titanium_GetRootHidePrefixPath() stringByAppendingPathComponent:@"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+    });
+    
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+    if (!dict) return NO;
+    
+    // Trả về YES nếu công tắc UI đang TẮT (Xám)
+    BOOL (^isOff)(NSString *) = ^BOOL(NSString *key) {
+        if (dict[key] != nil) {
+            return ![dict[key] boolValue];
+        }
+        return NO; 
+    };
+    
+    // =========================================================================
+    // MAP PROCESS NAME -> UI KEY (Mày nhớ check lại key trong RootListController)
+    // =========================================================================
+    if (strstr(path, "airprintd") && isOff(@"DaemonAirPrint")) return YES;
+    if (strstr(path, "backupd") && isOff(@"DaemonBackup")) return YES;
+    if (strstr(path, "assistivetouchd") && isOff(@"DaemonAssistiveTouch")) return YES;
+    if (strstr(path, "gamecenterd") && isOff(@"DaemonGameCenter")) return YES;
+    if (strstr(path, "softwareupdated") && isOff(@"DaemonOTA")) return YES;
+    if (strstr(path, "mobileassetd") && isOff(@"DaemonOTA")) return YES;
+    if (strstr(path, "ReportCrash") && isOff(@"DaemonLog")) return YES;
+    if (strstr(path, "logd") && isOff(@"DaemonLog")) return YES;
+    if (strstr(path, "accessoryd") && isOff(@"DaemonAccessory")) return YES;
+    if (strstr(path, "diskmanage") && isOff(@"DaemonDataWipe")) return YES;
+    if (strstr(path, "healthd") && isOff(@"DaemonHealthKit")) return YES;
+    if (strstr(path, "homekitd") && isOff(@"DaemonHomeKit")) return YES;
+    if (strstr(path, "cloudd") && isOff(@"DaemoniCloud")) return YES;
+    if (strstr(path, "akd") && isOff(@"DaemoniCloud")) return YES;
+    if (strstr(path, "tetherd") && isOff(@"DaemonTethering")) return YES;
+    if (strstr(path, "passd") && isOff(@"DaemonPassBook")) return YES;
+    if (strstr(path, "Spotlight") && isOff(@"DaemonSpotlight")) return YES;
+    if (strstr(path, "VoiceControl") && isOff(@"DaemonVoiceControl")) return YES;
+    if (strstr(path, "vpnagentd") && isOff(@"DaemonVPN")) return YES;
+    
+    return NO;
+}
+
+// Hook
+static int hooked_posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *file_actions, const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]) {
+    if (path && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
+        if (Titanium_IsDaemonDisabled(path)) {
+            if (pid) *pid = -1;
+            return EPERM; // Chặn đứng tại nhân launchd
+        }
+    }
+    return orig_posix_spawn(pid, path, file_actions, attrp, argv, envp);
+}
+
+// Khởi tạo
+__attribute__((constructor)) static void Titanium_InitDaemonKiller(void) {
+    MSHookFunction((void *)posix_spawn, (void *)hooked_posix_spawn, (void **)&orig_posix_spawn);
+}
+
+%group Group_DaemonKiller
+%end
+
+// ====================================================================================================
 // [PHẦN C: INIT - V108 FIX SREBOOT HANG]
 // ====================================================================================================
 
@@ -8506,6 +8575,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         %init(Group_Hardware_Deep_Core_Bypass);
         %init(Group_Safari_And_Animation_Safety);
         %init(Group_Hardware_ProMotion_Overclock);
+        %init(Group_DaemonKiller);
         %init(Group_Apple_Native_ColdBoot_Overdrive);
         if (!g_avoidTweakConflicts) %init(Group_Silicon_Hardware_Pipeline_Overdrive);
         %init(Group_Silicon_Scheduler_Touch_Governor);
