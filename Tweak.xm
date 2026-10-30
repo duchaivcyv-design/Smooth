@@ -6584,7 +6584,53 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 
 %hook CASpringAnimation
 
-// 5. Ép Frame Rate (Giữ nguyên khử nhoè)
+// [KHOÁ NẢY + GIỮ TỐC ĐỘ] Chỉ setter được đổi giá trị; getter trả đúng giá trị đã lưu (tránh nhân đôi).
+// Khối lượng ×0.75 và độ cứng ×1.5 giữ phản ứng nhanh như trước.
+// Lực cản luôn >= ngưỡng tới hạn (ζ >= 1): lò xo không dao động nên không nảy và không méo icon.
+- (void)setMass:(CGFloat)mass {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        %orig(mass * 0.75);
+        [self setDamping:[self damping]];
+        return;
+    }
+    %orig(mass);
+}
+
+- (void)setStiffness:(CGFloat)stiffness {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        %orig(stiffness * 1.5);
+        [self setDamping:[self damping]];
+        return;
+    }
+    %orig(stiffness);
+}
+
+- (CGFloat)damping {
+    CGFloat orig = %orig;
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        CGFloat critical = 2.0 * sqrt(fabs([self stiffness] * [self mass])) * 1.02;
+        return MAX(orig, critical);
+    }
+    return orig;
+}
+
+- (void)setDamping:(CGFloat)damping {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        CGFloat critical = 2.0 * sqrt(fabs([self stiffness] * [self mass])) * 1.02;
+        %orig(MAX(damping, critical));
+        return;
+    }
+    %orig(damping);
+}
+
+- (void)setInitialVelocity:(CGFloat)initialVelocity {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        %orig(initialVelocity * 1.5);
+        return;
+    }
+    %orig(initialVelocity);
+}
+
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
