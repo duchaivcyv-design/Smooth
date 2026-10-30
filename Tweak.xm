@@ -3855,8 +3855,6 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 }
 %end
 
-%end
-
 // ====================================================================================================
 // [PARALLEL ANIMATION FORCE - FIXED] ÉP RENDER TỐI ĐA, KHÔNG ĐẶC CẦU, KHÔNG LAG
 // ====================================================================================================
