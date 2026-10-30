@@ -3883,30 +3883,45 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 // [PARALLEL ANIMATION FORCE - FIXED] ÉP RENDER TỐI ĐA, KHÔNG ĐẶC CẦU, KHÔNG LAG
 // ====================================================================================================
 
-// 1. Ép CoreAnimation xả giao dịch ngay lập tức (0ms)
+// Thread-local counter: đếm transaction do chính hook này mở.
+// Chỉ flush khi commit transaction CUỐI CÙNG của mình — không xả transaction của thread khác.
+static _Thread_local NSInteger g_ownTxDepth = 0;
+
 %hook CATransaction
 + (void)begin {
-    // %orig TRƯỚC — mở transaction mới rồi mới đập flag lên nó.
-    // Trước đây setDisableActions trước %orig -> đập lên transaction CŨ (chưa mở)
-    // -> transaction mới không có flag -> vô dụng + hỏng transaction cha.
     %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        // Đập cả 3 flag ép cứng, chạy MỌI thread (Metal không dùng CA implicit nên vô hại)
+        // Ép cả 3 flag — mọi thread, không gate. Metal thread không dùng CA implicit
+        // nên setDisableActions vô hại với nó.
         [CATransaction setDisableActions:YES];
         [CATransaction setAnimationDuration:0.0];
         [CATransaction setAnimationTimingFunction:nil];
+        g_ownTxDepth++;
     }
 }
 
 + (void)commit {
-    // %orig TRƯỚC — commit xong mới flush.
-    // Trước đây flush trước %orig -> xả transaction CHƯA commit -> Metal thread
-    // đang present -> ensure_implicit -> push transaction -> CA_ABORT (crash 2).
-    %orig;
+    BOOL isMyOutermost = NO;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        // Xả ngay sau commit, không chờ next frame.
-        // An toàn mọi thread VỚI ĐIỀU KIỆN _setLowLatency đã gate main-only (patch 2/3).
-        [CATransaction flush];
+        if (g_ownTxDepth > 0) {
+            g_ownTxDepth--;
+            if (g_ownTxDepth == 0) isMyOutermost = YES;
+        }
+    }
+    %orig;
+    if (isMyOutermost) {
+        // [BẺ THẲNG] Flush ngay, đéo chờ runloop cuối iteration.
+        // Chỉ khi commit transaction CUỐI cùng do chính hook mở (depth về 0).
+        // Không bao giờ flush transaction của thread khác đang mở.
+        // Nếu commit xảy ra trên Metal completion thread với transaction riêng
+        // (không do hook mở) -> g_ownTxDepth == 0 từ đầu -> isMyOutermost = NO -> không flush
+        // -> present không bị xả giữa chừng -> không CA_ABORT.
+        // Nếu commit trên main thread sau chuỗi begin của hook -> isMyOutermost = YES
+        // -> flush -> UI update 0ms.
+        // Đây là ép cứng, không phải gate thread. Ownership, không phải main-check.
+        if (@available(iOS 10.0, *)) {
+            [CATransaction flush];
+        }
     }
 }
 %end
@@ -3917,16 +3932,13 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
     @try {
         if (anim && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
             if (@available(iOS 15.0, *)) {
-                // Ép cứng dải Frame Rate
                 if ([anim respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                     anim.preferredFrameRateRange = Titanium_HardLockFRR(Titanium_GetEffectiveFrameCap());
                 }
             }
-            // Ép cứng fill + dọn dẹp, đéo giữ lại gây đặc cầu
             anim.removedOnCompletion = YES;
             anim.fillMode = kCAFillModeForwards;
             anim.speed = 1.0;
-            // Bắt đầu ngay frame hiện tại, đéo delay
             if (anim.beginTime == 0.0) {
                 anim.beginTime = CACurrentMediaTime();
             }
@@ -3935,7 +3947,6 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
     %orig(anim, key);
 }
 %end
-
 %end
 
 // ====================================================================================================
@@ -4505,12 +4516,41 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
         if (!self) return %orig;
         double orig = %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-            // [ÉP NHANH] Mở/đóng thư mục dứt khoát
-            return (orig > 0.22) ? 0.15 : orig; 
+            // [ÉP CỨNG] Không chỉ giảm duration — clamp cả 2 chiều.
+            // Gốc ~0.22-0.30 -> ép 0.15 nếu gốc > 0.22.
+            // Sàn 0.12: dưới ngưỡng này GPU không kịp composite frame đầu
+            // -> tear dù không còn flush. 0.15 là ngưỡng an toàn.
+            double forced = (orig > 0.22) ? 0.15 : orig;
+            if (forced < 0.12) forced = 0.12;
+            return forced;
         }
     } @catch (__unused NSException *e) {}
     return %orig;
 }
+
+// Ép thêm: hệ số tốc độ animation folder luôn max (nếu class có)
+- (double)openAnimationDuration {
+    @try {
+        if (!self) return %orig;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            double orig = %orig;
+            return (orig > 0.22) ? 0.15 : orig;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
+- (double)closeAnimationDuration {
+    @try {
+        if (!self) return %orig;
+        if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+            double orig = %orig;
+            return (orig > 0.22) ? 0.15 : orig;
+        }
+    } @catch (__unused NSException *e) {}
+    return %orig;
+}
+
 %end
 
 %hook SBApplication
