@@ -3766,6 +3766,7 @@ static void Titanium_InstallUIScreenRateSpoofNow(void) {
         if (@available(iOS 15.0, *)) {
             Class metalLayerClass = NSClassFromString(@"CAMetalLayer");
             if (metalLayerClass && [metalLayerClass instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
+                %init(Group_CapabilityAwareMetalPacing);
             }
         }
     }
@@ -5412,6 +5413,35 @@ static void Titanium_InstallPowerBypassC(void) {
 // ====================================================================================================
 // HÀM ÉP LẠI FRAME RATE (ĐÃ DÙNG HARD LOCK THAY VÌ SMOOTH)
 // ====================================================================================================
+static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
+    if (!Titanium_DisplayRateOverrideReady() ||
+        !(IS_ACTIVE || g_syncPayloadV285.masterEnabled) ||
+        !Titanium_ShouldApplyAppDisplayOverrides() || g_isCurrentAppBlacklisted) return;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!Titanium_DisplayRateOverrideReady() ||
+            !(IS_ACTIVE || g_syncPayloadV285.masterEnabled) || g_isCurrentAppBlacklisted) return;
+        NSHashTable *links = Titanium_GetTrackedDisplayLinks();
+        NSArray *snapshot = nil;
+        @synchronized (links) {
+            snapshot = [[links allObjects] copy];
+        }
+        NSInteger cap = Titanium_ClampDisplayFrameRate(Titanium_GetEffectiveFrameCap());
+        if (cap < 60) cap = 60; // SAN 60HZ
+        NSInteger nativeMax = __atomic_load_n(&g_titaniumNativeDisplayMaxFPS, __ATOMIC_ACQUIRE);
+        if (nativeMax < 15 || nativeMax > 240) nativeMax = 60;
+        for (CADisplayLink *displayLink in snapshot) {
+            if (!displayLink) continue;
+            if (@available(iOS 15.0, *)) {
+                if ([displayLink respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                    displayLink.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
+                }
+            }
+            displayLink.preferredFramesPerSecond = cap;
+        }
+    });
+}
+
 static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
     if (!Titanium_ShouldApplyAppDisplayOverrides()) return;
     @autoreleasepool {
@@ -5756,6 +5786,31 @@ static void Titanium_BypassDCPMethod(void) {
         if (kill_sym) MSHookFunction(kill_sym, (void *)hooked_kill, (void **)&orig_kill);
     });
 }
+
+typedef struct __attribute__((packed)) {
+    uint32_t width;
+    uint32_t height;
+    uint32_t refreshRate;
+    uint32_t pixelClock;
+    uint32_t hSyncStart;
+    uint32_t hSyncEnd;
+    uint32_t vSyncStart;
+    uint32_t vSyncEnd;
+    uint32_t flags;
+} TioIomfbTiming;
+
+static io_connect_t g_dcpIomfbConn = IO_OBJECT_NULL;
+static io_connect_t g_dcpDispConn = IO_OBJECT_NULL;
+static volatile BOOL g_dcpConnReady = NO;
+static void Tio_DCPResolveConnections(void);
+
+typedef enum {
+    TioPathNone = 0,
+    TioPathFramework,
+    TioPathRawMIG,
+    TioPathDisplayConnect
+} TioDriverPath;
+static volatile TioDriverPath g_tioBestPath = TioPathNone;
 
 void Titanium_ForcePanelModeDirect(NSInteger hz) {
     if (!Titanium_V55_PanelWritable()) return;
@@ -6184,27 +6239,6 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 // ====================================================================================================
 
 %group Group_Hardware_ProMotion_Overclock
-
-// 1. Chặn đứng việc Driver trả về lỗi
-// Hook hàm lõi của Kernel giao tiếp với Driver màn hình
-static kern_return_t (*orig_IOConnectCallStructMethod)(io_connect_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt);
-
-static kern_return_t hooked_IOConnectCallStructMethod(io_connect_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt) {
-    kern_return_t ret = orig_IOConnectCallStructMethod(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
-    
-    // [ÉP BUỘC] Nếu đang bật tweak, LUÔN BÁO THÀNH CÔNG (KERN_SUCCESS) dù Driver từ chối
-    if (g_v60ForceDriverSuccess && (IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return KERN_SUCCESS; 
-    }
-    return ret;
-}
-
-static void Titanium_BypassDCPMethod(void) {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        MSHookFunction((void *)IOConnectCallStructMethod, (void *)hooked_IOConnectCallStructMethod, (void **)&orig_IOConnectCallStructMethod);
-    });
-}
 
 // 2. Ép cảm ứng lấy mẫu max speed
 %hook IOHIDEventSystemClient
