@@ -6105,12 +6105,6 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
 #define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
 #endif
 
-// [FIX LỖI BUILD] Phải có struct này thì mới dùng được con trỏ props
-typedef struct memorystatus_priority_properties {
-    int32_t  priority;
-    uint64_t user_data;
-} memorystatus_priority_properties_t;
-
 static void Titanium_Tier6JetsamImmunityReal(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
