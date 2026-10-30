@@ -65,6 +65,12 @@ extern char **environ;
 // NGÔN NGỮ: "auto" theo ngôn ngữ máy; "vi" / "en" chọn tay. Tiếng Anh => toàn bộ chữ là tiếng Anh.
 // ====================================================================================================
 static NSString *g_tiLangCache = nil;
+static NSString *g_tiSelectedLang = @"auto";
+// Gọi mỗi khi người dùng chọn ngôn ngữ hoặc khi đọc cấu hình: xóa cache để chữ đổi ngay theo lựa chọn.
+static void Titanium_ApplySelectedLanguage(NSString *code) {
+    g_tiSelectedLang = ([code isKindOfClass:NSString.class] && code.length) ? [code copy] : @"auto";
+    g_tiLangCache = nil;
+}
 static NSString *TI_ResolvedLanguage(NSString *selected) {
     if (selected.length > 0 && ![selected isEqualToString:@"auto"]) return selected;
     if (g_tiLangCache) return g_tiLangCache;
@@ -74,7 +80,7 @@ static NSString *TI_ResolvedLanguage(NSString *selected) {
     return g_tiLangCache;
 }
 static inline BOOL TI_IsVietnameseNow(void) {
-    return [TI_ResolvedLanguage(nil) isEqualToString:@"vi"];
+    return [TI_ResolvedLanguage(g_tiSelectedLang) isEqualToString:@"vi"];
 }
 static inline NSString *TI_TrV(NSString *vi, NSString *en) {
     return TI_IsVietnameseNow() ? (vi ?: en) : (en ?: vi);
@@ -86,6 +92,35 @@ static inline NSString *TI_TrV(NSString *vi, NSString *en) {
 // Hook 1 điểm (presentViewController) nên mọi chỗ gọi UIAlertController đều dùng giao diện mới.
 // ====================================================================================================
 static UIWindow *TIKeyWindow(void);
+@interface TILanguageRowsSource : NSObject <UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, copy) NSArray<NSArray<NSString *> *> *options;
+@property (nonatomic, copy) NSString *picked;
+@property (nonatomic, copy) void (^onPick)(NSString *code);
+@end
+@implementation TILanguageRowsSource
+- (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)section { return self.options.count; }
+- (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
+    UITableViewCell *c = [tv dequeueReusableCellWithIdentifier:@"ti_lang"];
+    if (!c) c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"ti_lang"];
+    NSArray<NSString *> *o = self.options[ip.row];
+    BOOL sel = [o[0] isEqualToString:self.picked];
+    c.textLabel.text = o[1];
+    c.textLabel.font = [UIFont systemFontOfSize:16 weight:sel ? UIFontWeightBold : UIFontWeightRegular];
+    c.textLabel.textColor = sel ? UIColor.blackColor : UIColor.whiteColor;
+    c.backgroundColor = UIColor.clearColor;
+    UIView *bg = [[UIView alloc] initWithFrame:CGRectInset(c.bounds, 4, 4)];
+    bg.backgroundColor = sel ? [UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1] : [UIColor colorWithWhite:1 alpha:0.06];
+    bg.layer.cornerRadius = 12;
+    c.backgroundView = bg;
+    c.selectionStyle = UITableViewCellSelectionStyleNone;
+    return c;
+}
+- (void)tableView:(UITableView *)tv didSelectRowAtIndexPath:(NSIndexPath *)ip {
+    self.picked = self.options[ip.row][0];
+    if (self.onPick) self.onPick(self.picked);
+}
+@end
+
 // Thông báo tự vẽ (kính mờ, tự ẩn), thay cho cảnh báo mặc định của iOS khi chỉ cần báo kết quả.
 @interface TIThemedToast : NSObject
 + (void)showText:(NSString *)text tint:(UIColor *)tint;
@@ -1783,15 +1818,15 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
     self.v20TabSelected = selected;
     BOOL dark = YES;
     if (@available(iOS 13.0, *)) dark = self.traitCollection.userInterfaceStyle != UIUserInterfaceStyleLight;
-    UIColor *c = selected ? [UIColor colorWithRed:0.12 green:0.12 blue:0.14 alpha:1.0] :
-                 (dark ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0]);
+    UIColor *c = selected ? [UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1.0] :
+                 (dark ? [UIColor colorWithWhite:0.95 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0]);
     UIFont *f = selected ? [UIFont systemFontOfSize:10.5 weight:UIFontWeightBold] : [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
     CGAffineTransform t = [self v20IconTransformForSelected:selected pressed:self.v20TabPressed];
     CGFloat titleAlpha = 1.0;
     void (^u)(void) = ^{
         self.iconView.tintColor = c;
         self.iconView.transform = t;
-        self.titleLabel.textColor = dark ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0];
+        self.titleLabel.textColor = selected ? [UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1.0] : (dark ? [UIColor colorWithWhite:0.95 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0]);
         self.titleLabel.font = f;
         self.titleLabel.alpha = titleAlpha;
         self.glassPill.alpha = 0.0;
@@ -5387,37 +5422,86 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
 }
 
 - (void)showLanguagePickerPopup:(id)sender {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"CHỌN NGÔN NGỮ" message:@"Tự động sẽ dùng ngôn ngữ ưu tiên của iPhone/iPad." preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Tự động theo máy" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        self.settingsDict[@"SelectedLanguage"] = @"auto";
-        self.settingsDict[@"AppLanguage"] = @"auto";
-        [[NSUserDefaults standardUserDefaults] setObject:@"auto" forKey:@"SelectedLanguage"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
+    UIWindow *win = TIKeyWindow();
+    if (!win) return;
+    NSString *current = self.settingsDict[@"SelectedLanguage"] ?: @"auto";
+
+    UIView *dim = [[UIView alloc] initWithFrame:win.bounds];
+    dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+    dim.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+    CGFloat cw = MIN(win.bounds.size.width - 48.0, 330.0), ch = 380.0;
+    UIView *card = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cw, ch)];
+    card.center = CGPointMake(CGRectGetMidX(win.bounds), CGRectGetMidY(win.bounds));
+    card.backgroundColor = [UIColor colorWithRed:0.06 green:0.08 blue:0.13 alpha:0.98];
+    card.layer.cornerRadius = 22;
+    if (@available(iOS 13.0, *)) card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.layer.borderWidth = 1;
+    card.layer.borderColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:0.55].CGColor;
+    card.layer.masksToBounds = YES;
+    [dim addSubview:card];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(20, 18, cw - 40, 24)];
+    title.text = TI_T(@"CHỌN NGÔN NGỮ", @"SELECT LANGUAGE");
+    title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
+    title.textColor = [UIColor colorWithRed:0.55 green:0.90 blue:1.0 alpha:1];
+    [card addSubview:title];
+
+    UITableView *table = [[UITableView alloc] initWithFrame:CGRectMake(14, 54, cw - 28, 214) style:UITableViewStylePlain];
+    table.backgroundColor = UIColor.clearColor;
+    table.separatorStyle = UITableViewCellSeparatorStyleNone;
+    table.rowHeight = 52;
+    [card addSubview:table];
+
+    TILanguageRowsSource *src = [TILanguageRowsSource new];
+    src.options = @[ @[@"auto", TI_T(@"Tự động theo máy", @"Auto (device language)")], @[@"vi", @"Tiếng Việt"], @[@"en", @"English"] ];
+    src.picked = current;
+    table.dataSource = src;
+    table.delegate = src;
+    objc_setAssociatedObject(table, "ti_lang_src", src, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    UIButton *applyBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    applyBtn.frame = CGRectMake(20, 282, cw - 40, 44);
+    applyBtn.layer.cornerRadius = 14;
+    applyBtn.backgroundColor = [UIColor colorWithRed:0.12 green:0.55 blue:0.80 alpha:1];
+    [applyBtn setTitle:TI_T(@"Áp dụng", @"Apply") forState:UIControlStateNormal];
+    [applyBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    applyBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    applyBtn.hidden = YES; // chỉ hiện khi chọn ngôn ngữ khác với ngôn ngữ đang dùng
+    [card addSubview:applyBtn];
+
+    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    closeBtn.frame = CGRectMake(20, ch - 52, cw - 40, 36);
+    [closeBtn setTitle:TI_T(@"Đóng", @"Close") forState:UIControlStateNormal];
+    [closeBtn setTitleColor:[UIColor colorWithWhite:0.75 alpha:1] forState:UIControlStateNormal];
+    closeBtn.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    [card addSubview:closeBtn];
+
+    __weak typeof(table) wTable = table;
+    src.onPick = ^(NSString *code) {
+        applyBtn.hidden = [code isEqualToString:current];
+        [wTable reloadData];
+    };
+    [closeBtn addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        [dim removeFromSuperview];
+    }] forControlEvents:UIControlEventTouchUpInside];
+    [applyBtn addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
+        NSString *code = src.picked ?: @"auto";
+        self.settingsDict[@"SelectedLanguage"] = code;
+        self.settingsDict[@"AppLanguage"] = code;
+        Titanium_ApplySelectedLanguage(code);
         [self saveSettingsDataAndSync];
-        [self.customTableView reloadData];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Tiếng Việt" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        self.settingsDict[@"SelectedLanguage"] = @"vi";
-        self.settingsDict[@"AppLanguage"] = @"vi";
-        [[NSUserDefaults standardUserDefaults] setObject:@"vi" forKey:@"SelectedLanguage"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        [self saveSettingsDataAndSync];
-        [self.customTableView reloadData];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"English" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        self.settingsDict[@"SelectedLanguage"] = @"en";
-        self.settingsDict[@"AppLanguage"] = @"en";
-        [[NSUserDefaults standardUserDefaults] setObject:@"en" forKey:@"SelectedLanguage"];
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        [self saveSettingsDataAndSync];
-        [self.customTableView reloadData];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.sourceView = self.view;
-        sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width/2, self.view.bounds.size.height/2, 1, 1);
-    }
-    [self presentViewController:sheet animated:YES completion:nil];
+        [TIThemedToast showText:TI_T(@"Đang áp dụng ngôn ngữ, app sẽ tự khởi động lại…", @"Applying language, the app will restart…")
+                           tint:[UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1]];
+        // Cho người dùng kịp đọc thông báo rồi thoát; lần mở sau app dùng ngôn ngữ mới.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            exit(0);
+        });
+    }] forControlEvents:UIControlEventTouchUpInside];
+
+    dim.alpha = 0;
+    [win addSubview:dim];
+    [UIView animateWithDuration:0.25 animations:^{ dim.alpha = 1; }];
 }
 
 - (void)showV35AppearanceSettings {
@@ -5483,7 +5567,6 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
                 if (![key isEqualToString:@"auto"]) {
                     owner.settingsDict[@"TargetRefreshRate"] = @(rate);
                     owner.settingsDict[@"TargetFPSRate"] = @(rate);
-                    [d setInteger:rate forKey:@"TargetRefreshRate"];
                     [d setInteger:rate forKey:@"TargetFPSRate"];
                 }
                 [d synchronize];
@@ -6913,10 +6996,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     if (wasConflictOn) {
         [TIThemedToast showText:TI_T(@"Đã tắt \"Tránh xung đột Tweak\" để Hz/FPS có hiệu lực", @"Turned off \"Avoid tweak conflicts\" so Hz/FPS can apply")
                            tint:[UIColor colorWithRed:0.45 green:0.90 blue:1.0 alpha:1]];
-    } else {
-        [TIThemedToast showText:TI_T(@"Đã áp dụng Hz/FPS", @"Hz/FPS applied")
-                           tint:[UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1]];
     }
+    // Không hiện thông báo "Đã áp dụng" nữa: Áp dụng chỉ lưu và gửi cấu hình, không làm phiền bằng popup.
     // V23: avoid a 5-second full-screen dim overlay and per-frame car timer.
     // The actual preference/payload work is coalesced and applied by applyDeepSpringBoardAndUIKitTweaks.
     [self applyDeepSpringBoardAndUIKitTweaks];
@@ -7779,10 +7860,9 @@ static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
 static NSString *const kTIRateWarnDismissKey = @"ti_rateWarnDismissedAt";
 
 static BOOL TI_RateWarningShouldShow(NSDictionary *d, NSInteger rate) {
-    if (rate <= 60) return NO;
-    NSNumber *ts = d[kTIRateWarnDismissKey];
-    if (ts && [[NSDate date] timeIntervalSince1970] - ts.doubleValue < 24 * 3600) return NO;
-    return YES;
+    // Banner ghim cố định, không có nút X, luôn hiện khi mức > 60.
+    (void)d;
+    return rate > 60;
 }
 
 static UIColor *TI_RateWarningColor(NSInteger rate) {
@@ -7800,7 +7880,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     box.backgroundColor = [tint colorWithAlphaComponent:0.10];
     box.layer.cornerRadius = 14;
     box.layer.borderWidth = 1;
-    box.layer.borderColor = [tint colorWithAlphaComponent:0.75].CGColor;
+    box.layer.borderColor = [UIColor colorWithRed:1.0 green:0.80 blue:0.20 alpha:0.9].CGColor;
 
     // Icon ⚠️ mờ làm nền
     UILabel *bg = [[UILabel alloc] initWithFrame:CGRectMake(cw/2 - 40, 8, 80, 80)];
@@ -7821,17 +7901,6 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                      @"WARNING: This tweak operates at the deepest level, directly hooking Kernel syscalls and overriding the hardware panel driver (DCP/IOMobileFramebuffer). It forces the physical display to exceed its factory limits (e.g., pushing a 60Hz panel to 240Hz) while completely bypassing thermal throttling and battery safety protocols. Prolonged use will cause severe hardware degradation: permanent screen burn-in, vertical/horizontal lines, dead pixels, GPU/peripheral burnout, and rapid battery swelling. You are overriding physical hardware limits. Use at your own risk.");
     [box addSubview:body];
 
-    UIButton *close = [UIButton buttonWithType:UIButtonTypeCustom];
-    close.frame = CGRectMake(cw - 38, 6, 30, 30);
-    [close setTitle:@"✕" forState:UIControlStateNormal];
-    [close setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    close.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightBold];
-    [close addAction:[UIAction actionWithHandler:^(__kindof UIAction *a) {
-        self.settingsDict[kTIRateWarnDismissKey] = @([[NSDate date] timeIntervalSince1970]);
-        [self saveSettingsDataAndSync];
-        [box removeFromSuperview];
-    }] forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:close];
 
     // Mức 240: icon ⚠️ ở giữa, rung nhẹ
     if (rate >= 240) {
@@ -8061,6 +8130,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
             case 2: return 6;
             case 3: return 6;
             case 4: return 9;
+            case 5: return 16; // Bổ sung: 16 công tắc daemon
             default: return 6;
         }
     } else if (_currentBottomTab == 3) {
@@ -8096,6 +8166,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
             case 2: return @"Màn hình";
             case 3: return @"PIN & NĂNG LƯỢNG";
             case 4: return @"Hệ thống";
+            case 5: return @"Bổ sung · Daemon";
             default: return @"Công tắc";
         }
     } else if (_currentBottomTab == 3) {
@@ -8454,6 +8525,34 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                 else if (indexPath.row == 3) { title = @"Khóa 30 FPS khi nóng";   prefKey = @"SmartThermalDispatch";    hint = @"Hạ xuống 30 FPS khi máy quá nóng"; }
                 else if (indexPath.row == 4) { title = @"Pin tiết kiệm 60Hz";     prefKey = @"DynamicThermalEngine";    hint = @"Giới hạn 60Hz khi pin yếu"; }
                 else                         { title = @"Tiết kiệm pin";          prefKey = @"PowerSaveMode";           hint = @"Khóa tần số ở 60Hz để tiết kiệm pin"; }
+            } else if (_currentSwitchSubTab == 5) {
+                // Bổ sung: 16 daemon, tên và key đúng theo danh sách; tweak đọc các key này trong Titanium_IsDaemonDisabled.
+                static NSArray<NSDictionary *> *s_daemons = nil;
+                static dispatch_once_t s_daemonOnce;
+                dispatch_once(&s_daemonOnce, ^{
+                    s_daemons = @[
+                        @{@"name": @"AirPrint daemon",              @"key": @"DaemonAirPrint"},
+                        @{@"name": @"Daemon Sao lưu",               @"key": @"DaemonBackup"},
+                        @{@"name": @"Daemon trợ giúp Cảm ứng",      @"key": @"DaemonAssistiveTouch"},
+                        @{@"name": @"Daemon Trung tâm Game",        @"key": @"DaemonGameCenter"},
+                        @{@"name": @"Daemons Cập nhật OTA",         @"key": @"DaemonOTA"},
+                        @{@"name": @"Daemons Nhật ký, báo cáo lỗi", @"key": @"DaemonLog"},
+                        @{@"name": @"Daemons phụ kiện",             @"key": @"DaemonAccessory"},
+                        @{@"name": @"Data partition wipe daemon",   @"key": @"DaemonDataWipe"},
+                        @{@"name": @"HealthKit daemon",             @"key": @"DaemonHealthKit"},
+                        @{@"name": @"HomeKit daemon",               @"key": @"DaemonHomeKit"},
+                        @{@"name": @"iCloud daemons",               @"key": @"DaemoniCloud"},
+                        @{@"name": @"Internet tethering daemon",    @"key": @"DaemonTethering"},
+                        @{@"name": @"PassBook daemon",              @"key": @"DaemonPassBook"},
+                        @{@"name": @"Spotlight daemon",             @"key": @"DaemonSpotlight"},
+                        @{@"name": @"Voice control daemons",        @"key": @"DaemonVoiceControl"},
+                        @{@"name": @"VPN daemon",                   @"key": @"DaemonVPN"}
+                    ];
+                });
+                NSInteger idx = MAX(0, MIN((NSInteger)s_daemons.count - 1, indexPath.row));
+                title = s_daemons[idx][@"name"];
+                prefKey = s_daemons[idx][@"key"];
+                hint = @"Tắt để chặn daemon";
             } else {
                 if (indexPath.row == 0)      { title = @"Mở app nhanh";           prefKey = @"TurboAppLaunch";          hint = @"Tăng tốc khởi chạy ứng dụng"; }
                 else if (indexPath.row == 1) { title = @"Sửa màn hình đen";       prefKey = @"FixAppLaunchBlackScreen"; hint = @"Khắc phục màn hình đen khi mở app"; }
@@ -8465,9 +8564,10 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                 else if (indexPath.row == 7) { title = @"Bàn phím không trễ";     prefKey = @"KeyboardZeroLagV24";      hint = @"Giảm trễ khi gõ phím"; }
                 else                         { title = @"Nhịp tiến trình nền";    prefKey = @"BackgroundPacingDaemon";  hint = @"Điều tiết tiến trình chạy nền"; }
             }
-            detail = hint;
+            detail = hint.length > 26 ? [[hint substringToIndex:26] stringByAppendingString:@"…"] : hint; // tối đa 26 ký tự
             LiquidCapsuleSwitch *s = [[LiquidCapsuleSwitch alloc] init];
-            s.on = [self.settingsDict[prefKey] ?: @NO boolValue];
+            // Nhóm Bổ sung (daemon): mặc định BẬT = daemon chạy bình thường, khớp isOff trong tweak.
+            s.on = (_currentSwitchSubTab == 5) ? [self.settingsDict[prefKey] ?: @YES boolValue] : [self.settingsDict[prefKey] ?: @NO boolValue];
             __weak typeof(self) wS = self;
             s.valueChangedBlock = ^(BOOL isOn) {
                 __strong typeof(wS) sS = wS;
@@ -9176,14 +9276,10 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
         self.settingsDict[@"TargetFPSRate"] = @(rate);
         self.settingsDict[@"EnableFPSControl"] = @YES;
         self->_lastAppliedFPS = rate;
-        [rateDefaults setInteger:rate forKey:@"TargetFPSRate"];
-        [rateDefaults setBool:YES forKey:@"EnableFPSControl"];
     } else {
         self.settingsDict[@"TargetRefreshRate"] = @(rate);
         self.settingsDict[@"EnableHzControl"] = @YES;
         self->_lastAppliedHz = rate;
-        [rateDefaults setInteger:rate forKey:@"TargetRefreshRate"];
-        [rateDefaults setBool:YES forKey:@"EnableHzControl"];
     }
     [rateDefaults synchronize];
     [self saveSettingsDataAndSync];
@@ -9316,7 +9412,6 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     if (hz == resolved && fps == resolved) return;
     self.settingsDict[@"TargetRefreshRate"] = @(resolved);
     self.settingsDict[@"TargetFPSRate"] = @(resolved);
-    [defaults setInteger:resolved forKey:@"TargetRefreshRate"];
     [defaults setInteger:resolved forKey:@"TargetFPSRate"];
     [defaults synchronize];
     [self syncSharedMemoryFile:YES];
@@ -9830,10 +9925,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         NSString *savedLanguage = [savedDefaults stringForKey:@"SelectedLanguage"];
         if (savedLanguage.length) self.settingsDict[@"SelectedLanguage"] = savedLanguage;
     }
-    if (!self.settingsDict[@"TargetRefreshRate"] && [savedDefaults objectForKey:@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @([savedDefaults integerForKey:@"TargetRefreshRate"]);
-    if (!self.settingsDict[@"TargetFPSRate"] && [savedDefaults objectForKey:@"TargetFPSRate"]) self.settingsDict[@"TargetFPSRate"] = @([savedDefaults integerForKey:@"TargetFPSRate"]);
-    if (!self.settingsDict[@"EnableHzControl"] && [savedDefaults objectForKey:@"EnableHzControl"]) self.settingsDict[@"EnableHzControl"] = @([savedDefaults boolForKey:@"EnableHzControl"]);
-    if (!self.settingsDict[@"EnableFPSControl"] && [savedDefaults objectForKey:@"EnableFPSControl"]) self.settingsDict[@"EnableFPSControl"] = @([savedDefaults boolForKey:@"EnableFPSControl"]);
+    Titanium_ApplySelectedLanguage(self.settingsDict[@"SelectedLanguage"]);
     Titanium_SynchronizeLinkedPreferences(self.settingsDict, nil);
     [self ensureDefaultSettingsExist];
     [self saveSettingsDataAndSync];
@@ -9882,7 +9974,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     BOOL hadLegacyAutoTheme = (self.settingsDict[TI_AUTO_THEME_KEY] != nil);
     if (![self.settingsDict[@"V35AccentColor"] isKindOfClass:NSString.class]) self.settingsDict[@"V35AccentColor"] = @"cyan";
     if (![self.settingsDict[@"V35GraphColor"] isKindOfClass:NSString.class]) self.settingsDict[@"V35GraphColor"] = @"auto";
-    if (![self.settingsDict[@"SelectedLanguage"] isKindOfClass:NSString.class]) self.settingsDict[@"SelectedLanguage"] = @"vi";
+    if (![self.settingsDict[@"SelectedLanguage"] isKindOfClass:NSString.class]) self.settingsDict[@"SelectedLanguage"] = @"auto";
     NSArray *keys = @[
         @"Enabled", @"EnableSystemMonitoring",
         @"TargetRefreshRate", @"TargetFPSRate", @"EnableHzControl", @"EnableFPSControl",
@@ -9922,8 +10014,8 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     }
     // Preserve user-selected values: defaults are applied only when keys are absent.
     // Closing the app from the switcher must not reset these persisted settings.
-    if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @60;
-    if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @60;
+    if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
+    if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @144;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"FeatureActivationComplete"]) self.settingsDict[@"FeatureActivationComplete"] = @NO;
     if (!self.settingsDict[TI_AUTO_THEME_KEY]) {
