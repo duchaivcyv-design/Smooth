@@ -1,10 +1,7 @@
 #!/bin/sh
-set -e
-
 # ====================================================================================================
 # SCRIPT POSTINST: PHÂN QUYỀN HỆ THỐNG & KÍCH HOẠT TWEAK (CHẾ ĐỘ ÉP TOÀN DIỆN)
 # (HỖ TRỢ: ROOTLESS, ROOTHIDE, PALERA1N, DOPAMINE & MỌI MÔI TRƯỜNG JAILBREAK)
-# (AN TOÀN TUYỆT ĐỐI: CHUẨN POSIX 100%, PHÂN QUYỀN MOBILE/ROOT CHÍNH XÁC)
 # ====================================================================================================
 
 # 1. TỰ ĐỘNG DÒ TÌM TIỀN TỐ PHÂN VÙNG (ƯU TIÊN BIẾN MÔI TRƯỜNG)
@@ -18,114 +15,89 @@ elif [ -n "$JB_ROOT_PATH" ] && [ -d "$JB_ROOT_PATH" ]; then
 elif [ -L "/var/jb" ] || [ -d "/var/jb" ]; then
     JB_ROOT="/var/jb"
 else
-    # Quét nhanh thư mục RootHide ngẫu nhiên trên phân vùng /private/preboot
     ROOTHIDE_DIR=$(find /private/preboot -maxdepth 3 -type d -name "jb-*" 2>/dev/null | head -n 1)
     if [ -z "$ROOTHIDE_DIR" ]; then
         ROOTHIDE_DIR=$(find /var -maxdepth 2 -type d -name "jb-*" 2>/dev/null | head -n 1)
     fi
-
     if [ -n "$ROOTHIDE_DIR" ] && [ -d "$ROOTHIDE_DIR" ]; then
         JB_ROOT="$ROOTHIDE_DIR"
-    else
-        JB_ROOT=""
     fi
 fi
 
-# 2. PHÂN QUYỀN CHUẨN CHO BUNDLE CÀI ĐẶT & THƯ VIỆN NHỊ PHÂN (ROOT:WHEEL 755 / 644)
-BUNDLE_PATHS="
+# 2. HÀM PHÂN QUYỀN (CHUẨN POSIX)
+# Sử dụng: set_perms <đường_dẫn> <type: file|dir> <quyền: 644|755> <user:group>
+set_perms() {
+    if [ -e "$1" ]; then
+        if [ "$2" = "dir" ]; then
+            chmod -R "$3" "$1" 2>/dev/null || true
+            chown -R "$4" "$1" 2>/dev/null || true
+        else
+            chmod "$3" "$1" 2>/dev/null || true
+            chown "$4" "$1" 2>/dev/null || true
+        fi
+    fi
+}
+
+# 3. PHÂN QUYỀN BUNDLE (THƯ MỤC)
+BUNDLES="
 $JB_ROOT/Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 $JB_ROOT/Library/PreferenceBundles/BoostiPhone6s.bundle
 /Library/PreferenceBundles/BoostiPhone6sPrefs.bundle
 /Library/PreferenceBundles/BoostiPhone6s.bundle
 "
+for B in $BUNDLES; do set_perms "$B" "dir" "755" "root:wheel"; done
 
-for B_PATH in $BUNDLE_PATHS; do
-    if [ -d "$B_PATH" ]; then
-        chmod -R 755 "$B_PATH" 2>/dev/null || true
-        chown -R root:wheel "$B_PATH" 2>/dev/null || true
-    fi
-done
-
-# Phân quyền cho dylib và filter plist trong DynamicLibraries (644 root:wheel)
-DYLIB_PATHS="
+# 4. PHÂN QUYỀN DYLIB & PLIST (FILE)
+FILES="
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6s.dylib
 $JB_ROOT/Library/MobileSubstrate/DynamicLibraries/BoostiPhone6s.plist
 /Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.dylib
 /Library/MobileSubstrate/DynamicLibraries/BoostiPhone6sCore.plist
-"
-
-for D_PATH in $DYLIB_PATHS; do
-    if [ -f "$D_PATH" ]; then
-        chmod 644 "$D_PATH" 2>/dev/null || true
-        chown root:wheel "$D_PATH" 2>/dev/null || true
-    fi
-done
-
-# 3. PHÂN QUYỀN ENTRY PLIST PREFERENCELOADER (644 root:wheel)
-PLIST_PATHS="
 $JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
 $JB_ROOT/Library/PreferenceLoader/Preferences/BoostiPhone6s.plist
 $JB_ROOT/Library/PreferenceLoader/BoostiPhone6sPrefs.plist
 /Library/PreferenceLoader/Preferences/BoostiPhone6sPrefs.plist
 /Library/PreferenceLoader/Preferences/BoostiPhone6s.plist
 "
+for F in $FILES; do set_perms "$F" "file" "644" "root:wheel"; done
 
-for P_PATH in $PLIST_PATHS; do
-    if [ -f "$P_PATH" ]; then
-        chmod 644 "$P_PATH" 2>/dev/null || true
-        chown root:wheel "$P_PATH" 2>/dev/null || true
-    fi
-done
-
-# 4. KHỞI TẠO THƯ MỤC CẤU HÌNH & PHÂN QUYỀN MOBILE:MOBILE (755 / 644)
-PREF_DIR_LIST="
+# 5. TẠO & PHÂN QUYỀN THƯ MỤC PREF (MOBILE:MOBILE)
+PREF_DIRS="
 /var/mobile/Library/Preferences
 $JB_ROOT/var/mobile/Library/Preferences
 "
-
-for P_DIR in $PREF_DIR_LIST; do
-    if [ -n "$JB_ROOT" ] || [ "$P_DIR" = "/var/mobile/Library/Preferences" ]; then
-        if [ ! -d "$P_DIR" ]; then
-            mkdir -p "$P_DIR" 2>/dev/null || true
-        fi
-        chmod 755 "$P_DIR" 2>/dev/null || true
-        chown mobile:mobile "$P_DIR" 2>/dev/null || true
+for PDIR in $PREF_DIRS; do 
+    if [ -n "$JB_ROOT" ] || [ "$PDIR" = "/var/mobile/Library/Preferences" ]; then
+        mkdir -p "$PDIR" 2>/dev/null || true
+        set_perms "$PDIR" "dir" "755" "mobile:mobile"
     fi
 done
 
-PREF_FILE_LIST="
+PREF_FILES="
 /var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist
 $JB_ROOT/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist
 $JB_ROOT/Library/Preferences/com.taojb.boostiphone6s.plist
 "
+for PF in $PREF_FILES; do set_perms "$PF" "file" "644" "mobile:mobile"; done
 
-for PF in $PREF_FILE_LIST; do
-    if [ -f "$PF" ]; then
-        chmod 644 "$PF" 2>/dev/null || true
-        chown mobile:mobile "$PF" 2>/dev/null || true
-    fi
-done
-
-# 5. ĐĂNG KÝ ICON ỨNG DỤNG BẰNG UICACHE (NẾU GÓI CÓ CHỨA APP UI)
+# 6. ĐĂNG KÝ ICON ỨNG DỤNG (NẾU CÓ)
 APP_PATHS="
 $JB_ROOT/Applications/BoostiPhone6s.app
 $JB_ROOT/Applications/BoostiPhone6sApp.app
 /Applications/BoostiPhone6s.app
 "
-
 if command -v uicache >/dev/null 2>&1; then
     for A_PATH in $APP_PATHS; do
         if [ -d "$A_PATH" ]; then
-            chmod -R 755 "$A_PATH" 2>/dev/null || true
-            chown -R root:wheel "$A_PATH" 2>/dev/null || true
+            set_perms "$A_PATH" "dir" "755" "root:wheel"
             uicache -p "$A_PATH" >/dev/null 2>&1 || true
         fi
     done
 fi
 
-# 6. DỌN SẠCH CỜ AN TOÀN/SAFE MODE CŨ VÀ RESET BỘ ĐẾM KHỞI CHẠY
+# 7. DỌN SẠCH CỜ AN TOÀN/SAFE MODE CŨ VÀ RESET BỘ ĐẾM
 defaults delete com.taojb.boostiphone6s BoostV20_SafeModeActive 2>/dev/null || true
 defaults delete com.taojb.boostiphone6s BoostiPhone6s_SafeModeActive 2>/dev/null || true
 
@@ -136,14 +108,13 @@ if [ -n "$JB_ROOT" ]; then
     rm -f "$JB_ROOT/tmp/.titanium_boot_guard" 2>/dev/null || true
 fi
 
-# 7. LÀM SẠCH DAEMON CFPREFSD & GỬI TÍN HIỆU DARWIN KÍCH HOẠT ĐỒNG BỘ
+# 8. GỬI TÍN HIỆU DARWIN VÀ LÀM SẠCH CFPREFSD
 killall -9 cfprefsd 2>/dev/null || true
 
 if command -v notifyutil >/dev/null 2>&1; then
-    notifyutil -p com.taojb.boostiphone6s/ReloadPrefs >/dev/null 2>&1 || true
-    notifyutil -p com.taojb.boostiphone6s/ReloadUIKitPrefs >/dev/null 2>&1 || true
-    notifyutil -p com.taojb.boostiphone6s/HardwareSync >/dev/null 2>&1 || true
-    notifyutil -p com.taojb.boostiphone6s/FPSChanged >/dev/null 2>&1 || true
+    for NOTIF in ReloadPrefs ReloadUIKitPrefs HardwareSync FPSChanged; do
+        notifyutil -p "com.taojb.boostiphone6s/$NOTIF" >/dev/null 2>&1 || true
+    done
     notifyutil -p com.titanium.v285.prefschanged >/dev/null 2>&1 || true
 fi
 
