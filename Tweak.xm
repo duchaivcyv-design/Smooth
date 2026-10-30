@@ -4361,6 +4361,32 @@ static _Thread_local NSInteger g_ownTxDepth = 0;
 
 // [ĐÃ XOÁ setShadowStyle:] Gây SIGABRT SBAppSwitcherPageShadowView.
 
+// [SYNC NHỊP] Chạy block đúng ở frame vsync kế tiếp, một lần duy nhất, rồi tự huỷ link.
+@interface TitaniumVsyncOnce : NSObject
+@property (nonatomic, copy) void (^work)(void);
+@property (nonatomic, strong) CADisplayLink *link;
+- (void)fire:(CADisplayLink *)l;
+@end
+@implementation TitaniumVsyncOnce
+- (void)fire:(CADisplayLink *)l {
+    [l invalidate];
+    self.link = nil;
+    void (^w)(void) = self.work;
+    self.work = nil;
+    if (w) w();
+}
+@end
+
+static void Titanium_RunOnNextVsync(void (^work)(void)) {
+    if (!work) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        TitaniumVsyncOnce *t = [TitaniumVsyncOnce new];
+        t.work = work;
+        t.link = [CADisplayLink displayLinkWithTarget:t selector:@selector(fire:)];
+        [t.link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    });
+}
+
 %hook SBControlCenterController
 
 - (void)presentAnimated:(BOOL)animated completion:(id)completion {
@@ -4370,8 +4396,10 @@ static _Thread_local NSInteger g_ownTxDepth = 0;
             __atomic_store_n(&g_isInteracting, YES, __ATOMIC_RELAXED);
             
             Titanium_TriggerInstantTouchBurst();
-            Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
-            Titanium_ReapplyFrameRateToAllScenes();
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+                Titanium_ReapplyFrameRateToAllScenes();
+            });
         }
     } @catch (__unused NSException *e) {}
     %orig(animated, completion);
@@ -4382,8 +4410,10 @@ static _Thread_local NSInteger g_ownTxDepth = 0;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             g_lastInteractionMachTime = mach_absolute_time();
             Titanium_LockMainThreadFast();
-            Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
-            Titanium_ReapplyFrameRateToAllScenes();
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+                Titanium_ReapplyFrameRateToAllScenes();
+            });
         }
     } @catch (__unused NSException *e) {}
     %orig(animated, completion);
@@ -4391,9 +4421,6 @@ static _Thread_local NSInteger g_ownTxDepth = 0;
     @try {
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             __atomic_store_n(&g_isInteracting, NO, __ATOMIC_RELAXED);
-            dispatch_async(dispatch_get_main_queue(), ^{
-                Titanium_ReapplyFrameRateToAllScenes();
-            });
         }
     } @catch (__unused NSException *e) {}
 }
@@ -6557,74 +6584,6 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 
 %hook CASpringAnimation
 
-// 1. Ép Khối lượng (Mass) nhẹ hơn -> Phản hồi tức thì
-- (CGFloat)mass {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return orig * 0.75; // Giảm 25% khối lượng
-    }
-    return orig;
-}
-
-- (void)setMass:(CGFloat)mass {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(mass * 0.75);
-        return;
-    }
-    %orig(mass);
-}
-
-// 2. Ép Độ cứng (Stiffness) cao hơn -> Lò xo bung mạnh, nhanh dứt điểm
-- (CGFloat)stiffness {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return orig * 1.5; // Tăng 50% độ cứng
-    }
-    return orig;
-}
-
-- (void)setStiffness:(CGFloat)stiffness {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(stiffness * 1.5);
-        return;
-    }
-    %orig(stiffness);
-}
-
-// 3. Ép Lực cản (Damping) tăng vừa phải -> Chống nảy quá đà gây lật icon
-- (CGFloat)damping {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return orig * 1.25; // Tăng 25% lực cản
-    }
-    return orig;
-}
-
-- (void)setDamping:(CGFloat)damping {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(damping * 1.25);
-        return;
-    }
-    %orig(damping);
-}
-
-// 4. Ép Vận tốc ban đầu (Initial Velocity) -> Bắn đi nhanh hơn
-- (CGFloat)initialVelocity {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return orig * 1.5;
-    }
-    return orig;
-}
-
-- (void)setInitialVelocity:(CGFloat)initialVelocity {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(initialVelocity * 1.5);
-        return;
-    }
-    %orig(initialVelocity);
-}
-
 // 5. Ép Frame Rate (Giữ nguyên khử nhoè)
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
@@ -7213,10 +7172,15 @@ static void Titanium_InitUltimateHardwareBypass(void) {
                 // Ép cứng dải Frame Rate
                 range = SafeMakeFRR((double)target, (double)target, (double)target);
                 
-                // [BẺ THẲNG] Bọc Async để không block app launch
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-                    Titanium_ExecuteUltimateHardwareHack(target);
-                });
+                // [SỬA NHẤP NHÁY CC] Chỉ ghi timing xuống driver khi Hz mục tiêu THAY ĐỔI.
+                // Trước đây ghi lại mỗi lần setPreferredFrameRateRange (mỗi frame của animation) -> panel đổi mode liên tục.
+                static NSInteger s_lastHwAppliedHz = 0;
+                if (target != s_lastHwAppliedHz) {
+                    s_lastHwAppliedHz = target;
+                    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                        Titanium_ExecuteUltimateHardwareHack(target);
+                    });
+                }
             }
         } @catch (__unused NSException *e) {}
     }
@@ -7927,7 +7891,9 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             g_lastInteractiveTick = now;
             g_isInteracting = YES;
             Titanium_TriggerInstantTouchBurst();
-            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+            });
         }
     } @catch (__unused NSException *e) {}
     %orig(animated, completion);
@@ -7939,7 +7905,9 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
             g_lastInteractionMachTime = now;
             g_lastInteractiveTick = now;
             Titanium_TriggerInstantTouchBurst();
-            Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+            Titanium_RunOnNextVsync(^{
+                Titanium_PushRateToDriverV4(Titanium_GetEffectiveFrameCap());
+            });
         }
     } @catch (__unused NSException *e) {}
     %orig(animated, completion);
