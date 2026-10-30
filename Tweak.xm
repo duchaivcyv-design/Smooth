@@ -4304,10 +4304,6 @@ static _Thread_local NSInteger g_ownTxDepth = 0;
 
 %group Group_Display_SpringBoardV285
 
-// ====================================================================================================
-// NHÓM 7: SPRINGBOARD - [ÉP CỨNG HZ/FPS] CHỐNG DROP KHI VUỐT ĐA NHIỆM, CONTROL CENTER
-// ====================================================================================================
-
 // [SYNC NHỊP] Chạy block đúng ở frame vsync kế tiếp, một lần duy nhất, rồi tự huỷ link.
 @interface TitaniumVsyncOnce : NSObject
 @property (nonatomic, copy) void (^work)(void);
@@ -4333,8 +4329,6 @@ static void Titanium_RunOnNextVsync(void (^work)(void)) {
         [t.link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
     });
 }
-
-%group Group_Display_SpringBoardV285
 
 %hook SBFluidSwitcherViewController
 
