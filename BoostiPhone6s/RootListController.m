@@ -4658,8 +4658,8 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
 
 - (void)idle {
     SCNAction *breathe = [SCNAction sequence:@[
-        [SCNAction scaleToX:1.0 y:1.03 z:1.0 duration:1.6],
-        [SCNAction scaleToX:1.0 y:1.0 z:1.0 duration:1.6]]];
+        [SCNAction scaleTo:1.03 duration:1.6],
+        [SCNAction scaleTo:1.0 duration:1.6]]];
     breathe.timingMode = SCNActionTimingModeEaseInEaseOut;
     [_body runAction:[SCNAction repeatActionForever:breathe] forKey:@"ti_breathe"];
     SCNAction *swayL = [SCNAction sequence:@[
