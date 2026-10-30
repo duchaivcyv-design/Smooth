@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <SceneKit/SceneKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <spawn.h>
@@ -1660,10 +1661,11 @@ static const void *kTrackingTouchKey = &kTrackingTouchKey;
         NSArray *switchLayout = @[
             [_titleL.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:18],
             [_titleL.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor constant:-9],
-            [_titleL.trailingAnchor constraintLessThanOrEqualToAnchor:accessory.leadingAnchor constant:-10],
+            // Chỉ dùng anchor của contentView: công tắc chưa nằm trong cây view lúc này (tránh văng "two different view trees").
+            [_titleL.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-(16 + 62 + 12)],
             [_detailL.leadingAnchor constraintEqualToAnchor:_titleL.leadingAnchor],
             [_detailL.topAnchor constraintEqualToAnchor:_titleL.bottomAnchor constant:3],
-            [_detailL.trailingAnchor constraintLessThanOrEqualToAnchor:accessory.leadingAnchor constant:-10]
+            [_detailL.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-(16 + 62 + 12)]
         ];
         NSArray *defLayout = objc_getAssociatedObject(self, "ti_defaultLayout");
         if (defLayout) [NSLayoutConstraint deactivateConstraints:defLayout];
@@ -4451,84 +4453,289 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
 // ====================================================================================================
 @interface TIGuideRobot : UIView
 @property (nonatomic, strong) UIColor *tint;
+- (void)idle;
 - (void)bounceLR;
 - (void)hop;
+- (void)wave;
+- (void)pointRight;
 - (void)celebrate;
 @end
-@implementation TIGuideRobot {
-    UIImageView *_img;
-    CALayer *_head, *_body, *_screen;
+
+// Bộ phát giọng nói của robot: đọc theo ngôn ngữ đã chọn trong app.
+@interface TIGuideSpeaker : NSObject
++ (void)say:(NSString *)text;
++ (void)stop;
+@end
+@implementation TIGuideSpeaker
++ (AVSpeechSynthesizer *)synth {
+    static AVSpeechSynthesizer *sy = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ sy = [[AVSpeechSynthesizer alloc] init]; });
+    return sy;
 }
++ (NSString *)voiceForLanguage {
+    NSString *code = TI_ResolvedLanguage(g_tiSelectedLang);
+    NSDictionary *map = @{@"vi": @"vi-VN", @"en": @"en-US", @"zh": @"zh-CN", @"ja": @"ja-JP", @"ko": @"ko-KR",
+                          @"fr": @"fr-FR", @"de": @"de-DE", @"es": @"es-ES", @"pt": @"pt-BR", @"ru": @"ru-RU",
+                          @"th": @"th-TH", @"id": @"id-ID", @"hi": @"hi-IN", @"ar": @"ar-SA"};
+    return map[code] ?: @"en-US";
+}
++ (void)say:(NSString *)text {
+    if (text.length == 0) return;
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    AVSpeechUtterance *u = [AVSpeechUtterance speechUtteranceWithString:text];
+    u.voice = [AVSpeechSynthesisVoice voiceWithLanguage:[self voiceForLanguage]];
+    u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95;
+    u.pitchMultiplier = 1.05;
+    [[self synth] stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    [[self synth] speakUtterance:u];
+}
++ (void)stop {
+    [[self synth] stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+}
+@end
+
+@implementation TIGuideRobot {
+    SCNView *_view;
+    SCNNode *_root, *_body, *_head, *_screen;
+    SCNNode *_lShoulder, *_rShoulder, *_lElbow, *_rElbow;
+    NSArray<SCNNode *> *_lFingers, *_rFingers;
+    NSMutableArray<SCNMaterial *> *_shellMats;
+    SCNMaterial *_screenMat;
+    SCNMaterial *_eyeMat;
+}
+
+static SCNNode *TIRobotNode(SCNGeometry *g, SCNVector3 p) {
+    SCNNode *n = [SCNNode nodeWithGeometry:g];
+    n.position = p;
+    return n;
+}
+
 - (instancetype)initWithFrame:(CGRect)f {
     self = [super initWithFrame:f];
     if (!self) return nil;
     self.backgroundColor = UIColor.clearColor;
-    // Tìm ảnh trong bundle app: thử theo tên, rồi theo đường dẫn file (kể cả khi nằm trong thư mục Resources).
-    UIImage *img = [UIImage imageNamed:@"robot_chao_mung"];
-    if (!img) {
-        NSString *path = [NSBundle.mainBundle pathForResource:@"robot_chao_mung" ofType:@"jpeg"];
-        if (path) img = [UIImage imageWithContentsOfFile:path];
-    }
-    if (img) {
-        _img = [[UIImageView alloc] initWithFrame:self.bounds];
-        _img.image = img;
-        _img.contentMode = UIViewContentModeScaleAspectFit;
-        [self addSubview:_img];
-    } else {
-        CGFloat w = f.size.width, h = f.size.height;
-        _body = [CALayer layer];
-        _body.frame = CGRectMake(w*0.22, h*0.52, w*0.56, h*0.40);
-        _body.cornerRadius = w*0.18;
-        _head = [CALayer layer];
-        _head.frame = CGRectMake(w*0.14, h*0.10, w*0.72, h*0.48);
-        _head.cornerRadius = w*0.24;
-        _screen = [CALayer layer];
-        _screen.frame = CGRectMake(w*0.24, h*0.22, w*0.52, h*0.24);
-        _screen.cornerRadius = w*0.08;
-        for (int i = 0; i < 2; i++) {
-            CALayer *eye = [CALayer layer];
-            eye.frame = CGRectMake(w*(0.12 + 0.26*i), h*0.07, w*0.14, h*0.14);
-            eye.cornerRadius = w*0.07;
-            eye.backgroundColor = [UIColor colorWithRed:.55 green:.95 blue:1 alpha:1].CGColor;
-            [_screen addSublayer:eye];
-        }
-        [self.layer addSublayer:_body];
-        [self.layer addSublayer:_head];
-        [_head addSublayer:_screen];
-    }
+    _view = [[SCNView alloc] initWithFrame:self.bounds];
+    _view.backgroundColor = UIColor.clearColor;
+    _view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _view.antialiasingMode = SCNAntialiasingModeMultisampling2X;
+    _view.userInteractionEnabled = NO;
+    _view.allowsCameraControl = NO;
+    _view.autoenablesDefaultLighting = NO;
+    [self addSubview:_view];
+    SCNScene *scene = [SCNScene scene];
+    _view.scene = scene;
+    [self buildRobotInScene:scene];
     self.tint = [UIColor colorWithRed:.45 green:.90 blue:1 alpha:1];
+    [self idle];
     return self;
 }
-- (void)setTint:(UIColor *)tint {
-    _tint = tint;
-    if (_head) {
-        _head.backgroundColor = [tint colorWithAlphaComponent:0.92].CGColor;
-        _body.backgroundColor = [tint colorWithAlphaComponent:0.72].CGColor;
-        _screen.backgroundColor = [UIColor colorWithRed:.05 green:.10 blue:.18 alpha:1].CGColor;
-    } else {
-        _img.layer.shadowColor = tint.CGColor;
-        _img.layer.shadowOpacity = 0.75;
-        _img.layer.shadowRadius = 12;
-        _img.layer.shadowOffset = CGSizeZero;
+
+- (void)buildRobotInScene:(SCNScene *)scene {
+    SCNNode *cam = [SCNNode node];
+    cam.camera = [SCNCamera camera];
+    cam.camera.fieldOfView = 34;
+    cam.position = SCNVector3Make(0, 0.2, 7.4);
+    [scene.rootNode addChildNode:cam];
+
+    SCNNode *key = [SCNNode node];
+    key.light = [SCNLight light];
+    key.light.type = SCNLightTypeOmni;
+    key.light.intensity = 1100;
+    key.position = SCNVector3Make(2.5, 4.0, 6.0);
+    [scene.rootNode addChildNode:key];
+
+    SCNNode *ambient = [SCNNode node];
+    ambient.light = [SCNLight light];
+    ambient.light.type = SCNLightTypeAmbient;
+    ambient.light.intensity = 450;
+    [scene.rootNode addChildNode:ambient];
+
+    _root = [SCNNode node];
+    [scene.rootNode addChildNode:_root];
+
+    _shellMats = [NSMutableArray array];
+    SCNMaterial *shell = [SCNMaterial material];
+    shell.lightingModelName = SCNLightingModelBlinn;
+    shell.specular.contents = [UIColor whiteColor];
+    shell.shininess = 0.6;
+    [_shellMats addObject:shell];
+
+    _screenMat = [SCNMaterial material];
+    _screenMat.lightingModelName = SCNLightingModelConstant;
+    _eyeMat = [SCNMaterial material];
+    _eyeMat.lightingModelName = SCNLightingModelConstant;
+
+    SCNCapsule *bodyG = [SCNCapsule capsuleWithCapRadius:0.52 height:1.25];
+    bodyG.materials = @[shell];
+    _body = TIRobotNode(bodyG, SCNVector3Make(0, -0.55, 0));
+    [_root addChildNode:_body];
+
+    SCNBox *headG = [SCNBox boxWithWidth:1.15 height:0.98 length:0.92 chamferRadius:0.32];
+    headG.materials = @[shell];
+    _head = TIRobotNode(headG, SCNVector3Make(0, 0.82, 0));
+    [_root addChildNode:_head];
+
+    SCNPlane *screenG = [SCNPlane planeWithWidth:0.78 height:0.5];
+    screenG.materials = @[_screenMat];
+    _screen = TIRobotNode(screenG, SCNVector3Make(0, 0.84, 0.47));
+    [_root addChildNode:_screen];
+
+    for (int i = 0; i < 2; i++) {
+        SCNSphere *eyeG = [SCNSphere sphereWithRadius:0.075];
+        eyeG.materials = @[_eyeMat];
+        SCNNode *eye = TIRobotNode(eyeG, SCNVector3Make(i == 0 ? -0.2 : 0.2, 0.9, 0.5));
+        [_root addChildNode:eye];
+    }
+
+    SCNCylinder *antG = [SCNCylinder cylinderWithRadius:0.035 height:0.28];
+    antG.materials = @[shell];
+    [_root addChildNode:TIRobotNode(antG, SCNVector3Make(0, 1.44, 0))];
+    SCNSphere *ballG = [SCNSphere sphereWithRadius:0.085];
+    ballG.materials = @[_eyeMat];
+    [_root addChildNode:TIRobotNode(ballG, SCNVector3Make(0, 1.62, 0))];
+
+    for (int i = 0; i < 2; i++) {
+        CGFloat side = (i == 0) ? -1.0 : 1.0;
+        SCNNode *shoulder = [SCNNode node];
+        shoulder.position = SCNVector3Make(side * 0.72, 0.25, 0);
+        [_root addChildNode:shoulder];
+        SCNCapsule *upperG = [SCNCapsule capsuleWithCapRadius:0.15 height:0.6];
+        upperG.materials = @[shell];
+        [shoulder addChildNode:TIRobotNode(upperG, SCNVector3Make(0, -0.33, 0))];
+        SCNNode *elbow = [SCNNode node];
+        elbow.position = SCNVector3Make(0, -0.66, 0);
+        [shoulder addChildNode:elbow];
+        SCNCapsule *lowerG = [SCNCapsule capsuleWithCapRadius:0.13 height:0.56];
+        lowerG.materials = @[shell];
+        [elbow addChildNode:TIRobotNode(lowerG, SCNVector3Make(0, -0.3, 0))];
+        SCNSphere *handG = [SCNSphere sphereWithRadius:0.18];
+        handG.materials = @[shell];
+        [elbow addChildNode:TIRobotNode(handG, SCNVector3Make(0, -0.62, 0))];
+        NSMutableArray<SCNNode *> *fingers = [NSMutableArray array];
+        NSArray<NSNumber *> *spread = @[@-0.42, @-0.14, @0.14, @0.42];
+        for (NSNumber *a in spread) {
+            SCNCapsule *fg = [SCNCapsule capsuleWithCapRadius:0.045 height:0.22];
+            fg.materials = @[shell];
+            SCNNode *f = TIRobotNode(fg, SCNVector3Make(sinf(a.floatValue) * 0.12, -0.84, 0.02));
+            f.eulerAngles = SCNVector3Make(0, 0, -a.floatValue * 0.5);
+            [elbow addChildNode:f];
+            [fingers addObject:f];
+        }
+        SCNCapsule *thumbG = [SCNCapsule capsuleWithCapRadius:0.05 height:0.2];
+        thumbG.materials = @[shell];
+        SCNNode *thumb = TIRobotNode(thumbG, SCNVector3Make(side * -0.16, -0.66, 0.08));
+        thumb.eulerAngles = SCNVector3Make(0, 0, side * 0.6);
+        [elbow addChildNode:thumb];
+        [fingers addObject:thumb];
+        if (i == 0) { _lShoulder = shoulder; _lElbow = elbow; _lFingers = fingers; }
+        else        { _rShoulder = shoulder; _rElbow = elbow; _rFingers = fingers; }
+    }
+
+    for (int i = 0; i < 2; i++) {
+        SCNCapsule *legG = [SCNCapsule capsuleWithCapRadius:0.17 height:0.45];
+        legG.materials = @[shell];
+        [_root addChildNode:TIRobotNode(legG, SCNVector3Make(i == 0 ? -0.3 : 0.3, -1.45, 0))];
     }
 }
+
+- (void)setTint:(UIColor *)tint {
+    _tint = tint;
+    CGFloat r, g, b, a;
+    [tint getRed:&r green:&g blue:&b alpha:&a];
+    UIColor *light = [UIColor colorWithRed:MIN(1, r*0.5+0.5) green:MIN(1, g*0.5+0.5) blue:MIN(1, b*0.5+0.5) alpha:1];
+    for (SCNMaterial *m in _shellMats) { m.diffuse.contents = light; }
+    // Ánh sáng Constant lấy màu từ diffuse nên đặt màu sáng vào diffuse.
+    _screenMat.diffuse.contents = [tint colorWithAlphaComponent:0.85];
+    _eyeMat.diffuse.contents = [UIColor whiteColor];
+}
+
+static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
+    a.duration = d;
+    a.timingMode = SCNActionTimingModeEaseInEaseOut;
+    return a;
+}
+
+- (void)idle {
+    SCNAction *up = TIEase([SCNAction scaleYTo:1.03 duration:0], 0);
+    SCNAction *breathe = [SCNAction sequence:@[
+        [SCNAction scaleYTo:1.03 duration:1.6],
+        [SCNAction scaleYTo:1.0 duration:1.6]]];
+    breathe.timingMode = SCNActionTimingModeEaseInEaseOut;
+    [_body runAction:[SCNAction repeatActionForever:breathe] forKey:@"ti_breathe"];
+    SCNAction *swayL = [SCNAction sequence:@[
+        [SCNAction rotateToX:0 y:0 z:-0.08 duration:1.8],
+        [SCNAction rotateToX:0 y:0 z:0.02 duration:1.8]]];
+    swayL.timingMode = SCNActionTimingModeEaseInEaseOut;
+    [_lShoulder runAction:[SCNAction repeatActionForever:swayL] forKey:@"ti_sway"];
+    SCNAction *swayR = [SCNAction sequence:@[
+        [SCNAction rotateToX:0 y:0 z:0.08 duration:1.8],
+        [SCNAction rotateToX:0 y:0 z:-0.02 duration:1.8]]];
+    swayR.timingMode = SCNActionTimingModeEaseInEaseOut;
+    [_rShoulder runAction:[SCNAction repeatActionForever:swayR] forKey:@"ti_sway"];
+    (void)up;
+}
+
+- (void)restArms {
+    [_lShoulder removeActionForKey:@"ti_arm"];
+    [_rShoulder removeActionForKey:@"ti_arm"];
+    [_rElbow removeActionForKey:@"ti_arm"];
+    [_lElbow removeActionForKey:@"ti_arm"];
+    [_lShoulder runAction:TIEase([SCNAction rotateToX:0 y:0 z:-0.05 duration:0.4], 0.4) forKey:@"ti_arm"];
+    [_rShoulder runAction:TIEase([SCNAction rotateToX:0 y:0 z:0.05 duration:0.4], 0.4) forKey:@"ti_arm"];
+    [_lElbow runAction:TIEase([SCNAction rotateToX:0 y:0 z:0 duration:0.4], 0.4) forKey:@"ti_arm"];
+    [_rElbow runAction:TIEase([SCNAction rotateToX:0 y:0 z:0 duration:0.4], 0.4) forKey:@"ti_arm"];
+}
+
 - (void)bounceLR {
-    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.translation.x"];
-    a.values = @[@0, @-12, @0, @12, @0];
-    a.duration = 0.9; a.repeatCount = 2;
-    [self.layer addAnimation:a forKey:@"ti_bounce"];
+    SCNAction *sway = [SCNAction sequence:@[
+        TIEase([SCNAction rotateToX:0 y:0.32 z:0 duration:0.3], 0.3),
+        TIEase([SCNAction rotateToX:0 y:-0.32 z:0 duration:0.6], 0.6),
+        TIEase([SCNAction rotateToX:0 y:0 z:0 duration:0.3], 0.3)]];
+    [_root runAction:sway forKey:@"ti_sway_body"];
 }
+
 - (void)hop {
-    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.translation.y"];
-    a.values = @[@0, @-16, @0];
-    a.duration = 0.5;
-    [self.layer addAnimation:a forKey:@"ti_hop"];
+    SCNAction *jump = [SCNAction sequence:@[
+        TIEase([SCNAction moveByX:0 y:0.45 z:0 duration:0.22], 0.22),
+        TIEase([SCNAction moveByX:0 y:-0.45 z:0 duration:0.24], 0.24)]];
+    [_root runAction:jump forKey:@"ti_hop"];
 }
+
+- (void)wave {
+    [self restArms];
+    SCNAction *raise = TIEase([SCNAction rotateToX:0 y:0 z:-2.45 duration:0.45], 0.45);
+    SCNAction *bend  = TIEase([SCNAction rotateToX:0 y:0 z:-0.9 duration:0.3], 0.3);
+    SCNAction *wag   = [SCNAction sequence:@[
+        TIEase([SCNAction rotateByX:0 y:0 z:0.45 duration:0.22], 0.22),
+        TIEase([SCNAction rotateByX:0 y:0 z:-0.45 duration:0.22], 0.22)]];
+    SCNAction *waves = [SCNAction repeatAction:wag count:3];
+    SCNAction *fingersOpen = [SCNAction sequence:@[
+        [SCNAction scaleTo:1.25 duration:0.15], [SCNAction scaleTo:1.0 duration:0.15]]];
+    [_rShoulder runAction:[SCNAction sequence:@[raise, [SCNAction wait:0.05]]] forKey:@"ti_arm"];
+    [_rElbow runAction:[SCNAction sequence:@[bend, waves, [SCNAction wait:0.2]]] forKey:@"ti_arm"];
+    for (SCNNode *f in _rFingers) [f runAction:[SCNAction repeatAction:fingersOpen count:3] forKey:@"ti_fingers"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
+}
+
+- (void)pointRight {
+    [self restArms];
+    SCNAction *point = TIEase([SCNAction rotateToX:-1.15 y:0 z:-0.25 duration:0.5], 0.5);
+    [_rShoulder runAction:point forKey:@"ti_arm"];
+    [_rElbow runAction:TIEase([SCNAction rotateToX:0 y:0 z:-0.15 duration:0.4], 0.4) forKey:@"ti_arm"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
+}
+
 - (void)celebrate {
-    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-    a.values = @[@1.0, @1.14, @0.96, @1.0];
-    a.duration = 0.5;
-    [self.layer addAnimation:a forKey:@"ti_celebrate"];
+    [self restArms];
+    SCNAction *lift = TIEase([SCNAction rotateToX:0 y:0 z:-2.5 duration:0.4], 0.4);
+    SCNAction *liftR = TIEase([SCNAction rotateToX:0 y:0 z:2.5 duration:0.4], 0.4);
+    [_lShoulder runAction:lift forKey:@"ti_arm"];
+    [_rShoulder runAction:liftR forKey:@"ti_arm"];
+    for (SCNNode *f in _lFingers) [f runAction:[SCNAction repeatAction:[SCNAction sequence:@[[SCNAction scaleTo:1.3 duration:0.12],[SCNAction scaleTo:1.0 duration:0.12]]] count:3] forKey:@"ti_fingers"];
+    for (SCNNode *f in _rFingers) [f runAction:[SCNAction repeatAction:[SCNAction sequence:@[[SCNAction scaleTo:1.3 duration:0.12],[SCNAction scaleTo:1.0 duration:0.12]]] count:3] forKey:@"ti_fingers"];
+    [self hop];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
 }
 @end
 
@@ -5655,6 +5862,7 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
             pickBubble.frame = CGRectMake(20, 274, cw - 40, bh);
             pickBubble.hidden = NO;
             [pickRobot hop];
+            [TIGuideSpeaker say:TI_T(@"Nhấn Áp dụng để đặt lại ngôn ngữ. App sẽ tự khởi động lại để áp dụng.", @"Tap Apply to set the language. The app will restart to apply it.")];
         } else {
             pickBubble.hidden = YES;
         }
@@ -7449,6 +7657,8 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [next setTitle:(last ? TI_T(@"Xong", @"Done") : TI_T(@"Tiếp  →", @"Next  →")) forState:UIControlStateNormal];
 
     if (tab >= 0) [self selectTabIndex:tab animated:NO];
+    [TIGuideSpeaker say:st[@"text"]];
+    if (idx == 0) [robot wave]; else if (tab >= 0) [robot pointRight];
     CGFloat bubbleW = MIN(b.size.width - 40, 300);
     CGFloat bh = [bubble setText:st[@"text"] width:bubbleW];
 
@@ -7480,6 +7690,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     g_tiTourOverlay = nil;
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:kTITourDoneKey];
     TIGuideRobot *robot = objc_getAssociatedObject(ov, "ti_robot");
+    [TIGuideSpeaker stop];
     robot.tint = [UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1]; // đổi màu khi xong
     [robot celebrate];
     [UIView animateWithDuration:0.35 delay:0.6 options:0 animations:^{ ov.alpha = 0; } completion:^(BOOL f) {
