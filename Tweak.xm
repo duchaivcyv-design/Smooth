@@ -1482,23 +1482,44 @@ static void Titanium_UpdateLowBatteryFlagV12_Impl(void) {
 #define Titanium_UpdateLowBatteryFlagV12 Titanium_UpdateLowBatteryFlagV12_Impl
 
 // ====================================================================================================
-// HARDWARE DETECTION & RUNTIME PATH RESOLUTION (BẺ KHÓA ROOTHIDE & ROOTLESS)
+// HARDWARE DETECTION & RUNTIME PATH RESOLUTION (ÉP CƯỠNG BỨC 3 MÔI TRƯỜNG)
 // ====================================================================================================
 
 static inline NSString *Titanium_GetRootHidePrefixPath(void) {
     static NSString *cachedJbRoot = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        // 1. Ưu tiên tuyệt đối hàm `jbroot` của RootHide / Rootless (nếu có)
+        typedef NSString* (*jbroot_fn)(NSString*);
+        jbroot_fn jbroot_ptr = (jbroot_fn)dlsym(RTLD_DEFAULT, "jbroot");
+        if (jbroot_ptr) {
+            NSString *testPath = jbroot_ptr(@"/var/mobile");
+            if (testPath && [testPath length] > 0) {
+                // Lấy phần gốc, ví dụ trả về /var/jbproj-xxxx/var/mobile -> cắt lấy /var/jbproj-xxxx
+                NSRange range = [testPath rangeOfString:@"/var/mobile"];
+                if (range.location != NSNotFound) {
+                    cachedJbRoot = [testPath substringToIndex:range.location];
+                    if (cachedJbRoot.length == 0) cachedJbRoot = @"/";
+                    return;
+                }
+            }
+        }
+
+        // 2. Nếu không có jbroot, dùng dladdr để tìm đường dẫn thư viện
         Dl_info info;
         if (dladdr((const void *)Titanium_GetRootHidePrefixPath, &info) && info.dli_fname) {
             NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
+            
+            // Kiểm tra Rootful truyền thống
             if ([dylibPath hasPrefix:@"/Library/TweakInject"] || [dylibPath hasPrefix:@"/usr/lib/TweakInject"]) {
                 cachedJbRoot = @"/";
             } else {
+                // Kiểm tra RootHide / Rootless (thường chứa /var/jb)
                 NSRange rVarJb = [dylibPath rangeOfString:@"/var/jb"];
                 if (rVarJb.location != NSNotFound) {
                     NSUInteger startIdx = rVarJb.location;
-                    NSUInteger searchIdx = startIdx + 7;
+                    NSUInteger searchIdx = startIdx + 7; // Độ dài của "/var/jb"
+                    // Tìm dấu / tiếp theo để cắt lấy thư mục gốc (vd: /var/jbproj-abc)
                     NSRange nextSlash = [dylibPath rangeOfString:@"/" options:0 range:NSMakeRange(searchIdx, dylibPath.length - searchIdx)];
                     if (nextSlash.location != NSNotFound) {
                         cachedJbRoot = [dylibPath substringToIndex:nextSlash.location];
@@ -1506,43 +1527,58 @@ static inline NSString *Titanium_GetRootHidePrefixPath(void) {
                         cachedJbRoot = [dylibPath substringToIndex:searchIdx];
                     }
                 } else {
-                    cachedJbRoot = @"/var/jb";
+                    cachedJbRoot = @"/var/jb"; // Fallback mặc định
                 }
             }
         } else {
-            cachedJbRoot = @"/var/jb";
+            cachedJbRoot = @"/var/jb"; // Fallback nếu dladdr thất bại
         }
     });
     return cachedJbRoot;
 }
 
 static inline NSString *Titanium_ResolvePrefPath(void) {
-    NSString *root = Titanium_GetRootHidePrefixPath();
-    NSFileManager *fm = [NSFileManager defaultManager];
-    
-    if (root && root.length > 0) {
-        if ([root isEqualToString:@"/"]) {
-            NSString *rootfulPath = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
-            if ([fm fileExistsAtPath:rootfulPath]) return rootfulPath;
-        } else {
-            NSString *jbPath = [root stringByAppendingPathComponent:@"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
-            if ([fm fileExistsAtPath:jbPath]) return jbPath;
-            
-            NSString *altJbPath = [root stringByAppendingPathComponent:@"mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
-            if ([fm fileExistsAtPath:altJbPath]) return altJbPath;
+    static NSString *resolvedPath = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *root = Titanium_GetRootHidePrefixPath();
+        NSFileManager *fm = [NSFileManager defaultManager];
+        
+        // Mảng chứa TẤT CẢ các đường dẫn có thể có trên 3 môi trường
+        NSMutableArray<NSString *> *searchPaths = [NSMutableArray array];
+        
+        NSString *fileName = @"var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+        
+        // 1. Môi trường Rootless / RootHide (Dựa vào root path tìm được)
+        if (root && ![root isEqualToString:@"/"]) {
+            [searchPaths addObject:[root stringByAppendingPathComponent:fileName]];
+            [searchPaths addObject:[root stringByAppendingPathComponent:@"mobile/Library/Preferences/com.taojb.boostiphone6s.plist"]];
         }
-    }
+        
+        // 2. Môi trường Rootful truyền thống (Đường dẫn tuyệt đối)
+        [searchPaths addObject:@"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        
+        // 3. Fallback ép cưỡng bức (Đề phòng path bị lỗi)
+        [searchPaths addObject:@"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        [searchPaths addObject:@"/var/jb/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"];
+        [searchPaths addObject:@"/tmp/com.taojb.boostiphone6s.plist"]; // Ép đọc từ /tmp nếu có
 
-    NSArray *fallbackPaths = @[
-        @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist",
-        @"/var/jb/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist"
-    ];
-    
-    for (NSString *path in fallbackPaths) {
-        if ([fm fileExistsAtPath:path]) return path;
-    }
-
-    return @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+        // Quét cạn: Thằng nào tồn tại đầu tiên thì chốt thằng đó
+        for (NSString *path in searchPaths) {
+            if ([fm fileExistsAtPath:path]) {
+                resolvedPath = path;
+                return;
+            }
+        }
+        
+        // Nếu đéo tìm thấy file nào (lần đầu cài), trả về đường dẫn mặc định để hàm write nó tạo ra
+        if (root && ![root isEqualToString:@"/"]) {
+            resolvedPath = [root stringByAppendingPathComponent:fileName];
+        } else {
+            resolvedPath = @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.plist";
+        }
+    });
+    return resolvedPath;
 }
 
 static inline BOOL HardwareHasNative120Hz(void) { return YES; }
@@ -2826,28 +2862,39 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void) {
 }
 
 static inline void Titanium_LockMainThreadFast(void) {
-    Titanium_UnleashAllHiddenSystemThreads();
-
     if (![NSThread isMainThread]) return;
 
+    // [ÉP MƯỢT TUYỆT ĐỐI] Dùng cờ Thread-Local để chỉ set Thread Policy ĐÚNG 1 LẦN.
+    // Nếu đã set rồi, nó bỏ qua toàn bộ, trả về ngay lập tức, đéo tốn 1 chu kỳ CPU nào.
+    static __thread BOOL s_isThreadOptimized = NO;
+    if (__builtin_expect(s_isThreadOptimized, 1)) return;
+    s_isThreadOptimized = YES;
+
+    // Chỉ chạy 1 lần duy nhất cho mỗi thread
+    Titanium_UnleashAllHiddenSystemThreads();
     Titanium_EnforceThreadVIPPolicy();
 
-    // [V94] Ép Main Thread lên mức 90 Realtime, chống tụt frame
-    static __thread BOOL s_kernel127Locked = NO;
-    if (__builtin_expect(!s_kernel127Locked, 0)) {
-        s_kernel127Locked = YES;
-        mach_port_t selfThread = pthread_mach_thread_np(pthread_self());
-        if (selfThread != MACH_PORT_NULL) {
-            thread_affinity_policy_data_t affinity = { .affinity_tag = 1 }; // Ép P-Core
-            thread_policy_set(selfThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
+    mach_port_t selfThread = pthread_mach_thread_np(pthread_self());
+    if (selfThread != MACH_PORT_NULL) {
+        thread_affinity_policy_data_t affinity = { .affinity_tag = 1 }; 
+        thread_policy_set(selfThread, THREAD_AFFINITY_POLICY, (thread_policy_t)&affinity, THREAD_AFFINITY_POLICY_COUNT);
 
-            thread_precedence_policy_data_t precedence = { .importance = 90 }; 
-            thread_policy_set(selfThread, THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
+        thread_precedence_policy_data_t precedence = { .importance = 90 }; 
+        thread_policy_set(selfThread, THREAD_PRECEDENCE_POLICY, (thread_policy_t)&precedence, THREAD_PRECEDENCE_POLICY_COUNT);
 
-            thread_throttle_policy_data_t throttle = { .pset_limit = 0 }; // Tắt throttle
-            thread_policy_set(selfThread, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
-        }
+        thread_throttle_policy_data_t throttle = { .pset_limit = 0 }; 
+        thread_policy_set(selfThread, THREAD_THROTTLE_POLICY, (thread_policy_t)&throttle, 1);
     }
+
+    // Vẫn giữ logic bơm xung nhưng đẩy vào background để không block Main Thread
+    if (Titanium_ShouldApplyAppDisplayOverrides()) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+            AppleInternal_LockHardwareCADisplay();
+            Titanium_EnableZeroLatencyPipeline();
+            Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+        });
+    }
+}
 
     static uint64_t s_lastNanoBurstTick = 0;
     uint64_t now = mach_absolute_time();
@@ -4405,19 +4452,40 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
     return %orig;
 }
 
+// [ÉP CƯỠNG BỨC] Khi cuộn, ép Driver phải chạy đúng Hz đã chọn, đéo cho tụt
+- (void)setContentOffset:(CGPoint)contentOffset {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isScrollingActive) {
+        Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+        Titanium_EnableZeroLatencyPipeline();
+    }
+}
+
+- (void)setContentOffset:(CGPoint)contentOffset animated:(BOOL)animated {
+    %orig;
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && g_isScrollingActive) {
+        Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+        Titanium_EnableZeroLatencyPipeline();
+    }
+}
+
 - (void)_scrollViewWillBeginDragging {
     @try {
-        if (!self) {
-            %orig;
-            return;
-        }
+        if (!self) { %orig; return; }
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            // [V80 FIX] Dùng atomic để tránh race condition khi vuốt
             __atomic_store_n(&g_isScrollingActive, YES, __ATOMIC_RELAXED);
             __atomic_store_n(&g_isUserTouchingScreen, YES, __ATOMIC_RELAXED);
+            
+            // [ÉP XUNG TỨC THỜI]
             Titanium_LockMainThreadFast();
             Titanium_EnableZeroLatencyPipeline();
             Titanium_PushRateToDriverV4(Titanium_GetUserTargetHz());
+
+            // [MOTION BLUR - BẺ GÃY CHUYỂN ĐỘNG]
+            // Bật vẽ bất đồng bộ và Rasterize để tạo hiệu ứng lướt siêu mượt
+            self.layer.shouldRasterize = YES;
+            self.layer.rasterizationScale = [UIScreen mainScreen].scale; // Đảm bảo nét
+            self.layer.drawsAsynchronously = YES;
         }
     } @catch (__unused NSException *e) {}
     %orig;
@@ -4428,24 +4496,26 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
         if (!self) return %orig;
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted && !Titanium_IsSpringBoard()) {
             if (self.isPagingEnabled) return %orig;
-            return 0.994f;
+            // Tăng nhẹ quán tính để lướt mượt hơn
+            return 0.995f;
         }
     } @catch (__unused NSException *e) {}
     return %orig;
 }
 
+// [KHỬ NHOÈ CHỮ] Khi dừng lại (dù có quán tính hay không), tắt ngay Rasterize để chữ nét căng
 - (void)_stopScrollDecelerationNotify:(BOOL)notify {
     BOOL origDone = NO;
     @try {
-        if (!self) {
-            origDone = YES; %orig(notify);
-            return;
-        }
+        if (!self) { origDone = YES; %orig(notify); return; }
         origDone = YES; %orig(notify);
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             __atomic_store_n(&g_isScrollingActive, NO, __ATOMIC_RELAXED);
             __atomic_store_n(&g_isUserTouchingScreen, NO, __ATOMIC_RELAXED);
-            // [V80 FIX] Ép lại 240Hz ngay khi dừng cuộn
+            
+            // Tắt Motion Blur -> Chữ đéo bao giờ bị nhoè
+            self.layer.shouldRasterize = NO;
+            
             dispatch_async(dispatch_get_main_queue(), ^{
                 Titanium_ReapplyFrameRateToAllScenes();
             });
@@ -4458,15 +4528,15 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 - (void)_scrollViewDidEndDecelerating {
     BOOL origDone = NO;
     @try {
-        if (!self) {
-            origDone = YES; %orig;
-            return;
-        }
+        if (!self) { origDone = YES; %orig; return; }
         origDone = YES; %orig;
         if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
             __atomic_store_n(&g_isScrollingActive, NO, __ATOMIC_RELAXED);
             __atomic_store_n(&g_isUserTouchingScreen, NO, __ATOMIC_RELAXED);
-            // [V80 FIX] Ép lại 240Hz ngay khi dừng quán tính
+            
+            // Tắt Motion Blur -> Chữ nét tuyệt đối
+            self.layer.shouldRasterize = NO;
+            
             dispatch_async(dispatch_get_main_queue(), ^{
                 Titanium_ReapplyFrameRateToAllScenes();
             });
@@ -7000,33 +7070,23 @@ static void Push_FlushToDriver(void) {
 static void Titanium_PushRateToDriverV4(NSInteger hz) {
     if (g_isRebooting) return;
     if (!Titanium_V55_PanelWritable()) return;
+    
+    // Nếu Hz đang chạy đúng bằng Hz yêu cầu, bỏ qua ngay lập tức, đéo làm gì cả
     if (hz == g_pushLastAppliedHz) return;
-    g_pushPendingHz = hz;
-    uint64_t now = mach_absolute_time();
     
-    // Nếu đã quá 300ms hoặc chưa có lịch, chạy luôn
-    if (g_pushLastFireTick != 0 &&
-        (now - g_pushLastFireTick) >= Tio_NS2Mach(300000000ULL) && !g_pushScheduled) {
-        g_pushLastFireTick = now;
-        Push_FlushToDriver();
-        return;
-    }
+    // Ép giá trị lưu trữ ngay lập tức để các frame tiếp theo đéo gọi lại lệnh này nữa
+    g_pushLastAppliedHz = hz;
     
-    g_pushLastFireTick = now;
-    if (g_pushScheduled) return;
-    g_pushScheduled = YES;
-    
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)),
-                   dispatch_get_main_queue(), ^{
-        Push_FlushToDriver();
-        NSInteger hz2 = g_pushPendingHz;
-        if (hz2 >= 15 && g_tioBestPath != TioPathNone && g_tioLastAcceptedHz == hz2) {
-            if (Titanium_V55_PanelWritable()) {
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-                    Tio_SubmitModeAllPaths(hz2);
-                });
+    // ĐẨY TOÀN BỘ TÁC VỤ NẶNG XUỐNG BACKGROUND THREAD
+    // Main Thread (nơi xử lý vuốt) sẽ rảnh rang 100%, đéo bao giờ bị block
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        @try {
+            Titanium_Tier4WriteCadence(hz);
+            
+            if (g_tioBestPath != TioPathNone && g_tioLastAcceptedHz != hz) {
+                Tio_SubmitModeAllPaths(hz);
             }
-        }
+        } @catch (__unused NSException *e) {}
     });
 }
 
@@ -7545,24 +7605,14 @@ static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(v
     return s_profile;
 }
 
-static inline BOOL Titanium_IsFilzaOrFileManagerProcess(void) {
-    static BOOL s_isFilza = NO;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        const char *prog = Titanium_SafeGetProgName();
-        NSString *bid = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-        if ((prog && (strcasestr(prog, "Filza") != NULL || strcasestr(prog, "Santander") != NULL ||
-                      strcasestr(prog, "NewTerm") != NULL || strcasestr(prog, "AppsManager") != NULL)) ||
-            [bid rangeOfString:@"com.tigisoftware.Filza" options:NSCaseInsensitiveSearch].location != NSNotFound ||
-            [bid rangeOfString:@"filza" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-            s_isFilza = YES;
-        }
-    });
-    return s_isFilza;
+// Ép cưỡng bức: Luôn trả về YES để bypass Sandbox cho bất kỳ app nào Tweak nạp vào
+static inline BOOL Titanium_IsTargetProcess(void) {
+    return YES; 
 }
 
 static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsFilzaOrFileManagerProcess()) {
+    // Ép cưỡng bức: Nếu Tweak đang chạy, bỏ qua mọi kiểm tra Sandbox
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsTargetProcess()) {
         if (!operation ||
             strncmp(operation, "file-", 5) == 0 ||
             strncmp(operation, "mach-", 5) == 0 ||
@@ -7571,7 +7621,7 @@ static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...)
             strncmp(operation, "sysctl-", 7) == 0 ||
             strncmp(operation, "iokit-", 6) == 0 ||
             strncmp(operation, "priv-", 5) == 0) {
-            return 0;
+            return 0; // Cho phép đọc/ghi mọi thứ
         }
     }
     return orig_sandbox_check ? orig_sandbox_check(pid, operation, type) : 0;
