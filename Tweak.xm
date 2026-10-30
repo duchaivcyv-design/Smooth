@@ -7468,6 +7468,8 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 // [PHẦN B: constants]
 // ====================================================================================================
 
+static inline BOOL Titanium_IsTargetProcess(void);
+
 #ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
 #define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
 #endif
@@ -7762,7 +7764,8 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
 %hook NSFileManager
 - (BOOL)isWritableFileAtPath:(NSString *)path {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path) {
-        if (Titanium_IsFilzaOrFileManagerProcess() ||
+        // Đã đổi thành Titanium_IsTargetProcess
+        if (Titanium_IsTargetProcess() ||
             [path hasPrefix:@"/var/"] || [path hasPrefix:@"/private/var/"] ||
             [path hasPrefix:@"/tmp/"] || [path hasPrefix:@"/Library/"]) {
             return YES;
@@ -7771,11 +7774,13 @@ static void Titanium_Tier5_FiveStageRAM_And_CPUGPU_Unlock(void) {
     return %orig(path);
 }
 - (BOOL)isReadableFileAtPath:(NSString *)path {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsFilzaOrFileManagerProcess()) return YES;
+    // Đã đổi thành Titanium_IsTargetProcess
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsTargetProcess()) return YES;
     return %orig(path);
 }
 - (BOOL)isDeletableFileAtPath:(NSString *)path {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsFilzaOrFileManagerProcess()) return YES;
+    // Đã đổi thành Titanium_IsTargetProcess
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && path && Titanium_IsTargetProcess()) return YES;
     return %orig(path);
 }
 %end
