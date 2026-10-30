@@ -6101,10 +6101,6 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
 // [JETSAM + REALTIME - BẺ THẲNG CƯỠNG CHẾ]
 // ====================================================================================================
 
-#ifndef MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK
-#define MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK 5
-#endif
-
 static void Titanium_Tier6JetsamImmunityReal(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
