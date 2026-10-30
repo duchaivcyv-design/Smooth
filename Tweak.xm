@@ -5804,6 +5804,43 @@ static tio_iomfb_main_fn    tio_iomfb_main    = NULL;
 static tio_iomfb_setmode_fn tio_iomfb_setmode = NULL;
 static tio_iomfb_ref        tio_iomfb_handle  = NULL;
 
+// 1. Khai báo struct Timing
+typedef struct __attribute__((packed)) {
+    uint32_t width;
+    uint32_t height;
+    uint32_t refreshRate;
+    uint32_t pixelClock;
+    uint32_t hSyncStart;
+    uint32_t hSyncEnd;
+    uint32_t vSyncStart;
+    uint32_t vSyncEnd;
+    uint32_t flags;
+} TioIomfbTiming;
+
+// 2. Khai báo biến toàn cục (Bổ sung Svc)
+static io_service_t g_dcpIomfbSvc = IO_OBJECT_NULL;
+static io_service_t g_dcpDispSvc  = IO_OBJECT_NULL;
+static io_connect_t g_dcpIomfbConn = IO_OBJECT_NULL;
+static io_connect_t g_dcpDispConn = IO_OBJECT_NULL;
+static volatile BOOL g_dcpConnReady = NO;
+
+typedef enum {
+    TioPathNone = 0,
+    TioPathFramework,
+    TioPathRawMIG,
+    TioPathDisplayConnect
+} TioDriverPath;
+static volatile TioDriverPath g_tioBestPath = TioPathNone;
+
+// 3. Forward Declarations (Khai báo trước hàm để hết lỗi undeclared)
+static void Tio_DCPResolveConnections(void);
+static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
+static BOOL Tio_SubmitModeAllPaths(NSInteger hz);
+static void Titanium_HardwareDriverOverride(NSInteger targetHz);
+static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
+
+// ====================================================================================================
+
 static void Titanium_LoadIOMFBDirect(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -5841,21 +5878,6 @@ static kern_return_t hooked_IOConnectCallScalarMethod(io_connect_t connection, u
     return ret;
 }
 
-// Kill hook bảo vệ HardButton
-static int (*orig_kill)(pid_t, int) = NULL;
-static int hooked_kill(pid_t pid, int sig) {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        if (pid == getpid() && sig == SIGKILL) {
-            g_isRebooting = YES;
-            NSDictionary *marker = @{@"time": @([[NSDate date] timeIntervalSince1970])};
-            [marker writeToFile:@"/tmp/.titanium_sreboot_marker" atomically:YES];
-        } else if (pid == getpid() && sig == SIGSTOP) {
-            return 0; 
-        }
-    }
-    return orig_kill ? orig_kill(pid, sig) : -1;
-}
-
 static void Titanium_BypassDCPMethod(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -5864,30 +5886,92 @@ static void Titanium_BypassDCPMethod(void) {
     });
 }
 
-typedef struct __attribute__((packed)) {
-    uint32_t width;
-    uint32_t height;
-    uint32_t refreshRate;
-    uint32_t pixelClock;
-    uint32_t hSyncStart;
-    uint32_t hSyncEnd;
-    uint32_t vSyncStart;
-    uint32_t vSyncEnd;
-    uint32_t flags;
-} TioIomfbTiming;
+// Hàm Resolve Connection (Bổ sung g_dcpIomfbSvc)
+static void Tio_DCPResolveConnections(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        @try {
+            // Quét đa dịch vụ cho iOS 15-18
+            const char *services[] = {
+                "IOMobileFramebuffer", "IOMobileFramebufferAP",
+                "AppleDCP", "AppleCLCD2"
+            };
+            for (int i = 0; i < 4; i++) {
+                g_dcpIomfbSvc = IOServiceGetMatchingService(kIOMasterPortDefault, IOServiceMatching(services[i]));
+                if (g_dcpIomfbSvc != IO_OBJECT_NULL) {
+                    if (IOServiceOpen(g_dcpIomfbSvc, mach_task_self(), 0, &g_dcpIomfbConn) == KERN_SUCCESS) {
+                        break;
+                    }
+                }
+            }
+            
+            io_iterator_t iter = IO_OBJECT_NULL;
+            if (IOServiceGetMatchingServices(kIOMasterPortDefault, IOServiceMatching("IODisplayConnect"), &iter) == KERN_SUCCESS) {
+                g_dcpDispSvc = IOIteratorNext(iter);
+                IOObjectRelease(iter);
+                if (g_dcpDispSvc != IO_OBJECT_NULL) {
+                    (void)IOServiceOpen(g_dcpDispSvc, mach_task_self(), 0, &g_dcpDispConn);
+                }
+            }
+            g_dcpConnReady = (g_dcpIomfbConn != IO_OBJECT_NULL) || (g_dcpDispConn != IO_OBJECT_NULL);
+        } @catch (__unused NSException *e) {}
+    });
+}
 
-static io_connect_t g_dcpIomfbConn = IO_OBJECT_NULL;
-static io_connect_t g_dcpDispConn = IO_OBJECT_NULL;
-static volatile BOOL g_dcpConnReady = NO;
-static void Tio_DCPResolveConnections(void);
+// Hàm Display Conn (Mày thiếu hàm này nên nó báo lỗi)
+static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz) {
+    if (g_isRebooting) return KERN_FAILURE;
+    if (!Titanium_V55_PanelWritable()) return KERN_FAILURE;
+    
+    Tio_DCPResolveConnections();
+    if (g_dcpDispConn == IO_OBJECT_NULL) return KERN_FAILURE;
+    
+    g_v60ForceDriverSuccess = YES;
+    static const uint32_t kSels[] = { 8, 9, 10, 11, 12, 13 };
+    for (uint32_t i = 0; i < 6; i++) {
+        uint64_t in = (uint64_t)hz;
+        uint32_t outLen = 0;
+        kern_return_t kr = IOConnectCallScalarMethod(g_dcpDispConn, kSels[i], &in, 1, NULL, &outLen);
+        if (kr == KERN_SUCCESS) {
+            g_v60ForceDriverSuccess = NO;
+            return kr;
+        }
+    }
+    g_v60ForceDriverSuccess = NO;
+    return KERN_FAILURE;
+}
 
-typedef enum {
-    TioPathNone = 0,
-    TioPathFramework,
-    TioPathRawMIG,
-    TioPathDisplayConnect
-} TioDriverPath;
-static volatile TioDriverPath g_tioBestPath = TioPathNone;
+// Hàm Submit All Paths (Bổ sung)
+static BOOL Tio_SubmitModeAllPaths(NSInteger hz) {
+    if (g_isRebooting) return NO;
+    
+    if (g_dcpIomfbConn != IO_OBJECT_NULL) {
+        TioIomfbTiming timing;
+        memset(&timing, 0, sizeof(timing));
+        timing.width = (uint32_t)[UIScreen mainScreen].nativeBounds.size.width;
+        timing.height = (uint32_t)[UIScreen mainScreen].nativeBounds.size.height;
+        timing.refreshRate = (uint32_t)hz;
+        timing.pixelClock = (uint32_t)((timing.width + 64) * (timing.height + 32) * hz * 1.05);
+        timing.flags = 0xFFFFFFFF;
+
+        uint32_t selectors[] = {14, 15, 16, 17, 18, 19, 30, 31};
+        for (int i = 0; i < 8; i++) {
+            size_t outLen = 0;
+            IOConnectCallStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
+        }
+        g_tioBestPath = TioPathRawMIG;
+    }
+    
+    if (g_dcpDispConn != IO_OBJECT_NULL) {
+        Tio_DisplayConnSetRefresh(hz);
+    }
+
+    if (tio_iomfb_setmode && tio_iomfb_handle) {
+        tio_iomfb_setmode(tio_iomfb_handle, (uint32_t)[UIScreen mainScreen].nativeBounds.size.width, (uint32_t)[UIScreen mainScreen].nativeBounds.size.height, (float)hz);
+    }
+    
+    return YES;
+}
 
 void Titanium_ForcePanelModeDirect(NSInteger hz) {
     if (!Titanium_V55_PanelWritable()) return;
@@ -5897,10 +5981,8 @@ void Titanium_ForcePanelModeDirect(NSInteger hz) {
     CGFloat pw = [UIScreen mainScreen].nativeBounds.size.width;
     CGFloat ph = [UIScreen mainScreen].nativeBounds.size.height;
 
-    // [BẬT CỜ] Ép Driver pass 100%
     g_v60ForceDriverSuccess = YES;
 
-    // 1. Đấm thẳng Timing vật lý xuống DCP
     Tio_DCPResolveConnections();
     if (g_dcpIomfbConn != IO_OBJECT_NULL) {
         TioIomfbTiming timing;
@@ -5914,9 +5996,8 @@ void Titanium_ForcePanelModeDirect(NSInteger hz) {
         timing.hSyncEnd = (uint32_t)pw;
         timing.vSyncStart = 0;
         timing.vSyncEnd = (uint32_t)ph;
-        timing.flags = 0xFFFFFFFF; // Force + Bypass EDID
+        timing.flags = 0xFFFFFFFF;
 
-        // [MA TRẬN SELECTOR] Mở rộng tối đa các cổng DCP có thể nhận Timing
         uint32_t selectors[] = {14, 15, 16, 17, 18, 19, 20, 21, 30, 31, 32, 33};
         int num_selectors = sizeof(selectors) / sizeof(selectors[0]);
         
@@ -5926,18 +6007,14 @@ void Titanium_ForcePanelModeDirect(NSInteger hz) {
         }
     }
 
-    // 2. Đấm qua Framework IOMFB
     if (tio_iomfb_setmode && tio_iomfb_handle) {
         tio_iomfb_setmode(tio_iomfb_handle, (uint32_t)pw, (uint32_t)ph, (float)hz);
     }
 
-    // Tắt cờ ép sau khi đấm xong
     g_v60ForceDriverSuccess = NO;
 
-    // 3. Ghi đè IORegistry
     Titanium_HardwareDriverOverride(hz);
 
-    // 4. Bóp sáng chống cháy sọc
     static NSInteger s_lastBrightnessTier = -1;
     NSInteger currentTier = (hz > 180) ? 3 : ((hz > 120) ? 2 : ((hz > 60) ? 1 : 0));
     
@@ -5956,7 +6033,6 @@ void Titanium_ForcePanelModeDirect(NSInteger hz) {
     g_tioActiveHz = hz;
     Titanium_V60_Log([NSString stringWithFormat:@"[V999 GOD] Panel forced to %ldHz. Accepted.", (long)hz]);
 
-    // 5. Đồng bộ OS
     dispatch_async(dispatch_get_main_queue(), ^{
         @try {
             if (@available(iOS 15.0, *)) {
@@ -5985,7 +6061,6 @@ static NSInteger Titanium_IOMFBTryAlternateModes(NSInteger targetHz) {
 
     g_v60ForceDriverSuccess = YES;
 
-    // 1. Ép qua Raw MIG (Mở rộng Selector)
     Tio_DCPResolveConnections();
     if (g_dcpIomfbConn != IO_OBJECT_NULL) {
         TioIomfbTiming timing;
@@ -6004,18 +6079,15 @@ static NSInteger Titanium_IOMFBTryAlternateModes(NSInteger targetHz) {
         g_tioBestPath = TioPathRawMIG;
     }
 
-    // 2. Ép qua DisplayConnect
     if (g_dcpDispConn != IO_OBJECT_NULL) {
         Tio_DisplayConnSetRefresh(upper);
     }
 
-    // 3. Ép qua Framework
     if (tio_iomfb_setmode && tio_iomfb_handle) {
         tio_iomfb_setmode(tio_iomfb_handle, w, h, (float)upper);
         g_tioBestPath = TioPathFramework;
     }
     
-    // 4. Ép Registry
     Titanium_HardwareDriverOverride(upper);
 
     g_v60ForceDriverSuccess = NO;
