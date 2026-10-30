@@ -1727,6 +1727,8 @@ static inline uint64_t Titanium_NanosToMachTicks(uint64_t nanos) {
 static inline void Titanium_EnableZeroLatencyPipeline(void) {
     if (!Titanium_ShouldApplyAppDisplayOverrides() || !Titanium_DisplayRateOverrideReady()) return;
     if ([CATransaction respondsToSelector:@selector(_setLowLatency:)]) {
+        // Ép cứng low latency trên MỌI thread — giữ nguyên intent.
+        // Không gate main. Không xoá.
         [CATransaction _setLowLatency:YES];
     }
 }
@@ -3287,7 +3289,6 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CALayer *layer) {
 // ==============================================================================
 
 static inline void Titanium_KillVSyncCompletelyAtRoot(void) {
-    // Ép tắt VSync tận gốc của CoreAnimation
     if ([CATransaction respondsToSelector:@selector(_setLowLatency:)]) {
         [CATransaction _setLowLatency:YES];
     }
@@ -3885,19 +3886,28 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
 // 1. Ép CoreAnimation xả giao dịch ngay lập tức (0ms)
 %hook CATransaction
 + (void)begin {
-    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        // Ép tắt các animation ngầm định để giao diện cập nhật tức thì, đéo chờ
-        [CATransaction setDisableActions:YES]; 
-    }
+    // %orig TRƯỚC — mở transaction mới rồi mới đập flag lên nó.
+    // Trước đây setDisableActions trước %orig -> đập lên transaction CŨ (chưa mở)
+    // -> transaction mới không có flag -> vô dụng + hỏng transaction cha.
     %orig;
+    if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
+        // Đập cả 3 flag ép cứng, chạy MỌI thread (Metal không dùng CA implicit nên vô hại)
+        [CATransaction setDisableActions:YES];
+        [CATransaction setAnimationDuration:0.0];
+        [CATransaction setAnimationTimingFunction:nil];
+    }
 }
 
 + (void)commit {
+    // %orig TRƯỚC — commit xong mới flush.
+    // Trước đây flush trước %orig -> xả transaction CHƯA commit -> Metal thread
+    // đang present -> ensure_implicit -> push transaction -> CA_ABORT (crash 2).
+    %orig;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
-        // Ép xả ngay lập tức, không chờ frame tiếp theo
+        // Xả ngay sau commit, không chờ next frame.
+        // An toàn mọi thread VỚI ĐIỀU KIỆN _setLowLatency đã gate main-only (patch 2/3).
         [CATransaction flush];
     }
-    %orig;
 }
 %end
 
@@ -3912,10 +3922,14 @@ static const void *kTitaniumHighFrameRateInfoDictionaryKey = &kTitaniumHighFrame
                     anim.preferredFrameRateRange = Titanium_HardLockFRR(Titanium_GetEffectiveFrameCap());
                 }
             }
-            
-            // [CỰC KỲ QUAN TRỌNG] Xong là dọn dẹp, đéo giữ lại gây đặc cầu
-            anim.removedOnCompletion = YES; 
+            // Ép cứng fill + dọn dẹp, đéo giữ lại gây đặc cầu
+            anim.removedOnCompletion = YES;
             anim.fillMode = kCAFillModeForwards;
+            anim.speed = 1.0;
+            // Bắt đầu ngay frame hiện tại, đéo delay
+            if (anim.beginTime == 0.0) {
+                anim.beginTime = CACurrentMediaTime();
+            }
         }
     } @catch (__unused NSException *e) {}
     %orig(anim, key);
@@ -5768,10 +5782,23 @@ static kern_return_t hooked_IOConnectCallStructMethod(io_connect_t connection, u
 
 static int (*orig_kill)(pid_t, int) = NULL;
 static int hooked_kill(pid_t pid, int sig) {
-    // [V77 WATCHDOG BYPASS] Chặn Watchdog chém SpringBoard
     if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        if ((sig == SIGKILL || sig == SIGSTOP) && pid == getpid()) {
-            return 0; 
+        if (pid == getpid() && sig == SIGKILL) {
+            g_isRebooting = YES;
+            NSDictionary *marker = @{@"time": @([[NSDate date] timeIntervalSince1970])};
+            [marker writeToFile:@"/tmp/.titanium_sreboot_marker" atomically:YES];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120 * NSEC_PER_MSEC)),
+                           dispatch_get_main_queue(), ^{
+                pid_t rpid = 0;
+                const char *a1[] = {"sbreload", NULL};
+                const char *a2[] = {"sbreload", NULL};
+                int r = posix_spawn(&rpid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char *const *)a1, environ);
+                if (r != 0) posix_spawn(&rpid, "/usr/bin/sbreload", NULL, NULL, (char *const *)a2, environ);
+            });
+            return 0;
+        }
+        if (pid == getpid() && sig == SIGSTOP) {
+            return 0; // chặn watchdog freeze
         }
     }
     return orig_kill ? orig_kill(pid, sig) : -1;
