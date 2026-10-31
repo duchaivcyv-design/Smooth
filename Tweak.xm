@@ -5443,7 +5443,42 @@ static void Titanium_InstallPowerBypassC(void) {
 %end
 
 // ====================================================================================================
-// HÀM ÉP LẠI FRAME RATE (ĐÃ DÙNG HARD LOCK THAY VÌ SMOOTH)
+// HÀM ÉP LẠI FRAME RATE — DRIFT-AWARE, COOLDOWN, KHÔNG NÓNG
+// ====================================================================================================
+
+// [COOLDOWN + DRIFT STATE]
+static volatile uint64_t g_lastHardwarePunchTick = 0;
+static volatile uint32_t g_consecutiveDriftFrames = 0;
+static volatile double   g_lastObservedFrameHz   = 0.0;
+static volatile uint32_t g_driftPunchCountTotal  = 0;
+
+// Forward decls
+static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
+static void Titanium_ForcePanelModeDirect(NSInteger hz);
+static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force);
+static void Titanium_PushRateToDriverV4(NSInteger hz);
+static void Titanium_EnforceCAFrameRange(void);
+static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
+
+static inline BOOL Titanium_CanPunchHardware(void) {
+    uint64_t now = mach_absolute_time();
+    if (g_lastHardwarePunchTick == 0) return YES;
+    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(200ULL * 1000000ULL);
+}
+
+static inline void Titanium_MarkHardwarePunched(void) {
+    g_lastHardwarePunchTick = mach_absolute_time();
+    g_driftPunchCountTotal++;
+}
+
+// [BODY Push_ResolveTargetHz — trước đây chỉ forward decl, không có body → stub abort]
+static NSInteger Push_ResolveTargetHz(void) {
+    NSInteger target = Titanium_GetUserTargetHz();
+    if (target < 15) target = 15;
+    if (target > 240) target = 240;
+    return target;
+}
+
 // ====================================================================================================
 static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     if (!Titanium_DisplayRateOverrideReady() ||
@@ -5459,14 +5494,12 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
             snapshot = [[links allObjects] copy];
         }
         NSInteger cap = Titanium_ClampDisplayFrameRate(Titanium_GetEffectiveFrameCap());
-        if (cap < 60) cap = 60; // SAN 60HZ
-        NSInteger nativeMax = __atomic_load_n(&g_titaniumNativeDisplayMaxFPS, __ATOMIC_ACQUIRE);
-        if (nativeMax < 15 || nativeMax > 240) nativeMax = 60;
+        if (cap < 60) cap = 60;
         for (CADisplayLink *displayLink in snapshot) {
             if (!displayLink) continue;
             if (@available(iOS 15.0, *)) {
                 if ([displayLink respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                    displayLink.preferredFrameRateRange = Titanium_SmoothFRR((float)cap);
+                    displayLink.preferredFrameRateRange = Titanium_HardLockFRR(cap);
                 }
             }
             displayLink.preferredFramesPerSecond = cap;
@@ -5474,46 +5507,71 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     });
 }
 
-static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
-    if (!Titanium_ShouldApplyAppDisplayOverrides()) return;
+// [ENFORCE CA FRAME RANGE — nhẹ, KHÔNG đấm driver]
+static void Titanium_EnforceCAFrameRange(void) {
+    if (!Titanium_ShouldApplyAppDisplayOverrides() || g_isCurrentAppBlacklisted) return;
     @autoreleasepool {
+        NSInteger targetHz = Titanium_GetUserTargetHz();
+        if (targetHz < 15) targetHz = 15;
+        if (targetHz > 240) targetHz = 240;
+        CAFrameRateRange target = Titanium_HardLockFRR(targetHz);
         if (@available(iOS 13.0, *)) {
-            if (!Titanium_DisplayRateOverrideReady()) return;
-            
-            // [SỬA] Bốc clamp, lấy đúng số user chọn (15-240)
-            NSInteger targetHz = Titanium_GetUserTargetHz();
-            CAFrameRateRange hardRange = Titanium_HardLockFRR(targetHz);
-            
             for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]]) {
-                    UIWindowScene *windowScene = (UIWindowScene *)scene;
-                    if (@available(iOS 15.0, *)) {
-                        if ([windowScene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                            windowScene.preferredFrameRateRange = SafeMakeFRR(hardRange.minimum, hardRange.maximum, hardRange.preferred);
+                if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+                UIWindowScene *ws = (UIWindowScene *)scene;
+                if (@available(iOS 15.0, *)) {
+                    if ([ws respondsToSelector:@selector(preferredFrameRateRange)] &&
+                        [ws respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
+                        CAFrameRateRange curr = ws.preferredFrameRateRange;
+                        if (fabs(curr.minimum - target.minimum) > 0.5 ||
+                            fabs(curr.maximum - target.maximum) > 0.5 ||
+                            fabs(curr.preferred - target.preferred) > 0.5) {
+                            ws.preferredFrameRateRange = target;
                         }
                     }
                 }
             }
         }
     }
-    
-    // Đồng bộ DisplayLink
     Titanium_ReapplyFrameRateToTrackedDisplayLinks();
-    
-    // [SỬA] Bơm thẳng xuống Driver để khóa cứng tần số
-    NSInteger targetHz = Titanium_GetUserTargetHz();
-    Titanium_PushRateToDriverV4(targetHz);
-    
-    // [REAL FORCE] Đấm thẳng IOMFB phần cứng (bọc async để không block main)
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        Titanium_ExecuteUltimateHardwareHack(targetHz);
-    });
+}
+
+static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
+    if (!Titanium_ShouldApplyAppDisplayOverrides()) return;
+    // Chỉ CA lock. Drift detector lo phần hardware.
+    Titanium_EnforceCAFrameRange();
+}
+
+// [DRIFT CHECK — chỉ đấm khi lệch 2% liên tiếp 5 frame]
+static inline void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz) {
+    if (targetHz < 15) return;
+    double interval = targetTs - timestamp;
+    if (interval <= 0.002 || interval > 0.5) return;
+    double actualHz = 1.0 / interval;
+    g_lastObservedFrameHz = actualHz;
+    double deviation = fabs(actualHz - (double)targetHz) / (double)targetHz;
+
+    if (deviation > 0.02) {
+        g_consecutiveDriftFrames++;
+        if (g_consecutiveDriftFrames >= 5) {
+            g_consecutiveDriftFrames = 0;
+            if (Titanium_CanPunchHardware()) {
+                Titanium_MarkHardwarePunched();
+                NSInteger tgt = targetHz;
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                    @try {
+                        Titanium_ExecuteUltimateHardwareHack(tgt);
+                        Titanium_ForcePanelModeDirect(tgt);
+                    } @catch (__unused NSException *e) {}
+                });
+            }
+        }
+    } else {
+        g_consecutiveDriftFrames = 0;
+    }
 }
 
 // ================= IOKIT SAFE-SYMBOL SHIMS =================
-// iOS 16.7 rootless: `IORegistryEntrySetCFProperties` (số nhiều) không đảm bảo có.
-// `IORegistryEntrySetCFProperty` (số ít) có trên mọi iOS → fallback an toàn.
-
 typedef kern_return_t (*Titanium_SetCFPropertiesFn)(io_registry_entry_t, CFTypeRef);
 typedef kern_return_t (*Titanium_SetCFPropertyFn)(io_registry_entry_t, CFStringRef, CFTypeRef);
 typedef io_service_t   (*Titanium_IOServiceGetMatchingServiceFn)(mach_port_t, CFDictionaryRef);
@@ -5524,8 +5582,8 @@ typedef kern_return_t  (*Titanium_IOConnectCallScalarMethodFn)(io_connect_t, uin
 typedef io_registry_entry_t (*Titanium_IORegistryEntryFromPathFn)(mach_port_t, const io_string_t);
 
 typedef struct {
-    Titanium_SetCFPropertiesFn           setCFProperties;       // có thể NULL
-    Titanium_SetCFPropertyFn             setCFProperty;         // phải có
+    Titanium_SetCFPropertiesFn           setCFProperties;
+    Titanium_SetCFPropertyFn             setCFProperty;
     Titanium_IOServiceGetMatchingServiceFn  getMatchingService;
     Titanium_IOServiceGetMatchingServicesFn getMatchingServices;
     Titanium_IOServiceOpenFn             serviceOpen;
@@ -5551,7 +5609,6 @@ static inline const TitaniumIOKitSyms *Titanium_ResolveIOKitSyms(void) {
     return &g_tioKit;
 }
 
-// Setter an toàn: số nhiều nếu có, không thì fallback từng key bằng số ít. Không bao giờ abort.
 static inline kern_return_t Titanium_SafeSetCFProperties(io_registry_entry_t svc, NSDictionary *props) {
     if (svc == IO_OBJECT_NULL || !props) return KERN_INVALID_ARGUMENT;
     const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
@@ -5561,9 +5618,7 @@ static inline kern_return_t Titanium_SafeSetCFProperties(io_registry_entry_t svc
     if (!s->setCFProperty) return KERN_NOT_SUPPORTED;
     kern_return_t last = KERN_SUCCESS;
     for (NSString *k in props) {
-        kern_return_t kr = s->setCFProperty(svc,
-            (__bridge CFStringRef)k,
-            (__bridge CFTypeRef)props[k]);
+        kern_return_t kr = s->setCFProperty(svc, (__bridge CFStringRef)k, (__bridge CFTypeRef)props[k]);
         if (kr != KERN_SUCCESS) last = kr;
     }
     return last;
@@ -5573,55 +5628,35 @@ static inline kern_return_t Titanium_SafeSetCFProperty(io_registry_entry_t svc, 
     if (svc == IO_OBJECT_NULL || !key) return KERN_INVALID_ARGUMENT;
     const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
     if (!s->setCFProperty) return KERN_NOT_SUPPORTED;
-    return s->setCFProperty(svc,
-        (__bridge CFStringRef)key,
-        (__bridge CFTypeRef)value);
+    return s->setCFProperty(svc, (__bridge CFStringRef)key, (__bridge CFTypeRef)value);
 }
 
 // ====================================================================================================
-// TITANIUM V77 — FULL TẦNG 4->6 — HARD FORCE SUCCESS, NO TEARING, ZERO STUTTER
-// ====================================================================================================
-
 extern ApexV285ProPayload g_syncPayloadV285;
-
-static inline BOOL Apex_IsMasterEnabled(void) {
-    return g_syncPayloadV285.masterEnabled != 0;
-}
-
+static inline BOOL Apex_IsMasterEnabled(void) { return g_syncPayloadV285.masterEnabled != 0; }
 extern BOOL g_isCurrentAppBlacklisted;
 @class BoostConfigV285Pro;
 extern BoostConfigV285Pro *CFG285;
 extern NSInteger Titanium_GetEffectiveFrameCap(void);
 extern void EnforceMaxCPUPower(void);
 
-// Khai báo các hàm (Đã xóa các biến/struct vì đã khai báo ở đầu file)
 static void Titanium_HardwareDriverOverride(NSInteger targetHz);
 static void Titanium_ForcePanelModeDirect(NSInteger hz);
 static void Titanium_Tier4WriteCadence(NSInteger hz);
 static void Titanium_Tier4RollbackCadence(void);
 static void Titanium_ReloadSharedSyncStateV285(void);
-
-// Các hàm liên quan đến IOMFB (Đã xóa biến, chỉ giữ khai báo hàm nếu chưa có)
 static void Tio_DCPResolveConnections(void);
 static kern_return_t Tio_IomfbRawSetMode(NSInteger hz);
 static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
 
-// ====================================================================================================
-// [GATES + SYNC STATE]
-// ====================================================================================================
 #import <notify.h>
 #include <signal.h>
 
-// [V52 FIX COMPILE] Forward declarations + khai bao bien (goi truoc dinh nghia -> undeclared)
 static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
 static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz);
 static volatile NSInteger g_tioLastAcceptedHz = 0;
-static void Titanium_Tier6JetsamImmunityReal(void) {
-    // [V52] Placeholder — chong undeclared.
-}
-static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz) {
-    // [V52] Placeholder — chong undeclared.
-}
+static void Titanium_Tier6JetsamImmunityReal(void) {}
+static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz) {}
 
 #define TITANIUM_CHECK_FILE @"/var/mobile/titanium_check.txt"
 #define TITANIUM_V57_BEST_HZ_FILE @"/tmp/.boost_best_hz"
@@ -5629,22 +5664,16 @@ static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz) {
 static volatile BOOL     g_v55ScreenOn      = YES;
 static volatile BOOL     g_v55WakeSettling  = NO;
 static volatile BOOL     g_v55FirstFrame    = NO;
-static volatile BOOL     g_v55ThermalSafe   = YES; 
-
+static volatile BOOL     g_v55ThermalSafe   = YES;
 static volatile BOOL     g_v56KeyboardVisible  = NO;
 static volatile uint64_t g_v56KeyboardHideTick = 0;
-
 static volatile uint64_t  g_v57AppLaunchTick   = 0;
 static volatile uint64_t  g_v57LastIPCReload   = 0;
 static volatile uint64_t  g_v57LastReapply     = 0;
 static volatile NSInteger g_v57SharedBestHz    = 0;
-
-// Cờ ép Driver thành công
 static volatile BOOL g_v60ForceDriverSuccess = NO;
 
-static inline uint64_t v55_ns(uint64_t ns) {
-    return Titanium_NanosToMachTicks(ns);
-}
+static inline uint64_t v55_ns(uint64_t ns) { return Titanium_NanosToMachTicks(ns); }
 
 static void Titanium_V60_Log(NSString *msg) {
     static dispatch_once_t once;
@@ -5675,10 +5704,7 @@ static inline BOOL Titanium_V57_TouchReady(void) {
     }
     return NO;
 }
-static inline BOOL Titanium_V55_PanelWritable(void) {
-    return g_v55ScreenOn && !g_v55WakeSettling;
-}
-
+static inline BOOL Titanium_V55_PanelWritable(void) { return g_v55ScreenOn && !g_v55WakeSettling; }
 static inline BOOL Titanium_V56_KeyboardBusy(void) {
     if (g_v56KeyboardVisible) return YES;
     if (g_v56KeyboardHideTick != 0 &&
@@ -5690,10 +5716,7 @@ static inline BOOL Titanium_V56_KeyboardBusy(void) {
 
 static void Titanium_V57_ReloadIPCIfStale(void) {
     uint64_t now = mach_absolute_time();
-    if (g_v57LastIPCReload != 0 &&
-        (now - g_v57LastIPCReload) < v55_ns(500ULL * 1000000ULL)) {
-        return;
-    }
+    if (g_v57LastIPCReload != 0 && (now - g_v57LastIPCReload) < v55_ns(500ULL * 1000000ULL)) return;
     g_v57LastIPCReload = now;
     Titanium_ReloadSharedSyncStateV285();
 }
@@ -5705,10 +5728,7 @@ static NSInteger Titanium_V57_ReadSharedBestHz(void) {
         if (d && d.length >= sizeof(int32_t)) {
             int32_t hz = 0;
             [d getBytes:&hz length:sizeof(int32_t)];
-            if (hz >= 60 && hz <= 240) {
-                g_v57SharedBestHz = hz;
-                return hz;
-            }
+            if (hz >= 60 && hz <= 240) { g_v57SharedBestHz = hz; return hz; }
         }
     } @catch (__unused NSException *e) {}
     return 0;
@@ -5726,16 +5746,11 @@ static void Titanium_V57_ForceReapplyIfNeeded(void) {
     if (Titanium_IsSpringBoard()) return;
     if (!Titanium_V57_TouchReady()) return;
     uint64_t now = mach_absolute_time();
-    if (g_v57LastReapply != 0 &&
-        (now - g_v57LastReapply) < v55_ns(1000ULL * 1000000ULL)) {
-        return;
-    }
+    if (g_v57LastReapply != 0 && (now - g_v57LastReapply) < v55_ns(1000ULL * 1000000ULL)) return;
     g_v57LastReapply = now;
     Titanium_V57_ReloadIPCIfStale();
     dispatch_async(dispatch_get_main_queue(), ^{
-        @try {
-            Titanium_ReapplyFrameRateToAllScenes();
-        } @catch (__unused NSException *e) {}
+        @try { Titanium_ReapplyFrameRateToAllScenes(); } @catch (__unused NSException *e) {}
     });
 }
 
@@ -5744,41 +5759,21 @@ static void Titanium_V56_InstallKeyboardState(void) {
     dispatch_once(&once, ^{
         NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
         [nc addObserverForName:UIKeyboardWillShowNotification object:nil queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *n) {
-            g_v56KeyboardVisible = YES;
-            g_v56KeyboardHideTick = 0;
-        }];
+                    usingBlock:^(__unused NSNotification *n) { g_v56KeyboardVisible = YES; g_v56KeyboardHideTick = 0; }];
         [nc addObserverForName:UIKeyboardDidShowNotification object:nil queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *n) {
-            g_v56KeyboardVisible = YES;
-        }];
+                    usingBlock:^(__unused NSNotification *n) { g_v56KeyboardVisible = YES; }];
         [nc addObserverForName:UIKeyboardWillHideNotification object:nil queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *n) {
-            g_v56KeyboardVisible = NO;
-            g_v56KeyboardHideTick = mach_absolute_time();
-        }];
+                    usingBlock:^(__unused NSNotification *n) { g_v56KeyboardVisible = NO; g_v56KeyboardHideTick = mach_absolute_time(); }];
         [nc addObserverForName:UIKeyboardDidHideNotification object:nil queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *n) {
-            g_v56KeyboardVisible = NO;
-            g_v56KeyboardHideTick = mach_absolute_time();
-        }];
+                    usingBlock:^(__unused NSNotification *n) { g_v56KeyboardVisible = NO; g_v56KeyboardHideTick = mach_absolute_time(); }];
     });
 }
 
-// ====================================================================================================
-// [TARGET HELPERS]
-// ====================================================================================================
-
 static NSInteger Titanium_GetUserTargetHz(void) {
     Titanium_V57_ReloadIPCIfStale();
-    // [BẺ THẲNG] Lấy trực tiếp targetHz từ cấu hình, đéo qua hàm clamp
     NSInteger target = g_syncPayloadV285.targetHz;
-    
-    // Fallback nếu cấu hình lỗi
     if (target < 15) target = g_cachedResolvedHz;
     if (target < 15 && CFG285) target = CFG285.targetHz;
-    
-    // [KHOÁ TRẦN] Sàn 15, Trần 240
     if (target < 15) target = 15;
     if (target > 240) target = 240;
     return target;
@@ -5786,31 +5781,16 @@ static NSInteger Titanium_GetUserTargetHz(void) {
 
 static NSInteger Titanium_GetUserTargetFPS(void) {
     Titanium_V57_ReloadIPCIfStale();
-    // [BẺ THẲNG] Lấy trực tiếp targetFPS từ cấu hình
     NSInteger target = g_syncPayloadV285.targetFPS;
-    
     if (target < 15) target = g_cachedResolvedFPS;
     if (target < 15 && CFG285) target = CFG285.targetFPS;
-    
     if (target < 15) target = 15;
     if (target > 240) target = 240;
     return target;
 }
 
-static float Titanium_ForceUserHz(float r) { 
-    (void)r; 
-    return (float)Titanium_GetUserTargetHz(); 
-}
-
-static float Titanium_ForceUserFPS(float r) { 
-    (void)r; 
-    return (float)Titanium_GetUserTargetFPS(); 
-}
-
-
-// ====================================================================================================
-// [OVERDRIVE STATE - BẺ THẲNG PHẦN MỀM GHI ĐÈ PHẦN CỨNG]
-// ====================================================================================================
+static float Titanium_ForceUserHz(float r) { (void)r; return (float)Titanium_GetUserTargetHz(); }
+static float Titanium_ForceUserFPS(float r) { (void)r; return (float)Titanium_GetUserTargetFPS(); }
 
 static volatile NSInteger g_tioActiveHz        = 0;
 static volatile double    g_tioObservedVsyncHz = 0.0;
@@ -5840,21 +5820,17 @@ NSInteger Titanium_ActualPanelHz(void) {
 @implementation TitaniumOverdriveVSyncProbe
 - (void)tick:(CADisplayLink *)link {
     if (!Titanium_V55_PanelWritable()) return;
-    
-    // [BẺ THẲNG CƯỠNG CHẾ] Ép DisplayLink chạy đúng target Hz, đéo nhận 60Hz từ OS
     NSInteger targetHz = Titanium_GetUserTargetHz();
+
+    // DRIFT CHECK — chỉ đấm khi lệch thật. KHÔNG spam hardware mỗi frame.
+    Titanium_DriftCheck(link.timestamp, link.targetTimestamp, targetHz);
+
+    // CA lock nhẹ
     link.preferredFramesPerSecond = targetHz;
     if (@available(iOS 15.0, *)) {
         link.preferredFrameRateRange = CAFrameRateRangeMake((float)targetHz, (float)targetHz, (float)targetHz);
     }
-    
-    // [VƯỢT THẲNG PHẦN MỀM] Đấm thẳng xuống Driver phần cứng mỗi frame
-    // Ép cứng cờ bypass, đéo cho Driver từ chối lệnh
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        Titanium_ExecuteUltimateHardwareHack(targetHz);
-    });
-    
-    // Vẫn ghi nhận Vsync thực tế để log (nhưng đéo dùng để quyết định)
+
     CFTimeInterval d = link.targetTimestamp - link.timestamp;
     if (d > 0.004 && d < 0.2) {
         g_tioObservedVsyncHz = 1.0 / d;
@@ -5876,13 +5852,10 @@ static void Titanium_StartOverdriveProbe(void) {
     dispatch_once(&once, ^{
         TitaniumOverdriveVSyncProbe *p = [TitaniumOverdriveVSyncProbe new];
         p.link = [CADisplayLink displayLinkWithTarget:p selector:@selector(tick:)];
-        
-        // [SỬA] Không để 0 (native probe) nữa, ép luôn target
         p.link.preferredFramesPerSecond = Titanium_GetUserTargetHz();
         if (@available(iOS 15.0, *)) {
             p.link.preferredFrameRateRange = CAFrameRateRangeMake((float)Titanium_GetUserTargetHz(), (float)Titanium_GetUserTargetHz(), (float)Titanium_GetUserTargetHz());
         }
-        
         p.link.paused = !g_v55ScreenOn;
         [p.link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
         g_tioProbe = p;
@@ -5891,8 +5864,7 @@ static void Titanium_StartOverdriveProbe(void) {
 }
 
 // ====================================================================================================
-// [IOMFB DIRECT-CALL & DRIVER SPOOF - V999 ABSOLUTE GOD MODE - SAFE IOKIT]
-// BẺ THẲNG XUỐNG CHIP - symbol resolve qua dlsym, thiếu thì log + bỏ qua.
+// IOMFB DIRECT — RAW MIG + COOLDOWN
 // ====================================================================================================
 
 typedef void *tio_iomfb_ref;
@@ -5929,14 +5901,6 @@ typedef enum {
 } TioDriverPath;
 static volatile TioDriverPath g_tioBestPath = TioPathNone;
 
-static void Tio_DCPResolveConnections(void);
-static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
-static BOOL Tio_SubmitModeAllPaths(NSInteger hz);
-static void Titanium_HardwareDriverOverride(NSInteger targetHz);
-static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
-
-// ====================================================================================================
-
 static void Titanium_LoadIOMFBDirect(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -5950,286 +5914,168 @@ static void Titanium_LoadIOMFBDirect(void) {
     });
 }
 
-// Hook StructMethod — orig có null guard, hook chạy không crash nếu orig resolve fail.
-static kern_return_t (*orig_IOConnectCallStructMethod)(io_connect_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt) = NULL;
-
-static kern_return_t hooked_IOConnectCallStructMethod(io_connect_t connection,
-                                                      uint32_t selector,
-                                                      const void *inputStruct,
-                                                      size_t inputStructCnt,
-                                                      void *outputStruct,
-                                                      size_t *outputStructCnt) {
+static kern_return_t (*orig_IOConnectCallStructMethod)(io_connect_t, uint32_t, const void*, size_t, void*, size_t*) = NULL;
+static kern_return_t hooked_IOConnectCallStructMethod(io_connect_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt) {
     kern_return_t ret = KERN_FAILURE;
     if (orig_IOConnectCallStructMethod) {
-        ret = orig_IOConnectCallStructMethod(connection, selector,
-                                             inputStruct, inputStructCnt,
-                                             outputStruct, outputStructCnt);
+        ret = orig_IOConnectCallStructMethod(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
     }
-    if (g_v60ForceDriverSuccess && (IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return KERN_SUCCESS;
-    }
+    if (g_v60ForceDriverSuccess && (IS_ACTIVE || Apex_IsMasterEnabled())) return KERN_SUCCESS;
     return ret;
 }
 
-// Hook ScalarMethod — orig có null guard tương tự.
-static kern_return_t (*orig_IOConnectCallScalarMethod)(io_connect_t connection, uint32_t selector, const uint64_t *input, uint32_t inputCnt, uint64_t *output, uint32_t *outputCnt) = NULL;
-
-static kern_return_t hooked_IOConnectCallScalarMethod(io_connect_t connection,
-                                                      uint32_t selector,
-                                                      const uint64_t *input,
-                                                      uint32_t inputCnt,
-                                                      uint64_t *output,
-                                                      uint32_t *outputCnt) {
+static kern_return_t (*orig_IOConnectCallScalarMethod)(io_connect_t, uint32_t, const uint64_t*, uint32_t, uint64_t*, uint32_t*) = NULL;
+static kern_return_t hooked_IOConnectCallScalarMethod(io_connect_t connection, uint32_t selector, const uint64_t *input, uint32_t inputCnt, uint64_t *output, uint32_t *outputCnt) {
     kern_return_t ret = KERN_FAILURE;
     if (orig_IOConnectCallScalarMethod) {
-        ret = orig_IOConnectCallScalarMethod(connection, selector,
-                                             input, inputCnt,
-                                             output, outputCnt);
+        ret = orig_IOConnectCallScalarMethod(connection, selector, input, inputCnt, output, outputCnt);
     }
-    if (g_v60ForceDriverSuccess && (IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return KERN_SUCCESS;
-    }
+    if (g_v60ForceDriverSuccess && (IS_ACTIVE || Apex_IsMasterEnabled())) return KERN_SUCCESS;
     return ret;
 }
 
-// Hook method — resolve symbol qua dlsym trước, hook pointer thật, không hook stub.
 static void Titanium_BypassDCPMethod(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-
-        // Hook StructMethod — chỉ khi symbol có thật.
         if (s->connectStructMethod) {
-            MSHookFunction((void *)s->connectStructMethod,
-                           (void *)hooked_IOConnectCallStructMethod,
-                           (void **)&orig_IOConnectCallStructMethod);
-            if (!orig_IOConnectCallStructMethod) {
-                Titanium_V60_Log(@"[V999] MSHookFunction StructMethod failed — orig NULL, hook disabled");
-            }
+            MSHookFunction((void *)s->connectStructMethod, (void *)hooked_IOConnectCallStructMethod, (void **)&orig_IOConnectCallStructMethod);
+            if (!orig_IOConnectCallStructMethod) Titanium_V60_Log(@"[V999] StructMethod hook orig NULL");
         } else {
-            Titanium_V60_Log(@"[V999] IOConnectCallStructMethod missing — struct hook skipped");
+            Titanium_V60_Log(@"[V999] IOConnectCallStructMethod missing");
         }
-
-        // Hook ScalarMethod — tương tự.
         if (s->connectScalarMethod) {
-            MSHookFunction((void *)s->connectScalarMethod,
-                           (void *)hooked_IOConnectCallScalarMethod,
-                           (void **)&orig_IOConnectCallScalarMethod);
-            if (!orig_IOConnectCallScalarMethod) {
-                Titanium_V60_Log(@"[V999] MSHookFunction ScalarMethod failed — orig NULL, hook disabled");
-            }
+            MSHookFunction((void *)s->connectScalarMethod, (void *)hooked_IOConnectCallScalarMethod, (void **)&orig_IOConnectCallScalarMethod);
+            if (!orig_IOConnectCallScalarMethod) Titanium_V60_Log(@"[V999] ScalarMethod hook orig NULL");
         } else {
-            Titanium_V60_Log(@"[V999] IOConnectCallScalarMethod missing — scalar hook skipped");
+            Titanium_V60_Log(@"[V999] IOConnectCallScalarMethod missing");
         }
     });
 }
-
-// ====================================================================================================
-// [DCP RESOLVE CONNECTIONS - V999 SAFE IOKIT]
-// Toàn bộ symbol resolve qua dlsym — thiếu cái nào thì thoát êm, không abort.
-// ====================================================================================================
 
 static void Tio_DCPResolveConnections(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         @try {
             const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-            if (!s->getMatchingService || !s->serviceOpen) {
-                Titanium_V60_Log(@"[V999] IOKit service symbols missing — DCP resolve skipped");
-                g_dcpConnReady = NO;
-                return;
-            }
-
+            if (!s->getMatchingService || !s->serviceOpen) { g_dcpConnReady = NO; return; }
             const char *services[] = {
                 "IOMobileFramebuffer", "IOMobileFramebufferAP",
-                "AppleDCP", "AppleCLCD2"
+                "AppleDCP", "AppleCLCD2", "AppleCLCD",
+                "AppleDCPAVController", "AppleM2Scaler", "AppleM2ScalerUserClient"
             };
-            for (int i = 0; i < 4; i++) {
-                g_dcpIomfbSvc = s->getMatchingService(kIOMasterPortDefault,
-                                                     IOServiceMatching(services[i]));
+            int n = (int)(sizeof(services)/sizeof(services[0]));
+            for (int i = 0; i < n; i++) {
+                g_dcpIomfbSvc = s->getMatchingService(kIOMasterPortDefault, IOServiceMatching(services[i]));
                 if (g_dcpIomfbSvc != IO_OBJECT_NULL) {
-                    if (s->serviceOpen(g_dcpIomfbSvc, mach_task_self(), 0, &g_dcpIomfbConn) == KERN_SUCCESS) {
-                        break;
-                    }
+                    if (s->serviceOpen(g_dcpIomfbSvc, mach_task_self(), 0, &g_dcpIomfbConn) == KERN_SUCCESS) break;
                 }
             }
-
             io_iterator_t iter = IO_OBJECT_NULL;
             if (s->getMatchingServices &&
-                s->getMatchingServices(kIOMasterPortDefault,
-                                       IOServiceMatching("IODisplayConnect"),
-                                       &iter) == KERN_SUCCESS &&
+                s->getMatchingServices(kIOMasterPortDefault, IOServiceMatching("IODisplayConnect"), &iter) == KERN_SUCCESS &&
                 iter != IO_OBJECT_NULL) {
                 g_dcpDispSvc = IOIteratorNext(iter);
                 IOObjectRelease(iter);
-                if (g_dcpDispSvc != IO_OBJECT_NULL) {
-                    (void)s->serviceOpen(g_dcpDispSvc, mach_task_self(), 0, &g_dcpDispConn);
-                }
+                if (g_dcpDispSvc != IO_OBJECT_NULL) (void)s->serviceOpen(g_dcpDispSvc, mach_task_self(), 0, &g_dcpDispConn);
             }
-
             g_dcpConnReady = (g_dcpIomfbConn != IO_OBJECT_NULL) || (g_dcpDispConn != IO_OBJECT_NULL);
-        } @catch (__unused NSException *e) {
-            g_dcpConnReady = NO;
-        }
+        } @catch (__unused NSException *e) { g_dcpConnReady = NO; }
     });
 }
-
-// ====================================================================================================
-// [DISPLAY CONN SET REFRESH - V999 SAFE IOKIT]
-// ====================================================================================================
 
 static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz) {
     if (g_isRebooting) return KERN_FAILURE;
     if (!Titanium_V55_PanelWritable()) return KERN_FAILURE;
-
     const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-    if (!s->connectScalarMethod) {
-        Titanium_V60_Log(@"[V999] IOConnectCallScalarMethod missing — skipping DisplayConnSetRefresh");
-        return KERN_FAILURE;
-    }
-
+    if (!s->connectScalarMethod) return KERN_FAILURE;
     Tio_DCPResolveConnections();
     if (g_dcpDispConn == IO_OBJECT_NULL) return KERN_FAILURE;
-
     g_v60ForceDriverSuccess = YES;
     static const uint32_t kSels[] = { 8, 9, 10, 11, 12, 13 };
     for (uint32_t i = 0; i < 6; i++) {
         uint64_t in = (uint64_t)hz;
         uint32_t outLen = 0;
         kern_return_t kr = s->connectScalarMethod(g_dcpDispConn, kSels[i], &in, 1, NULL, &outLen);
-        if (kr == KERN_SUCCESS) {
-            g_v60ForceDriverSuccess = NO;
-            return kr;
-        }
+        if (kr == KERN_SUCCESS) { g_v60ForceDriverSuccess = NO; return kr; }
     }
     g_v60ForceDriverSuccess = NO;
     return KERN_FAILURE;
 }
 
-// ====================================================================================================
-// [SUBMIT MODE ALL PATHS - V999 SAFE IOKIT]
-// ====================================================================================================
-
 static BOOL Tio_SubmitModeAllPaths(NSInteger hz) {
     if (g_isRebooting) return NO;
-
     const TitaniumIOKitSyms *syms = Titanium_ResolveIOKitSyms();
-
     if (g_dcpIomfbConn != IO_OBJECT_NULL && syms->connectStructMethod) {
         TioIomfbTiming timing;
         memset(&timing, 0, sizeof(timing));
-        timing.width       = (uint32_t)[UIScreen mainScreen].nativeBounds.size.width;
-        timing.height      = (uint32_t)[UIScreen mainScreen].nativeBounds.size.height;
+        timing.width = (uint32_t)[UIScreen mainScreen].nativeBounds.size.width;
+        timing.height = (uint32_t)[UIScreen mainScreen].nativeBounds.size.height;
         timing.refreshRate = (uint32_t)hz;
-        timing.pixelClock  = (uint32_t)((timing.width + 64) * (timing.height + 32) * hz * 1.05);
-        timing.flags       = 0xFFFFFFFF;
-
+        timing.pixelClock = (uint32_t)((timing.width + 64) * (timing.height + 32) * hz * 1.05);
+        timing.flags = 0xFFFFFFFF;
         uint32_t selectors[] = {14, 15, 16, 17, 18, 19, 30, 31};
         for (int i = 0; i < 8; i++) {
             size_t outLen = 0;
-            (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i],
-                                            &timing, sizeof(timing), NULL, &outLen);
+            (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
         }
         g_tioBestPath = TioPathRawMIG;
     }
-
-    if (g_dcpDispConn != IO_OBJECT_NULL) {
-        Tio_DisplayConnSetRefresh(hz);
-    }
-
+    if (g_dcpDispConn != IO_OBJECT_NULL) Tio_DisplayConnSetRefresh(hz);
     if (tio_iomfb_setmode && tio_iomfb_handle) {
-        tio_iomfb_setmode(tio_iomfb_handle,
-                          (uint32_t)[UIScreen mainScreen].nativeBounds.size.width,
-                          (uint32_t)[UIScreen mainScreen].nativeBounds.size.height,
-                          (float)hz);
+        tio_iomfb_setmode(tio_iomfb_handle, (uint32_t)[UIScreen mainScreen].nativeBounds.size.width, (uint32_t)[UIScreen mainScreen].nativeBounds.size.height, (float)hz);
     }
-
     return YES;
 }
 
-// ====================================================================================================
-// [FORCE PANEL MODE DIRECT - V999 SAFE IOKIT]
-// Toàn bộ IOKit call resolve qua dlsym — thiếu symbol thì log + thoát êm, không abort.
-// ====================================================================================================
-
-void Titanium_ForcePanelModeDirect(NSInteger hz) {
+// [FORCE PANEL MODE — COOLDOWN + KHÔNG BRIGHTNESS TIER]
+static void Titanium_ForcePanelModeDirect(NSInteger hz) {
     if (!Titanium_V55_PanelWritable()) return;
     if (hz < 15) hz = 15;
     if (hz > 240) hz = 240;
+    if (!Titanium_CanPunchHardware()) return;
+    Titanium_MarkHardwarePunched();
 
     const TitaniumIOKitSyms *syms = Titanium_ResolveIOKitSyms();
-    if (!syms->connectStructMethod) {
-        Titanium_V60_Log(@"[V999] IOConnectCallStructMethod missing — skipping ForcePanelModeDirect");
-        return;
-    }
+    if (!syms->connectStructMethod) { Titanium_V60_Log(@"[V999] StructMethod missing — ForcePanel skipped"); return; }
 
     CGFloat pw = [UIScreen mainScreen].nativeBounds.size.width;
     CGFloat ph = [UIScreen mainScreen].nativeBounds.size.height;
-
     g_v60ForceDriverSuccess = YES;
-
     Tio_DCPResolveConnections();
+
     if (g_dcpIomfbConn != IO_OBJECT_NULL) {
         TioIomfbTiming timing;
         memset(&timing, 0, sizeof(timing));
-
-        timing.width       = (uint32_t)pw;
-        timing.height      = (uint32_t)ph;
+        timing.width = (uint32_t)pw; timing.height = (uint32_t)ph;
         timing.refreshRate = (uint32_t)hz;
-        timing.pixelClock  = (uint32_t)((pw + 64) * (ph + 32) * hz * 1.05);
-        timing.hSyncStart  = 0;
-        timing.hSyncEnd    = (uint32_t)pw;
-        timing.vSyncStart  = 0;
-        timing.vSyncEnd    = (uint32_t)ph;
-        timing.flags       = 0xFFFFFFFF;
-
-        uint32_t selectors[] = {14, 15, 16, 17, 18, 19, 20, 21, 30, 31, 32, 33};
-        int num_selectors = (int)(sizeof(selectors) / sizeof(selectors[0]));
-
-        for (int i = 0; i < num_selectors; i++) {
+        timing.pixelClock = (uint32_t)((pw + 64) * (ph + 32) * hz * 1.05);
+        timing.hSyncEnd = (uint32_t)pw; timing.vSyncEnd = (uint32_t)ph;
+        timing.flags = 0xFFFFFFFF;
+        uint32_t selectors[] = {
+            14, 15, 16, 17, 18, 19, 20, 21,
+            22, 23, 24, 25, 26, 27, 28, 29,
+            30, 31, 32, 33,
+            40, 41, 42
+        };
+        int n = (int)(sizeof(selectors)/sizeof(selectors[0]));
+        for (int i = 0; i < n; i++) {
             size_t outLen = 0;
-            (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i],
-                                            &timing, sizeof(timing), NULL, &outLen);
+            (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
         }
     }
-
-    if (tio_iomfb_setmode && tio_iomfb_handle) {
-        tio_iomfb_setmode(tio_iomfb_handle, (uint32_t)pw, (uint32_t)ph, (float)hz);
-    }
-
+    if (tio_iomfb_setmode && tio_iomfb_handle) tio_iomfb_setmode(tio_iomfb_handle, (uint32_t)pw, (uint32_t)ph, (float)hz);
     g_v60ForceDriverSuccess = NO;
-
     Titanium_HardwareDriverOverride(hz);
 
-    static NSInteger s_lastBrightnessTier = -1;
-    NSInteger currentTier = (hz > 180) ? 3 : ((hz > 120) ? 2 : ((hz > 60) ? 1 : 0));
-
-    if (currentTier != s_lastBrightnessTier) {
-        s_lastBrightnessTier = currentTier;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            @try {
-                UIScreen *screen = [UIScreen mainScreen];
-                if (currentTier == 3)      screen.brightness = 0.15f;
-                else if (currentTier == 2) screen.brightness = 0.25f;
-                else if (currentTier == 1) screen.brightness = 0.50f;
-            } @catch (__unused NSException *e) {}
-        });
-    }
+    // [ĐÃ BỐC BRIGHTNESS TIER] Không ép screen.brightness theo Hz — hết nóng, hết nháy.
 
     g_tioActiveHz = hz;
-    Titanium_V60_Log([NSString stringWithFormat:@"[V999 GOD] Panel forced to %ldHz. Accepted.", (long)hz]);
+    Titanium_V60_Log([NSString stringWithFormat:@"[V999 PUNCH] Panel forced to %ldHz", (long)hz]);
 
     dispatch_async(dispatch_get_main_queue(), ^{
         @try {
-            if (@available(iOS 15.0, *)) {
-                for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                    if ([scene isKindOfClass:[UIWindowScene class]] &&
-                        [(UIWindowScene *)scene respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
-                        ((UIWindowScene *)scene).preferredFrameRateRange =
-                            CAFrameRateRangeMake((float)hz, (float)hz, (float)hz);
-                    }
-                }
-            }
+            Titanium_EnforceCAFrameRange();
             id cad = [%c(CADisplay) mainDisplay];
             if (cad && [cad respondsToSelector:@selector(setPreferredFPS:)]) {
                 ((void (*)(id, SEL, NSInteger))objc_msgSend)(cad, @selector(setPreferredFPS:), hz);
@@ -6238,94 +6084,58 @@ void Titanium_ForcePanelModeDirect(NSInteger hz) {
     });
 }
 
-// ====================================================================================================
-// [IOMFB TRY ALTERNATE MODES - V999 SAFE IOKIT]
-// ====================================================================================================
-
 static NSInteger Titanium_IOMFBTryAlternateModes(NSInteger targetHz) {
     if (g_tioCachedBestHz == targetHz) return targetHz;
     if (!Titanium_V55_PanelWritable()) return 0;
-
     const TitaniumIOKitSyms *syms = Titanium_ResolveIOKitSyms();
-    if (!syms->connectStructMethod) {
-        Titanium_V60_Log(@"[V999] IOConnectCallStructMethod missing — skipping IOMFBTryAlternateModes");
-        return 0;
-    }
-
+    if (!syms->connectStructMethod) return 0;
     uint32_t w = (uint32_t)[UIScreen mainScreen].nativeBounds.size.width;
     uint32_t h = (uint32_t)[UIScreen mainScreen].nativeBounds.size.height;
     NSInteger upper = MIN(targetHz, (NSInteger)240);
-
     g_v60ForceDriverSuccess = YES;
-
     Tio_DCPResolveConnections();
     if (g_dcpIomfbConn != IO_OBJECT_NULL) {
         TioIomfbTiming timing;
         memset(&timing, 0, sizeof(timing));
-        timing.width       = w;
-        timing.height      = h;
+        timing.width = w; timing.height = h;
         timing.refreshRate = (uint32_t)upper;
-        timing.pixelClock  = (uint32_t)((w + 64) * (h + 32) * upper * 1.05);
-        timing.flags       = 0xFFFFFFFF;
-
+        timing.pixelClock = (uint32_t)((w + 64) * (h + 32) * upper * 1.05);
+        timing.flags = 0xFFFFFFFF;
         uint32_t selectors[] = {14, 15, 16, 17, 18, 19};
         for (int i = 0; i < 6; i++) {
             size_t outLen = 0;
-            (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i],
-                                            &timing, sizeof(timing), NULL, &outLen);
+            (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
         }
-        g_tioBestPath = TioPathRawMIG;
     }
-
-    if (g_dcpDispConn != IO_OBJECT_NULL) {
-        Tio_DisplayConnSetRefresh(upper);
-    }
-
-    if (tio_iomfb_setmode && tio_iomfb_handle) {
-        tio_iomfb_setmode(tio_iomfb_handle, w, h, (float)upper);
-        g_tioBestPath = TioPathFramework;
-    }
-
+    if (g_dcpDispConn != IO_OBJECT_NULL) Tio_DisplayConnSetRefresh(upper);
+    if (tio_iomfb_setmode && tio_iomfb_handle) tio_iomfb_setmode(tio_iomfb_handle, w, h, (float)upper);
     Titanium_HardwareDriverOverride(upper);
-
     g_v60ForceDriverSuccess = NO;
     g_tioCachedBestHz = upper;
     return upper;
 }
 
-// ====================================================================================================
-// [SCREEN STATE - BẺ THẲNG CƯỠNG CHẾ KHI BẬT MÀN HÌNH]
-// ====================================================================================================
-
 static void Titanium_V55_InstallScreenState(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         int token = 0;
-        notify_register_dispatch("com.apple.springboard.hasBlankedScreen",
-                                 &token, dispatch_get_main_queue(), ^(int t) {
+        notify_register_dispatch("com.apple.springboard.hasBlankedScreen", &token, dispatch_get_main_queue(), ^(int t) {
             uint64_t state = 0;
             notify_get_state(t, &state);
             BOOL on = (state == 0);
             g_v55ScreenOn = on;
-            
             if (on) {
                 g_v55WakeSettling = YES;
                 g_tioObservedVsyncHz = 0.0;
                 g_tioLastVsyncTick = mach_absolute_time();
                 g_tioRecoveryArmed = NO;
                 if (g_tioProbe && g_tioProbe.link) g_tioProbe.link.paused = NO;
-                
-                // [BẺ THẲNG] Bật màn hình là đấm Driver liền, đéo đợi 800ms
                 NSInteger targetHz = Titanium_GetUserTargetHz();
-                
-                // Bọc Async đấm thẳng phần cứng
                 dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                     Titanium_ExecuteUltimateHardwareHack(targetHz);
                     Titanium_HardwareDriverOverride(targetHz);
                     Titanium_Tier4WriteCadence(targetHz);
                 });
-                
-                // Đồng bộ lại UIWindowScene
                 dispatch_async(dispatch_get_main_queue(), ^{
                     Titanium_ReapplyFrameRateToAllScenes();
                     if (g_tioProbe && g_tioProbe.link) {
@@ -6335,24 +6145,16 @@ static void Titanium_V55_InstallScreenState(void) {
                         }
                     }
                 });
-                
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)),
-                               dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(800 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                     g_v55WakeSettling = NO;
                 });
             } else {
-                // [TẮT MÀN HÌNH] Chỉ dừng timer/probe, ĐÉO ép setmode về 60Hz nữa.
-                // OS sẽ tự làm việc đó, khi bật lên mình đấm lại.
                 if (g_tioProbe && g_tioProbe.link) g_tioProbe.link.paused = YES;
                 g_tioRecoveryArmed = NO;
             }
         });
     });
 }
-
-// ====================================================================================================
-// [CADENCE - BẺ THẲNG, BỐC THROTTLE, KHOÁ MIN=MAX]
-// ====================================================================================================
 
 static volatile uint64_t  g_v55LastCadenceTick = 0;
 static volatile NSInteger g_v55LastCadenceHz   = 0;
@@ -6361,11 +6163,8 @@ static void Titanium_Tier4WriteCadence(NSInteger hz) {
     if (!Titanium_V55_PanelWritable()) return;
     if (hz < 15) hz = 15;
     if (hz > 240) hz = 240;
-    
-    // [VÁ LỖ HỔNG] Bốc sạch check 300ms. Đấm liên tục đéo chờ.
     g_v55LastCadenceHz = hz;
     g_v55LastCadenceTick = mach_absolute_time();
-
     dispatch_async(dispatch_get_main_queue(), ^{
         @try {
             id server = [%c(CAWindowServer) performSelector:@selector(server)];
@@ -6378,12 +6177,10 @@ static void Titanium_Tier4WriteCadence(NSInteger hz) {
                     ((void (*)(id, SEL, type))objc_msgSend)(d, @selector(sel:), (type)(val))
                 if ([d respondsToSelector:@selector(setAllowsVirtualModes:)])
                     ((BOOL (*)(id, SEL, BOOL))objc_msgSend)(d, @selector(setAllowsVirtualModes:), YES);
-                
                 TIO_SEND(setMinimumFrameDuration, double, dur);
-                TIO_SEND(setMaximumRefreshRate,   double, (double)hz);
-                TIO_SEND(setIdealRefreshRate,     double, (double)hz);
-                // [VÁ LỖ HỔNG] Ép Min = Target, đéo cho OS tụt xuống 15Hz
-                TIO_SEND(setMinimumRefreshRate,   double, (double)hz); 
+                TIO_SEND(setMaximumRefreshRate, double, (double)hz);
+                TIO_SEND(setIdealRefreshRate, double, (double)hz);
+                TIO_SEND(setMinimumRefreshRate, double, (double)hz);
                 #undef TIO_SEND
             }
             id cad = [%c(CADisplay) mainDisplay];
@@ -6393,59 +6190,56 @@ static void Titanium_Tier4WriteCadence(NSInteger hz) {
                 if ([cad respondsToSelector:@selector(setPreferredFPS:)])
                     ((void (*)(id, SEL, NSInteger))objc_msgSend)(cad, @selector(setPreferredFPS:), hz);
             }
-            Titanium_V60_Log([NSString stringWithFormat:@"[OS] CAWindowServer HARD LOCKED %ld Hz / FPS", (long)hz]);
-            Titanium_ForcePanelModeDirect(hz);
         } @catch (NSException *e) {}
     });
 }
 
-// ====================================================================================================
-// [IOREGISTRY TIMING - V999 SAFE IOKIT]
-// Toàn bộ IOKit symbol resolve qua dlsym — không gọi trực tiếp.
-// Thiếu symbol thì thoát êm, log rõ, không abort SpringBoard.
-// ====================================================================================================
-
 static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
     if (!Titanium_V55_PanelWritable()) return;
-
     const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-    if (!s->entryFromPath || !s->setCFProperty) {
-        Titanium_V60_Log(@"[V999] IORegistryEntry symbols unavailable — skipping timing write");
-        return;
-    }
+    if (!s->entryFromPath || !s->setCFProperty) return;
     if (hz < 15) hz = 15;
     if (hz > 240) hz = 240;
-
     @try {
         const char *paths[] = {
             "IOService:/AppleARMPE/display0",
             "IOService:/AppleARMPE/display0/AppleCLCD2",
-            "IOService:/AppleARMPE/display0/IOMobileFramebuffer"
+            "IOService:/AppleARMPE/display0/IOMobileFramebuffer",
+            "IOService:/arm-io/display0"
         };
-
-        NSDictionary *props = @{
-            @"target-refresh-rate"   : @(hz),
-            @"preferred-refresh-rate": @(hz),
-            @"min-refresh-rate"      : @(hz),
-            @"max-refresh-rate"      : @(hz),
-            @"refresh-rate"          : @(hz),
-            @"DisplayRefreshRate"    : @(hz)
-        };
-
         g_v60ForceDriverSuccess = YES;
-
-        for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        NSDictionary *props = @{
+            @"target-refresh-rate"    : @(hz),
+            @"preferred-refresh-rate" : @(hz),
+            @"min-refresh-rate"       : @(hz),
+            @"max-refresh-rate"       : @(hz),
+            @"refresh-rate"           : @(hz),
+            @"DisplayRefreshRate"     : @(hz),
+            @"IOMFBCustomRefreshRate" : @(hz),
+            @"IOMFBSupportsProMotion" : @YES,
+            @"isProMotionEnabled"     : @YES,
+            @"VRRModeEnabled"         : @YES,
+            @"ThermalMitigationEnabled" : @NO,
+            @"thermal-mitigation"     : @NO,
+            @"FrameRateProtection"    : @NO,
+            @"DynamicPowerManagement" : @NO,
+            @"DisplayIdleDownclock"   : @NO,
+            @"IOMFBPowerManagement"   : @NO,
+            @"IOMFBCurrentPowerState" : @(1),
+            @"AllowHardwareOverclock" : @YES,
+            @"ForcePixelClock"        : @YES,
+            @"MaxPixelClock"          : @(999999999),
+            @"OverrideLimit"          : @YES,
+            @"BypassEDIDCheck"        : @YES
+        };
+        for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); i++) {
             io_registry_entry_t entry = s->entryFromPath(kIOMasterPortDefault, paths[i]);
             if (entry == IO_OBJECT_NULL) continue;
-
-            // Gọi qua shim an toàn (số nhiều nếu có, không thì số ít từng key).
-            // Với props nhỏ thế này thì số ít cũng đủ, nhưng đi qua helper
-            // để giữ pattern đồng bộ với các chỗ IOKit khác.
-            (void)Titanium_SafeSetCFProperties(entry, props);
-
+            for (NSString *k in props) {
+                (void)s->setCFProperty(entry, (__bridge CFStringRef)k, (__bridge CFTypeRef)props[k]);
+            }
             IOObjectRelease(entry);
         }
-
         g_v60ForceDriverSuccess = NO;
     } @catch (NSException *e) {
         g_v60ForceDriverSuccess = NO;
@@ -6453,64 +6247,39 @@ static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz) {
     }
 }
 
-// ====================================================================================================
-// [REALTIME FRAME - VÁ LỖ HỔNG TIMEOUT 500MS]
-// ====================================================================================================
-
+// [REALTIME FRAME — 30%/50%, CHỈ KHI TƯƠNG TÁC — CHỐNG NÓNG]
 static void Titanium_Tier6RealtimeFrameConstraint(NSInteger hz) {
     if (!Titanium_V57_TouchReady()) return;
     if (Titanium_V56_KeyboardBusy()) return;
     if (![NSThread isMainThread]) return;
     if (hz < 15 || hz > 240) return;
-    
-    // [VÁ LỖ HỔNG] Đấm liên tục, đéo check cooldown 500ms nữa.
+    if (!g_isInteracting && !g_isScrollingActive && !g_isContinuousSwiping) return;
     mach_port_t thread = pthread_mach_thread_np(pthread_self());
     uint64_t periodNs = 1000000000ULL / (uint64_t)hz;
-    
     thread_time_constraint_policy_data_t tc;
-    tc.period      = (uint32_t)tio_mach_nanos(periodNs);
-    // Tăng sức mạnh CPU lên tối đa
-    tc.computation = (uint32_t)tio_mach_nanos(periodNs * 0.8); 
-    tc.constraint  = (uint32_t)tio_mach_nanos(periodNs * 0.95);
+    tc.period = (uint32_t)tio_mach_nanos(periodNs);
+    tc.computation = (uint32_t)tio_mach_nanos(periodNs * 0.3);
+    tc.constraint  = (uint32_t)tio_mach_nanos(periodNs * 0.5);
     tc.preemptible = TRUE;
-    thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY,
-                      (thread_policy_t)&tc, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+    thread_policy_set(thread, THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&tc, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 }
 
-// ====================================================================================================
-// [OVERDRIVE PIPELINE - BỐC CỜ DONE ĐỂ CHẠY LẠI LIÊN TỤC]
-// ====================================================================================================
-
 static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
-    // [VÁ LỖ HỔNG] Bốc sạch check g_tioOverdriveDone. 
-    // Nếu OS reset panel, gọi hàm này là đấm lại ngay.
     if (g_tioOverdriveBusy) return;
     if (!Titanium_V55_PanelWritable()) return;
-
     g_tioOverdriveBusy = YES;
     g_tioRecoveryArmed = NO;
-
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @autoreleasepool {
             Titanium_LoadIOMFBDirect();
-            
-            if (targetHz > 60) {
-                Titanium_IOMFBTryAlternateModes(targetHz);
-            }
-
-            g_tioActiveHz      = targetHz;
+            if (targetHz > 60) Titanium_IOMFBTryAlternateModes(targetHz);
+            g_tioActiveHz = targetHz;
             g_tioRecoveryArmed = YES;
             g_tioLastVsyncTick = mach_absolute_time();
-            
             Titanium_Tier4WriteCadence(targetHz);
-            Titanium_Tier5WriteIORegistryTiming(targetHz);
-            Titanium_ForcePanelModeDirect(targetHz); 
-            
-            // [ĐÃ XOÁ DÒNG NÀY] g_tioOverdriveDone = YES;
-            
+            Titanium_ForcePanelModeDirect(targetHz);
             Titanium_V57_WriteSharedBestHz(targetHz);
-            
-            Titanium_V60_Log([NSString stringWithFormat:@"[V77 GOD MODE] HARD FORCED AT %ldHz. NO ROLLBACK.", (long)targetHz]);
+            Titanium_V60_Log([NSString stringWithFormat:@"[V77] HARD FORCED %ldHz", (long)targetHz]);
             g_tioOverdriveBusy = NO;
         }
     });
@@ -6520,111 +6289,77 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     if (!Titanium_V55_PanelWritable()) return;
     Titanium_V57_ReloadIPCIfStale();
     NSInteger targetHz = Titanium_GetUserTargetHz();
-    
     Titanium_StartOverdriveProbe();
     Titanium_Tier6JetsamImmunityReal();
     Titanium_Tier6RealtimeFrameConstraint(targetHz);
-    
     Titanium_OverdrivePipelineGo(targetHz);
-    
     Titanium_Tier4WriteCadence(targetHz);
 }
 
-// ====================================================================================================
-// [HARDWARE DRIVER OVERRIDE - V999 ABSOLUTE FORCE - SAFE IOKIT]
-// Số nhiều `IORegistryEntrySetCFProperties` có thể thiếu trên iOS 16.7 rootless.
-// Toàn bộ IOKit symbol resolve qua dlsym, thiếu số nhiều thì fallback số ít từng key.
-// ====================================================================================================
-
+// [HARDWARE DRIVER OVERRIDE — COOLDOWN, expanded drivers]
 static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
     if (!Titanium_V55_PanelWritable()) return;
     if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
-
-    // Resolve symbol một lần — nếu thiếu hết thì thoát êm, không abort.
     const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-    if (!s->setCFProperties && !s->setCFProperty) {
-        Titanium_V60_Log(@"[V999] IOKit CFProperty symbols unavailable — skipping HW override");
-        return;
-    }
-    if (!s->getMatchingServices && !s->getMatchingService) {
-        Titanium_V60_Log(@"[V999] IOKit matching symbols unavailable — skipping HW override");
-        return;
-    }
-
+    if (!s->setCFProperties && !s->setCFProperty) return;
+    if (!s->getMatchingServices && !s->getMatchingService) return;
+    if (!Titanium_CanPunchHardware()) return;
+    Titanium_MarkHardwarePunched();
     g_v60ForceDriverSuccess = YES;
-
     NSDictionary *overrideProps = @{
-        @"DisplayPipeRefreshRate"    : @(targetHz),
-        @"TargetRefreshRate"         : @(targetHz),
-        @"MaximumRefreshRate"        : @(targetHz),
-        @"MinimumRefreshRate"        : @(targetHz),
-
-        @"IOMFBSupportsProMotion"    : @YES,
-        @"isProMotionEnabled"        : @YES,
-        @"VRRModeEnabled"            : @YES,
-        @"AllowsVirtualModes"        : @YES,
-        @"DisplayIdleDownclock"      : @NO,
-        @"IOMFBCustomRefreshRate"    : @(targetHz),
-        @"IOMFBCurrentPowerState"    : @(1),
-        @"IOMFBMinPixelClock"        : @(0),
-        @"SupportsVRR"               : @YES,
-        @"PipeOverrideMode"          : @YES,
-
-        @"MinFrameDuration"          : @(1000000000 / targetHz),
-
-        @"ThermalMitigationEnabled"  : @NO,
-        @"DynamicPowerManagement"    : @NO,
-        @"FrameRateProtection"       : @NO,
-        @"AllowHardwareOverclock"    : @YES,
-        @"BypassEDIDCheck"           : @YES,
-        @"ForcePixelClock"           : @YES,
-        @"LimitVoltage"              : @YES,
-        @"FrameRateControl"          : @YES,
-        @"MaxPixelClock"             : @(999999999),
-        @"OverrideLimit"             : @YES
+        @"DisplayPipeRefreshRate" : @(targetHz),
+        @"TargetRefreshRate"      : @(targetHz),
+        @"MaximumRefreshRate"     : @(targetHz),
+        @"MinimumRefreshRate"     : @(targetHz),
+        @"IOMFBSupportsProMotion" : @YES,
+        @"isProMotionEnabled"     : @YES,
+        @"VRRModeEnabled"         : @YES,
+        @"AllowsVirtualModes"     : @YES,
+        @"DisplayIdleDownclock"   : @NO,
+        @"IOMFBCustomRefreshRate" : @(targetHz),
+        @"IOMFBCurrentPowerState" : @(1),
+        @"SupportsVRR"            : @YES,
+        @"PipeOverrideMode"       : @YES,
+        @"MinFrameDuration"       : @(1000000000 / targetHz),
+        @"ThermalMitigationEnabled" : @NO,
+        @"DynamicPowerManagement" : @NO,
+        @"FrameRateProtection"    : @NO,
+        @"AllowHardwareOverclock" : @YES,
+        @"BypassEDIDCheck"        : @YES,
+        @"ForcePixelClock"        : @YES,
+        @"MaxPixelClock"          : @(999999999),
+        @"OverrideLimit"          : @YES
     };
-
     const char *drivers[] = {
         "AppleDCP", "AppleCLCD2", "AppleCLCD",
         "IOMobileFramebufferAP", "IOMobileFramebuffer",
         "IOFramebuffer", "IOMobileFramebufferClient",
         "IOFramebufferUserClient", "AppleDCPAVController",
-        "IOAVController", "AGXAcceleratorG13"
+        "IOAVController", "AGXAcceleratorG13", "AGXAcceleratorG14",
+        "AppleM2Scaler", "AppleM2ScalerUserClient"
     };
-
-    for (size_t i = 0; i < sizeof(drivers) / sizeof(drivers[0]); i++) {
+    for (size_t i = 0; i < sizeof(drivers)/sizeof(drivers[0]); i++) {
         CFMutableDictionaryRef matchDict = IOServiceMatching(drivers[i]);
         if (!matchDict) continue;
-
         io_iterator_t iterator = IO_OBJECT_NULL;
-        kern_return_t kr = s->getMatchingServices
-            ? s->getMatchingServices(kIOMasterPortDefault, matchDict, &iterator)
-            : KERN_FAILURE;
-
+        kern_return_t kr = s->getMatchingServices ? s->getMatchingServices(kIOMasterPortDefault, matchDict, &iterator) : KERN_FAILURE;
         if (kr != KERN_SUCCESS || iterator == IO_OBJECT_NULL) continue;
-
         io_service_t service = IO_OBJECT_NULL;
         while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
-            // Không còn gọi trực tiếp số nhiều. Helper lo: số nhiều nếu có,
-            // không thì set từng key bằng số ít. Không abort nếu thiếu symbol.
             (void)Titanium_SafeSetCFProperties(service, overrideProps);
             IOObjectRelease(service);
         }
         IOObjectRelease(iterator);
     }
-
     g_v60ForceDriverSuccess = NO;
 }
 
 // ====================================================================================================
-// [GROUP: ProMotion overclock & Spoof - V999 ABSOLUTE FORCE]
-// ÉP DRIVER NHẬN LỆNH - ĐÉO CHO TỪ CHỐI - GHI ĐÈ MỌI NGÓC NGÁCH
+// HOOK: ProMotion overclock
 // ====================================================================================================
-
 %group Group_Hardware_ProMotion_Overclock
 
-// 1. Ép cảm ứng lấy mẫu max speed
 %hook IOHIDEventSystemClient
 - (void)setProperty:(id)property forKey:(NSString *)key {
     if (!self) { %orig(property, key); return; }
@@ -6648,110 +6383,78 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 }
 %end
 
-// 2. Ép Driver màn hình nhận tần số quét thô (Đéo cho từ chối)
 %hook IOMobileFramebufferClient
-
 - (int)setDisplayRefreshRate:(float)rate options:(unsigned int)options {
     if (!self) return %orig(rate, options);
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V55_PanelWritable()) {
         NSInteger target = Titanium_GetUserTargetHz();
         Titanium_ForcePanelModeDirect(target);
-        return 0; // Trả 0 = Thành công, OS tưởng đã set xong
+        return 0;
     }
     return %orig(rate, options);
 }
-
 - (int)setDisplayRefreshRate:(float)arg1 {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V55_PanelWritable()) {
         NSInteger target = Titanium_GetUserTargetHz();
         Titanium_ForcePanelModeDirect(target);
-        return 0; 
+        return 0;
     }
     return %orig(arg1);
 }
-
-// Ép getter trả về Hz mục tiêu
 - (int)getDisplayRefreshRate:(float *)arg1 {
     int ret = %orig(arg1);
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && arg1) {
-        *arg1 = (float)Titanium_GetUserTargetHz();
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && arg1) *arg1 = (float)Titanium_GetUserTargetHz();
     return ret;
 }
-
 - (float)getDisplayRefreshRate {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return (float)Titanium_GetUserTargetHz();
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled())) return (float)Titanium_GetUserTargetHz();
     return %orig;
 }
 %end
 
-// 3. Đấm thẳng lệnh xuống Kernel - Chặn đứng mọi giới hạn
 %hook IORegistryEntry
 - (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
     if (!key || !self) return %orig(key, value);
-    
     if (IS_ACTIVE || Apex_IsMasterEnabled()) {
-        // Quét rỗng mọi key liên quan đến bóp xung, giới hạn, nhiệt độ
         NSString *keyLower = [key lowercaseString];
-        if ([keyLower containsString:@"power"] ||       // Power limits
-            [keyLower containsString:@"thermal"] ||     // Nhiệt độ
-            [keyLower containsString:@"throttle"] ||    // Bóp xung
-            [keyLower containsString:@"budget"] ||      // Ngân sách
-            [keyLower containsString:@"limit"] ||       // Mọi loại limit
-            [keyLower containsString:@"cap"] ||         // Giới hạn trần
-            [keyLower containsString:@"max"] ||         // Max
-            [keyLower containsString:@"sustain"] ||     // Duy trì
-            [keyLower containsString:@"temperature"]) {  // Nhiệt độ trực tiếp
-            
-            // Ghi đè KERN_SUCCESS, cấm OS ghi giới hạn xuống chip
-            return KERN_SUCCESS; 
+        if ([keyLower containsString:@"power"] || [keyLower containsString:@"thermal"] ||
+            [keyLower containsString:@"throttle"] || [keyLower containsString:@"budget"] ||
+            [keyLower containsString:@"limit"] || [keyLower containsString:@"cap"] ||
+            [keyLower containsString:@"max"] || [keyLower containsString:@"sustain"] ||
+            [keyLower containsString:@"temperature"]) {
+            return KERN_SUCCESS;
         }
     }
     return %orig(key, value);
 }
 %end
 
-// 4. Ép Nhiệt độ và Pin luôn mát/đầy (Bịt mõm OS)
 %hook NSProcessInfo
 - (NSProcessInfoThermalState)thermalState {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return NSProcessInfoThermalStateNominal; // Ép báo mát
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled())) return NSProcessInfoThermalStateNominal;
     return %orig;
 }
 - (BOOL)isLowPowerModeEnabled {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return NO; // Ép tắt LPM
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled())) return NO;
     return %orig;
 }
 %end
 
 %hook UIDevice
 - (float)batteryLevel {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return 1.0f; // Ép pin 100%
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled())) return 1.0f;
     return %orig;
 }
 - (UIDeviceBatteryState)batteryState {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        return UIDeviceBatteryStateFull; // Ép sạc đầy
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled())) return UIDeviceBatteryStateFull;
     return %orig;
 }
 %end
 
-// 5. Bơm điện tối đa cho GPU
 %hook AGXAccelerator
 - (int)setPowerState:(unsigned int)state {
     if (!self) return %orig(state);
-    if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        EnforceMaxCPUPower();
-        state = 1; // Power state cao nhất
-    }
+    if ((IS_ACTIVE || Apex_IsMasterEnabled())) { EnforceMaxCPUPower(); state = 1; }
     return %orig(state);
 }
 %end
@@ -6759,52 +6462,34 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 %end
 
 // ====================================================================================================
-// [GROUP: Deep Core Bypass - V999 ULTIMATE] - CHẶN ĐỨNG MỌI LỆNH BÓP XUNG
+// HOOK: Deep Core Bypass
 // ====================================================================================================
-
 %group Group_Hardware_Deep_Core_Bypass
 
-// 1. Chặn IORegistry (Mở rộng ma trận keyword + Chặn ghi)
 %hook IORegistryEntry
 - (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
     if (!key || !self) return %orig(key, value);
-    
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSString *keyLower = [key lowercaseString];
-        
-        // [BẺ THẲNG] Quét mọi ngóc ngách key liên quan đến nhiệt/power/throttle
-        if ([keyLower containsString:@"powerlimit"] ||     // Giới hạn công suất
-            [keyLower containsString:@"thermal"] ||        // Nhiệt độ
-            [keyLower containsString:@"throttle"] ||       // Bóp xung
-            [keyLower containsString:@"budget"] ||         // Ngân sách năng lượng
-            [keyLower containsString:@"maxpower"] ||       // Công suất tối đa
-            [keyLower containsString:@"sustainable"] ||    // Công suất bền vững
-            [keyLower containsString:@"temperature"] ||    // Nhiệt độ trực tiếp
-            [keyLower containsString:@"limit"] ||          // Mọi loại giới hạn
-            [keyLower containsString:@"cap"] ||            // Trần
-            [keyLower containsString:@"constraint"] ||     // Ràng buộc
-            [keyLower containsString:@"sensor"] ||         // Cảm biến nhiệt
-            [keyLower containsString:@"current"]) {        // Dòng điện
-            
-            // Đè kết quả thành công, đéo ghi gì xuống chip
-            return KERN_SUCCESS; 
+        if ([keyLower containsString:@"powerlimit"] || [keyLower containsString:@"thermal"] ||
+            [keyLower containsString:@"throttle"] || [keyLower containsString:@"budget"] ||
+            [keyLower containsString:@"maxpower"] || [keyLower containsString:@"sustainable"] ||
+            [keyLower containsString:@"temperature"] || [keyLower containsString:@"limit"] ||
+            [keyLower containsString:@"cap"] || [keyLower containsString:@"constraint"] ||
+            [keyLower containsString:@"sensor"] || [keyLower containsString:@"current"]) {
+            return KERN_SUCCESS;
         }
     }
     return %orig(key, value);
 }
-
-// Chặn set hàng loạt (Dictionary)
 - (kern_return_t)setCFProperties:(NSDictionary *)properties {
     if (!properties || !self) return %orig(properties);
-    
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         NSMutableDictionary *filtered = [properties mutableCopy];
         for (NSString *key in properties.allKeys) {
             NSString *keyLower = [key lowercaseString];
-            if ([keyLower containsString:@"power"] || 
-                [keyLower containsString:@"thermal"] || 
-                [keyLower containsString:@"throttle"] || 
-                [keyLower containsString:@"limit"] ||
+            if ([keyLower containsString:@"power"] || [keyLower containsString:@"thermal"] ||
+                [keyLower containsString:@"throttle"] || [keyLower containsString:@"limit"] ||
                 [keyLower containsString:@"sensor"]) {
                 [filtered removeObjectForKey:key];
             }
@@ -6815,45 +6500,31 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 }
 %end
 
-// 2. Chặn Power Manager (Tắt hoàn toàn bảo vệ nhiệt)
 %hook IOPMrootDomain
 - (IOReturn)setAggressiveness:(unsigned long)type level:(unsigned long)level {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        return %orig(type, 0); 
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return %orig(type, 0);
     return %orig(type, level);
 }
 - (void)setSleepSupported:(BOOL)supported {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return; 
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return;
     %orig(supported);
 }
 %end
 
-// 3. Ép GPU (AGX) lên mức Power State tối đa, chặn hạ xung
 %hook AGXAccelerator
 - (int)setPowerState:(unsigned int)state {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        EnforceMaxCPUPower(); 
-        state = 1; // 1 = Max Power
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) { EnforceMaxCPUPower(); state = 1; }
     return %orig(state);
 }
 - (void)setPerfState:(unsigned int)state {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        %orig(1); // Ép Max Perf
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) { %orig(1); return; }
     %orig(state);
 }
 %end
 
-// 4. Chặn Kernel Task (Bóp xung CPU)
 %hook OSKernelTask
 - (void)setQoS:(unsigned int)qos {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        %orig(33); // Ép QoS class cao nhất (UserInteractive)
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) { %orig(33); return; }
     %orig(qos);
 }
 %end
@@ -6861,9 +6532,8 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 %end
 
 // ====================================================================================================
-// [GROUP: Cold Boot]
+// HOOK: Cold Boot
 // ====================================================================================================
-
 %group Group_Apple_Native_ColdBoot_Overdrive
 
 %hook UIScene
@@ -6872,9 +6542,7 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
     @try {
         if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
             Titanium_V57_ReloadIPCIfStale();
-            dispatch_async(dispatch_get_main_queue(), ^{
-                Titanium_ReapplyFrameRateToAllScenes();
-            });
+            dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
         }
     } @catch (__unused NSException *e) {}
 }
@@ -6884,10 +6552,7 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
         if (!Titanium_IsSpringBoard() && !g_isCurrentAppBlacklisted && Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
             Titanium_V57_ReloadIPCIfStale();
             Titanium_TriggerInstantTouchBurst();
-            dispatch_async(dispatch_get_main_queue(), ^{
-                Titanium_ReapplyFrameRateToAllScenes();
-            });
-            // [SỬA XÁM KHI MỞ APP] Overdrive IOMFB chạy nền để khung đầu của app không bị chờ.
+            dispatch_async(dispatch_get_main_queue(), ^{ Titanium_ReapplyFrameRateToAllScenes(); });
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                 Titanium_ExecuteRealPanelOverdrive();
             });
@@ -6914,124 +6579,70 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 %end
 
 // ====================================================================================================
-// [GROUP: KeepAppsAlive_NoKill] - ÉP CƯỠNG CHẾ RAM, CHẶN JETSAM KILL
+// HOOK: KeepAppsAlive
 // ====================================================================================================
-
 %group Group_KeepAppsAlive_NoKill
-
 %hook FBProcess
 - (void)killForReason:(long long)reason andReport:(BOOL)report withDescription:(id)description completion:(id)comp {
     @try {
         if (!self) { %orig(reason, report, description, comp); return; }
-        
-        // Kiểm tra xem đây có phải là lệnh kill do người dùng chủ động không
         NSString *desc = description ? [description lowercaseString] : @"";
-        BOOL isUserKill = ([desc containsString:@"user"] || 
-                           [desc containsString:@"terminate"] || 
-                           [desc containsString:@"explicit"] || 
-                           [desc containsString:@"switcher"] ||
+        BOOL isUserKill = ([desc containsString:@"user"] || [desc containsString:@"terminate"] ||
+                           [desc containsString:@"explicit"] || [desc containsString:@"switcher"] ||
                            [desc containsString:@"force"]);
-        
-        // [ÉP CƯỠNG CHẾ] Nếu đang bật tweak VÀ ĐÉO PHẢI user kill -> Chặn đứng!
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             if (!isUserKill) {
-                // [FIX DELAY 3-4S] Phải gọi completion handler thì iOS mới nhả ra
-                // để chuyển sang app tiếp theo. Thiếu dòng này là nó treo chờ timeout.
-                if (comp) {
-                    void (^completionBlock)(id) = comp;
-                    completionBlock(nil);
-                }
-                return; 
+                if (comp) { void (^cb)(id) = comp; cb(nil); }
+                return;
             }
         }
     } @catch (__unused NSException *e) {}
     %orig(reason, report, description, comp);
 }
-
-- (BOOL)isPendingExit {
-    return %orig;
-}
+- (BOOL)isPendingExit { return %orig; }
 %end
-
 %end
 
 // ====================================================================================================
-// [GROUP: V12 Smooth Exit - BẺ THẲNG VẬT LÝ LÒ XO]
+// HOOK: V12 — BỐC PHYSICS (folder distortion fix). Chỉ giữ frameRateRange.
 // ====================================================================================================
-
 %group Group_TitaniumV12_SmoothExit_And_DisplayLink
 
 %hook CASpringAnimation
 
-- (void)setStiffness:(CGFloat)stiffness {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(stiffness * 1.5);
-        [self setDamping:[self damping]];
-        return;
-    }
-    %orig(stiffness);
-}
-
-- (CGFloat)damping {
-    CGFloat orig = %orig;
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        CGFloat critical = 2.0 * sqrt(fabs([self stiffness] * [self mass])) * 1.02;
-        return MAX(orig, critical);
-    }
-    return orig;
-}
-
-- (void)setDamping:(CGFloat)damping {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        CGFloat critical = 2.0 * sqrt(fabs([self stiffness] * [self mass])) * 1.02;
-        %orig(MAX(damping, critical));
-        return;
-    }
-    %orig(damping);
-}
-
-- (void)setInitialVelocity:(CGFloat)initialVelocity {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(initialVelocity * 1.5);
-        return;
-    }
-    %orig(initialVelocity);
-}
+// [ĐÃ XOÁ setStiffness/damping/setDamping/setInitialVelocity] — nguyên nhân folder méo.
+// Chỉ giữ frameRateRange để animation chạy đúng target Hz.
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
             NSInteger target = Titanium_GetEffectiveFrameCap();
             if (target < 15) target = 15;
-            range = Titanium_SmoothFRR((float)target);
+            range = Titanium_HardLockFRR(target);
         }
     }
     %orig(range);
 }
-
 - (CAFrameRateRange)preferredFrameRateRange {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
             NSInteger target = Titanium_GetEffectiveFrameCap();
             if (target < 15) target = 15;
-            return Titanium_SmoothFRR((float)target);
+            return Titanium_HardLockFRR(target);
         }
     }
     return %orig;
 }
 
 %end
-
 %end
 
 // ====================================================================================================
-// [GROUP: AI Stream + Network Absolute Unthrottled] - BẺ THẲNG NHƯNG KHÔNG NGHẼN
+// HOOK: AI Stream + Network
 // ====================================================================================================
-
 %group Group_AI_Stream_Optimization
 
 %hook UITextView
-// ... (Giữ nguyên phần UITextView cũ của mày) ...
 - (void)didMoveToWindow {
     BOOL origDone = NO;
     @try {
@@ -7051,39 +6662,26 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
                 }
             }
         }
-    } @catch (__unused NSException *e) {
-        if (!origDone) %orig;
-    }
+    } @catch (__unused NSException *e) { if (!origDone) %orig; }
 }
-// ... (Giữ nguyên insertText, deleteBackward, setContentOffset) ...
 %end
 
 %hook UIKeyboardImpl
-// ... (Giữ nguyên) ...
 %end
 
-// [V999 FIX] Ép mạng tối đa nhưng vẫn trong giới hạn an toàn của iOS
 %hook NSURLSessionConfiguration
-
 + (NSURLSessionConfiguration *)defaultSessionConfiguration {
     NSURLSessionConfiguration *cfg = %orig;
     @try {
         if (cfg && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            // [SỬA] Giảm số kết nối xuống mức an toàn để đéo nghẽn Socket
-            cfg.HTTPMaximumConnectionsPerHost = 8; 
-            
-            // [SỬA] Tắt Pipelining (giao thức đã lỗi thời, gây kẹt)
-            cfg.HTTPShouldUsePipelining = NO; 
-            
-            // [SỬA] Timeout vừa phải, đủ để tải ảnh nặng
+            cfg.HTTPMaximumConnectionsPerHost = 8;
+            cfg.HTTPShouldUsePipelining = NO;
             cfg.timeoutIntervalForRequest = 60.0;
-            cfg.timeoutIntervalForResource = 120.0; 
-            
+            cfg.timeoutIntervalForResource = 120.0;
             if (@available(iOS 13.0, *)) {
                 cfg.allowsExpensiveNetworkAccess = YES;
                 cfg.allowsConstrainedNetworkAccess = YES;
             }
-            
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
                     @try { [cfg setValue:@YES forKey:@"assumesHTTP3Capable"]; } @catch (__unused NSException *e) {}
@@ -7093,22 +6691,18 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
     } @catch (__unused NSException *e) {}
     return cfg;
 }
-
 + (NSURLSessionConfiguration *)ephemeralSessionConfiguration {
     NSURLSessionConfiguration *cfg = %orig;
     @try {
         if (cfg && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            // [SỬA] Áp dụng tương tự cho ephemeral
             cfg.HTTPMaximumConnectionsPerHost = 8;
             cfg.HTTPShouldUsePipelining = NO;
             cfg.timeoutIntervalForRequest = 60.0;
             cfg.timeoutIntervalForResource = 120.0;
-            
             if (@available(iOS 13.0, *)) {
                 cfg.allowsExpensiveNetworkAccess = YES;
                 cfg.allowsConstrainedNetworkAccess = YES;
             }
-            
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
                     @try { [cfg setValue:@YES forKey:@"assumesHTTP3Capable"]; } @catch (__unused NSException *e) {}
@@ -7121,19 +6715,12 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 %end
 
 %hook NSURLSessionTask
-
 - (void)setPriority:(float)priority {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig(1.0); // Ép ưu tiên cao nhất cho mọi request (Giữ nguyên)
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) { %orig(1.0); return; }
     %orig(priority);
 }
-
 - (float)priority {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        return 1.0;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) return 1.0;
     return %orig;
 }
 %end
@@ -7141,236 +6728,98 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 %end
 
 // ====================================================================================================
-// [DEEP DRIVER BREAK - V999 ABSOLUTE GOD MODE] FIX LỖ HỔNG IOS 15-18
+// DEEP DRIVER — SAFE IOKIT
 // ====================================================================================================
 
-// ====================================================================================================
-// [FIX LỖ HỔNG 1] DCP Resolve Connections v2 — SAFE IOKIT
-// Quét đa dịch vụ iOS 15-18, toàn bộ symbol qua dlsym, không abort.
-// ====================================================================================================
-
-static void Tio_DCPResolveConnections_v2(void) {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        @try {
-            const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-            if (!s->getMatchingService || !s->serviceOpen) {
-                Titanium_V60_Log(@"[V999] IOKit service symbols missing — DCP v2 resolve skipped");
-                g_dcpConnReady = NO;
-                return;
-            }
-
-            const char *services[] = {
-                "IOMobileFramebuffer", "IOMobileFramebufferAP",
-                "AppleDCP", "AppleCLCD2"
-            };
-            for (int i = 0; i < 4; i++) {
-                g_dcpIomfbSvc = s->getMatchingService(kIOMasterPortDefault,
-                                                     IOServiceMatching(services[i]));
-                if (g_dcpIomfbSvc != IO_OBJECT_NULL) {
-                    if (s->serviceOpen(g_dcpIomfbSvc, mach_task_self(), 0, &g_dcpIomfbConn) == KERN_SUCCESS) {
-                        break;
-                    }
-                }
-            }
-
-            io_iterator_t iter = IO_OBJECT_NULL;
-            if (s->getMatchingServices &&
-                s->getMatchingServices(kIOMasterPortDefault,
-                                       IOServiceMatching("IODisplayConnect"),
-                                       &iter) == KERN_SUCCESS &&
-                iter != IO_OBJECT_NULL) {
-                g_dcpDispSvc = IOIteratorNext(iter);
-                IOObjectRelease(iter);
-                if (g_dcpDispSvc != IO_OBJECT_NULL) {
-                    (void)s->serviceOpen(g_dcpDispSvc, mach_task_self(), 0, &g_dcpDispConn);
-                }
-            }
-
-            g_dcpConnReady = (g_dcpIomfbConn != IO_OBJECT_NULL) || (g_dcpDispConn != IO_OBJECT_NULL);
-        } @catch (__unused NSException *e) {
-            g_dcpConnReady = NO;
-        }
-    });
-}
-
-// ====================================================================================================
-// [FIX LỖ HỔNG 2] IOMFB Raw Set Mode — SAFE IOKIT
-// Đấm mù ma trận Selector, gate symbol trước khi gọi.
-// ====================================================================================================
+static void Tio_DCPResolveConnections_v2(void) { Tio_DCPResolveConnections(); }
 
 static kern_return_t Tio_IomfbRawSetMode(NSInteger hz) {
     if (g_isRebooting) return KERN_FAILURE;
     if (!Titanium_V55_PanelWritable()) return KERN_FAILURE;
-
     const TitaniumIOKitSyms *syms = Titanium_ResolveIOKitSyms();
-    if (!syms->connectStructMethod) {
-        Titanium_V60_Log(@"[V999] IOConnectCallStructMethod missing — skipping IomfbRawSetMode");
-        return KERN_FAILURE;
-    }
-
+    if (!syms->connectStructMethod) return KERN_FAILURE;
     Tio_DCPResolveConnections();
     if (g_dcpIomfbConn == IO_OBJECT_NULL) return KERN_FAILURE;
-
     TioIomfbTiming timing;
     memset(&timing, 0, sizeof(timing));
     CGSize nb = [UIScreen mainScreen].nativeBounds.size;
-
-    timing.width       = (uint32_t)nb.width;
-    timing.height      = (uint32_t)nb.height;
+    timing.width = (uint32_t)nb.width; timing.height = (uint32_t)nb.height;
     timing.refreshRate = (uint32_t)hz;
-    timing.pixelClock  = (uint32_t)((nb.width + 64) * (nb.height + 32) * hz * 1.05);
-    timing.hSyncStart  = 0;
-    timing.hSyncEnd    = (uint32_t)nb.width;
-    timing.vSyncStart  = 0;
-    timing.vSyncEnd    = (uint32_t)nb.height;
-    timing.flags       = 0xFFFFFFFF;
-
+    timing.pixelClock = (uint32_t)((nb.width + 64) * (nb.height + 32) * hz * 1.05);
+    timing.hSyncEnd = (uint32_t)nb.width; timing.vSyncEnd = (uint32_t)nb.height;
+    timing.flags = 0xFFFFFFFF;
     g_v60ForceDriverSuccess = YES;
-
     uint32_t selectors[] = {14, 15, 16, 17, 18, 19, 20, 21, 30, 31};
     kern_return_t finalRet = KERN_FAILURE;
-
     for (int i = 0; i < 10; i++) {
         size_t outLen = 0;
-        kern_return_t kr = syms->connectStructMethod(g_dcpIomfbConn, selectors[i],
-                                                    &timing, sizeof(timing), NULL, &outLen);
+        kern_return_t kr = syms->connectStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
         if (kr == KERN_SUCCESS) finalRet = KERN_SUCCESS;
     }
-
     g_v60ForceDriverSuccess = NO;
     return finalRet;
 }
 
-// ====================================================================================================
-// [FIX LỖ HỔNG 3] Display Conn Set Refresh v2 — SAFE IOKIT
-// Bắn tỉa ma trận Scalar, gate symbol.
-// ====================================================================================================
-
-static kern_return_t Tio_DisplayConnSetRefresh_v2(NSInteger hz) {
-    if (g_isRebooting) return KERN_FAILURE;
-    if (!Titanium_V55_PanelWritable()) return KERN_FAILURE;
-
-    const TitaniumIOKitSyms *s = Titanium_ResolveIOKitSyms();
-    if (!s->connectScalarMethod) {
-        Titanium_V60_Log(@"[V999] IOConnectCallScalarMethod missing — skipping DisplayConnSetRefresh_v2");
-        return KERN_FAILURE;
-    }
-
-    Tio_DCPResolveConnections();
-    if (g_dcpDispConn == IO_OBJECT_NULL) return KERN_FAILURE;
-
-    g_v60ForceDriverSuccess = YES;
-    static const uint32_t kSels[] = { 8, 9, 10, 11, 12, 13 };
-    for (uint32_t i = 0; i < 6; i++) {
-        uint64_t in = (uint64_t)hz;
-        uint32_t outLen = 0;
-        kern_return_t kr = s->connectScalarMethod(g_dcpDispConn, kSels[i], &in, 1, NULL, &outLen);
-        if (kr == KERN_SUCCESS) {
-            g_v60ForceDriverSuccess = NO;
-            return kr;
-        }
-    }
-    g_v60ForceDriverSuccess = NO;
-    return KERN_FAILURE;
-}
-
-// ====================================================================================================
-// [FIX LỖ HỔNG 4] Push Rate To Driver V4 — SAFE IOKIT
-// Không check trùng khi force = YES, đấm mọi call qua shim.
-// ====================================================================================================
+static kern_return_t Tio_DisplayConnSetRefresh_v2(NSInteger hz) { return Tio_DisplayConnSetRefresh(hz); }
 
 static volatile NSInteger g_pushLastAppliedHz = 0;
 
+// [PUSH RATE — COOLDOWN]
 static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force) {
     if (g_isRebooting) return;
     if (!Titanium_V55_PanelWritable()) return;
-
     if (hz < 15) hz = 15;
     if (hz > 240) hz = 240;
-
     if (!force && hz == g_pushLastAppliedHz) return;
     g_pushLastAppliedHz = hz;
-
+    if (!Titanium_CanPunchHardware()) return;
+    Titanium_MarkHardwarePunched();
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        @try {
-            Titanium_Tier4WriteCadence(hz);
-            Tio_SubmitModeAllPaths(hz);
-            Titanium_ExecuteUltimateHardwareHack(hz);
-        } @catch (__unused NSException *e) {
-            Titanium_V60_Log(@"[V999] PushRateToDriverV4 throw");
-        }
+        @try { Titanium_ForcePanelModeDirect(hz); } @catch (__unused NSException *e) {}
     });
 }
+static void Titanium_PushRateToDriverV4(NSInteger hz) { Titanium_PushRateToDriverV4(hz, NO); }
 
-static void Titanium_PushRateToDriverV4(NSInteger hz) {
-    Titanium_PushRateToDriverV4(hz, NO);
-}
-
-// ====================================================================================================
-// [FIX LỖ HỔNG 5] Ultimate Hardware Hack — SAFE IOKIT
-// Cache connection, không open/close, gate symbol trước khi gọi.
-// ====================================================================================================
-
+// [ULTIMATE HACK — COOLDOWN]
 static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) {
     if (!Titanium_V55_PanelWritable()) return;
     if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
-
+    if (!Titanium_CanPunchHardware()) return;
+    Titanium_MarkHardwarePunched();
     const TitaniumIOKitSyms *syms = Titanium_ResolveIOKitSyms();
-    if (!syms->connectStructMethod) {
-        Titanium_V60_Log(@"[V999] IOConnectCallStructMethod missing — skipping UltimateHardwareHack");
-        return;
-    }
-
+    if (!syms->connectStructMethod) return;
     Tio_DCPResolveConnections();
     if (g_dcpIomfbConn == IO_OBJECT_NULL) return;
-
     CGSize screenSize = [UIScreen mainScreen].nativeBounds.size;
     TioIomfbTiming timing;
     memset(&timing, 0, sizeof(timing));
-
-    timing.width       = (uint32_t)screenSize.width;
-    timing.height      = (uint32_t)screenSize.height;
+    timing.width = (uint32_t)screenSize.width; timing.height = (uint32_t)screenSize.height;
     timing.refreshRate = (uint32_t)targetHz;
-    timing.pixelClock  = (uint32_t)((screenSize.width + 64) * (screenSize.height + 32) * targetHz * 1.05);
-    timing.hSyncStart  = 0;
-    timing.hSyncEnd    = (uint32_t)screenSize.width;
-    timing.vSyncStart  = 0;
-    timing.vSyncEnd    = (uint32_t)screenSize.height;
-    timing.flags       = 0xFFFFFFFF;
-
+    timing.pixelClock = (uint32_t)((screenSize.width + 64) * (screenSize.height + 32) * targetHz * 1.05);
+    timing.hSyncEnd = (uint32_t)screenSize.width; timing.vSyncEnd = (uint32_t)screenSize.height;
+    timing.flags = 0xFFFFFFFF;
     g_v60ForceDriverSuccess = YES;
-
     uint32_t selectors[] = {14, 15, 16, 17, 18, 19, 20, 21, 30};
     for (int i = 0; i < 9; i++) {
         size_t outLen = 0;
-        (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i],
-                                        &timing, sizeof(timing), NULL, &outLen);
+        (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
     }
-
     g_v60ForceDriverSuccess = NO;
 }
 
-// ====================================================================================================
-// [Tier 5C SWEEP - ĐẤM TỔNG LỰC]
-// ====================================================================================================
 static void Titanium_Tier5C_RunSweepV4(void) {
     if (g_isRebooting) return;
     if (!Apex_IsMasterEnabled()) return;
     if (!Titanium_V55_PanelWritable()) return;
-
     NSInteger target = Titanium_GetUserTargetHz();
-
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @try {
             Tio_SubmitModeAllPaths(target);
             Titanium_HardwareDriverOverride(target);
             Titanium_Tier5WriteIORegistryTiming(target);
             Titanium_Tier4WriteCadence(target);
-            Titanium_Tier4_WriteCADisplayRefresh(target);
             Titanium_ExecuteUltimateHardwareHack(target);
-            
             g_tioLastAcceptedHz = target;
             Titanium_V57_WriteSharedBestHz(target);
         } @catch (__unused NSException *e) {}
@@ -7378,43 +6827,22 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 }
 
 // ====================================================================================================
-// [CAWindowServer] - Ép xung thực sự mỗi frame, buộc Driver nhận lệnh
+// HOOK: CAWindowServer
 // ====================================================================================================
-
 %group Group_CAWindowServer_Absolute_Dominance
 
 %hook CADisplayController
-
 - (void)displayLinkDidFire:(id)arg1 {
-    @try {
-        if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-            Titanium_LockMainThreadFast();
-            Titanium_EnableZeroLatencyPipeline();
-            
-            // [BẺ GÃY PHẦN CỨNG] Bọc Async để không block Main Thread
-            NSInteger target = Push_ResolveTargetHz();
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-                // Đấm Driver, ép cờ bypass thành công
-                Titanium_ExecuteUltimateHardwareHack(target);
-            });
-        }
-    } @catch (__unused NSException *e) {}
+    // Bốc spam driver mỗi frame. Drift detector lo.
     %orig(arg1);
 }
-
 - (double)refreshRate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        return (double)Push_ResolveTargetHz();
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return (double)Push_ResolveTargetHz();
     return %orig;
 }
 - (void)setRefreshRate:(double)rate {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
         %orig((double)Push_ResolveTargetHz());
-        NSInteger target = Push_ResolveTargetHz();
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            Titanium_ExecuteUltimateHardwareHack(target);
-        });
         return;
     }
     %orig(rate);
@@ -7424,56 +6852,28 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 %hook CAWindowServerDisplay
 - (BOOL)allowsVirtualModes { return YES; }
 - (void)setAllowsVirtualModes:(BOOL)flag { %orig(YES); }
-
-// [ÉP ĐÚNG NHỊP] Trả về 1/Hz thay vì 0.0 (Tránh fallback 60Hz)
 - (double)minimumFrameDuration {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        return (1.0 / (double)Push_ResolveTargetHz()); 
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return (1.0 / (double)Push_ResolveTargetHz());
     return %orig;
 }
-
 - (void)setMinimumFrameDuration:(double)duration {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        %orig(1.0 / (double)Push_ResolveTargetHz());
-        NSInteger target = Push_ResolveTargetHz();
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            Titanium_ExecuteUltimateHardwareHack(target);
-        });
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) { %orig(1.0 / (double)Push_ResolveTargetHz()); return; }
     %orig(duration);
 }
-
 - (double)maximumRefreshRate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        return (double)Push_ResolveTargetHz();
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return (double)Push_ResolveTargetHz();
     return %orig;
 }
 - (void)setMaximumRefreshRate:(double)rate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        %orig((double)Push_ResolveTargetHz());
-        NSInteger target = Push_ResolveTargetHz();
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            Titanium_ExecuteUltimateHardwareHack(target);
-        });
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) { %orig((double)Push_ResolveTargetHz()); return; }
     %orig(rate);
 }
-
 - (double)minimumRefreshRate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        return (double)Push_ResolveTargetHz();
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) return (double)Push_ResolveTargetHz();
     return %orig;
 }
 - (void)setMinimumRefreshRate:(double)rate {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
-        %orig((double)Push_ResolveTargetHz());
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled)) { %orig((double)Push_ResolveTargetHz()); return; }
     %orig(rate);
 }
 %end
@@ -7485,12 +6885,8 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     @try {
         if (disp && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
             NSInteger target = Push_ResolveTargetHz();
-            if ([disp respondsToSelector:@selector(setMaximumRefreshRate:)]) {
-                [(id)disp setValue:@(target) forKey:@"maximumRefreshRate"];
-            }
-            if ([disp respondsToSelector:@selector(setMinimumRefreshRate:)]) {
-                [(id)disp setValue:@(target) forKey:@"minimumRefreshRate"];
-            }
+            if ([disp respondsToSelector:@selector(setMaximumRefreshRate:)]) [(id)disp setValue:@(target) forKey:@"maximumRefreshRate"];
+            if ([disp respondsToSelector:@selector(setMinimumRefreshRate:)]) [(id)disp setValue:@(target) forKey:@"minimumRefreshRate"];
         }
     } @catch (__unused NSException *e) {}
     return disp;
@@ -7500,25 +6896,18 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 %end
 
 // ====================================================================================================
-// [UIWindowScene] - Ép App phải render đúng FPS thực, đéo cho báo sai
+// HOOK: UIWindowScene
 // ====================================================================================================
-
 %group Group_Window_Level_Overdrive
 
 %hook UIWindowScene
-
 - (void)setPreferredFrameRateRange:(SafeFrameRateRange)range {
     if (@available(iOS 15.0, *)) {
         @try {
             if (Titanium_DisplayRateOverrideReady() && self &&
                 (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-                
                 NSInteger target = Push_ResolveTargetHz();
-                
-                // Ép cứng dải Frame Rate
                 range = SafeMakeFRR((double)target, (double)target, (double)target);
-                
-                // [SỬA NHẤP NHÁY CC] Chỉ ghi timing xuống driver khi Hz mục tiêu THAY ĐỔI.
                 static NSInteger s_lastHwAppliedHz = 0;
                 if (target != s_lastHwAppliedHz) {
                     s_lastHwAppliedHz = target;
@@ -7531,7 +6920,6 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     }
     %orig(*(CAFrameRateRange *)&range);
 }
-
 - (void)_processUpdateWithFrameContext:(id)context {
     @try {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -7542,8 +6930,6 @@ static void Titanium_Tier5C_RunSweepV4(void) {
                     s_last = now;
                     Titanium_LockMainThreadFast();
                     Titanium_EnableZeroLatencyPipeline();
-                    
-                    // [BẺ THẲNG] Bọc Async
                     NSInteger target = Push_ResolveTargetHz();
                     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                         Titanium_ExecuteUltimateHardwareHack(target);
@@ -7558,11 +6944,9 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 
 %end
 
-
 // ====================================================================================================
-// [GROUP: V10 Layout]
+// HOOK: V10 Layout
 // ====================================================================================================
-
 %group Group_TitaniumV10_SpringBoard_Layout_Boost
 
 static inline void Titanium_V10_PinMainThreadHigh(void) {
@@ -7616,18 +7000,14 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 %end
 
 // ====================================================================================================
-// [GROUP: Switcher - V111 ABSOLUTE FORCE]
+// HOOK: Switcher
 // ====================================================================================================
-
 %group Group_SpringBoard_Switcher_Opt
-
 %hook _UIScreenEdgePanGestureRecognizer
 - (BOOL)delaysTouchesBegan {
     if (!self) return %orig;
     if (Titanium_V56_KeyboardBusy()) return %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady()) {
-        return NO; // Trả về NO để vuốt mép tức thời, không chờ nhận diện
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady()) return NO;
     return %orig;
 }
 - (double)_edgeRegionSize {
@@ -7635,82 +7015,55 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
     double size = %orig;
     if (Titanium_V56_KeyboardBusy()) return size;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_IsSpringBoard() && Titanium_V57_TouchReady()) {
-        return (size > 0.0) ? (size * 1.25) : 25.0; // Tăng vùng nhận diện mép để vuốt dễ hơn
+        return (size > 0.0) ? (size * 1.25) : 25.0;
     }
     return size;
 }
 %end
-
 %hook SBFluidSwitcherModifier
 - (double)shadowOpacityForIndex:(unsigned long long)index {
     if (!self) return %orig;
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_V57_TouchReady()) {
-        return 0.0; // Xóa đổ bóng của app trong switcher để tăng FPS
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && Titanium_V57_TouchReady()) return 0.0;
     return %orig;
 }
 %end
-
 %end
 
 // ====================================================================================================
-// [GROUP: Liquid Glass - V111 ABSOLUTE FORCE - KHỬ MỜ 100%]
+// HOOK: Liquid Glass
 // ====================================================================================================
-
 %group Group_LiquidGlass_Opt
-
-// Đập nát hiệu ứng mờ của toàn bộ hệ thống (Control Center, Menu, Settings)
 %hook UIVisualEffectView
 - (void)setEffect:(UIVisualEffect *)effect {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig(nil); // Xoá sạch mờ, đéo cho phép bất kỳ app nào render Blur
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) { %orig(nil); return; }
     %orig(effect);
 }
-
 - (void)layoutSubviews {
     %orig;
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        // Tắt opacity nhóm để đéo bị mờ lớp nền
         CALayer *layer = self.layer;
         if (layer) layer.allowsGroupOpacity = YES;
     }
 }
 %end
-
 %hook CABackdropLayer
 - (void)setDisablesOccludedBackdropBlurs:(BOOL)flag {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig(YES); // Tắt blur nền
-        return;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) { %orig(YES); return; }
     %orig(flag);
 }
-
 - (BOOL)disablesOccludedBackdropBlurs {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        return YES;
-    }
+    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) return YES;
     return %orig;
 }
-
 - (void)setScale:(CGFloat)scale {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        // [SỬA MỜ] Không ép scale = 0 nữa; dùng giá trị gốc của iOS
-        %orig(scale);
-        return;
-    }
     %orig(scale);
 }
 %end
-
 %end
 
 // ====================================================================================================
-// [Safari safety]
+// Safari safety
 // ====================================================================================================
-
 static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
     if (Titanium_IsSpringBoard() || Titanium_IsSettingsApp() ||
         Titanium_IsSpoofExcludedApp() || g_isCurrentAppBlacklisted) return NO;
@@ -7718,28 +7071,23 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 }
 
 %group Group_Safari_And_Animation_Safety
-
 %hook _UIMorphingPlatterView
 - (void)layoutSubviews {
-    @try { if (!self || [(UIView *)self window] == nil) { %orig; return; } }
-    @catch (__unused NSException *e) {}
+    @try { if (!self || [(UIView *)self window] == nil) { %orig; return; } } @catch (__unused NSException *e) {}
     %orig;
 }
 %end
-
 %hook _UIClickPresentationInteraction
 - (void)_cancelWithReason:(NSInteger)reason alongsideActions:(id)alongsideActions completion:(id)completion {
-    @try { if (!self) { %orig(reason, alongsideActions, completion); return; } }
-    @catch (__unused NSException *e) {}
+    @try { if (!self) { %orig(reason, alongsideActions, completion); return; } } @catch (__unused NSException *e) {}
     %orig(reason, alongsideActions, completion);
 }
 %end
 %end
 
 // ====================================================================================================
-// [PHẦN B: constants] - V999 ABSOLUTE FORCE
+// PHẦN B: constants
 // ====================================================================================================
-
 static inline BOOL Titanium_IsTargetProcess(void);
 
 #ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
@@ -7769,7 +7117,6 @@ static inline BOOL Titanium_IsTargetProcess(void);
 #ifndef TIER6_KERNEL_MAX_IMPORTANCE
 #define TIER6_KERNEL_MAX_IMPORTANCE 90
 #endif
-
 #ifndef CS_OPS_STATUS
 #define CS_OPS_STATUS 0
 #endif
@@ -7789,7 +7136,6 @@ typedef struct memorystatus_priority_properties {
 } memorystatus_priority_properties_t;
 
 typedef int (*sandbox_check_fn)(pid_t pid, const char *operation, int type, ...);
-
 static sandbox_check_fn orig_sandbox_check = NULL;
 
 @interface RBSProcessMonitor : NSObject
