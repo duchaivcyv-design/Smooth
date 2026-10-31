@@ -7057,8 +7057,6 @@ static inline void Titanium_PushRateToDriverV4_Normal(NSInteger hz) {
 
 // [FIX LỖ HỔNG 5] Ultimate Hack - Cache Connection, Không Open/Close
 static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) {
-    return; // [V56 FIX MISSING SYMBOL] dyld abort KHONG bat duoc bang @try — vo hieu hoa ham nay, giu 4 ham Tier4/Tier5. Neu het crash -> xac nhan thu pham.
-    @try { // [V55 CHAN LOI CRASH] bat exception, khong abort SpringBoard
     if (!Titanium_V55_PanelWritable()) return;
     if (targetHz < 15) targetHz = 15;
     if (targetHz > 240) targetHz = 240;
@@ -7090,7 +7088,6 @@ static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) {
     }
     
     g_v60ForceDriverSuccess = NO;
-    } @catch (__unused NSException *e) { /* [V55] chan loi crash — bo qua, khong treo respring */ }
 }
 
 // ====================================================================================================
