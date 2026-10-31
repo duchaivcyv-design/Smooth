@@ -384,20 +384,7 @@ static NSInteger Titanium_GetUserTargetHz(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
 static void Titanium_V57_ForceReapplyIfNeeded(void);
-
-// extern — hai biến này định nghĩa thật ở khối cuối file,
-// khai báo trước ở đây để body phía dưới dùng được.
-static ApexV285ProPayload g_syncPayloadV285;
-static volatile NSInteger g_cachedResolvedHz;
-
-// Body cho Push_ResolveTargetHz — đặt ngay sau decl để tránh stub abort
-static NSInteger Push_ResolveTargetHz(void) {
-    NSInteger target = g_syncPayloadV285.targetHz;
-    if (target < 15) target = g_cachedResolvedHz;
-    if (target < 15) target = 15;
-    if (target > 240) target = 240;
-    return target;
-}
+static NSInteger Push_ResolveTargetHz(void);            // forward decl only — body ở sau line 1394
 
 // ====================================================================================================
 // KHAI BÁO @INTERFACE
@@ -1398,6 +1385,20 @@ static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
+
+// ====================================================================================================
+// BODY PUSH_RESOLVETARGETHZ
+// Đặt ở đây vì g_syncPayloadV285 (line 1312) và g_cachedResolvedHz (line ~1394)
+// đã được define phía trên. Không cần forward decl biến.
+// ====================================================================================================
+
+static NSInteger Push_ResolveTargetHz(void) {
+    NSInteger target = g_syncPayloadV285.targetHz;
+    if (target < 15) target = g_cachedResolvedHz;
+    if (target < 15) target = 15;
+    if (target > 240) target = 240;
+    return target;
+}
 
 // ====================================================================================================
 // ĐỊNH NGHĨA THỰC TẾ CÁC HÀM TRỢ GIÚP (TỐI ƯU TRỰC TIẾP, KHÔNG RỜM RÀ)
