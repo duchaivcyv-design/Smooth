@@ -5471,14 +5471,6 @@ static inline void Titanium_MarkHardwarePunched(void) {
     g_driftPunchCountTotal++;
 }
 
-// [BODY Push_ResolveTargetHz — trước đây chỉ forward decl, không có body → stub abort]
-static NSInteger Push_ResolveTargetHz(void) {
-    NSInteger target = Titanium_GetUserTargetHz();
-    if (target < 15) target = 15;
-    if (target > 240) target = 240;
-    return target;
-}
-
 // ====================================================================================================
 static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     if (!Titanium_DisplayRateOverrideReady() ||
