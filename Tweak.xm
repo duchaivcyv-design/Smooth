@@ -385,6 +385,11 @@ static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
 static void Titanium_V57_ForceReapplyIfNeeded(void);
 
+// extern — hai biến này định nghĩa thật ở khối cuối file,
+// khai báo trước ở đây để body phía dưới dùng được.
+extern ApexV285ProPayload g_syncPayloadV285;
+extern volatile NSInteger g_cachedResolvedHz;
+
 // Body cho Push_ResolveTargetHz — đặt ngay sau decl để tránh stub abort
 static NSInteger Push_ResolveTargetHz(void) {
     NSInteger target = g_syncPayloadV285.targetHz;
