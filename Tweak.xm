@@ -385,6 +385,8 @@ static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
 static void Titanium_V57_ForceReapplyIfNeeded(void);
 static NSInteger Push_ResolveTargetHz(void);            // forward decl only — body ở sau line 1394
+// [FORWARD DECL] — phải ở ĐẦU file, trước mọi call
+static void Titanium_V60_Log(NSString *msg);
 
 // ====================================================================================================
 // KHAI BÁO @INTERFACE
@@ -5635,7 +5637,6 @@ static inline kern_return_t Titanium_SafeSetCFProperty(io_registry_entry_t svc, 
 #endif
 
 extern int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
-static void Titanium_V60_Log(NSString *msg);
 
 static uint64_t Titanium_GetDeviceTotalRAM(void) {
     static uint64_t s_totalRAM = 0;
