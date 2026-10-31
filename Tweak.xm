@@ -5525,6 +5525,17 @@ static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
 #import <notify.h>
 #include <signal.h>
 
+// [V52 FIX COMPILE] Forward declarations + khai bao bien (goi truoc dinh nghia -> undeclared)
+static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
+static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz);
+static volatile NSInteger g_tioLastAcceptedHz = 0;
+static void Titanium_Tier6JetsamImmunityReal(void) {
+    // [V52] Placeholder — chong undeclared.
+}
+static void Titanium_Tier4_WriteCADisplayRefresh(NSInteger hz) {
+    // [V52] Placeholder — chong undeclared.
+}
+
 #define TITANIUM_CHECK_FILE @"/var/mobile/titanium_check.txt"
 #define TITANIUM_V57_BEST_HZ_FILE @"/tmp/.boost_best_hz"
 
@@ -6915,7 +6926,7 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 // ====================================================================================================
 
 // [FIX LỖ HỔNG 1] Mở rộng quét kết nối cho iOS 15-18 (Thêm AppleDCP và AP)
-static void Tio_DCPResolveConnections(void) {
+static void Tio_DCPResolveConnections_v2(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         @try {
@@ -6985,7 +6996,7 @@ static kern_return_t Tio_IomfbRawSetMode(NSInteger hz) {
 }
 
 // [FIX LỖ HỔNG 3] DisplayConnect - Quét sạch mọi cổng Scalar
-static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz) {
+static kern_return_t Tio_DisplayConnSetRefresh_v2(NSInteger hz) {
     if (g_isRebooting) return KERN_FAILURE;
     if (!Titanium_V55_PanelWritable()) return KERN_FAILURE;
     
@@ -7051,7 +7062,7 @@ static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) {
     if (g_dcpIomfbConn == IO_OBJECT_NULL) return;
 
     CGSize screenSize = [UIScreen mainScreen].nativeBounds.size;
-    TioForceTiming timing;
+    TioIomfbTiming timing;
     memset(&timing, 0, sizeof(timing));
     
     timing.width = (uint32_t)screenSize.width;
