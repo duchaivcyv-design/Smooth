@@ -9,51 +9,51 @@ include $(THEOS)/makefiles/common.mk
 
 APPLICATION_NAME = BoostiPhone6sApp
 
-# Nạp các tệp mã nguồn chính của ứng dụng
 BoostiPhone6sApp_FILES = main.m \
                          AppDelegate.m \
                          RootListController.m
 
-# IOKit: cần cho IORegistry* (IOIteratorNext, IORegistryGetRootEntry, ...)
-# KHÔNG thêm CoreAudioTypes: framework này không có trên SDK iOS,
-# chỉ là warning auto-link vô hại nếu bỏ ngoài danh sách.
 BoostiPhone6sApp_FRAMEWORKS = UIKit CoreGraphics Foundation QuartzCore AudioToolbox IOKit
 BoostiPhone6sApp_INSTALL_PATH = $(_THEOS_PREFIX)/Applications
 
-# [MỚI] Thư mục Resources: nội dung được copy thẳng vào bundle app.
-# Đặt robot_chao_mung.jpeg vào thư mục này để app đọc được ảnh.
 BoostiPhone6sApp_RESOURCE_DIRS = Resources
 
-# CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
 BoostiPhone6sApp_CFLAGS = -fobjc-arc \
-                          -O0 \
+                          -O2 \
                           -Wall \
-                          -Wno-error \
-                          -Wno-deprecated-declarations \
                           -Wno-unused-variable \
                           -Wno-unused-function \
-                          -Wno-implicit-function-declaration \
+                          -Wno-deprecated-declarations \
                           -Wno-deprecated-non-prototype \
+                          -Wno-macro-redefined \
                           -Wno-unused-command-line-argument \
                           -Wno-unguarded-availability-new \
                           -Wno-unguarded-availability \
-                          -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                           -IHeaders \
                           -I../Headers \
                           -I.
 
-# LINKER FLAGS
-BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip
+BoostiPhone6sApp_LDFLAGS = -Wl,-dead_strip \
+                           -Wl,-undefined,dynamic_lookup
 
-# [FIX] Ký app bằng entitlements — tên phải khớp APPLICATION_NAME (BoostiPhone6sApp)
 BoostiPhone6sApp_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/application.mk
 
-# ĐẢM BẢO QUYỀN THỰC THI CHO BINARY VÀ GÓI APP
 after-stage::
 	@echo "=== [BoostiPhone6sApp] Cấp quyền phân phối gói Rootless ==="
 	@APP_DIR="$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Applications/BoostiPhone6sApp.app"; \
-	chmod -R 0755 "$$APP_DIR"; \
-	chmod 0755 "$$APP_DIR/BoostiPhone6sApp"; \
-	echo "  [OK] Đã hoàn tất phân quyền 0755!"
+	if [ -d "$$APP_DIR" ]; then \
+		find "$$APP_DIR" -type d -exec chmod 0755 {} +; \
+		find "$$APP_DIR" -type f -exec chmod 0644 {} +; \
+		if [ -f "$$APP_DIR/BoostiPhone6sApp" ]; then \
+			chmod 0755 "$$APP_DIR/BoostiPhone6sApp"; \
+			echo "  [OK] Binary 0755"; \
+		else \
+			echo "  [WARN] Binary không tìm thấy: $$APP_DIR/BoostiPhone6sApp"; \
+		fi; \
+		echo "  [OK] Folder 0755, file 0644, binary 0755"; \
+	else \
+		echo "  [ERROR] App bundle không tồn tại: $$APP_DIR"; \
+		exit 1; \
+	fi
