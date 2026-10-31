@@ -26,7 +26,7 @@ BoostiPhone6sApp_RESOURCE_DIRS = Resources
 
 # CỜ BIÊN DỊCH: TỐI ƯU HÓA O3 & TƯƠNG THÍCH ĐẦY ĐỦ CÁC MACRO
 BoostiPhone6sApp_CFLAGS = -fobjc-arc \
-                          -O3 \
+                          -O0 \
                           -Wall \
                           -Wno-error \
                           -Wno-deprecated-declarations \
