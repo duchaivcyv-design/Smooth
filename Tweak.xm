@@ -1917,8 +1917,7 @@ static inline void Titanium_BackgroundPurgeMemory(void) {
     static uint64_t s_lastPurgeTicks = 0;
     if (g_lowBatterySmoothBoostV12) return;
 
-    // Không purge khi đang tương tác → không drop frame.
-    if (g_isInteracting || g_isScrollingActive || g_isContinuousSwiping) return;
+    if (g_isInteracting) return;
 
     uint64_t now = mach_absolute_time();
     BOOL shouldPurge = NO;
@@ -3300,8 +3299,7 @@ static void AppleInternal_LockHardwareCADisplay(void) {
 
 #include <sys/sysctl.h>
 
-// [MASTER RATE] — single source of truth
-extern NSInteger Titanium_GetMasterRate(void);
+static NSInteger Titanium_GetMasterRate(void);
 
 // Giữ lại vì có code khác gọi. Không dùng trong clamp nữa.
 static NSInteger Titanium_GetSafeMaxHzForChip(void) {
@@ -5409,10 +5407,15 @@ static void Titanium_PushRateToDriverV4(NSInteger hz);
 static void Titanium_EnforceCAFrameRange(void);
 static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
 
+// [PUNCH GATE — THERMAL + COOLDOWN + DRIFT COUNTER]
+// - Thermal gate: máy Serious/Critical → refuse punch (chống nóng)
+// - Cooldown 1500ms: chống kernel churn
+// - Drift counter: log số lần punch thực sự để verify
 static inline BOOL Titanium_CanPunchHardware(void) {
+    if (!Titanium_ThermalOK()) return NO;
     uint64_t now = mach_absolute_time();
     if (g_lastHardwarePunchTick == 0) return YES;
-    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(200ULL * 1000000ULL);
+    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(1500ULL * 1000000ULL);
 }
 
 static inline void Titanium_MarkHardwarePunched(void) {
@@ -5678,7 +5681,7 @@ static void Titanium_WireGlobalPayloadsToChip(void) {
 static void Titanium_PurgePurgableMemory(void) {
     @try {
         int state = 0;
-        mach_vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &state);
+        vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &state);
     } @catch (__unused NSException *e) {}
 }
 
@@ -5733,6 +5736,9 @@ extern BoostConfigV285Pro *CFG285;
 extern NSInteger Titanium_GetEffectiveFrameCap(void);
 extern void EnforceMaxCPUPower(void);
 
+static void Titanium_V60_Log(NSString *msg);
+static NSInteger Titanium_GetMasterRate(void);
+static inline BOOL Titanium_ShouldPurgeNow(void);
 static void Titanium_HardwareDriverOverride(NSInteger targetHz);
 static void Titanium_ForcePanelModeDirect(NSInteger hz);
 static void Titanium_Tier4WriteCadence(NSInteger hz);
@@ -7032,7 +7038,10 @@ static void Titanium_InstallIOMFBCFunctionHook(void) {
             if (@available(iOS 13.0, *)) {
                 cfg.allowsExpensiveNetworkAccess = YES;
                 cfg.allowsConstrainedNetworkAccess = YES;
-                cfg.allowsUltraConstrainedNetworkAccess = YES;
+            }
+            // [KVC GUARD] allowsUltraConstrainedNetworkAccess chỉ có runtime iOS 17+
+            if ([cfg respondsToSelector:NSSelectorFromString(@"setAllowsUltraConstrainedNetworkAccess:")]) {
+                @try { [cfg setValue:@YES forKey:@"allowsUltraConstrainedNetworkAccess"]; } @catch (__unused NSException *e) {}
             }
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
@@ -7060,10 +7069,15 @@ static void Titanium_InstallIOMFBCFunctionHook(void) {
             cfg.HTTPShouldUsePipelining = NO;
             cfg.timeoutIntervalForRequest = 30.0;
             cfg.timeoutIntervalForResource = 90.0;
+
             if (@available(iOS 11.0, *)) cfg.waitsForConnectivity = YES;
             if (@available(iOS 13.0, *)) {
                 cfg.allowsExpensiveNetworkAccess = YES;
                 cfg.allowsConstrainedNetworkAccess = YES;
+            }
+            // [KVC GUARD] iOS 17+ only
+            if ([cfg respondsToSelector:NSSelectorFromString(@"setAllowsUltraConstrainedNetworkAccess:")]) {
+                @try { [cfg setValue:@YES forKey:@"allowsUltraConstrainedNetworkAccess"]; } @catch (__unused NSException *e) {}
             }
             if (@available(iOS 15.0, *)) {
                 if ([cfg respondsToSelector:NSSelectorFromString(@"setAssumesHTTP3Capable:")]) {
@@ -7072,6 +7086,9 @@ static void Titanium_InstallIOMFBCFunctionHook(void) {
             }
             if ([cfg respondsToSelector:NSSelectorFromString(@"setNetworkServiceType:")]) {
                 @try { [cfg setValue:@(6) forKey:@"networkServiceType"]; } @catch (__unused NSException *e) {}
+            }
+            if ([cfg respondsToSelector:NSSelectorFromString(@"setMultipathServiceType:")]) {
+                @try { [cfg setValue:@(1) forKey:@"multipathServiceType"]; } @catch (__unused NSException *e) {}
             }
         }
     } @catch (__unused NSException *e) {}
@@ -8821,8 +8838,8 @@ static void Titanium_StartIPCHearthbeatV12(void) {
                     Titanium_ReloadSharedSyncStateV285();
 
                     // [RAM ENGINE] Purge định kỳ — kernel thu hồi page vật lý mỗi 30s.
-                    // Chỉ purge khi RSS > 85% ceiling adaptive hoặc áp lực cao.
-                    if (Titanium_ShouldPurgeNow_Forward()) {
+                    // Chỉ purge khi RSS > 85% ceiling adaptive hoặc áp lực cao.p ưu
+                    if (Titanium_ShouldPurgeNow()) {
                         Titanium_PurgePurgableMemory();
                         malloc_zone_pressure_relief(malloc_default_zone(), 0);
                     }
