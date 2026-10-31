@@ -5636,8 +5636,63 @@ static inline kern_return_t Titanium_SafeSetCFProperty(io_registry_entry_t svc, 
 #define VM_PURGABLE_PURGE_ALL 0
 #endif
 
+// ====================================================================================================
+// [RAM CONTROL ENGINE — DLSYM-GUARDED PRIVATE SYMBOLS]
+// iOS 16.7 rootless: memorystatus_control + vm_purgable_control + mach_vm_wire
+// có thể không export → gọi trực tiếp → _dyld_missing_symbol_abort.
+// Toàn bộ gọi qua dlsym, thiếu thì return -1/KERN_FAILURE, không crash.
+// ====================================================================================================
+
 extern int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
 
+// [DLSYM STATE] — resolve 1 lần, cache function pointer
+static int (*g_memorystatus_control_fn)(uint32_t, int32_t, uint32_t, void *, size_t) = NULL;
+static int (*g_vm_purgable_control_fn)(vm_map_t, vm_offset_t, int, int *) = NULL;
+static kern_return_t (*g_mach_vm_wire_fn)(vm_map_t, vm_map_t, mach_vm_address_t, mach_vm_size_t, vm_prot_t) = NULL;
+static dispatch_once_t g_dlsymOnce;
+
+static inline void Titanium_ResolvePrivateSymbols(void) {
+    dispatch_once(&g_dlsymOnce, ^{
+        g_memorystatus_control_fn = (int (*)(uint32_t, int32_t, uint32_t, void *, size_t))
+            dlsym(RTLD_DEFAULT, "memorystatus_control");
+        if (!g_memorystatus_control_fn) {
+            Titanium_V60_Log(@"[RAM] memorystatus_control missing — jetsam elevate skipped");
+        }
+
+        g_vm_purgable_control_fn = (int (*)(vm_map_t, vm_offset_t, int, int *))
+            dlsym(RTLD_DEFAULT, "vm_purgable_control");
+        if (!g_vm_purgable_control_fn) {
+            Titanium_V60_Log(@"[RAM] vm_purgable_control missing — purge skipped");
+        }
+
+        g_mach_vm_wire_fn = (kern_return_t (*)(vm_map_t, vm_map_t, mach_vm_address_t, mach_vm_size_t, vm_prot_t))
+            dlsym(RTLD_DEFAULT, "mach_vm_wire");
+        if (!g_mach_vm_wire_fn) {
+            Titanium_V60_Log(@"[RAM] mach_vm_wire missing — wire skipped");
+        }
+    });
+}
+
+// [SAFE WRAPPERS]
+static inline int Titanium_SafeMemorystatusControl(uint32_t cmd, int32_t pid, uint32_t flags, void *buf, size_t sz) {
+    Titanium_ResolvePrivateSymbols();
+    if (!g_memorystatus_control_fn) return -1;
+    return g_memorystatus_control_fn(cmd, pid, flags, buf, sz);
+}
+
+static inline int Titanium_SafeVmPurgableControl(vm_map_t task, vm_offset_t addr, int ctrl, int *state) {
+    Titanium_ResolvePrivateSymbols();
+    if (!g_vm_purgable_control_fn) return -1;
+    return g_vm_purgable_control_fn(task, addr, ctrl, state);
+}
+
+static inline kern_return_t Titanium_SafeMachVmWire(vm_map_t host, vm_map_t task, mach_vm_address_t addr, mach_vm_size_t size, vm_prot_t prot) {
+    Titanium_ResolvePrivateSymbols();
+    if (!g_mach_vm_wire_fn) return KERN_FAILURE;
+    return g_mach_vm_wire_fn(host, task, addr, size, prot);
+}
+
+// [DEVICE RAM DETECT]
 static uint64_t Titanium_GetDeviceTotalRAM(void) {
     static uint64_t s_totalRAM = 0;
     static dispatch_once_t once;
@@ -5650,34 +5705,46 @@ static uint64_t Titanium_GetDeviceTotalRAM(void) {
     return s_totalRAM;
 }
 
+// [JETSAM UNLIMITED — qua Safe wrapper]
 static void Titanium_ForceJetsamUnlimited(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         @try {
             int32_t hwm = 0x7FFFFFFF - 1;
-            memorystatus_control(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK, getpid(), 0, &hwm, sizeof(hwm));
+            Titanium_SafeMemorystatusControl(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK,
+                                             getpid(), 0, &hwm, sizeof(hwm));
+
             int32_t taskLimit = 0x7FFFFFFF - 1;
-            memorystatus_control(MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT, getpid(), 0, &taskLimit, sizeof(taskLimit));
+            Titanium_SafeMemorystatusControl(MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT,
+                                             getpid(), 0, &taskLimit, sizeof(taskLimit));
 
             struct { int32_t priority; uint64_t user_data; } props;
             props.priority = JETSAM_PRIORITY_CRITICAL;
             props.user_data = 0;
-            memorystatus_control(MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES, getpid(), 0, &props, sizeof(props));
+            Titanium_SafeMemorystatusControl(MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES,
+                                             getpid(), 0, &props, sizeof(props));
 
-            memorystatus_control(MEMORYSTATUS_CMD_SET_PROCESS_IS_FREEZABLE, getpid(), 0, NULL, 0);
-            memorystatus_control(MEMORYSTATUS_CMD_SET_PROCESS_IS_MANAGED, getpid(), 0, NULL, 0);
+            Titanium_SafeMemorystatusControl(MEMORYSTATUS_CMD_SET_PROCESS_IS_FREEZABLE,
+                                             getpid(), 0, NULL, 0);
+            Titanium_SafeMemorystatusControl(MEMORYSTATUS_CMD_SET_PROCESS_IS_MANAGED,
+                                             getpid(), 0, NULL, 0);
 
             uint64_t total = Titanium_GetDeviceTotalRAM();
-            Titanium_V60_Log([NSString stringWithFormat:@"[RAM] jetsam policy set: total=%lluMB", total / 1024 / 1024]);
+            Titanium_V60_Log([NSString stringWithFormat:@"[RAM] jetsam policy set: total=%lluMB",
+                              total / 1024 / 1024]);
         } @catch (NSException *e) {
             Titanium_V60_Log([NSString stringWithFormat:@"[RAM] ForceJetsamUnlimited throw: %@", e.reason]);
         }
     });
 }
 
+// [WIRE TO CHIP — qua Safe wrapper]
 static BOOL Titanium_WireMemoryToChip(void *addr, size_t size) {
     if (!addr || size == 0) return NO;
-    kern_return_t kr = mach_vm_wire(0, mach_task_self(), (mach_vm_address_t)addr, (mach_vm_size_t)size, VM_PROT_READ | VM_PROT_WRITE);
+    kern_return_t kr = Titanium_SafeMachVmWire(0, mach_task_self(),
+                                               (mach_vm_address_t)addr,
+                                               (mach_vm_size_t)size,
+                                               VM_PROT_READ | VM_PROT_WRITE);
     return kr == KERN_SUCCESS;
 }
 
@@ -5698,13 +5765,15 @@ static void Titanium_WireGlobalPayloadsToChip(void) {
     });
 }
 
+// [PURGE — qua Safe wrapper]
 static void Titanium_PurgePurgableMemory(void) {
     @try {
         int state = 0;
-        vm_purgable_control(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &state);
+        Titanium_SafeVmPurgableControl(mach_task_self(), 0, VM_PURGABLE_PURGE_ALL, &state);
     } @catch (__unused NSException *e) {}
 }
 
+// [VM STATS]
 static uint64_t Titanium_GetAvailableRAM(void) {
     @try {
         vm_statistics64_data_t vmstat;
@@ -5714,7 +5783,8 @@ static uint64_t Titanium_GetAvailableRAM(void) {
             host_page_size(mach_host_self(), &pageSize);
             uint64_t psize = (uint64_t)pageSize;
             if (psize == 0) psize = 16384;
-            return ((uint64_t)vmstat.free_count + (uint64_t)vmstat.speculative_count + (uint64_t)vmstat.purgeable_count) * psize;
+            return ((uint64_t)vmstat.free_count + (uint64_t)vmstat.speculative_count +
+                    (uint64_t)vmstat.purgeable_count) * psize;
         }
     } @catch (__unused NSException *e) {}
     return 0;
@@ -5731,6 +5801,7 @@ static uint64_t Titanium_GetCurrentRSS(void) {
     return 0;
 }
 
+// [CEILING ADAPTIVE THEO RAM]
 static uint64_t Titanium_GetRAMCeiling(void) {
     uint64_t total = Titanium_GetDeviceTotalRAM();
     if (total >= 8ULL * 1024 * 1024 * 1024) return total - (1ULL * 1024 * 1024 * 1024);
@@ -8803,19 +8874,16 @@ static void Titanium_InstallDaemonKillerHooks(void) {
 
 // ====================================================================================================
 // [PHẦN C: INIT - V108 FIX SREBOOT HANG + RAM ENGINE INTEGRATION]
-// - ForceJetsamUnlimited ngay khi init → kernel đéo kill
-// - WireGlobalPayloadsToChip sau IPC init → ghim vào chip RAM
-// - Purge định kỳ trong heartbeat → kernel thu hồi page vật lý
-// - Re-apply jetsam + wire sau mỗi boot settle (SpringBoard + App)
 // ====================================================================================================
 
-// RAM engine forward decls — phải có sẵn ở block khác, nhưng khai báo lại cho chắc
+// RAM engine forward decls
 extern void Titanium_ForceJetsamUnlimited(void);
 extern void Titanium_WireGlobalPayloadsToChip(void);
 extern void Titanium_PurgePurgableMemory(void);
 extern uint64_t Titanium_GetCurrentRSS(void);
 extern uint64_t Titanium_GetDeviceTotalRAM(void);
 extern uint64_t Titanium_GetRAMCeiling(void);
+extern BOOL Titanium_ShouldPurgeNow(void);
 
 static void Titanium_StartIPCHearthbeatV12(void) {
     @try {
@@ -8833,17 +8901,14 @@ static void Titanium_StartIPCHearthbeatV12(void) {
                 @try {
                     Titanium_ReloadSharedSyncStateV285();
 
-                    // [RAM ENGINE] Purge định kỳ — kernel thu hồi page vật lý mỗi 30s.
-                    // Chỉ purge khi RSS > 85% ceiling adaptive hoặc áp lực cao.p ưu
                     if (Titanium_ShouldPurgeNow()) {
                         Titanium_PurgePurgableMemory();
                         malloc_zone_pressure_relief(malloc_default_zone(), 0);
                     }
 
-                    // [RAM ENGINE] Re-wire nếu wire bị mất (hiếm, khi mlock bị drop).
                     static uint32_t s_wireTick = 0;
                     s_wireTick++;
-                    if (s_wireTick % 10 == 0) {  // mỗi 5 phút
+                    if (s_wireTick % 10 == 0) {
                         Titanium_WireGlobalPayloadsToChip();
                     }
                 } @catch (NSException *e) {
@@ -8855,11 +8920,6 @@ static void Titanium_StartIPCHearthbeatV12(void) {
     } @catch (NSException *e) {
         Titanium_V60_Log([NSString stringWithFormat:@"[V999] StartIPCHearthbeat throw: %@", e.reason]);
     }
-}
-
-// Forward for use in timer — defined in RAM engine block
-static inline BOOL Titanium_ShouldPurgeNow_Forward(void) {
-    return Titanium_ShouldPurgeNow();
 }
 
 static void Titanium_V57_StartAppReapplyTimer(void) {
@@ -8884,7 +8944,6 @@ static void Titanium_V57_StartAppReapplyTimer(void) {
                 if (targetHz < 15)  targetHz = 15;
                 if (targetHz > 240) targetHz = 240;
 
-                // force = YES để timer đấm bất chấp trùng Hz.
                 Titanium_PushRateToDriverV4(targetHz, YES);
                 Titanium_ReapplyFrameRateToAllScenes();
 
@@ -8896,8 +8955,6 @@ static void Titanium_V57_StartAppReapplyTimer(void) {
                     }
                 });
 
-                // [RAM ENGINE] Purge mỗi 4s (16 tick × 0.25s) trong app.
-                // Gate trong BackgroundPurgeMemory đã check tương tác + interval.
                 static uint32_t s_purgeTick = 0;
                 s_purgeTick++;
                 if (s_purgeTick % 16 == 0) {
@@ -8934,7 +8991,6 @@ static void Titanium_RegisterAppResumeRefreshV12(void) {
                     if (Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
                         Titanium_ReapplyFrameRateToAllScenes();
                     }
-                    // [RAM ENGINE] Re-apply jetsam + wire mỗi lần app active.
                     Titanium_ForceJetsamUnlimited();
                     Titanium_WireGlobalPayloadsToChip();
                 } @catch (NSException *e) {
@@ -9010,8 +9066,8 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
         @try {
             g_v57AppLaunchTick = mach_absolute_time();
 
-            // [RAM ENGINE] Force jetsam ngay lúc init — trước mọi thứ khác.
-            Titanium_ForceJetsamUnlimited();
+            // [FIX] BỐC ForceJetsamUnlimited khỏi constructor — chuyển sang %ctor.
+            // Lý do: constructor chạy trước bootloop check armed → crash 20 lần.
 
             Titanium_V55_InstallScreenState();
             Titanium_V56_InstallKeyboardState();
@@ -9021,7 +9077,6 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
             Titanium_V57_StartAppReapplyTimer();
             Titanium_StartThermalAndChargingWatchdog();
 
-            // [RAM ENGINE] Wire sau 500ms để IPC đã sẵn sàng.
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)),
                            dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
                 @try {
@@ -9192,7 +9247,6 @@ static void Titanium_RestoreOnFirstFrame(void) {
                 Titanium_ApplySiliconDeepOptimizations();
                 Titanium_ExecuteRealPanelOverdrive();
 
-                // [RAM ENGINE] Re-apply sau first frame — app đã load UI, RAM đã cấp.
                 Titanium_ForceJetsamUnlimited();
                 Titanium_WireGlobalPayloadsToChip();
 
@@ -9247,7 +9301,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             Titanium_KillVSyncCompletelyAtRoot();
             Titanium_InitZeroCopyIPC(isSpringBoard);
 
-            // [RAM ENGINE] Re-apply jetsam + wire sau IPC init (payload đã sẵn sàng).
             Titanium_ForceJetsamUnlimited();
             Titanium_WireGlobalPayloadsToChip();
 
@@ -9304,7 +9357,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 Titanium_StartThermalAndChargingWatchdog();
                 Titanium_StartIPCHearthbeatV12();
 
-                // [RAM ENGINE] SpringBoard cần RAM cực cao — re-apply trước boot settle.
                 Titanium_ForceJetsamUnlimited();
                 Titanium_WireGlobalPayloadsToChip();
 
@@ -9323,7 +9375,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         }
                         Titanium_ExecuteRealPanelOverdrive();
 
-                        // [RAM ENGINE] Final re-apply sau boot settle.
                         Titanium_ForceJetsamUnlimited();
                         Titanium_WireGlobalPayloadsToChip();
                     } @catch (NSException *e) {
@@ -9345,7 +9396,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         Titanium_RegisterAppResumeRefreshV12();
                         Titanium_RestoreOnFirstFrame();
 
-                        // [RAM ENGINE] Re-apply mỗi app.
                         Titanium_ForceJetsamUnlimited();
                         Titanium_WireGlobalPayloadsToChip();
                     } @catch (NSException *e) {
@@ -9527,7 +9577,7 @@ static void Titanium_BypassKillMethodV108(void) {
             Titanium_RegisterPrefsObservers(isSpringBoard);
             %init;
 
-            // [RAM ENGINE] Force jetsam + wire ngay trong %ctor — trước khi app UI start.
+            // [RAM ENGINE] Force jetsam + wire ngay trong %ctor — bootloop check đã armed.
             Titanium_ForceJetsamUnlimited();
             Titanium_WireGlobalPayloadsToChip();
 
