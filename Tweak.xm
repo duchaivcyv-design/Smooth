@@ -5407,10 +5407,27 @@ static void Titanium_PushRateToDriverV4(NSInteger hz);
 static void Titanium_EnforceCAFrameRange(void);
 static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
 
-// [PUNCH GATE — THERMAL + COOLDOWN + DRIFT COUNTER]
-// - Thermal gate: máy Serious/Critical → refuse punch (chống nóng)
-// - Cooldown 1500ms: chống kernel churn
-// - Drift counter: log số lần punch thực sự để verify
+// ====================================================================================================
+// [THERMAL & PUNCH GATE] — thermal + 1500ms cooldown + drift counter
+// Share giữa: ForcePanelModeDirect, HardwareDriverOverride,
+//             PushRateToDriverV4, ExecuteUltimateHardwareHack
+// ====================================================================================================
+
+// [THERMAL GATE] — máy Serious/Critical thì ngừng punch
+static inline BOOL Titanium_ThermalOK(void) {
+    @try {
+        if (@available(iOS 11.0, *)) {
+            NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
+            if (state == NSProcessInfoThermalStateSerious ||
+                state == NSProcessInfoThermalStateCritical) {
+                return NO;
+            }
+        }
+    } @catch (__unused NSException *e) {}
+    return YES;
+}
+
+// [PUNCH GATE] — thermal check + cooldown 1500ms
 static inline BOOL Titanium_CanPunchHardware(void) {
     if (!Titanium_ThermalOK()) return NO;
     uint64_t now = mach_absolute_time();
@@ -5418,6 +5435,7 @@ static inline BOOL Titanium_CanPunchHardware(void) {
     return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(1500ULL * 1000000ULL);
 }
 
+// [MARK] — update timestamp + đếm lần punch (để log verify)
 static inline void Titanium_MarkHardwarePunched(void) {
     g_lastHardwarePunchTick = mach_absolute_time();
     g_driftPunchCountTotal++;
@@ -5617,6 +5635,7 @@ static inline kern_return_t Titanium_SafeSetCFProperty(io_registry_entry_t svc, 
 #endif
 
 extern int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
+static void Titanium_V60_Log(NSString *msg);
 
 static uint64_t Titanium_GetDeviceTotalRAM(void) {
     static uint64_t s_totalRAM = 0;
@@ -5913,29 +5932,6 @@ NSInteger Titanium_ActualPanelHz(void) {
     if (g_tioObservedVsyncHz >= 20.0 && g_tioObservedVsyncHz <= 260.0)
         return (NSInteger)llround(g_tioObservedVsyncHz);
     return g_tioActiveHz > 0 ? g_tioActiveHz : 60;
-}
-
-// [THERMAL & PUNCH GATE]
-static inline BOOL Titanium_ThermalOK(void) {
-    @try {
-        if (@available(iOS 11.0, *)) {
-            NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
-            if (state == NSProcessInfoThermalStateSerious || state == NSProcessInfoThermalStateCritical) return NO;
-        }
-    } @catch (__unused NSException *e) {}
-    return YES;
-}
-
-static inline BOOL Titanium_CanPunchHardware(void) {
-    if (!Titanium_ThermalOK()) return NO;
-    uint64_t now = mach_absolute_time();
-    if (g_lastHardwarePunchTick == 0) return YES;
-    // 1500ms cooldown để không nóng máy
-    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(1500ULL * 1000000ULL);
-}
-
-static inline void Titanium_MarkHardwarePunched(void) {
-    g_lastHardwarePunchTick = mach_absolute_time();
 }
 
 @interface TitaniumOverdriveVSyncProbe : NSObject
@@ -6625,7 +6621,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 - (void)setCurrentMode:(id)mode {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         @try {
-            id currentMode = %orig ? nil : nil;
             NSArray *modes = nil;
             if ([self respondsToSelector:@selector(availableModes)]) {
                 modes = [self performSelector:@selector(availableModes)];
