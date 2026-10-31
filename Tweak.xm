@@ -375,6 +375,8 @@ static BOOL g_avoidTweakConflicts = NO;
 static void Titanium_InstallMGCopyAnswerHookV26(void);
 static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
+// [FIX BUILD] Khai báo trước hàm ép Hz
+static NSInteger Push_ResolveTargetHz(void);
 
 // Forward Declarations for functions used later
 static void Titanium_PushRateToDriverV4(NSInteger hz);
