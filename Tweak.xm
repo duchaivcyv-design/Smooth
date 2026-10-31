@@ -377,8 +377,6 @@ static volatile BOOL g_isInteracting = NO;
 static volatile uint64_t g_lastInteractiveTick = 0;
 
 // Forward Declarations for functions used later
-// FIX: forward decl cả hai overload — 2-arg (chính) và 1-arg (compat wrapper).
-// Body 2-arg ở khối [FIX LỖ HỔNG 4], body 1-arg wrapper thêm ngay sau đó.
 static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force);
 static void Titanium_PushRateToDriverV4(NSInteger hz);   // compat wrapper
 
@@ -386,7 +384,15 @@ static NSInteger Titanium_GetUserTargetHz(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
 static void Titanium_V57_ForceReapplyIfNeeded(void);
-static NSInteger Push_ResolveTargetHz(void);             // body ở reply trước — paste vào file
+
+// Body cho Push_ResolveTargetHz — đặt ngay sau decl để tránh stub abort
+static NSInteger Push_ResolveTargetHz(void) {
+    NSInteger target = g_syncPayloadV285.targetHz;
+    if (target < 15) target = g_cachedResolvedHz;
+    if (target < 15) target = 15;
+    if (target > 240) target = 240;
+    return target;
+}
 
 // ====================================================================================================
 // KHAI BÁO @INTERFACE
@@ -7291,7 +7297,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force) {
     });
 }
 
-static inline void Titanium_PushRateToDriverV4_Normal(NSInteger hz) {
+static void Titanium_PushRateToDriverV4(NSInteger hz) {
     Titanium_PushRateToDriverV4(hz, NO);
 }
 
