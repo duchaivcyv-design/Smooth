@@ -15,8 +15,7 @@ BoostiPhone6sCore_FILES = Tweak.xm \
                           TitaniumKernelOverdrive.m
 
 BoostiPhone6sCore_CFLAGS = -fobjc-arc \
-                           -O3 \
-                           -fvisibility=hidden \
+                           -O0 \
                            -Wall \
                            -Wno-error \
                            -Wno-unused-variable \
@@ -29,7 +28,6 @@ BoostiPhone6sCore_CFLAGS = -fobjc-arc \
                            -Wno-unguarded-availability-new \
                            -Wno-unguarded-availability \
                            -Wno-unused-command-line-argument \
-                           -D__IPHONE_OS_VERSION_MIN_REQUIRED=150000 \
                            -DBUILDING_LIBRARY=1 \
                            -IHeaders \
                            -I.
