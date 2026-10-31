@@ -65,7 +65,25 @@ include $(THEOS_MAKE_PATH)/aggregate.mk
 
 BOOST_PLIST_NAME = BoostiPhone6sCore.plist
 
+# [FIX] Dam bao postinst + prerm LUON co trong DEB (dat cung voi control trong thu muc DEBIAN/)
 after-stage::
+	@echo ""
+	@echo "=== [BoostisCore] Copy postinst/prerm vao DEBIAN/ ==="
+	@mkdir -p "$(THEOS_STAGING_DIR)/DEBIAN"
+	@if [ -f "postinst" ]; then \
+		cp -f "postinst" "$(THEOS_STAGING_DIR)/DEBIAN/postinst"; \
+		chmod 0755 "$(THEOS_STAGING_DIR)/DEBIAN/postinst"; \
+		echo "  [OK] postinst -> DEBIAN/postinst"; \
+	else \
+		echo "  [WARN] postinst khong ton tai trong thu muc goc — bo qua"; \
+	fi
+	@if [ -f "prerm" ]; then \
+		cp -f "prerm" "$(THEOS_STAGING_DIR)/DEBIAN/prerm"; \
+		chmod 0755 "$(THEOS_STAGING_DIR)/DEBIAN/prerm"; \
+		echo "  [OK] prerm -> DEBIAN/prerm"; \
+	else \
+		echo "  [WARN] prerm khong ton tai trong thu muc goc — bo qua"; \
+	fi
 	@echo ""
 	@echo "=== [BoostisCore] Create Filter Plist ==="
 	@mkdir -p "$(THEOS_STAGING_DIR)$(_THEOS_PREFIX)/Library/MobileSubstrate/DynamicLibraries"
@@ -113,6 +131,16 @@ before-package::
 		echo "  [OK] Filter Plist found"; \
 	else \
 		echo "  [ERROR] Filter Plist missing!"; exit 1; \
-	fi
-	@echo "  [OK] Ready for DEB packaging"
+	fi; \
+	if [ -f "$(THEOS_STAGING_DIR)/DEBIAN/postinst" ]; then \
+		echo "  [OK] postinst found in DEBIAN/"; \
+	else \
+		echo "  [WARN] postinst missing in DEBIAN/ (se khong chay sau cai)"; \
+	fi; \
+	if [ -f "$(THEOS_STAGING_DIR)/DEBIAN/prerm" ]; then \
+		echo "  [OK] prerm found in DEBIAN/"; \
+	else \
+		echo "  [WARN] prerm missing in DEBIAN/ (se khong chay truoc go)"; \
+	fi; \
+	echo "  [OK] Ready for DEB packaging"
 	@echo ""
