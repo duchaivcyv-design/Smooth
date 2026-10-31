@@ -3824,16 +3824,6 @@ static void Titanium_UntrackDisplayLink(CADisplayLink *link) {
     return %orig;
 }
 
-- (CFTimeInterval)targetTimestamp {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        NSInteger t = Titanium_GetMasterRate();
-        if (t < 15)  t = 15;
-        if (t > 240) t = 240;
-        return [self timestamp] + (1.0 / (double)t);
-    }
-    return %orig;
-}
-
 - (CAFrameRateRange)preferredFrameRateRange {
     if (@available(iOS 15.0, *)) {
         if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
@@ -4093,11 +4083,9 @@ static _Thread_local NSInteger g_ownTxDepth = 0;
     }
 }
 + (void)commit {
-    BOOL isMyOutermost = NO;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) {
         if (g_ownTxDepth > 0) {
             g_ownTxDepth--;
-            if (g_ownTxDepth == 0) isMyOutermost = YES;
         }
     }
     %orig;
@@ -6017,32 +6005,6 @@ static inline BOOL Titanium_V56_KeyboardBusy(void) {
     return NO;
 }
 
-// [THERMAL GATE] — chỉ fake mát khi đéo phải critical thật
-static inline BOOL Titanium_ThermalOK(void) {
-    @try {
-        if (@available(iOS 11.0, *)) {
-            NSProcessInfoThermalState state = [[NSProcessInfo processInfo] thermalState];
-            // Hard fake — bốc throttle, không bao giờ return NO
-            (void)state;
-        }
-    } @catch (__unused NSException *e) {}
-    return YES; // LUÔN OK — bốc gate thermal
-}
-
-// [PUNCH STATE]
-static volatile uint64_t g_lastHardwarePunchTick = 0;
-static volatile uint32_t g_driftPunchCountTotal  = 0;
-
-static inline BOOL Titanium_CanPunchHardware(void) {
-    // [BỐC COOLDOWN] — luôn cho punch
-    return YES;
-}
-
-static inline void Titanium_MarkHardwarePunched(void) {
-    g_lastHardwarePunchTick = mach_absolute_time();
-    g_driftPunchCountTotal++;
-}
-
 static void Titanium_V57_ReloadIPCIfStale(void) {
     uint64_t now = mach_absolute_time();
     if (g_v57LastIPCReload != 0 && (now - g_v57LastIPCReload) < v55_ns(500ULL * 1000000ULL)) return;
@@ -6597,6 +6559,18 @@ static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
             Titanium_V60_Log([NSString stringWithFormat:@"[V77] HARD FORCED %ldHz", (long)targetHz]);
             g_tioOverdriveBusy = NO;
         }
+    });
+}
+
+static void Titanium_Tier6JetsamImmunityReal(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        void *kern = dlopen("/usr/lib/system/libsystem_kernel.dylib", RTLD_LAZY);
+        if (!kern) return;
+        typedef int (*msc_fn)(uint32_t, int32_t, uint32_t, void *, size_t);
+        msc_fn msc = (msc_fn)dlsym(kern, "memorystatus_control");
+        if (!msc) return;
+        (void)msc(MEMORYSTATUS_CMD_SET_JETSAM_HIGH_WATER_MARK, getpid(), 0, NULL, 0);
     });
 }
 
@@ -7562,48 +7536,6 @@ static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force) {
 static void Titanium_PushRateToDriverV4(NSInteger hz) { Titanium_PushRateToDriverV4(hz, NO); }
 
 // [ULTIMATE HACK] — full matrix selector
-static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) {
-    if (!Titanium_V55_PanelWritable()) return;
-    if (targetHz < 15) targetHz = 15;
-    if (targetHz > 240) targetHz = 240;
-    if (!Titanium_CanPunchHardware()) return;
-    Titanium_MarkHardwarePunched();
-
-    const TitaniumIOKitSyms *syms = Titanium_ResolveIOKitSyms();
-    if (!syms->connectStructMethod) return;
-
-    Tio_DCPResolveConnections();
-    if (g_dcpIomfbConn == IO_OBJECT_NULL) {
-        Tio_DCPResolveConnections_v2();
-    }
-    if (g_dcpIomfbConn == IO_OBJECT_NULL) return;
-
-    CGSize screenSize = [UIScreen mainScreen].nativeBounds.size;
-    TioIomfbTiming timing;
-    memset(&timing, 0, sizeof(timing));
-    timing.width       = (uint32_t)screenSize.width;
-    timing.height      = (uint32_t)screenSize.height;
-    timing.refreshRate = (uint32_t)targetHz;
-    timing.pixelClock  = (uint32_t)((screenSize.width + 64) * (screenSize.height + 32) * targetHz * 1.08);
-    timing.hSyncEnd    = (uint32_t)screenSize.width;
-    timing.vSyncEnd    = (uint32_t)screenSize.height;
-    timing.flags       = 0xFFFFFFFF;
-
-    g_v60ForceDriverSuccess = YES;
-    uint32_t selectors[] = {
-        14, 15, 16, 17, 18, 19, 20, 21,
-        22, 23, 24, 25, 26, 27, 28, 29,
-        30, 31, 32, 33,
-        40, 41, 42
-    };
-    int n = (int)(sizeof(selectors)/sizeof(selectors[0]));
-    for (int i = 0; i < n; i++) {
-        size_t outLen = 0;
-        (void)syms->connectStructMethod(g_dcpIomfbConn, selectors[i], &timing, sizeof(timing), NULL, &outLen);
-    }
-    g_v60ForceDriverSuccess = NO;
-}
-
 static void Titanium_Tier5C_RunSweepV4(void) {
     if (g_isRebooting) return;
     if (!Apex_IsMasterEnabled()) return;
@@ -7611,12 +7543,10 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     NSInteger target = Titanium_GetMasterRate();
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @try {
-            Tio_SubmitModeAllPaths(target);
             Titanium_HardwareDriverOverride(target);
             Titanium_Tier5WriteIORegistryTiming(target);
             Titanium_Tier4WriteCadence(target);
             Titanium_ExecuteUltimateHardwareHack(target);
-            g_tioLastAcceptedHz = target;
             Titanium_V57_WriteSharedBestHz(target);
             Titanium_V60_Log([NSString stringWithFormat:@"[SWEEP] target=%ld readback=%ld",
                               (long)target, (long)Titanium_ReadDisplayPreferredFPS()]);
