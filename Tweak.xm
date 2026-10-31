@@ -3639,6 +3639,9 @@ static void Titanium_UntrackDisplayLink(CADisplayLink *link) {
 %end
 
 // [ÉP CỨNG CỰC SÂU] Ép CADisplayMode trả về đúng thông số + Đấm Driver phần cứng
+// [V52.2 FIX] Forward declaration ngay truoc loi goi dau tien -> khong con undeclared
+static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
+
 %hook CADisplayMode
 - (double)refreshRate {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
