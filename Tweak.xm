@@ -8,12 +8,15 @@
 #import <mach/vm_region.h>
 #import <mach/vm_statistics.h>
 #import <mach/vm_types.h>
+#import <mach/vm_purgable.h>
 #import <mach/thread_act.h>
 #import <mach/thread_policy.h>
 #import <mach/task.h>
 #import <mach/task_info.h>
 #import <mach/task_policy.h>
 #import <mach/clock.h>
+#import <mach/mach_error.h>
+#import <mach-o/dyld.h>
 #import <SpriteKit/SpriteKit.h>
 #import <SceneKit/SceneKit.h>
 
@@ -21,6 +24,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdatomic.h>
+#include <signal.h>
 #import <pthread.h>
 #include <strings.h>
 #import <pthread/qos.h>
@@ -36,6 +40,14 @@
 #import <errno.h>
 #import <time.h>
 #import <os/lock.h>
+#import <dispatch/dispatch.h>
+
+// ==================== NETWORK (C SOCKET HOOKS) ====================
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 // ==================== SYS HEADERS ====================
 #import <sys/types.h>
@@ -71,7 +83,6 @@
 #if __has_include(<IOSurface/IOSurfaceRef.h>)
 #import <IOSurface/IOSurfaceRef.h>
 #endif
-
 // ==================== CHỐT BẢO VỆ HẰNG SỐ KERNEL XNU ====================
 #ifndef LATENCY_QOS_TIER_0
 #define LATENCY_QOS_TIER_0 ((0xFF << 16) | 1)
