@@ -4459,6 +4459,16 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
 - (void)wave;
 - (void)pointRight;
 - (void)celebrate;
+- (void)nod;
+- (void)lookAround;
+- (void)stumble;
+- (void)fallAndGetUp;
+- (void)shrug;
+- (void)clap;
+- (void)stretch;
+- (void)walkInPlace;
+- (void)startRandomGestures;
+- (void)stopRandomGestures;
 @end
 
 // Bộ phát giọng nói của robot: đọc theo ngôn ngữ đã chọn trong app.
@@ -4498,7 +4508,8 @@ static void TIMusicSearch(NSString *term, NSString *country, void (^done)(NSArra
 @implementation TIGuideRobot {
     SCNView *_view;
     SCNNode *_root, *_body, *_head, *_screen;
-    SCNNode *_lShoulder, *_rShoulder, *_lElbow, *_rElbow;
+    SCNNode *_lShoulder, *_rShoulder, *_lElbow, *_rElbow, *_lLeg, *_rLeg;
+    NSTimer *_gestureTimer;
     NSArray<SCNNode *> *_lFingers, *_rFingers;
     NSMutableArray<SCNMaterial *> *_shellMats;
     SCNMaterial *_screenMat;
@@ -4578,14 +4589,14 @@ static SCNNode *TIRobotNode(SCNGeometry *g, SCNVector3 p) {
 
     SCNPlane *screenG = [SCNPlane planeWithWidth:0.78 height:0.5];
     screenG.materials = @[_screenMat];
-    _screen = TIRobotNode(screenG, SCNVector3Make(0, 0.84, 0.47));
-    [_root addChildNode:_screen];
+    _screen = TIRobotNode(screenG, SCNVector3Make(0, 0.02, 0.47));
+    [_head addChildNode:_screen];
 
     for (int i = 0; i < 2; i++) {
         SCNSphere *eyeG = [SCNSphere sphereWithRadius:0.075];
         eyeG.materials = @[_eyeMat];
-        SCNNode *eye = TIRobotNode(eyeG, SCNVector3Make(i == 0 ? -0.2 : 0.2, 0.9, 0.5));
-        [_root addChildNode:eye];
+        SCNNode *eye = TIRobotNode(eyeG, SCNVector3Make(i == 0 ? -0.2 : 0.2, 0.08, 0.5));
+        [_head addChildNode:eye];
     }
 
     SCNCylinder *antG = [SCNCylinder cylinderWithRadius:0.035 height:0.28];
@@ -4635,7 +4646,9 @@ static SCNNode *TIRobotNode(SCNGeometry *g, SCNVector3 p) {
     for (int i = 0; i < 2; i++) {
         SCNCapsule *legG = [SCNCapsule capsuleWithCapRadius:0.17 height:0.45];
         legG.materials = @[shell];
-        [_root addChildNode:TIRobotNode(legG, SCNVector3Make(i == 0 ? -0.3 : 0.3, -1.45, 0))];
+        SCNNode *leg = TIRobotNode(legG, SCNVector3Make(i == 0 ? -0.3 : 0.3, -1.45, 0));
+        [_root addChildNode:leg];
+        if (i == 0) _lLeg = leg; else _rLeg = leg;
     }
 }
 
@@ -4724,6 +4737,13 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
 }
 
+- (void)nod {
+    SCNAction *down = [SCNAction rotateByX:0.22 y:0 z:0 duration:0.18];
+    SCNAction *up = [SCNAction rotateByX:-0.22 y:0 z:0 duration:0.18];
+    down.timingMode = SCNActionTimingModeEaseInEaseOut;
+    up.timingMode = SCNActionTimingModeEaseInEaseOut;
+    [_head runAction:[SCNAction repeatAction:[SCNAction sequence:@[down, up]] count:2] forKey:@"ti_nod"];
+}
 - (void)celebrate {
     [self restArms];
     SCNAction *lift = TIEase([SCNAction rotateToX:0 y:0 z:-2.5 duration:0.4], 0.4);
@@ -4735,13 +4755,114 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
     [self hop];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
 }
+
+- (void)lookAround {
+    SCNAction *left = TIEase([SCNAction rotateToX:0 y:0.55 z:0 duration:0.5], 0.5);
+    SCNAction *right = TIEase([SCNAction rotateToX:0 y:-0.55 z:0 duration:0.9], 0.9);
+    SCNAction *front = TIEase([SCNAction rotateToX:0 y:0 z:0 duration:0.5], 0.5);
+    [_head runAction:[SCNAction sequence:@[left, [SCNAction waitForDuration:0.3], right, [SCNAction waitForDuration:0.3], front]] forKey:@"ti_look"];
+}
+
+- (void)stumble {
+    SCNAction *lean1 = TIEase([SCNAction rotateByX:0 y:0 z:0.28 duration:0.18], 0.18);
+    SCNAction *lean2 = TIEase([SCNAction rotateByX:0 y:0 z:-0.56 duration:0.22], 0.22);
+    SCNAction *back  = TIEase([SCNAction rotateByX:0 y:0 z:0.28 duration:0.3], 0.3);
+    [_root runAction:[SCNAction sequence:@[lean1, lean2, back]] forKey:@"ti_stumble"];
+    [_lShoulder runAction:[SCNAction sequence:@[TIEase([SCNAction rotateToX:0 y:0 z:-1.6 duration:0.2], 0.2), [SCNAction waitForDuration:0.35], [SCNAction rotateToX:0 y:0 z:-0.05 duration:0.4]]] forKey:@"ti_arm"];
+    [_rShoulder runAction:[SCNAction sequence:@[TIEase([SCNAction rotateToX:0 y:0 z:1.6 duration:0.2], 0.2), [SCNAction waitForDuration:0.35], [SCNAction rotateToX:0 y:0 z:0.05 duration:0.4]]] forKey:@"ti_arm"];
+}
+
+- (void)fallAndGetUp {
+    // Ngã về phía trước như người thật, nằm một lúc rồi chống tay đứng dậy.
+    SCNAction *fall = TIEase([SCNAction rotateByX:-1.35 y:0 z:0 duration:0.42], 0.42);
+    fall.timingMode = SCNActionTimingModeEaseIn;
+    SCNAction *rest = [SCNAction waitForDuration:0.7];
+    SCNAction *getUpRot = TIEase([SCNAction rotateByX:1.35 y:0 z:0 duration:0.6], 0.6);
+    getUpRot.timingMode = SCNActionTimingModeEaseOut;
+    [_root runAction:[SCNAction sequence:@[fall, rest, getUpRot]] forKey:@"ti_fall"];
+    [_lShoulder runAction:[SCNAction sequence:@[TIEase([SCNAction rotateToX:-0.6 y:0 z:-0.4 duration:0.25], 0.25), [SCNAction waitForDuration:1.2], TIEase([SCNAction rotateToX:0 y:0 z:-0.05 duration:0.4], 0.4)]] forKey:@"ti_arm"];
+    [_rShoulder runAction:[SCNAction sequence:@[TIEase([SCNAction rotateToX:-0.6 y:0 z:0.4 duration:0.25], 0.25), [SCNAction waitForDuration:1.2], TIEase([SCNAction rotateToX:0 y:0 z:0.05 duration:0.4], 0.4)]] forKey:@"ti_arm"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self hop]; });
+}
+
+- (void)shrug {
+    SCNAction *up = TIEase([SCNAction moveByX:0 y:0.12 z:0 duration:0.2], 0.2);
+    SCNAction *down = TIEase([SCNAction moveByX:0 y:-0.12 z:0 duration:0.25], 0.25);
+    [_root runAction:[SCNAction sequence:@[up, down]] forKey:@"ti_shrug"];
+    [_lShoulder runAction:[SCNAction sequence:@[TIEase([SCNAction rotateToX:0 y:0 z:-0.5 duration:0.2], 0.2), [SCNAction waitForDuration:0.5], TIEase([SCNAction rotateToX:0 y:0 z:-0.05 duration:0.3], 0.3)]] forKey:@"ti_arm"];
+    [_rShoulder runAction:[SCNAction sequence:@[TIEase([SCNAction rotateToX:0 y:0 z:0.5 duration:0.2], 0.2), [SCNAction waitForDuration:0.5], TIEase([SCNAction rotateToX:0 y:0 z:0.05 duration:0.3], 0.3)]] forKey:@"ti_arm"];
+}
+
+- (void)clap {
+    [self restArms];
+    SCNAction *lift = TIEase([SCNAction rotateToX:-1.0 y:0 z:-1.2 duration:0.3], 0.3);
+    SCNAction *liftR = TIEase([SCNAction rotateToX:-1.0 y:0 z:1.2 duration:0.3], 0.3);
+    SCNAction *in = TIEase([SCNAction rotateToX:-1.0 y:0 z:-0.35 duration:0.14], 0.14);
+    SCNAction *inR = TIEase([SCNAction rotateToX:-1.0 y:0 z:0.35 duration:0.14], 0.14);
+    SCNAction *out = TIEase([SCNAction rotateToX:-1.0 y:0 z:-1.2 duration:0.14], 0.14);
+    SCNAction *outR = TIEase([SCNAction rotateToX:-1.0 y:0 z:1.2 duration:0.14], 0.14);
+    [_lShoulder runAction:[SCNAction sequence:@[lift, [SCNAction repeatAction:[SCNAction sequence:@[in, out]] count:3]]] forKey:@"ti_arm"];
+    [_rShoulder runAction:[SCNAction sequence:@[liftR, [SCNAction repeatAction:[SCNAction sequence:@[inR, outR]] count:3]]] forKey:@"ti_arm"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
+}
+
+- (void)stretch {
+    [self restArms];
+    SCNAction *armsUp = TIEase([SCNAction rotateToX:0 y:0 z:-2.7 duration:0.6], 0.6);
+    SCNAction *armsUpR = TIEase([SCNAction rotateToX:0 y:0 z:2.7 duration:0.6], 0.6);
+    [_lShoulder runAction:[SCNAction sequence:@[armsUp, [SCNAction waitForDuration:0.5]]] forKey:@"ti_arm"];
+    [_rShoulder runAction:[SCNAction sequence:@[armsUpR, [SCNAction waitForDuration:0.5]]] forKey:@"ti_arm"];
+    SCNAction *arch = TIEase([SCNAction rotateByX:-0.2 y:0 z:0 duration:0.5], 0.5);
+    [_root runAction:[SCNAction sequence:@[arch, [SCNAction waitForDuration:0.4], [SCNAction rotateByX:0.2 y:0 z:0 duration:0.5]]] forKey:@"ti_stretch"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self restArms]; });
+}
+
+- (void)walkInPlace {
+    SCNAction *legF = TIEase([SCNAction rotateByX:0.45 y:0 z:0 duration:0.2], 0.2);
+    SCNAction *legB = TIEase([SCNAction rotateByX:-0.9 y:0 z:0 duration:0.4], 0.4);
+    SCNAction *legBack = TIEase([SCNAction rotateByX:0.45 y:0 z:0 duration:0.2], 0.2);
+    [_lLeg runAction:[SCNAction repeatAction:[SCNAction sequence:@[legF, legB, legBack]] count:3] forKey:@"ti_walk"];
+    SCNAction *legF2 = TIEase([SCNAction rotateByX:-0.45 y:0 z:0 duration:0.2], 0.2);
+    SCNAction *legB2 = TIEase([SCNAction rotateByX:0.9 y:0 z:0 duration:0.4], 0.4);
+    SCNAction *legBack2 = TIEase([SCNAction rotateByX:-0.45 y:0 z:0 duration:0.2], 0.2);
+    [_rLeg runAction:[SCNAction repeatAction:[SCNAction sequence:@[legF2, legB2, legBack2]] count:3] forKey:@"ti_walk"];
+}
+
+- (void)startRandomGestures {
+    [self stopRandomGestures];
+    __weak typeof(self) wself = self;
+    _gestureTimer = [NSTimer scheduledTimerWithTimeInterval:4.5 repeats:YES block:^(NSTimer *t) {
+        TIGuideRobot *me = wself; if (!me) { [t invalidate]; return; }
+        switch (arc4random_uniform(7)) {
+            case 0: [me lookAround]; break;
+            case 1: [me shrug]; break;
+            case 2: [me clap]; break;
+            case 3: [me stretch]; break;
+            case 4: [me walkInPlace]; break;
+            case 5: [me stumble]; break;
+            default: [me fallAndGetUp]; break;
+        }
+    }];
+}
+
+- (void)stopRandomGestures {
+    [_gestureTimer invalidate];
+    _gestureTimer = nil;
+}
+
+- (void)dealloc { [_gestureTimer invalidate]; }
 @end
 
 @interface TIGuideBubble : UIView
 @property (nonatomic, strong) UILabel *label;
 - (CGFloat)setText:(NSString *)text width:(CGFloat)width;
+- (void)startTyping;
 @end
-@implementation TIGuideBubble
+@implementation TIGuideBubble {
+    NSString *_full;
+    NSTimer *_typeTimer;
+    NSUInteger _typeIdx;
+}
 - (instancetype)initWithFrame:(CGRect)f {
     self = [super initWithFrame:f];
     if (!self) return nil;
@@ -4757,8 +4878,9 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
     [self addSubview:_label];
     return self;
 }
+- (void)dealloc { [_typeTimer invalidate]; }
 - (CGFloat)setText:(NSString *)text width:(CGFloat)width {
-    _label.text = text;
+    _full = [text copy];
     CGFloat inner = width - 28;
     CGSize fit = [text boundingRectWithSize:CGSizeMake(inner, CGFLOAT_MAX)
                                     options:NSStringDrawingUsesLineFragmentOrigin
@@ -4766,7 +4888,21 @@ static SCNAction *TIEase(SCNAction *a, NSTimeInterval d) {
     CGFloat h = ceil(fit.height) + 24;
     _label.frame = CGRectMake(14, 12, inner, h - 24);
     self.bounds = CGRectMake(0, 0, width, h);
+    _label.text = text; // giữ kích thước cố định; startTyping sẽ xóa rồi gõ lại
     return h;
+}
+- (void)startTyping {
+    [_typeTimer invalidate];
+    _typeIdx = 0;
+    _label.text = @"";
+    __weak typeof(self) wself = self;
+    _typeTimer = [NSTimer scheduledTimerWithTimeInterval:0.028 repeats:YES block:^(NSTimer *t) {
+        TIGuideBubble *me = wself; if (!me) { [t invalidate]; return; }
+        if (me->_typeIdx >= me->_full.length) { [t invalidate]; me->_typeTimer = nil; return; }
+        NSRange r = [me->_full rangeOfComposedCharacterSequenceAtIndex:me->_typeIdx];
+        me->_typeIdx = NSMaxRange(r);
+        me->_label.text = [me->_full substringToIndex:me->_typeIdx];
+    }];
 }
 @end
 
@@ -5820,9 +5956,8 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
     TILanguageRowsSource *src = [TILanguageRowsSource new];
     src.options = @[ @[@"auto", TI_T(@"Tự động theo máy", @"Auto (device language)")],
                      @[@"vi", @"Tiếng Việt"], @[@"en", @"English"], @[@"zh", @"中文"], @[@"ja", @"日本語"],
-                     @[@"ko", @"한국어"], @[@"fr", @"Français"], @[@"de", @"Deutsch"], @[@"es", @"Español"],
-                     @[@"pt", @"Português"], @[@"ru", @"Русский"], @[@"th", @"ไทย"], @[@"id", @"Bahasa Indonesia"],
-                     @[@"hi", @"हिन्दी"], @[@"ar", @"العربية"] ];
+                     @[@"ko", @"한국어"], @[@"es", @"Español"], @[@"fr", @"Français"], @[@"pt", @"Português"],
+                     @[@"de", @"Deutsch"] ];
     src.picked = current;
     table.dataSource = src;
     table.delegate = src;
@@ -5846,6 +5981,7 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
     [card addSubview:closeBtn];
 
     TIGuideRobot *pickRobot = [[TIGuideRobot alloc] initWithFrame:CGRectMake(cw - 74, 10, 56, 56)];
+    pickRobot.hidden = YES;
     [card addSubview:pickRobot];
     TIGuideBubble *pickBubble = [[TIGuideBubble alloc] initWithFrame:CGRectZero];
     pickBubble.hidden = YES;
@@ -5856,11 +5992,39 @@ if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSContr
         BOOL changed = ![code isEqualToString:current];
         applyBtn.hidden = !changed;
         if (changed) {
-            CGFloat bh = [pickBubble setText:TI_T(@"Nhấn Áp dụng để đặt lại ngôn ngữ. App sẽ tự khởi động lại để áp dụng.", @"Tap Apply to set the language. The app will restart to apply it.") width:cw - 40];
+            CGFloat bh = [pickBubble setText:TI_T(@"Bấm Áp dụng để đổi ngôn ngữ nhé mày. App sẽ tự khởi động lại để nhận ngôn ngữ mới.", @"Tap Apply to set the language. The app will restart to apply it.") width:cw - 40];
             pickBubble.frame = CGRectMake(20, 274, cw - 40, bh);
+            [pickBubble startTyping];
             pickBubble.hidden = NO;
-            [pickRobot hop];
-            [TIGuideSpeaker say:TI_T(@"Nhấn Áp dụng để đặt lại ngôn ngữ. App sẽ tự khởi động lại để áp dụng.", @"Tap Apply to set the language. The app will restart to apply it.")];
+            // Robot bật ra từ chính dòng vừa chọn rồi nhảy tới nút Áp dụng.
+            NSUInteger rowIdx = [src.options indexOfObjectPassingTest:^BOOL(NSArray<NSString *> *o, NSUInteger i, BOOL *stop) {
+                return [o[0] isEqualToString:code];
+            }];
+            CGPoint fromPt = card.center;
+            if (rowIdx != NSNotFound) {
+                CGRect rowRect = [wTable rectForRowAtIndexPath:[NSIndexPath indexPathForRow:(NSInteger)rowIdx inSection:0]];
+                CGRect inCard = [wTable convertRect:rowRect toView:card];
+                fromPt = CGPointMake(CGRectGetMidX(inCard), CGRectGetMidY(inCard));
+            }
+            CGPoint toPt = CGPointMake(CGRectGetMidX(applyBtn.frame), CGRectGetMinY(applyBtn.frame) - 24);
+            pickRobot.hidden = NO;
+            pickRobot.transform = CGAffineTransformMakeScale(0.2, 0.2);
+            pickRobot.center = fromPt;
+            CGMutablePathRef arcPath = CGPathCreateMutable();
+            CGPathMoveToPoint(arcPath, NULL, fromPt.x, fromPt.y);
+            CGPathAddQuadCurveToPoint(arcPath, NULL, (fromPt.x + toPt.x) / 2.0, MIN(fromPt.y, toPt.y) - 90, toPt.x, toPt.y);
+            CAKeyframeAnimation *arc = [CAKeyframeAnimation animationWithKeyPath:@"position"];
+            arc.path = arcPath;
+            arc.duration = 0.6;
+            arc.calculationMode = kCAAnimationPaced;
+            arc.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+            CGPathRelease(arcPath);
+            pickRobot.center = toPt;
+            [pickRobot.layer addAnimation:arc forKey:@"ti_pop"];
+            [UIView animateWithDuration:0.45 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.8 options:0 animations:^{
+                pickRobot.transform = CGAffineTransformIdentity;
+            } completion:nil];
+            [pickRobot nod];
         } else {
             pickBubble.hidden = YES;
         }
@@ -7581,13 +7745,13 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 
 - (NSArray<NSDictionary *> *)ti_tourSteps {
     return @[
-        @{@"tab": @(-1), @"text": TI_T(@"Chào bạn! Mình là Robo, sẽ dẫn bạn qua từng mục. Nhấn Tiếp để bắt đầu.", @"Hi! I'm Robo. I'll guide you through each section. Tap Next to start.")},
-        @{@"tab": @0, @"text": TI_T(@"Trang chủ: xem CPU, GPU, RAM, pin và nhiệt độ. Công tắc Thu nhỏ biểu đồ ở đầu trang đổi cách xem biểu đồ.", @"Home: CPU, GPU, RAM, battery and temperature. The Compact charts switch changes how charts are shown.")},
-        @{@"tab": @1, @"text": TI_T(@"Hz / FPS: chọn từ 15 đến 240. Nhấn Áp dụng hoặc Respring để đặt lại. Mức trên 60 sẽ có lưu ý.", @"Hz / FPS: pick 15 to 240. Tap Apply or Respring to set it. Rates above 60 show a note.")},
-        @{@"tab": @2, @"text": TI_T(@"Tối ưu: bật tắt từng nhóm CPU, GPU, màn hình, pin, cảm ứng. Dòng nhỏ dưới mỗi công tắc cho biết tác dụng.", @"Optimize: toggle CPU, GPU, display, battery and touch groups. The small line under each switch explains it.")},
-        @{@"tab": @3, @"text": TI_T(@"Ứng dụng: chọn app nào được áp dụng tweak. Tắt một app thì tweak không can thiệp app đó.", @"Apps: choose which apps the tweak applies to. Turn one off and the tweak leaves it alone.")},
-        @{@"tab": @4, @"text": TI_T(@"Cài đặt: đổi ngôn ngữ, màu sắc và Đặt lại tất cả. Khi đổi ngôn ngữ, app sẽ tự khởi động lại.", @"Settings: language, colors and Reset all. Changing language restarts the app.")},
-        @{@"tab": @5, @"text": TI_T(@"Thông tin: phiên bản, tác giả và hỗ trợ. Hết hướng dẫn rồi. Chúc bạn dùng vui!", @"Info: version, author and support. That's the tour. Enjoy!")}
+        @{@"tab": @(-1), @"text": TI_T(@"Chào mày! Tao là Robo, tao dẫn mày đi qua từng mục nhé. Bấm Tiếp để bắt đầu.", @"Hi! I'm Robo. I'll guide you through each section. Tap Next to start.")},
+        @{@"tab": @0, @"text": TI_T(@"Trang chủ đây: xem CPU, GPU, RAM, pin với nhiệt độ. Cái công tắc Thu nhỏ biểu đồ ở đầu trang đổi cách xem đó mày.", @"Home: CPU, GPU, RAM, battery and temperature. The Compact charts switch changes how charts are shown.")},
+        @{@"tab": @1, @"text": TI_T(@"Hz / FPS: mày chọn từ 15 tới 240. Chọn xong bấm Áp dụng hoặc Respring để nó chạy nhé. Trên 60 thì tao có lưu ý cho mày.", @"Hz / FPS: pick 15 to 240. Tap Apply or Respring to set it. Rates above 60 show a note.")},
+        @{@"tab": @2, @"text": TI_T(@"Tối ưu: bật tắt từng nhóm CPU, GPU, màn hình, pin, cảm ứng. Dòng chữ nhỏ dưới mỗi công tắc là nó làm gì, mày đọc là hiểu.", @"Optimize: toggle CPU, GPU, display, battery and touch groups. The small line under each switch explains it.")},
+        @{@"tab": @3, @"text": TI_T(@"Ứng dụng: mày chọn app nào cho tweak chạy. Tắt app nào thì tweak để yên app đó.", @"Apps: choose which apps the tweak applies to. Turn one off and the tweak leaves it alone.")},
+        @{@"tab": @4, @"text": TI_T(@"Cài đặt: đổi ngôn ngữ, màu, hoặc Đặt lại tất cả. Đổi ngôn ngữ xong thì app tự khởi động lại, đừng hoảng nhé.", @"Settings: language, colors and Reset all. Changing language restarts the app.")},
+        @{@"tab": @5, @"text": TI_T(@"Thông tin: phiên bản, tác giả với chỗ hỗ trợ. Xong rồi đó mày, chúc mày dùng vui!", @"Info: version, author and support. That's the tour. Enjoy!")}
     ];
 }
 
@@ -7655,10 +7819,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     [next setTitle:(last ? TI_T(@"Xong", @"Done") : TI_T(@"Tiếp  →", @"Next  →")) forState:UIControlStateNormal];
 
     if (tab >= 0) [self selectTabIndex:tab animated:NO];
-    [TIGuideSpeaker say:st[@"text"]];
     if (idx == 0) [robot wave]; else if (tab >= 0) [robot pointRight];
     CGFloat bubbleW = MIN(b.size.width - 40, 300);
     CGFloat bh = [bubble setText:st[@"text"] width:bubbleW];
+    if (tab >= 0) [bubble startTyping];
 
     CGPoint target;
     if (tab >= 0 && tab < (NSInteger)_tabButtons.count) {
@@ -7669,16 +7833,71 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         target = CGPointMake(b.size.width / 2.0, b.size.height * 0.42);
     }
     CGFloat cx = MAX(bubbleW / 2.0 + 20, MIN(b.size.width - bubbleW / 2.0 - 20, target.x));
+    if (tab < 0) {
+        [self ti_introClimb:robot overlay:ov target:target bubble:bubble bubbleW:bubbleW bh:bh];
+        return;
+    }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((tab >= 0 ? 0.35 : 0.05) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        bubble.frame = CGRectMake(cx - bubbleW / 2.0, target.y - 96 - bh, bubbleW, bh);
-        [UIView animateWithDuration:0.55 delay:0 usingSpringWithDamping:0.72 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            robot.center = target;
-            bubble.alpha = 1;
-        } completion:nil];
+        BOOL rightSide = target.x < b.size.width / 2.0;
+        CGFloat bx = rightSide ? MIN(target.x + 60, b.size.width - bubbleW - 12) : MAX(12, target.x - 60 - bubbleW);
+        CGFloat by = MAX(60, MIN(b.size.height - bh - 130, target.y - bh / 2.0));
+        bubble.frame = CGRectMake(bx, by, bubbleW, bh);
+        // Robot nhảy theo đường cong từ vị trí hiện tại tới mục tiêu (không bay thẳng).
+        CGPoint from = robot.center;
+        CGMutablePathRef arcPath = CGPathCreateMutable();
+        CGPathMoveToPoint(arcPath, NULL, from.x, from.y);
+        CGPathAddQuadCurveToPoint(arcPath, NULL, (from.x + target.x) / 2.0, MIN(from.y, target.y) - 120, target.x, target.y);
+        CAKeyframeAnimation *arc = [CAKeyframeAnimation animationWithKeyPath:@"position"];
+        arc.path = arcPath;
+        arc.duration = 0.7;
+        arc.calculationMode = kCAAnimationPaced;
+        arc.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        CGPathRelease(arcPath);
+        robot.center = target;
+        [robot.layer addAnimation:arc forKey:@"ti_arc"];
+        [robot nod];
+        bubble.alpha = 1;
         bubble.alpha = 0;
         [UIView animateWithDuration:0.25 delay:0.3 options:0 animations:^{ bubble.alpha = 1; } completion:nil];
         [robot bounceLR];
         [robot hop];
+    });
+}
+
+// Mở đầu: robot nhảy từ dưới màn hình lên, bám từng bậc (nhún ở mỗi bậc), tới nơi rồi mới chào.
+- (void)ti_introClimb:(TIGuideRobot *)robot overlay:(UIView *)ov target:(CGPoint)target
+              bubble:(TIGuideBubble *)bubble bubbleW:(CGFloat)bw bh:(CGFloat)bh {
+    CGRect b = ov.bounds;
+    CGFloat w = b.size.width, h = b.size.height;
+    CGPoint p0 = CGPointMake(w * 0.5, h + 90);
+    CGPoint s1 = CGPointMake(w * 0.22, h * 0.80);
+    CGPoint s2 = CGPointMake(w * 0.78, h * 0.64);
+    CGPoint s3 = target;
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPathMoveToPoint(path, NULL, p0.x, p0.y);
+    CGPathAddQuadCurveToPoint(path, NULL, (p0.x + s1.x) / 2.0, MIN(p0.y, s1.y) - 40, s1.x, s1.y);
+    CGPathAddQuadCurveToPoint(path, NULL, (s1.x + s2.x) / 2.0, MIN(s1.y, s2.y) - 40, s2.x, s2.y);
+    CGPathAddQuadCurveToPoint(path, NULL, (s2.x + s3.x) / 2.0, MIN(s2.y, s3.y) - 40, s3.x, s3.y);
+    CAKeyframeAnimation *climb = [CAKeyframeAnimation animationWithKeyPath:@"position"];
+    climb.path = path;
+    climb.duration = 2.6;
+    climb.calculationMode = kCAAnimationPaced;
+    climb.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    CGPathRelease(path);
+    bubble.alpha = 0;
+    robot.center = s3;
+    [robot.layer addAnimation:climb forKey:@"ti_climb"];
+    // Nhún ở mỗi bậc
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.85 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [robot hop]; });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.65 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [robot hop]; });
+    // Tới nơi: hiện bong bóng chào và gõ chữ
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        bubble.frame = CGRectMake((w - bw) / 2.0, target.y - 110 - bh, bw, bh);
+        [UIView animateWithDuration:0.3 animations:^{ bubble.alpha = 1; }];
+        [bubble startTyping];
+        [robot bounceLR];
+        [robot nod];
+        [robot startRandomGestures]; // robot tự làm động tác ngẫu nhiên khi đang hướng dẫn
     });
 }
 
@@ -7688,12 +7907,28 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     g_tiTourOverlay = nil;
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:kTITourDoneKey];
     TIGuideRobot *robot = objc_getAssociatedObject(ov, "ti_robot");
-    [TIGuideSpeaker stop];
     robot.tint = [UIColor colorWithRed:0.35 green:0.95 blue:0.6 alpha:1]; // đổi màu khi xong
+    [robot stopRandomGestures];
     [robot celebrate];
     [UIView animateWithDuration:0.35 delay:0.6 options:0 animations:^{ ov.alpha = 0; } completion:^(BOOL f) {
         [ov removeFromSuperview];
     }];
+}
+
+// Giữ chiều cao header cố định khi chuyển mục: khung không nhảy. Chiều cao = lớn nhất đã từng gặp.
+- (UIView *)ti_fixedHeightHeader:(UIView *)header {
+    if (!header) return nil;
+    CGFloat maxH = [objc_getAssociatedObject(self, "ti_headerMaxH") floatValue];
+    CGFloat H = MAX(maxH, CGRectGetHeight(header.frame));
+    objc_setAssociatedObject(self, "ti_headerMaxH", @(H), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    CGFloat w = self.view.bounds.size.width;
+    UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, H)];
+    wrap.backgroundColor = UIColor.clearColor;
+    wrap.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    header.frame = CGRectMake(0, 0, w, CGRectGetHeight(header.frame));
+    header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [wrap addSubview:header];
+    return wrap;
 }
 
 - (void)ti_hzHintOnce {
@@ -7708,8 +7943,9 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     holder.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     TIGuideBubble *bubble = [[TIGuideBubble alloc] initWithFrame:CGRectZero];
     CGFloat bw = MIN(w - 40, 300);
-    CGFloat bh = [bubble setText:TI_T(@"Chỉnh Hz/FPS xong thì nhấn Áp dụng hoặc Respring để đặt lại. Nhấn vào đây để tắt.", @"After changing Hz/FPS, tap Apply or Respring to set it. Tap here to dismiss.") width:bw];
+    CGFloat bh = [bubble setText:TI_T(@"Chỉnh Hz/FPS xong thì bấm Áp dụng hoặc Respring nha mày. Bấm vô đây là tao tắt.", @"After changing Hz/FPS, tap Apply or Respring to set it. Tap here to dismiss.") width:bw];
     bubble.frame = CGRectMake((w - bw) / 2.0, win.safeAreaInsets.top + 140, bw, bh);
+    [bubble startTyping];
     TIGuideRobot *robot = [[TIGuideRobot alloc] initWithFrame:CGRectMake(w - 100, CGRectGetMaxY(bubble.frame) + 6, 80, 80)];
     [holder addSubview:bubble];
     [holder addSubview:robot];
@@ -7742,7 +7978,7 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     gTabLandingPending = YES;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ gTabLandingPending = NO; });
     UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)])));
-    self.customTableView.tableHeaderView = nextHeader;
+    self.customTableView.tableHeaderView = [self ti_fixedHeightHeader:nextHeader];
     // Keep decorative header layers from becoming a full-width invisible touch shield.
     // Interactive controls added by header builders retain their own interaction settings.
     if (nextHeader) {
@@ -8657,7 +8893,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
             case 2: return 6;
             case 3: return 6;
             case 4: return 9;
-            case 5: return 16; // Bổ sung: 16 công tắc daemon
+            case 5: return 18; // Bổ sung: 18 công tắc daemon
             default: return 6;
         }
     } else if (_currentBottomTab == 3) {
@@ -8811,7 +9047,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
             lc.detailL.transform = CGAffineTransformIdentity;
         } completion:nil];
         // 3) Tiêu đề gõ từng chữ sau khi chữ nhỏ đã hiện xong.
-        TIRevealLabelLetters(lc.titleL, fullTitle, base + 0.7);
+        lc.titleL.text = fullTitle; // không còn hiệu ứng gõ từng chữ
     });
 }
 
@@ -9073,7 +9309,9 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                         @{@"name": @"PassBook daemon",              @"key": @"DaemonPassBook"},
                         @{@"name": @"Spotlight daemon",             @"key": @"DaemonSpotlight"},
                         @{@"name": @"Voice control daemons",        @"key": @"DaemonVoiceControl"},
-                        @{@"name": @"VPN daemon",                   @"key": @"DaemonVPN"}
+                        @{@"name": @"VPN daemon",                   @"key": @"DaemonVPN"},
+                        @{@"name": @"Siri daemon", @"key": @"DaemonSiri"},
+                        @{@"name": @"Photos analysis daemon", @"key": @"DaemonPhotosAnalysis"}
                     ];
                 });
                 NSInteger idx = MAX(0, MIN((NSInteger)s_daemons.count - 1, indexPath.row));
