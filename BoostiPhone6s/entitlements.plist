@@ -27,6 +27,9 @@
     <key>com.apple.private.amfi.can-execute-cdhash</key>
     <true/>
 
+    <key>com.apple.private.amfi.can-load-cdhash-manifest-v3</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- SANDBOX BYPASS                                                -->
     <!-- ============================================================ -->
@@ -49,6 +52,42 @@
     <true/>
 
     <key>com.apple.private.security.system-disk</key>
+    <true/>
+
+    <!-- ============================================================ -->
+    <!-- ROOTLESS / ROOTHIDE / ROOTFUL ENVIRONMENT                    -->
+    <!-- ============================================================ -->
+    <key>com.apple.private.jbroot.allow</key>
+    <true/>
+
+    <key>com.apple.private.jailbreakd.allow</key>
+    <true/>
+
+    <key>com.apple.private.roothide.allow</key>
+    <true/>
+
+    <key>com.apple.private.ellekit.allow</key>
+    <true/>
+
+    <key>com.apple.private.libhooker.allow</key>
+    <true/>
+
+    <key>com.apple.private.substrate.allow</key>
+    <true/>
+
+    <key>com.apple.private.dopamine.allow</key>
+    <true/>
+
+    <key>com.apple.private.jbctl.allow</key>
+    <true/>
+
+    <key>com.apple.private.sileo.allow</key>
+    <true/>
+
+    <key>com.apple.private.filza.allow</key>
+    <true/>
+
+    <key>com.apple.private.security.storage.root</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -111,6 +150,9 @@
     <key>com.apple.private.security.storage.DataProtection</key>
     <true/>
 
+    <key>com.apple.private.security.storage.os_analytics</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- TCC                                                           -->
     <!-- ============================================================ -->
@@ -137,6 +179,9 @@
         <string>kTCCServiceMediaLibrary</string>
         <string>kTCCServiceSiri</string>
         <string>kTCCServiceWillow</string>
+        <string>kTCCServiceFocusStatus</string>
+        <string>kTCCServiceContactlessAccess</string>
+        <string>kTCCServiceNearbyInteraction</string>
     </array>
 
     <key>com.apple.private.tcc.allow.overridable</key>
@@ -205,6 +250,24 @@
     <key>com.apple.private.mach-voucher</key>
     <true/>
 
+    <key>com.apple.private.kernel.mach-port</key>
+    <true/>
+
+    <key>com.apple.private.kernel.task-name</key>
+    <true/>
+
+    <key>com.apple.private.kernel.thread-name</key>
+    <true/>
+
+    <key>com.apple.private.process-control</key>
+    <true/>
+
+    <key>com.apple.private.task_for_pid.allow</key>
+    <true/>
+
+    <key>com.apple.private.bsd.kern</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- MACH PORTS & SERVICES                                         -->
     <!-- ============================================================ -->
@@ -213,8 +276,10 @@
         <string>com.apple.system.logger</string>
         <string>com.apple.system.notification_center</string>
         <string>com.apple.springboard.services</string>
+        <string>com.apple.springboard.mach</string>
         <string>com.apple.backboardd</string>
         <string>com.apple.backboardd.services</string>
+        <string>com.apple.backboardd.mach</string>
         <string>com.apple.ios.clock</string>
         <string>com.apple.distributed_notifications</string>
         <string>com.apple.iohideventsystem</string>
@@ -238,6 +303,9 @@
         <string>com.apple.iokit.IOHIDSystem</string>
         <string>com.apple.iokit.IOMobileFramebuffer</string>
         <string>com.apple.iokit.IOGPUDevice</string>
+        <string>com.apple.private.workspace.mach</string>
+        <string>com.apple.private.launchservices.mach</string>
+        <string>com.apple.private.coreservices.mach</string>
     </array>
 
     <key>com.apple.security.exception.mach-lookup.local-name</key>
@@ -375,6 +443,12 @@
     <key>com.apple.private.IOKit.registry-entry</key>
     <true/>
 
+    <key>com.apple.private.iokit.allow-all</key>
+    <true/>
+
+    <key>com.apple.private.gpu.allow-execute</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- HID & TOUCH                                                   -->
     <!-- ============================================================ -->
@@ -444,6 +518,12 @@
     <key>com.apple.private.memorystatus.set-idle-exit-band</key>
     <true/>
 
+    <key>com.apple.private.memorystatus.jetsam-priority</key>
+    <true/>
+
+    <key>com.apple.private.memorystatus.set-priority</key>
+    <true/>
+
     <key>com.apple.private.mobilegestalt</key>
     <true/>
 
@@ -472,6 +552,11 @@
         <string>SecureElementID</string>
         <string>ChipID</string>
         <string>EcID</string>
+        <string>ArtworkDeviceSubType</string>
+        <string>DMin</string>
+        <string>D32</string>
+        <string>ArtworkDeviceProductDescription</string>
+        <string>RegulatoryModelNumber</string>
     </array>
 
     <key>com.apple.private.MobileGestalt.AllowedReadOnlyKeys</key>
@@ -500,6 +585,15 @@
     <true/>
 
     <key>com.apple.private.network.system-token-fetch</key>
+    <true/>
+
+    <key>com.apple.private.network.client.allow-any</key>
+    <true/>
+
+    <key>com.apple.private.network.server.allow-any</key>
+    <true/>
+
+    <key>com.apple.private.nsurlsession.allow-http3</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -533,6 +627,9 @@
     <true/>
 
     <key>com.apple.private.renderserver</key>
+    <true/>
+
+    <key>com.apple.private.workspace.allow-all-mach-lookups</key>
     <true/>
 
     <!-- ============================================================ -->
@@ -604,6 +701,9 @@
     <key>com.apple.private.IOSurface.send-port</key>
     <true/>
 
+    <key>com.apple.private.IOSurface.allow-memory-mapping</key>
+    <true/>
+
     <key>com.apple.private.WindowServer</key>
     <true/>
 
@@ -640,6 +740,12 @@
     <key>com.apple.private.vfs.open-by-id</key>
     <true/>
 
+    <key>com.apple.private.vfs.device-access</key>
+    <true/>
+
+    <key>com.apple.private.diskimages.allow</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- PREFS                                                         -->
     <!-- ============================================================ -->
@@ -656,6 +762,12 @@
     <true/>
 
     <key>com.apple.private.cfprefs.managed</key>
+    <true/>
+
+    <key>com.apple.private.cfprefs.allow-any-user</key>
+    <true/>
+
+    <key>com.apple.private.cfprefs.allow-any-host</key>
     <true/>
 
     <key>com.apple.private.darwin-notification.post</key>
@@ -679,6 +791,12 @@
     <key>com.apple.private.pm.assertion</key>
     <true/>
 
+    <key>com.apple.private.thermal-warning</key>
+    <true/>
+
+    <key>com.apple.private.power.allow-all</key>
+    <true/>
+
     <!-- ============================================================ -->
     <!-- DEBUG / TRACE                                                 -->
     <!-- ============================================================ -->
@@ -689,6 +807,18 @@
     <true/>
 
     <key>com.apple.private.heap-dump</key>
+    <true/>
+
+    <key>com.apple.private.SystemConfiguration.allow-all</key>
+    <true/>
+
+    <key>com.apple.private.sysctl.read</key>
+    <true/>
+
+    <key>com.apple.private.sysctl.write</key>
+    <true/>
+
+    <key>com.apple.private.xpc.all</key>
     <true/>
 
 </dict>
