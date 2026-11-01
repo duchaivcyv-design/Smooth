@@ -1,4 +1,8 @@
 // ==================== MACH & XNU KERNEL ====================
+// [SỬA BUILD] macro SREBOOT đưa lên đầu để dùng được ở mọi nơi trong file
+#define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
+#define TITANIUM_SREBOOT_WINDOW     15.0    // [FIX-1] 180s → 15s
+
 #import <mach/mach.h>
 #import <mach/mach_init.h>
 #import <mach/mach_host.h>
@@ -6098,6 +6102,7 @@ static void Titanium_Tier4WriteCadence(NSInteger hz);
 static void Titanium_ReloadSharedSyncStateV285(void);
 static void Tio_DCPResolveConnections(void);
 static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
+static kern_return_t Tio_DisplayConnSetRefresh_v2(NSInteger hz); // [SỬA BUILD] khai báo trước
 static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
 static void Titanium_LoadIOMFBDirect(void);
 static BOOL Titanium_V55_PanelWritable(void);
@@ -6920,7 +6925,7 @@ static void Titanium_HardwareDriverOverride(NSInteger targetHz) {
 // ----------------------------------------------------------------------------------------------------
 // [FAKE MODE FACTORY] — mode object ảo @ target Hz, dùng cho mọi inject path
 // ----------------------------------------------------------------------------------------------------
-@interface TitaniumFakeDisplayMode : CADisplayMode
+@interface TitaniumFakeDisplayMode : NSObject // [SỬA BUILD] CADisplayMode là class private, không có trong SDK
 @end
 
 @implementation TitaniumFakeDisplayMode
@@ -9940,8 +9945,6 @@ void Titanium_TriggerRespringAction(void) {
 // ====================================================================================================
 // [USERSACE REBOOT — launchctl đúng path Dopamine, watchdog 6s fallback sbreload]
 // ====================================================================================================
-#define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
-#define TITANIUM_SREBOOT_WINDOW     15.0    // [FIX-1] 180s → 15s
 
 static BOOL Titanium_ShouldDelayLoadAfterSreboot(void) {
     @try {
