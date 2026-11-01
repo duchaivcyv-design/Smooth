@@ -99,8 +99,6 @@ after-stage::
 		'		</array>' \
 		'		<key>Classes</key>' \
 		'		<array>' \
-		'			<string>CALayer</string>' \
-		'			<string>CAMetalLayer</string>' \
 		'			<string>CADisplayLink</string>' \
 		'			<string>CAAnimation</string>' \
 		'			<string>CATransaction</string>' \
@@ -109,9 +107,6 @@ after-stage::
 		'			<string>CAWindowServer</string>' \
 		'			<string>CAWindowServerDisplay</string>' \
 		'			<string>WKWebView</string>' \
-		'			<string>NSURLSessionConfiguration</string>' \
-		'			<string>SBApplication</string>' \
-		'			<string>SBUIController</string>' \
 		'		</array>' \
 		'	</dict>' \
 		'</dict>' \
