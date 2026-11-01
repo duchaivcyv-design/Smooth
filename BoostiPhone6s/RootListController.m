@@ -259,7 +259,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     [self loadExistingSettings];
     [self buildFullInterfaceLayout];
     [self setupOrientationListener];
-    [self checkOrientationAndRun(self.view.bounds.size)];
+    [self checkOrientationAndRun:self.view.bounds.size];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
