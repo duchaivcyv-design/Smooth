@@ -8375,7 +8375,7 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 %end
 
 // ====================================================================================================
-// PHẦN B: constants
+// PHẦN B: constants + TARGETED SANDBOX OVERRIDE (bản sạch — bốc hết duplicate)
 // ====================================================================================================
 static inline BOOL Titanium_IsTargetProcess(void);
 
@@ -8423,9 +8423,6 @@ typedef struct memorystatus_priority_properties {
     int32_t  priority;
     uint64_t user_data;
 } memorystatus_priority_properties_t;
-
-typedef int (*sandbox_check_fn)(pid_t pid, const char *operation, int type, ...);
-static sandbox_check_fn orig_sandbox_check = NULL;
 
 @interface RBSProcessMonitor : NSObject
 - (void)invalidate;
@@ -8500,88 +8497,14 @@ static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(v
     return s_profile;
 }
 
-// [ÉP CƯỠNG BỨC] — luôn YES khi tweak active, bốc guard cũ
+// [TARGET PROCESS CHECK]
 static inline BOOL Titanium_IsTargetProcess(void) {
-    // Bốc guard "IS_ACTIVE || masterEnabled" — giờ ép YES vô điều kiện nếu tweak cài
     return YES;
-}
-
-// [BRUTE SANDBOX] — bốc whitelist operation prefix, block reject 100%
-static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
-    // Ép chấp nhận 100% — mọi operation đều pass
-    if (Titanium_IsTargetProcess()) {
-        return 0;   // 0 = allow
-    }
-    return orig_sandbox_check ? orig_sandbox_check(pid, operation, type) : 0;
-}
-
-// [HOOK FILE I/O] — thêm access, open, stat, faccessat để chặn reject ở file layer
-static int (*orig_access_fn)(const char *path, int mode) = NULL;
-static int hooked_access_fn(const char *path, int mode) {
-    if (Titanium_IsTargetProcess()) {
-        return 0;   // ép file accessible
-    }
-    return orig_access_fn ? orig_access_fn(path, mode) : -1;
-}
-
-static int (*orig_faccessat_fn)(int fd, const char *path, int mode, int flags) = NULL;
-static int hooked_faccessat_fn(int fd, const char *path, int mode, int flags) {
-    if (Titanium_IsTargetProcess()) {
-        return 0;
-    }
-    return orig_faccessat_fn ? orig_faccessat_fn(fd, path, mode, flags) : -1;
-}
-
-static int (*orig_open_fn)(const char *path, int flags, ...) = NULL;
-static int hooked_open_fn(const char *path, int flags, ...) {
-    va_list ap;
-    va_start(ap, flags);
-    mode_t mode = va_arg(ap, mode_t);
-    va_end(ap);
-
-    if (Titanium_IsTargetProcess() && path) {
-        // Thử mở trực tiếp với O_CREAT fallback nếu path chưa tồn tại + write flag
-        int fd = orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
-        if (fd >= 0) return fd;
-        // Fallback: mở O_RDWR|O_CREAT nếu write flag
-        if ((flags & O_WRONLY) || (flags & O_RDWR)) {
-            int fbFlags = flags | O_CREAT;
-            fd = orig_open_fn ? orig_open_fn(path, fbFlags, mode ? mode : 0644) : -1;
-            if (fd >= 0) return fd;
-        }
-        return fd;
-    }
-    return orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
-}
-
-static int (*orig_stat_fn)(const char *path, struct stat *buf) = NULL;
-static int hooked_stat_fn(const char *path, struct stat *buf) {
-    int ret = orig_stat_fn ? orig_stat_fn(path, buf) : -1;
-    // Ép success nếu fail — giả lập file tồn tại nếu buf cần
-    if (ret != 0 && Titanium_IsTargetProcess() && buf) {
-        memset(buf, 0, sizeof(struct stat));
-        buf->st_mode = S_IFREG | 0644;
-        buf->st_size = 0;
-        return 0;
-    }
-    return ret;
-}
-
-static int (*orig_lstat_fn)(const char *path, struct stat *buf) = NULL;
-static int hooked_lstat_fn(const char *path, struct stat *buf) {
-    int ret = orig_lstat_fn ? orig_lstat_fn(path, buf) : -1;
-    if (ret != 0 && Titanium_IsTargetProcess() && buf) {
-        memset(buf, 0, sizeof(struct stat));
-        buf->st_mode = S_IFREG | 0644;
-        buf->st_size = 0;
-        return 0;
-    }
-    return ret;
 }
 
 // ====================================================================================================
 // [TARGETED SANDBOX OVERRIDE — mở cứng vài file hệ thống cụ thể cho đọc/ghi]
-// Đéo whitelist, đéo blocklist. Chỉ ép mở đúng danh sách path hệ thống dưới đây.
+// Đéo whitelist toàn bộ, đéo brute. Chỉ ép mở đúng danh sách path hệ thống dưới đây.
 // Mọi path khác → passthrough bình thường (iOS tự xử lý như không có tweak).
 // ====================================================================================================
 
@@ -8591,10 +8514,10 @@ static BOOL Titanium_IsForceOpenSystemPath(const char *path) {
 
     static const char *forceOpenPaths[] = {
         // === CẤU HÌNH HỆ THỐNG ===
-        "/private/etc/hosts",                       // hosts file
-        "/private/etc/resolv.conf",                 // DNS config
+        "/private/etc/hosts",
+        "/private/etc/resolv.conf",
         "/private/etc/hosts.equiv",
-        "/private/etc/ssh/sshd_config",             // SSH config
+        "/private/etc/ssh/sshd_config",
         "/private/etc/ssh/ssh_config",
         "/private/etc/ssh/authorized_keys",
         "/private/etc/ssh/known_hosts",
@@ -8611,28 +8534,28 @@ static BOOL Titanium_IsForceOpenSystemPath(const char *path) {
         // === NETWORK CONFIG ===
         "/private/var/db/dhcpclient/",
         "/private/var/db/dhcpd_leases",
-        "/private/var/preferences/SystemConfiguration/",    // WiFi, network plist
+        "/private/var/preferences/SystemConfiguration/",
         "/private/var/root/Library/Preferences/",
 
         // === SYSTEM DB ===
         "/private/var/db/timezone/",
-        "/private/var/db/locationd/",                       // location cache
-        "/private/var/db/nsurlsessiond/",                   // network cache
+        "/private/var/db/locationd/",
+        "/private/var/db/nsurlsessiond/",
         "/private/var/db/com.apple.xpc.roleaccountd.staging/",
-        "/private/var/db/mds/",                              // Spotlight index
-        "/private/var/db/lockdown/",                         // pairing records
+        "/private/var/db/mds/",
+        "/private/var/db/lockdown/",
 
         // === SPRINGBOARD CONFIG ===
         "/private/var/mobile/Library/Preferences/com.apple.springboard.plist",
-        "/private/var/mobile/Library/Preferences/com.apple.springboard.",  // prefix mọi sub plist
+        "/private/var/mobile/Library/Preferences/com.apple.springboard.",
         "/private/var/mobile/Library/SpringBoard/",
         "/private/var/mobile/Library/SplashBoard/",
         "/private/var/mobile/Library/BackBoard/",
 
         // === SYSTEM PREFERENCES ===
-        "/private/var/mobile/Library/Preferences/",          // toàn bộ prefs mobile
-        "/private/var/preferences/",                          // toàn bộ prefs system
-        "/var/mobile/Library/Preferences/",                   // rootless variant
+        "/private/var/mobile/Library/Preferences/",
+        "/private/var/preferences/",
+        "/var/mobile/Library/Preferences/",
         "/var/preferences/",
 
         // === CACHE / TMP HỆ THỐNG ===
@@ -8660,7 +8583,11 @@ static BOOL Titanium_IsForceOpenSystemPath(const char *path) {
     return NO;
 }
 
-// [SANDBOX_CHECK] — chỉ ép allow operation file-* với path trong danh sách
+// ====================================================================================================
+// [SANDBOX + FILE I/O HOOKS — CHỈ MỘT BẢN DUY NHẤT, TARGETED]
+// ====================================================================================================
+
+// [SANDBOX_CHECK]
 static int (*orig_sandbox_check)(pid_t, const char *, int, ...) = NULL;
 static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
     if (!orig_sandbox_check) return 0;
@@ -8680,7 +8607,7 @@ static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...)
     return orig_sandbox_check(pid, operation, type);
 }
 
-// [SANDBOX_CHECK_SELF] — same logic, file-scope
+// [SANDBOX_CHECK_SELF]
 static int (*g_orig_sandbox_check_self)(pid_t, const char *, int, ...) = NULL;
 static int hooked_sandbox_check_self(pid_t pid, const char *operation, int type, ...) {
     if (!g_orig_sandbox_check_self) return 0;
@@ -8700,7 +8627,7 @@ static int hooked_sandbox_check_self(pid_t pid, const char *operation, int type,
     return g_orig_sandbox_check_self(pid, operation, type);
 }
 
-// [ACCESS] — path trong danh sách → ép có quyền
+// [ACCESS]
 static int (*orig_access_fn)(const char *path, int mode) = NULL;
 static int hooked_access_fn(const char *path, int mode) {
     if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
@@ -8709,6 +8636,7 @@ static int hooked_access_fn(const char *path, int mode) {
     return orig_access_fn ? orig_access_fn(path, mode) : -1;
 }
 
+// [FACCESSAT]
 static int (*orig_faccessat_fn)(int fd, const char *path, int mode, int flags) = NULL;
 static int hooked_faccessat_fn(int fd, const char *path, int mode, int flags) {
     if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
@@ -8717,19 +8645,18 @@ static int hooked_faccessat_fn(int fd, const char *path, int mode, int flags) {
     return orig_faccessat_fn ? orig_faccessat_fn(fd, path, mode, flags) : -1;
 }
 
-// [OPEN] — path trong danh sách → ép mở kể cả O_RDWR/O_WRONLY, fallback O_CREAT
+// [OPEN] — va_arg int (FIX mode_t promote) + fallback O_CREAT
 static int (*orig_open_fn)(const char *path, int flags, ...) = NULL;
 static int hooked_open_fn(const char *path, int flags, ...) {
     va_list ap;
     va_start(ap, flags);
-    int mode_arg = va_arg(ap, int);
+    int mode_arg = va_arg(ap, int);   // [FIX] mode_t promote int
     va_end(ap);
     mode_t mode = (mode_t)mode_arg;
 
     if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
         int fd = orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
         if (fd >= 0) return fd;
-        // Fallback O_CREAT cho write flag
         if ((flags & O_WRONLY) || (flags & O_RDWR)) {
             int fbFlags = flags | O_CREAT;
             fd = orig_open_fn ? orig_open_fn(path, fbFlags, mode ? mode : 0644) : -1;
@@ -8739,7 +8666,7 @@ static int hooked_open_fn(const char *path, int flags, ...) {
     return orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
 }
 
-// [STAT] — path trong danh sách → ép tồn tại
+// [STAT]
 static int (*orig_stat_fn)(const char *path, struct stat *buf) = NULL;
 static int hooked_stat_fn(const char *path, struct stat *buf) {
     if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
@@ -8755,6 +8682,7 @@ static int hooked_stat_fn(const char *path, struct stat *buf) {
     return orig_stat_fn ? orig_stat_fn(path, buf) : -1;
 }
 
+// [LSTAT]
 static int (*orig_lstat_fn)(const char *path, struct stat *buf) = NULL;
 static int hooked_lstat_fn(const char *path, struct stat *buf) {
     if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
@@ -9715,9 +9643,9 @@ extern uint64_t Titanium_GetDeviceTotalRAM(void);
 extern uint64_t Titanium_GetRAMCeiling(void);
 extern BOOL Titanium_ShouldPurgeNow(void);
 
-// [V55] screen state token — KHÔNG cần extern. g_blankedScreenToken đã định nghĩa:
-//   static volatile int g_blankedScreenToken = -1;   (file-scope, trước V55_InstallScreenState)
-// Bốc extern để tránh: non-static declaration follows static declaration
+// [FIX] global token — accessible từ Titanium_PrepareForReboot
+// Phải file-scope, KHÔNG static, để Titanium_PrepareForReboot (line ~9950) đọc được
+volatile int g_blankedScreenToken = -1;
 
 static void Titanium_StartIPCHearthbeatV12(void) {
     @try {
@@ -9912,13 +9840,11 @@ __attribute__((constructor)) static void Titanium_DeepHardwareCoreInit(void) {
 static void Titanium_PrepareForReboot(void) {
     g_isRebooting = YES;
 
-    // 1. Stop CADisplayLink probe
     if (g_tioProbe && g_tioProbe.link) {
         [g_tioProbe.link invalidate];
         g_tioProbe.link = nil;
     }
 
-    // 2. Close IOKit user clients (CRITICAL — hang ở đây nếu không đóng)
     if (g_dcpIomfbConn != IO_OBJECT_NULL) {
         IOServiceClose(g_dcpIomfbConn);
         g_dcpIomfbConn = IO_OBJECT_NULL;
@@ -9936,28 +9862,42 @@ static void Titanium_PrepareForReboot(void) {
         g_dcpDispSvc = IO_OBJECT_NULL;
     }
 
-    // 3. Close shm
-    if (g_sharedPayloadPtr != MAP_FAILED && g_sharedPayloadPtr != NULL) {
+    if (g_sharedPayloadPtr != (ApexV285ProPayload *)MAP_FAILED && g_sharedPayloadPtr != NULL) {
         munmap(g_sharedPayloadPtr, TITANIUM_SHARED_MEM_SIZE);
-        g_sharedPayloadPtr = MAP_FAILED;
+        g_sharedPayloadPtr = (ApexV285ProPayload *)MAP_FAILED;
     }
     if (g_shmFd >= 0) {
         close(g_shmFd);
         g_shmFd = -1;
     }
 
-    // 4. Cancel notify token
     if (g_blankedScreenToken >= 0) {
         notify_cancel(g_blankedScreenToken);
         g_blankedScreenToken = -1;
     }
 
-    // 5. Remove NSNotification observers
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
     @try {
         [[NSNotificationCenter defaultCenter] removeObserver:nil];
     } @catch (__unused NSException *e) {}
+#pragma clang diagnostic pop
 
     Titanium_V60_Log(@"[REBOOT] prep done — ports closed, shm closed");
+}
+
+// [FIX-2] Watchdog 5s — nếu respawn fail thì reset state, tweak sống tiếp
+static void Titanium_ArmRebootWatchdog(void) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5000 * NSEC_PER_MSEC)),
+                   dispatch_get_main_queue(), ^{
+        if (!g_isRebooting) return;
+        Titanium_V60_Log(@"[REBOOT] 5s no respawn — reset g_isRebooting + marker");
+        g_isRebooting = NO;
+        [[NSFileManager defaultManager] removeItemAtPath:TITANIUM_SREBOOT_MARKER error:nil];
+        // Recreate probe đã invalidate trong PrepareForReboot
+        extern void Titanium_StartOverdriveProbe(void);
+        Titanium_StartOverdriveProbe();
+    });
 }
 
 // ====================================================================================================
@@ -9967,6 +9907,7 @@ void Titanium_TriggerRespringAction(void) {
     if (g_isRebooting) return;
 
     Titanium_PrepareForReboot();
+    Titanium_ArmRebootWatchdog();   // [FIX-2]
 
     UIImpactFeedbackGenerator *fb = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
     [fb impactOccurred];
@@ -9976,8 +9917,6 @@ void Titanium_TriggerRespringAction(void) {
         @try {
             pid_t pid = 0;
             const char *argsSB[] = {"sbreload", NULL};
-
-            // 3 path theo thứ tự Dopamine → system
             const char *sbPaths[] = {
                 "/var/jb/usr/bin/sbreload",
                 "/var/jb/basebin/sbreload",
@@ -10002,16 +9941,36 @@ void Titanium_TriggerRespringAction(void) {
 // [USERSACE REBOOT — launchctl đúng path Dopamine, watchdog 6s fallback sbreload]
 // ====================================================================================================
 #define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
-#define TITANIUM_SREBOOT_WINDOW     180.0
+#define TITANIUM_SREBOOT_WINDOW     15.0    // [FIX-1] 180s → 15s
 
 static BOOL Titanium_ShouldDelayLoadAfterSreboot(void) {
     @try {
         NSDictionary *marker = [NSDictionary dictionaryWithContentsOfFile:TITANIUM_SREBOOT_MARKER];
+        if (!marker) return NO;
+
         NSNumber *t = marker[@"time"];
-        if ([t isKindOfClass:[NSNumber class]]) {
-            NSTimeInterval age = [[NSDate date] timeIntervalSince1970] - [t doubleValue];
-            if (age >= 0.0 && age < TITANIUM_SREBOOT_WINDOW) return YES;
+        if (![t isKindOfClass:[NSNumber class]]) {
+            [[NSFileManager defaultManager] removeItemAtPath:TITANIUM_SREBOOT_MARKER error:nil];
+            return NO;
         }
+
+        NSTimeInterval age = [[NSDate date] timeIntervalSince1970] - [t doubleValue];
+        if (age < 0 || age >= TITANIUM_SREBOOT_WINDOW) {
+            [[NSFileManager defaultManager] removeItemAtPath:TITANIUM_SREBOOT_MARKER error:nil];
+            return NO;
+        }
+
+        NSInteger count = [marker[@"count"] integerValue];
+        if (count >= 2) {
+            Titanium_V60_Log([NSString stringWithFormat:@"[BOOT] skip load (marker count=%ld)", (long)count]);
+            [[NSFileManager defaultManager] removeItemAtPath:TITANIUM_SREBOOT_MARKER error:nil];
+            return YES;
+        }
+
+        NSDictionary *updated = @{ @"time": t, @"count": @(count + 1) };
+        [updated writeToFile:TITANIUM_SREBOOT_MARKER atomically:YES];
+        Titanium_V60_Log([NSString stringWithFormat:@"[BOOT] first boot after sreboot (count=%ld)", (long)count]);
+        return NO;
     } @catch (__unused NSException *e) {}
     return NO;
 }
@@ -10020,9 +9979,12 @@ void Titanium_TriggerSrebootAction(void) {
     if (g_isRebooting) return;
 
     Titanium_PrepareForReboot();
+    Titanium_ArmRebootWatchdog();   // [FIX-2]
 
-    // Write marker SAU khi đã cleanup port
-    NSDictionary *marker = @{@"time": @([[NSDate date] timeIntervalSince1970])};
+    NSDictionary *marker = @{
+        @"time": @([[NSDate date] timeIntervalSince1970]),
+        @"count": @1
+    };
     [marker writeToFile:TITANIUM_SREBOOT_MARKER atomically:YES];
 
     UINotificationFeedbackGenerator *fb = [[UINotificationFeedbackGenerator alloc] init];
@@ -10034,12 +9996,10 @@ void Titanium_TriggerSrebootAction(void) {
             pid_t pid = 0;
             const char *argsReboot[] = {"launchctl", "reboot", "userspace", NULL};
 
-            // Set env cho Dopamine bootstrap
             setenv("HOME", "/var/mobile", 1);
             setenv("PATH", "/var/jb/usr/bin:/var/jb/basebin:/usr/bin:/bin:/usr/sbin:/sbin", 1);
             setenv("LANG", "en_US.UTF-8", 1);
 
-            // [FIX] đúng path Dopamine — basebin trước, usr/bin sau, system cuối
             const char *lcPaths[] = {
                 "/var/jb/basebin/launchctl",
                 "/var/jb/usr/bin/launchctl",
@@ -10061,7 +10021,6 @@ void Titanium_TriggerSrebootAction(void) {
             }
 
             if (spawned) {
-                // [WATCHDOG 6s] — launchctl treo thì force sbreload
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6000 * NSEC_PER_MSEC)),
                                dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                     Titanium_V60_Log(@"[REBOOT] watchdog: launchctl hung, force sbreload");
@@ -10074,7 +10033,6 @@ void Titanium_TriggerSrebootAction(void) {
                                 (char *const *)argsSB, environ);
                 });
             } else {
-                // launchctl không có → fallback sbreload luôn
                 Titanium_V60_Log(@"[REBOOT] launchctl unavailable, fallback sbreload");
                 const char *argsSB[] = {"sbreload", NULL};
                 const char *sbPaths[] = {
@@ -10357,6 +10315,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                            dispatch_get_main_queue(), ^{
                 g_SystemMasterReady = YES;
             });
+
+            // [FIX-4] Xoá marker sau 10s boot OK — tránh skip lần respring kế tiếp
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)),
+                           dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    [[NSFileManager defaultManager] removeItemAtPath:TITANIUM_SREBOOT_MARKER error:nil];
+                    Titanium_V60_Log(@"[BOOT] 10s survival — sreboot marker cleared");
+                } @catch (__unused NSException *e) {}
+            });
         } @catch (NSException *e) {
             Titanium_V60_Log([NSString stringWithFormat:@"[V999] runCoreTweak throw: %@", e.reason]);
         }
@@ -10390,24 +10357,19 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
 // ====================================================================================================
 // [FIX SREBOOT HANG - KILL HOOK - SAFE]
-// FIX: passthrough khi rebooting, bốc marker write trên SIGTERM (gây FS block)
-// ====================================================================
+// ====================================================================================================
 
 static int (*orig_kill_v108)(pid_t, int) = NULL;
 
 static int hooked_kill_v108(pid_t pid, int sig) {
-    // [FIX] Đang reboot → passthrough ngay, không intercept
     if (g_isRebooting) {
         return orig_kill_v108 ? orig_kill_v108(pid, sig) : -1;
     }
 
     if ((IS_ACTIVE || Apex_IsMasterEnabled())) {
-        // Chỉ block SIGSTOP tới self — SIGKILL/SIGTERM phải passthrough
         if (pid == getpid() && sig == SIGSTOP) {
             return 0;
         }
-        // Bốc hoàn toàn logic ghi marker khi SIGTERM pid==1 (block FS)
-        // Marker đã ghi trong Titanium_TriggerSrebootAction trước spawn launchctl
     }
     return orig_kill_v108 ? orig_kill_v108(pid, sig) : -1;
 }
