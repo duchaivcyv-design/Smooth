@@ -193,12 +193,6 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     NSMutableDictionary *_settings;
     NSArray<NSDictionary *> *_groupTogglesMeta;
     
-    // Màn hình nhắc xoay ngang với hiệu ứng xoay 3D
-    UIView *_rotateOverlay;
-    UIImageView *_rotateIconView;
-    UILabel *_rotateTitleLabel;
-    UILabel *_rotateSubLabel;
-    
     // Màn hình khởi động Boot Sequence
     UIView *_bootContainer;
     UITextView *_bootConsoleLogView;
@@ -206,7 +200,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     UILabel *_bootLogoLabel;
     UILabel *_bootSubPrompt;
     
-    // Khung giao diện chính eDEX-UI
+    // Khung giao diện chính xoay ngang ảo
     UIView *_mainCyberInterface;
     
     // Thanh tiêu đề trên (Top Bar)
@@ -268,18 +262,15 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 
     [self initVietnameseToggleMeta];
     [self loadExistingSettings];
-    [self buildFullInterfaceLayout];
-    [self forceLandscapeOrientation];
-    [self setupOrientationObservers];
+    [self buildVirtualLandscapeLayout];
     
-    // Bắt đầu kiểm tra hướng màn hình
-    [self evaluateOrientationState:self.view.bounds.size animated:NO];
+    // Kích hoạt ngay Boot Sequence trên khung xoay ngang ảo
+    [self executeSciFiBootSequence];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.navigationController setNavigationBarHidden:YES animated:NO];
-    [self forceLandscapeOrientation];
     [self startRuntimeLoops];
 }
 
@@ -293,84 +284,37 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     return YES;
 }
 
-#pragma mark - Ép hướng xoay ngang (Landscape Mode)
-
-- (BOOL)shouldAutorotate {
-    return YES;
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self layoutVirtualLandscape];
 }
 
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return UIInterfaceOrientationMaskLandscape;
-}
+#pragma mark - Cơ chế Xoay Ngang Ảo Cưỡng Chế (Virtual Landscape)
+// Do ứng dụng Cài đặt (Preferences.app) của iOS khóa chặt ở portrait và bỏ qua Info.plist,
+// cơ chế này dùng CGAffineTransform xoay view 90 độ và hoán đổi W / H.
+// Người dùng cầm ngang điện thoại sẽ thấy toàn bộ giao diện nằm ngang chuẩn 100%, không bao giờ bị chặn.
 
-- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
-    return UIInterfaceOrientationLandscapeRight;
-}
-
-- (void)forceLandscapeOrientation {
-    if (@available(iOS 16.0, *)) {
-        UIWindowScene *scene = (UIWindowScene *)self.view.window.windowScene;
-        if (scene) {
-            UIWindowSceneGeometryPreferencesIOS *preferences = [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
-            [scene requestGeometryUpdateWithPreferences:preferences errorHandler:nil];
-        }
-        [self setNeedsUpdateOfSupportedInterfaceOrientations];
+- (void)layoutVirtualLandscape {
+    CGSize viewSz = self.view.bounds.size;
+    CGFloat portraitW = MIN(viewSz.width, viewSz.height);
+    CGFloat portraitH = MAX(viewSz.width, viewSz.height);
+    
+    // Kích thước chuẩn ngang: chiều dài là chiều dọc thực tế của máy
+    CGFloat targetW = portraitH;
+    CGFloat targetH = portraitW;
+    
+    _mainCyberInterface.bounds = CGRectMake(0, 0, targetW, targetH);
+    _mainCyberInterface.center = CGPointMake(viewSz.width / 2.0, viewSz.height / 2.0);
+    
+    if (viewSz.width < viewSz.height) {
+        // Điện thoại đang ở dạng dọc hoặc Preferences khóa dọc -> Xoay 90 độ sang ngang
+        _mainCyberInterface.transform = CGAffineTransformMakeRotation(M_PI_2);
     } else {
-        [[UIDevice currentDevice] setValue:@(UIInterfaceOrientationLandscapeRight) forKey:@"orientation"];
-        [UIViewController attemptRotationToDeviceOrientation];
+        // Nếu môi trường cho phép xoay thật
+        _mainCyberInterface.transform = CGAffineTransformIdentity;
     }
-}
-
-- (void)setupOrientationObservers {
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onDeviceOrientationChanged) name:UIDeviceOrientationDidChangeNotification object:nil];
-}
-
-- (void)onDeviceOrientationChanged {
-    [self forceLandscapeOrientation];
-    [self evaluateOrientationState:self.view.bounds.size animated:YES];
-}
-
-- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
-    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
-        [self evaluateOrientationState:size animated:YES];
-    } completion:nil];
-}
-
-- (void)evaluateOrientationState:(CGSize)sz animated:(BOOL)animated {
-    BOOL isLandscape = sz.width > sz.height;
-    if (!isLandscape) {
-        // Chưa xoay ngang: Hiện màn hình nhắc xoay ngang với hoạt ảnh xoay icon
-        _rotateOverlay.hidden = NO;
-        [self.view bringSubviewToFront:_rotateOverlay];
-        _rotateOverlay.frame = CGRectMake(0, 0, sz.width, sz.height);
-        [self updateRotateOverlayFrames:sz];
-        [self startRotateIconAnimation];
-        _mainCyberInterface.alpha = 0.0;
-    } else {
-        // Đã xoay ngang: Ẩn overlay nhắc xoay, tính toán lại frame chống đè chữ
-        [self stopRotateIconAnimation];
-        if (animated) {
-            [UIView animateWithDuration:0.35 animations:^{
-                self->_rotateOverlay.alpha = 0.0;
-            } completion:^(BOOL finished) {
-                self->_rotateOverlay.hidden = YES;
-                self->_rotateOverlay.alpha = 1.0;
-            }];
-        } else {
-            _rotateOverlay.hidden = YES;
-        }
-        
-        _mainCyberInterface.frame = CGRectMake(0, 0, sz.width, sz.height);
-        [self updateModuleFramesForSize:sz];
-        
-        if (!_hasBooted) {
-            _hasBooted = YES;
-            [self executeSciFiBootSequence];
-        } else {
-            _mainCyberInterface.alpha = 1.0;
-        }
-    }
+    
+    [self updateModuleFramesForSize:CGSizeMake(targetW, targetH)];
 }
 
 #pragma mark - Khởi tạo danh sách công tắc thuần Tiếng Việt
@@ -539,45 +483,11 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     notify_post(NOTIFY_FPS_CHANGED);
 }
 
-#pragma mark - Xây dựng Giao diện Toàn Màn hình
+#pragma mark - Xây dựng Khung Xoay Ngang Ảo
 
-- (void)buildFullInterfaceLayout {
-    CGSize sz = self.view.bounds.size;
-    
-    // 1. Màn hình nhắc xoay ngang với hoạt ảnh
-    _rotateOverlay = [[UIView alloc] initWithFrame:self.view.bounds];
-    _rotateOverlay.backgroundColor = [UIColor colorWithRed:0.02 green:0.025 blue:0.04 alpha:0.99];
-    _rotateOverlay.hidden = YES;
-    [self.view addSubview:_rotateOverlay];
-
-    _rotateIconView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 72, 72)];
-    _rotateIconView.contentMode = UIViewContentModeScaleAspectFit;
-    _rotateIconView.tintColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0];
-    if (@available(iOS 13.0, *)) {
-        _rotateIconView.image = [UIImage systemImageNamed:@"rotate.right.fill"];
-    }
-    [_rotateOverlay addSubview:_rotateIconView];
-
-    _rotateTitleLabel = [[UILabel alloc] init];
-    _rotateTitleLabel.numberOfLines = 0;
-    _rotateTitleLabel.textAlignment = NSTextAlignmentCenter;
-    _rotateTitleLabel.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0];
-    _rotateTitleLabel.font = [UIFont fontWithName:@"Courier-Bold" size:15] ?: [UIFont boldSystemFontOfSize:15];
-    _rotateTitleLabel.text = @">> VUI LÒNG XOAY NGANG THIẾT BỊ <<";
-    [_rotateOverlay addSubview:_rotateTitleLabel];
-
-    _rotateSubLabel = [[UILabel alloc] init];
-    _rotateSubLabel.numberOfLines = 0;
-    _rotateSubLabel.textAlignment = NSTextAlignmentCenter;
-    _rotateSubLabel.textColor = [UIColor colorWithRed:0.4 green:0.75 blue:0.9 alpha:0.85];
-    _rotateSubLabel.font = [UIFont fontWithName:@"Courier" size:11] ?: [UIFont systemFontOfSize:11];
-    _rotateSubLabel.text = @"Giao diện eDEX-UI Sci-Fi Terminal được thiết kế chuẩn màn hình ngang để không bị đè chữ.";
-    [_rotateOverlay addSubview:_rotateSubLabel];
-
-    // 2. Container giao diện chính
-    _mainCyberInterface = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sz.width, sz.height)];
+- (void)buildVirtualLandscapeLayout {
+    _mainCyberInterface = [[UIView alloc] initWithFrame:CGRectZero];
     _mainCyberInterface.backgroundColor = [UIColor colorWithRed:0.015 green:0.02 blue:0.035 alpha:1.0];
-    _mainCyberInterface.alpha = 0.0;
     [self.view addSubview:_mainCyberInterface];
 
     // Top Bar
@@ -736,7 +646,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _lblIpcPipeStatus.text = @"TRẠNG THÁI: ĐÃ ĐỒNG BỘ";
     [_rightPanel addSubview:_lblIpcPipeStatus];
 
-    // Thanh điều khiển đáy: Bottom Dock Bar (Không dùng bàn phím)
+    // Thanh điều khiển đáy: Bottom Dock Bar
     _bottomDockBar = [[UIView alloc] init];
     _bottomDockBar.backgroundColor = [UIColor colorWithRed:0.02 green:0.035 blue:0.06 alpha:0.95];
     _bottomDockBar.layer.borderColor = [UIColor colorWithRed:0.0 green:0.75 blue:0.9 alpha:0.35].CGColor;
@@ -763,29 +673,6 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     }
 
     [self buildBootSequenceViews];
-}
-
-#pragma mark - Hiệu ứng xoay Icon và cập nhật Frame chuẩn xác chống đè chữ
-
-- (void)startRotateIconAnimation {
-    if (![_rotateIconView.layer animationForKey:@"rotateAnimation"]) {
-        CABasicAnimation *rotation = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
-        rotation.toValue = @(M_PI * 2.0);
-        rotation.duration = 2.0;
-        rotation.cumulative = YES;
-        rotation.repeatCount = HUGE_VALF;
-        [_rotateIconView.layer addAnimation:rotation forKey:@"rotateAnimation"];
-    }
-}
-
-- (void)stopRotateIconAnimation {
-    [_rotateIconView.layer removeAnimationForKey:@"rotateAnimation"];
-}
-
-- (void)updateRotateOverlayFrames:(CGSize)sz {
-    _rotateIconView.center = CGPointMake(sz.width / 2.0, sz.height / 2.0 - 50);
-    _rotateTitleLabel.frame = CGRectMake(20, sz.height / 2.0 + 8, sz.width - 40, 30);
-    _rotateSubLabel.frame = CGRectMake(20, sz.height / 2.0 + 44, sz.width - 40, 44);
 }
 
 - (void)updateModuleFramesForSize:(CGSize)sz {
@@ -852,18 +739,19 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 #pragma mark - Khởi động Sci-Fi Boot Screen
 
 - (void)buildBootSequenceViews {
-    _bootContainer = [[UIView alloc] initWithFrame:self.view.bounds];
+    _bootContainer = [[UIView alloc] initWithFrame:_mainCyberInterface.bounds];
     _bootContainer.backgroundColor = [UIColor colorWithRed:0.01 green:0.01 blue:0.02 alpha:1.0];
-    [self.view addSubview:_bootContainer];
+    _bootContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [_mainCyberInterface addSubview:_bootContainer];
 
-    _bootConsoleLogView = [[UITextView alloc] initWithFrame:CGRectMake(24, 20, self.view.bounds.size.width - 48, self.view.bounds.size.height * 0.5)];
+    _bootConsoleLogView = [[UITextView alloc] initWithFrame:CGRectMake(24, 20, _mainCyberInterface.bounds.size.width - 48, _mainCyberInterface.bounds.size.height * 0.5)];
     _bootConsoleLogView.backgroundColor = [UIColor clearColor];
     _bootConsoleLogView.textColor = [UIColor colorWithRed:0.25 green:0.85 blue:1.0 alpha:0.9];
     _bootConsoleLogView.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
     _bootConsoleLogView.userInteractionEnabled = NO;
     [_bootContainer addSubview:_bootConsoleLogView];
 
-    _bootLogoBox = [[UIView alloc] initWithFrame:CGRectMake(self.view.bounds.size.width/2 - 140, self.view.bounds.size.height * 0.55, 280, 56)];
+    _bootLogoBox = [[UIView alloc] initWithFrame:CGRectMake(_mainCyberInterface.bounds.size.width/2 - 140, _mainCyberInterface.bounds.size.height * 0.55, 280, 56)];
     _bootLogoBox.layer.borderColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.85 alpha:0.9].CGColor;
     _bootLogoBox.layer.borderWidth = 1.2;
     _bootLogoBox.layer.cornerRadius = 2.0;
@@ -880,7 +768,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _bootLogoLabel.font = [UIFont fontWithName:@"HelveticaNeue-CondensedBlack" size:24] ?: [UIFont boldSystemFontOfSize:24];
     [_bootLogoBox addSubview:_bootLogoLabel];
 
-    _bootSubPrompt = [[UILabel alloc] initWithFrame:CGRectMake(20, CGRectGetMaxY(_bootLogoBox.frame) + 14, self.view.bounds.size.width - 40, 22)];
+    _bootSubPrompt = [[UILabel alloc] initWithFrame:CGRectMake(20, CGRectGetMaxY(_bootLogoBox.frame) + 14, _mainCyberInterface.bounds.size.width - 40, 22)];
     _bootSubPrompt.textAlignment = NSTextAlignmentCenter;
     _bootSubPrompt.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.6 alpha:1.0];
     _bootSubPrompt.font = [UIFont fontWithName:@"Courier" size:13] ?: [UIFont monospacedSystemFontOfSize:13 weight:UIFontWeightBold];
@@ -935,7 +823,6 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
         [UIView animateWithDuration:0.6 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
             self->_bootContainer.transform = CGAffineTransformMakeScale(1.12, 1.12);
             self->_bootContainer.alpha = 0.0;
-            self->_mainCyberInterface.alpha = 1.0;
         } completion:^(BOOL finished) {
             [self->_bootContainer removeFromSuperview];
             self->_bootContainer = nil;
@@ -1293,3 +1180,4 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 }
 
 @end
+
