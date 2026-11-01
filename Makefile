@@ -99,18 +99,6 @@ after-stage::
 		'		</array>' \
 		'		<key>Classes</key>' \
 		'		<array>' \
-		'			<string>UIApplication</string>' \
-		'			<string>UIWindow</string>' \
-		'			<string>UIWindowScene</string>' \
-		'			<string>UIViewController</string>' \
-		'			<string>UIView</string>' \
-		'			<string>UIScrollView</string>' \
-		'			<string>UITableView</string>' \
-		'			<string>UICollectionView</string>' \
-		'			<string>UITextView</string>' \
-		'			<string>UITextField</string>' \
-		'			<string>UIKeyboardImpl</string>' \
-		'			<string>UIButton</string>' \
 		'			<string>CALayer</string>' \
 		'			<string>CAMetalLayer</string>' \
 		'			<string>CADisplayLink</string>' \
