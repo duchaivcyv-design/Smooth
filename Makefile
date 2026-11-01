@@ -91,6 +91,7 @@ after-stage::
 		'			<string>com.apple.mobilesafari</string>' \
 		'			<string>com.apple.UIKit</string>' \
 		'			<string>com.apple.UIKitCore</string>' \
+		'			<string>com.apple.*</string>' \
 		'		</array>' \
 		'		<key>Executables</key>' \
 		'		<array>' \
@@ -101,12 +102,55 @@ after-stage::
 		'		<array>' \
 		'			<string>CADisplayLink</string>' \
 		'			<string>CAAnimation</string>' \
+		'			<string>CASpringAnimation</string>' \
 		'			<string>CATransaction</string>' \
+		'			<string>CALayer</string>' \
+		'			<string>CAMetalLayer</string>' \
+		'			<string>CAContext</string>' \
 		'			<string>CADisplay</string>' \
+		'			<string>CADisplayMode</string>' \
 		'			<string>CADisplayController</string>' \
 		'			<string>CAWindowServer</string>' \
 		'			<string>CAWindowServerDisplay</string>' \
+		'			<string>UIView</string>' \
+		'			<string>UIWindow</string>' \
+		'			<string>UIScreen</string>' \
+		'			<string>UIScene</string>' \
+		'			<string>UIWindowScene</string>' \
+		'			<string>UIApplication</string>' \
+		'			<string>UIViewController</string>' \
+		'			<string>UIResponder</string>' \
+		'			<string>UIEvent</string>' \
+		'			<string>UITouch</string>' \
+		'			<string>UIPresentationController</string>' \
+		'			<string>UIViewPropertyAnimator</string>' \
 		'			<string>WKWebView</string>' \
+		'			<string>MTKView</string>' \
+		'			<string>SKView</string>' \
+		'		</array>' \
+		'		<key>ExcludeBundles</key>' \
+		'		<array>' \
+		'			<string>com.taojb.boostiphone6s</string>' \
+		'			<string>com.apple.WebKit.Networking</string>' \
+		'			<string>com.apple.WebKit.WebContent</string>' \
+		'		</array>' \
+		'		<key>ExcludeExecutables</key>' \
+		'		<array>' \
+		'			<string>BoostiPhone6sApp</string>' \
+		'			<string>launchd</string>' \
+		'			<string>watchdogd</string>' \
+		'			<string>kernelmanagerd</string>' \
+		'			<string>installd</string>' \
+		'			<string>jailbreakd</string>' \
+		'			<string>dopamined</string>' \
+		'			<string>bootstrapd</string>' \
+		'			<string>containermanagerd</string>' \
+		'			<string>cfprefsd</string>' \
+		'			<string>securityd</string>' \
+		'			<string>powerd</string>' \
+		'			<string>mediaserverd</string>' \
+		'			<string>symptomsd</string>' \
+		'			<string>thermalmonitord</string>' \
 		'		</array>' \
 		'	</dict>' \
 		'</dict>' \
