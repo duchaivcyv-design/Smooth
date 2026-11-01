@@ -191,19 +191,25 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 @interface RootListController () {
     ApexV285ProPayloadRLCV285 _payload;
     NSMutableDictionary *_settings;
-    NSArray<NSString *> *_groupToggleKeys;
+    NSArray<NSDictionary *> *_groupTogglesMeta;
     
-    UIView *_rotateLandscapeOverlay;
-    UILabel *_rotatePromptLabel;
+    // Màn hình nhắc xoay ngang với hiệu ứng xoay 3D
+    UIView *_rotateOverlay;
+    UIImageView *_rotateIconView;
+    UILabel *_rotateTitleLabel;
+    UILabel *_rotateSubLabel;
     
+    // Màn hình khởi động Boot Sequence
     UIView *_bootContainer;
     UITextView *_bootConsoleLogView;
     UIView *_bootLogoBox;
     UILabel *_bootLogoLabel;
     UILabel *_bootSubPrompt;
     
-    UIView *_eDEXMainInterface;
+    // Khung giao diện chính eDEX-UI
+    UIView *_mainCyberInterface;
     
+    // Thanh tiêu đề trên (Top Bar)
     UIView *_topBarView;
     UILabel *_topClockLabel;
     UILabel *_topSysInfoLabel;
@@ -211,6 +217,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     NSMutableArray<UIButton *> *_topTabButtons;
     NSInteger _activeMainTab;
     
+    // Cột bên trái: Giám sát phần cứng thời gian thực
     UIView *_leftPanel;
     CAShapeLayer *_cpuWaveLayer;
     CGFloat _cpuHistory[32];
@@ -220,15 +227,16 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     UILabel *_lblThermalText;
     UILabel *_lblStorageText;
     
+    // Cột trung tâm: Bảng điều khiển & Tinh chỉnh
     UIView *_centerPanel;
     UILabel *_lblCenterHeader;
     UIScrollView *_centerScrollView;
-    UIView *_centerControlHub;
     UILabel *_lblTargetHzValue;
     UISlider *_hzSlider;
     UILabel *_lblTargetFpsValue;
     UISlider *_fpsSlider;
     
+    // Cột bên phải: Radar quét & Thông tin mạng/IPC
     UIView *_rightPanel;
     UIView *_radarCircleView;
     CAShapeLayer *_radarSweepLayer;
@@ -238,12 +246,15 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     UILabel *_lblIPVal;
     UILabel *_lblIpcPipeStatus;
     
+    // Thanh điều khiển đáy (Dock Bar)
     UIView *_bottomDockBar;
     NSMutableArray<UIButton *> *_dockActionButtons;
     
+    // Timers
     CADisplayLink *_animTickLink;
     NSTimer *_systemPollTimer;
     UIImpactFeedbackGenerator *_haptic;
+    BOOL _hasBooted;
 }
 @end
 
@@ -255,16 +266,20 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
     [_haptic prepare];
 
-    [self initToggleKeys];
+    [self initVietnameseToggleMeta];
     [self loadExistingSettings];
     [self buildFullInterfaceLayout];
-    [self setupOrientationListener];
-    [self checkOrientationAndRun:self.view.bounds.size];
+    [self forceLandscapeOrientation];
+    [self setupOrientationObservers];
+    
+    // Bắt đầu kiểm tra hướng màn hình
+    [self evaluateOrientationState:self.view.bounds.size animated:NO];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.navigationController setNavigationBarHidden:YES animated:NO];
+    [self forceLandscapeOrientation];
     [self startRuntimeLoops];
 }
 
@@ -278,22 +293,128 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     return YES;
 }
 
-- (void)initToggleKeys {
-    _groupToggleKeys = @[
-        @"enableAppleInternalProMotion", @"enableZeroLatencyTouch", @"enableMetalZeroTearing",
-        @"enableFluidTransitions", @"enableTitaniumGameMetalOverdrive", @"enableAIStreamOptimization",
-        @"enableFastLaunchSuperEngine", @"enableScrollAndKeyboard", @"enableInstantActionTransitions",
-        @"enableGlobalThreadGovernor", @"enableSiliconSchedulerTouch", @"enableCoreAnimationRenderServer",
-        @"enableCAWindowServerDominance", @"enableForceRenderRecovery", @"enableWindowLevelOverdrive",
-        @"enableSystemMemoryGovernor", @"enableThermalCryoPacing", @"enableDeepRamCompaction",
-        @"enableWebKitRamOptimizer", @"enableSiliconHardwarePipeline", @"enableHardwareProMotionOverclock",
-        @"enableNeuralTouchEdgeZeroLatency", @"enableNativeColdBootOverdrive", @"enableTitaniumV12SmoothExit",
-        @"enableDisplaySpringBoard", @"enableLiquidGlassOpt", @"enableSwitcher30Apps",
-        @"enableSpringBoardSwitcherOpt", @"enableFloatingWindowPiP", @"enableHardwareSegregationHome",
-        @"enableSpringBoardProcessManager", @"enableKeepAppsAlive", @"enableTitaniumV10LayoutBoost",
-        @"enableUIKitThirdPartyIsolated"
+#pragma mark - Ép hướng xoay ngang (Landscape Mode)
+
+- (BOOL)shouldAutorotate {
+    return YES;
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIInterfaceOrientationMaskLandscape;
+}
+
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
+    return UIInterfaceOrientationLandscapeRight;
+}
+
+- (void)forceLandscapeOrientation {
+    if (@available(iOS 16.0, *)) {
+        UIWindowScene *scene = (UIWindowScene *)self.view.window.windowScene;
+        if (scene) {
+            UIWindowSceneGeometryPreferencesIOS *preferences = [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
+            [scene requestGeometryUpdateWithPreferences:preferences errorHandler:nil];
+        }
+        [self setNeedsUpdateOfSupportedInterfaceOrientations];
+    } else {
+        [[UIDevice currentDevice] setValue:@(UIInterfaceOrientationLandscapeRight) forKey:@"orientation"];
+        [UIViewController attemptRotationToDeviceOrientation];
+    }
+}
+
+- (void)setupOrientationObservers {
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onDeviceOrientationChanged) name:UIDeviceOrientationDidChangeNotification object:nil];
+}
+
+- (void)onDeviceOrientationChanged {
+    [self forceLandscapeOrientation];
+    [self evaluateOrientationState:self.view.bounds.size animated:YES];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        [self evaluateOrientationState:size animated:YES];
+    } completion:nil];
+}
+
+- (void)evaluateOrientationState:(CGSize)sz animated:(BOOL)animated {
+    BOOL isLandscape = sz.width > sz.height;
+    if (!isLandscape) {
+        // Chưa xoay ngang: Hiện màn hình nhắc xoay ngang với hoạt ảnh xoay icon
+        _rotateOverlay.hidden = NO;
+        [self.view bringSubviewToFront:_rotateOverlay];
+        _rotateOverlay.frame = CGRectMake(0, 0, sz.width, sz.height);
+        [self updateRotateOverlayFrames:sz];
+        [self startRotateIconAnimation];
+        _mainCyberInterface.alpha = 0.0;
+    } else {
+        // Đã xoay ngang: Ẩn overlay nhắc xoay, tính toán lại frame chống đè chữ
+        [self stopRotateIconAnimation];
+        if (animated) {
+            [UIView animateWithDuration:0.35 animations:^{
+                self->_rotateOverlay.alpha = 0.0;
+            } completion:^(BOOL finished) {
+                self->_rotateOverlay.hidden = YES;
+                self->_rotateOverlay.alpha = 1.0;
+            }];
+        } else {
+            _rotateOverlay.hidden = YES;
+        }
+        
+        _mainCyberInterface.frame = CGRectMake(0, 0, sz.width, sz.height);
+        [self updateModuleFramesForSize:sz];
+        
+        if (!_hasBooted) {
+            _hasBooted = YES;
+            [self executeSciFiBootSequence];
+        } else {
+            _mainCyberInterface.alpha = 1.0;
+        }
+    }
+}
+
+#pragma mark - Khởi tạo danh sách công tắc thuần Tiếng Việt
+
+- (void)initVietnameseToggleMeta {
+    _groupTogglesMeta = @[
+        @{@"key": @"enableAppleInternalProMotion",        @"name": @"ProMotion Nội Bộ Apple",            @"desc": @"Mở khóa toàn bộ dải tần số quét ProMotion nguyên bản"},
+        @{@"key": @"enableZeroLatencyTouch",              @"name": @"Cảm Ứng Độ Trễ Bằng 0",             @"desc": @"Ưu tiên ngắt cảm ứng mức phần cứng ngay tức thì"},
+        @{@"key": @"enableMetalZeroTearing",              @"name": @"Khử Xé Hình Metal (Zero Tearing)",  @"desc": @"Đồng bộ khung hình Metal không rách đồ họa"},
+        @{@"key": @"enableFluidTransitions",              @"name": @"Chuyển Cảnh Siêu Mượt",             @"desc": @"Gia tốc hoạt họa giao diện toàn hệ thống"},
+        @{@"key": @"enableTitaniumGameMetalOverdrive",    @"name": @"Tăng Tốc Đồ Họa Metal Game",        @"desc": @"Ép xung render và tối ưu bộ đệm game"},
+        @{@"key": @"enableAIStreamOptimization",          @"name": @"Tối Ưu Luồng Render Thông Minh",     @"desc": @"Tự động phân bổ luồng đồ họa thời gian thực"},
+        @{@"key": @"enableFastLaunchSuperEngine",         @"name": @"Mở Ứng Dụng Siêu Tốc",             @"desc": @"Bỏ qua độ trễ khởi động Splash Screen"},
+        @{@"key": @"enableScrollAndKeyboard",             @"name": @"Tối Ưu Cuộn & Bàn Phím",           @"desc": @"Triệt tiêu giật lag khi gõ văn bản và lướt bảng"},
+        @{@"key": @"enableInstantActionTransitions",      @"name": @"Phản Hồi Thao Tác Tức Thì",         @"desc": @"Phản ứng ngay lập tức khi chạm menu"},
+        @{@"key": @"enableGlobalThreadGovernor",          @"name": @"Điều Phối Luồng Toàn Cục",          @"desc": @"Ép xung nhân hiệu năng cao xử lý UI"},
+        @{@"key": @"enableSiliconSchedulerTouch",         @"name": @"Lập Lịch Vi Xử Lý Cảm Ứng",        @"desc": @"Điều phối CPU trực tiếp theo thao tác ngón tay"},
+        @{@"key": @"enableCoreAnimationRenderServer",     @"name": @"Máy Chủ Render CoreAnimation",      @"desc": @"Ưu tiên tuyệt đối cho tiến trình dựng hình iOS"},
+        @{@"key": @"enableCAWindowServerDominance",       @"name": @"Thống Trị WindowServer",            @"desc": @"Ngăn chặn nghẽn luồng tại tầng hệ thống"},
+        @{@"key": @"enableForceRenderRecovery",           @"name": @"Phục Hồi Khung Hình Lỗi",          @"desc": @"Bù khung hình rớt tức thì để tránh giật hình"},
+        @{@"key": @"enableWindowLevelOverdrive",          @"name": @"Ép Xung Cấp Độ Cửa Sổ",            @"desc": @"Gia tốc các lớp ứng dụng đang hiển thị"},
+        @{@"key": @"enableSystemMemoryGovernor",          @"name": @"Điều Phối Bộ Nhớ & RunLoop",        @"desc": @"Chống phân mảnh RAM trong phiên làm việc"},
+        @{@"key": @"enableThermalCryoPacing",             @"name": @"Chống Giảm Tần Số Khi Nóng",        @"desc": @"Duy trì tốc độ mượt ngay cả khi nhiệt độ cao"},
+        @{@"key": @"enableDeepRamCompaction",             @"name": @"Nén Bộ Nhớ RAM Chuyên Sâu",        @"desc": @"Tự động dọn RAM rác chạy ngầm"},
+        @{@"key": @"enableWebKitRamOptimizer",            @"name": @"Tối Ưu Trình Duyệt WebKit",         @"desc": @"Tăng tốc lướt web Safari và WebKit"},
+        @{@"key": @"enableSiliconHardwarePipeline",       @"name": @"Đường Ống Phần Cứng Apple Silicon", @"desc": @"Khai thác tối đa năng lực phần cứng chip"},
+        @{@"key": @"enableHardwareProMotionOverclock",    @"name": @"Ép Xung Phần Cứng Màn Hình",       @"desc": @"Ép tần số quét vượt giới hạn mặc định"},
+        @{@"key": @"enableNeuralTouchEdgeZeroLatency",    @"name": @"Cảm Ứng Viền Không Trễ Neural",    @"desc": @"Loại bỏ góc chết và độ trễ vuốt mép viền"},
+        @{@"key": @"enableNativeColdBootOverdrive",       @"name": @"Gia Tốc Khởi Động Nguội",          @"desc": @"Khởi động app nhanh như đã chạy nền"},
+        @{@"key": @"enableTitaniumV12SmoothExit",         @"name": @"Thoát Ứng Dụng Cực Mượt V12",       @"desc": @"Loại bỏ hiện tượng khựng khung hình khi vuốt về Home"},
+        @{@"key": @"enableDisplaySpringBoard",            @"name": @"Đồng Bộ SpringBoard Siêu Mượt",     @"desc": @"Khóa chặt tần số quét màn hình chính"},
+        @{@"key": @"enableLiquidGlassOpt",                @"name": @"Tối Ưu Hiệu Ứng Kính Mờ iOS",      @"desc": @"Giảm tải GPU khi dựng hiệu ứng mờ nhòe"},
+        @{@"key": @"enableSwitcher30Apps",                @"name": @"Bộ Chuyển Đổi Đa Nhiệm 30 App",    @"desc": @"Giữ 30 ứng dụng trong trạng thái sẵn sàng"},
+        @{@"key": @"enableSpringBoardSwitcherOpt",        @"name": @"Tối Ưu Vuốt Đa Nhiệm",              @"desc": @"Chuyển đổi qua lại giữa các app không độ trễ"},
+        @{@"key": @"enableFloatingWindowPiP",             @"name": @"Tăng Tốc Cửa Sổ Nổi PiP",           @"desc": @"Xem video góc màn hình mượt mà không tụt FPS"},
+        @{@"key": @"enableHardwareSegregationHome",       @"name": @"Cô Lập Bộ Nhớ Home Cổ Điển",        @"desc": @"Bảo vệ thanh trạng thái và icon không bị load lại"},
+        @{@"key": @"enableSpringBoardProcessManager",     @"name": @"Quản Lý Tiến Trình Nền Nâng Cao",   @"desc": @"Điều phối tiến trình chạy nền thông minh"},
+        @{@"key": @"enableKeepAppsAlive",                 @"name": @"Chống Tự Động Đóng App Ngầm",       @"desc": @"Ngăn hệ thống iOS tự tắt app của bạn"},
+        @{@"key": @"enableTitaniumV10LayoutBoost",        @"name": @"Gia Tốc Dàn Trang SpringBoard",     @"desc": @"Cuộn trang icon mượt mà ở tần số quét cao nhất"},
+        @{@"key": @"enableUIKitThirdPartyIsolated",       @"name": @"Cô Lập Gia Tốc Ứng Dụng Thứ 3",    @"desc": @"Áp dụng tốc độ tối đa cho toàn bộ app cài đặt"}
     ];
 }
+
+#pragma mark - Đọc / Ghi cấu hình Settings
 
 - (void)loadExistingSettings {
     NSString *prefPath = TI_ResolvePrefPath();
@@ -308,7 +429,8 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _payload.thermalShield = _settings[@"ThermalShield"] ? [_settings[@"ThermalShield"] unsignedIntValue] : 1;
     _payload.zeroLatencyTouch = _settings[@"ZeroLatencyTouch"] ? [_settings[@"ZeroLatencyTouch"] unsignedIntValue] : 1;
 
-    for (NSString *key in _groupToggleKeys) {
+    for (NSDictionary *meta in _groupTogglesMeta) {
+        NSString *key = meta[@"key"];
         id val = _settings[key];
         uint32_t state = (val != nil) ? [val unsignedIntValue] : 1;
         [self writeGroupToggleValue:state forKey:key];
@@ -401,7 +523,8 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _settings[@"ThermalShield"] = @(_payload.thermalShield);
     _settings[@"ZeroLatencyTouch"] = @(_payload.zeroLatencyTouch);
 
-    for (NSString *key in _groupToggleKeys) {
+    for (NSDictionary *meta in _groupTogglesMeta) {
+        NSString *key = meta[@"key"];
         _settings[key] = @([self readGroupToggleValueForKey:key]);
     }
 
@@ -416,77 +539,69 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     notify_post(NOTIFY_FPS_CHANGED);
 }
 
-- (void)setupOrientationListener {
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(deviceOrientationChanged) name:UIDeviceOrientationDidChangeNotification object:nil];
-}
-
-- (void)deviceOrientationChanged {
-    [self checkOrientationAndRun:self.view.bounds.size];
-}
-
-- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
-    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        [self checkOrientationAndRun:size];
-    } completion:nil];
-}
-
-- (void)checkOrientationAndRun:(CGSize)sz {
-    BOOL isLandscape = sz.width > sz.height;
-    if (!isLandscape) {
-        _rotateLandscapeOverlay.hidden = NO;
-        [self.view bringSubviewToFront:_rotateLandscapeOverlay];
-        _rotateLandscapeOverlay.frame = CGRectMake(0, 0, sz.width, sz.height);
-        _rotatePromptLabel.frame = CGRectMake(20, sz.height/2 - 40, sz.width - 40, 80);
-    } else {
-        _rotateLandscapeOverlay.hidden = YES;
-        _eDEXMainInterface.frame = CGRectMake(0, 0, sz.width, sz.height);
-        [self updateModuleFramesForSize:sz];
-    }
-}
+#pragma mark - Xây dựng Giao diện Toàn Màn hình
 
 - (void)buildFullInterfaceLayout {
     CGSize sz = self.view.bounds.size;
     
-    _rotateLandscapeOverlay = [[UIView alloc] initWithFrame:self.view.bounds];
-    _rotateLandscapeOverlay.backgroundColor = [UIColor colorWithRed:0.02 green:0.02 blue:0.04 alpha:0.98];
-    _rotateLandscapeOverlay.hidden = YES;
-    [self.view addSubview:_rotateLandscapeOverlay];
+    // 1. Màn hình nhắc xoay ngang với hoạt ảnh
+    _rotateOverlay = [[UIView alloc] initWithFrame:self.view.bounds];
+    _rotateOverlay.backgroundColor = [UIColor colorWithRed:0.02 green:0.025 blue:0.04 alpha:0.99];
+    _rotateOverlay.hidden = YES;
+    [self.view addSubview:_rotateOverlay];
 
-    _rotatePromptLabel = [[UILabel alloc] init];
-    _rotatePromptLabel.numberOfLines = 0;
-    _rotatePromptLabel.textAlignment = NSTextAlignmentCenter;
-    _rotatePromptLabel.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0];
-    _rotatePromptLabel.font = [UIFont fontWithName:@"Courier-Bold" size:16] ?: [UIFont boldSystemFontOfSize:16];
-    _rotatePromptLabel.text = @">> PLEASE ROTATE DEVICE TO LANDSCAPE <<\n[eDEX-UI SCI-FI TERMINAL REQUIRES WIDESCREEN]";
-    [_rotateLandscapeOverlay addSubview:_rotatePromptLabel];
+    _rotateIconView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 72, 72)];
+    _rotateIconView.contentMode = UIViewContentModeScaleAspectFit;
+    _rotateIconView.tintColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0];
+    if (@available(iOS 13.0, *)) {
+        _rotateIconView.image = [UIImage systemImageNamed:@"rotate.right.fill"];
+    }
+    [_rotateOverlay addSubview:_rotateIconView];
 
-    _eDEXMainInterface = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sz.width, sz.height)];
-    _eDEXMainInterface.backgroundColor = [UIColor colorWithRed:0.015 green:0.02 blue:0.035 alpha:1.0];
-    _eDEXMainInterface.alpha = 0.0;
-    [self.view addSubview:_eDEXMainInterface];
+    _rotateTitleLabel = [[UILabel alloc] init];
+    _rotateTitleLabel.numberOfLines = 0;
+    _rotateTitleLabel.textAlignment = NSTextAlignmentCenter;
+    _rotateTitleLabel.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0];
+    _rotateTitleLabel.font = [UIFont fontWithName:@"Courier-Bold" size:15] ?: [UIFont boldSystemFontOfSize:15];
+    _rotateTitleLabel.text = @">> VUI LÒNG XOAY NGANG THIẾT BỊ <<";
+    [_rotateOverlay addSubview:_rotateTitleLabel];
 
+    _rotateSubLabel = [[UILabel alloc] init];
+    _rotateSubLabel.numberOfLines = 0;
+    _rotateSubLabel.textAlignment = NSTextAlignmentCenter;
+    _rotateSubLabel.textColor = [UIColor colorWithRed:0.4 green:0.75 blue:0.9 alpha:0.85];
+    _rotateSubLabel.font = [UIFont fontWithName:@"Courier" size:11] ?: [UIFont systemFontOfSize:11];
+    _rotateSubLabel.text = @"Giao diện eDEX-UI Sci-Fi Terminal được thiết kế chuẩn màn hình ngang để không bị đè chữ.";
+    [_rotateOverlay addSubview:_rotateSubLabel];
+
+    // 2. Container giao diện chính
+    _mainCyberInterface = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sz.width, sz.height)];
+    _mainCyberInterface.backgroundColor = [UIColor colorWithRed:0.015 green:0.02 blue:0.035 alpha:1.0];
+    _mainCyberInterface.alpha = 0.0;
+    [self.view addSubview:_mainCyberInterface];
+
+    // Top Bar
     _topBarView = [[UIView alloc] init];
     _topBarView.backgroundColor = [UIColor colorWithRed:0.03 green:0.045 blue:0.07 alpha:0.95];
     _topBarView.layer.borderColor = [UIColor colorWithRed:0.0 green:0.75 blue:0.9 alpha:0.4].CGColor;
     _topBarView.layer.borderWidth = 0.8;
-    [_eDEXMainInterface addSubview:_topBarView];
+    [_mainCyberInterface addSubview:_topBarView];
 
     _topClockLabel = [[UILabel alloc] init];
     _topClockLabel.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.85 alpha:1.0];
-    _topClockLabel.font = [UIFont fontWithName:@"Courier-Bold" size:12] ?: [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold];
+    _topClockLabel.font = [UIFont fontWithName:@"Courier-Bold" size:11] ?: [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightBold];
     [_topBarView addSubview:_topClockLabel];
 
     _topSysInfoLabel = [[UILabel alloc] init];
-    _topSysInfoLabel.textColor = [UIColor colorWithRed:0.3 green:0.7 blue:0.85 alpha:0.8];
+    _topSysInfoLabel.textColor = [UIColor colorWithRed:0.3 green:0.75 blue:0.9 alpha:0.85];
     _topSysInfoLabel.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
-    _topSysInfoLabel.text = @"SMOOTHIOS PRO // APEX-V285 ENGINE [ONLINE]";
+    _topSysInfoLabel.text = @"SMOOTHIOS PRO // ĐỘNG CƠ APEX-V285 [HOẠT ĐỘNG]";
     [_topBarView addSubview:_topSysInfoLabel];
 
     _topTabContainer = [[UIView alloc] init];
     [_topBarView addSubview:_topTabContainer];
 
-    NSArray *tabs = @[@"DASHBOARD", @"HZ / FPS", @"34 SWITCHES", @"HOOKED APPS", @"PROFILES & RESET"];
+    NSArray *tabs = @[@"TỔNG QUAN", @"TẦN SỐ HZ / FPS", @"34 CÔNG TẮC", @"GIA TỐC APP", @"HỆ THỐNG"];
     _topTabButtons = [NSMutableArray array];
     for (NSInteger i = 0; i < tabs.count; i++) {
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -498,25 +613,28 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
         [b setTitle:tabs[i] forState:UIControlStateNormal];
         [b setTitleColor:(i == 0 ? [UIColor whiteColor] : [UIColor colorWithRed:0.3 green:0.7 blue:0.8 alpha:0.8]) forState:UIControlStateNormal];
         b.titleLabel.font = [UIFont fontWithName:@"HelveticaNeue-CondensedBold" size:10] ?: [UIFont boldSystemFontOfSize:10];
+        b.titleLabel.adjustsFontSizeToFitWidth = YES;
+        b.titleLabel.minimumScaleFactor = 0.8;
         [b addTarget:self action:@selector(mainTabClicked:) forControlEvents:UIControlEventTouchUpInside];
         [_topTabContainer addSubview:b];
         [_topTabButtons addObject:b];
     }
 
+    // Cột trái: Left Panel
     _leftPanel = [[UIView alloc] init];
     _leftPanel.layer.borderWidth = 0.5;
     _leftPanel.layer.borderColor = [UIColor colorWithRed:0.0 green:0.6 blue:0.8 alpha:0.3].CGColor;
-    [_eDEXMainInterface addSubview:_leftPanel];
+    [_mainCyberInterface addSubview:_leftPanel];
 
-    UILabel *leftHdr = [[UILabel alloc] initWithFrame:CGRectMake(8, 4, 180, 16)];
+    UILabel *leftHdr = [[UILabel alloc] initWithFrame:CGRectMake(8, 4, 200, 15)];
     leftHdr.textColor = [UIColor colorWithRed:0.0 green:0.9 blue:0.95 alpha:0.9];
     leftHdr.font = [UIFont fontWithName:@"Courier-Bold" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold];
-    leftHdr.text = @"// REALTIME CPU / RAM / TEMP";
+    leftHdr.text = @"// THEO DÕI PHẦN CỨNG THỰC TẾ";
     [_leftPanel addSubview:leftHdr];
 
-    UIView *waveContainer = [[UIView alloc] initWithFrame:CGRectMake(8, 24, 180, 68)];
+    UIView *waveContainer = [[UIView alloc] init];
     waveContainer.tag = 501;
-    waveContainer.backgroundColor = [UIColor colorWithRed:0.01 green:0.02 blue:0.03 alpha:0.8];
+    waveContainer.backgroundColor = [UIColor colorWithRed:0.01 green:0.02 blue:0.03 alpha:0.85];
     waveContainer.layer.borderWidth = 0.5;
     waveContainer.layer.borderColor = [UIColor colorWithRed:0.0 green:0.7 blue:0.8 alpha:0.35].CGColor;
     [_leftPanel addSubview:waveContainer];
@@ -527,60 +645,62 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _cpuWaveLayer.lineWidth = 1.0;
     [waveContainer.layer addSublayer:_cpuWaveLayer];
 
-    _lblCpuText = [[UILabel alloc] initWithFrame:CGRectMake(8, 96, 180, 14)];
+    _lblCpuText = [[UILabel alloc] init];
     _lblCpuText.textColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:0.85];
     _lblCpuText.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
     [_leftPanel addSubview:_lblCpuText];
 
-    _lblRamText = [[UILabel alloc] initWithFrame:CGRectMake(8, 112, 180, 14)];
+    _lblRamText = [[UILabel alloc] init];
     _lblRamText.textColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:0.85];
     _lblRamText.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
     [_leftPanel addSubview:_lblRamText];
 
-    _ramBar = [[UIProgressView alloc] initWithFrame:CGRectMake(8, 129, 180, 3)];
+    _ramBar = [[UIProgressView alloc] init];
     _ramBar.progressTintColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.6 alpha:1.0];
     _ramBar.trackTintColor = [UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0];
     [_leftPanel addSubview:_ramBar];
 
-    _lblThermalText = [[UILabel alloc] initWithFrame:CGRectMake(8, 136, 180, 14)];
+    _lblThermalText = [[UILabel alloc] init];
     _lblThermalText.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.5 alpha:0.9];
     _lblThermalText.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
     [_leftPanel addSubview:_lblThermalText];
 
-    _lblStorageText = [[UILabel alloc] initWithFrame:CGRectMake(8, 152, 180, 14)];
-    _lblStorageText.textColor = [UIColor colorWithRed:0.4 green:0.7 blue:0.9 alpha:0.8];
+    _lblStorageText = [[UILabel alloc] init];
+    _lblStorageText.textColor = [UIColor colorWithRed:0.4 green:0.75 blue:0.9 alpha:0.8];
     _lblStorageText.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
     [_leftPanel addSubview:_lblStorageText];
 
+    // Cột trung tâm: Center Panel
     _centerPanel = [[UIView alloc] init];
     _centerPanel.layer.borderWidth = 0.5;
     _centerPanel.layer.borderColor = [UIColor colorWithRed:0.0 green:0.75 blue:0.95 alpha:0.4].CGColor;
-    [_eDEXMainInterface addSubview:_centerPanel];
+    [_mainCyberInterface addSubview:_centerPanel];
 
-    _lblCenterHeader = [[UILabel alloc] initWithFrame:CGRectMake(10, 4, 300, 16)];
+    _lblCenterHeader = [[UILabel alloc] init];
     _lblCenterHeader.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.85 alpha:1.0];
     _lblCenterHeader.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightBold];
-    _lblCenterHeader.text = @">> WORKSPACE CONSOLE // DISPATCH ENGINE";
+    _lblCenterHeader.text = @">> BẢNG ĐIỀU KHIỂN TRUNG TÂM // ĐỘNG CƠ APEX";
     [_centerPanel addSubview:_lblCenterHeader];
 
     _centerScrollView = [[UIScrollView alloc] init];
-    _centerScrollView.backgroundColor = [UIColor colorWithRed:0.01 green:0.015 blue:0.03 alpha:0.7];
+    _centerScrollView.backgroundColor = [UIColor colorWithRed:0.01 green:0.015 blue:0.03 alpha:0.75];
     _centerScrollView.layer.borderColor = [UIColor colorWithRed:0.0 green:0.5 blue:0.7 alpha:0.25].CGColor;
     _centerScrollView.layer.borderWidth = 0.5;
     [_centerPanel addSubview:_centerScrollView];
 
+    // Cột phải: Right Panel (Radar & Mạng)
     _rightPanel = [[UIView alloc] init];
     _rightPanel.layer.borderWidth = 0.5;
     _rightPanel.layer.borderColor = [UIColor colorWithRed:0.0 green:0.6 blue:0.8 alpha:0.3].CGColor;
-    [_eDEXMainInterface addSubview:_rightPanel];
+    [_mainCyberInterface addSubview:_rightPanel];
 
-    UILabel *rightHdr = [[UILabel alloc] initWithFrame:CGRectMake(8, 4, 180, 16)];
+    UILabel *rightHdr = [[UILabel alloc] initWithFrame:CGRectMake(8, 4, 200, 15)];
     rightHdr.textColor = [UIColor colorWithRed:0.0 green:0.9 blue:0.95 alpha:0.9];
     rightHdr.font = [UIFont fontWithName:@"Courier-Bold" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold];
-    rightHdr.text = @"// NETWORK & RADAR GLOBE";
+    rightHdr.text = @"// RADAR VỆ TINH & ĐƯỜNG TRUYỀN IPC";
     [_rightPanel addSubview:rightHdr];
 
-    _radarCircleView = [[UIView alloc] initWithFrame:CGRectMake(8, 24, 130, 130)];
+    _radarCircleView = [[UIView alloc] init];
     _radarCircleView.backgroundColor = [UIColor colorWithRed:0.01 green:0.02 blue:0.04 alpha:0.85];
     _radarCircleView.layer.borderColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.9 alpha:0.4].CGColor;
     _radarCircleView.layer.borderWidth = 0.5;
@@ -598,91 +718,128 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _radarSweepLayer.lineWidth = 1.2;
     [_radarCircleView.layer addSublayer:_radarSweepLayer];
 
-    _lblPingVal = [[UILabel alloc] initWithFrame:CGRectMake(8, 160, 180, 14)];
+    _lblPingVal = [[UILabel alloc] init];
     _lblPingVal.textColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:0.85];
     _lblPingVal.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
-    _lblPingVal.text = @"LATENCY: 8ms [SHM FIFO]";
+    _lblPingVal.text = @"ĐỘ TRỄ IPC: 4ms [TRỰC TIẾP]";
     [_rightPanel addSubview:_lblPingVal];
 
-    _lblIPVal = [[UILabel alloc] initWithFrame:CGRectMake(8, 176, 180, 14)];
+    _lblIPVal = [[UILabel alloc] init];
     _lblIPVal.textColor = [UIColor colorWithRed:0.2 green:0.85 blue:1.0 alpha:0.85];
     _lblIPVal.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
-    _lblIPVal.text = @"HOST: 127.0.0.1:285";
+    _lblIPVal.text = @"KÊNH TRUYỀN: FIFO BỘ NHỚ";
     [_rightPanel addSubview:_lblIPVal];
 
-    _lblIpcPipeStatus = [[UILabel alloc] initWithFrame:CGRectMake(8, 192, 180, 14)];
+    _lblIpcPipeStatus = [[UILabel alloc] init];
     _lblIpcPipeStatus.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.5 alpha:0.9];
     _lblIpcPipeStatus.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
-    _lblIpcPipeStatus.text = @"IPC PIPE: /tmp/.boost_hz_sync";
+    _lblIpcPipeStatus.text = @"TRẠNG THÁI: ĐÃ ĐỒNG BỘ";
     [_rightPanel addSubview:_lblIpcPipeStatus];
 
+    // Thanh điều khiển đáy: Bottom Dock Bar (Không dùng bàn phím)
     _bottomDockBar = [[UIView alloc] init];
     _bottomDockBar.backgroundColor = [UIColor colorWithRed:0.02 green:0.035 blue:0.06 alpha:0.95];
     _bottomDockBar.layer.borderColor = [UIColor colorWithRed:0.0 green:0.75 blue:0.9 alpha:0.35].CGColor;
     _bottomDockBar.layer.borderWidth = 0.6;
-    [_eDEXMainInterface addSubview:_bottomDockBar];
+    [_mainCyberInterface addSubview:_bottomDockBar];
 
-    NSArray *dockCmds = @[@"[APPLY & SYNC]", @"[FORCE MAX 240HZ]", @"[ZERO TOUCH OVERDRIVE]", @"[CLEAR MEMORY]", @"[RESPRING SPRINGBOARD]"];
+    NSArray *dockCmds = @[@"[LƯU & ĐỒNG BỘ]", @"[ÉP MAX 240HZ]", @"[CẢM ỨNG 0MS]", @"[DỌN RAM GỐC]", @"[RESPRING MÁY]"];
     _dockActionButtons = [NSMutableArray array];
     for (NSInteger i = 0; i < dockCmds.count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         btn.tag = 1000 + i;
         btn.layer.borderWidth = 1.0;
         btn.layer.borderColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.9 alpha:0.4].CGColor;
-        btn.layer.cornerRadius = 2.0;
-        btn.backgroundColor = [UIColor colorWithRed:0.0 green:0.1 blue:0.18 alpha:0.6];
+        btn.layer.cornerRadius = 3.0;
+        btn.backgroundColor = [UIColor colorWithRed:0.0 green:0.1 blue:0.18 alpha:0.65];
         [btn setTitle:dockCmds[i] forState:UIControlStateNormal];
         [btn setTitleColor:[UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0] forState:UIControlStateNormal];
         btn.titleLabel.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
+        btn.titleLabel.adjustsFontSizeToFitWidth = YES;
+        btn.titleLabel.minimumScaleFactor = 0.75;
         [btn addTarget:self action:@selector(dockActionTriggered:) forControlEvents:UIControlEventTouchUpInside];
         [_bottomDockBar addSubview:btn];
         [_dockActionButtons addObject:btn];
     }
 
     [self buildBootSequenceViews];
-    [self renderActiveTabWorkspace];
+}
+
+#pragma mark - Hiệu ứng xoay Icon và cập nhật Frame chuẩn xác chống đè chữ
+
+- (void)startRotateIconAnimation {
+    if (![_rotateIconView.layer animationForKey:@"rotateAnimation"]) {
+        CABasicAnimation *rotation = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+        rotation.toValue = @(M_PI * 2.0);
+        rotation.duration = 2.0;
+        rotation.cumulative = YES;
+        rotation.repeatCount = HUGE_VALF;
+        [_rotateIconView.layer addAnimation:rotation forKey:@"rotateAnimation"];
+    }
+}
+
+- (void)stopRotateIconAnimation {
+    [_rotateIconView.layer removeAnimationForKey:@"rotateAnimation"];
+}
+
+- (void)updateRotateOverlayFrames:(CGSize)sz {
+    _rotateIconView.center = CGPointMake(sz.width / 2.0, sz.height / 2.0 - 50);
+    _rotateTitleLabel.frame = CGRectMake(20, sz.height / 2.0 + 8, sz.width - 40, 30);
+    _rotateSubLabel.frame = CGRectMake(20, sz.height / 2.0 + 44, sz.width - 40, 44);
 }
 
 - (void)updateModuleFramesForSize:(CGSize)sz {
     CGFloat topH = 46.0;
-    CGFloat bottomH = 42.0;
+    CGFloat bottomH = 44.0;
     CGFloat contentH = sz.height - topH - bottomH;
 
+    // 1. Top Bar
     _topBarView.frame = CGRectMake(0, 0, sz.width, topH);
-    _topClockLabel.frame = CGRectMake(12, 6, 170, 16);
-    _topSysInfoLabel.frame = CGRectMake(12, 24, 260, 14);
+    _topClockLabel.frame = CGRectMake(12, 6, 210, 16);
+    _topSysInfoLabel.frame = CGRectMake(12, 24, 270, 14);
 
-    CGFloat tabW = sz.width - 290;
-    _topTabContainer.frame = CGRectMake(280, 4, tabW, 36);
-    CGFloat singleTabW = (tabW - 20) / _topTabButtons.count;
+    CGFloat tabStartX = 290.0;
+    CGFloat tabW = sz.width - tabStartX - 12;
+    _topTabContainer.frame = CGRectMake(tabStartX, 4, tabW, 36);
+    CGFloat singleTabW = (tabW - 16) / _topTabButtons.count;
     for (NSInteger i = 0; i < _topTabButtons.count; i++) {
         _topTabButtons[i].frame = CGRectMake(i * (singleTabW + 4), 2, singleTabW, 32);
     }
 
-    CGFloat leftW = sz.width * 0.26;
-    CGFloat rightW = sz.width * 0.26;
+    // 2. Chia tỷ lệ 3 cột: Trái 25%, Giữa 50%, Phải 25% (Rộng rãi, không bao giờ bị đè)
+    CGFloat leftW = floor(sz.width * 0.25);
+    CGFloat rightW = floor(sz.width * 0.25);
     CGFloat centerW = sz.width - leftW - rightW;
 
+    // Cột Trái
     _leftPanel.frame = CGRectMake(0, topH, leftW, contentH);
     UIView *waveContainer = [_leftPanel viewWithTag:501];
-    waveContainer.frame = CGRectMake(8, 24, leftW - 16, 68);
-    _lblCpuText.frame = CGRectMake(8, 98, leftW - 16, 14);
-    _lblRamText.frame = CGRectMake(8, 114, leftW - 16, 14);
-    _ramBar.frame = CGRectMake(8, 131, leftW - 16, 3);
-    _lblThermalText.frame = CGRectMake(8, 138, leftW - 16, 14);
-    _lblStorageText.frame = CGRectMake(8, 154, leftW - 16, 14);
+    CGFloat waveH = floor(contentH * 0.36);
+    waveContainer.frame = CGRectMake(8, 22, leftW - 16, waveH);
+    
+    CGFloat leftItemY = CGRectGetMaxY(waveContainer.frame) + 8;
+    _lblCpuText.frame = CGRectMake(8, leftItemY, leftW - 16, 14);
+    _lblRamText.frame = CGRectMake(8, leftItemY + 18, leftW - 16, 14);
+    _ramBar.frame = CGRectMake(8, leftItemY + 36, leftW - 16, 3);
+    _lblThermalText.frame = CGRectMake(8, leftItemY + 44, leftW - 16, 14);
+    _lblStorageText.frame = CGRectMake(8, leftItemY + 62, leftW - 16, 14);
 
+    // Cột Giữa
     _centerPanel.frame = CGRectMake(leftW, topH, centerW, contentH);
     _lblCenterHeader.frame = CGRectMake(10, 4, centerW - 20, 16);
-    _centerScrollView.frame = CGRectMake(6, 24, centerW - 12, contentH - 30);
+    _centerScrollView.frame = CGRectMake(6, 22, centerW - 12, contentH - 28);
 
+    // Cột Phải
     _rightPanel.frame = CGRectMake(leftW + centerW, topH, rightW, contentH);
-    CGFloat radarSz = MIN(rightW - 16, contentH * 0.45);
-    _radarCircleView.frame = CGRectMake((rightW - radarSz)/2, 24, radarSz, radarSz);
-    _lblPingVal.frame = CGRectMake(8, CGRectGetMaxY(_radarCircleView.frame) + 10, rightW - 16, 14);
-    _lblIPVal.frame = CGRectMake(8, CGRectGetMaxY(_radarCircleView.frame) + 26, rightW - 16, 14);
-    _lblIpcPipeStatus.frame = CGRectMake(8, CGRectGetMaxY(_radarCircleView.frame) + 42, rightW - 16, 14);
+    CGFloat radarSz = MIN(rightW - 16, floor(contentH * 0.48));
+    _radarCircleView.frame = CGRectMake((rightW - radarSz)/2.0, 22, radarSz, radarSz);
+    
+    CGFloat rightItemY = CGRectGetMaxY(_radarCircleView.frame) + 10;
+    _lblPingVal.frame = CGRectMake(8, rightItemY, rightW - 16, 14);
+    _lblIPVal.frame = CGRectMake(8, rightItemY + 18, rightW - 16, 14);
+    _lblIpcPipeStatus.frame = CGRectMake(8, rightItemY + 36, rightW - 16, 14);
 
+    // Thanh Đáy (Dock)
     _bottomDockBar.frame = CGRectMake(0, topH + contentH, sz.width, bottomH);
     CGFloat dockBtnW = (sz.width - 24) / _dockActionButtons.count;
     for (NSInteger i = 0; i < _dockActionButtons.count; i++) {
@@ -692,7 +849,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     [self renderActiveTabWorkspace];
 }
 
-#pragma mark - Sci-Fi Boot Screen (Video Identical)
+#pragma mark - Khởi động Sci-Fi Boot Screen
 
 - (void)buildBootSequenceViews {
     _bootContainer = [[UIView alloc] initWithFrame:self.view.bounds];
@@ -706,7 +863,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _bootConsoleLogView.userInteractionEnabled = NO;
     [_bootContainer addSubview:_bootConsoleLogView];
 
-    _bootLogoBox = [[UIView alloc] initWithFrame:CGRectMake(self.view.bounds.size.width/2 - 140, self.view.bounds.size.height * 0.55, 280, 60)];
+    _bootLogoBox = [[UIView alloc] initWithFrame:CGRectMake(self.view.bounds.size.width/2 - 140, self.view.bounds.size.height * 0.55, 280, 56)];
     _bootLogoBox.layer.borderColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.85 alpha:0.9].CGColor;
     _bootLogoBox.layer.borderWidth = 1.2;
     _bootLogoBox.layer.cornerRadius = 2.0;
@@ -723,26 +880,28 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _bootLogoLabel.font = [UIFont fontWithName:@"HelveticaNeue-CondensedBlack" size:24] ?: [UIFont boldSystemFontOfSize:24];
     [_bootLogoBox addSubview:_bootLogoLabel];
 
-    _bootSubPrompt = [[UILabel alloc] initWithFrame:CGRectMake(20, CGRectGetMaxY(_bootLogoBox.frame) + 16, self.view.bounds.size.width - 40, 22)];
+    _bootSubPrompt = [[UILabel alloc] initWithFrame:CGRectMake(20, CGRectGetMaxY(_bootLogoBox.frame) + 14, self.view.bounds.size.width - 40, 22)];
     _bootSubPrompt.textAlignment = NSTextAlignmentCenter;
     _bootSubPrompt.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.6 alpha:1.0];
     _bootSubPrompt.font = [UIFont fontWithName:@"Courier" size:13] ?: [UIFont monospacedSystemFontOfSize:13 weight:UIFontWeightBold];
     [_bootContainer addSubview:_bootSubPrompt];
+}
 
+- (void)executeSciFiBootSequence {
     NSArray<NSString *> *bootScript = @[
-        @"SYSTEM_BOOT: DARWIN XNU HYBRID PROBE INITIALIZING...",
-        @"DETECTED ARCHITECTURE: ARM64E // APPLE SILICON A11-A17+",
-        @"PROBING VIRTUAL FRAMEBUFFER DRIVER: CADISPLAYLINK CADENCE ZERO.",
-        @"UNLOCKING RESTRICTED DISPLAY MODES: 15HZ TO 240HZ EXPOSURE [OK]",
-        @"PATCHING COREANIMATION RUNLOOP OBSERVERS -> BYPASS DROPPED FRAMES.",
-        @"BINDING ZERO-LATENCY TOUCH PIPELINE: IOKIT EVENT QUEUE DISPATCHED.",
-        @"ALLOCATING MEMORY IPC SYNCHRONIZER: /tmp/.boost_hz_sync [RDWR OK]",
-        @"CHECKING 34 HARDWARE OPTIMIZATION HOOKS... COMPLETE.",
-        @"AUTHENTICATING OPERATOR PRIVILEGES... ACCESS GRANTED."
+        @"KHỞI ĐỘNG HỆ THỐNG: ĐANG DÒ TÌM NHÂN HYBRID DARWIN-XNU...",
+        @"PHÁT HIỆN KIẾN TRÚC: ARM64E // APPLE SILICON A11-A17+ [KHỚP]",
+        @"MỞ KHÓA BỘ ĐIỀU KHIỂN FRAMEBUFFER: KHỬ HOÀN TOÀN TRỄ CADISPLAYLINK.",
+        @"MỞ RỘNG DẢI TẦN SỐ QUÉT: HỖ TRỢ ĐỘC QUYỀN 15HZ ĐẾN 240HZ [SẴN SÀNG]",
+        @"TIÊM VÀO VÒNG LẶP COREANIMATION: LOẠI BỎ KHUNG HÌNH GIẬT KHỰNG.",
+        @"KẾT NỐI ĐƯỜNG TRUYỀN CẢM ỨNG KHÔNG TRỄ: IOKIT EVENT QUEUE [KÍCH HOẠT]",
+        @"KHỞI TẠO ĐƯỜNG ỐNG ĐỒNG BỘ IPC: /tmp/.boost_hz_sync [THÀNH CÔNG]",
+        @"NẠP TOÀN BỘ 34 CÔNG TẮC GIA TỐC PHẦN CỨNG... HOÀN TẤT 100%.",
+        @"XÁC THỰC QUYỀN TRUY CẬP ĐIỀU HÀNH... TRUY CẬP THÀNH CÔNG."
     ];
 
     __block NSUInteger step = 0;
-    NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:0.16 repeats:YES block:^(NSTimer * _Nonnull t) {
+    NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:0.14 repeats:YES block:^(NSTimer *t) {
         if (step < bootScript.count) {
             self->_bootConsoleLogView.text = [self->_bootConsoleLogView.text stringByAppendingFormat:@"%@\n", bootScript[step]];
             [self->_bootConsoleLogView scrollRangeToVisible:NSMakeRange(self->_bootConsoleLogView.text.length, 0)];
@@ -754,9 +913,9 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
                 self->_bootLogoBox.alpha = 1.0;
             } completion:^(BOOL finished) {
                 AudioServicesPlaySystemSound(1057);
-                NSString *welcomeStr = @">> Welcome back, Operator <<";
+                NSString *welcomeStr = @">> Chào mừng bạn, Người điều hành <<";
                 __block NSInteger charIdx = 0;
-                [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer * _Nonnull pTimer) {
+                [NSTimer scheduledTimerWithTimeInterval:0.025 repeats:YES block:^(NSTimer *pTimer) {
                     if (charIdx <= welcomeStr.length) {
                         self->_bootSubPrompt.text = [welcomeStr substringToIndex:charIdx];
                         charIdx++;
@@ -776,7 +935,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
         [UIView animateWithDuration:0.6 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
             self->_bootContainer.transform = CGAffineTransformMakeScale(1.12, 1.12);
             self->_bootContainer.alpha = 0.0;
-            self->_eDEXMainInterface.alpha = 1.0;
+            self->_mainCyberInterface.alpha = 1.0;
         } completion:^(BOOL finished) {
             [self->_bootContainer removeFromSuperview];
             self->_bootContainer = nil;
@@ -784,7 +943,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     });
 }
 
-#pragma mark - Center Console Modules (Full Functions)
+#pragma mark - Hiển thị nội dung Tabs chi tiết (Không đè chữ)
 
 - (void)mainTabClicked:(UIButton *)sender {
     [_haptic impactOccurred];
@@ -803,34 +962,34 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     CGFloat w = _centerScrollView.frame.size.width;
     if (w <= 0) return;
 
-    if (_activeMainTab == 0) { // DASHBOARD OVERVIEW
-        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, w - 20, 18)];
+    if (_activeMainTab == 0) { // TAB 0: TỔNG QUAN
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, w - 24, 18)];
         title.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.8 alpha:1.0];
         title.font = [UIFont fontWithName:@"Courier-Bold" size:11] ?: [UIFont boldSystemFontOfSize:11];
-        title.text = @"[CURRENT SYSTEM DISPATCH SUMMARY]";
+        title.text = @"[BÁO CÁO TRẠNG THÁI ĐIỀU PHỐI HỆ THỐNG]";
         [_centerScrollView addSubview:title];
 
-        UILabel *desc = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, w - 20, 90)];
+        UILabel *desc = [[UILabel alloc] initWithFrame:CGRectMake(12, 34, w - 24, 110)];
         desc.numberOfLines = 0;
-        desc.textColor = [UIColor colorWithRed:0.5 green:0.8 blue:0.9 alpha:0.9];
+        desc.textColor = [UIColor colorWithRed:0.55 green:0.85 blue:0.95 alpha:0.9];
         desc.font = [UIFont fontWithName:@"Courier" size:10] ?: [UIFont systemFontOfSize:10];
-        desc.text = [NSString stringWithFormat:@"• TARGET REFRESH RATE : %u Hz\n• TARGET FPS CAP     : %u FPS\n• THERMAL PROTECTION  : %@\n• ZERO LATENCY TOUCH  : %@\n• 34 HOOK ENGINE     : %lu ACTIVE MODULES\n• IPC BUS PIPE STATE  : SYNCHRONIZED",
+        desc.text = [NSString stringWithFormat:@"• TẦN SỐ QUÉT MỤC TIÊU   : %u Hz\n• GIỚI HẠN KHUNG HÌNH FPS: %u FPS\n• BẢO VỆ NHIỆT ĐỘ        : %@\n• CẢM ỨNG ĐỘ TRỄ 0MS     : %@\n• TỔNG CÔNG TẮC GIA TỐC  : %lu MÔ-ĐUN HOẠT ĐỘNG\n• KÊNH ĐỒNG BỘ NHỊ PHÂN  : TRỰC TIẾP /tmp/.boost_hz_sync\n• TRẠNG THÁI HIỆN TẠI    : SIÊU TỐC ĐỘ (CYBERMAX)",
                      _payload.targetHz, _payload.targetFPS,
-                     _payload.thermalShield ? @"ACTIVE" : @"DISABLED",
-                     _payload.zeroLatencyTouch ? @"ENABLED (0ms)" : @"STOCK",
-                     (unsigned long)_groupToggleKeys.count];
+                     _payload.thermalShield ? @"BẬT BẢO VỆ" : @"VÔ HIỆU HÓA",
+                     _payload.zeroLatencyTouch ? @"KÍCH HOẠT (0MS)" : @"TIÊU CHUẨN",
+                     (unsigned long)_groupTogglesMeta.count];
         [_centerScrollView addSubview:desc];
 
-        _centerScrollView.contentSize = CGSizeMake(w, 140);
+        _centerScrollView.contentSize = CGSizeMake(w, 160);
 
-    } else if (_activeMainTab == 1) { // HZ / FPS TUNER
-        _lblTargetHzValue = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, w - 20, 16)];
+    } else if (_activeMainTab == 1) { // TAB 1: TẦN SỐ HZ / FPS
+        _lblTargetHzValue = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, w - 24, 16)];
         _lblTargetHzValue.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0];
         _lblTargetHzValue.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
-        _lblTargetHzValue.text = [NSString stringWithFormat:@">> TARGET REFRESH: %u HZ", _payload.targetHz];
+        _lblTargetHzValue.text = [NSString stringWithFormat:@">> TẦN SỐ QUÉT MỤC TIÊU: %u HZ", _payload.targetHz];
         [_centerScrollView addSubview:_lblTargetHzValue];
 
-        _hzSlider = [[UISlider alloc] initWithFrame:CGRectMake(10, 26, w - 20, 24)];
+        _hzSlider = [[UISlider alloc] initWithFrame:CGRectMake(12, 28, w - 24, 24)];
         _hzSlider.minimumValue = 15;
         _hzSlider.maximumValue = 240;
         _hzSlider.value = _payload.targetHz;
@@ -838,13 +997,13 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
         [_hzSlider addTarget:self action:@selector(onHzSliderChanged:) forControlEvents:UIControlEventValueChanged];
         [_centerScrollView addSubview:_hzSlider];
 
-        _lblTargetFpsValue = [[UILabel alloc] initWithFrame:CGRectMake(10, 56, w - 20, 16)];
+        _lblTargetFpsValue = [[UILabel alloc] initWithFrame:CGRectMake(12, 58, w - 24, 16)];
         _lblTargetFpsValue.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0];
         _lblTargetFpsValue.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
-        _lblTargetFpsValue.text = [NSString stringWithFormat:@">> TARGET RENDER FPS: %u FPS", _payload.targetFPS];
+        _lblTargetFpsValue.text = [NSString stringWithFormat:@">> GIỚI HẠN KHUNG HÌNH: %u FPS", _payload.targetFPS];
         [_centerScrollView addSubview:_lblTargetFpsValue];
 
-        _fpsSlider = [[UISlider alloc] initWithFrame:CGRectMake(10, 74, w - 20, 24)];
+        _fpsSlider = [[UISlider alloc] initWithFrame:CGRectMake(12, 78, w - 24, 24)];
         _fpsSlider.minimumValue = 15;
         _fpsSlider.maximumValue = 240;
         _fpsSlider.value = _payload.targetFPS;
@@ -853,10 +1012,10 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
         [_centerScrollView addSubview:_fpsSlider];
 
         NSArray *presets = @[@"60Hz", @"90Hz", @"120Hz", @"144Hz", @"240Hz MAX"];
-        CGFloat pW = (w - 30) / presets.count;
+        CGFloat pW = (w - 32) / presets.count;
         for (NSInteger i = 0; i < presets.count; i++) {
             UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-            btn.frame = CGRectMake(10 + i * pW, 106, pW - 4, 26);
+            btn.frame = CGRectMake(12 + i * pW, 112, pW - 4, 28);
             btn.tag = 2000 + i;
             btn.layer.borderWidth = 1.0;
             btn.layer.borderColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.95 alpha:0.4].CGColor;
@@ -867,77 +1026,94 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
             [btn addTarget:self action:@selector(onPresetClicked:) forControlEvents:UIControlEventTouchUpInside];
             [_centerScrollView addSubview:btn];
         }
-        _centerScrollView.contentSize = CGSizeMake(w, 145);
+        _centerScrollView.contentSize = CGSizeMake(w, 155);
 
-    } else if (_activeMainTab == 2) { // 34 ADVANCED HOOK SWITCHES
-        CGFloat curY = 6;
-        for (NSInteger i = 0; i < _groupToggleKeys.count; i++) {
-            NSString *key = _groupToggleKeys[i];
+    } else if (_activeMainTab == 2) { // TAB 2: 34 CÔNG TẮC TIẾNG VIỆT
+        CGFloat curY = 8;
+        for (NSInteger i = 0; i < _groupTogglesMeta.count; i++) {
+            NSDictionary *meta = _groupTogglesMeta[i];
+            NSString *key = meta[@"key"];
+            NSString *name = meta[@"name"];
+            NSString *desc = meta[@"desc"];
             uint32_t val = [self readGroupToggleValueForKey:key];
 
-            UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(10, curY, w - 75, 20)];
-            lbl.textColor = [UIColor colorWithRed:0.6 green:0.85 blue:0.95 alpha:0.9];
-            lbl.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightRegular];
-            lbl.text = [NSString stringWithFormat:@"[%02ld] %@", (long)i, key];
-            [_centerScrollView addSubview:lbl];
+            UIView *itemBox = [[UIView alloc] initWithFrame:CGRectMake(8, curY, w - 16, 44)];
+            itemBox.backgroundColor = [UIColor colorWithRed:0.02 green:0.035 blue:0.06 alpha:0.6];
+            itemBox.layer.borderColor = [UIColor colorWithRed:0.0 green:0.7 blue:0.9 alpha:0.2].CGColor;
+            itemBox.layer.borderWidth = 0.5;
+            itemBox.layer.cornerRadius = 3.0;
+            [_centerScrollView addSubview:itemBox];
 
-            UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(w - 60, curY - 3, 50, 20)];
+            UILabel *lblName = [[UILabel alloc] initWithFrame:CGRectMake(8, 4, itemBox.bounds.size.width - 70, 16)];
+            lblName.textColor = [UIColor colorWithRed:0.0 green:0.95 blue:0.85 alpha:1.0];
+            lblName.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
+            lblName.text = [NSString stringWithFormat:@"[%02ld] %@", (long)i + 1, name];
+            [itemBox addSubview:lblName];
+
+            UILabel *lblDesc = [[UILabel alloc] initWithFrame:CGRectMake(8, 22, itemBox.bounds.size.width - 70, 16)];
+            lblDesc.textColor = [UIColor colorWithRed:0.5 green:0.75 blue:0.85 alpha:0.8];
+            lblDesc.font = [UIFont fontWithName:@"Courier" size:8] ?: [UIFont systemFontOfSize:8];
+            lblDesc.text = desc;
+            [itemBox addSubview:lblDesc];
+
+            UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(itemBox.bounds.size.width - 58, 7, 50, 20)];
             sw.transform = CGAffineTransformMakeScale(0.65, 0.65);
             sw.on = (val != 0);
             sw.onTintColor = [UIColor colorWithRed:0.0 green:0.85 blue:0.95 alpha:1.0];
             sw.tag = 3000 + i;
             [sw addTarget:self action:@selector(onToggleSwitched:) forControlEvents:UIControlEventValueChanged];
-            [_centerScrollView addSubview:sw];
+            [itemBox addSubview:sw];
 
-            curY += 24;
+            curY += 48;
         }
         _centerScrollView.contentSize = CGSizeMake(w, curY + 10);
 
-    } else if (_activeMainTab == 3) { // HOOKED APPS
-        UILabel *appsHdr = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, w - 20, 16)];
+    } else if (_activeMainTab == 3) { // TAB 3: GIA TỐC APP
+        UILabel *appsHdr = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, w - 24, 18)];
         appsHdr.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.85 alpha:1.0];
-        appsHdr.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
-        appsHdr.text = @"// THIRD PARTY APP ACCELERATION HOOKS";
+        appsHdr.font = [UIFont fontWithName:@"Courier-Bold" size:11] ?: [UIFont boldSystemFontOfSize:11];
+        appsHdr.text = @"// TRẠNG THÁI GIA TỐC ỨNG DỤNG BÊN THỨ 3";
         [_centerScrollView addSubview:appsHdr];
 
-        UILabel *list = [[UILabel alloc] initWithFrame:CGRectMake(10, 28, w - 20, 80)];
+        UILabel *list = [[UILabel alloc] initWithFrame:CGRectMake(12, 34, w - 24, 90)];
         list.numberOfLines = 0;
-        list.textColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.9 alpha:0.85];
-        list.font = [UIFont fontWithName:@"Courier" size:9] ?: [UIFont systemFontOfSize:9];
-        list.text = @"• SPRINGBOARD SHELL : ACTIVE (OVERCLOCK INJECTED)\n• WEBKIT JIT RENDER : OPTIMIZED (ZERO STUTTER)\n• METAL API GAMES   : FPS BYPASS RUNNING\n• DAEMONS WATCHDOG  : MONITORED /tmp/.boost_hz_sync";
+        list.textColor = [UIColor colorWithRed:0.5 green:0.85 blue:0.95 alpha:0.9];
+        list.font = [UIFont fontWithName:@"Courier" size:10] ?: [UIFont systemFontOfSize:10];
+        list.text = @"• GIAO DIỆN SPRINGBOARD : BẬT (ÉP XUNG MÀN HÌNH CHÍNH)\n• TRÌNH DUYỆT WEBKIT     : TỐI ƯU (CHỐNG GIẬT LAG CUỘN TRANG)\n• GAME ĐỒ HỌA METAL      : VƯỢT GIỚI HẠN FPS MẶC ĐỊNH\n• BỘ NHỚ ĐỆM TIẾN TRÌNH  : GIÁM SÁT LIÊN TỤC QUA FIFO IPC\n• DANH SÁCH ỨNG DỤNG     : ĐÃ KẾT NỐI TẤT CẢ APP HỆ THỐNG";
         [_centerScrollView addSubview:list];
-        _centerScrollView.contentSize = CGSizeMake(w, 120);
+        _centerScrollView.contentSize = CGSizeMake(w, 140);
 
-    } else { // PROFILES & SYSTEM RESET
-        UILabel *profHdr = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, w - 20, 16)];
+    } else { // TAB 4: HỆ THỐNG
+        UILabel *profHdr = [[UILabel alloc] initWithFrame:CGRectMake(12, 10, w - 24, 18)];
         profHdr.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.85 alpha:1.0];
-        profHdr.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
-        profHdr.text = @"// DISPATCH PROFILES & MEMORY PURGE";
+        profHdr.font = [UIFont fontWithName:@"Courier-Bold" size:11] ?: [UIFont boldSystemFontOfSize:11];
+        profHdr.text = @"// QUẢN TRỊ BỘ NHỚ & ĐẶT LẠI CẤU HÌNH";
         [_centerScrollView addSubview:profHdr];
 
         UIButton *btnClean = [UIButton buttonWithType:UIButtonTypeCustom];
-        btnClean.frame = CGRectMake(10, 32, w - 20, 32);
+        btnClean.frame = CGRectMake(12, 38, w - 24, 34);
         btnClean.backgroundColor = [UIColor colorWithRed:0.0 green:0.35 blue:0.5 alpha:0.6];
         btnClean.layer.borderWidth = 1.0;
         btnClean.layer.borderColor = [UIColor colorWithRed:0.0 green:0.9 blue:1.0 alpha:0.7].CGColor;
-        [btnClean setTitle:@"FORCE PURGE CACHE & MACH VM RAM" forState:UIControlStateNormal];
+        btnClean.layer.cornerRadius = 3.0;
+        [btnClean setTitle:@"GIẢI PHÓNG TOÀN BỘ BỘ NHỚ RAM (MACH VM PURGE)" forState:UIControlStateNormal];
         btnClean.titleLabel.font = [UIFont fontWithName:@"Courier-Bold" size:10] ?: [UIFont boldSystemFontOfSize:10];
         [btnClean addTarget:self action:@selector(forcePurgeMemory) forControlEvents:UIControlEventTouchUpInside];
         [_centerScrollView addSubview:btnClean];
 
-        _centerScrollView.contentSize = CGSizeMake(w, 90);
+        _centerScrollView.contentSize = CGSizeMake(w, 100);
     }
 }
 
 - (void)onHzSliderChanged:(UISlider *)s {
     _payload.targetHz = (int)s.value;
-    _lblTargetHzValue.text = [NSString stringWithFormat:@">> TARGET REFRESH: %u HZ", _payload.targetHz];
+    _lblTargetHzValue.text = [NSString stringWithFormat:@">> TẦN SỐ QUÉT MỤC TIÊU: %u HZ", _payload.targetHz];
     [self saveAndCommitAllSync];
 }
 
 - (void)onFpsSliderChanged:(UISlider *)s {
     _payload.targetFPS = (int)s.value;
-    _lblTargetFpsValue.text = [NSString stringWithFormat:@">> TARGET RENDER FPS: %u FPS", _payload.targetFPS];
+    _lblTargetFpsValue.text = [NSString stringWithFormat:@">> GIỚI HẠN KHUNG HÌNH: %u FPS", _payload.targetFPS];
     [self saveAndCommitAllSync];
 }
 
@@ -949,15 +1125,15 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     _payload.targetFPS = rates[idx];
     _hzSlider.value = _payload.targetHz;
     _fpsSlider.value = _payload.targetFPS;
-    _lblTargetHzValue.text = [NSString stringWithFormat:@">> TARGET REFRESH: %u HZ", _payload.targetHz];
-    _lblTargetFpsValue.text = [NSString stringWithFormat:@">> TARGET RENDER FPS: %u FPS", _payload.targetFPS];
+    _lblTargetHzValue.text = [NSString stringWithFormat:@">> TẦN SỐ QUÉT MỤC TIÊU: %u HZ", _payload.targetHz];
+    _lblTargetFpsValue.text = [NSString stringWithFormat:@">> GIỚI HẠN KHUNG HÌNH: %u FPS", _payload.targetFPS];
     [self saveAndCommitAllSync];
 }
 
 - (void)onToggleSwitched:(UISwitch *)sw {
     [_haptic impactOccurred];
     NSInteger idx = sw.tag - 3000;
-    NSString *key = _groupToggleKeys[idx];
+    NSString *key = _groupTogglesMeta[idx][@"key"];
     [self writeGroupToggleValue:sw.isOn ? 1 : 0 forKey:key];
     [self saveAndCommitAllSync];
 }
@@ -975,7 +1151,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 - (void)dockActionTriggered:(UIButton *)btn {
     [_haptic impactOccurred];
     NSInteger tag = btn.tag - 1000;
-    if (tag == 0) { // APPLY & SYNC
+    if (tag == 0) { // LƯU & ĐỒNG BỘ
         [self saveAndCommitAllSync];
         AudioServicesPlaySystemSound(1104);
     } else if (tag == 1) { // 240Hz MAX
@@ -983,15 +1159,16 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
         _payload.targetFPS = 240;
         [self saveAndCommitAllSync];
         [self renderActiveTabWorkspace];
-    } else if (tag == 2) { // ZERO TOUCH OVERDRIVE
+    } else if (tag == 2) { // CẢM ỨNG 0MS
         _payload.zeroLatencyTouch = 1;
         _payload.forceOverclock = 1;
         [self saveAndCommitAllSync];
-    } else if (tag == 3) { // CLEAR MEMORY
+        [self renderActiveTabWorkspace];
+    } else if (tag == 3) { // DỌN RAM GỐC
         [self forcePurgeMemory];
-    } else if (tag == 4) { // RESPRING
+    } else if (tag == 4) { // RESPRING MÁY
         AudioServicesPlaySystemSound(1057);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             pid_t pid;
             const char *args[] = {"killall", "-9", "SpringBoard", NULL};
             posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)args, NULL);
@@ -999,7 +1176,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     }
 }
 
-#pragma mark - System Realtime Telemetry Loops
+#pragma mark - Vòng lặp giám sát phần cứng thời gian thực
 
 - (void)startRuntimeLoops {
     _animTickLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onTickLoop:)];
@@ -1018,7 +1195,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 - (void)onTickLoop:(CADisplayLink *)link {
     NSDateFormatter *df = [[NSDateFormatter alloc] init];
     df.dateFormat = @"HH:mm:ss.SS";
-    _topClockLabel.text = [NSString stringWithFormat:@"UTC TIME: %@", [df stringFromDate:[NSDate date]]];
+    _topClockLabel.text = [NSString stringWithFormat:@"GIỜ HỆ THỐNG: %@", [df stringFromDate:[NSDate date]]];
 
     _radarAngle += 0.04;
     [self drawRadarSweepAndGlobe:_radarAngle];
@@ -1066,7 +1243,7 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
             cpuUsage = ((CGFloat)(cpuinfo.cpu_ticks[CPU_STATE_USER] + cpuinfo.cpu_ticks[CPU_STATE_SYSTEM]) / total) * 100.0;
         }
     }
-    _lblCpuText.text = [NSString stringWithFormat:@"CPU USAGE : %.1f%%", cpuUsage];
+    _lblCpuText.text = [NSString stringWithFormat:@"CPU SỬ DỤNG : %.1f%%", cpuUsage];
 
     for (int i = 0; i < 31; i++) {
         _cpuHistory[i] = _cpuHistory[i+1];
@@ -1092,21 +1269,21 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
     mach_msg_type_number_t size = MACH_TASK_BASIC_INFO_COUNT;
     if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &size) == KERN_SUCCESS) {
         CGFloat memMb = (CGFloat)info.resident_size / (1024.0 * 1024.0);
-        _lblRamText.text = [NSString stringWithFormat:@"RAM TASK  : %.1f MB", memMb];
+        _lblRamText.text = [NSString stringWithFormat:@"RAM ĐANG DÙNG: %.1f MB", memMb];
         _ramBar.progress = MIN(1.0, memMb / 512.0);
     }
 
     NSProcessInfoThermalState tState = [NSProcessInfo processInfo].thermalState;
-    NSString *tStr = @"NOMINAL (COOL)";
-    if (tState == NSProcessInfoThermalStateFair) tStr = @"FAIR (WARM)";
-    else if (tState == NSProcessInfoThermalStateSerious) tStr = @"SERIOUS (THROTTLING)";
-    else if (tState == NSProcessInfoThermalStateCritical) tStr = @"CRITICAL";
-    _lblThermalText.text = [NSString stringWithFormat:@"THERMAL   : %@", tStr];
+    NSString *tStr = @"MÁT MẺ (BÌNH THƯỜNG)";
+    if (tState == NSProcessInfoThermalStateFair) tStr = @"HƠI ẤM";
+    else if (tState == NSProcessInfoThermalStateSerious) tStr = @"NÓNG CAO (ĐANG HÃM)";
+    else if (tState == NSProcessInfoThermalStateCritical) tStr = @"RẤT NÓNG";
+    _lblThermalText.text = [NSString stringWithFormat:@"NHIỆT ĐỘ     : %@", tStr];
 
     NSDictionary *fsAttr = [[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:nil];
     if (fsAttr) {
         CGFloat freeGb = [fsAttr[NSFileSystemFreeSize] doubleValue] / (1024.0*1024.0*1024.0);
-        _lblStorageText.text = [NSString stringWithFormat:@"FREE VFS  : %.1f GB", freeGb];
+        _lblStorageText.text = [NSString stringWithFormat:@"BỘ NHỚ TRỐNG : %.1f GB", freeGb];
     }
 }
 
@@ -1116,4 +1293,3 @@ static void TI_WriteSyncPayloadUniversal(const void *data, size_t size) {
 }
 
 @end
-
