@@ -130,27 +130,24 @@ after-stage::
 		'		</array>' \
 		'		<key>ExcludeBundles</key>' \
 		'		<array>' \
-		'			<string>com.taojb.boostiphone6s</string>' \
 		'			<string>com.apple.WebKit.Networking</string>' \
 		'			<string>com.apple.WebKit.WebContent</string>' \
+		'			<string>com.apple.backboardd</string>' \
+		'			<string>com.apple.runningboardd</string>' \
 		'		</array>' \
 		'		<key>ExcludeExecutables</key>' \
 		'		<array>' \
 		'			<string>BoostiPhone6sApp</string>' \
-		'			<string>launchd</string>' \
 		'			<string>watchdogd</string>' \
+		'			<string>com.taojb.boostiphone6s</string>' \
 		'			<string>kernelmanagerd</string>' \
 		'			<string>installd</string>' \
-		'			<string>jailbreakd</string>' \
-		'			<string>dopamined</string>' \
-		'			<string>bootstrapd</string>' \
-		'			<string>containermanagerd</string>' \
 		'			<string>cfprefsd</string>' \
-		'			<string>securityd</string>' \
 		'			<string>powerd</string>' \
 		'			<string>mediaserverd</string>' \
 		'			<string>symptomsd</string>' \
-		'			<string>thermalmonitord</string>' \
+		'			<string>backboardd</string>' \
+		'			<string>runningboardd</string>' \
 		'		</array>' \
 		'	</dict>' \
 		'</dict>' \
