@@ -10403,6 +10403,8 @@ static void Titanium_BypassKillMethodV108(void) {
 
 // ====================================================================================================
 // [%ctor]
+// FIX INVERT: chặn nạp vào TOÀN BỘ process Accessibility / AssistiveTouch / VoiceOver
+// Lý do: inject vào A11y → hook CA/rate/pipeline corrupt setting invert color
 // ====================================================================================================
 
 %ctor {
@@ -10412,16 +10414,41 @@ static void Titanium_BypassKillMethodV108(void) {
             if (!progName) return;
             if (!Titanium_IsUIProcess()) return;
 
-            if (strcasestr(progName, "BoostiPhone6sApp") != NULL ||
-                strcasestr(progName, "AccessibilityUIServer") != NULL ||
-                strcasestr(progName, "PosterBoard") != NULL ||
+            // [CHẶN APP TWEAK] — không inject vào chính tweak app
+            if (strcasestr(progName, "BoostiPhone6sApp") != NULL) return;
+
+            // [CHẶN A11Y — FIX INVERT] — block toàn bộ process trợ năng + accessibility
+            // Inject vào đây → hook CA rate → corrupt setting invert color
+            if (strcasestr(progName, "AccessibilityUIServer") != NULL ||
+                strcasestr(progName, "AccessibilityUIService") != NULL ||
+                strcasestr(progName, "AccessibilitySettingsLoader") != NULL ||
+                strcasestr(progName, "accessibility") != NULL ||
+                strcasecmp(progName, "assistivetouchd") == 0 ||
+                strcasecmp(progName, "assistivetouchd.helper") == 0 ||
+                strcasecmp(progName, "AXSpringBoardServerInstance") == 0 ||
+                strcasecmp(progName, "AXAuditService") == 0 ||
+                strcasecmp(progName, "AXHUDService") == 0 ||
+                strcasecmp(progName, "AXRuntime") == 0 ||
+                strcasecmp(progName, "axassetsd") == 0 ||
+                strcasecmp(progName, "AccessibilityUIShared") == 0 ||
+                strcasecmp(progName, "VoiceOverServices") == 0 ||
+                strcasecmp(progName, "AXSpeechAssetServices") == 0 ||
+                strcasecmp(progName, "AXFrontBoardUtils") == 0 ||
+                strcasecmp(progName, "AssistiveTouch") == 0 ||
+                strcasecmp(progName, "ATService") == 0 ||
+                strcasecmp(progName, "VoiceOver") == 0 ||
+                strcasecmp(progName, "screenreaderd") == 0 ||
+                strcasecmp(progName, "speechsynthesisd") == 0) return;
+
+            // [BỐC] AccessibilityUIServer + assistivetouchd khỏi block cũ — đã bốc
+
+            if (strcasestr(progName, "PosterBoard") != NULL ||
                 strcasestr(progName, "Cr4shed") != NULL ||
                 strcasestr(progName, "ScreenshotServicesService") != NULL ||
                 strcasestr(progName, "SharingViewService") != NULL ||
                 strcasestr(progName, "PassbookUIService") != NULL ||
                 strcasestr(progName, "UserNotificationCenter") != NULL ||
                 strcasestr(progName, "CoreAuthUI") != NULL ||
-                strcasestr(progName, "assistivetouchd") != NULL ||
                 strcasestr(progName, "sharingd") != NULL ||
                 strcasestr(progName, "zinitd") != NULL ||
                 strcasestr(progName, "nanotimekitcompaniond") != NULL ||
@@ -10465,6 +10492,17 @@ static void Titanium_BypassKillMethodV108(void) {
             if (bundleID) {
                 if ([bundleID rangeOfString:@"networkextension" options:NSCaseInsensitiveSearch].location != NSNotFound ||
                     [bundleID rangeOfString:@"vpn" options:NSCaseInsensitiveSearch].location != NSNotFound) return;
+
+                // [CHẶN A11Y BUNDLE] — bất kỳ bundle nào chứa "accessibility" hoặc "assistivetouch"
+                if ([bundleID rangeOfString:@"accessibility" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                    [bundleID rangeOfString:@"assistivetouch" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                    [bundleID rangeOfString:@"voiceover" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                    [bundleID rangeOfString:@"speech" options:NSCaseInsensitiveSearch].location != NSNotFound) return;
+
+                // [CHẶN CỨNG] — bundle id của Settings (nơi chứa A11y toggle)
+                if ([bundleID isEqualToString:@"com.apple.Preferences"]) {
+                    // CHO PHÉP Settings load — không block — nhưng file I/O hook đã bị bốc
+                }
             }
 
             BOOL isSpringBoard = (bundleID && [bundleID isEqualToString:@"com.apple.springboard"]) ||
