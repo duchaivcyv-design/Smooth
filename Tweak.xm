@@ -8580,9 +8580,197 @@ static int hooked_lstat_fn(const char *path, struct stat *buf) {
 }
 
 // ====================================================================================================
-// [TIER 6 - UNLOCK SYSTEM FILE ACCESS — hook full, brute]
+// [TARGETED SANDBOX OVERRIDE — mở cứng vài file hệ thống cụ thể cho đọc/ghi]
+// Đéo whitelist, đéo blocklist. Chỉ ép mở đúng danh sách path hệ thống dưới đây.
+// Mọi path khác → passthrough bình thường (iOS tự xử lý như không có tweak).
 // ====================================================================================================
 
+// [DANH SÁCH PATH HỆ THỐNG ĐƯỢC ÉP MỞ] — thêm/bớt tùy nhu cầu
+static BOOL Titanium_IsForceOpenSystemPath(const char *path) {
+    if (!path || !path[0]) return NO;
+
+    static const char *forceOpenPaths[] = {
+        // === CẤU HÌNH HỆ THỐNG ===
+        "/private/etc/hosts",                       // hosts file
+        "/private/etc/resolv.conf",                 // DNS config
+        "/private/etc/hosts.equiv",
+        "/private/etc/ssh/sshd_config",             // SSH config
+        "/private/etc/ssh/ssh_config",
+        "/private/etc/ssh/authorized_keys",
+        "/private/etc/ssh/known_hosts",
+        "/private/etc/fstab",
+        "/private/etc/nsswitch.conf",
+        "/private/etc/protocols",
+        "/private/etc/services",
+        "/private/etc/shells",
+        "/private/etc/passwd",
+        "/private/etc/group",
+        "/private/etc/master.passwd",
+        "/private/etc/sudoers",
+
+        // === NETWORK CONFIG ===
+        "/private/var/db/dhcpclient/",
+        "/private/var/db/dhcpd_leases",
+        "/private/var/preferences/SystemConfiguration/",    // WiFi, network plist
+        "/private/var/root/Library/Preferences/",
+
+        // === SYSTEM DB ===
+        "/private/var/db/timezone/",
+        "/private/var/db/locationd/",                       // location cache
+        "/private/var/db/nsurlsessiond/",                   // network cache
+        "/private/var/db/com.apple.xpc.roleaccountd.staging/",
+        "/private/var/db/mds/",                              // Spotlight index
+        "/private/var/db/lockdown/",                         // pairing records
+
+        // === SPRINGBOARD CONFIG ===
+        "/private/var/mobile/Library/Preferences/com.apple.springboard.plist",
+        "/private/var/mobile/Library/Preferences/com.apple.springboard.",  // prefix mọi sub plist
+        "/private/var/mobile/Library/SpringBoard/",
+        "/private/var/mobile/Library/SplashBoard/",
+        "/private/var/mobile/Library/BackBoard/",
+
+        // === SYSTEM PREFERENCES ===
+        "/private/var/mobile/Library/Preferences/",          // toàn bộ prefs mobile
+        "/private/var/preferences/",                          // toàn bộ prefs system
+        "/var/mobile/Library/Preferences/",                   // rootless variant
+        "/var/preferences/",
+
+        // === CACHE / TMP HỆ THỐNG ===
+        "/private/var/tmp/",
+        "/private/var/mobile/Library/Caches/",
+        "/private/var/mobile/Library/Logs/",
+
+        // === JAILBREAK ROOT ===
+        "/var/jb/",
+        "/private/var/jb/",
+        "/var/jbproj-",
+        "/private/var/jbproj-",
+
+        // === MOBILE HOME ===
+        "/var/mobile/",
+        "/private/var/mobile/",
+
+        NULL
+    };
+
+    for (int i = 0; forceOpenPaths[i]; i++) {
+        size_t plen = strlen(forceOpenPaths[i]);
+        if (strncmp(path, forceOpenPaths[i], plen) == 0) return YES;
+    }
+    return NO;
+}
+
+// [SANDBOX_CHECK] — chỉ ép allow operation file-* với path trong danh sách
+static int (*orig_sandbox_check)(pid_t, const char *, int, ...) = NULL;
+static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
+    if (!orig_sandbox_check) return 0;
+    if (!Titanium_IsTargetProcess() || !operation) {
+        return orig_sandbox_check(pid, operation, type);
+    }
+    if (strncmp(operation, "file-", 5) != 0) {
+        return orig_sandbox_check(pid, operation, type);
+    }
+    va_list ap;
+    va_start(ap, type);
+    const char *path = va_arg(ap, const char *);
+    va_end(ap);
+    if (path && Titanium_IsForceOpenSystemPath(path)) {
+        return 0;
+    }
+    return orig_sandbox_check(pid, operation, type);
+}
+
+// [SANDBOX_CHECK_SELF] — same logic, file-scope
+static int (*g_orig_sandbox_check_self)(pid_t, const char *, int, ...) = NULL;
+static int hooked_sandbox_check_self(pid_t pid, const char *operation, int type, ...) {
+    if (!g_orig_sandbox_check_self) return 0;
+    if (!Titanium_IsTargetProcess() || !operation) {
+        return g_orig_sandbox_check_self(pid, operation, type);
+    }
+    if (strncmp(operation, "file-", 5) != 0) {
+        return g_orig_sandbox_check_self(pid, operation, type);
+    }
+    va_list ap;
+    va_start(ap, type);
+    const char *path = va_arg(ap, const char *);
+    va_end(ap);
+    if (path && Titanium_IsForceOpenSystemPath(path)) {
+        return 0;
+    }
+    return g_orig_sandbox_check_self(pid, operation, type);
+}
+
+// [ACCESS] — path trong danh sách → ép có quyền
+static int (*orig_access_fn)(const char *path, int mode) = NULL;
+static int hooked_access_fn(const char *path, int mode) {
+    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
+        return 0;
+    }
+    return orig_access_fn ? orig_access_fn(path, mode) : -1;
+}
+
+static int (*orig_faccessat_fn)(int fd, const char *path, int mode, int flags) = NULL;
+static int hooked_faccessat_fn(int fd, const char *path, int mode, int flags) {
+    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
+        return 0;
+    }
+    return orig_faccessat_fn ? orig_faccessat_fn(fd, path, mode, flags) : -1;
+}
+
+// [OPEN] — path trong danh sách → ép mở kể cả O_RDWR/O_WRONLY, fallback O_CREAT
+static int (*orig_open_fn)(const char *path, int flags, ...) = NULL;
+static int hooked_open_fn(const char *path, int flags, ...) {
+    va_list ap;
+    va_start(ap, flags);
+    int mode_arg = va_arg(ap, int);
+    va_end(ap);
+    mode_t mode = (mode_t)mode_arg;
+
+    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
+        int fd = orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
+        if (fd >= 0) return fd;
+        // Fallback O_CREAT cho write flag
+        if ((flags & O_WRONLY) || (flags & O_RDWR)) {
+            int fbFlags = flags | O_CREAT;
+            fd = orig_open_fn ? orig_open_fn(path, fbFlags, mode ? mode : 0644) : -1;
+        }
+        return fd;
+    }
+    return orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
+}
+
+// [STAT] — path trong danh sách → ép tồn tại
+static int (*orig_stat_fn)(const char *path, struct stat *buf) = NULL;
+static int hooked_stat_fn(const char *path, struct stat *buf) {
+    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
+        int ret = orig_stat_fn ? orig_stat_fn(path, buf) : -1;
+        if (ret == 0) return 0;
+        if (buf) {
+            memset(buf, 0, sizeof(struct stat));
+            buf->st_mode = S_IFREG | 0644;
+            buf->st_size = 0;
+        }
+        return 0;
+    }
+    return orig_stat_fn ? orig_stat_fn(path, buf) : -1;
+}
+
+static int (*orig_lstat_fn)(const char *path, struct stat *buf) = NULL;
+static int hooked_lstat_fn(const char *path, struct stat *buf) {
+    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
+        int ret = orig_lstat_fn ? orig_lstat_fn(path, buf) : -1;
+        if (ret == 0) return 0;
+        if (buf) {
+            memset(buf, 0, sizeof(struct stat));
+            buf->st_mode = S_IFREG | 0644;
+            buf->st_size = 0;
+        }
+        return 0;
+    }
+    return orig_lstat_fn ? orig_lstat_fn(path, buf) : -1;
+}
+
+// [INSTALL]
 static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -8592,56 +8780,46 @@ static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
                                      RTLD_LAZY | RTLD_LOCAL);
                 if (!sbLib) sbLib = RTLD_DEFAULT;
 
-                // sandbox_check
                 void *symSbCheck = dlsym(sbLib, "sandbox_check");
                 if (symSbCheck && !orig_sandbox_check) {
-                    MSHookFunction(symSbCheck,
-                                   (void *)hooked_sandbox_check,
-                                   (void **)&orig_sandbox_check);
-                    Titanium_V60_Log(@"[SB] sandbox_check hook installed");
+                    MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
+                    Titanium_V60_Log(@"[SB] sandbox_check hooked (targeted)");
                 }
 
-                // sandbox_check_self
                 void *symSbSelf = dlsym(sbLib, "sandbox_check_self");
-                if (symSbSelf) {
-                    static sandbox_check_fn orig_self = NULL;
-                    static int hooked_self(pid_t pid, const char *op, int type, ...) {
-                        if (Titanium_IsTargetProcess()) return 0;
-                        return orig_self ? orig_self(pid, op, type) : 0;
-                    }
-                    MSHookFunction(symSbSelf, (void *)hooked_self, (void **)&orig_self);
-                    Titanium_V60_Log(@"[SB] sandbox_check_self hook installed");
+                if (symSbSelf && !g_orig_sandbox_check_self) {
+                    MSHookFunction(symSbSelf, (void *)hooked_sandbox_check_self, (void **)&g_orig_sandbox_check_self);
+                    Titanium_V60_Log(@"[SB] sandbox_check_self hooked (targeted)");
                 }
 
-                // File I/O
                 void *symAccess = dlsym(RTLD_DEFAULT, "access");
                 if (symAccess) {
                     MSHookFunction(symAccess, (void *)hooked_access_fn, (void **)&orig_access_fn);
-                    Titanium_V60_Log(@"[FILE] access hook installed");
+                    Titanium_V60_Log(@"[FILE] access hooked (targeted)");
                 }
 
                 void *symFaccessat = dlsym(RTLD_DEFAULT, "faccessat");
                 if (symFaccessat) {
                     MSHookFunction(symFaccessat, (void *)hooked_faccessat_fn, (void **)&orig_faccessat_fn);
-                    Titanium_V60_Log(@"[FILE] faccessat hook installed");
+                    Titanium_V60_Log(@"[FILE] faccessat hooked (targeted)");
                 }
 
                 void *symOpen = dlsym(RTLD_DEFAULT, "open");
                 if (symOpen) {
                     MSHookFunction(symOpen, (void *)hooked_open_fn, (void **)&orig_open_fn);
-                    Titanium_V60_Log(@"[FILE] open hook installed");
+                    Titanium_V60_Log(@"[FILE] open hooked (targeted)");
                 }
 
                 void *symStat = dlsym(RTLD_DEFAULT, "stat");
                 if (symStat) {
                     MSHookFunction(symStat, (void *)hooked_stat_fn, (void **)&orig_stat_fn);
-                    Titanium_V60_Log(@"[FILE] stat hook installed");
+                    Titanium_V60_Log(@"[FILE] stat hooked (targeted)");
                 }
 
                 void *symLstat = dlsym(RTLD_DEFAULT, "lstat");
                 if (symLstat) {
                     MSHookFunction(symLstat, (void *)hooked_lstat_fn, (void **)&orig_lstat_fn);
-                    Titanium_V60_Log(@"[FILE] lstat hook installed");
+                    Titanium_V60_Log(@"[FILE] lstat hooked (targeted)");
                 }
             } @catch (NSException *e) {
                 Titanium_V60_Log([NSString stringWithFormat:@"[SB] hook throw: %@", e.reason]);
@@ -9537,8 +9715,9 @@ extern uint64_t Titanium_GetDeviceTotalRAM(void);
 extern uint64_t Titanium_GetRAMCeiling(void);
 extern BOOL Titanium_ShouldPurgeNow(void);
 
-// [V55] screen state token — cancel khi reboot (V55_InstallScreenState phải lưu token này)
-extern volatile int g_blankedScreenToken;
+// [V55] screen state token — KHÔNG cần extern. g_blankedScreenToken đã định nghĩa:
+//   static volatile int g_blankedScreenToken = -1;   (file-scope, trước V55_InstallScreenState)
+// Bốc extern để tránh: non-static declaration follows static declaration
 
 static void Titanium_StartIPCHearthbeatV12(void) {
     @try {
@@ -9556,7 +9735,6 @@ static void Titanium_StartIPCHearthbeatV12(void) {
                 @try {
                     Titanium_ReloadSharedSyncStateV285();
 
-                    // [PURGE GATE] — chỉ purge purgable page khi SpringBoard idle
                     if (!g_isInteracting && !g_isScrollingActive && !g_isContinuousSwiping) {
                         if (Titanium_ShouldPurgeNow()) {
                             Titanium_PurgePurgableMemory();
