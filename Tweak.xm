@@ -6581,7 +6581,6 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     Titanium_StartOverdriveProbe();
     Titanium_Tier6JetsamImmunityReal();
     Titanium_Tier6RealtimeFrameConstraint(targetHz);
-    Titanium_OverdrivePipelineUp:
     Titanium_OverdrivePipelineGo(targetHz);
     Titanium_Tier4WriteCadence(targetHz);
 }
