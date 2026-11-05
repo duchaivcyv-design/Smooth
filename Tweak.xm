@@ -6087,50 +6087,65 @@ static inline BOOL Titanium_ShouldPurgeNow(void) {
 }
 
 // ====================================================================================================
-// [FORWARD DECLARATIONS — CHỐNG UNDECLARED KHI COMPILE]
+// [FORWARD DECLARATIONS — BẢN SẠCH ĐÃ LỌC BỎ TRÙNG LẶP & XUNG ĐỘT STATIC/EXTERN]
 // ====================================================================================================
-extern ApexV285ProPayload g_syncPayloadV285;
-extern BOOL g_isCurrentAppBlacklisted;
-extern volatile BOOL g_isScrollingActive;
-extern volatile BOOL g_isContinuousSwiping;
-extern volatile NSInteger g_cachedResolvedHz;
-extern volatile NSInteger g_cachedResolvedFPS;
-@class BoostConfigV285Pro;
-extern BoostConfigV285Pro *CFG285;
-extern NSInteger Titanium_GetEffectiveFrameCap(void);
-extern void EnforceMaxCPUPower(void);
-extern uint64_t Titanium_NanosToMachTicks(uint64_t nanos);
-extern BOOL Titanium_IsSpringBoard(void);
-extern ApexV285ProPayload *g_sharedPayloadPtr;
-extern int g_shmFd;
 
-static inline BOOL Apex_IsMasterEnabled(void) { return g_syncPayloadV285.masterEnabled != 0; }
+// Cờ toàn cục của tầng AF & Overdrive (chỉ khai báo nếu chưa được định nghĩa)
+extern volatile BOOL     g_afActive;
+extern volatile NSInteger g_afForceHz;
+extern volatile NSInteger g_afLockedHz;
+extern volatile BOOL     g_tioOverdriveBusy;
 
-static void Titanium_V60_Log(NSString *msg);
+static inline BOOL Apex_IsMasterEnabled(void) { 
+    return g_syncPayloadV285.masterEnabled != 0; 
+}
+
+// --- TIỆN ÍCH HỆ THỐNG & TOUCH ---
+static uint64_t tio_mach_nanos(uint64_t nanos);
+static BOOL Titanium_V55_PanelWritable(void);
+static BOOL Titanium_V57_TouchReady(void);
+static BOOL Titanium_V56_KeyboardBusy(void);
+
+// --- READ / VERIFY KERNEL REFRESH RATE (FIX LỖI 9583) ---
+static NSInteger Titanium_ReadKernelPanelHz(void);
+static NSInteger Titanium_ActualPanelHz(void);
+static NSInteger Titanium_ComputeFeasibleHz(NSInteger targetHz, uint32_t w, uint32_t h);
+
+// --- TẦNG HIỂN THỊ, SCENE & METAL ---
 static NSInteger Titanium_GetMasterRate(void);
-static inline BOOL Titanium_ShouldPurgeNow(void);
-static inline BOOL Titanium_CanPunchHardware(void);
-static inline void Titanium_MarkHardwarePunched(void);
-static inline BOOL Titanium_ThermalOK(void);
-static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
-static void Titanium_EnforceCAFrameRange(void);
-static void Titanium_ReapplyFrameRateToAllScenes(void);
+static void Titanium_ReapplyFrameRateToVisibleMetalLayers(void);
+
+// --- TẦNG DRIVER OVERRIDE & HARDWARE HACK ---
 static void Titanium_HardwareDriverOverride(NSInteger targetHz);
 static void Titanium_ForcePanelModeDirect(NSInteger hz);
 static void Titanium_Tier4WriteCadence(NSInteger hz);
 static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz);
-static void Titanium_ReloadSharedSyncStateV285(void);
+static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
+static void Titanium_Tier6RealtimeFrameConstraint(NSInteger hz);
+static void Titanium_Tier6JetsamImmunityReal(void);
+static void Titanium_OverdrivePipelineGo(NSInteger targetHz);
+static void Titanium_ExecuteRealPanelOverdrive(void);
+
+// --- GIAO TIẾP IOKIT, DCP & FRAMEBUFFER ---
+static void Titanium_LoadIOMFBDirect(void);
 static void Tio_DCPResolveConnections(void);
+static void Tio_DCPResolveConnections_v2(void);
 static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
 static kern_return_t Tio_DisplayConnSetRefresh_v2(NSInteger hz);
 static void Tio_DisplayConnSetRefresh_compat(NSInteger hz);
-static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
-static void Titanium_LoadIOMFBDirect(void);
-static BOOL Titanium_V55_PanelWritable(void);
-static BOOL Titanium_V57_TouchReady(void);
-static BOOL Titanium_V56_KeyboardBusy(void);
+static kern_return_t Tio_IomfbRawSetMode(NSInteger hz);
+
+// --- NHÓM AF (AUTO-FRAME / BRUTE WRITE ENGINE) ---
+static NSInteger Titanium_AF_ClampTarget(NSInteger targetHz, uint32_t w, uint32_t h);
+static BOOL Titanium_AF_BruteWrite(NSInteger hz, uint32_t w, uint32_t h);
+static void Titanium_AF_ApplyTarget(NSInteger targetHz);
+static void Titanium_AF_StartWatchdog(NSInteger targetHz);
+static void Titanium_AF_StopWatchdog(void);
+
+// --- IPC, SHM & PROBE ---
+static void Titanium_V57_WriteSharedBestHz(NSInteger hz);
+static void Titanium_V57_ReloadIPCIfStale(void);
 static void Titanium_StartOverdriveProbe(void);
-static void Titanium_ReapplyFrameRateToVisibleMetalLayers(void);
 static void Titanium_InstallPanicSuppress(void);
 static void Titanium_BypassDCPMethod(void);
 
@@ -8628,7 +8643,8 @@ static kern_return_t Tio_IomfbRawSetMode(NSInteger hz) {
         
         if (syms->connectScalarMethod) {
             uint64_t in = (uint64_t)hz;
-            (void)syms->connectScalarMethod(g_dcpIomfbConn, kTargetSelectors[i], &in, 1, NULL, &outLen);
+            uint32_t scalarOutCount = 0;
+            (void)syms->connectScalarMethod(g_dcpIomfbConn, kTargetSelectors[i], &in, 1, NULL, &scalarOutCount);
         }
     }
 
