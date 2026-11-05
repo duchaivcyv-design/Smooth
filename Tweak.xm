@@ -5611,6 +5611,13 @@ static volatile double   g_lastObservedFrameHz   = 0.0;
 static volatile uint32_t g_driftPunchCountTotal  = 0;
 
 // Forward decls
+// [SỬA BUILD] Định nghĩa tạm (stub) cho các hàm đã khai báo static nhưng thiếu thân hàm.
+// Thân hàm gốc không có trong file; cần khôi phục logic thật nếu muốn tính năng này hoạt động.
+static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) { (void)targetHz; }
+static void Titanium_ForcePanelModeDirect(NSInteger hz) { (void)hz; }
+// Trả 0 => caller tự fallback sang Titanium_ActualPanelHz() (đã xử lý ở chỗ gọi).
+static NSInteger Titanium_ReadKernelPanelHz(void) { return 0; }
+
 static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
 static void Titanium_ForcePanelModeDirect(NSInteger hz);
 static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force);
