@@ -7598,28 +7598,32 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 
 // ====================================================================================================
 // HOOK: ProMotion overclock — BẺ THẲNG XUỐNG DRIVER, REFUSE LOWER, LOCK RATE
-// DEEP EDITION: inject fake CADisplayMode @ target, force setCurrentMode,
-//               block reject path 100%, ép mọi getter trả target
 // ====================================================================================================
 %group Group_Hardware_ProMotion_Overclock
 
-// ----------------------------------------------------------------------------------------------------
-// [FAKE MODE FACTORY] — mode object ảo @ target Hz, dùng cho mọi inject path
-// ----------------------------------------------------------------------------------------------------
-@interface TitaniumFakeDisplayMode : NSObject // [SỬA BUILD] CADisplayMode là class private, không có trong SDK
+// ====================================================================================================
+// [FAKE MODE FACTORY — BỔ SUNG ĐỦ COLOR SPACE ĐỂ CHỐNG LỆCH MÀU / ĐẢO MÀU]
+// ====================================================================================================
+@interface TitaniumFakeDisplayMode : NSObject
 @end
 
 @implementation TitaniumFakeDisplayMode
-- (double)refreshRate       { return (double)Titanium_GetMasterRate(); }
+- (double)refreshRate        { return (double)Titanium_GetMasterRate(); }
 - (double)refreshRateForMode { return (double)Titanium_GetMasterRate(); }
 - (double)safeRefreshRate    { return (double)Titanium_GetMasterRate(); }
 - (double)nominalRefreshRate { return (double)Titanium_GetMasterRate(); }
 - (double)pixelAspectRatio   { return 1.0; }
-- (CGSize)size              { return [UIScreen mainScreen].nativeBounds.size; }
-- (CGSize)pointSize         { return [UIScreen mainScreen].nativeBounds.size; }
-- (CGSize)pixelSize         { return [UIScreen mainScreen].nativeBounds.size; }
-- (int)width                { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
-- (int)height               { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
+- (CGSize)size               { return [UIScreen mainScreen].nativeBounds.size; }
+- (CGSize)pointSize          { return [UIScreen mainScreen].nativeBounds.size; }
+- (CGSize)pixelSize          { return [UIScreen mainScreen].nativeBounds.size; }
+- (int)width                 { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
+- (int)height                { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
+
+// [BỔ SUNG QUAN TRỌNG] Trả về không gian màu chuẩn để tránh CoreAnimation bóp méo màu / đảo màu
+- (NSString *)colorMode      { return @"NSColorSpaceStandardRGB"; }
+- (NSString *)colorGamut     { return @"sRGB"; }
+- (uint32_t)pixelFormat      { return 'BGRA'; } // 32-bit pixel format chuẩn iOS
+- (BOOL)isVirtual            { return YES; }
 @end
 
 static TitaniumFakeDisplayMode *Titanium_MakeFakeMode(void) {
@@ -7639,9 +7643,6 @@ static TitaniumFakeDisplayMode *Titanium_MakeFakeMode(void) {
     return s_fake;
 }
 
-// ----------------------------------------------------------------------------------------------------
-// IOHID — ReportInterval @ target
-// ----------------------------------------------------------------------------------------------------
 %hook IOHIDEventSystemClient
 - (void)setProperty:(id)property forKey:(NSString *)key {
     if (!self) { %orig(property, key); return; }
@@ -7665,14 +7666,10 @@ static TitaniumFakeDisplayMode *Titanium_MakeFakeMode(void) {
 }
 %end
 
-// ----------------------------------------------------------------------------------------------------
-// [C FUNCTION] IOMobileFramebufferSetDisplayMode — ép target, block reject
-// ----------------------------------------------------------------------------------------------------
 static void (*orig_IOMobileFramebufferSetDisplayMode)(void *fb, uint32_t w, uint32_t h, float hz) = NULL;
 static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint32_t h, float hz) {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V55_PanelWritable()) {
         NSInteger target = Titanium_GetMasterRate();
-        // Gọi 2 lần — lần target, lần native — cho driver ghi cả 2 path
         if (orig_IOMobileFramebufferSetDisplayMode) {
             orig_IOMobileFramebufferSetDisplayMode(fb, w, h, (float)target);
         }
@@ -7683,16 +7680,12 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     }
 }
 
-// ----------------------------------------------------------------------------------------------------
-// [REJECT BLOCK] IOMobileFramebufferClient — setDisplayRefreshRate trả 0 luôn,
-// getDisplayRefreshRate trả target, không cho driver báo reject
-// ----------------------------------------------------------------------------------------------------
 %hook IOMobileFramebufferClient
 - (int)setDisplayRefreshRate:(float)rate options:(unsigned int)options {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && Titanium_V55_PanelWritable()) {
         NSInteger target = Titanium_GetMasterRate();
         Titanium_ForcePanelModeDirect(target);
-        return 0;   // ép driver báo success
+        return 0;
     }
     return %orig(rate, options);
 }
@@ -7707,7 +7700,7 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 - (int)getDisplayRefreshRate:(float *)arg1 {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && arg1) {
         *arg1 = (float)Titanium_GetMasterRate();
-        return 0;   // báo success luôn
+        return 0;
     }
     return %orig(arg1);
 }
@@ -7730,9 +7723,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 }
 %end
 
-// ----------------------------------------------------------------------------------------------------
-// [MODE INJECT] CADisplayMode — mọi mode getter trả fake, mọi setter passthrough
-// ----------------------------------------------------------------------------------------------------
 %hook CADisplayMode
 - (double)refreshRate {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
@@ -7763,9 +7753,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 }
 %end
 
-// ----------------------------------------------------------------------------------------------------
-// [DISPLAY OVERRIDE] CADisplay — every path returns target / fake mode
-// ----------------------------------------------------------------------------------------------------
 %hook CADisplay
 - (double)refreshRate {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
@@ -7831,7 +7818,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     %orig(timings);
 }
 
-// [FAKE MODE INJECT] availableModes trả mảng có fake mode @ target ở cuối
 - (NSArray *)availableModes {
     NSArray *orig = %orig;
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
@@ -7846,7 +7832,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     return orig;
 }
 
-// [FAKE MODE INJECT] currentMode trả fake mode @ target
 - (id)currentMode {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         id fake = (id)Titanium_MakeFakeMode();
@@ -7855,7 +7840,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     return %orig;
 }
 
-// [FORCE SET] setCurrentMode — bỏ qua mode user truyền, force fake mode
 - (void)setCurrentMode:(id)mode {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         id fake = (id)Titanium_MakeFakeMode();
@@ -7864,7 +7848,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
         } else {
             %orig(mode);
         }
-        // Ép driver vật lý thêm 1 lần nữa
         NSInteger target = Titanium_GetMasterRate();
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             Titanium_ForcePanelModeDirect(target);
@@ -7886,9 +7869,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 }
 %end
 
-// ----------------------------------------------------------------------------------------------------
-// [LOCK HARDWARE] CAWindowServerDisplay — full triplet + cadence + duration
-// ----------------------------------------------------------------------------------------------------
 %hook CAWindowServerDisplay
 - (void)setMinimumFrameDuration:(double)duration {
     if (IS_ACTIVE || Apex_IsMasterEnabled()) {
@@ -7950,38 +7930,7 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 - (void)setAllowsVirtualModes:(BOOL)flag { %orig(YES); }
 %end
 
-// ----------------------------------------------------------------------------------------------------
-// [BLOCK THERMAL DROP — narrow] không đụng color/gamma/invert
-// ----------------------------------------------------------------------------------------------------
-%hook IORegistryEntry
-- (kern_return_t)setCFProperty:(NSString *)key withValue:(id)value {
-    if (!key || !self) return %orig(key, value);
-    if (IS_ACTIVE || Apex_IsMasterEnabled()) {
-        NSString *keyLower = [key lowercaseString];
-        if ([keyLower containsString:@"thermal-budget"] ||
-            [keyLower containsString:@"thermalbudget"] ||
-            [keyLower containsString:@"thermal-mitigation"] ||
-            [keyLower containsString:@"thermalmitigation"] ||
-            [keyLower containsString:@"thermal-pressure"] ||
-            [keyLower containsString:@"thermalpressure"] ||
-            [keyLower containsString:@"thermal-level"] ||
-            [keyLower containsString:@"thermallimit"] ||
-            [keyLower containsString:@"powerlimit"] ||
-            [keyLower containsString:@"power-limit"] ||
-            [keyLower containsString:@"maxpower"] ||
-            [keyLower containsString:@"sustainable"] ||
-            [keyLower containsString:@"throttle"] ||
-            [keyLower containsString:@"throttling"]) {
-            return KERN_SUCCESS;
-        }
-    }
-    return %orig(key, value);
-}
-%end
-
-// ----------------------------------------------------------------------------------------------------
-// [BLOCK THERMAL] NSProcessInfo / UIDevice — luôn báo mát
-// ----------------------------------------------------------------------------------------------------
+// Đã lọc bỏ IORegistryEntry filter thermal rác để tránh xung đột hệ thống hiển thị màu sắc
 %hook NSProcessInfo
 - (NSProcessInfoThermalState)thermalState {
     if (IS_ACTIVE || Apex_IsMasterEnabled()) return NSProcessInfoThermalStateNominal;
@@ -8004,9 +7953,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 }
 %end
 
-// ----------------------------------------------------------------------------------------------------
-// [BƠM ĐIỆN] AGXAccelerator — ép max power + perf state
-// ----------------------------------------------------------------------------------------------------
 %hook AGXAccelerator
 - (int)setPowerState:(unsigned int)state {
     if (!self) return %orig(state);
