@@ -3,6 +3,7 @@
 #define TITANIUM_SREBOOT_MARKER     @"/tmp/.titanium_sreboot_marker"
 #define TITANIUM_SREBOOT_WINDOW     15.0    // [FIX-1] 180s → 15s
 
+// ==================== MACH & XNU KERNEL ====================
 #import <mach/mach.h>
 #import <mach/mach_init.h>
 #import <mach/mach_host.h>
@@ -62,12 +63,19 @@
 #import <sys/wait.h>
 #import <sys/mman.h>
 #import <sys/stat.h>
+#import <sys/mount.h>       // [THÊM] Cần cho kiểm tra VFS / filesystem
+#import <sys/param.h>       // [THÊM] Khai báo MAXPATHLEN, PAGE_SIZE
+#import <sys/syscall.h>     // [THÊM] Khai báo các mã gọi syscall trực tiếp
 
 // ==================== OBJC & SECURITY ====================
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <substrate.h>
+
+#if __has_include(<sandbox.h>)
+#import <sandbox.h>         // [THÊM] Khai báo sandbox
+#endif
 
 // ==================== APPLE FRAMEWORKS ====================
 #import <CoreFoundation/CoreFoundation.h>
@@ -80,13 +88,24 @@
 #import <Metal/Metal.h>
 #import <WebKit/WebKit.h>
 
+// [THÊM] BẢO VỆ IOKIT & IOSURFACE (Chống báo lỗi thiếu thư mục private trên SDK iOS)
 #if __has_include(<IOKit/IOKitLib.h>)
 #import <IOKit/IOKitLib.h>
+#import <IOKit/IOKitKeys.h>
+#else
+typedef mach_port_t io_object_t;
+typedef io_object_t io_service_t;
+typedef io_object_t io_connect_t;
+typedef io_object_t io_iterator_t;
+typedef io_object_t io_registry_entry_t;
+#define IO_OBJECT_NULL ((io_object_t)0)
+#define kIOMasterPortDefault ((mach_port_t)0)
 #endif
 
 #if __has_include(<IOSurface/IOSurfaceRef.h>)
 #import <IOSurface/IOSurfaceRef.h>
 #endif
+
 // ==================== CHỐT BẢO VỆ HẰNG SỐ KERNEL XNU ====================
 #ifndef LATENCY_QOS_TIER_0
 #define LATENCY_QOS_TIER_0 ((0xFF << 16) | 1)
