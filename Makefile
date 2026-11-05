@@ -86,44 +86,32 @@ after-stage::
 		'		<key>Bundles</key>' \
 		'		<array>' \
 		'			<string>com.apple.springboard</string>' \
-		'			<string>com.apple.backboardd</string>' \
 		'			<string>com.apple.Preferences</string>' \
 		'			<string>com.apple.mobilesafari</string>' \
 		'			<string>com.apple.UIKit</string>' \
 		'			<string>com.apple.UIKitCore</string>' \
-		'			<string>com.apple.*</string>' \
+		'			<string>com.apple.WebKit.WebContent</string>' \
 		'		</array>' \
 		'		<key>Executables</key>' \
 		'		<array>' \
 		'			<string>SpringBoard</string>' \
-		'			<string>backboardd</string>' \
 		'		</array>' \
 		'		<key>Classes</key>' \
 		'		<array>' \
 		'			<string>CADisplayLink</string>' \
-		'			<string>CAAnimation</string>' \
-		'			<string>CASpringAnimation</string>' \
-		'			<string>CATransaction</string>' \
-		'			<string>CALayer</string>' \
-		'			<string>CAMetalLayer</string>' \
-		'			<string>CAContext</string>' \
 		'			<string>CADisplay</string>' \
 		'			<string>CADisplayMode</string>' \
 		'			<string>CADisplayController</string>' \
 		'			<string>CAWindowServer</string>' \
 		'			<string>CAWindowServerDisplay</string>' \
-		'			<string>UIView</string>' \
+		'			<string>CAMetalLayer</string>' \
+		'			<string>CAAnimation</string>' \
+		'			<string>CASpringAnimation</string>' \
+		'			<string>CATransaction</string>' \
 		'			<string>UIWindow</string>' \
 		'			<string>UIScreen</string>' \
 		'			<string>UIScene</string>' \
 		'			<string>UIWindowScene</string>' \
-		'			<string>UIApplication</string>' \
-		'			<string>UIViewController</string>' \
-		'			<string>UIResponder</string>' \
-		'			<string>UIEvent</string>' \
-		'			<string>UITouch</string>' \
-		'			<string>UIPresentationController</string>' \
-		'			<string>UIViewPropertyAnimator</string>' \
 		'			<string>WKWebView</string>' \
 		'			<string>MTKView</string>' \
 		'			<string>SKView</string>' \
@@ -131,12 +119,12 @@ after-stage::
 		'		<key>ExcludeBundles</key>' \
 		'		<array>' \
 		'			<string>com.apple.WebKit.Networking</string>' \
-		'			<string>com.apple.WebKit.WebContent</string>' \
 		'			<string>com.apple.backboardd</string>' \
 		'			<string>com.apple.runningboardd</string>' \
 		'		</array>' \
 		'		<key>ExcludeExecutables</key>' \
 		'		<array>' \
+		'			<string>backboardd</string>' \
 		'			<string>BoostiPhone6sApp</string>' \
 		'			<string>watchdogd</string>' \
 		'			<string>com.taojb.boostiphone6s</string>' \
@@ -146,7 +134,6 @@ after-stage::
 		'			<string>powerd</string>' \
 		'			<string>mediaserverd</string>' \
 		'			<string>symptomsd</string>' \
-		'			<string>backboardd</string>' \
 		'			<string>runningboardd</string>' \
 		'		</array>' \
 		'	</dict>' \
