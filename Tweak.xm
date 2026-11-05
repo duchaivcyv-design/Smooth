@@ -820,10 +820,6 @@ static void Titanium_V60_Log(NSString *msg);
 - (void)setAllowGPUOptimizedContents:(BOOL)flag;
 @end
 
-@interface MTLCompileOptions : NSObject
-@property (nonatomic, assign) BOOL fastMathEnabled;
-@property (nonatomic, assign) NSUInteger languageVersion;
-@end
 
 @interface UIScreen (TitaniumApexPrivate)
 - (void)_setTargetRefreshRate:(CGFloat)rate;
@@ -1173,7 +1169,7 @@ static void Titanium_V60_Log(NSString *msg);
 @interface SBAppSwitcherSnapshotImageCache : NSObject
 - (void)reloadImagesForAllItems;
 - (void)_purgeAllSnapshots;
-- (id)_requestImageForAppLayout:(id)arg1 displayIdentity:(id)arg2 isLowQuality:(BOOL)arg3 async:(BOOL)4 withCompletion:(id)5;
+- (id)_requestImageForAppLayout:(id)arg1 displayIdentity:(id)arg2 isLowQuality:(BOOL)arg3 async:(BOOL)arg4 withCompletion:(id)arg5;
 - (BOOL)shouldLoadSnapshotImagesImmediately;
 @end
 
@@ -6113,9 +6109,9 @@ static volatile NSInteger g_v57SharedBestHz    = 0;
 static volatile BOOL     g_v60ForceDriverSuccess = NO;
 
 // Absolute Force State
-static volatile NSInteger g_afForceHz          = 0;
-static volatile NSInteger g_afLockedHz         = 0;
-static volatile BOOL      g_afActive           = NO;
+volatile NSInteger g_afForceHz          = 0;
+volatile NSInteger g_afLockedHz         = 0;
+volatile BOOL      g_afActive           = NO;
 static dispatch_source_t  g_afWatchdog         = nil;
 
 static inline uint64_t v55_ns(uint64_t ns) { return Titanium_NanosToMachTicks(ns); }
@@ -6210,7 +6206,7 @@ static float Titanium_ForceUserFPS(float r) { (void)r; return (float)Titanium_Ge
 
 static volatile NSInteger g_tioActiveHz        = 0;
 static volatile double    g_tioObservedVsyncHz = 0.0;
-static volatile BOOL      g_tioOverdriveBusy   = NO;
+volatile BOOL      g_tioOverdriveBusy   = NO;
 static volatile BOOL      g_tioRecoveryArmed   = NO;
 static volatile uint64_t  g_tioLastVsyncTick   = 0;
 static volatile NSInteger g_tioCachedBestHz    = 0;
@@ -6309,7 +6305,6 @@ static io_connect_t g_dcpDispConn = IO_OBJECT_NULL;
 static volatile BOOL g_dcpConnReady = NO;
 
 // Cờ ép buộc Driver chấp nhận (Bypass DCP / Panel Rejection)
-static volatile BOOL g_v60ForceDriverSuccess = NO;
 
 // Hook hàm C cấp thấp của Framework IOMobileFramebuffer
 static tio_iomfb_setmode_fn orig_iomfb_setmode_hook = NULL;
@@ -10810,12 +10805,10 @@ static void Titanium_RestoreOnFirstFrame(void) {
             }
             if (visibleTicks >= 4) {
                 Titanium_UpdateNativeDisplayMaxFPS();
-                Titanium_InstallUIScreenRateSpoofNow();
                 Titanium_RestoreFirstDrawDefaultsOnce();
                 __atomic_store_n(&g_titaniumFirstFrameReady, 1, __ATOMIC_RELEASE);
                 g_v55FirstFrame = YES;
                 Titanium_KillVSyncCompletelyAtRoot();
-                AppleInternal_LockHardwareCADisplay();
                 Titanium_ApplySiliconDeepOptimizations();
                 Titanium_ExecuteRealPanelOverdrive();
 
@@ -10868,7 +10861,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             }
 
             if (g_isCurrentAppBlacklisted) return;
-            if (!isSpringBoard) Titanium_RegisterUIScreenRateSpoofAfterLaunch();
 
             Titanium_KillVSyncCompletelyAtRoot();
             Titanium_InitZeroCopyIPC(isSpringBoard);
@@ -10938,9 +10930,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         Titanium_ReloadSharedSyncStateV285();
                         Titanium_UpdateNativeDisplayMaxFPS();
                         Titanium_KillVSyncCompletelyAtRoot();
-                        AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_ApplySiliconDeepOptimizations();
-                        AppleInternal_LockHardwareCADisplay();
                         if (Titanium_V57_TouchReady() && !Titanium_V56_KeyboardBusy()) {
                             Titanium_ReapplyFrameRateToAllScenes();
                         }
@@ -10963,7 +10953,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                             CFG285.targetHz  = g_cachedResolvedHz;
                             CFG285.targetFPS = g_cachedResolvedFPS;
                         }
-                        AppleInternal_EnforceZeroLatencyKernelTier();
                         Titanium_RegisterAppResumeRefreshV12();
                         Titanium_RestoreOnFirstFrame();
 
