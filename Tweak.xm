@@ -10934,7 +10934,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
             %init(Group_ZeroLatency_Touch_Opt);
             %init(Group_FluidTransitions_Pacing_PreScreen);
-            %init(Group_FluidTransitions_Pacing_PostScreen);
             %init(Group_AI_Stream_Optimization);
             %init(Group_FastLaunch_SuperEngineV285);
             %init(Group_Scroll_And_Keyboard_Opt);
