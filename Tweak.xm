@@ -7529,7 +7529,7 @@ static kern_return_t hooked_IOConnectCallScalarMethod(
     uint64_t *output,
     uint32_t *outputCnt
 ) {
-    kern_return_t ret = orig_IOConnectCallScalarMethod(connection, selector, input, inputCnt, output, outputCnt);
+    kern_return_t ret = orig_IOConnectCallScalarMethod ? orig_IOConnectCallScalarMethod(connection, selector, input, inputCnt, output, outputCnt) : KERN_FAILURE;
 
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && connection != MACH_PORT_NULL && ret != KERN_SUCCESS) {
         if (Titanium_IsDisplayConnection(connection)) {
@@ -7542,15 +7542,6 @@ static kern_return_t hooked_IOConnectCallScalarMethod(
     return ret;
 }
 
-static kern_return_t (*orig_IOConnectCallStructMethod)(
-    mach_port_t connection,
-    uint32_t selector,
-    const void *inputStruct,
-    size_t inputStructCnt,
-    void *outputStruct,
-    size_t *outputStructCnt
-) = NULL;
-
 static kern_return_t hooked_IOConnectCallStructMethod(
     mach_port_t connection,
     uint32_t selector,
@@ -7559,7 +7550,7 @@ static kern_return_t hooked_IOConnectCallStructMethod(
     void *outputStruct,
     size_t *outputStructCnt
 ) {
-    kern_return_t ret = orig_IOConnectCallStructMethod(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
+    kern_return_t ret = orig_IOConnectCallStructMethod ? orig_IOConnectCallStructMethod(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt) : KERN_FAILURE;
 
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && connection != MACH_PORT_NULL && ret != KERN_SUCCESS) {
         if (Titanium_IsDisplayConnection(connection)) {
@@ -7569,17 +7560,17 @@ static kern_return_t hooked_IOConnectCallStructMethod(
     return ret;
 }
 
-// Hàm khởi tạo cài đặt hook (gọi hàm này bên trong runCoreTweak hoặc %ctor)
+// Hàm khởi tạo cài đặt hook
 static void Titanium_InstallMachIPCHooks(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        void *hScalar = MSFindSymbol(NULL, "_IOConnectCallScalarMethod");
+        void *hScalar = dlsym(RTLD_DEFAULT, "IOConnectCallScalarMethod");
         if (hScalar) {
             MSHookFunction(hScalar, (void *)hooked_IOConnectCallScalarMethod, (void **)&orig_IOConnectCallScalarMethod);
         }
-        void *hStruct = MSFindSymbol(NULL, "_IOConnectCallStructMethod");
+        void *hStruct = dlsym(RTLD_DEFAULT, "IOConnectCallStructMethod");
         if (hStruct) {
-            MSHookFunction(hStruct, (void *)hooked_IOConnectCallStructMethod, (void **)&orig_IOConnectCallStructMethod);
+            MSHookFunction(hStruct, (void *)hooked_IOConnectCallStructMethod, (void **)&orig_IOConnectCallScalarMethod);
         }
     });
 }
