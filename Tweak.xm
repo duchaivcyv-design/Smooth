@@ -11211,7 +11211,18 @@ static void Titanium_BypassKillMethodV108(void) {
             Titanium_BypassDCPMethod();
             Titanium_BypassKillMethodV108();
 
-            NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 1.0;
+            // [FIX BLACK SCREEN] bootDelay app: 1.0s → 0.1s
+            // 1.0s quá lâu — app render frame đầu trước khi hooks active → đen màn hình
+            // 0.1s đủ để process stabilize, không race với %init
+            // RestoreOnFirstFrame gọi ngay tại đây (không đợi runCoreTweak) để fix frame đầu mọi app
+            if (!isSpringBoard) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    @try {
+                        Titanium_RestoreOnFirstFrame();
+                    } @catch (__unused NSException *e) {}
+                });
+            }
+            NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 0.1;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(bootDelay * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
                 @try {
