@@ -7493,16 +7493,6 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 // ====================================================================================================
 // CHỐT CHẶN 3: BẺ KHÓA MACH IPC TRAP — ÉP KERNEL TRẢ VỀ SUCCESS (AN TOÀN THEO DRIVER)
 // ====================================================================================================
-#import <IOKit/IOKitLib.h>
-
-static kern_return_t (*orig_IOConnectCallScalarMethod)(
-    mach_port_t connection,
-    uint32_t selector,
-    const uint64_t *input,
-    uint32_t inputCnt,
-    uint64_t *output,
-    uint32_t *outputCnt
-) = NULL;
 
 // Cache kiểm tra connection nhanh tránh spam gọi IOConnectGetService
 static inline BOOL Titanium_IsDisplayConnection(mach_port_t conn) {
