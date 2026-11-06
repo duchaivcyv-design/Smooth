@@ -10995,9 +10995,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
             %init(Group_UIKit_ThirdParty_IsolatedV285);
             %init(Group_Tier5_DisplayIC_DynamicIsland_Dock_3DParticles);
             %init(Group_V55_MetalSync);
-            
-            // [BỔ SUNG]: Khởi tạo nhóm tăng tốc RenderServer để bắt kịp chu kỳ 0.1ms
-            %init(Group_ZeroLatency_Render_Booster);
 
             Titanium_InstallDirectIOMobileFramebufferCHooks();
             Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite();
