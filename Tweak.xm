@@ -1511,6 +1511,9 @@ static volatile NSProcessInfoThermalState g_liveThermalStateV285 = NSProcessInfo
 static BOOL g_SystemMasterReady = YES;
 static volatile BOOL g_isRebooting = NO; // [FIX] Trạng thái bảo vệ khi respring/reboot
 static volatile int g_titaniumFirstFrameReady = 0;
+static NSString *g_titaniumPendingBundleID = nil;
+static char g_titaniumPendingProgName[256] = {0};
+static volatile BOOL g_titaniumPendingCoreStart = NO;
 static volatile NSInteger g_titaniumNativeDisplayMaxFPS = 60;
 static volatile int g_titaniumNativeDisplayRateReady = 0;
 static volatile int g_titaniumScreenRateSpoofReady = 0;
@@ -1589,6 +1592,7 @@ static inline void Titanium_ReloadSharedSyncStateV285(void);
 static inline void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_RestoreFirstDrawDefaultsOnce(void);
 static void Titanium_RestoreOnFirstFrame(void);
+static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName);
 static inline BOOL Titanium_DisplayRateOverrideReady(void);
 #define TITANIUM_BOOT_SETTLE_DELAY_APP 0.0
 #define TITANIUM_BOOT_SETTLE_DELAY_SB 2.5
@@ -10862,6 +10866,20 @@ static void Titanium_RestoreOnFirstFrame(void) {
                 weakTarget.handler = nil;
                 Titanium_ReapplyFrameRateToVisibleMetalLayers();
                 Titanium_ReapplyFrameRateToAllScenes();
+
+                if (__atomic_exchange_n(&g_titaniumPendingCoreStart, NO, __ATOMIC_ACQ_REL)) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_MSEC)),
+                                   dispatch_get_main_queue(), ^{
+                        @try {
+                            if (g_isRebooting) return;
+                            NSString *pendingBundleID = g_titaniumPendingBundleID;
+                            g_titaniumPendingBundleID = nil;
+                            runCoreTweak(NO, pendingBundleID, g_titaniumPendingProgName);
+                        } @catch (NSException *e) {
+                            Titanium_V60_Log([NSString stringWithFormat:@"[V999] first-draw delayed core start throw: %@", e.reason]);
+                        }
+                    });
+                }
             }
         } @catch (NSException *e) {
             Titanium_V60_Log([NSString stringWithFormat:@"[V999] firstFrame handler throw: %@", e.reason]);
@@ -11240,25 +11258,27 @@ static void Titanium_BypassKillMethodV108(void) {
             Titanium_BypassDCPMethod();
             Titanium_BypassKillMethodV108();
 
-            // Khôi phục khung hình đầu tiên ngay lập tức
             if (!isSpringBoard) {
+                // Chỉ nạp Core sau khi app đã vẽ xong khung hình đầu tiên + 15ms.
+                g_titaniumPendingBundleID = [bundleID copy];
+                strlcpy(g_titaniumPendingProgName, progName ? progName : "", sizeof(g_titaniumPendingProgName));
+                __atomic_store_n(&g_titaniumPendingCoreStart, YES, __ATOMIC_RELEASE);
                 dispatch_async(dispatch_get_main_queue(), ^{
                     @try {
                         Titanium_RestoreOnFirstFrame();
                     } @catch (__unused NSException *e) {}
                 });
+            } else {
+                // Giữ nguyên thời điểm khởi chạy SpringBoard.
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), ^{
+                    @try {
+                        runCoreTweak(YES, bundleID, progName);
+                    } @catch (NSException *e) {
+                        Titanium_V60_Log([NSString stringWithFormat:@"[V999] scheduled runCoreTweak throw: %@", e.reason]);
+                    }
+                });
             }
-
-            // Đệm đúng 15ms cho App (0.015s) thay vì 0.1s
-            NSTimeInterval bootDelay = isSpringBoard ? 2.5 : 0.015;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(bootDelay * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), ^{
-                @try {
-                    runCoreTweak(isSpringBoard, bundleID, progName);
-                } @catch (NSException *e) {
-                    Titanium_V60_Log([NSString stringWithFormat:@"[V999] scheduled runCoreTweak throw: %@", e.reason]);
-                }
-            });
         } @catch (NSException *e) {
             Titanium_V60_Log([NSString stringWithFormat:@"[V999] %%ctor throw: %@", e.reason]);
             Titanium_V60_Log([NSString stringWithFormat:@"[AF] ctor throw: %@", e.reason]);
