@@ -6362,6 +6362,11 @@ static void Titanium_LoadIOMFBDirect(void) {
 
 // 1. Cưỡng chế IOConnectCallStructMethod
 static kern_return_t (*orig_IOConnectCallStructMethod)(io_connect_t, uint32_t, const void*, size_t, void*, size_t*) = NULL;
+static kern_return_t (*orig_IOConnectCallScalarMethod)(io_connect_t, uint32_t, const uint64_t*, uint32_t, uint64_t*, uint32_t*) = NULL;
+
+// Forward declaration: implementation is below this hook block.
+static inline BOOL Titanium_IsDisplayConnection(mach_port_t conn);
+
 static kern_return_t hooked_IOConnectCallStructMethod(io_connect_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt) {
     kern_return_t ret = orig_IOConnectCallStructMethod ? orig_IOConnectCallStructMethod(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt) : KERN_FAILURE;
 
@@ -6371,17 +6376,29 @@ static kern_return_t hooked_IOConnectCallStructMethod(io_connect_t connection, u
         }
         return KERN_SUCCESS;
     }
+
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && connection != MACH_PORT_NULL &&
+        ret != KERN_SUCCESS && Titanium_IsDisplayConnection(connection)) {
+        return KERN_SUCCESS;
+    }
     return ret;
 }
 
 // 2. Cưỡng chế IOConnectCallScalarMethod
-static kern_return_t (*orig_IOConnectCallScalarMethod)(io_connect_t, uint32_t, const uint64_t*, uint32_t, uint64_t*, uint32_t*) = NULL;
 static kern_return_t hooked_IOConnectCallScalarMethod(io_connect_t connection, uint32_t selector, const uint64_t *input, uint32_t inputCnt, uint64_t *output, uint32_t *outputCnt) {
     kern_return_t ret = orig_IOConnectCallScalarMethod ? orig_IOConnectCallScalarMethod(connection, selector, input, inputCnt, output, outputCnt) : KERN_FAILURE;
 
     if (g_v60ForceDriverSuccess && ret != KERN_SUCCESS) {
         if (output && outputCnt && *outputCnt > 0) {
             memset(output, 0, (*outputCnt) * sizeof(uint64_t));
+        }
+        return KERN_SUCCESS;
+    }
+
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && connection != MACH_PORT_NULL &&
+        ret != KERN_SUCCESS && Titanium_IsDisplayConnection(connection)) {
+        if (output && outputCnt && *outputCnt > 0) {
+            output[0] = (uint64_t)Titanium_GetMasterRate();
         }
         return KERN_SUCCESS;
     }
@@ -7521,58 +7538,9 @@ static inline BOOL Titanium_IsDisplayConnection(mach_port_t conn) {
     return s_lastIsDisplay;
 }
 
-static kern_return_t hooked_IOConnectCallScalarMethod(
-    mach_port_t connection,
-    uint32_t selector,
-    const uint64_t *input,
-    uint32_t inputCnt,
-    uint64_t *output,
-    uint32_t *outputCnt
-) {
-    kern_return_t ret = orig_IOConnectCallScalarMethod ? orig_IOConnectCallScalarMethod(connection, selector, input, inputCnt, output, outputCnt) : KERN_FAILURE;
-
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && connection != MACH_PORT_NULL && ret != KERN_SUCCESS) {
-        if (Titanium_IsDisplayConnection(connection)) {
-            if (output && outputCnt && *outputCnt > 0) {
-                output[0] = (uint64_t)Titanium_GetMasterRate();
-            }
-            return KERN_SUCCESS; // Ép kernel chấp nhận nhịp mới
-        }
-    }
-    return ret;
-}
-
-static kern_return_t hooked_IOConnectCallStructMethod(
-    mach_port_t connection,
-    uint32_t selector,
-    const void *inputStruct,
-    size_t inputStructCnt,
-    void *outputStruct,
-    size_t *outputStructCnt
-) {
-    kern_return_t ret = orig_IOConnectCallStructMethod ? orig_IOConnectCallStructMethod(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt) : KERN_FAILURE;
-
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && connection != MACH_PORT_NULL && ret != KERN_SUCCESS) {
-        if (Titanium_IsDisplayConnection(connection)) {
-            return KERN_SUCCESS;
-        }
-    }
-    return ret;
-}
-
-// Hàm khởi tạo cài đặt hook
+// Hàm khởi tạo dùng chung hook đã cài ở Titanium_InstallIOConnectHooks.
 static void Titanium_InstallMachIPCHooks(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        void *hScalar = dlsym(RTLD_DEFAULT, "IOConnectCallScalarMethod");
-        if (hScalar) {
-            MSHookFunction(hScalar, (void *)hooked_IOConnectCallScalarMethod, (void **)&orig_IOConnectCallScalarMethod);
-        }
-        void *hStruct = dlsym(RTLD_DEFAULT, "IOConnectCallStructMethod");
-        if (hStruct) {
-            MSHookFunction(hStruct, (void *)hooked_IOConnectCallStructMethod, (void **)&orig_IOConnectCallScalarMethod);
-        }
-    });
+    Titanium_InstallIOConnectHooks();
 }
 
 // ====================================================================================================
