@@ -5794,6 +5794,7 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 }
 
 // [DRIFT CHECK — 1% × 3 frame = bắt sớm, không false positive]
+static inline void Titanium_MarkHardwarePunched(void);
 static inline void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz) {
     if (targetHz < 15) return;
     double interval = targetTs - timestamp;
