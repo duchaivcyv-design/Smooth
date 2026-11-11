@@ -4,7 +4,6 @@
 #define TITANIUM_SREBOOT_WINDOW     15.0    // [FIX-1] 180s → 15s
 
 // ==================== MACH & XNU KERNEL ====================
-#import <mach/mach.h>
 #import <mach/mach_init.h>
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
