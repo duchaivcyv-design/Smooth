@@ -9,6 +9,7 @@
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
 #import <mach/mach_types.h>
+#import <mach/mach_vm.h>
 #import <mach/vm_map.h>
 #import <mach/vm_region.h>
 #import <mach/vm_statistics.h>
@@ -1578,8 +1579,6 @@ static SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange ra
     return range;
 }
 
-static void Titanium_BypassQuartzCoreRangeAssertion(void) {}
-static void Init_CAWindowServer_Hooks(void) {}
 
 #define TITANIUM_SHARED_MEM_NAME "/titanium_sync_shm_v285"
 #define TITANIUM_SHARED_MEM_SIZE sizeof(ApexV285ProPayload)
@@ -2485,9 +2484,6 @@ static inline BOOL Titanium_ShouldApplyEcoFrameCapV19(void) {
     return NO;
 }
 
-static void Titanium_TuneWindowServerDisplayDirectly(void) {
-    // Intentionally disabled. Do not write fictitious refresh durations/rates to CAWindowServer.
-}
 
 @implementation BoostConfigV285Pro
 
@@ -3437,9 +3433,6 @@ static inline NSInteger Titanium_ClampRequestedFrameRate(NSInteger requestedFPS)
     return requestedFPS;
 }
 
-static void Titanium_UpdateNativeDisplayMaxFPS(void) {
-    // Intentionally no-op: bốc scan phần cứng native — tránh lock về 60Hz.
-}
 
 static inline BOOL Titanium_ThermalSafeForOverride(void) {
     @try {
@@ -5651,10 +5644,7 @@ static volatile uint32_t g_driftPunchCountTotal  = 0;
 // Forward decls
 // [SỬA BUILD] Định nghĩa tạm (stub) cho các hàm đã khai báo static nhưng thiếu thân hàm.
 // Thân hàm gốc không có trong file; cần khôi phục logic thật nếu muốn tính năng này hoạt động.
-static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz) { (void)targetHz; }
-static void Titanium_ForcePanelModeDirect(NSInteger hz) { (void)hz; }
-// Trả 0 => caller tự fallback sang Titanium_ActualPanelHz() (đã xử lý ở chỗ gọi).
-static NSInteger Titanium_ReadKernelPanelHz(void) { return 0; }
+static NSInteger Titanium_ReadKernelPanelHz(void);
 
 static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
 static void Titanium_ForcePanelModeDirect(NSInteger hz);
@@ -10896,7 +10886,6 @@ void Titanium_TriggerSrebootAction(void) {
     });
 }
 
-static void Titanium_InstallMGCopyAnswerHookV26(void) {}
 
 static void Titanium_RegisterPrefsObservers(BOOL isSpringBoardProcess) {
     (void)isSpringBoardProcess;
