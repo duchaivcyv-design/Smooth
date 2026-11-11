@@ -6393,31 +6393,37 @@ static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value)
 static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
     Titanium_InitUltimateKernelAPI();
 
-    // [FIX 1] Guard reentrancy — không chạy 2 lần song song
-    static _Atomic bool s_isScanning = false;
-    bool expected = false;
-    if (!__atomic_compare_exchange_n(&s_isScanning, &expected, true, false,
-                                     __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-        return;  // Đang quét → bỏ qua
-    }
+    static os_unfair_lock s_scanLock = OS_UNFAIR_LOCK_INIT;
+    static mach_vm_address_t s_pinnedAddrs[512];
+    static int s_pinnedCount = 0;
+    static bool s_scanning = false;
 
-    // [FIX 2] Cache danh sách địa chỉ đã tìm được → các lần sau chỉ ghi, KHÔNG quét lại
-    #define TITANIUM_PIN_MAX 512
-    static mach_vm_address_t s_pinnedAddrs[TITANIUM_PIN_MAX];
-    static _Atomic int s_pinnedCount = 0;
+    os_unfair_lock_lock(&s_scanLock);
 
-    // [FIX 3] Nếu đã có cache → chỉ ghi đè lại, xong trong microseconds
-    int cachedCount = __atomic_load_n(&s_pinnedCount, __ATOMIC_ACQUIRE);
-    if (cachedCount > 0) {
-        uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
-        for (int i = 0; i < cachedCount; i++) {
-            Titanium_KernelWriteAbsolute(s_pinnedAddrs[i], targetVal64);
-        }
-        __atomic_store_n(&s_isScanning, false, __ATOMIC_RELEASE);
-        Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Cache hit: re-pinned %d addrs → %ldHz",
-                          cachedCount, (long)targetHz]);
+    // Guard reentrancy
+    if (s_scanning) {
+        os_unfair_lock_unlock(&s_scanLock);
         return;
     }
+
+    // Cache hit → chỉ ghi đè lại, không quét
+    if (s_pinnedCount > 0) {
+        int cnt = s_pinnedCount;
+        mach_vm_address_t addrs[512];
+        memcpy(addrs, s_pinnedAddrs, sizeof(mach_vm_address_t) * (size_t)cnt);
+        os_unfair_lock_unlock(&s_scanLock);
+
+        uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
+        for (int i = 0; i < cnt; i++) {
+            Titanium_KernelWriteAbsolute(addrs[i], targetVal64);
+        }
+        Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Cache hit: re-pinned %d addrs → %ldHz",
+                          cnt, (long)targetHz]);
+        return;
+    }
+
+    s_scanning = true;
+    os_unfair_lock_unlock(&s_scanLock);
 
     uint64_t kernelBase = 0;
     if (jbclient_get_kernel_base_fn) kernelBase = jbclient_get_kernel_base_fn();
@@ -6425,21 +6431,21 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
 
     if (kernelBase == 0) {
         Titanium_V60_Log(@"[GOD-MODE] LỖI: Không lấy được Kernel Base. Hủy quét để bảo vệ máy!");
-        __atomic_store_n(&s_isScanning, false, __ATOMIC_RELEASE);
+        os_unfair_lock_lock(&s_scanLock);
+        s_scanning = false;
+        os_unfair_lock_unlock(&s_scanLock);
         return;
     }
 
     Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan, Base: 0x%llX", kernelBase]);
 
-    // [FIX 4] Thu hẹp range: 0x1000000 → 0x1040000 = 256 KB (thay vì 32 MB)
-    // 256KB / 4 = 65.536 lần đọc (thay vì 8.388.608)
-    // → ~0.16s thay vì ~21s
+    // Thu hẹp range: 256 KB thay vì 32 MB → 65.536 lần đọc thay vì 8.388.608
     uint64_t scanStart = kernelBase + 0x1000000;
     uint64_t scanEnd   = kernelBase + 0x1040000;
     uint64_t step      = 4;
 
     uint64_t currentAddr = scanStart;
-    int foundCount = 0;
+    int found = 0;
 
     uint32_t buf = 0;
     vm_size_t readSize = sizeof(buf);
@@ -6447,7 +6453,7 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
 
     mach_port_t kTask = Titanium_GetKernelTaskPort();
 
-    while (currentAddr < scanEnd && foundCount < TITANIUM_PIN_MAX) {
+    while (currentAddr < scanEnd) {
         kern_return_t kr = KERN_FAILURE;
 
         if (jbclient_kread_fn) {
@@ -6461,14 +6467,13 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
             if (buf == 60 || buf == 120) {
                 uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
                 if (Titanium_KernelWriteAbsolute(currentAddr, targetVal64)) {
-                    // Lưu địa chỉ vào cache
-                    int idx = __atomic_fetch_add(&s_pinnedCount, 1, __ATOMIC_ACQ_REL);
-                    if (idx < TITANIUM_PIN_MAX) {
-                        s_pinnedAddrs[idx] = currentAddr;
-                        foundCount++;
-                    } else {
-                        __atomic_store_n(&s_pinnedCount, TITANIUM_PIN_MAX, __ATOMIC_RELEASE);
+                    os_unfair_lock_lock(&s_scanLock);
+                    if (s_pinnedCount < 512) {
+                        s_pinnedAddrs[s_pinnedCount] = currentAddr;
+                        s_pinnedCount++;
+                        found++;
                     }
+                    os_unfair_lock_unlock(&s_scanLock);
                     Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Pinned 0x%llX: %u → %ldHz",
                                       currentAddr, buf, (long)targetHz]);
                 }
@@ -6477,11 +6482,12 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
         currentAddr += step;
     }
 
-    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan done, pinned %d addrs (cached)", foundCount]);
-    __atomic_store_n(&s_isScanning, false, __ATOMIC_RELEASE);
-    #undef TITANIUM_PIN_MAX
-}
+    os_unfair_lock_lock(&s_scanLock);
+    s_scanning = false;
+    os_unfair_lock_unlock(&s_scanLock);
 
+    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan done, pinned %d addrs (cached)", found]);
+}
 // ====================================================================================================
 // [FIX BƠ] — PHỤC HỒI CÁC HÀM RỖNG BẰNG LOGIC THẬT
 // ====================================================================================================
