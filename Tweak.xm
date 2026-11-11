@@ -6392,60 +6392,96 @@ static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value)
 // ====================================================================================================
 static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
     Titanium_InitUltimateKernelAPI();
-    
-    uint64_t kernelBase = 0;
-    if (jbclient_get_kernel_base_fn) kernelBase = jbclient_get_kernel_base_fn();
-    else if (libkernrw_get_base_fn) kernelBase = libkernrw_get_base_fn();
-    
-    // BẢO VỆ: Nếu không lấy được Base, dừng lại ngay để tránh Panic
-    if (kernelBase == 0) {
-        Titanium_V60_Log(@"[GOD-MODE] LỖI: Không lấy được Kernel Base. Hủy quét để bảo vệ máy!");
+
+    // [FIX 1] Guard reentrancy — không chạy 2 lần song song
+    static _Atomic bool s_isScanning = false;
+    bool expected = false;
+    if (!__atomic_compare_exchange_n(&s_isScanning, &expected, true, false,
+                                     __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        return;  // Đang quét → bỏ qua
+    }
+
+    // [FIX 2] Cache danh sách địa chỉ đã tìm được → các lần sau chỉ ghi, KHÔNG quét lại
+    #define TITANIUM_PIN_MAX 512
+    static mach_vm_address_t s_pinnedAddrs[TITANIUM_PIN_MAX];
+    static _Atomic int s_pinnedCount = 0;
+
+    // [FIX 3] Nếu đã có cache → chỉ ghi đè lại, xong trong microseconds
+    int cachedCount = __atomic_load_n(&s_pinnedCount, __ATOMIC_ACQUIRE);
+    if (cachedCount > 0) {
+        uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
+        for (int i = 0; i < cachedCount; i++) {
+            Titanium_KernelWriteAbsolute(s_pinnedAddrs[i], targetVal64);
+        }
+        __atomic_store_n(&s_isScanning, false, __ATOMIC_RELEASE);
+        Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Cache hit: re-pinned %d addrs → %ldHz",
+                          cachedCount, (long)targetHz]);
         return;
     }
 
-    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Bắt đầu quét Base: 0x%llX", kernelBase]);
+    uint64_t kernelBase = 0;
+    if (jbclient_get_kernel_base_fn) kernelBase = jbclient_get_kernel_base_fn();
+    else if (libkernrw_get_base_fn) kernelBase = libkernrw_get_base_fn();
 
-    // Thu hẹp vùng quét (Chỉ quét vùng Data của IOKit - Rất an toàn)
-    uint64_t scanStart = kernelBase + 0x1000000; 
-    uint64_t scanEnd   = kernelBase + 0x3000000; 
-    uint64_t step      = 4; // Bước nhảy 4-byte (vì Hz là uint32_t)
-    
+    if (kernelBase == 0) {
+        Titanium_V60_Log(@"[GOD-MODE] LỖI: Không lấy được Kernel Base. Hủy quét để bảo vệ máy!");
+        __atomic_store_n(&s_isScanning, false, __ATOMIC_RELEASE);
+        return;
+    }
+
+    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan, Base: 0x%llX", kernelBase]);
+
+    // [FIX 4] Thu hẹp range: 0x1000000 → 0x1040000 = 256 KB (thay vì 32 MB)
+    // 256KB / 4 = 65.536 lần đọc (thay vì 8.388.608)
+    // → ~0.16s thay vì ~21s
+    uint64_t scanStart = kernelBase + 0x1000000;
+    uint64_t scanEnd   = kernelBase + 0x1040000;
+    uint64_t step      = 4;
+
     uint64_t currentAddr = scanStart;
     int foundCount = 0;
-    
-    uint32_t buf = 0; 
+
+    uint32_t buf = 0;
     vm_size_t readSize = sizeof(buf);
-    vm_size_t outSize = 0; 
-    
+    vm_size_t outSize = 0;
+
     mach_port_t kTask = Titanium_GetKernelTaskPort();
 
-    while (currentAddr < scanEnd) {
+    while (currentAddr < scanEnd && foundCount < TITANIUM_PIN_MAX) {
         kern_return_t kr = KERN_FAILURE;
-        
-        // Đọc dữ liệu từ Kernel
+
         if (jbclient_kread_fn) {
             kr = jbclient_kread_fn(currentAddr, &buf, sizeof(buf));
         } else if (MACH_PORT_VALID(kTask)) {
-            kr = vm_read_overwrite(kTask, (vm_address_t)currentAddr, readSize, (vm_address_t)&buf, &outSize);
+            kr = vm_read_overwrite(kTask, (vm_address_t)currentAddr, readSize,
+                                   (vm_address_t)&buf, &outSize);
         }
-        
+
         if (kr == KERN_SUCCESS) {
-            // Tìm các giá trị mặc định của tần số quét (60Hz, 120Hz)
             if (buf == 60 || buf == 120) {
                 uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
-                
-                // GHI ĐÈ TUYỆT ĐỐI
                 if (Titanium_KernelWriteAbsolute(currentAddr, targetVal64)) {
-                    foundCount++;
-                    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Đã ghim tại 0x%llX: %u -> %ld Hz", currentAddr, buf, (long)targetHz]);
+                    // Lưu địa chỉ vào cache
+                    int idx = __atomic_fetch_add(&s_pinnedCount, 1, __ATOMIC_ACQ_REL);
+                    if (idx < TITANIUM_PIN_MAX) {
+                        s_pinnedAddrs[idx] = currentAddr;
+                        foundCount++;
+                    } else {
+                        __atomic_store_n(&s_pinnedCount, TITANIUM_PIN_MAX, __ATOMIC_RELEASE);
+                    }
+                    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Pinned 0x%llX: %u → %ldHz",
+                                      currentAddr, buf, (long)targetHz]);
                 }
             }
         }
         currentAddr += step;
     }
-    
-    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Hoàn tất! Đã ghim %d địa chỉ!", foundCount]);
+
+    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan done, pinned %d addrs (cached)", foundCount]);
+    __atomic_store_n(&s_isScanning, false, __ATOMIC_RELEASE);
+    #undef TITANIUM_PIN_MAX
 }
+
 // ====================================================================================================
 // [FIX BƠ] — PHỤC HỒI CÁC HÀM RỖNG BẰNG LOGIC THẬT
 // ====================================================================================================
@@ -11424,16 +11460,18 @@ static void Titanium_BypassKillMethodV108(void) {
             Titanium_RegisterPrefsObservers(isSpringBoard);
             %init;
 
-            // 2. Bơm tần số mục tiêu xuống driver
-            NSInteger target = Titanium_GetMasterRate();
-            Titanium_AF_StartWatchdog(target);
-            Titanium_AF_ApplyTarget(target);
-            Titanium_HardwareDriverOverride(target);
-            Titanium_Tier4WriteCadence(target);
+// 2. Bơm tần số mục tiêu xuống driver — CHẠY TRÊN BG QUEUE, KHÔNG BLOCK MAIN THREAD
+NSInteger target = Titanium_GetMasterRate();
+Titanium_AF_StartWatchdog(target);
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1000 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                Titanium_AF_ApplyTarget(Titanium_GetMasterRate());
-            });
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)),
+               dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    @try {
+        Titanium_AF_ApplyTarget(Titanium_GetMasterRate());
+        Titanium_HardwareDriverOverride(Titanium_GetMasterRate());
+        Titanium_Tier4WriteCadence(Titanium_GetMasterRate());
+    } @catch (__unused NSException *e) {}
+});
 
             Titanium_V60_Log([NSString stringWithFormat:@"[AF] ctor completed, active target=%ld", (long)target]);
 
