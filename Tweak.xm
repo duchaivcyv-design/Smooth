@@ -6307,7 +6307,6 @@ static void Titanium_StartOverdriveProbe(void) {
     });
 }
 
-#include <mach/mach_vm.h>
 #include <dlfcn.h>
 #include <sys/sysctl.h>
 
