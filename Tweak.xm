@@ -5793,8 +5793,21 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
     }
 }
 
+// ====================================================================================================
 // [DRIFT CHECK — 1% × 3 frame = bắt sớm, không false positive]
-static inline void Titanium_MarkHardwarePunched(void);
+// [FIX] Định nghĩa thật 2 hàm helper TRƯỚC DriftCheck, không dùng forward decl
+// ====================================================================================================
+static inline void Titanium_MarkHardwarePunched(void) {
+    g_lastHardwarePunchTick = mach_absolute_time();
+    g_driftPunchCountTotal++;
+}
+
+static inline BOOL Titanium_CanPunchHardware(void) {
+    uint64_t now = mach_absolute_time();
+    if (g_lastHardwarePunchTick == 0) return YES;
+    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(500ULL * 1000000ULL);
+}
+
 static inline void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz) {
     if (targetHz < 15) return;
     double interval = targetTs - timestamp;
