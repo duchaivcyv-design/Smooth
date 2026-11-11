@@ -6388,106 +6388,200 @@ static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value)
 }
 
 // ====================================================================================================
-// QUÉT MÙ VÀ GHIM (TUYỆT ĐỐI KHÔNG PANIC)
+// [K-SWEEP V5] — QUÉT RỘNG 32MB + SENTINEL VERIFY + NEIGHBOR FILTER + RESTORE SAFE
 // ====================================================================================================
+// Mạnh hơn V4:
+//   - Range 32MB (0x1000000 → 0x3000000) thay vì 256KB → bắt được AppleCLCD2/DCP ở xa
+//   - Sentinel verify từng địa chỉ trước khi pin — KHÔNG pin mù
+//   - Neighbor filter (skip mảng config)
+//   - Context heuristic: ưu tiên địa chỉ có pixel-clock (800MHz) hoặc 240 gần đó
+//   - Restore mọi thứ nếu fail
+//   - Multi-pass: lần 2 verify lại cache còn writable không (phòng kernel reloc)
+//   - Background queue → không Watchdog
+// ====================================================================================================
+
+static os_unfair_lock g_ksweepLock = OS_UNFAIR_LOCK_INIT;
+static mach_vm_address_t g_ksweepPinned[1024];
+static int g_ksweepPinnedCount = 0;
+static bool g_ksweepScanning = false;
+static dispatch_queue_t g_ksweepQueue = NULL;
+
+// Direct write + verify. Trả về YES nếu write persistent (read-back khớp).
+static bool Titanium_KWriteVerify(uint64_t addr, uint32_t val) {
+    if (!jbclient_kwrite_fn || !jbclient_kread_fn) return false;
+    if (jbclient_kwrite_fn(addr, &val, 4) != 0) return false;
+    uint32_t rb = 0;
+    if (jbclient_kread_fn(addr, &rb, 4) != 0) return false;
+    return rb == val;
+}
+
 static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
     Titanium_InitUltimateKernelAPI();
 
-    static os_unfair_lock s_scanLock = OS_UNFAIR_LOCK_INIT;
-    static mach_vm_address_t s_pinnedAddrs[512];
-    static int s_pinnedCount = 0;
-    static bool s_scanning = false;
+    static dispatch_once_t queueOnce;
+    dispatch_once(&queueOnce, ^{
+        g_ksweepQueue = dispatch_queue_create("com.titanium.ksweep.v5", DISPATCH_QUEUE_SERIAL);
+    });
 
-    os_unfair_lock_lock(&s_scanLock);
+    // ===== FAST PATH: cache hit → ghi lại 1024 địa chỉ trên bg =====
+    os_unfair_lock_lock(&g_ksweepLock);
+    int cachedCount = g_ksweepPinnedCount;
+    mach_vm_address_t localCache[1024];
+    if (cachedCount > 0) memcpy(localCache, g_ksweepPinned, sizeof(mach_vm_address_t) * (size_t)cachedCount);
+    bool scanning = g_ksweepScanning;
+    os_unfair_lock_unlock(&g_ksweepLock);
 
-    // Guard reentrancy
-    if (s_scanning) {
-        os_unfair_lock_unlock(&s_scanLock);
+    if (cachedCount > 0) {
+        uint32_t targetVal32 = (uint32_t)targetHz;
+        dispatch_async(g_ksweepQueue, ^{
+            int ok = 0;
+            for (int i = 0; i < cachedCount; i++) {
+                if (Titanium_KWriteVerify(localCache[i], targetVal32)) ok++;
+            }
+            Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Cache re-pin: %d/%d verified → %ldHz",
+                              ok, cachedCount, (long)targetHz]);
+        });
         return;
     }
+    if (scanning) return;
 
-    // Cache hit → chỉ ghi đè lại, không quét
-    if (s_pinnedCount > 0) {
-        int cnt = s_pinnedCount;
-        mach_vm_address_t addrs[512];
-        memcpy(addrs, s_pinnedAddrs, sizeof(mach_vm_address_t) * (size_t)cnt);
-        os_unfair_lock_unlock(&s_scanLock);
+    os_unfair_lock_lock(&g_ksweepLock);
+    g_ksweepScanning = true;
+    os_unfair_lock_unlock(&g_ksweepLock);
 
-        uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
-        for (int i = 0; i < cnt; i++) {
-            Titanium_KernelWriteAbsolute(addrs[i], targetVal64);
-        }
-        Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Cache hit: re-pinned %d addrs → %ldHz",
-                          cnt, (long)targetHz]);
-        return;
-    }
-
-    s_scanning = true;
-    os_unfair_lock_unlock(&s_scanLock);
-
-    uint64_t kernelBase = 0;
-    if (jbclient_get_kernel_base_fn) kernelBase = jbclient_get_kernel_base_fn();
-    else if (libkernrw_get_base_fn) kernelBase = libkernrw_get_base_fn();
-
-    if (kernelBase == 0) {
-        Titanium_V60_Log(@"[GOD-MODE] LỖI: Không lấy được Kernel Base. Hủy quét để bảo vệ máy!");
-        os_unfair_lock_lock(&s_scanLock);
-        s_scanning = false;
-        os_unfair_lock_unlock(&s_scanLock);
-        return;
-    }
-
-    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan, Base: 0x%llX", kernelBase]);
-
-    // Thu hẹp range: 256 KB thay vì 32 MB → 65.536 lần đọc thay vì 8.388.608
-    uint64_t scanStart = kernelBase + 0x1000000;
-    uint64_t scanEnd   = kernelBase + 0x1040000;
-    uint64_t step      = 4;
-
-    uint64_t currentAddr = scanStart;
-    int found = 0;
-
-    uint32_t buf = 0;
-    vm_size_t readSize = sizeof(buf);
-    vm_size_t outSize = 0;
-
-    mach_port_t kTask = Titanium_GetKernelTaskPort();
-
-    while (currentAddr < scanEnd) {
-        kern_return_t kr = KERN_FAILURE;
-
-        if (jbclient_kread_fn) {
-            kr = jbclient_kread_fn(currentAddr, &buf, sizeof(buf));
-        } else if (MACH_PORT_VALID(kTask)) {
-            kr = vm_read_overwrite(kTask, (vm_address_t)currentAddr, readSize,
-                                   (vm_address_t)&buf, &outSize);
-        }
-
-        if (kr == KERN_SUCCESS) {
-            if (buf == 60 || buf == 120) {
-                uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
-                if (Titanium_KernelWriteAbsolute(currentAddr, targetVal64)) {
-                    os_unfair_lock_lock(&s_scanLock);
-                    if (s_pinnedCount < 512) {
-                        s_pinnedAddrs[s_pinnedCount] = currentAddr;
-                        s_pinnedCount++;
-                        found++;
-                    }
-                    os_unfair_lock_unlock(&s_scanLock);
-                    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Pinned 0x%llX: %u → %ldHz",
-                                      currentAddr, buf, (long)targetHz]);
+    // ===== FULL SCAN — bg queue =====
+    dispatch_async(g_ksweepQueue, ^{
+        @autoreleasepool {
+            @try {
+                if (!jbclient_kread_fn || !jbclient_kwrite_fn) {
+                    Titanium_V60_Log(@"[K-SWEEP] jbclient kread/kwrite missing, abort");
+                    goto done;
                 }
+
+                uint64_t base = 0;
+                if (jbclient_get_kernel_base_fn) base = jbclient_get_kernel_base_fn();
+                else if (libkernrw_get_base_fn) base = libkernrw_get_base_fn();
+                if (base == 0) {
+                    Titanium_V60_Log(@"[K-SWEEP] base=0, abort");
+                    goto done;
+                }
+
+                // Verify kread hoạt động bằng magic header
+                uint64_t magic = 0;
+                if (jbclient_kread_fn(base, &magic, 8) != 0 ||
+                    (magic != 0xFEEDFACF && magic != 0xFEEDFAC)) {
+                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] kread broken (magic=0x%llX), abort", magic]);
+                    goto done;
+                }
+
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Base=0x%llX OK, scan 32MB...", base]);
+
+                uint64_t scanStart = base + 0x1000000;
+                uint64_t scanEnd   = base + 0x3000000;
+                uint64_t step      = 4;
+                uint32_t sentinel  = 0xDEADBEEF;
+
+                mach_vm_address_t localPins[1024];
+                int found = 0;
+                uint64_t addr = scanStart;
+
+                while (addr < scanEnd && found < 1024) {
+                    uint32_t buf = 0;
+                    if (jbclient_kread_fn(addr, &buf, 4) != 0) {
+                        addr += step;
+                        continue;
+                    }
+
+                    if (buf != 60 && buf != 120) {
+                        addr += step;
+                        continue;
+                    }
+
+                    // FILTER 1 — neighbor filter: bỏ qua nếu láng giềng cũng 60/120/240
+                    // (mảng config, timeout array, buffer size array)
+                    uint32_t L = 0, R = 0, L2 = 0, R2 = 0;
+                    jbclient_kread_fn(addr - 4, &L, 4);
+                    jbclient_kread_fn(addr + 4, &R, 4);
+                    jbclient_kread_fn(addr - 8, &L2, 4);
+                    jbclient_kread_fn(addr + 8, &R2, 4);
+                    if (L == 60 || L == 120 || L == 240 ||
+                        R == 60 || R == 120 || R == 240 ||
+                        L2 == 60 || L2 == 120 || L2 == 240 ||
+                        R2 == 60 || R2 == 120 || R2 == 240) {
+                        addr += step;
+                        continue;
+                    }
+
+                    // FILTER 2 — sentinel test: write 0xDEADBEEF, read back
+                    uint32_t orig = buf;
+                    if (!Titanium_KWriteVerify(addr, sentinel)) {
+                        // Kernel từ chối (KTRR/read-only). Thử restore, skip.
+                        jbclient_kwrite_fn(addr, &orig, 4);
+                        addr += step;
+                        continue;
+                    }
+
+                    // ✅ WRITABLE — restore rồi pin
+                    Titanium_KWriteVerify(addr, orig);
+
+                    // HEURISTIC: nếu gần đó có pixelClock (800MHz = 0x2FAF0800) → ưu tiên
+                    bool highPriority = false;
+                    for (int off = -64; off <= 64; off += 4) {
+                        if (off == 0) continue;
+                        uint32_t nearby = 0;
+                        if (jbclient_kread_fn(addr + off, &nearby, 4) != 0) continue;
+                        if (nearby == 800000000u || nearby == 400000000u ||
+                            nearby == 200000000u || nearby == 240) {
+                            highPriority = true;
+                            break;
+                        }
+                    }
+
+                    // Nếu high-priority → chèn đầu mảng, không → cuối
+                    if (highPriority) {
+                        memmove(&localPins[1], &localPins[0], sizeof(mach_vm_address_t) * (size_t)found);
+                        localPins[0] = addr;
+                    } else {
+                        localPins[found] = addr;
+                    }
+                    found++;
+
+                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] %@ 0x%llX orig=%u",
+                                      highPriority ? @"★" : @"✅", addr, orig]);
+
+                    addr += step;
+                }
+
+                // Lưu cache
+                os_unfair_lock_lock(&g_ksweepLock);
+                g_ksweepPinnedCount = found;
+                if (found > 0) memcpy(g_ksweepPinned, localPins, sizeof(mach_vm_address_t) * (size_t)found);
+                os_unfair_lock_unlock(&g_ksweepLock);
+
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] DONE, %d writable addrs cached", found]);
+
+                // Apply targetHz ngay
+                uint32_t targetVal32 = (uint32_t)targetHz;
+                for (int i = 0; i < found; i++) {
+                    Titanium_KWriteVerify(localPins[i], targetVal32);
+                }
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Applied %ldHz to %d addrs",
+                                  (long)targetHz, found]);
+
+            done:
+                os_unfair_lock_lock(&g_ksweepLock);
+                g_ksweepScanning = false;
+                os_unfair_lock_unlock(&g_ksweepLock);
+            } @catch (NSException *e) {
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] throw: %@", e.reason]);
+                os_unfair_lock_lock(&g_ksweepLock);
+                g_ksweepScanning = false;
+                os_unfair_lock_unlock(&g_ksweepLock);
             }
         }
-        currentAddr += step;
-    }
-
-    os_unfair_lock_lock(&s_scanLock);
-    s_scanning = false;
-    os_unfair_lock_unlock(&s_scanLock);
-
-    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] First scan done, pinned %d addrs (cached)", found]);
+    });
 }
+
 // ====================================================================================================
 // [FIX BƠ] — PHỤC HỒI CÁC HÀM RỖNG BẰNG LOGIC THẬT
 // ====================================================================================================
@@ -9478,7 +9572,7 @@ static BOOL Titanium_IsForceOpenSystemPath(const char *path) {
 }
 
 // ====================================================================================================
-// [SANDBOX + FILE I/O HOOKS — CHỈ MỘT BẢN DUY NHẤT, TARGETED]
+// [SANDBOX HOOKS — CHỈ 2 HÀM, BỎ OPEN/STAT/ACCESS ĐỂ TRÁNH CONFLICT TRAMPOLINE]
 // ====================================================================================================
 
 // [SANDBOX_CHECK]
@@ -9521,78 +9615,7 @@ static int hooked_sandbox_check_self(pid_t pid, const char *operation, int type,
     return g_orig_sandbox_check_self(pid, operation, type);
 }
 
-// [ACCESS]
-static int (*orig_access_fn)(const char *path, int mode) = NULL;
-static int hooked_access_fn(const char *path, int mode) {
-    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
-        return 0;
-    }
-    return orig_access_fn ? orig_access_fn(path, mode) : -1;
-}
-
-// [FACCESSAT]
-static int (*orig_faccessat_fn)(int fd, const char *path, int mode, int flags) = NULL;
-static int hooked_faccessat_fn(int fd, const char *path, int mode, int flags) {
-    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
-        return 0;
-    }
-    return orig_faccessat_fn ? orig_faccessat_fn(fd, path, mode, flags) : -1;
-}
-
-// [OPEN] — va_arg int (FIX mode_t promote) + fallback O_CREAT
-static int (*orig_open_fn)(const char *path, int flags, ...) = NULL;
-static int hooked_open_fn(const char *path, int flags, ...) {
-    va_list ap;
-    va_start(ap, flags);
-    int mode_arg = va_arg(ap, int);   // [FIX] mode_t promote int
-    va_end(ap);
-    mode_t mode = (mode_t)mode_arg;
-
-    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
-        int fd = orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
-        if (fd >= 0) return fd;
-        if ((flags & O_WRONLY) || (flags & O_RDWR)) {
-            int fbFlags = flags | O_CREAT;
-            fd = orig_open_fn ? orig_open_fn(path, fbFlags, mode ? mode : 0644) : -1;
-        }
-        return fd;
-    }
-    return orig_open_fn ? orig_open_fn(path, flags, mode) : -1;
-}
-
-// [STAT]
-static int (*orig_stat_fn)(const char *path, struct stat *buf) = NULL;
-static int hooked_stat_fn(const char *path, struct stat *buf) {
-    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
-        int ret = orig_stat_fn ? orig_stat_fn(path, buf) : -1;
-        if (ret == 0) return 0;
-        if (buf) {
-            memset(buf, 0, sizeof(struct stat));
-            buf->st_mode = S_IFREG | 0644;
-            buf->st_size = 0;
-        }
-        return 0;
-    }
-    return orig_stat_fn ? orig_stat_fn(path, buf) : -1;
-}
-
-// [LSTAT]
-static int (*orig_lstat_fn)(const char *path, struct stat *buf) = NULL;
-static int hooked_lstat_fn(const char *path, struct stat *buf) {
-    if (Titanium_IsTargetProcess() && path && Titanium_IsForceOpenSystemPath(path)) {
-        int ret = orig_lstat_fn ? orig_lstat_fn(path, buf) : -1;
-        if (ret == 0) return 0;
-        if (buf) {
-            memset(buf, 0, sizeof(struct stat));
-            buf->st_mode = S_IFREG | 0644;
-            buf->st_size = 0;
-        }
-        return 0;
-    }
-    return orig_lstat_fn ? orig_lstat_fn(path, buf) : -1;
-}
-
-// [INSTALL]
+// [INSTALL — CHỈ 2 HOOK]
 static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -9605,43 +9628,13 @@ static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
                 void *symSbCheck = dlsym(sbLib, "sandbox_check");
                 if (symSbCheck && !orig_sandbox_check) {
                     MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
-                    Titanium_V60_Log(@"[SB] sandbox_check hooked (targeted)");
+                    Titanium_V60_Log(@"[SB] sandbox_check hooked");
                 }
 
                 void *symSbSelf = dlsym(sbLib, "sandbox_check_self");
                 if (symSbSelf && !g_orig_sandbox_check_self) {
                     MSHookFunction(symSbSelf, (void *)hooked_sandbox_check_self, (void **)&g_orig_sandbox_check_self);
-                    Titanium_V60_Log(@"[SB] sandbox_check_self hooked (targeted)");
-                }
-
-                void *symAccess = dlsym(RTLD_DEFAULT, "access");
-                if (symAccess) {
-                    MSHookFunction(symAccess, (void *)hooked_access_fn, (void **)&orig_access_fn);
-                    Titanium_V60_Log(@"[FILE] access hooked (targeted)");
-                }
-
-                void *symFaccessat = dlsym(RTLD_DEFAULT, "faccessat");
-                if (symFaccessat) {
-                    MSHookFunction(symFaccessat, (void *)hooked_faccessat_fn, (void **)&orig_faccessat_fn);
-                    Titanium_V60_Log(@"[FILE] faccessat hooked (targeted)");
-                }
-
-                void *symOpen = dlsym(RTLD_DEFAULT, "open");
-                if (symOpen) {
-                    MSHookFunction(symOpen, (void *)hooked_open_fn, (void **)&orig_open_fn);
-                    Titanium_V60_Log(@"[FILE] open hooked (targeted)");
-                }
-
-                void *symStat = dlsym(RTLD_DEFAULT, "stat");
-                if (symStat) {
-                    MSHookFunction(symStat, (void *)hooked_stat_fn, (void **)&orig_stat_fn);
-                    Titanium_V60_Log(@"[FILE] stat hooked (targeted)");
-                }
-
-                void *symLstat = dlsym(RTLD_DEFAULT, "lstat");
-                if (symLstat) {
-                    MSHookFunction(symLstat, (void *)hooked_lstat_fn, (void **)&orig_lstat_fn);
-                    Titanium_V60_Log(@"[FILE] lstat hooked (targeted)");
+                    Titanium_V60_Log(@"[SB] sandbox_check_self hooked");
                 }
             } @catch (NSException *e) {
                 Titanium_V60_Log([NSString stringWithFormat:@"[SB] hook throw: %@", e.reason]);
