@@ -1523,6 +1523,8 @@ static volatile NSInteger g_cachedResolvedFPS = 240;
 static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
+static NSInteger g_lastHz = 240;
+static void Titanium_ClearKSweepCache(void);
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
 
@@ -6481,14 +6483,19 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
                              ? (now - g_ksweepCacheTimestamp) : UINT64_MAX;
     bool cacheExpired = (cacheAgeTicks > Titanium_NanosToMachTicks((uint64_t)KSWEEP_CACHE_TTL_SEC * 1000000000ULL));
 
-    mach_vm_address_t localCache[2048];
-    if (cachedCount > 0) memcpy(localCache, g_ksweepPinned, sizeof(mach_vm_address_t) * (size_t)cachedCount);
+    // [FIX] Dùng heap malloc — block không capture được C array
+    mach_vm_address_t *cachePtr = NULL;
+    if (cachedCount > 0) {
+        cachePtr = (mach_vm_address_t *)malloc(sizeof(mach_vm_address_t) * (size_t)cachedCount);
+        if (cachePtr) memcpy(cachePtr, g_ksweepPinned, sizeof(mach_vm_address_t) * (size_t)cachedCount);
+    }
     bool scanning = g_ksweepScanning;
 
     if (cacheExpired && cachedCount > 0) {
         g_ksweepPinnedCount = 0;
         cachedCount = 0;
         g_ksweepCacheTimestamp = 0;
+        if (cachePtr) { free(cachePtr); cachePtr = NULL; }
     }
     os_unfair_lock_unlock(&g_ksweepLock);
 
@@ -6496,21 +6503,25 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
         Titanium_V60_Log(@"[K-SWEEP] Cache expired (30s TTL) → rescan");
     }
 
-    // ===== Cache hit =====
-    if (cachedCount > 0) {
+    // ===== Cache hit — dùng heap pointer =====
+    if (cachedCount > 0 && cachePtr) {
         uint32_t targetVal32 = (uint32_t)targetHz;
+        int countCopy = cachedCount;
         dispatch_async(g_ksweepQueue, ^{
             int ok = 0;
-            for (int i = 0; i < cachedCount; i++) {
-                if (Titanium_ForceKWrite(localCache[i], targetVal32)) ok++;
+            for (int i = 0; i < countCopy; i++) {
+                if (Titanium_ForceKWrite(cachePtr[i], targetVal32)) ok++;
             }
+            free(cachePtr);
             os_unfair_lock_lock(&g_ksweepLock);
             g_ksweepCacheTimestamp = mach_absolute_time();
             os_unfair_lock_unlock(&g_ksweepLock);
             Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Cache force-write: %d/%d → %ldHz",
-                              ok, cachedCount, (long)targetHz]);
+                              ok, countCopy, (long)targetHz]);
         });
         return;
+    } else if (cachePtr) {
+        free(cachePtr);
     }
 
     if (scanning) return;
