@@ -6390,7 +6390,7 @@ static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value)
 // ====================================================================================================
 // QUÉT MÙ VÀ GHIM (TUYỆT ĐỐI KHÔNG PANIC)
 // ====================================================================================================
-static void Titanium_BruteForceKernelSweep_Ultimate(NSInteger targetHz) {
+static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
     Titanium_InitUltimateKernelAPI();
     
     uint64_t kernelBase = 0;
