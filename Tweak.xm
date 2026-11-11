@@ -6133,6 +6133,8 @@ static void Titanium_Tier6JetsamImmunityReal(void);
 static void Titanium_OverdrivePipelineGo(NSInteger targetHz);
 static void Titanium_ExecuteRealPanelOverdrive(void);
 static void Titanium_BruteForceKernelSweep(NSInteger targetHz);
+static inline void Titanium_MarkHardwarePunched(void);
+static inline BOOL Titanium_CanPunchHardware(void);
 
 // --- GIAO TIẾP IOKIT, DCP & FRAMEBUFFER ---
 static void Titanium_LoadIOMFBDirect(void);
