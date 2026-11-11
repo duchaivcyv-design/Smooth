@@ -20,6 +20,7 @@
 #import <mach/task_policy.h>
 #import <mach/clock.h>
 #import <mach/mach_error.h>
+#include <mach/host_priv.h>
 #import <mach-o/dyld.h>
 #import <SpriteKit/SpriteKit.h>
 #import <SceneKit/SceneKit.h>
