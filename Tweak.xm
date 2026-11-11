@@ -8,7 +8,6 @@
 #import <mach/mach_host.h>
 #import <mach/mach_time.h>
 #import <mach/mach_types.h>
-#import <mach/mach_vm.h>
 #import <mach/vm_map.h>
 #import <mach/vm_region.h>
 #import <mach/vm_statistics.h>
@@ -1967,8 +1966,8 @@ static inline void Titanium_EnforceThreadVIPPolicy(void) {
     void *stack = pthread_get_stackaddr_np(self);
     size_t stackSize = pthread_get_stacksize_np(self);
     if (stack && stackSize > 0) {
-        mach_vm_wire(0, mach_task_self(), (mach_vm_address_t)stack,
-                     (mach_vm_size_t)stackSize, VM_PROT_READ | VM_PROT_WRITE);
+        vm_wire(0, mach_task_self(), (vm_address_t)stack,
+        (vm_size_t)stackSize, VM_PROT_READ | VM_PROT_WRITE);
     }
 
     Titanium_DisableKernelThreadThrottling();
