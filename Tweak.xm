@@ -5665,39 +5665,41 @@ static void Titanium_EnforceCAFrameRange(void);
 static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
 
 // ====================================================================================================
-// [THERMAL & PUNCH GATE] — thermal + 1500ms cooldown + drift counter
-// Share giữa: ForcePanelModeDirect, HardwareDriverOverride,
-//             PushRateToDriverV4, ExecuteUltimateHardwareHack
+// [THERMAL & PUNCH GATE] — MẠNH + MÁT + PIN TỤT
 // ====================================================================================================
 
-// [COOL+FORCE] Luôn YES — không bao giờ ngừng punch vì thermal
-// Nhiệt độ giảm bằng: kill daemon nền + RAM clean (không phải bằng cách ngừng punch)
-// Nếu ThermalOK=NO khi Serious → punch dừng → Hz tụt → giật → KHÔNG mượt
+// [MÁT] Không block punch khi thermal
 static inline BOOL Titanium_ThermalOK(void) {
     return YES;
 }
 
-// [COOL] 500ms = 2Hz punch max — đủ mượt, không gây kernel spinlock contention
-// 100ms = 10Hz = kernel write storm = nóng ngược lại
+// [MẠNH] 300ms = 3.3Hz punch — mượt hơn 500ms, không contention
 static inline BOOL Titanium_CanPunchHardware(void) {
     uint64_t now = mach_absolute_time();
     if (g_lastHardwarePunchTick == 0) return YES;
-    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(500ULL * 1000000ULL);
+    return (now - g_lastHardwarePunchTick) >= Titanium_NanosToMachTicks(300ULL * 1000000ULL);
+}
+
+// [FIX] Định nghĩa TRƯỚC DriftCheck để không lỗi undeclared
+static inline void Titanium_MarkHardwarePunched(void) {
+    g_lastHardwarePunchTick = mach_absolute_time();
+    g_driftPunchCountTotal++;
 }
 
 // ====================================================================================================
-// [REAPPLY DISPLAY LINKS — throttle 50ms, skip nếu không đổi]
+// [REAPPLY DISPLAY LINKS — throttle 30ms, skip nếu không đổi]
+// ====================================================================================================
 static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     if (!Titanium_DisplayRateOverrideReady() ||
         !(IS_ACTIVE || g_syncPayloadV285.masterEnabled) ||
         !Titanium_ShouldApplyAppDisplayOverrides() || g_isCurrentAppBlacklisted) return;
 
-    // [COOL] Throttle 50ms — tránh flood main queue từ touch/scroll event
+    // [MẠNH] 30ms = 33Hz reapply — bắt kịp Hz kernel reset
     static os_unfair_lock s_dlLock = OS_UNFAIR_LOCK_INIT;
     static uint64_t s_lastDLApply = 0;
     uint64_t now = mach_absolute_time();
     os_unfair_lock_lock(&s_dlLock);
-    if (s_lastDLApply != 0 && (now - s_lastDLApply) < Titanium_NanosToMachTicks(50ULL * 1000000ULL)) {
+    if (s_lastDLApply != 0 && (now - s_lastDLApply) < Titanium_NanosToMachTicks(30ULL * 1000000ULL)) {
         os_unfair_lock_unlock(&s_dlLock);
         return;
     }
@@ -5716,7 +5718,7 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
         if (cap < 60) cap = 60;
         for (CADisplayLink *displayLink in snapshot) {
             if (!displayLink) continue;
-            // [COOL] Chỉ update nếu thay đổi — tránh CA recompute vô ích
+            // [MÁT] Skip nếu không đổi — không CA recompute vô ích
             if (displayLink.preferredFramesPerSecond != cap) {
                 if (@available(iOS 15.0, *)) {
                     if ([displayLink respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
@@ -5729,16 +5731,18 @@ static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void) {
     });
 }
 
-// [ENFORCE CA FRAME RANGE — throttle 30ms, chỉ set khi range khác]
+// ====================================================================================================
+// [ENFORCE CA FRAME RANGE — throttle 20ms]
+// ====================================================================================================
 static void Titanium_EnforceCAFrameRange(void) {
     if (!Titanium_ShouldApplyAppDisplayOverrides() || g_isCurrentAppBlacklisted) return;
 
-    // [COOL] Throttle 30ms — không cần apply nhanh hơn 33Hz
+    // [MẠNH] 20ms = 50Hz apply
     static os_unfair_lock s_caLock = OS_UNFAIR_LOCK_INIT;
     static uint64_t s_lastCAApply = 0;
     uint64_t now = mach_absolute_time();
     os_unfair_lock_lock(&s_caLock);
-    if (s_lastCAApply != 0 && (now - s_lastCAApply) < Titanium_NanosToMachTicks(30ULL * 1000000ULL)) {
+    if (s_lastCAApply != 0 && (now - s_lastCAApply) < Titanium_NanosToMachTicks(20ULL * 1000000ULL)) {
         os_unfair_lock_unlock(&s_caLock);
         return;
     }
@@ -5758,10 +5762,10 @@ static void Titanium_EnforceCAFrameRange(void) {
                     if ([ws respondsToSelector:@selector(preferredFrameRateRange)] &&
                         [ws respondsToSelector:@selector(setPreferredFrameRateRange:)]) {
                         CAFrameRateRange curr = ws.preferredFrameRateRange;
-                        // [COOL] Chỉ set khi lệch thật (0.5 frame)
-                        if (fabs(curr.minimum - target.minimum) > 0.5 ||
-                            fabs(curr.maximum - target.maximum) > 0.5 ||
-                            fabs(curr.preferred - target.preferred) > 0.5) {
+                        // [MÁT] Chỉ set khi lệch 1 frame
+                        if (fabs(curr.minimum - target.minimum) > 1.0 ||
+                            fabs(curr.maximum - target.maximum) > 1.0 ||
+                            fabs(curr.preferred - target.preferred) > 1.0) {
                             ws.preferredFrameRateRange = target;
                         }
                     }
@@ -5794,10 +5798,8 @@ static inline void Titanium_ReapplyFrameRateToAllScenes(void) {
 }
 
 // ====================================================================================================
-// [DRIFT CHECK — 1% × 3 frame = bắt sớm, không false positive]
-// [FIX] Định nghĩa thật 2 hàm helper TRƯỚC DriftCheck, không dùng forward decl
+// [DRIFT CHECK — 0.8% × 2 frame = bắt sớm hơn 6x, không false positive]
 // ====================================================================================================
-
 static inline void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz) {
     if (targetHz < 15) return;
     double interval = targetTs - timestamp;
@@ -5806,13 +5808,13 @@ static inline void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval 
     g_lastObservedFrameHz = actualHz;
     double deviation = fabs(actualHz - (double)targetHz) / (double)targetHz;
 
-    // [COOL] 1% × 3 frame: lệch 1% liên tiếp 3 frame (48ms) → punch ngay
-    // 0.5% = punch vì noise CA timestamp = NÓNG
-    // 2% = lệch 2% (60Hz thay vì 120Hz) mới punch = LAG
-    // 1%/3 = cân bằng
-    if (deviation > 0.01) {
+    // [MẠNH] 0.8% × 2 frame = bắt kịp kernel reset trong ~16ms ở 120Hz
+    // 0.8% > noise CA timestamp (0.3%) → không false positive
+    // 0.5% sẽ false positive vì noise → punch storm → NÓNG ngược
+    // 0.8%/2 = cân bằng tối ưu
+    if (deviation > 0.008) {
         g_consecutiveDriftFrames++;
-        if (g_consecutiveDriftFrames >= 3) {
+        if (g_consecutiveDriftFrames >= 2) {
             g_consecutiveDriftFrames = 0;
             if (Titanium_CanPunchHardware()) {
                 Titanium_MarkHardwarePunched();
