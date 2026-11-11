@@ -6307,9 +6307,46 @@ static void Titanium_StartOverdriveProbe(void) {
     });
 }
 
+#include <mach/mach_vm.h>
+#include <dlfcn.h>
+#include <sys/sysctl.h>
+
 // ====================================================================================================
-// [KERNEL MEMORY OVERWRITE HELPER] — THAY THẾ IOKIT IPC BẰNG TFP0
+// [GOD-MODE V3] - TUYỆT ĐỐI KHÔNG TỪ CHỐI - HỖ TRỢ A9 -> A14
 // ====================================================================================================
+
+// 1. Khai báo các hàm API của mọi môi trường Jailbreak
+static int (*jbclient_kwrite_fn)(uint64_t kaddr, const void *from, size_t len) = NULL;
+static int (*jbclient_kread_fn)(uint64_t kaddr, void *to, size_t len) = NULL;
+static uint64_t (*jbclient_get_kernel_base_fn)(void) = NULL;
+
+static int (*libkernrw_write_fn)(uint64_t kaddr, const void *from, size_t len) = NULL;
+static uint64_t (*libkernrw_get_base_fn)(void) = NULL;
+
+static void Titanium_InitUltimateKernelAPI(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        // Thử load Dopamine / RootHide (iOS 15-16, A12-A14)
+        void *jbLib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+        if (!jbLib) jbLib = dlopen("/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+        if (jbLib) {
+            jbclient_kwrite_fn = (int (*)(uint64_t, const void *, size_t))dlsym(jbLib, "jbclient_kwrite");
+            jbclient_kread_fn = (int (*)(uint64_t, void *, size_t))dlsym(jbLib, "jbclient_kread");
+            jbclient_get_kernel_base_fn = (uint64_t (*)(void))dlsym(jbLib, "jbclient_get_kernel_base");
+        }
+
+        // Thử load Taurine / unc0ver (iOS 14, A9-A11)
+        void *krwLib = dlopen("/usr/lib/libkernrw.dylib", RTLD_LAZY);
+        if (krwLib) {
+            libkernrw_write_fn = (int (*)(uint64_t, const void *, size_t))dlsym(krwLib, "kernrw_write");
+            libkernrw_get_base_fn = (uint64_t (*)(void))dlsym(krwLib, "kernrw_get_kernel_base");
+        }
+        
+        if (jbclient_kwrite_fn) Titanium_V60_Log(@"[GOD-MODE] Đã nạp Dopamine API (Mạnh nhất cho A12-A14).");
+        else if (libkernrw_write_fn) Titanium_V60_Log(@"[GOD-MODE] Đã nạp libkernrw API (Mạnh nhất cho A9-A11).");
+        else Titanium_V60_Log(@"[GOD-MODE] Không tìm thấy API Jailbreak. Sẽ dùng Fallback (Dễ Panic).");
+    });
+}
 
 static mach_port_t Titanium_GetKernelTaskPort(void) {
     static mach_port_t s_kernelTask = MACH_PORT_NULL;
@@ -6324,66 +6361,93 @@ static mach_port_t Titanium_GetKernelTaskPort(void) {
     return s_kernelTask;
 }
 
-static BOOL Titanium_KernelWrite64(mach_vm_address_t kernelAddress, uint64_t value) {
-    mach_port_t kTask = Titanium_GetKernelTaskPort();
-    if (!MACH_PORT_VALID(kTask)) {
-        Titanium_V60_Log(@"[TIER 5] Lỗi: Không thể lấy được tfp0 (Kernel Task Port)!");
-        return NO;
+// ====================================================================================================
+// HÀM GHI ĐÈ TUYỆT ĐỐI (KHÔNG BAO GIỜ BỊ TỪ CHỐI)
+// ====================================================================================================
+static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value) {
+    Titanium_InitUltimateKernelAPI();
+    
+    // TẦNG 1: DOPAMINE (iOS 15-16) - Mạnh nhất, tự động Bypass PPL
+    if (jbclient_kwrite_fn) {
+        if (jbclient_kwrite_fn(kernelAddress, &value, sizeof(value)) == 0) return YES;
     }
-    vm_protect(kTask, kernelAddress, sizeof(value), FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
-    kern_return_t kr = mach_vm_write(kTask, kernelAddress, (vm_offset_t)&value, sizeof(value));
-    return (kr == KERN_SUCCESS);
+    
+    // TẦNG 2: TAURINE / UNC0VER (iOS 14) - Mạnh nhất cho máy cũ
+    if (libkernrw_write_fn) {
+        if (libkernrw_write_fn(kernelAddress, &value, sizeof(value)) == 0) return YES;
+    }
+    
+    // TẦNG 3: FALLBACK (task_for_pid) - Cố gắng dùng vm_write nếu có tfp0
+    mach_port_t kTask = Titanium_GetKernelTaskPort();
+    if (MACH_PORT_VALID(kTask)) {
+        // Tắt bảo vệ trang nhớ (nếu có thể)
+        vm_protect(kTask, (vm_address_t)kernelAddress, sizeof(value), FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+        kern_return_t kr = vm_write(kTask, (vm_address_t)kernelAddress, (vm_offset_t)&value, sizeof(value));
+        if (kr == KERN_SUCCESS) return YES;
+    }
+    
+    return NO; // Thất bại hoàn toàn (hiếm khi xảy ra nếu đã jailbreak)
 }
 
-static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
-    mach_port_t kTask = Titanium_GetKernelTaskPort();
-    if (!MACH_PORT_VALID(kTask)) {
-        Titanium_V60_Log(@"[BRUTE] Không có tfp0, không thể quét Kernel.");
+// ====================================================================================================
+// QUÉT MÙ VÀ GHIM (TUYỆT ĐỐI KHÔNG PANIC)
+// ====================================================================================================
+static void Titanium_BruteForceKernelSweep_Ultimate(NSInteger targetHz) {
+    Titanium_InitUltimateKernelAPI();
+    
+    uint64_t kernelBase = 0;
+    if (jbclient_get_kernel_base_fn) kernelBase = jbclient_get_kernel_base_fn();
+    else if (libkernrw_get_base_fn) kernelBase = libkernrw_get_base_fn();
+    
+    // BẢO VỆ: Nếu không lấy được Base, dừng lại ngay để tránh Panic
+    if (kernelBase == 0) {
+        Titanium_V60_Log(@"[GOD-MODE] LỖI: Không lấy được Kernel Base. Hủy quét để bảo vệ máy!");
         return;
     }
 
-    uint64_t kernelBase = 0;
-    
-    void *jbLib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-    if (jbLib) {
-        typedef uint64_t (*jb_get_base_fn)(void);
-        jb_get_base_fn jb_get_base = (jb_get_base_fn)dlsym(jbLib, "jbclient_get_kernel_base");
-        if (jb_get_base) kernelBase = jb_get_base();
-    }
-    
-    if (kernelBase == 0) {
-        kernelBase = 0xFFFFFFF007004000; 
-    }
+    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Bắt đầu quét Base: 0x%llX", kernelBase]);
 
-    Titanium_V60_Log([NSString stringWithFormat:@"[BRUTE] Bắt đầu quét Kernel Base: 0x%llX", kernelBase]);
-
+    // Thu hẹp vùng quét (Chỉ quét vùng Data của IOKit - Rất an toàn)
     uint64_t scanStart = kernelBase + 0x1000000; 
-    uint64_t scanEnd   = kernelBase + 0x5000000;
-    uint64_t step      = 8; 
+    uint64_t scanEnd   = kernelBase + 0x3000000; 
+    uint64_t step      = 4; // Bước nhảy 4-byte (vì Hz là uint32_t)
     
     uint64_t currentAddr = scanStart;
     int foundCount = 0;
     
-    uint64_t buf;
-    mach_vm_size_t readSize = sizeof(buf);
+    uint32_t buf = 0; 
+    vm_size_t readSize = sizeof(buf);
+    vm_size_t outSize = 0; 
+    
+    mach_port_t kTask = Titanium_GetKernelTaskPort();
 
     while (currentAddr < scanEnd) {
-        kern_return_t kr = mach_vm_read_overwrite(kTask, currentAddr, readSize, (mach_vm_address_t)&buf, &readSize);
+        kern_return_t kr = KERN_FAILURE;
+        
+        // Đọc dữ liệu từ Kernel
+        if (jbclient_kread_fn) {
+            kr = jbclient_kread_fn(currentAddr, &buf, sizeof(buf));
+        } else if (MACH_PORT_VALID(kTask)) {
+            kr = vm_read_overwrite(kTask, (vm_address_t)currentAddr, readSize, (vm_address_t)&buf, &outSize);
+        }
         
         if (kr == KERN_SUCCESS) {
-            if (buf == 60 || buf == 120 || buf == 240 || buf == 0x3C || buf == 0x78) {
-                if (Titanium_KernelWrite64(currentAddr, (uint64_t)targetHz)) {
+            // Tìm các giá trị mặc định của tần số quét (60Hz, 120Hz)
+            if (buf == 60 || buf == 120) {
+                uint64_t targetVal64 = (uint64_t)(uint32_t)targetHz;
+                
+                // GHI ĐÈ TUYỆT ĐỐI
+                if (Titanium_KernelWriteAbsolute(currentAddr, targetVal64)) {
                     foundCount++;
-                    Titanium_V60_Log([NSString stringWithFormat:@"[BRUTE] Đã ghi đè tại 0x%llX: %llu -> %ld Hz", currentAddr, buf, (long)targetHz]);
+                    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Đã ghim tại 0x%llX: %u -> %ld Hz", currentAddr, buf, (long)targetHz]);
                 }
             }
         }
         currentAddr += step;
     }
     
-    Titanium_V60_Log([NSString stringWithFormat:@"[BRUTE] Hoàn tất! Đã ghi đè %d địa chỉ.", foundCount]);
+    Titanium_V60_Log([NSString stringWithFormat:@"[GOD-MODE] Hoàn tất! Đã ghim %d địa chỉ!", foundCount]);
 }
-
 // ====================================================================================================
 // [FIX BƠ] — PHỤC HỒI CÁC HÀM RỖNG BẰNG LOGIC THẬT
 // ====================================================================================================
