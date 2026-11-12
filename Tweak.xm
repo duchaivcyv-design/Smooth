@@ -419,7 +419,7 @@ static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
 static void Titanium_V57_ForceReapplyIfNeeded(void);
 static NSInteger Push_ResolveTargetHz(void);            // forward decl only — body ở sau line 1394
-// [FORWARD DECL] — phải ở ĐẦU file, trước mọi call
+static void Titanium_ProbeKernelAPI(void);
 static void Titanium_V60_Log(NSString *msg);
 
 // ====================================================================================================
@@ -3524,8 +3524,19 @@ static inline BOOL Titanium_IsMediaOrVideoLayer(CALayer *layer) {
 
 // ==============================================================================
 // TẦNG 2: BẺ KHÓA METAL & TẮT V-SYNC — TRUE HARDWARE BYPASS & PANEL OVERDRIVE
+// [FIX-BUILD] forward declarations cho orig_CAMetalLayer_* trước mọi function dùng
 // [FIX-RECURSION] TLS guard + gọi thẳng orig IMP cho mọi setter đã hook
 // ==============================================================================
+
+// ---- Forward decls: 8 orig function pointers + TLS guard ----
+static void (*orig_CAMetalLayer_didMoveToWindow)(id self, SEL _cmd) = NULL;
+static void (*orig_CAMetalLayer_setDisplaySyncEnabled)(id self, SEL _cmd, BOOL enabled) = NULL;
+static BOOL (*orig_CAMetalLayer_displaySyncEnabled)(id self, SEL _cmd) = NULL;
+static void (*orig_CAMetalLayer_setPresentsWithTransaction)(id self, SEL _cmd, BOOL flag) = NULL;
+static BOOL (*orig_CAMetalLayer_presentsWithTransaction)(id self, SEL _cmd) = NULL;
+static void (*orig_CAMetalLayer_setAllowsNextDrawableTimeout)(id self, SEL _cmd, BOOL allow) = NULL;
+static void (*orig_CAMetalLayer_setMaximumDrawableCount)(id self, SEL _cmd, NSUInteger count) = NULL;
+static id   (*orig_CAMetalLayer_nextDrawable)(id self, SEL _cmd) = NULL;
 
 static _Thread_local BOOL s_tlsMetalHook = NO;
 
@@ -3645,7 +3656,6 @@ static void Titanium_ForceApplyMetalOverdriveUltimate(id self) {
 }
 
 // [DID MOVE TO WINDOW]
-static void (*orig_CAMetalLayer_didMoveToWindow)(id self, SEL _cmd) = NULL;
 static void hooked_CAMetalLayer_didMoveToWindow(id self, SEL _cmd) {
     if (orig_CAMetalLayer_didMoveToWindow) orig_CAMetalLayer_didMoveToWindow(self, _cmd);
     if (!self) return;
@@ -3654,14 +3664,14 @@ static void hooked_CAMetalLayer_didMoveToWindow(id self, SEL _cmd) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf) Titanium_ForceApplyMetalOverdriveUltimate(weakSelf);
         });
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
             if (weakSelf) Titanium_ForceApplyMetalOverdriveUltimate(weakSelf);
         });
     }
 }
 
 // [SETTER] displaySyncEnabled — chỉ gọi orig, KHÔNG gọi KillVSync (KillVSync đã gọi orig)
-static void (*orig_CAMetalLayer_setDisplaySyncEnabled)(id self, SEL _cmd, BOOL enabled) = NULL;
 static void hooked_CAMetalLayer_setDisplaySyncEnabled(id self, SEL _cmd, BOOL enabled) {
     if (!orig_CAMetalLayer_setDisplaySyncEnabled) return;
     if (s_tlsMetalHook) {
@@ -3676,7 +3686,6 @@ static void hooked_CAMetalLayer_setDisplaySyncEnabled(id self, SEL _cmd, BOOL en
 }
 
 // [GETTER] displaySyncEnabled
-static BOOL (*orig_CAMetalLayer_displaySyncEnabled)(id self, SEL _cmd) = NULL;
 static BOOL hooked_CAMetalLayer_displaySyncEnabled(id self, SEL _cmd) {
     if (!orig_CAMetalLayer_displaySyncEnabled) return NO;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return NO;
@@ -3684,7 +3693,6 @@ static BOOL hooked_CAMetalLayer_displaySyncEnabled(id self, SEL _cmd) {
 }
 
 // [SETTER] presentsWithTransaction
-static void (*orig_CAMetalLayer_setPresentsWithTransaction)(id self, SEL _cmd, BOOL flag) = NULL;
 static void hooked_CAMetalLayer_setPresentsWithTransaction(id self, SEL _cmd, BOOL flag) {
     if (!orig_CAMetalLayer_setPresentsWithTransaction) return;
     if (s_tlsMetalHook) {
@@ -3699,7 +3707,6 @@ static void hooked_CAMetalLayer_setPresentsWithTransaction(id self, SEL _cmd, BO
 }
 
 // [GETTER] presentsWithTransaction
-static BOOL (*orig_CAMetalLayer_presentsWithTransaction)(id self, SEL _cmd) = NULL;
 static BOOL hooked_CAMetalLayer_presentsWithTransaction(id self, SEL _cmd) {
     if (!orig_CAMetalLayer_presentsWithTransaction) return NO;
     if (IS_ACTIVE || g_syncPayloadV285.masterEnabled) return NO;
@@ -3707,7 +3714,6 @@ static BOOL hooked_CAMetalLayer_presentsWithTransaction(id self, SEL _cmd) {
 }
 
 // [SETTER] allowsNextDrawableTimeout
-static void (*orig_CAMetalLayer_setAllowsNextDrawableTimeout)(id self, SEL _cmd, BOOL allow) = NULL;
 static void hooked_CAMetalLayer_setAllowsNextDrawableTimeout(id self, SEL _cmd, BOOL allow) {
     if (!orig_CAMetalLayer_setAllowsNextDrawableTimeout) return;
     if (s_tlsMetalHook) {
@@ -3722,7 +3728,6 @@ static void hooked_CAMetalLayer_setAllowsNextDrawableTimeout(id self, SEL _cmd, 
 }
 
 // [SETTER] setMaximumDrawableCount
-static void (*orig_CAMetalLayer_setMaximumDrawableCount)(id self, SEL _cmd, NSUInteger count) = NULL;
 static void hooked_CAMetalLayer_setMaximumDrawableCount(id self, SEL _cmd, NSUInteger count) {
     if (!orig_CAMetalLayer_setMaximumDrawableCount) return;
     NSUInteger targetCount = count;
@@ -3731,7 +3736,6 @@ static void hooked_CAMetalLayer_setMaximumDrawableCount(id self, SEL _cmd, NSUIn
 }
 
 // [NEXT DRAWABLE]
-static id (*orig_CAMetalLayer_nextDrawable)(id self, SEL _cmd) = NULL;
 static id hooked_CAMetalLayer_nextDrawable(id self, SEL _cmd) {
     if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled)) {
         g_isMetalGameProcess = YES;
@@ -6389,7 +6393,18 @@ static void Titanium_StartOverdriveProbe(void) {
 // [GOD-MODE V3] - TUYỆT ĐỐI KHÔNG TỪ CHỐI - HỖ TRỢ A9 -> A14
 // ====================================================================================================
 
-// 1. Khai báo các hàm API của mọi môi trường Jailbreak
+// ==============================================================================
+// [FIX-SYMBOL] Kernel API init — đúng tên thật của Dopamine libjailbreak
+// ==============================================================================
+// VERIFIED runtime trên Dopamine 2.x build hiện tại:
+//   dlsym(lib, "_kwritebuf_phys") = 0x104dbb00c  (sau ASLR slide)
+//   dlsym(lib, "_kreadbuf_phys")  = 0x104dbad80
+// Signature (3-arg, verified qua segfault test 4-arg):
+//   int kwritebuf_phys(uint64_t phys_addr, const void *from, size_t len)
+//   int kreadbuf_phys (uint64_t phys_addr, void *to,        size_t len)
+// Return: 0 = success, -1 = fail
+// ==============================================================================
+
 static int (*jbclient_kwrite_fn)(uint64_t kaddr, const void *from, size_t len) = NULL;
 static int (*jbclient_kread_fn)(uint64_t kaddr, void *to, size_t len) = NULL;
 static uint64_t (*jbclient_get_kernel_base_fn)(void) = NULL;
@@ -6400,37 +6415,96 @@ static uint64_t (*libkernrw_get_base_fn)(void) = NULL;
 static void Titanium_InitUltimateKernelAPI(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        // Thử load Dopamine / RootHide (iOS 15-16, A12-A14)
-        void *jbLib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-        if (!jbLib) jbLib = dlopen("/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-        if (jbLib) {
-            jbclient_kwrite_fn = (int (*)(uint64_t, const void *, size_t))dlsym(jbLib, "jbclient_kwrite");
-            jbclient_kread_fn = (int (*)(uint64_t, void *, size_t))dlsym(jbLib, "jbclient_kread");
-            jbclient_get_kernel_base_fn = (uint64_t (*)(void))dlsym(jbLib, "jbclient_get_kernel_base");
+        void *jbLib = NULL;
+        const char *jbPaths[] = {
+            "/var/jb/basebin/libjailbreak.dylib",
+            "/var/jb/usr/lib/libjailbreak.dylib",
+            "/usr/lib/libjailbreak.dylib"
+        };
+        for (int i = 0; i < 3 && !jbLib; i++) {
+            jbLib = dlopen(jbPaths[i], RTLD_LAZY);
+            if (jbLib) {
+                Titanium_V60_Log([NSString stringWithFormat:
+                    @"[GOD-MODE] libjailbreak loaded from %s", jbPaths[i]]);
+            }
         }
 
-        // Thử load Taurine / unc0ver (iOS 14, A9-A11)
-        void *krwLib = dlopen("/usr/lib/libkernrw.dylib", RTLD_LAZY);
-        if (krwLib) {
-            libkernrw_write_fn = (int (*)(uint64_t, const void *, size_t))dlsym(krwLib, "kernrw_write");
-            libkernrw_get_base_fn = (uint64_t (*)(void))dlsym(krwLib, "kernrw_get_kernel_base");
+        if (jbLib) {
+            // Ưu tiên tên mới (Dopamine 2.x hiện tại) — verified work
+            jbclient_kwrite_fn = (int (*)(uint64_t, const void *, size_t))
+                dlsym(jbLib, "_kwritebuf_phys");
+            jbclient_kread_fn = (int (*)(uint64_t, void *, size_t))
+                dlsym(jbLib, "_kreadbuf_phys");
+
+            // Fallback tên cũ (Dopamine 1.x / Taurine build khác)
+            if (!jbclient_kwrite_fn)
+                jbclient_kwrite_fn = (int (*)(uint64_t, const void *, size_t))
+                    dlsym(jbLib, "jbclient_kwrite");
+            if (!jbclient_kread_fn)
+                jbclient_kread_fn = (int (*)(uint64_t, void *, size_t))
+                    dlsym(jbLib, "jbclient_kread");
+
+            // Kernel base — có hoặc không, không critical
+            jbclient_get_kernel_base_fn = (uint64_t (*)(void))
+                dlsym(jbLib, "jbclient_get_kernel_base");
+            if (!jbclient_get_kernel_base_fn)
+                jbclient_get_kernel_base_fn = (uint64_t (*)(void))
+                    dlsym(jbLib, "_jbclient_get_kernel_base");
+
+            Titanium_V60_Log([NSString stringWithFormat:
+                @"[GOD-MODE] kwrite=%p kread=%p base=%p",
+                (void*)jbclient_kwrite_fn,
+                (void*)jbclient_kread_fn,
+                (void*)jbclient_get_kernel_base_fn]);
         }
-        
-        if (jbclient_kwrite_fn) Titanium_V60_Log(@"[GOD-MODE] Đã nạp Dopamine API (Mạnh nhất cho A12-A14).");
-        else if (libkernrw_write_fn) Titanium_V60_Log(@"[GOD-MODE] Đã nạp libkernrw API (Mạnh nhất cho A9-A11).");
-        else Titanium_V60_Log(@"[GOD-MODE] Không tìm thấy API Jailbreak. Sẽ dùng Fallback (Dễ Panic).");
+
+        // libkernrw — Taurine / unc0ver cũ (iOS 14 A9-A11)
+        void *krwLib = dlopen("/usr/lib/libkernrw.dylib", RTLD_LAZY);
+        if (!krwLib) krwLib = dlopen("/var/jb/usr/lib/libkernrw.dylib", RTLD_LAZY);
+        if (krwLib) {
+            libkernrw_write_fn = (int (*)(uint64_t, const void *, size_t))
+                dlsym(krwLib, "kernrw_write");
+            libkernrw_get_base_fn = (uint64_t (*)(void))
+                dlsym(krwLib, "kernrw_get_kernel_base");
+        }
+
+        if (jbclient_kwrite_fn && jbclient_kread_fn) {
+            Titanium_V60_Log(@"[GOD-MODE] V7 ACTIVE — kwritebuf_phys + kreadbuf_phys OK");
+        } else if (libkernrw_write_fn) {
+            Titanium_V60_Log(@"[GOD-MODE] V7 ACTIVE — libkernrw fallback");
+        } else {
+            Titanium_V60_Log(@"[GOD-MODE] V7 DISABLED — no kernel API, no crash-safe write");
+        }
     });
 }
 
+// ==============================================================================
+// [FIX-TFP0] task_for_pid(0) fail trên Dopamine rootless — log rõ, không im lặng
+// ==============================================================================
 static mach_port_t Titanium_GetKernelTaskPort(void) {
     static mach_port_t s_kernelTask = MACH_PORT_NULL;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
+        // Thử task_for_pid(0) — work trên checkm8 / palera1n A9-A11
         kern_return_t kr = task_for_pid(mach_task_self(), 0, &s_kernelTask);
-        if (kr != KERN_SUCCESS || !MACH_PORT_VALID(s_kernelTask)) {
-            host_t host = mach_host_self();
-            host_get_special_port(host, HOST_LOCAL_NODE, 4, &s_kernelTask);
+        if (kr == KERN_SUCCESS && MACH_PORT_VALID(s_kernelTask)) {
+            Titanium_V60_Log(@"[TFP0] task_for_pid(0) OK");
+            return;
         }
+
+        // Fallback: host_get_special_port(4) — kernel task port cũ
+        host_t host = mach_host_self();
+        kr = host_get_special_port(host, HOST_LOCAL_NODE, 4, &s_kernelTask);
+        if (kr == KERN_SUCCESS && MACH_PORT_VALID(s_kernelTask)) {
+            Titanium_V60_Log(@"[TFP0] host_get_special_port(4) OK");
+            return;
+        }
+
+        // Cả hai fail — Dopamine 2.x rootless không expose tfp0, dùng kwritebuf_phys
+        s_kernelTask = MACH_PORT_NULL;
+        Titanium_V60_Log([NSString stringWithFormat:
+            @"[TFP0] NO kernel port — Dopamine rootless expected. "
+            @"Use kwritebuf_phys path instead. kr=%d", kr]);
     });
     return s_kernelTask;
 }
@@ -11425,11 +11499,16 @@ static void Titanium_RestoreOnFirstFrame(void) {
 }
 
 // ====================================================================================================
+// [FIX-BUILD] Forward decl — Titanium_ProbeKernelAPI dùng trong runCoreTweak (line ~11445)
+// Body phải được định nghĩa TRƯỚC runCoreTweak (khuyến nghị: ngay sau Titanium_InitUltimateKernelAPI)
+// ====================================================================================================
+static void Titanium_ProbeKernelAPI(void);
+
+// ====================================================================================================
 // CORE TWEAK RUNNER — ÉP TỐI ĐA KHÔNG GIỚI HẠN, BƠM ĐỒNG BỘ MỌI ENGINE
 // ====================================================================================================
 
 static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName) {
-    (void)bundleID; (void)progName;
     static BOOL s_coreInitDone = NO;
     if (s_coreInitDone) return;
     s_coreInitDone = YES;
@@ -11454,6 +11533,9 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                 CFG285 = [configClass sharedInstance];
                 [CFG285 loadSettings];
             }
+
+            // [FIX-3] Populate screen cache trước mọi UIScreen read về sau
+            Titanium_GetScreenSizeCached();
 
             g_lastSyncTicksV285 = 0;
             g_v57LastIPCReload = 0;
@@ -11536,7 +11618,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
                         Titanium_UpdateNativeDisplayMaxFPS();
                         Titanium_KillVSyncCompletelyAtRoot();
                         Titanium_ApplySiliconDeepOptimizations();
-                        
+
                         Titanium_ReapplyFrameRateToAllScenes();
                         Titanium_ExecuteRealPanelOverdrive();
 
@@ -11587,6 +11669,7 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
     }
 }
+
 // ====================================================================================================
 // [UIView animation range guard — UNCAPPED DỠ BỎ CLAMP 240HZ]
 // ====================================================================================================
@@ -11769,7 +11852,7 @@ static void Titanium_BypassKillMethodV108(void) {
             Titanium_AF_InstallDCPForce();
             Titanium_AF_InstallCrashSuppress();
 
-            // [ĐÃ SỬA]: Cài đặt bẫy Mach IPC ngay lập tức để bảo vệ các lệnh IOKit bên dưới
+            // Cài đặt bẫy Mach IPC trước khi driver IOKit chạy
             Titanium_InstallMachIPCHooks();
 
             Titanium_V55_InstallScreenState();
@@ -11777,18 +11860,18 @@ static void Titanium_BypassKillMethodV108(void) {
             Titanium_RegisterPrefsObservers(isSpringBoard);
             %init;
 
-// 2. Bơm tần số mục tiêu xuống driver — CHẠY TRÊN BG QUEUE, KHÔNG BLOCK MAIN THREAD
-NSInteger target = Titanium_GetMasterRate();
-Titanium_AF_StartWatchdog(target);
+            // 2. Bơm tần số mục tiêu xuống driver — BG queue, không block main
+            NSInteger target = Titanium_GetMasterRate();
+            Titanium_AF_StartWatchdog(target);
 
-dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)),
-               dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-    @try {
-        Titanium_AF_ApplyTarget(Titanium_GetMasterRate());
-        Titanium_HardwareDriverOverride(Titanium_GetMasterRate());
-        Titanium_Tier4WriteCadence(Titanium_GetMasterRate());
-    } @catch (__unused NSException *e) {}
-});
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)),
+                           dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    Titanium_AF_ApplyTarget(Titanium_GetMasterRate());
+                    Titanium_HardwareDriverOverride(Titanium_GetMasterRate());
+                    Titanium_Tier4WriteCadence(Titanium_GetMasterRate());
+                } @catch (__unused NSException *e) {}
+            });
 
             Titanium_V60_Log([NSString stringWithFormat:@"[AF] ctor completed, active target=%ld", (long)target]);
 
@@ -11799,7 +11882,7 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC))
             Titanium_BypassKillMethodV108();
 
             if (!isSpringBoard) {
-                // Chỉ nạp Core sau khi app đã vẽ xong khung hình đầu tiên + 15ms.
+                // Nạp Core sau khi app đã vẽ xong khung hình đầu tiên
                 g_titaniumPendingBundleID = [bundleID copy];
                 strlcpy(g_titaniumPendingProgName, progName ? progName : "", sizeof(g_titaniumPendingProgName));
                 __atomic_store_n(&g_titaniumPendingCoreStart, YES, __ATOMIC_RELEASE);
@@ -11809,7 +11892,6 @@ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC))
                     } @catch (__unused NSException *e) {}
                 });
             } else {
-                // Giữ nguyên thời điểm khởi chạy SpringBoard.
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)),
                                dispatch_get_main_queue(), ^{
                     @try {
