@@ -8894,16 +8894,16 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     // Hiển thị cảnh báo ngay khi mở tab Hz/FPS, kể cả khi mục tiêu đang là 60.
     // Chiều cao được tính tự động dựa trên độ dài văn bản để không bị cắt chữ.
     // ====================================================
+    // ... (code phía trên)
     NSInteger warningRate = MAX(hz, fps);
     UIColor *warningTint = TI_RateWarningColor(warningRate);
     
     CGFloat padding = 12.0;
     CGFloat titleH = 20.0;
-    CGFloat gap = 5.0;
+    CGFloat warnGap = 5.0; // [FIX] Đổi tên từ gap -> warnGap để tránh trùng
     CGFloat textW = cw - (padding * 2);
     CGFloat warningY = 436.0;
 
-    // 1. Setup Label trước để đo chiều cao chữ
     UILabel *warningBody = [[UILabel alloc] initWithFrame:CGRectZero];
     warningBody.numberOfLines = 0;
     warningBody.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightMedium];
@@ -8912,7 +8912,6 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     warningBody.minimumScaleFactor = 0.82;
     warningBody.text = @"⚠️ CẢNH BÁO : Đã nâng cấp lên KERNEL BLIND-SCAN (Quét mù Physical R/W). Tweak không còn fake UI nữa mà dùng kwritebuf_phys quét 256MB RAM để ghim thẳng 90Hz vào struct. Đã hook Mach Exception, chặn đứng Watchdog và ReportCrash. RỦI RO: Nếu quét nhầm vào struct Nhiệt độ/Nguồn -> KERNEL PANIC (Sập nguồn ngay). Ép vượt 60Hz (Panel vật lý) sẽ gây rách hình, sọc màn, nóng ran và tụt pin. Chặn crash chỉ có tác dụng userland, panic kernel là chết. TỰ CHỊU TRÁCH NHIỆM!";
 
-    // 2. Tính toán chiều cao thực tế của đoạn text
     CGSize maxSize = CGSizeMake(textW, CGFLOAT_MAX);
     CGRect textRect = [warningBody.text boundingRectWithSize:maxSize
                                                      options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
@@ -8920,10 +8919,9 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                                                      context:nil];
     CGFloat bodyH = ceil(textRect.size.height);
     
-    // 3. Tính toán chiều cao tổng của container
-    CGFloat warningH = padding + titleH + gap + bodyH + padding;
+    // [FIX] Sử dụng warnGap thay vì gap
+    CGFloat warningH = padding + titleH + warnGap + bodyH + padding;
 
-    // 4. Khởi tạo và add view cảnh báo
     UIView *warning = [[UIView alloc] initWithFrame:CGRectMake(side, warningY, cw, warningH)];
     warning.backgroundColor = [warningTint colorWithAlphaComponent:0.075];
     warning.layer.cornerRadius = 14.0;
@@ -8937,12 +8935,11 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     warningTitle.textColor = warningTint;
     [warning addSubview:warningTitle];
 
-    // Set frame cho Label với chiều cao đã đo được
-    warningBody.frame = CGRectMake(padding, padding + titleH + gap, textW, bodyH);
+    // [FIX] Sử dụng warnGap thay vì gap
+    warningBody.frame = CGRectMake(padding, padding + titleH + warnGap, textW, bodyH);
     [warning addSubview:warningBody];
 
-    // 5. Mở rộng root view nếu cảnh báo lố chiều cao cũ (570)
-    CGFloat newRootHeight = warningY + warningH + 12.0; // 12.0 là padding đáy
+    CGFloat newRootHeight = warningY + warningH + 12.0;
     if (newRootHeight > root.frame.size.height) {
         CGRect r = root.frame;
         r.size.height = newRootHeight;
