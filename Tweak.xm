@@ -516,7 +516,7 @@ static void Titanium_Tier5C_RunSweepV4(void);
 static void Titanium_BypassQuartzCoreRangeAssertion(void);
 static void Titanium_BypassDCPMethod(void);
 static void Titanium_BypassKillMethodV108(void);
-static void Titanium_CheckAndPreventBootloopUniversal(void);
+static BOOL Titanium_CheckAndPreventBootloopUniversal(void);
 static void Titanium_V57_WriteSharedBestHz(NSInteger hz);
 static void Titanium_ApplyConfiguredRateToLayerTree(CALayer *layer);
 static void Titanium_InstallPowerBypassC(void);
@@ -533,11 +533,11 @@ static BOOL Titanium_ShouldDelayLoadAfterSreboot(void);
 static void Titanium_PrepareForReboot(void);
 static void Titanium_ArmRebootWatchdog(void);
 static void Titanium_LogDaemonBlocked(const char *path);
-static void Titanium_HookedWatchdogKick(pid_t pid);
+static int Titanium_HookedWatchdogKick(pid_t pid);
 static inline BOOL Titanium_ShouldPurgeNow(void);
 static inline BOOL Titanium_IsBundleDisabledViaIPC(NSString *bundleID);
 static uint64_t Titanium_IPCSequenceNowV25(void);
-static void Titanium_WriteAtomicIPCFile(NSString *path, const void *bytes, size_t len);
+static BOOL Titanium_WriteAtomicIPCFile(NSString *path, const void *bytes, size_t len);
 static void Titanium_WriteSyncPayloadV285(const ApexV285ProPayload *payload);
 static void Titanium_WriteDisabledAppsFile(NSString *ids);
 static void Titanium_SmartThrottle60Hz(void);
@@ -694,6 +694,7 @@ static inline BOOL Titanium_IsTargetProcess(void);
 - (double)epsilon;
 @end
 
+#if 0  // SDK đã khai báo class này; khối trùng gây lỗi "duplicate interface"
 @interface MTKView : UIView
 @property (nonatomic, assign) NSInteger preferredFramesPerSecond;
 @property (nonatomic, assign) BOOL paused;
@@ -701,19 +702,24 @@ static inline BOOL Titanium_IsTargetProcess(void);
 - (void)didMoveToWindow;
 - (void)draw;
 @end
+#endif
 
 // [THÊM] SKView (SpriteKit)
+#if 0  // SDK đã khai báo class này; khối trùng gây lỗi "duplicate interface"
 @interface SKView : UIView
 - (NSInteger)preferredFramesPerSecond;
 - (void)setPreferredFramesPerSecond:(NSInteger)fps;
 - (void)didMoveToWindow;
 @end
+#endif
 
 // [THÊM] SCNView (SceneKit)
+#if 0  // SDK đã khai báo class này; khối trùng gây lỗi "duplicate interface"
 @interface SCNView : UIView
 - (NSInteger)preferredFramesPerSecond;
 - (void)setPreferredFramesPerSecond:(NSInteger)fps;
 @end
+#endif
 
 @interface _UIRoundedRectShadowView : UIView
 - (void)layoutSubviews;
@@ -922,10 +928,12 @@ static inline BOOL Titanium_IsTargetProcess(void);
 @end
 
 // [THÊM] CAAnimation — belief preferredFrameRateRange
+#if 0  // SDK đã khai báo class này; khối trùng gây lỗi "duplicate interface"
 @interface CAAnimation : NSObject
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range;
 - (CAFrameRateRange)preferredFrameRateRange;
 @end
+#endif
 
 @interface CABackdropLayer : CALayer
 - (void)setScale:(double)scale;
@@ -8853,7 +8861,7 @@ static void Titanium_InstallMachIPCHooks(void) {
 // ====================================================================================================
 // HOOK: ProMotion overclock — BELIEF-ALIGNED (mọi readback = Titanium_BeliefTargetHz)
 // ====================================================================================================
-static volatile BOOL g_beliefTimestampScale = NO;
+// g_beliefTimestampScale: khai báo ở dòng 427 (mặc định NO)
 static NSInteger Titanium_BeliefTargetHz(void) {
     NSInteger t = Titanium_GetMasterRate();
     if (t < 15) t = 60;
@@ -11804,7 +11812,7 @@ static void Titanium_V57_StartAppReapplyTimer(void) {
                 if (targetHz < 15)  targetHz = 15;
                 if (targetHz > 240) targetHz = 240;
 
-                Titanium_PushRateToDriverV4(targetHz, YES);
+Titanium_PushRateToDriverV4_Force(targetHz, YES);
                 Titanium_ReapplyFrameRateToAllScenes();
 
                 dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
