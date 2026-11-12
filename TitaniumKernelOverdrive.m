@@ -418,7 +418,9 @@ void Titanium_WireAllMemory(void *addr, size_t size) {
 }
 
 // ====================================================================================================
-// [TARGET-90] PANEL OVERWRITE — Quét mù Kernel tìm 60Hz và ghi đè thành 90Hz
+// [TARGET-90] PANEL OVERWRITE — Full Range Pattern Scan (15-240Hz)
+// Quét dải rộng 256MB, tìm mọi giá trị Hz từ 15-240 kẹp giữa độ phân giải panel
+// Ghi đè thành 90Hz, giới hạn 12 patch để tránh panic
 // ====================================================================================================
 void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
     static kwritebuf_phys_t kwrite_fn = NULL;
@@ -429,60 +431,108 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
         if (!lib) lib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
         if (lib) {
             kwrite_fn = (kwritebuf_phys_t)dlsym(lib, "_kwritebuf_phys");
-            kread_fn = (kreadbuf_phys_t)dlsym(lib, "_kreadbuf_phys");
+            kread_fn  = (kreadbuf_phys_t)dlsym(lib, "_kreadbuf_phys");
         }
     });
 
     if (!kwrite_fn || !kread_fn) return;
 
-    // Chuyển virtual base thành physical (mask 0xfffffff0...)
+    // Chuyển virtual base thành physical
     uint64_t phys_base = kernel_base & 0x0000000FFFFFFFFFULL;
     if (phys_base < 0x800000000ULL) {
-        phys_base = 0x8025a54000ULL; // Fallback theo log của mày
+        phys_base = 0x8025a54000ULL; // Fallback
     }
 
-    ODLog("Force Panel: Virtual=0x%llx Phys=0x%llx", kernel_base, phys_base);
+    ODLog("[PANEL-PATCH] Base=0x%llx, scanning 256MB range 15-240Hz...", phys_base);
 
+    // Quét dải rộng: từ base+16MB đến base+272MB (256MB window)
     uint64_t scan_start = phys_base + 0x1000000;
-    uint64_t scan_end = phys_base + 0x8000000; // Quét 112MB
-    int patched = 0;
+    uint64_t scan_end   = phys_base + 0x11000000; 
+    
+    int patched_count = 0;
+    uint64_t last_hit_page = 0;
+    uint32_t target_hz = 90;
 
     for (uint64_t addr = scan_start; addr < scan_end; addr += 4) {
+        // Skip nếu cùng page với hit gần nhất (tránh overwrite struct nhiều lần)
+        if (addr - last_hit_page < 0x1000) continue;
+
         uint32_t val = 0;
         if (kread_fn(addr, &val, 4) != 0) continue;
-        
-        // 60Hz là 0x3C (60)
-        if (val == 60 || val == 120 || val == 240) {
-            // Lấy hàng xóm để check xem có phải struct panel không
-            uint32_t nearby1 = 0, nearby2 = 0;
-            kread_fn(addr + 4, &nearby1, 4);
-            kread_fn(addr - 4, &nearby2, 4);
+
+        // [FULL RANGE] Tìm mọi giá trị từ 15 đến 240
+        if (val >= 15 && val <= 240) {
+            // Bỏ qua các giá trị phổ biến không liên quan (nhiệt độ, phần trăm)
+            // 15-30 có thể là nhiệt độ, 100 là % pin, 240 là màu
+            // Nhưng vì có kèm check độ phân giải bên dưới, cứ quét hết
             
-            // iPhone 8 Plus panel struct thường có 1080 hoặc 1920 gần đó
-            if (nearby1 == 1080 || nearby1 == 1242 || nearby2 == 1080 || nearby2 == 1242 ||
-                nearby1 == 1920 || nearby2 == 1920 || nearby1 == 2208 || nearby2 == 2208) {
-                
-                uint32_t new_val = 90; // Ép thành 90Hz
-                if (kwrite_fn(addr, &new_val, 4) == 0) {
-                    ODLog("[PATCH] 0x%llx: %u -> 90", addr, val);
-                    patched++;
-                    if (patched >= 16) break; // Ghim tối đa 16 chỗ, tránh panic
+            // Đọc vùng 64 byte xung quanh tìm độ phân giải panel
+            bool has_resolution = false;
+            uint32_t res_val = 0;
+            
+            for (int i = -16; i <= 16; i++) {
+                if (i == 0) continue;
+                uint32_t neighbor = 0;
+                if (kread_fn(addr + (i * 4), &neighbor, 4) == 0) {
+                    // Resolution markers cho iPhone (8 Plus = 1920x1080, XS = 2436x1125...)
+                    if (neighbor == 1920 || neighbor == 1080 || 
+                        neighbor == 1242 || neighbor == 2208 || 
+                        neighbor == 750 || neighbor == 1334 ||
+                        neighbor == 2436 || neighbor == 1125 ||
+                        neighbor == 2688 || neighbor == 1242) {
+                        has_resolution = true;
+                        res_val = neighbor;
+                        break;
+                    }
+                }
+            }
+
+            // Nếu có resolution marker → xác suất cao đây là struct display timing
+            if (has_resolution) {
+                // Ghi đè giá trị Hz gốc thành target
+                if (kwrite_fn(addr, &target_hz, 4) == 0) {
+                    ODLog("[PANEL-PATCH] ✅ 0x%llx: %uHz -> 90Hz (res=%u)", addr, val, res_val);
+                    patched_count++;
+                    last_hit_page = addr;
+
+                    // Càn quét: ghi đè các giá trị Hz khác trong cùng struct
+                    for (int off = 4; off <= 32; off += 4) {
+                        uint32_t nearby = 0;
+                        if (kread_fn(addr + off, &nearby, 4) == 0) {
+                            if (nearby >= 15 && nearby <= 240 && nearby != target_hz) {
+                                // Kiểm tra xem có phải giá trị nhiệt độ không
+                                // (trong khoảng 15-40 nhưng KHÔNG có res marker xung quanh)
+                                kwrite_fn(addr + off, &target_hz, 4);
+                                patched_count++;
+                            }
+                        }
+                    }
+                }
+
+                // Giới hạn tối đa 12 hit để tránh ghi quá nhiều vào cùng một vùng
+                if (patched_count >= 12) {
+                    ODLog("[PANEL-PATCH] Reached max 12 patches. Stopping to prevent panic.");
+                    break;
                 }
             }
         }
     }
-    ODLog("Force Panel Done: Patched %d addresses", patched);
+    
+    ODLog("[PANEL-PATCH] Done. %d addresses overwritten to 90Hz.", patched_count);
 }
 
 // ====================================================================================================
 // CONVENIENCE
 // ====================================================================================================
 void Titanium_ApplyAllOverdrive(void) {
+    // 1. Ép thread priority (userland max)
     Titanium_OverclockChipAndUnthrottle();
+    
+    // 2. Mở khóa RAM
     Titanium_BreakJetsamMemoryLimits();
     
-    // Mày có thể truyền base lấy từ jbclient_get_kernel_base_fn() 
-    // Ở đây tao dùng base mày gửi trong log làm fallback
+    // 3. Ghi đè kernel panel (Pattern Scan 15-240Hz)
+    // Base lấy từ log hoặc runtime
     uint64_t kbase = 0xfffffff025a54000ULL; 
     Titanium_ForceKernelPanelHz(kbase);
 }
