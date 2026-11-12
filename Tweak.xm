@@ -5771,9 +5771,8 @@ static void Titanium_InstallPowerBypassC(void) {
         if (TITANIUM_LITE_MODE) return;
         if (self && (IS_ACTIVE || g_syncPayloadV285.masterEnabled) && self.window && self.layer != nil) {
             self.layer.allowsGroupOpacity = YES;
-            if ([self respondsToSelector:NSSelectorFromString(@"_setBlurRadius:")]) {
-                [self setValue:@(0.0) forKey:@"_blurRadius"];
-            }
+            // [FIX-COLOR] Không set _blurRadius:0 — giữ blur gốc
+            // Killing blur → material bị trong suốt → lộ background → looks inverted
         }
     } @catch (__unused NSException *e) {}
 }
@@ -5787,10 +5786,8 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %hook UIVisualEffectView
 - (void)setEffect:(UIVisualEffect *)effect {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        %orig(nil);
-        return;
-    }
+    // [FIX-COLOR] Không kill effect — trả nguyên effect gốc
+    // Killing blur → lộ content phía sau → looks inverted
     %orig(effect);
 }
 %end
@@ -8892,8 +8889,9 @@ static NSInteger Titanium_BeliefTargetHz(void) {
 - (CGSize)pixelSize          { return [UIScreen mainScreen].nativeBounds.size; }
 - (int)width                 { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
 - (int)height                { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
-- (NSString *)colorMode      { return @"NSColorSpaceStandardRGB"; }
-- (NSString *)colorGamut     { return @"sRGB"; }
+// [FIX-COLOR] Trả %orig-equivalent — fake mode là safety net, không ép color
+- (NSString *)colorMode      { return @"kCGColorSpaceSRGB"; }
+- (NSString *)colorGamut     { return @"kCGColorSpaceSRGB"; }
 - (uint32_t)pixelFormat      { return 'BGRA'; }
 - (BOOL)isVirtual            { return YES; }
 - (BOOL)isHighDynamicRange   { return NO; }
@@ -9116,30 +9114,129 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 // CADisplayMode — readback belief (4 getter)
 // ----------------------------------------------------------------------------------------------------
 %hook CADisplayMode
+
+// --- Hz getters (4 gốc) ---
 - (double)refreshRate {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return (double)Titanium_BeliefTargetHz();
     }
     return %orig;
 }
+
 - (double)refreshRateForMode {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return (double)Titanium_BeliefTargetHz();
     }
     return %orig;
 }
+
 - (double)safeRefreshRate {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return (double)Titanium_BeliefTargetHz();
     }
     return %orig;
 }
+
 - (double)nominalRefreshRate {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return (double)Titanium_BeliefTargetHz();
     }
     return %orig;
 }
+
+// --- [MỞ RỘNG] CRASH PATH — crash log gọi _copyDescription trên mode ---
+// Không hook → forwarding → abort. Hook → trả string an toàn.
+- (NSString *)_copyDescription {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) {
+        return [NSString stringWithFormat:@"<CADisplayMode %.0fHz (Titanium)>",
+                (double)Titanium_BeliefTargetHz()];
+    }
+    return %orig;
+}
+
+- (NSString *)description {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) {
+        return [NSString stringWithFormat:@"<CADisplayMode %.0fHz (Titanium)>",
+                (double)Titanium_BeliefTargetHz()];
+    }
+    return %orig;
+}
+
+// --- [MỞ RỘNG] ProMotion / VRR flags — FBS check khi init FBSDisplayMode ---
+- (BOOL)supportsDynamicRefreshRate {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) return YES;
+    return %orig;
+}
+
+- (BOOL)supportsProMotion {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) return YES;
+    return %orig;
+}
+
+- (BOOL)supportsVariableRefreshRate {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) return YES;
+    return %orig;
+}
+
+- (BOOL)isVirtual {
+    // Trả NO — FBS reject nếu isVirtual=YES
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) return NO;
+    return %orig;
+}
+
+- (BOOL)isHighDynamicRange {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) return NO;
+    return %orig;
+}
+
+// --- [MỞ RỘNG] Metadata — đảm bảo FBS init FBSDisplayMode không bị nil ---
+- (double)pixelAspectRatio {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return 1.0;
+    }
+    return %orig;
+}
+
+- (CGSize)size {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return [UIScreen mainScreen].nativeBounds.size;
+    }
+    return %orig;
+}
+
+- (int)width {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return (int)[UIScreen mainScreen].nativeBounds.size.width;
+    }
+    return %orig;
+}
+
+- (int)height {
+    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        return (int)[UIScreen mainScreen].nativeBounds.size.height;
+    }
+    return %orig;
+}
+
+- (NSString *)colorMode {
+    // [FIX-COLOR] Trả %orig — không ép color space
+    // Ép sRGB khi panel thực tế P3 → mismatch → invert trên content HDR/P3
+    return %orig;
+}
+
+- (NSString *)colorGamut {
+    // [FIX-COLOR] Trả %orig
+    return %orig;
+}
+
+// --- [MỞ RỘNG] CFNumber-style getters FBS đôi khi đọc ---
+- (int64_t)nominalRefreshRateValue {
+    if (IS_ACTIVE || Apex_IsMasterEnabled()) {
+        return (int64_t)Titanium_BeliefTargetHz();
+    }
+    return %orig;
+}
+
 %end
 
 // ====================================================================================================
@@ -9161,11 +9258,18 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 - (CGSize)pixelSize          { return [UIScreen mainScreen].nativeBounds.size; }
 - (int)width                 { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
 - (int)height                { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
-- (NSString *)colorMode      { return @"NSColorSpaceStandardRGB"; }
-- (NSString *)colorGamut     { return @"sRGB"; }
+- (int)pixelWidth            { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
+- (int)pixelHeight           { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
+- (CGFloat)scale             { return [UIScreen mainScreen].scale; }
+// [FIX-COLOR] Trả %orig-equivalent — fake mode là safety net, không ép color
+- (NSString *)colorMode      { return @"kCGColorSpaceSRGB"; }
+- (NSString *)colorGamut     { return @"kCGColorSpaceSRGB"; }
 - (uint32_t)pixelFormat      { return 'BGRA'; }
 - (BOOL)isVirtual            { return NO; }
 - (BOOL)isHighDynamicRange   { return NO; }
+- (BOOL)supportsDynamicRefreshRate { return YES; }
+- (BOOL)supportsProMotion    { return YES; }
+- (BOOL)supportsVariableRefreshRate { return YES; }
 - (BOOL)isEqual:(id)obj {
     if (obj == self) return YES;
     if ([obj isKindOfClass:[TitaniumHardFakeMode class]])
@@ -9175,6 +9279,9 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 - (NSUInteger)hash { return (NSUInteger)(self.hz * 1000); }
 - (NSString *)description {
     return [NSString stringWithFormat:@"<TitaniumMode %.0fHz>", self.hz];
+}
+- (NSString *)_copyDescription {
+    return [self description];
 }
 @end
 
@@ -9205,12 +9312,16 @@ static NSArray<TitaniumHardFakeMode *> *Titanium_BuildFakeModesArray(void) {
 - (NSArray *)availableModes {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         NSInteger target = Titanium_BeliefTargetHz();
-        NSMutableArray *modes = [NSMutableArray array];
-        for (TitaniumHardFakeMode *m in Titanium_BuildFakeModesArray())
-            [modes addObject:m];
+        // Real modes trước — FBS luôn có ít nhất 1 real CADisplayMode
+        NSArray *realModes = %orig;
+        NSMutableArray *modes = [NSMutableArray arrayWithArray:realModes ?: @[]];
+        // Thêm fake mode target nếu chưa có
         BOOL found = NO;
-        for (TitaniumHardFakeMode *m in modes) {
-            if (fabs(m.hz - (double)target) < 0.5) { found = YES; break; }
+        for (id m in modes) {
+            if ([m respondsToSelector:@selector(refreshRate)]) {
+                double r = ((double (*)(id, SEL))objc_msgSend)(m, @selector(refreshRate));
+                if (fabs(r - (double)target) < 0.5) { found = YES; break; }
+            }
         }
         if (!found) [modes addObject:Titanium_MakeMode((double)target)];
         return modes;
@@ -9220,6 +9331,7 @@ static NSArray<TitaniumHardFakeMode *> *Titanium_BuildFakeModesArray(void) {
 
 - (id)currentMode {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
+        // Fake mode trả về — safety hooks đảm bảo FBS chấp nhận
         return Titanium_MakeMode((double)Titanium_BeliefTargetHz());
     }
     return %orig;
@@ -10478,15 +10590,11 @@ static inline void Titanium_V10_PinMainThreadHigh(void) {
 
 %hook CABackdropLayer
 - (void)setDisablesOccludedBackdropBlurs:(BOOL)flag {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) { 
-        %orig(YES); 
-        return; 
-    }
+    // [FIX-COLOR] Không disable blur — backdrop layer giữ blur gốc
     %orig(flag);
 }
 
 - (BOOL)disablesOccludedBackdropBlurs {
-    if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) return YES;
     return %orig;
 }
 
@@ -12294,6 +12402,126 @@ static void Titanium_RestoreOnFirstFrame(void) {
     [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
+// ====================================================================================================
+// [FAKE-AS-REAL] — hook TitaniumHardFakeMode để FBS check pass
+// ====================================================================================================
+static void Titanium_InstallFakeModeSafetyHooks(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Class fakeCls = objc_getClass("TitaniumHardFakeMode");
+        Class realCls = objc_getClass("CADisplayMode");
+        if (!fakeCls || !realCls) {
+            Titanium_V60_Log(@"[FAKE-REAL] class not found");
+            return;
+        }
+
+        // 1. isKindOfClass: — YES cho CADisplayMode
+        Method m = class_getInstanceMethod(fakeCls, @selector(isKindOfClass:));
+        if (m) {
+            IMP newImp = imp_implementationWithBlock(^BOOL(id self, Class cls) {
+                if (cls == realCls) return YES;
+                Class c = object_getClass(self);
+                while (c) {
+                    if (c == cls) return YES;
+                    c = class_getSuperclass(c);
+                }
+                return NO;
+            });
+            method_setImplementation(m, newImp);
+        }
+
+        // 2. isMemberOfClass: — YES cho CADisplayMode
+        m = class_getInstanceMethod(fakeCls, @selector(isMemberOfClass:));
+        if (m) {
+            IMP newImp = imp_implementationWithBlock(^BOOL(id self, Class cls) {
+                if (cls == realCls) return YES;
+                return object_getClass(self) == cls;
+            });
+            method_setImplementation(m, newImp);
+        }
+
+        // 3. class — return CADisplayMode (FBS đôi khi gọi)
+        m = class_getInstanceMethod(fakeCls, @selector(class));
+        if (m) {
+            IMP newImp = imp_implementationWithBlock(^Class(id self) {
+                return realCls;
+            });
+            method_setImplementation(m, newImp);
+        }
+
+        // 4. respondsToSelector: — YES cho MỌI selector CADisplayMode có
+        m = class_getInstanceMethod(fakeCls, @selector(respondsToSelector:));
+        if (m) {
+            IMP newImp = imp_implementationWithBlock(^BOOL(id self, SEL sel) {
+                Class c = object_getClass(self);
+                while (c) {
+                    if (class_respondsToSelector(c, sel)) return YES;
+                    c = class_getSuperclass(c);
+                }
+                if (class_respondsToSelector(realCls, sel)) return YES;
+                return NO;
+            });
+            method_setImplementation(m, newImp);
+        }
+
+        // 5. methodSignatureForSelector: — fallback lấy từ CADisplayMode
+        m = class_getInstanceMethod(fakeCls, @selector(methodSignatureForSelector:));
+        if (m) {
+            IMP newImp = imp_implementationWithBlock(^NSMethodSignature *(id self, SEL sel) {
+                Class c = object_getClass(self);
+                while (c) {
+                    Method mm = class_getInstanceMethod(c, sel);
+                    if (mm) return [NSMethodSignature signatureWithObjCTypes:method_getTypeEncoding(mm)];
+                    c = class_getSuperclass(c);
+                }
+                Method rm = class_getInstanceMethod(realCls, sel);
+                if (rm) return [NSMethodSignature signatureWithObjCTypes:method_getTypeEncoding(rm)];
+                return nil;
+            });
+            method_setImplementation(m, newImp);
+        }
+
+        // 6. forwardInvocation: — fill return value an toàn
+        m = class_getInstanceMethod(fakeCls, @selector(forwardInvocation:));
+        if (m) {
+            IMP newImp = imp_implementationWithBlock(^(id self, NSInvocation *inv) {
+                NSNumber *hzNum = nil;
+                @try { hzNum = [self valueForKey:@"hz"]; } @catch (__unused NSException *e) {}
+                double hz = hzNum ? [hzNum doubleValue] : 60.0;
+                const char *rt = inv.methodSignature.methodReturnType;
+                if (strcmp(rt, @encode(double)) == 0) {
+                    double v = hz; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(float)) == 0) {
+                    float v = (float)hz; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(int)) == 0) {
+                    int v = (int)hz; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(long)) == 0) {
+                    long v = (long)hz; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(long long)) == 0) {
+                    long long v = (long long)hz; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(unsigned long)) == 0) {
+                    unsigned long v = (unsigned long)hz; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(BOOL)) == 0) {
+                    BOOL v = YES; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(CGSize)) == 0) {
+                    CGSize v = [UIScreen mainScreen].nativeBounds.size;
+                    [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(CGRect)) == 0) {
+                    CGRect v = (CGRect){CGPointZero, [UIScreen mainScreen].nativeBounds.size};
+                    [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(CGPoint)) == 0) {
+                    CGPoint v = CGPointZero; [inv setReturnValue:&v];
+                } else if (strcmp(rt, @encode(id)) == 0) {
+                    id v = nil; [inv setReturnValue:&v];
+                }
+            });
+            method_setImplementation(m, newImp);
+        }
+
+        Titanium_V60_Log(@"[FAKE-REAL] installed — isKindOfClass/respondsToSelector/forwardInvocation");
+    });
+}
+
 // ==============================================================================
 // [FIX-BUILD] Titanium_ProbeKernelAPI — body, không phải decl
 // Line 11524 gọi hàm này → body phải định nghĩa ở đây (line 11505 trước khi xoá)
@@ -12629,6 +12857,11 @@ static void Titanium_BypassKillMethodV108(void) { /* TODO: logic thật */ }
             Titanium_InstallFPSUncapHooks();
             Titanium_InstallHardOverrideIOConnect();
 
+            // [BLOCK E-EXT] belief engine + fake-as-real safety hooks
+            // PHẢI chạy TRƯỚC %init và TRƯỚC warmup — để FBS check pass khi CADisplay hook active
+            Titanium_InstallBeliefEngine();
+            Titanium_InstallFakeModeSafetyHooks();
+
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)),
                            dispatch_get_main_queue(), ^{
                 @try {
@@ -12636,6 +12869,7 @@ static void Titanium_BypassKillMethodV108(void) { /* TODO: logic thật */ }
                     Titanium_LogActualRefreshRate();
                 } @catch (__unused NSException *e) {}
             });
+            // [/BLOCK E]
             // [/BLOCK E]
 
             Titanium_V55_InstallScreenState();
