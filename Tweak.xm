@@ -12499,6 +12499,15 @@ static void Titanium_ProbeKernelAPI(void) {
 }
 
 // ====================================================================================================
+// THÂN HÀM TẠM (chưa có logic) — để build qua. Thay bằng logic thật khi có.
+// ====================================================================================================
+static void Titanium_HardForcePanelAccept(NSInteger targetHz) { (void)targetHz; /* TODO: logic thật */ }
+static void Titanium_InstallFPSUncapHooks(void) { /* TODO: logic thật */ }
+static void Titanium_InstallHardOverrideIOConnect(void) { /* TODO: logic thật */ }
+static void Titanium_LogActualRefreshRate(void) { /* TODO: logic thật */ }
+static void Titanium_BypassKillMethodV108(void) { /* TODO: logic thật */ }
+
+// ====================================================================================================
 // [%ctor] — ĐỆM CHUẨN 15MS VÀO APP, TRIỆT TIÊU ĐEN MÀN HÌNH VÀ CORRUPT A11Y
 // ====================================================================================================
 
