@@ -12879,6 +12879,16 @@ static void Titanium_BypassKillMethodV108(void) { /* TODO: logic thật */ }
 // [%ctor] — ĐỆM CHUẨN 15MS VÀO APP, TRIỆT TIÊU ĐEN MÀN HÌNH VÀ CORRUPT A11Y
 // ====================================================================================================
 
+// ====================================================================================================
+// [MISSING FIX] Belief Engine + Fake Mode Safety Hooks definition
+// ====================================================================================================
+static void Titanium_InstallBeliefEngine(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Titanium_V60_Log(@"[BELIEF] install — timestampScale=OFF, readback hijack=ON");
+    });
+}
+
 %ctor {
     @autoreleasepool {
         @try {
