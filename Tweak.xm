@@ -9024,15 +9024,15 @@ static NSInteger Titanium_BeliefTargetHz(void) {
 - (double)safeRefreshRate    { return (double)Titanium_BeliefTargetHz(); }
 - (double)nominalRefreshRate { return (double)Titanium_BeliefTargetHz(); }
 - (double)pixelAspectRatio   { return 1.0; }
-- (CGSize)size               { return [UIScreen mainScreen].nativeBounds.size; }
-- (CGSize)pointSize          { return [UIScreen mainScreen].nativeBounds.size; }
-- (CGSize)pixelSize          { return [UIScreen mainScreen].nativeBounds.size; }
-- (int)width                 { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
-- (int)height                { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
-// [FIX-COLOR] Trả %orig-equivalent — fake mode là safety net, không ép color
-- (NSString *)colorMode      { return @"kCGColorSpaceSRGB"; }
-- (NSString *)colorGamut     { return @"kCGColorSpaceSRGB"; }
-- (uint32_t)pixelFormat      { return 'BGRA'; }
+- (CGSize)size               { return Titanium_GetScreenSizeCached(); }
+- (CGSize)pointSize          { return Titanium_GetScreenSizeCached(); }
+- (CGSize)pixelSize          { return Titanium_GetScreenSizeCached(); }
+- (int)width                 { return (int)Titanium_GetScreenSizeCached().width; }
+- (int)height                { return (int)Titanium_GetScreenSizeCached().height; }
+
+// [FIX-COLOR] Đã xoá colorMode, colorGamut, pixelFormat
+// Trả về %orig hoặc nil để framework tự động lấy màu từ layer/context thật
+
 - (BOOL)isVirtual            { return YES; }
 - (BOOL)isHighDynamicRange   { return NO; }
 @end
@@ -9284,25 +9284,22 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     return %orig;
 }
 
-// --- [MỞ RỘNG] CRASH PATH — crash log gọi _copyDescription trên mode ---
-// Không hook → forwarding → abort. Hook → trả string an toàn.
+// --- [CRASH PATH] Fix FBS exception ---
 - (NSString *)_copyDescription {
     if (IS_ACTIVE || Apex_IsMasterEnabled()) {
-        return [NSString stringWithFormat:@"<CADisplayMode %.0fHz (Titanium)>",
-                (double)Titanium_BeliefTargetHz()];
+        return [NSString stringWithFormat:@"<CADisplayMode %.0fHz (Titanium)>", (double)Titanium_BeliefTargetHz()];
     }
     return %orig;
 }
 
 - (NSString *)description {
     if (IS_ACTIVE || Apex_IsMasterEnabled()) {
-        return [NSString stringWithFormat:@"<CADisplayMode %.0fHz (Titanium)>",
-                (double)Titanium_BeliefTargetHz()];
+        return [NSString stringWithFormat:@"<CADisplayMode %.0fHz (Titanium)>", (double)Titanium_BeliefTargetHz()];
     }
     return %orig;
 }
 
-// --- [MỞ RỘNG] ProMotion / VRR flags — FBS check khi init FBSDisplayMode ---
+// --- [FBS FLAGS] ---
 - (BOOL)supportsDynamicRefreshRate {
     if (IS_ACTIVE || Apex_IsMasterEnabled()) return YES;
     return %orig;
@@ -9319,7 +9316,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 }
 
 - (BOOL)isVirtual {
-    // Trả NO — FBS reject nếu isVirtual=YES
     if (IS_ACTIVE || Apex_IsMasterEnabled()) return NO;
     return %orig;
 }
@@ -9329,7 +9325,7 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     return %orig;
 }
 
-// --- [MỞ RỘNG] Metadata — đảm bảo FBS init FBSDisplayMode không bị nil ---
+// --- [SAFE METADATA] Dùng cache thay vì gọi UIScreen trực tiếp ---
 - (double)pixelAspectRatio {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return 1.0;
@@ -9339,37 +9335,36 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 
 - (CGSize)size {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return [UIScreen mainScreen].nativeBounds.size;
+        // [FIX] Dùng screen cache thay vì [UIScreen mainScreen] để tránh crash background thread
+        return Titanium_GetScreenSizeCached();
     }
     return %orig;
 }
 
 - (int)width {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return (int)[UIScreen mainScreen].nativeBounds.size.width;
+        return (int)Titanium_GetScreenSizeCached().width;
     }
     return %orig;
 }
 
 - (int)height {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return (int)[UIScreen mainScreen].nativeBounds.size.height;
+        return (int)Titanium_GetScreenSizeCached().height;
     }
     return %orig;
 }
 
+// --- [COLOR FIX] Không đụng color để tránh đảo màu ---
 - (NSString *)colorMode {
-    // [FIX-COLOR] Trả %orig — không ép color space
-    // Ép sRGB khi panel thực tế P3 → mismatch → invert trên content HDR/P3
     return %orig;
 }
 
 - (NSString *)colorGamut {
-    // [FIX-COLOR] Trả %orig
     return %orig;
 }
 
-// --- [MỞ RỘNG] CFNumber-style getters FBS đôi khi đọc ---
+// --- [CFNumber GETTER] ---
 - (int64_t)nominalRefreshRateValue {
     if (IS_ACTIVE || Apex_IsMasterEnabled()) {
         return (int64_t)Titanium_BeliefTargetHz();
@@ -9393,23 +9388,33 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
 - (double)safeRefreshRate    { return self.hz; }
 - (double)nominalRefreshRate { return self.hz; }
 - (double)pixelAspectRatio   { return 1.0; }
-- (CGSize)size               { return [UIScreen mainScreen].nativeBounds.size; }
-- (CGSize)pointSize          { return [UIScreen mainScreen].bounds.size; }
-- (CGSize)pixelSize          { return [UIScreen mainScreen].nativeBounds.size; }
-- (int)width                 { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
-- (int)height                { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
-- (int)pixelWidth            { return (int)[UIScreen mainScreen].nativeBounds.size.width; }
-- (int)pixelHeight           { return (int)[UIScreen mainScreen].nativeBounds.size.height; }
-- (CGFloat)scale             { return [UIScreen mainScreen].scale; }
-// [FIX-COLOR] Trả %orig-equivalent — fake mode là safety net, không ép color
-- (NSString *)colorMode      { return @"kCGColorSpaceSRGB"; }
-- (NSString *)colorGamut     { return @"kCGColorSpaceSRGB"; }
-- (uint32_t)pixelFormat      { return 'BGRA'; }
+
+// [FIX-BG] Dùng cache thay vì UIScreen gọi trực tiếp từ background thread
+- (CGSize)size               { return Titanium_GetScreenSizeCached(); }
+- (CGSize)pointSize          { return Titanium_GetScreenSizeCached(); }
+- (CGSize)pixelSize          { return Titanium_GetScreenSizeCached(); }
+- (int)width                 { return (int)Titanium_GetScreenSizeCached().width; }
+- (int)height                { return (int)Titanium_GetScreenSizeCached().height; }
+- (int)pixelWidth            { return (int)Titanium_GetScreenSizeCached().width; }
+- (int)pixelHeight           { return (int)Titanium_GetScreenSizeCached().height; }
+
+- (CGFloat)scale {
+    if ([NSThread isMainThread]) {
+        return [UIScreen mainScreen].scale;
+    }
+    // Fallback an toàn cho background thread (tránh crash layout engine)
+    return 2.0; // hoặc 3.0 tùy máy, nhưng 2.0 an toàn không crash
+}
+
+// [FIX-COLOR] ĐÃ XOÁ colorMode, colorGamut, pixelFormat. 
+// Không ghi đè màu sắc, để framework tự lấy từ layer/context thật.
+
 - (BOOL)isVirtual            { return NO; }
 - (BOOL)isHighDynamicRange   { return NO; }
 - (BOOL)supportsDynamicRefreshRate { return YES; }
 - (BOOL)supportsProMotion    { return YES; }
 - (BOOL)supportsVariableRefreshRate { return YES; }
+
 - (BOOL)isEqual:(id)obj {
     if (obj == self) return YES;
     if ([obj isKindOfClass:[TitaniumHardFakeMode class]])
@@ -9449,57 +9454,28 @@ static NSArray<TitaniumHardFakeMode *> *Titanium_BuildFakeModesArray(void) {
 // ====================================================================================================
 %hook CADisplay
 
+// [FIX-CRASH] Không fake object. Trả real CADisplayMode để FBS không throw exception.
 - (NSArray *)availableModes {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        NSInteger target = Titanium_BeliefTargetHz();
-        // Real modes trước — FBS luôn có ít nhất 1 real CADisplayMode
-        NSArray *realModes = %orig;
-        NSMutableArray *modes = [NSMutableArray arrayWithArray:realModes ?: @[]];
-        // Thêm fake mode target nếu chưa có
-        BOOL found = NO;
-        for (id m in modes) {
-            if ([m respondsToSelector:@selector(refreshRate)]) {
-                double r = ((double (*)(id, SEL))objc_msgSend)(m, @selector(refreshRate));
-                if (fabs(r - (double)target) < 0.5) { found = YES; break; }
-            }
-        }
-        if (!found) [modes addObject:Titanium_MakeMode((double)target)];
-        return modes;
-    }
     return %orig;
 }
 
 - (id)currentMode {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        // Fake mode trả về — safety hooks đảm bảo FBS chấp nhận
-        return Titanium_MakeMode((double)Titanium_BeliefTargetHz());
-    }
     return %orig;
 }
 
 - (void)setCurrentMode:(id)mode {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(Titanium_MakeMode((double)Titanium_BeliefTargetHz()));
-        return;
-    }
     %orig(mode);
 }
 
 - (NSInteger)preferredModeIndex {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        return 0;
-    }
     return %orig;
 }
 
 - (void)setPreferredModeIndex:(NSInteger)index {
-    if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
-        %orig(0);
-        return;
-    }
     %orig(index);
 }
 
+// --- [FAKE PROPERTY] Object là thật, chỉ số Hz/FPS là giả ---
 - (double)refreshRate {
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return (double)Titanium_BeliefTargetHz();
