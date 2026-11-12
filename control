@@ -2,7 +2,6 @@ Package: com.taojb.boostiphone6s
 Name: SmoothIOS Pro
 Version: 1.4.0-1t
 Architecture: iphoneos-arm64
-Package: com.taojb.boostiphone6s
 Description: CẢNH BÁO : GHI ĐÈ TRỰC TIẾP VÀO KERNEL MEMORY (PHYSICAL R/W). QUÉT MÙ 256MB RAM TÌM STRUCT PANEL ĐỂ ÉP CỨNG 90HZ. CHẶN ĐỨNG WATCHDOG VÀ REPORTCRASH BẰNG MACH EXCEPTION HOOK. NGUY CƠ PANIC KERNEL VÀ HỎNG PANEL VẬT LÝ RẤT CAO. TỰ CHỊU TRÁCH NHIỆM.( HÃY XỬ DỤNG CẬN THẬN. Ép Native ContentsScale, tắt render offscreen để khử nhoè. Ghim Thread Priority (QoS Tier 0, Realtime Class, P-core) và bẻ khóa Jetsam Memory. Quét dải tần 15-240Hz và ghi đè target 90Hz trực tiếp vào địa chỉ vật lý của Kernel.
 Maintainer: TaoJB, NoJB, NoNo
 Author: TaoJB, NoJB, NoNo
