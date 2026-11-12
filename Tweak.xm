@@ -559,7 +559,7 @@ static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetT
 static void Titanium_InstallPanicSuppress(void);
 static inline BOOL Titanium_IsTargetProcess(void);
 static void Titanium_InstallFakeModeSafetyHooks(void);
-
+extern void Titanium_ForceKernelPanelHz(uint64_t kernel_base);
 // KHAI BÁO @INTERFACE (BẢN HOÀN CHỈNH ĐỦ CLASS PRIVATE & KHÔNG TRÙNG LẶP)
 // ====================================================================================================
 
@@ -7815,66 +7815,174 @@ static void Titanium_BypassDCPMethod(void) {
 }
 
 // ====================================================================================================
-// [CRASH / PANIC / REPORT SUPPRESS]
+// [ULTIMATE CRASH / PANIC / REPORT SUPPRESS V3]
+// Chặn: abort, exit, assert, std::terminate, objc exception, kill, raise, spawn, mach exc, signal
 // ====================================================================================================
 
-static void (*orig_af_panic)(const char *, ...) = NULL;
-static void hooked_af_panic(const char *fmt, ...) {
-    @try { Titanium_V60_Log([NSString stringWithFormat:@"[AF] panic suppressed: %s", fmt ?: ""]); }
-    @catch (__unused NSException *e) {}
+// --- 1. HOOK ABORT / EXIT / TRAP THREAD ---
+static void (*orig_abort_v3)(void) = NULL;
+static void hooked_abort_v3(void) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log(@"[CRASH-SUPPRESS] abort() swallowed, trapping thread");
+        while (1) sleep(1); // Trap luồng, không cho chết
+    }
+    if (orig_abort_v3) orig_abort_v3();
 }
 
-static void Titanium_InstallPanicSuppress(void) {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        void *p = dlsym(RTLD_DEFAULT, "panic");
-        if (p) {
-            MSHookFunction(p, (void *)hooked_af_panic, (void **)&orig_af_panic);
-            Titanium_V60_Log(@"[AF] panic suppression installed");
-        }
-    });
+static void (*orig_exit_v3)(int) = NULL;
+static void hooked_exit_v3(int status) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS] exit(%d) swallowed, trapping thread", status]);
+        while (1) sleep(1);
+    }
+    if (orig_exit_v3) orig_exit_v3(status);
 }
 
-static int (*orig_af_spawn)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]);
-static int hooked_af_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *fa,
-                            const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]) {
-    if ((g_afActive || Apex_IsMasterEnabled()) && path) {
-        const char *b = strrchr(path, '/'); b = b ? b + 1 : path;
-        if (strcasecmp(b, "ReportCrash") == 0 || strcasecmp(b, "Cr4shed") == 0 ||
-            strcasecmp(b, "Cr4shedHelper") == 0) {
-            if (pid) *pid = -1; errno = EPERM; return EPERM;
+static void (*orig__exit_v3)(int) = NULL;
+static void hooked__exit_v3(int status) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log(@"[CRASH-SUPPRESS] _exit swallowed, trapping thread");
+        while (1) sleep(1);
+    }
+    if (orig__exit_v3) orig__exit_v3(status);
+}
+
+// --- 2. HOOK ASSERT / EXCEPTIONS ---
+static void (*orig_assert_rtn_v3)(const char *, const char *, int, const char *) = NULL;
+static void hooked_assert_rtn_v3(const char *func, const char *file, int line, const char *expr) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS] assert swallowed: %s @ %s:%d", expr ? expr : "", file ? file : "", line]);
+        return;
+    }
+    if (orig_assert_rtn_v3) orig_assert_rtn_v3(func, file, line, expr);
+}
+
+static void (*orig_objc_terminate_v3)(void) = NULL;
+static void hooked_objc_terminate_v3(void) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log(@"[CRASH-SUPPRESS] _objc_terminate swallowed");
+        while (1) sleep(1);
+    }
+    if (orig_objc_terminate_v3) orig_objc_terminate_v3();
+}
+
+static void (*orig_std_terminate_v3)(void) = NULL;
+static void hooked_std_terminate_v3(void) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log(@"[CRASH-SUPPRESS] std::terminate swallowed");
+        while (1) sleep(1);
+    }
+    if (orig_std_terminate_v3) orig_std_terminate_v3();
+}
+
+static void Titanium_UncaughtExceptionHandler_v3(NSException *exception) {
+    Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS] ObjC Exception caught: %@ - %@", [exception name], [exception reason]]);
+    // Ép luồng hiện tại dừng, không ném lên terminate
+}
+
+// --- 3. HOOK KILL / RAISE / SIGNALS ---
+static int (*orig_kill_v3)(pid_t, int) = NULL;
+static int hooked_kill_v3(pid_t pid, int sig) {
+    if ((g_afActive || Apex_IsMasterEnabled()) && pid == getpid()) {
+        if (sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGSTOP || sig == SIGSEGV || sig == SIGBUS) {
+            Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS] kill(self, %d) swallowed", sig]);
+            return 0;
         }
     }
-    return orig_af_spawn ? orig_af_spawn(pid, path, fa, attrp, argv, envp) : -1;
+    return orig_kill_v3 ? orig_kill_v3(pid, sig) : -1;
 }
 
-static struct sigaction g_af_prev_segv, g_af_prev_abrt, g_af_prev_bus;
-static void af_signal_handler(int sig, siginfo_t *info, void *ctx) {
-    @try { Titanium_V60_Log([NSString stringWithFormat:@"[AF] SIG%d suppressed addr=%p", sig, info ? info->si_addr : NULL]); }
-    @catch (__unused NSException *e) {}
+static int (*orig_raise_v3)(int) = NULL;
+static int hooked_raise_v3(int sig) {
+    if (g_afActive || Apex_IsMasterEnabled()) {
+        Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS] raise(%d) swallowed", sig]);
+        return 0;
+    }
+    return orig_raise_v3 ? orig_raise_v3(sig) : -1;
+}
+
+static void af_signal_handler_v3(int sig, siginfo_t *info, void *ctx) {
+    Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS] SIG%d swallowed at %p", sig, info ? info->si_addr : NULL]);
+}
+
+// --- 4. MACH EXCEPTION BLOCK (chặn crash reporter can thiệp) ---
+static kern_return_t (*orig_task_set_exception_ports_v3)(task_t, exception_mask_t, mach_port_t, exception_behavior_t, thread_state_flavor_t) = NULL;
+static kern_return_t hooked_task_set_exception_ports_v3(task_t task, exception_mask_t masks, mach_port_t new_port, exception_behavior_t behavior, thread_state_flavor_t flavor) {
+    if ((g_afActive || Apex_IsMasterEnabled()) && task == mach_task_self()) {
+        // Chặn không cho hệ thống gắn port exception vào process mình
+        return KERN_SUCCESS;
+    }
+    return orig_task_set_exception_ports_v3 ? orig_task_set_exception_ports_v3(task, masks, new_port, behavior, flavor) : KERN_FAILURE;
+}
+
+// --- 5. SPAWN BLOCK (ReportCrash / Cr4shed / watchdogd) ---
+static int (*orig_posix_spawn_v3)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]);
+static int hooked_posix_spawn_v3(pid_t *pid, const char *path, const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *attrp, char *const argv[], char *const envp[]) {
+    if ((g_afActive || Apex_IsMasterEnabled()) && path) {
+        const char *b = strrchr(path, '/');
+        b = b ? b + 1 : path;
+        if (strcasecmp(b, "ReportCrash") == 0 || strcasecmp(b, "Cr4shed") == 0 ||
+            strcasecmp(b, "Cr4shedHelper") == 0 || strcasecmp(b, "watchdogd") == 0) {
+            if (pid) *pid = -1;
+            errno = EPERM;
+            return EPERM;
+        }
+    }
+    return orig_posix_spawn_v3 ? orig_posix_spawn_v3(pid, path, fa, attrp, argv, envp) : -1;
+}
+
+// --- 6. INSTALL ALL ---
+static void (*orig_af_panic)(const char *, ...) = NULL;
+static void hooked_af_panic(const char *fmt, ...) {
+    Titanium_V60_Log(@"[CRASH-SUPPRESS] userland panic() swallowed");
 }
 
 static void Titanium_AF_InstallCrashSuppress(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        Titanium_InstallPanicSuppress();
-        void *sp = dlsym(RTLD_DEFAULT, "posix_spawn");
-        if (sp) MSHookFunction(sp, (void *)hooked_af_spawn, (void **)&orig_af_spawn);
-        struct sigaction sa; memset(&sa, 0, sizeof(sa));
-        sa.sa_sigaction = af_signal_handler;
-        sa.sa_flags = SA_SIGINFO | SA_RESTART;
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGSEGV, &sa, &g_af_prev_segv);
-        sigaction(SIGABRT, &sa, &g_af_prev_abrt);
-        sigaction(SIGBUS,  &sa, &g_af_prev_bus);
-        Titanium_V60_Log(@"[AF] crash suppress installed");
-    });
-}
+        @try {
+            void *sym;
+            
+            // Userland panics / aborts / exits
+            sym = dlsym(RTLD_DEFAULT, "panic"); if (sym) MSHookFunction(sym, (void *)hooked_af_panic, (void **)&orig_af_panic);
+            sym = dlsym(RTLD_DEFAULT, "abort"); if (sym) MSHookFunction(sym, (void *)hooked_abort_v3, (void **)&orig_abort_v3);
+            sym = dlsym(RTLD_DEFAULT, "exit"); if (sym) MSHookFunction(sym, (void *)hooked_exit_v3, (void **)&orig_exit_v3);
+            sym = dlsym(RTLD_DEFAULT, "_exit"); if (sym) MSHookFunction(sym, (void *)hooked__exit_v3, (void **)&orig__exit_v3);
+            sym = dlsym(RTLD_DEFAULT, "__assert_rtn"); if (sym) MSHookFunction(sym, (void *)hooked_assert_rtn_v3, (void **)&orig_assert_rtn_v3);
+            sym = dlsym(RTLD_DEFAULT, "_objc_terminate"); if (sym) MSHookFunction(sym, (void *)hooked_objc_terminate_v3, (void **)&orig_objc_terminate_v3);
+            sym = dlsym(RTLD_DEFAULT, "_ZSt9terminatev"); if (sym) MSHookFunction(sym, (void *)hooked_std_terminate_v3, (void **)&orig_std_terminate_v3);
 
-static int (*orig_Titanium_watchdog_kick)(pid_t) = NULL;
-static int Titanium_HookedWatchdogKick(pid_t pid) {
-    if (g_afActive || Apex_IsMasterEnabled()) return 0;
-    return orig_Titanium_watchdog_kick ? orig_Titanium_watchdog_kick(pid) : 0;
+            // Kill / Raise
+            sym = dlsym(RTLD_DEFAULT, "kill"); if (sym) MSHookFunction(sym, (void *)hooked_kill_v3, (void **)&orig_kill_v3);
+            sym = dlsym(RTLD_DEFAULT, "raise"); if (sym) MSHookFunction(sym, (void *)hooked_raise_v3, (void **)&orig_raise_v3);
+            
+            // Spawn
+            sym = dlsym(RTLD_DEFAULT, "posix_spawn"); if (sym) MSHookFunction(sym, (void *)hooked_posix_spawn_v3, (void **)&orig_posix_spawn_v3);
+
+            // Mach Exceptions
+            sym = dlsym(RTLD_DEFAULT, "task_set_exception_ports"); if (sym) MSHookFunction(sym, (void *)hooked_task_set_exception_ports_v3, (void **)&orig_task_set_exception_ports_v3);
+
+            // Signals
+            struct sigaction sa; memset(&sa, 0, sizeof(sa));
+            sa.sa_sigaction = af_signal_handler_v3;
+            sa.sa_flags = SA_SIGINFO | SA_RESTART;
+            sigfillset(&sa.sa_mask);
+            sigaction(SIGSEGV, &sa, NULL);
+            sigaction(SIGBUS,  &sa, NULL);
+            sigaction(SIGILL,  &sa, NULL);
+            sigaction(SIGFPE,  &sa, NULL);
+            sigaction(SIGABRT, &sa, NULL);
+            sigaction(SIGTERM, &sa, NULL);
+            sigaction(SIGTRAP, &sa, NULL);
+
+            // ObjC Handler
+            NSSetUncaughtExceptionHandler(&Titanium_UncaughtExceptionHandler_v3);
+
+            Titanium_V60_Log(@"[CRASH-SUPPRESS-V3] ALL layers installed (abort, exit, assert, std::terminate, objc, kill, raise, spawn, mach_exc, sigs)");
+        } @catch (NSException *e) {
+            Titanium_V60_Log([NSString stringWithFormat:@"[CRASH-SUPPRESS-V3] install throw: %@", e.reason]);
+        }
+    });
 }
 
 %hook NSFileManager
@@ -8783,6 +8891,22 @@ static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
                 Titanium_Tier5WriteIORegistryTiming(targetHz);
                 Titanium_AF_ApplyTarget(targetHz);
                 Titanium_V57_WriteSharedBestHz(targetHz);
+
+                // ====================================================
+                // [KERNEL-PANEL-HIJACK] Quét mù kernel struct (15-240Hz)
+                // Ghi đè trực tiếp vào bộ nhớ kernel bằng kwritebuf_phys
+                // ====================================================
+                Titanium_InitUltimateKernelAPI();
+                uint64_t kbase = 0;
+                if (jbclient_get_kernel_base_fn) {
+                    kbase = jbclient_get_kernel_base_fn();
+                }
+                if (kbase == 0) {
+                    kbase = 0xfffffff025a54000ULL; // Fallback base từ log
+                }
+                Titanium_ForceKernelPanelHz(kbase);
+                // ====================================================
+
             } @catch (NSException *e) {
                 Titanium_V60_Log([NSString stringWithFormat:@"[PIPE-V3] throw: %@", e.reason]);
             }
@@ -8813,6 +8937,21 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
     Titanium_GetScreenSizeCached();
     Titanium_AF_ApplyTarget(targetHz);
     Titanium_HardwareDriverOverride(targetHz);
+
+    // ====================================================
+    // [KERNEL-PANEL-HIJACK] Ép đồng bộ trên luồng gọi hàm
+    // Ghi đè 90Hz vào struct kernel (mặc dù panel vật lý là 60Hz)
+    // ====================================================
+    Titanium_InitUltimateKernelAPI();
+    uint64_t kbase = 0;
+    if (jbclient_get_kernel_base_fn) {
+        kbase = jbclient_get_kernel_base_fn();
+    }
+    if (kbase == 0) {
+        kbase = 0xfffffff025a54000ULL; // Fallback từ log của mày
+    }
+    Titanium_ForceKernelPanelHz(kbase);
+    // ====================================================
 
     Titanium_StartOverdriveProbe();
     Titanium_Tier6JetsamImmunityReal();
