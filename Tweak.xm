@@ -6427,24 +6427,170 @@ static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value)
 }
 
 // ====================================================================================================
-// [K-SWEEP V6] — KHÔNG GOTO + FORCE MULTI-SIZE WRITE + CACHE TTL 30S + QUÉT 48MB
+// [K-SWEEP V7-FIX2] — Dopamine 2.x, chạy trong SpringBoard (dyldhook context)
+// Fix v2:
+//   - removed popen(/var/jb/basebin/jbctl) — sandbox blocks exec in SpringBoard
+//   - base discovery moved fully into tweak (kreadbuf_phys works HERE, not in shell)
+//   - added handle-alive diagnostic before scan
+//   - kept 8-byte neighbor-preserve + rollback
+//   - 3-arg signature locked: int(uint64, void*, size_t)
 // ====================================================================================================
-static void Titanium_ProbeKernelAPI(void) {
-    void *lib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-    if (!lib) { Titanium_V60_Log(@"[PROBE] NO LIB"); return; }
-    
-    void *kw = dlsym(lib, "jbclient_kwrite");
-    void *kr = dlsym(lib, "jbclient_kread");
-    void *kb = dlsym(lib, "jbclient_get_kernel_base");
-    void *pw = dlsym(lib, "jbclient_physwrite");
-    void *tf = dlsym(lib, "jbclient_get_physrw_tfp0");
-    
-    Titanium_V60_Log([NSString stringWithFormat:@"[PROBE] kwrite=%p kread=%p base=%p physwrite=%p tfp0=%p",
-                      kw, kr, kb, pw, tf]);
+
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#include <mach-o/dyld.h>
+#include <dlfcn.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+
+typedef int (*kreadbuf_phys_t)(uint64_t, void*, size_t);
+typedef int (*kwritebuf_phys_t)(uint64_t, const void*, size_t);
+
+static kreadbuf_phys_t  g_kreadbuf_phys  = NULL;
+static kwritebuf_phys_t g_kwritebuf_phys = NULL;
+
+// ====================================================================================================
+// SYMBOL INIT
+// ====================================================================================================
+static void Titanium_InitLibjailbreakSymbols(void) {
+    if (g_kreadbuf_phys && g_kwritebuf_phys) return;
+    void* lib = dlopen("/var/jb/basebin/libjailbreak.dylib", RTLD_LAZY);
+    if (!lib) {
+        Titanium_V60_Log(@"[K-SWEEP] dlopen libjailbreak FAILED");
+        return;
+    }
+    g_kreadbuf_phys  = (kreadbuf_phys_t) dlsym(lib, "_kreadbuf_phys");
+    g_kwritebuf_phys = (kwritebuf_phys_t)dlsym(lib, "_kwritebuf_phys");
+    Titanium_V60_Log([NSString stringWithFormat:
+        @"[K-SWEEP] syms kread=%p kwrite=%p",
+        (void*)g_kreadbuf_phys, (void*)g_kwritebuf_phys]);
 }
 
+// ====================================================================================================
+// HANDLE ALIVE CHECK — verify kread works in THIS process before trusting it
+// ret=0 + any nonzero byte → handle alive
+// ret=-1 everywhere → physrw not initialized in this process
+// ====================================================================================================
+static bool Titanium_PhysRWAlive(void) {
+    if (!g_kreadbuf_phys) return false;
+    // sanity: read from a few phys addrs, if ANY returns ret=0 → handle alive
+    const uint64_t probes[] = {
+        0x800000000ULL, 0x800100000ULL, 0x801000000ULL,
+        0x804000000ULL, 0x808000000ULL, 0x810000000ULL,
+    };
+    int alive = 0, fail = 0;
+    for (int i = 0; i < 6; i++) {
+        uint64_t buf = 0;
+        int r = g_kreadbuf_phys(probes[i], &buf, 8);
+        if (r == 0) {
+            alive++;
+            Titanium_V60_Log([NSString stringWithFormat:
+                @"[K-SWEEP] probe 0x%llX ret=0 val=0x%llX",
+                probes[i], buf]);
+        } else {
+            fail++;
+        }
+    }
+    Titanium_V60_Log([NSString stringWithFormat:
+        @"[K-SWEEP] physrw alive=%d fail=%d", alive, fail]);
+    return alive > 0;
+}
+
+// ====================================================================================================
+// FORCE KWRITE — 8-byte write preserves neighbor, rollback on verify fail
+// ====================================================================================================
+static bool Titanium_ForceKWrite(uint64_t addr, uint32_t val) {
+    if (!g_kwritebuf_phys) return false;
+
+    if (g_kwritebuf_phys(addr, &val, 4) == 0) {
+        if (!g_kreadbuf_phys) return true;
+        uint32_t rb = 0;
+        if (g_kreadbuf_phys(addr, &rb, 4) == 0 && rb == val) return true;
+    }
+
+    if (g_kreadbuf_phys) {
+        uint64_t orig64 = 0;
+        if (g_kreadbuf_phys(addr, &orig64, 8) == 0) {
+            uint64_t v64 = (orig64 & 0xFFFFFFFF00000000ULL) | (uint64_t)val;
+            if (g_kwritebuf_phys(addr, &v64, 8) == 0) {
+                uint64_t rb = 0;
+                if (g_kreadbuf_phys(addr, &rb, 8) == 0 && (uint32_t)rb == val) return true;
+                g_kwritebuf_phys(addr, &orig64, 8);
+            }
+        }
+    }
+
+    uint16_t v16 = (uint16_t)val;
+    if (g_kwritebuf_phys(addr, &v16, 2) == 0) {
+        if (!g_kreadbuf_phys) return true;
+        uint16_t rb = 0;
+        if (g_kreadbuf_phys(addr, &rb, 2) == 0 && rb == v16) return true;
+    }
+
+    uint8_t v8 = (uint8_t)val;
+    if (g_kwritebuf_phys(addr, &v8, 1) == 0) {
+        if (!g_kreadbuf_phys) return true;
+        uint8_t rb = 0;
+        if (g_kreadbuf_phys(addr, &rb, 1) == 0 && rb == v8) return true;
+    }
+    return false;
+}
+
+// ====================================================================================================
+// KERNEL BASE — probe phys range from INSIDE tweak (works because SpringBoard has physrw handle)
+// no popen, no shell — sandbox blocks it
+// ====================================================================================================
+static uint64_t Titanium_GetKernelBasePhys(void) {
+    if (!g_kreadbuf_phys) return 0;
+
+    // Mach-O 64 magic FEEDFACF (little endian: CF FA ED FE in bytes, 0xFEEDFACF as u32 LE)
+    // scan wide: 0x800000000..0xC00000000, step 2MB (fast enough, ~512 probes)
+    Titanium_V60_Log(@"[K-SWEEP] probing phys for Mach-O magic");
+
+    for (uint64_t probe = 0x800000000ULL; probe < 0xC00000000ULL; probe += 0x200000ULL) {
+        uint32_t hdr[8] = {0};
+        if (g_kreadbuf_phys(probe, hdr, 32) != 0) continue;
+        if (hdr[0] != 0xFEEDFACF && hdr[0] != 0xFEEDFAC) continue;
+        // cputype at offset 4 — arm64 family
+        uint32_t cputype = hdr[1];
+        if (cputype != 0x0100000C && cputype != 0x0200000C) continue;
+        // ncmds at offset 16, sizeofcmds at 20 — kernel cache has many cmds
+        uint32_t ncmds = hdr[4];
+        uint32_t sizeofcmds = hdr[5];
+        if (ncmds == 0 || ncmds > 500) continue;
+        if (sizeofcmds == 0 || sizeofcmds > 0x100000) continue;
+        Titanium_V60_Log([NSString stringWithFormat:
+            @"[K-SWEEP] base found 0x%llX ncmds=%u sizeofcmds=0x%x",
+            probe, ncmds, sizeofcmds]);
+        return probe;
+    }
+
+    // secondary sweep: step 16MB over full range (fallback if 2MB missed alignment)
+    for (uint64_t probe = 0x800000000ULL; probe < 0x1000000000ULL; probe += 0x1000000ULL) {
+        uint32_t magic = 0;
+        if (g_kreadbuf_phys(probe, &magic, 4) != 0) continue;
+        if (magic == 0xFEEDFACF || magic == 0xFEEDFAC) {
+            // verify cputype
+            uint32_t ct = 0;
+            if (g_kreadbuf_phys(probe + 4, &ct, 4) == 0 &&
+                (ct == 0x0100000C || ct == 0x0200000C)) {
+                Titanium_V60_Log([NSString stringWithFormat:
+                    @"[K-SWEEP] base found (wide) 0x%llX", probe]);
+                return probe;
+            }
+        }
+    }
+
+    Titanium_V60_Log(@"[K-SWEEP] base NOT FOUND — phys range exhausted");
+    return 0;
+}
+
+// ====================================================================================================
+// CACHE / STATE
+// ====================================================================================================
 static os_unfair_lock g_ksweepLock = OS_UNFAIR_LOCK_INIT;
-static mach_vm_address_t g_ksweepPinned[2048];
+static mach_vm_address_t g_ksweepPinned[8192];
 static int g_ksweepPinnedCount = 0;
 static bool g_ksweepScanning = false;
 static dispatch_queue_t g_ksweepQueue = NULL;
@@ -6452,63 +6598,31 @@ static uint64_t g_ksweepCacheTimestamp = 0;
 
 #define KSWEEP_CACHE_TTL_SEC 30
 
-// FORCE WRITE — thử 4/8/2/1 byte, không bao giờ bỏ cuộc nếu kernel cho phép
-static bool Titanium_ForceKWrite(uint64_t addr, uint32_t val) {
-    if (!jbclient_kwrite_fn) return false;
-
-    // 1. Thử 4-byte
-    if (jbclient_kwrite_fn(addr, &val, 4) == 0) {
-        if (!jbclient_kread_fn) return true;
-        uint32_t rb = 0;
-        if (jbclient_kread_fn(addr, &rb, 4) == 0 && rb == val) return true;
-    }
-
-    // 2. Thử 8-byte (một số struct kernel chỉ chấp nhận 8-byte aligned write)
-    uint64_t v64 = (uint64_t)val;
-    if (jbclient_kwrite_fn(addr, &v64, 8) == 0) {
-        if (!jbclient_kread_fn) return true;
-        uint64_t rb = 0;
-        if (jbclient_kread_fn(addr, &rb, 8) == 0 && (uint32_t)rb == val) return true;
-    }
-
-    // 3. Thử 2-byte
-    uint16_t v16 = (uint16_t)val;
-    if (jbclient_kwrite_fn(addr, &v16, 2) == 0) {
-        if (!jbclient_kread_fn) return true;
-        uint16_t rb = 0;
-        if (jbclient_kread_fn(addr, &rb, 2) == 0 && rb == v16) return true;
-    }
-
-    // 4. Thử 1-byte
-    uint8_t v8 = (uint8_t)val;
-    if (jbclient_kwrite_fn(addr, &v8, 1) == 0) {
-        if (!jbclient_kread_fn) return true;
-        uint8_t rb = 0;
-        if (jbclient_kread_fn(addr, &rb, 1) == 0 && rb == v8) return true;
-    }
-
-    return false;
-}
-
-// Xoá cache tay — dùng khi đổi tần số lớn hoặc respring
 static void Titanium_ClearKSweepCache(void) {
     os_unfair_lock_lock(&g_ksweepLock);
     g_ksweepPinnedCount = 0;
     g_ksweepCacheTimestamp = 0;
     memset(g_ksweepPinned, 0, sizeof(g_ksweepPinned));
     os_unfair_lock_unlock(&g_ksweepLock);
-    Titanium_V60_Log(@"[K-SWEEP] Cache CLEARED (manual)");
+    Titanium_V60_Log(@"[K-SWEEP] cache cleared");
 }
 
+// ====================================================================================================
+// MAIN SWEEP
+// ====================================================================================================
 static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
-    Titanium_InitUltimateKernelAPI();
+    Titanium_InitLibjailbreakSymbols();
+
+    if (!Titanium_PhysRWAlive()) {
+        Titanium_V60_Log(@"[K-SWEEP] physrw dead in this process, abort");
+        return;
+    }
 
     static dispatch_once_t queueOnce;
     dispatch_once(&queueOnce, ^{
-        g_ksweepQueue = dispatch_queue_create("com.titanium.ksweep.v6", DISPATCH_QUEUE_SERIAL);
+        g_ksweepQueue = dispatch_queue_create("com.titanium.ksweep.v7", DISPATCH_QUEUE_SERIAL);
     });
 
-    // ===== Check cache TTL =====
     uint64_t now = mach_absolute_time();
     os_unfair_lock_lock(&g_ksweepLock);
     int cachedCount = g_ksweepPinnedCount;
@@ -6516,7 +6630,6 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
                              ? (now - g_ksweepCacheTimestamp) : UINT64_MAX;
     bool cacheExpired = (cacheAgeTicks > Titanium_NanosToMachTicks((uint64_t)KSWEEP_CACHE_TTL_SEC * 1000000000ULL));
 
-    // [FIX] Dùng heap malloc — block không capture được C array
     mach_vm_address_t *cachePtr = NULL;
     if (cachedCount > 0) {
         cachePtr = (mach_vm_address_t *)malloc(sizeof(mach_vm_address_t) * (size_t)cachedCount);
@@ -6532,11 +6645,6 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
     }
     os_unfair_lock_unlock(&g_ksweepLock);
 
-    if (cacheExpired && g_ksweepPinnedCount == 0) {
-        Titanium_V60_Log(@"[K-SWEEP] Cache expired (30s TTL) → rescan");
-    }
-
-    // ===== Cache hit — dùng heap pointer =====
     if (cachedCount > 0 && cachePtr) {
         uint32_t targetVal32 = (uint32_t)targetHz;
         int countCopy = cachedCount;
@@ -6549,7 +6657,7 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
             os_unfair_lock_lock(&g_ksweepLock);
             g_ksweepCacheTimestamp = mach_absolute_time();
             os_unfair_lock_unlock(&g_ksweepLock);
-            Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Cache force-write: %d/%d → %ldHz",
+            Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] cache write %d/%d -> %ldHz",
                               ok, countCopy, (long)targetHz]);
         });
         return;
@@ -6563,113 +6671,109 @@ static void Titanium_BruteForceKernelSweep(NSInteger targetHz) {
     g_ksweepScanning = true;
     os_unfair_lock_unlock(&g_ksweepLock);
 
-    // ===== FULL SCAN =====
     dispatch_async(g_ksweepQueue, ^{
         @autoreleasepool {
             @try {
-                bool doScan = true;
-
-                if (!jbclient_kread_fn || !jbclient_kwrite_fn) {
-                    Titanium_V60_Log(@"[K-SWEEP] jbclient missing, abort");
-                    doScan = false;
-                }
-
-                uint64_t base = 0;
-                if (doScan) {
-                    if (jbclient_get_kernel_base_fn) base = jbclient_get_kernel_base_fn();
-                    else if (libkernrw_get_base_fn) base = libkernrw_get_base_fn();
-                    if (base == 0) {
-                        Titanium_V60_Log(@"[K-SWEEP] base=0, abort");
-                        doScan = false;
-                    }
-                }
-
-                if (doScan) {
-                    uint64_t magic = 0;
-                    if (jbclient_kread_fn(base, &magic, 8) != 0 ||
-                        (magic != 0xFEEDFACF && magic != 0xFEEDFAC)) {
-                        Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] kread broken (magic=0x%llX), abort", magic]);
-                        doScan = false;
-                    }
-                }
-
-                if (doScan) {
-                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Base=0x%llX, scan 48MB (V6 force)...", base]);
-
-                    uint64_t scanStart = base + 0x1000000;
-                    uint64_t scanEnd   = base + 0x4000000;
-                    uint64_t step      = 4;
-                    uint32_t sentinel  = 0xDEADBEEF;
-
-                    mach_vm_address_t localPins[2048];
-                    int found = 0;
-                    uint64_t addr = scanStart;
-
-                    while (addr < scanEnd && found < 2048) {
-                        uint32_t buf = 0;
-                        if (jbclient_kread_fn(addr, &buf, 4) != 0) { addr += step; continue; }
-                        if (buf != 60 && buf != 120) { addr += step; continue; }
-
-                        uint32_t L = 0, R = 0, L2 = 0, R2 = 0;
-                        jbclient_kread_fn(addr - 4, &L, 4);
-                        jbclient_kread_fn(addr + 4, &R, 4);
-                        jbclient_kread_fn(addr - 8, &L2, 4);
-                        jbclient_kread_fn(addr + 8, &R2, 4);
-                        if (L == 60 || L == 120 || L == 240 ||
-                            R == 60 || R == 120 || R == 240 ||
-                            L2 == 60 || L2 == 120 || L2 == 240 ||
-                            R2 == 60 || R2 == 120 || R2 == 240) {
-                            addr += step; continue;
-                        }
-
-                        uint32_t orig = buf;
-                        if (!Titanium_ForceKWrite(addr, sentinel)) {
-                            Titanium_ForceKWrite(addr, orig);
-                            addr += step; continue;
-                        }
-                        Titanium_ForceKWrite(addr, orig);
-
-                        bool highPriority = false;
-                        for (int off = -64; off <= 64; off += 4) {
-                            if (off == 0) continue;
-                            uint32_t nearby = 0;
-                            if (jbclient_kread_fn(addr + off, &nearby, 4) != 0) continue;
-                            if (nearby == 800000000u || nearby == 400000000u ||
-                                nearby == 200000000u || nearby == 240) {
-                                highPriority = true; break;
-                            }
-                        }
-
-                        if (highPriority) {
-                            if (found > 0) memmove(&localPins[1], &localPins[0], sizeof(mach_vm_address_t) * (size_t)found);
-                            localPins[0] = addr;
-                        } else {
-                            localPins[found] = addr;
-                        }
-                        found++;
-
-                        Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] %@ 0x%llX orig=%u",
-                                          highPriority ? @"★" : @"✅", addr, orig]);
-                        addr += step;
-                    }
-
+                uint64_t base = Titanium_GetKernelBasePhys();
+                if (base == 0) {
                     os_unfair_lock_lock(&g_ksweepLock);
-                    g_ksweepPinnedCount = found;
-                    if (found > 0) memcpy(g_ksweepPinned, localPins, sizeof(mach_vm_address_t) * (size_t)found);
-                    g_ksweepCacheTimestamp = mach_absolute_time();
+                    g_ksweepScanning = false;
                     os_unfair_lock_unlock(&g_ksweepLock);
-
-                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] DONE, %d writable addrs cached (30s TTL)", found]);
-
-                    uint32_t targetVal32 = (uint32_t)targetHz;
-                    for (int i = 0; i < found; i++) {
-                        Titanium_ForceKWrite(localPins[i], targetVal32);
-                    }
-                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] Applied %ldHz to %d addrs",
-                                      (long)targetHz, found]);
+                    return;
                 }
+
+                uint32_t magic = 0;
+                if (g_kreadbuf_phys(base, &magic, 4) != 0 ||
+                    (magic != 0xFEEDFACF && magic != 0xFEEDFAC)) {
+                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] base magic bad 0x%X, abort", magic]);
+                    os_unfair_lock_lock(&g_ksweepLock);
+                    g_ksweepScanning = false;
+                    os_unfair_lock_unlock(&g_ksweepLock);
+                    return;
+                }
+
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] base=0x%llX, scan 120MB", base]);
+
+                uint64_t scanStart = base + 0x1000000;
+                uint64_t scanEnd   = base + 0x8800000;
+                uint64_t step      = 4;
+                uint32_t sentinel  = 0xDEADBEEF;
+
+                mach_vm_address_t localPins[8192];
+                int found = 0;
+                uint64_t addr = scanStart;
+                uint64_t lastLogTick = 0;
+
+                while (addr < scanEnd && found < 8192) {
+                    if (addr - lastLogTick >= 0xA00000) {
+                        lastLogTick = addr;
+                        int percent = (int)(((addr - scanStart) * 100) / (scanEnd - scanStart));
+                        Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] %d%% found=%d", percent, found]);
+                    }
+
+                    uint32_t buf = 0;
+                    if (g_kreadbuf_phys(addr, &buf, 4) != 0) { addr += step; continue; }
+                    if (buf != 60 && buf != 120) { addr += step; continue; }
+
+                    uint32_t L = 0, R = 0, L2 = 0, R2 = 0;
+                    g_kreadbuf_phys(addr - 4, &L, 4);
+                    g_kreadbuf_phys(addr + 4, &R, 4);
+                    g_kreadbuf_phys(addr - 8, &L2, 4);
+                    g_kreadbuf_phys(addr + 8, &R2, 4);
+                    if (L == 60 || L == 120 || L == 240 ||
+                        R == 60 || R == 120 || R == 240 ||
+                        L2 == 60 || L2 == 120 || L2 == 240 ||
+                        R2 == 60 || R2 == 120 || R2 == 240) {
+                        addr += step; continue;
+                    }
+
+                    uint32_t orig = buf;
+                    if (!Titanium_ForceKWrite(addr, sentinel)) {
+                        Titanium_ForceKWrite(addr, orig);
+                        addr += step; continue;
+                    }
+                    Titanium_ForceKWrite(addr, orig);
+
+                    bool highPriority = false;
+                    for (int off = -64; off <= 64; off += 4) {
+                        if (off == 0) continue;
+                        uint32_t nearby = 0;
+                        if (g_kreadbuf_phys(addr + off, &nearby, 4) != 0) continue;
+                        if (nearby == 800000000u || nearby == 400000000u ||
+                            nearby == 200000000u || nearby == 240) {
+                            highPriority = true; break;
+                        }
+                    }
+
+                    if (highPriority) {
+                        if (found > 0) memmove(&localPins[1], &localPins[0], sizeof(mach_vm_address_t) * (size_t)found);
+                        localPins[0] = addr;
+                    } else {
+                        localPins[found] = addr;
+                    }
+                    found++;
+
+                    Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] %@ 0x%llX orig=%u",
+                                      highPriority ? @"HP" : @"OK", addr, orig]);
+                    addr += step;
+                }
+
+                os_unfair_lock_lock(&g_ksweepLock);
+                g_ksweepPinnedCount = found;
+                if (found > 0) memcpy(g_ksweepPinned, localPins, sizeof(mach_vm_address_t) * (size_t)found);
+                g_ksweepCacheTimestamp = mach_absolute_time();
+                os_unfair_lock_unlock(&g_ksweepLock);
+
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] done %d addrs cached", found]);
+
+                uint32_t targetVal32 = (uint32_t)targetHz;
+                for (int i = 0; i < found; i++) {
+                    Titanium_ForceKWrite(localPins[i], targetVal32);
+                }
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] applied %ldHz to %d",
+                                  (long)targetHz, found]);
             } @catch (NSException *e) {
-                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] throw: %@", e.reason]);
+                Titanium_V60_Log([NSString stringWithFormat:@"[K-SWEEP] throw %@", e.reason]);
             }
 
             os_unfair_lock_lock(&g_ksweepLock);
