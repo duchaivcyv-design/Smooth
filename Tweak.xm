@@ -6429,13 +6429,19 @@ static BOOL Titanium_KernelWriteAbsolute(uint64_t kernelAddress, uint64_t value)
 // ====================================================================================================
 // [K-SWEEP V6] — KHÔNG GOTO + FORCE MULTI-SIZE WRITE + CACHE TTL 30S + QUÉT 48MB
 // ====================================================================================================
-// Mạnh hơn V5:
-//   - Force write 4-byte → 8-byte → 2-byte → 1-byte (đéo từ chối được nữa)
-//   - Cache TTL 30 giây → tự xoá + rescan (đéo cache cứng)
-//   - Range 48MB (0x1000000 → 0x4000000)
-//   - Cache 2048 slots
-//   - Titanium_ClearKSweepCache() gọi tay được
-// ====================================================================================================
+static void Titanium_ProbeKernelAPI(void) {
+    void *lib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+    if (!lib) { Titanium_V60_Log(@"[PROBE] NO LIB"); return; }
+    
+    void *kw = dlsym(lib, "jbclient_kwrite");
+    void *kr = dlsym(lib, "jbclient_kread");
+    void *kb = dlsym(lib, "jbclient_get_kernel_base");
+    void *pw = dlsym(lib, "jbclient_physwrite");
+    void *tf = dlsym(lib, "jbclient_get_physrw_tfp0");
+    
+    Titanium_V60_Log([NSString stringWithFormat:@"[PROBE] kwrite=%p kread=%p base=%p physwrite=%p tfp0=%p",
+                      kw, kr, kb, pw, tf]);
+}
 
 static os_unfair_lock g_ksweepLock = OS_UNFAIR_LOCK_INIT;
 static mach_vm_address_t g_ksweepPinned[2048];
@@ -11265,6 +11271,15 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
 
     @autoreleasepool {
         @try {
+            // ===== PROBE KERNEL API (diagnostic, chạy nền 1500ms) =====
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1500 * NSEC_PER_MSEC)),
+                           dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    Titanium_ProbeKernelAPI();
+                } @catch (__unused NSException *e) {}
+            });
+            // =========================================================
+
             Titanium_BypassQuartzCoreRangeAssertion();
 
             Class configClass = NSClassFromString(@"BoostConfigV285Pro");
@@ -11405,7 +11420,6 @@ static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *pro
         }
     }
 }
-
 // ====================================================================================================
 // [UIView animation range guard — UNCAPPED DỠ BỎ CLAMP 240HZ]
 // ====================================================================================================
