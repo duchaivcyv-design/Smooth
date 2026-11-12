@@ -472,7 +472,7 @@ static NSArray<NSArray<NSString *> *> *Titanium_LinkedPreferenceGroups(void) {
             @[@"ultraResponsiveness", @"UltraResponsiveness"],
             @[@"lock30FpsOnOverheat", @"SmartThermalDispatch"],
             @[@"flatTintBlur", @"QuantumRenderShield"],
-            @[@"powerSaveMode", @"batterySaver60Hz", @"PowerSaveMode"],
+            @[@"powerSaveMode", @"PowerSaveMode"],
             @[@"neuralBufferOpt", @"MetalHexBuffering"],
             @[@"vsyncAdaptiveBuffer", @"FixAppExitStutter"],
             @[@"IsolateRenderPipeline", @"FixAppLaunchBlackScreen"],
@@ -4971,12 +4971,14 @@ static NSString *const kTITourDoneKey = @"ti_tourDone_v1";
     _appSearchQuery = @"";
 
     _chipErrorActive = NO;
-    _lastAppliedHz = 240;
-    _lastAppliedFPS = 240;
+    _lastAppliedHz = 60;
+    _lastAppliedFPS = 60;
     _currentLatencyMs = -1;
     _serverDown = NO;
 
     [self loadSettingsData];
+    _lastAppliedHz = [self.settingsDict[@"TargetRefreshRate"] integerValue] ?: 60;
+    _lastAppliedFPS = [self.settingsDict[@"TargetFPSRate"] integerValue] ?: 60;
     // Persist the local configuration-unlock state across force-quit/relaunch. This is a UI state only,
     // not proof that a kernel exploit ran or that kernel privileges remain active.
     NSUserDefaults *localStateDefaults = [NSUserDefaults standardUserDefaults];
@@ -5485,8 +5487,8 @@ static NSString *const kTITourDoneKey = @"ti_tourDone_v1";
         // Chế độ thủ công: giữ đúng Hz/FPS người dùng chọn, auto không ghi đè.
         [d setObject:@"manual" forKey:@"SmooIOSProfileV36"];
         // Chỉ đặt mặc định cho đúng key mà Tweak.xm đọc.
-if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
-if (!self.settingsDict[@"TargetFPSRate"])     self.settingsDict[@"TargetFPSRate"]     = @144;
+if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @60;
+if (!self.settingsDict[@"TargetFPSRate"])     self.settingsDict[@"TargetFPSRate"]     = @60;
 if (!self.settingsDict[@"EnableHzControl"])   self.settingsDict[@"EnableHzControl"]   = @YES;
 if (!self.settingsDict[@"EnableFPSControl"])  self.settingsDict[@"EnableFPSControl"]  = @YES;
 [self saveSettingsDataAndSync];
@@ -7624,11 +7626,17 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     CGFloat W = CGRectGetWidth(self.view.bounds);
     CGFloat H = CGRectGetHeight(self.view.bounds);
     if (W <= 0.0 || H <= 0.0) return;
-    CGFloat barHeight = 66.0;
-    CGFloat margin = 10.0;
+    BOOL compactDock = [self.settingsDict[@"ti_compactCharts"] boolValue];
+    CGFloat barHeight = compactDock ? 58.0 : 66.0;
     CGFloat bottomSafe = MAX(0.0, self.view.safeAreaInsets.bottom);
-    CGFloat y = MAX(8.0, H - bottomSafe - barHeight - 8.0);
-    CGRect newFrame = CGRectMake(margin, y, MAX(0.0, W - margin * 2.0), barHeight);
+    CGFloat margin = compactDock ? 0.0 : 10.0;
+    CGFloat dockHeight = compactDock ? (barHeight + bottomSafe) : barHeight;
+    CGFloat y = compactDock ? (H - dockHeight) : MAX(8.0, H - bottomSafe - barHeight - 8.0);
+    CGRect newFrame = CGRectMake(margin, y, MAX(0.0, W - margin * 2.0), dockHeight);
+    _liquidNavBarContainer.cornerRadiusValue = compactDock ? 0.0 : 24.0;
+    _liquidNavBarContainer.layer.cornerRadius = compactDock ? 0.0 : 24.0;
+    _liquidNavBarContainer.layer.shadowOpacity = compactDock ? 0.0 : 0.22;
+    _liquidNavBarContainer.layer.shadowRadius = compactDock ? 0.0 : 17.0;
     BOOL sizeChanged = !CGSizeEqualToSize(_v20LastNavLayoutSize, self.view.bounds.size) || !CGRectEqualToRect(_v20LastNavFrame, newFrame);
     if (!CGRectEqualToRect(_liquidNavBarContainer.frame, newFrame)) _liquidNavBarContainer.frame = newFrame;
     if (sizeChanged) {
@@ -7638,8 +7646,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         for (NSInteger i = 0; i < _tabButtons.count; i++) {
             _tabButtons[i].frame = CGRectMake(i * btnW + 2.0, 2.0, MAX(0.0, btnW - 4.0), barHeight - 4.0);
         }
-        CGFloat blobSize = 48.0;
-        CGRect blobFrame = CGRectMake((btnW - blobSize) * 0.5, -12.0, blobSize, blobSize);
+        CGFloat blobSize = compactDock ? 38.0 : 48.0;
+        CGFloat blobY = compactDock ? ((barHeight - blobSize) * 0.5) : -12.0;
+        CGRect blobFrame = CGRectMake((btnW - blobSize) * 0.5, blobY, blobSize, blobSize);
+        _activeGlassIndicator.cornerRadiusValue = blobSize * 0.5;
         _activeGlassIndicator.frame = blobFrame;
         if (_currentBottomTab >= 0 && _currentBottomTab < _tabButtons.count) {
             _activeGlassIndicator.center = CGPointMake(_currentBottomTab * btnW + btnW * 0.5, _activeGlassIndicator.center.y);
@@ -7659,12 +7669,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
         if (!CGRectEqualToRect(self.customTableView.frame, tableFrame)) self.customTableView.frame = tableFrame;
         CGFloat headerWidth = self.view.bounds.size.width;
         if (self.customTableView.tableHeaderView && fabs(self.customTableView.tableHeaderView.bounds.size.width - headerWidth) > 1.0) {
-            self.customTableView.tableHeaderView = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:headerWidth] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)])));
+            UIView *rebuiltHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:headerWidth] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:headerWidth] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:headerWidth] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:headerWidth] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, headerWidth, 1.0)])));
+            self.customTableView.tableHeaderView = [self ti_fixedHeightHeader:rebuiltHeader];
         }
-        // Reserve space for the floating bottom dock so the final cards remain scrollable
-        // and aren't visually hidden behind the navigation bar.
-        CGFloat dockReserve = CGRectGetHeight(_liquidNavBarContainer.bounds) + self.view.safeAreaInsets.bottom + 22.0;
-        UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, MAX(10.0, dockReserve), 0.0);
+        // The table already ends above the dock frame; keep only a small scroll tail.
+        CGFloat dockReserve = compactDock ? 10.0 : 18.0;
+        UIEdgeInsets desiredInset = UIEdgeInsetsMake(2.0, 0.0, dockReserve, 0.0);
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.contentInset, desiredInset)) self.customTableView.contentInset = desiredInset;
         if (!UIEdgeInsetsEqualToEdgeInsets(self.customTableView.scrollIndicatorInsets, desiredInset)) self.customTableView.scrollIndicatorInsets = desiredInset;
     }
@@ -7916,12 +7926,10 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     }];
 }
 
-// Giữ chiều cao header cố định khi chuyển mục: khung không nhảy. Chiều cao = lớn nhất đã từng gặp.
+// Header dùng đúng chiều cao của tab hiện tại; không giữ lại chiều cao của tab trước.
 - (UIView *)ti_fixedHeightHeader:(UIView *)header {
     if (!header) return nil;
-    CGFloat maxH = [objc_getAssociatedObject(self, "ti_headerMaxH") floatValue];
-    CGFloat H = MAX(maxH, CGRectGetHeight(header.frame));
-    objc_setAssociatedObject(self, "ti_headerMaxH", @(H), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    CGFloat H = MAX(1.0, CGRectGetHeight(header.frame));
     CGFloat w = self.view.bounds.size.width;
     UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, H)];
     wrap.backgroundColor = UIColor.clearColor;
@@ -7980,6 +7988,12 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ gTabLandingPending = NO; });
     UIView *nextHeader = (_currentBottomTab == 0) ? [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 1) ? [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 2) ? [self buildNeonSwitchHeaderWithWidth:self.view.bounds.size.width] : ((_currentBottomTab == 5) ? [self buildV23DeviceInfoHeaderWithWidth:self.view.bounds.size.width] : [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)])));
     self.customTableView.tableHeaderView = [self ti_fixedHeightHeader:nextHeader];
+    // Do not carry the previous tab's scroll offset into a shorter header; that left
+    // the first section below the viewport and looked like a large empty black gap.
+    if (oldTab != _currentBottomTab) {
+        [self.customTableView layoutIfNeeded];
+        [self.customTableView setContentOffset:CGPointMake(0.0, -self.customTableView.contentInset.top) animated:NO];
+    }
     // Keep decorative header layers from becoming a full-width invisible touch shield.
     // Interactive controls added by header builders retain their own interaction settings.
     if (nextHeader) {
@@ -8395,12 +8409,50 @@ static NSString * const TIAdminAPIBaseURLOverrideKey = @"ti_admin_api_base_url_o
 }
 
 - (UIView *)buildNeonSwitchHeaderWithWidth:(CGFloat)width {
-    CGFloat w=MAX(320.0,width), side=16.0, cw=w-side*2.0; UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,250)]; root.backgroundColor=UIColor.clearColor;
-    UILabel *title=[[UILabel alloc] initWithFrame:CGRectMake(side,12,cw,30)]; title.text=@"CÔNG TẮC NHANH"; title.font=[UIFont systemFontOfSize:22 weight:UIFontWeightBlack]; title.textColor=UIColor.whiteColor; [root addSubview:title];
-    UILabel *sub=[[UILabel alloc] initWithFrame:CGRectMake(side,43,cw,30)]; sub.numberOfLines=2; sub.text=@"Chọn nhóm để mở thiết lập tương ứng. Tùy chọn không được hệ thống hỗ trợ sẽ không tự ép xung hoặc vượt giới hạn iOS."; sub.font=[UIFont systemFontOfSize:10]; sub.textColor=[UIColor secondaryLabelColor]; [root addSubview:sub];
-    NSArray *titles=@[@"Giao diện",@"Hiệu năng",@"Pin",@"Đồ họa",@"Cảm ứng",@"Bổ sung"]; NSArray *icons=@[@"paintpalette.fill",@"speedometer",@"battery.100",@"sparkles",@"hand.tap.fill",@"slider.horizontal.3"];
-    CGFloat gap=9, tw=(cw-gap*2)/3.0, th=72;
-    for(NSInteger i=0;i<6;i++){ NSInteger col=i%3,row=i/3; UIButton *b=[UIButton buttonWithType:UIButtonTypeSystem]; b.frame=CGRectMake(side+col*(tw+gap),82+row*(th+gap),tw,th); b.tag=i; b.backgroundColor=[UIColor colorWithRed:.06 green:.035 blue:.14 alpha:1]; b.layer.cornerRadius=14; b.layer.borderWidth=1; b.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:1].CGColor; [b setImage:[UIImage systemImageNamed:icons[i]] forState:UIControlStateNormal]; [b setTitle:[@"  " stringByAppendingString:titles[i]] forState:UIControlStateNormal]; b.titleLabel.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBold]; b.tintColor=[UIColor systemCyanColor]; [b addTarget:self action:@selector(neonV15SelectSwitchGroup:) forControlEvents:UIControlEventTouchUpInside]; [root addSubview:b]; }
+    CGFloat w = MAX(320.0, width), side = 16.0, cw = w - side * 2.0;
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 224.0)];
+    root.backgroundColor = UIColor.clearColor;
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(side, 10, cw, 28)];
+    title.text = @"CÔNG TẮC NHANH";
+    title.font = [UIFont systemFontOfSize:21 weight:UIFontWeightBlack];
+    title.textColor = UIColor.whiteColor;
+    [root addSubview:title];
+    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(side, 39, cw, 31)];
+    sub.numberOfLines = 2;
+    sub.text = @"Chọn nhóm để mở công tắc. Mỗi công tắc lưu theo đúng khóa cấu hình mà tweak đọc.";
+    sub.font = [UIFont systemFontOfSize:10];
+    sub.textColor = [UIColor secondaryLabelColor];
+    [root addSubview:sub];
+    NSArray *titles = @[@"CPU", @"GPU", @"MÀN HÌNH", @"PIN", @"HỆ THỐNG", @"DAEMON"];
+    NSArray *icons = @[@"cpu", @"sparkles", @"display", @"battery.100", @"gearshape.fill", @"slider.horizontal.3"];
+    CGFloat gap = 8.0, tw = (cw - gap * 2.0) / 3.0, th = 64.0, top = 78.0;
+    for (NSInteger i = 0; i < 6; i++) {
+        NSInteger col = i % 3, row = i / 3;
+        UIButton *tile = [UIButton buttonWithType:UIButtonTypeCustom];
+        tile.frame = CGRectMake(side + col * (tw + gap), top + row * (th + 7.0), tw, th);
+        tile.tag = i;
+        tile.backgroundColor = [UIColor colorWithRed:.045 green:.035 blue:.13 alpha:1.0];
+        tile.layer.cornerRadius = 13.0;
+        tile.layer.borderWidth = 1.0;
+        tile.layer.borderColor = [UIColor colorWithRed:.35 green:.22 blue:.66 alpha:1].CGColor;
+        UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:icons[i]]];
+        icon.frame = CGRectMake((tw - 20.0) * 0.5, 7.0, 20.0, 20.0);
+        icon.contentMode = UIViewContentModeScaleAspectFit;
+        icon.tintColor = [UIColor colorWithRed:.25 green:.85 blue:1 alpha:1];
+        icon.userInteractionEnabled = NO;
+        [tile addSubview:icon];
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(3.0, 35.0, tw - 6.0, 20.0)];
+        label.text = titles[i];
+        label.font = [UIFont systemFontOfSize:9.0 weight:UIFontWeightBlack];
+        label.textColor = UIColor.whiteColor;
+        label.textAlignment = NSTextAlignmentCenter;
+        label.adjustsFontSizeToFitWidth = YES;
+        label.minimumScaleFactor = 0.72;
+        label.lineBreakMode = NSLineBreakByTruncatingTail;
+        [tile addSubview:label];
+        [tile addTarget:self action:@selector(neonV15SelectSwitchGroup:) forControlEvents:UIControlEventTouchUpInside];
+        [root addSubview:tile];
+    }
     return root;
 }
 
@@ -8463,13 +8515,15 @@ static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
     self.settingsDict[@"ti_compactCharts"] = @(sender.on);
     [self saveSettingsDataAndSync];
     if (_currentBottomTab == 0) {
-        self.customTableView.tableHeaderView = [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width];
+        UIView *header = [self buildNeonDashboardHeaderWithWidth:self.view.bounds.size.width];
+        self.customTableView.tableHeaderView = [self ti_fixedHeightHeader:header];
     }
+    [self layoutLiquidGlassControlsForCurrentBounds];
 }
 
 - (UIView *)buildNeonDashboardHeaderWithWidth:(CGFloat)width {
     CGFloat w=MAX(320.0,width), side=14.0, cw=w-side*2.0;
-    UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,995.0)]; root.backgroundColor=UIColor.clearColor;
+    UIView *root=[[UIView alloc] initWithFrame:CGRectMake(0,0,w,850.0)]; root.backgroundColor=UIColor.clearColor;
     UILabel *eyebrow=[[UILabel alloc] initWithFrame:CGRectMake(side,10,cw,14)]; eyebrow.text=@"SMOOIOS PRO / LIVE MONITOR V43"; eyebrow.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor=[UIColor colorWithRed:.22 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
     UILabel *title=[[UILabel alloc] initWithFrame:CGRectMake(side,28,cw,31)]; title.text=@"BẢNG ĐIỀU KHIỂN"; title.font=[UIFont systemFontOfSize:24 weight:UIFontWeightBlack]; title.textColor=UIColor.whiteColor; [root addSubview:title];
     UILabel *sub=[[UILabel alloc] initWithFrame:CGRectMake(side,61,cw,18)]; sub.text=@"Biểu đồ cập nhật liên tục · chỉ dùng số đo đọc được"; sub.font=[UIFont systemFontOfSize:11]; sub.textColor=[UIColor secondaryLabelColor]; [root addSubview:sub];
@@ -8488,17 +8542,6 @@ static inline BOOL TI_CompactChartsOn(NSDictionary *d) {
         if(page<6){
             TIFullMetricPageInto(inner, page, cw, metricNames[page], metricDetails[page], metricSymbols[page]);
             inner.contentSize=CGSizeMake(cw,375);
-        } else if(page==-1){
-            CGFloat gap=9, cardW=(cw-gap)/2.0, cardH=137.0;
-            for(NSInteger i=0;i<6;i++){
-                NSInteger col=i%2,row=i/2; UIView *card=[[UIView alloc] initWithFrame:CGRectMake(col*(cardW+gap),row*(cardH+gap),cardW,cardH)]; card.backgroundColor=[UIColor colorWithRed:.05 green:.035 blue:.12 alpha:1]; card.layer.cornerRadius=15; card.layer.borderWidth=1; card.layer.borderColor=[UIColor colorWithRed:.30 green:.20 blue:.53 alpha:1].CGColor; [inner addSubview:card];
-                UIImageView *icon=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:metricSymbols[i]]]; icon.frame=CGRectMake(10,9,17,17); icon.tintColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1]; [card addSubview:icon];
-                UILabel *name=[[UILabel alloc] initWithFrame:CGRectMake(32,8,cardW-40,18)]; name.text=metricNames[i]; name.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack]; name.textColor=UIColor.whiteColor; name.adjustsFontSizeToFitWidth=YES; name.minimumScaleFactor=.7; [card addSubview:name];
-                UILabel *detail=[[UILabel alloc] initWithFrame:CGRectMake(10,29,cardW-20,23)]; detail.text=metricDetails[i]; detail.numberOfLines=2; detail.font=[UIFont systemFontOfSize:8]; detail.textColor=[UIColor secondaryLabelColor]; [card addSubview:detail];
-                TITrendGraphView *graph=[[TITrendGraphView alloc] initWithFrame:CGRectMake(9,55,cardW-18,48)]; graph.tag=9200+i; [card addSubview:graph];
-                UILabel *reading=[[UILabel alloc] initWithFrame:CGRectMake(9,107,cardW-18,20)]; reading.tag=9190+i; reading.text=@"Đang lấy mẫu…"; reading.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; reading.textColor=UIColor.whiteColor; reading.adjustsFontSizeToFitWidth=YES; reading.minimumScaleFactor=.6; [card addSubview:reading];
-            }
-            inner.contentSize=CGSizeMake(cw,3*(cardH+gap));
         } else {
             UILabel *thermalNote=[[UILabel alloc] initWithFrame:CGRectMake(4,2,cw-8,48)]; thermalNote.numberOfLines=0; thermalNote.font=[UIFont systemFontOfSize:11]; thermalNote.textColor=[UIColor secondaryLabelColor]; thermalNote.text=@"Đang dò các cảm biến số thực tế mà IORegistry của thiết bị công bố. Tên và đơn vị phụ thuộc SoC/iOS; chỉ số nào không có nguồn cảm biến tương ứng sẽ không được suy diễn thành °C."; [inner addSubview:thermalNote];
             NSArray *tn=@[@"CPU · NHIỆT ĐỘ",@"GPU · NHIỆT ĐỘ",@"RAM · NHIỆT ĐỘ",@"MÀN HÌNH · NHIỆT ĐỘ"];
@@ -8661,8 +8704,8 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     body.numberOfLines = 0;
     body.font = [UIFont systemFontOfSize:10.5];
     body.textColor = [UIColor colorWithWhite:0.85 alpha:1];
-    body.text = TI_T(@"CẢNH BÁO: Tweak can thiệp trực tiếp vào nhân Kernel và ép cứng Driver phần cứng (DCP/IOMobileFramebuffer). Nó bắt tấm nền vật lý chạy vượt giới hạn thiết kế (ví dụ: ép màn 60Hz gồng lên 240Hz) đồng thời vô hiệu hóa hoàn toàn hệ thống bảo vệ nhiệt độ và dòng điện. Dùng lâu dài sẽ dẫn đến hỏng hóc phần cứng không thể cứu vãn: cháy sọc màn hình (dọc/ngang), lưu ảnh (burn-in), chết điểm ảnh, hỏng GPU, và làm pin phồng rộp. Mày đang phá bỏ giới hạn vật lý của phần cứng. Tự chịu trách nhiệm.",
-                     @"WARNING: This tweak operates at the deepest level, directly hooking Kernel syscalls and overriding the hardware panel driver (DCP/IOMobileFramebuffer). It forces the physical display to exceed its factory limits (e.g., pushing a 60Hz panel to 240Hz) while completely bypassing thermal throttling and battery safety protocols. Prolonged use will cause severe hardware degradation: permanent screen burn-in, vertical/horizontal lines, dead pixels, GPU/peripheral burnout, and rapid battery swelling. You are overriding physical hardware limits. Use at your own risk.");
+    body.text = TI_T(@"LƯU Ý: Mức đã chọn là mục tiêu cấu hình gửi tới các đường áp dụng của tweak; không phải xác nhận kernel hoặc panel đã chấp nhận ghi. Driver và iOS có thể từ chối hoặc giới hạn mức này. Không đặt vượt thông số phần cứng; mức cao có thể làm máy nóng, hao pin và mất ổn định.",
+                     @"NOTE: The selected value is a configuration target sent to the tweak's apply paths; it does not prove that the kernel or display panel accepted a write. The driver and iOS may reject or clamp it. Do not exceed hardware specifications; higher targets may increase heat, battery use, and instability.");
     [box addSubview:body];
 
 
@@ -8683,7 +8726,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
 
 - (UIView *)buildNeonRateHeaderWithWidth:(CGFloat)width {
     CGFloat w = MAX(320.0, width), side = 14.0, cw = w - side * 2.0;
-    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 505.0)];
+    UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 570.0)];
     root.backgroundColor = UIColor.clearColor;
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
     eyebrow.text = @"SMOOTHIOS PRO / DRIVER CHIP V10"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
@@ -8736,65 +8779,30 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.frame=CGRectMake(18,236,actionW,42); apply.tag=99440; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; apply.layer.shadowOpacity=.24; apply.layer.shadowRadius=9; [apply setTitle:@"ÁP DỤNG" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightBlack]; [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:apply];
     UIButton *respring=[UIButton buttonWithType:UIButtonTypeSystem]; respring.frame=CGRectMake(18+actionW+actionGap,236,actionW,42); respring.tag=99441; respring.layer.cornerRadius=15; respring.backgroundColor=[UIColor colorWithRed:.22 green:.18 blue:.42 alpha:1]; respring.layer.borderWidth=1; respring.layer.borderColor=[UIColor colorWithRed:.56 green:.42 blue:1 alpha:.9].CGColor; [respring setTitle:@"RESPRING" forState:UIControlStateNormal]; [respring setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; respring.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; [respring addTarget:self action:@selector(v332RequestRespring:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:respring];
     UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,378,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
-    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Chỉ số mục tiêu được lưu vào cấu hình; FPS LIVE bên dưới là tốc độ khung hình của giao diện ứng dụng."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
-    // V23: six compact information tiles are always visible on the dashboard.
-    {
-        NSInteger warnRate = MAX(hz, fps);
-        UIView *warn = [self ti_rateWarningViewWithWidth:cw rate:warnRate];
-        if (warn) { warn.frame = CGRectMake(side, 436, cw, 128); [root addSubview:warn]; }
-    }
-    UILabel *infoTitle=[[UILabel alloc] initWithFrame:CGRectMake(side,704,cw,18)];
-    infoTitle.text=@"THÔNG TIN THIẾT BỊ · CHẠM ĐỂ XEM CHI TIẾT";
-    infoTitle.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBlack];
-    infoTitle.textColor=[UIColor colorWithRed:.35 green:.82 blue:1 alpha:1];
-    [root addSubview:infoTitle];
-    NSArray<NSString *> *infoNames=@[@"CPU",@"GPU",@"RAM",@"MÀN HÌNH",@"THÔNG TIN MÁY",@"JAILBREAK"];
-    NSArray<NSString *> *infoSymbols=@[@"cpu",@"gpu",@"memorychip",@"display",@"iphone",@"lock.shield"];
-    for(NSInteger i=0;i<6;i++) {
-        CGFloat gap=8, tileW=(cw-gap*2)/3.0, x=side+(i%3)*(tileW+gap), y=728+(i/3)*61;
-        UIButton *tile=[UIButton buttonWithType:UIButtonTypeSystem];
-        tile.frame=CGRectMake(x,y,tileW,53); tile.tag=99500+i;
-        tile.backgroundColor=[UIColor colorWithRed:.055 green:.035 blue:.13 alpha:1];
-        tile.layer.cornerRadius=13; tile.layer.borderWidth=1;
-        tile.layer.borderColor=[UIColor colorWithRed:.38 green:.22 blue:.72 alpha:.85].CGColor;
-        UIImageView *ico=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:infoSymbols[i]]];
-        ico.frame=CGRectMake(9,9,17,17); ico.tintColor=[UIColor colorWithRed:.22 green:.82 blue:1 alpha:1]; [tile addSubview:ico];
-        UILabel *lab=[[UILabel alloc] initWithFrame:CGRectMake(29,8,tileW-34,36)];
-        lab.text=infoNames[i]; lab.font=[UIFont systemFontOfSize:9 weight:UIFontWeightBlack];
-        lab.textColor=UIColor.whiteColor; lab.numberOfLines=2; lab.adjustsFontSizeToFitWidth=YES; lab.minimumScaleFactor=.7; [tile addSubview:lab];
-        [tile addTarget:self action:@selector(neonV23ShowDeviceInfo:) forControlEvents:UIControlEventTouchUpInside];
-        [root addSubview:tile];
-    }
+    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Mức đã chọn được lưu vào cấu hình. FPS LIVE là số đo của giao diện, không phải FPS game."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
+    // Hiển thị cảnh báo ngay khi mở tab Hz/FPS, kể cả khi mục tiêu đang là 60.
+    NSInteger warningRate = MAX(hz, fps);
+    UIColor *warningTint = TI_RateWarningColor(warningRate);
+    UIView *warning = [[UIView alloc] initWithFrame:CGRectMake(side, 436, cw, 122)];
+    warning.backgroundColor = [warningTint colorWithAlphaComponent:0.075];
+    warning.layer.cornerRadius = 14.0;
+    warning.layer.borderWidth = 1.0;
+    warning.layer.borderColor = [warningTint colorWithAlphaComponent:0.85].CGColor;
+    [root addSubview:warning];
+    UILabel *warningTitle = [[UILabel alloc] initWithFrame:CGRectMake(12, 9, cw - 24, 20)];
+    warningTitle.text = [NSString stringWithFormat:@"CẢNH BÁO ÁP DỤNG · %@", (warningRate > 60 ? @"MỨC CAO" : @"MỨC CƠ BẢN")];
+    warningTitle.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightBlack];
+    warningTitle.textColor = warningTint;
+    [warning addSubview:warningTitle];
+    UILabel *warningBody = [[UILabel alloc] initWithFrame:CGRectMake(12, 34, cw - 24, 78)];
+    warningBody.numberOfLines = 0;
+    warningBody.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightMedium];
+    warningBody.textColor = [UIColor colorWithWhite:0.84 alpha:1.0];
+    warningBody.adjustsFontSizeToFitWidth = YES;
+    warningBody.minimumScaleFactor = 0.82;
+    warningBody.text = @"Hz/FPS là mục tiêu cấu hình, không phải số đo panel hoặc FPS game. Tweak có các đường hook/IOKit mức thấp nhưng không xác nhận kernel/driver đã chấp nhận ghi. iOS và phần cứng có thể từ chối hoặc giới hạn; mức vượt thông số hỗ trợ có thể gây nóng, hao pin và mất ổn định.";
+    [warning addSubview:warningBody];
     return root;
-}
-
-- (void)neonV23ShowDeviceInfo:(UIButton *)sender {
-    NSInteger index=sender.tag-99500;
-    struct utsname sysinfo; uname(&sysinfo);
-    NSString *machine=[NSString stringWithUTF8String:sysinfo.machine] ?: @"Không rõ";
-    NSString *os=UIDevice.currentDevice.systemVersion ?: @"Không rõ";
-    NSString *arch=@"Không xác định";
-#if defined(__arm64e__)
-    arch=@"arm64e";
-#elif defined(__arm64__)
-    arch=@"arm64";
-#endif
-    NSString *jailbreak=@"Chưa xác định được loại jailbreak";
-    NSFileManager *fm=NSFileManager.defaultManager;
-    if([fm fileExistsAtPath:@"/var/jb/.installed_roothide"] || [fm fileExistsAtPath:@"/var/containers/Bundle/tweaksupport"]) jailbreak=@"Có dấu hiệu RootHide (heuristic)";
-    else if([fm fileExistsAtPath:@"/var/jb"] || [fm fileExistsAtPath:@"/var/lib/dpkg/status"]) jailbreak=@"Có dấu hiệu jailbreak rootless/rootful; chưa đủ dữ liệu để phân biệt chắc chắn";
-    NSString *message=@""; NSString *title=@"";
-    switch(index) {
-        case 0: title=@"CPU"; message=[NSString stringWithFormat:@"Kiến trúc biên dịch: %@\nSố lõi logic: %u\nMức tải hiện đọc được: %@\nXung nhịp tối đa: iOS không cung cấp giá trị tin cậy qua API công khai; không tự suy đoán.",arch,Titanium_LogicalCPUCoreCount(),Titanium_GetLiveCPULoadPercentage()>=0?[NSString stringWithFormat:@"%.0f%%",Titanium_GetLiveCPULoadPercentage()]:@"Không khả dụng"]; break;
-        case 1: title=@"GPU"; message=[NSString stringWithFormat:@"GPU renderer: %@\nMức tải, xung nhịp và nhiệt độ GPU: không có số đo phần cứng đáng tin cậy được đọc trên phiên này. Không tự tạo số giả.", (MTLCreateSystemDefaultDevice() ? MTLCreateSystemDefaultDevice().name : @"Chưa nhận diện được")]; break;
-        case 2: title=@"RAM & BỘ NHỚ"; message=[NSString stringWithFormat:@"RAM vật lý: %@\nBộ nhớ tiến trình hiện tại: %@\nLưu ý: bộ nhớ tiến trình không phải tổng RAM đang sử dụng toàn hệ thống.",Titanium_ByteCountString(NSProcessInfo.processInfo.physicalMemory),Titanium_ByteCountString(Titanium_CurrentProcessFootprintBytes())]; break;
-        case 3: title=@"MÀN HÌNH · HZ / FPS"; message=[NSString stringWithFormat:@"Hz tối đa mà UIKit báo: %ld\nHz đang cấu hình: %@\nFPS giao diện SmoothIOS: %ld\nFPS game và nhiệt độ CPU/GPU thực tế không được đo trong bản này.",(long)UIScreen.mainScreen.maximumFramesPerSecond,self.settingsDict[@"TargetRefreshRate"] ?: @"Chưa đặt",(long)_uiFPSMeasured]; break;
-        case 4: title=@"THÔNG TIN MÁY"; message=[NSString stringWithFormat:@"Mẫu thiết bị: %@\niOS: %@\nKiến trúc: %@\nBộ nhớ vật lý: %@",machine,os,arch,Titanium_ByteCountString(NSProcessInfo.processInfo.physicalMemory)]; break;
-        default: title=@"MÔI TRƯỜNG JAILBREAK"; message=[NSString stringWithFormat:@"%@\nĐường dẫn /var/jb: %@\nThông tin chỉ mang tính nhận diện sơ bộ; không xác nhận khai thác kernel thành công.",jailbreak,[fm fileExistsAtPath:@"/var/jb"]?@"Có":@"Không thấy"]; break;
-    }
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"Đóng" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)neonV12SelectMode:(UIButton *)sender {
@@ -8806,7 +8814,8 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     if (fps < 15) fps = 60; if (fps > 240) fps = 240;
     if (slider) slider.value=(mode==0?hz:(mode==2?fps:((hz==fps)?hz:MAX(hz,fps))));
     [self.customTableView.tableHeaderView removeFromSuperview];
-    self.customTableView.tableHeaderView=[self buildNeonRateHeaderWithWidth:self.view.bounds.size.width];
+    UIView *rateHeader = [self buildNeonRateHeaderWithWidth:self.view.bounds.size.width];
+    self.customTableView.tableHeaderView = [self ti_fixedHeightHeader:rateHeader];
 }
 - (void)neonV12SliderChanged:(UISlider *)sender {
     NSInteger rate=MAX(15,MIN(240,(NSInteger)lrintf(sender.value)));
@@ -8894,12 +8903,12 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     } else if (_currentBottomTab == 2) {
         if (section == 0) return 1; // Music Studio shortcut; switch groups are square tiles in the header.
         switch (_currentSwitchSubTab) {
-            case 0: return 7;
-            case 1: return 6;
-            case 2: return 6;
-            case 3: return 6;
-            case 4: return 9;
-            case 5: return 18; // Bổ sung: 18 công tắc daemon
+            case 0: return 7;  // CPU
+            case 1: return 5;  // GPU: bỏ dòng Metal bị lặp key
+            case 2: return 6;  // Màn hình
+            case 3: return 7;  // Pin: batterySaver60Hz và DynamicThermalEngine độc lập
+            case 4: return 9;  // Hệ thống
+            case 5: return 18; // Daemon
             default: return 6;
         }
     } else if (_currentBottomTab == 3) {
@@ -8932,10 +8941,10 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
         switch (_currentSwitchSubTab) {
             case 0: return @"CPU";
             case 1: return @"GPU";
-            case 2: return @"Màn hình";
+            case 2: return @"MÀN HÌNH";
             case 3: return @"PIN & NĂNG LƯỢNG";
-            case 4: return @"Hệ thống";
-            case 5: return @"Bổ sung · Daemon";
+            case 4: return @"HỆ THỐNG";
+            case 5: return @"DAEMON";
             default: return @"Công tắc";
         }
     } else if (_currentBottomTab == 3) {
@@ -8997,7 +9006,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     if (heading.length == 0) return 10.0;
     // Đệm thêm ở các tiêu đề đang sát hàng phía trên (tab Cài đặt, Tối ưu, Ứng dụng).
     if (_currentBottomTab == 4 && section == 3) return 58.0;
-    if (_currentBottomTab == 2 && section == 1) return 54.0;
+    if (_currentBottomTab == 2 && section == 1) return 44.0;
     if (_currentBottomTab == 3 && section == 0) return 58.0;
     if (_currentBottomTab == 3 && section == 1) return 54.0;
     if (_currentBottomTab == 3 && section == 2) return 46.0;
@@ -9010,8 +9019,8 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     if (_currentBottomTab == 3 && indexPath.section == 1) return 50.0;
     // Hàng công tắc vẫn cao hơn một chút để mỗi công tắc là một ô bo tròn riêng.
     // Hàng công tắc có thêm dòng mô tả nhỏ nên cao hơn để chữ không đè sang hàng dưới.
-    if (_currentBottomTab == 2 && indexPath.section == 0) return 96.0;
-    if (_currentBottomTab == 2 && indexPath.section == 1) return 96.0;
+    if (_currentBottomTab == 2 && indexPath.section == 0) return 76.0;
+    if (_currentBottomTab == 2 && indexPath.section == 1) return 80.0;
     if (_currentBottomTab == 4) return 72.0;
     return 64.0;
 }
@@ -9279,7 +9288,6 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                 else if (indexPath.row == 2) { title = @"Tắt V-Sync thích ứng";   prefKey = @"FixAppExitStutter";      hint = @"Giảm khựng khi thoát app"; }
                 else if (indexPath.row == 3) { title = @"Ổn định FPS trong game"; prefKey = @"GameFPSStabilizer";      hint = @"Giữ khung hình đều khi chơi game"; }
                 else if (indexPath.row == 4) { title = @"Chắn hiệu ứng mờ";       prefKey = @"QuantumRenderShield";     hint = @"Bảo vệ luồng vẽ khi có hiệu ứng kính mờ"; }
-                else                         { title = @"Đệm neural";             prefKey = @"MetalHexBuffering";       hint = @"Bộ đệm dự đoán khung tiếp theo"; }
             } else if (_currentSwitchSubTab == 2) {
                 if (indexPath.row == 0)      { title = @"Ép 144Hz";               prefKey = @"ForceOverclock144Hz";     hint = @"Cho phép tần số làm tươi 144Hz"; }
                 else if (indexPath.row == 1) { title = @"ProMotion Beta 7";       prefKey = @"ProMotionEngineBeta7";    hint = @"Điều phối tần số ProMotion"; }
@@ -9292,8 +9300,9 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
                 else if (indexPath.row == 1) { title = @"Chống nhiễu sạc";        prefKey = @"ChargerRippleRejection";  hint = @"Giảm nhiễu cảm ứng khi đang cắm sạc"; }
                 else if (indexPath.row == 2) { title = @"Giả pin đầy";            prefKey = @"DeviceSpoofer";           hint = @"Hiển thị trạng thái pin giả để tắt bớt tiết kiệm pin"; }
                 else if (indexPath.row == 3) { title = @"Khóa 30 FPS khi nóng";   prefKey = @"SmartThermalDispatch";    hint = @"Hạ xuống 30 FPS khi máy quá nóng"; }
-                else if (indexPath.row == 4) { title = @"Pin tiết kiệm 60Hz";     prefKey = @"DynamicThermalEngine";    hint = @"Giới hạn 60Hz khi pin yếu"; }
-                else                         { title = @"Tiết kiệm pin";          prefKey = @"PowerSaveMode";           hint = @"Khóa tần số ở 60Hz để tiết kiệm pin"; }
+                else if (indexPath.row == 4) { title = @"Pin tiết kiệm 60Hz";     prefKey = @"batterySaver60Hz";       hint = @"Giới hạn mục tiêu 60Hz khi tiết kiệm pin"; }
+                else if (indexPath.row == 5) { title = @"Tiết kiệm pin";           prefKey = @"PowerSaveMode";           hint = @"Bật hồ sơ tiết kiệm năng lượng"; }
+                else                         { title = @"Điều phối nhiệt động";   prefKey = @"DynamicThermalEngine";    hint = @"Điều phối theo trạng thái nhiệt nếu có nguồn hỗ trợ"; }
             } else if (_currentSwitchSubTab == 5) {
                 // Bổ sung: 16 daemon, tên và key đúng theo danh sách; tweak đọc các key này trong Titanium_IsDaemonDisabled.
                 static NSArray<NSDictionary *> *s_daemons = nil;
@@ -9671,9 +9680,18 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
         [text appendAttributedString:bundleText];
         lc.titleL.attributedText = text;
         lc.titleL.numberOfLines = 2;
-        lc.titleL.lineBreakMode = NSLineBreakByTruncatingMiddle;
+        lc.titleL.lineBreakMode = NSLineBreakByTruncatingTail;
         lc.titleL.adjustsFontSizeToFitWidth = NO;
         lc.detailL.hidden = YES;
+        NSArray *oldAppLayout = objc_getAssociatedObject(lc, "ti_curLayout");
+        if (oldAppLayout) [NSLayoutConstraint deactivateConstraints:oldAppLayout];
+        NSArray *appTextLayout = @[
+            [lc.titleL.leadingAnchor constraintEqualToAnchor:lc.contentView.leadingAnchor constant:18.0],
+            [lc.titleL.centerYAnchor constraintEqualToAnchor:lc.contentView.centerYAnchor],
+            [lc.titleL.trailingAnchor constraintLessThanOrEqualToAnchor:lc.contentView.trailingAnchor constant:-(16.0 + 104.0 + 16.0)]
+        ];
+        [NSLayoutConstraint activateConstraints:appTextLayout];
+        objc_setAssociatedObject(lc, "ti_curLayout", appTextLayout, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return cell;
 }
@@ -10166,14 +10184,14 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
 - (void)applySmooIOSAdaptivePerformancePolicy {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSString *profile = [self.settingsDict[@"SmooIOSProfileV36"] isKindOfClass:NSString.class] ? self.settingsDict[@"SmooIOSProfileV36"] : ([defaults stringForKey:@"SmooIOSProfileV36"] ?: @"auto");
-    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 144;
-    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 144;
+    NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
+    NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 60;
     BOOL autoTune = [defaults objectForKey:@"SmooIOSAutoTuneEnabledV36"] ? [defaults boolForKey:@"SmooIOSAutoTuneEnabledV36"] : NO;
     if (!autoTune || ![profile isEqualToString:@"auto"]) return;
 
     // Use Apple's published thermal state and Low Power Mode, not guessed Celsius values.
     NSProcessInfo *info = NSProcessInfo.processInfo;
-    NSInteger resolved = 240;
+    NSInteger resolved = 60; // Safe default when the OS thermal state is unavailable or unknown.
     if (info.isLowPowerModeEnabled || info.thermalState >= NSProcessInfoThermalStateCritical) resolved = 15;
     else if (info.thermalState >= NSProcessInfoThermalStateSerious) resolved = 15;
     else if (info.thermalState == NSProcessInfoThermalStateFair) resolved = 90;
@@ -10748,7 +10766,14 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
     if (![self.settingsDict[@"SelectedLanguage"] isKindOfClass:NSString.class]) self.settingsDict[@"SelectedLanguage"] = @"auto";
     NSArray *keys = @[
         @"Enabled", @"EnableSystemMonitoring",
-        @"TargetRefreshRate", @"TargetFPSRate", @"EnableHzControl", @"EnableFPSControl",
+        @"EnableHzControl", @"EnableFPSControl", @"AvoidTweakConflicts",
+        // Canonical keys read by Tweak.xm; creating them here keeps UI state and runtime state identical.
+        @"RealtimeThreadSched", @"IOSchedulerEngine", @"QuantumCoreSync", @"CPUGPUFreqOptimizer",
+        @"AntiThermalThrottling", @"SystemProcessOpt", @"HeavyLoadCooling",
+        @"MetalHexBuffering", @"FixAppLaunchBlackScreen", @"FixAppExitStutter", @"GameFPSStabilizer", @"QuantumRenderShield",
+        @"ForceOverclock144Hz", @"ProMotionEngineBeta7", @"TouchResponseBoost", @"ColorOs17SmoothEngine", @"ZeroLagNeuralBooster", @"UltraResponsiveness",
+        @"AntiGhostTouch", @"ChargerRippleRejection", @"DeviceSpoofer", @"SmartThermalDispatch", @"batterySaver60Hz", @"PowerSaveMode", @"DynamicThermalEngine",
+        @"TurboAppLaunch", @"ReduceMultiTaskLag", @"HyperMemoryGuardian", @"AutoCloseBackgroundApp", @"AggressiveRamClean", @"KeyboardZeroLagV24", @"BackgroundPacingDaemon",
         @"pCoreRealtimePriority", @"schedulerGovernor", @"quantumCoreSync",
         @"lockHighIdleFloor", @"AntiThermalThrottling", @"AntiThermalThrottle",
         @"iopolVipPriority", @"coolDownHeavyLoad", @"backgroundPacingDaemon",
@@ -10757,7 +10782,7 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         @"ForceOverclock144Hz", @"ProMotionEngineBeta7", @"TouchResponseBoost",
         @"ColorOs17SmoothEngine", @"zeroLagNeural", @"ultraResponsiveness",
         @"AntiGhostTouch", @"ChargerRippleRejection", @"fakeFullBatteryState",
-        @"lock30FpsOnOverheat", @"batterySaver60Hz", @"powerSaveMode",
+        @"lock30FpsOnOverheat", @"powerSaveMode",
         @"TurboAppLaunch", @"FixAppLaunchBlackScreen", @"ReduceMultiTaskLag",
         @"FixAppExitStutter", @"hyperMemoryGuardian", @"autoKillBackground",
         @"aggressiveRamClean", @"periodicRamClean", @"machVMPurgeRam",
@@ -10783,10 +10808,12 @@ static NSArray<NSNumber *> *TI_ExploitPhaseCodeCount(void) {
         [sensorDefaults setBool:YES forKey:sensorMigrationKey];
         [sensorDefaults synchronize];
     }
-    // Preserve user-selected values: defaults are applied only when keys are absent.
-    // Closing the app from the switcher must not reset these persisted settings.
-    if (!self.settingsDict[@"TargetRefreshRate"]) self.settingsDict[@"TargetRefreshRate"] = @144;
-    if (!self.settingsDict[@"TargetFPSRate"])    self.settingsDict[@"TargetFPSRate"]    = @144;
+    // Hz/FPS are integers, not Boolean preferences. Seed 60 once; preserve every valid user-selected rate.
+    // Old builds accidentally created these keys as @NO (0), so migrate only invalid/missing values.
+    NSInteger storedHz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 0;
+    NSInteger storedFPS = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 0;
+    if (storedHz < 15 || storedHz > 240) self.settingsDict[@"TargetRefreshRate"] = @60;
+    if (storedFPS < 15 || storedFPS > 240) self.settingsDict[@"TargetFPSRate"] = @60;
     if (!self.settingsDict[@"IsRateLocked"])     self.settingsDict[@"IsRateLocked"]     = @NO;
     if (!self.settingsDict[@"FeatureActivationComplete"]) self.settingsDict[@"FeatureActivationComplete"] = @NO;
     if (!self.settingsDict[TI_AUTO_THEME_KEY]) {
