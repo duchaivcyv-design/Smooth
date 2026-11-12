@@ -492,6 +492,11 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
                 // Ghi đè giá trị Hz gốc thành target
                 if (kwrite_fn(addr, &target_hz, 4) == 0) {
                     ODLog("[PANEL-PATCH] ✅ 0x%llx: %uHz -> 90Hz (res=%u)", addr, val, res_val);
+                    
+                    // [FIX WERROR] ODLog no-op khi debug tắt → cast 2 biến này
+                    (void)val;
+                    (void)res_val;
+
                     patched_count++;
                     last_hit_page = addr;
 
@@ -508,6 +513,7 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
                         }
                     }
                 }
+            }
 
                 // Giới hạn tối đa 12 hit để tránh ghi quá nhiều vào cùng một vùng
                 if (patched_count >= 12) {
