@@ -415,21 +415,17 @@ static volatile uint64_t g_lastInteractiveTick = 0;
 // ====================================================================================================
 
 // --- Rate control ---
-static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force);
+static void Titanium_PushRateToDriverV4_Force(NSInteger hz, BOOL force);
 static void Titanium_PushRateToDriverV4(NSInteger hz);
 static NSInteger Titanium_GetUserTargetHz(void);
 static void Titanium_ReapplyFrameRateToAllScenes(void);
 static void Titanium_EnableZeroLatencyPipeline(void);
-static void Titanium_V57_ForceReapplyIfNeeded(void);
 static NSInteger Push_ResolveTargetHz(void);
 static void Titanium_V60_Log(NSString *msg);
 
 // --- [BELIEF ENGINE] — ép readback Hz/FPS toàn hệ thống ---
 static volatile BOOL g_beliefTimestampScale;
 static NSInteger Titanium_BeliefTargetHz(void);
-static NSString *Titanium_BuildBeliefWebScript(void);
-static void Titanium_InstallBeliefEngine(void);
-static void Titanium_BeliefSelfTest(void);
 
 // --- [FAKE MODE CLASS] — dùng cho CADisplay availableModes/currentMode ---
 @class TitaniumHardFakeMode;
@@ -532,7 +528,6 @@ static NSInteger Titanium_ReadKernelPanelHz(void);
 static NSInteger Titanium_ActualPanelHz(void);
 static NSInteger Titanium_ComputeFeasibleHz(NSInteger targetHz, uint32_t w, uint32_t h);
 static void Titanium_ReapplyFrameRateToTrackedDisplayLinks(void);
-static void Titanium_ClearKSweepCache(void);
 static void Titanium_RestoreFirstDrawDefaultsOnce(void);
 static BOOL Titanium_ShouldDelayLoadAfterSreboot(void);
 static void Titanium_PrepareForReboot(void);
@@ -554,9 +549,16 @@ static void Titanium_BoostCurrentThreadBriefly(void);
 static void Titanium_EnforceThreadVIPPolicy(void);
 static void Titanium_UpdateLowBatteryFlagV12(void);
 static inline void Titanium_ReloadSharedSyncStateV285(void);
-static void Titanium_ReleaseOnFirstFrame(void);
 
 // ====================================================================================================
+// --- Khai báo gom thêm từ các vị trí rải rác trong file (chỉ chuyển lên, không đổi chữ ký) ---
+static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName);
+static uint64_t Titanium_GetCurrentRSS(void);
+static inline void Titanium_UnleashAllHiddenSystemThreads(void);
+static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
+static void Titanium_InstallPanicSuppress(void);
+static inline BOOL Titanium_IsTargetProcess(void);
+
 // KHAI BÁO @INTERFACE (BẢN HOÀN CHỈNH ĐỦ CLASS PRIVATE & KHÔNG TRÙNG LẶP)
 // ====================================================================================================
 
@@ -1690,7 +1692,6 @@ static volatile BOOL g_thermalSeriousV285 = NO;
 static volatile float g_batteryLevelV12 = 1.0f;
 static volatile BOOL g_lowBatterySmoothBoostV12 = NO;
 static NSInteger g_lastHz = 240;
-static void Titanium_ClearKSweepCache(void);
 
 #define TITANIUM_BOOT_FLAG_VERIFIED @"/var/mobile/Library/Preferences/com.taojb.boostiphone6s.verified"
 
@@ -1752,14 +1753,7 @@ static SafeFrameRateRange Titanium_NormalizeFrameRateRange(SafeFrameRateRange ra
 static ApexV285ProPayload *g_sharedPayloadPtr = (ApexV285ProPayload *)MAP_FAILED;
 static int g_shmFd = -1;
 
-static void Titanium_TuneWindowServerDisplayDirectly(void);
-static void Titanium_Tier4_ExecuteHardwarePanelOverdrive(void);
-static inline void Titanium_ReloadSharedSyncStateV285(void);
 static inline void Titanium_ReapplyFrameRateToAllScenes(void);
-static void Titanium_RestoreFirstDrawDefaultsOnce(void);
-static void Titanium_RestoreOnFirstFrame(void);
-static void runCoreTweak(BOOL isSpringBoard, NSString *bundleID, const char *progName);
-static inline BOOL Titanium_DisplayRateOverrideReady(void);
 #define TITANIUM_BOOT_SETTLE_DELAY_APP 0.0
 #define TITANIUM_BOOT_SETTLE_DELAY_SB 2.5
 
@@ -1794,10 +1788,6 @@ static void ReloadPreferencesCallbackV285(CFNotificationCenterRef center, void *
     } @catch (__unused NSException *e) {}
 }
 
-static void Titanium_StartIPCHearthbeatV12(void);
-static void Titanium_RegisterAppResumeRefreshV12(void);
-static void Titanium_UpdateLowBatteryFlagV12(void);
-static inline void Titanium_A20PrewarmAssetsAndGPU(void);
 
 static inline bool Titanium_KernelForceWriteProtectBypass(void *targetAddress, const void *sourceBytes, size_t dataSize) {
     if (!targetAddress || !sourceBytes || dataSize == 0) return false;
@@ -2063,10 +2053,7 @@ static inline uint64_t Titanium_NanosToMachTicks(uint64_t nanos) {
 // ====================================================================================================
 
 // Forward decls — RAM engine định nghĩa ở block khác
-static void Titanium_PurgePurgableMemory(void);
 static BOOL Titanium_ShouldPurgeNow(void);
-static uint64_t Titanium_GetCurrentRSS(void);
-static uint64_t Titanium_GetDeviceTotalRAM(void);
 
 // [ZERO LATENCY PIPELINE — ép CA commit thẳng, giảm latency render]
 static inline void Titanium_EnableZeroLatencyPipeline(void) {
@@ -3138,7 +3125,6 @@ static inline void Titanium_SmartThrottle60Hz(void) {
     }
 }
 
-static inline void Titanium_UnleashAllHiddenSystemThreads(void);
 
 // ==============================================================================
 // KẾT NỐI VÙNG NHỚ CHIA SẺ ZERO-COPY IPC & QUẢN LÝ DẢI 15-240 HZ (MẶC ĐỊNH 240HZ)
@@ -3596,7 +3582,6 @@ static inline BOOL Titanium_IsCurrentAppAGame(void) {
 
 #include <sys/sysctl.h>
 
-static NSInteger Titanium_GetMasterRate(void);
 
 static NSInteger Titanium_GetSafeMaxHzForChip(void) {
     return 240;
@@ -5530,6 +5515,10 @@ static int hooked_IOPSGetPercentRemaining(void) {
     return 100;
 }
 
+
+// ====================================================================================================
+// GROUP: Group_Global_Thread_Governor_Unthrottled
+// ====================================================================================================
 %group Group_Global_Thread_Governor_Unthrottled
 
 %hook NSProcessInfo
@@ -5726,6 +5715,10 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
+
+// ====================================================================================================
+// GROUP: Group_CoreAnimation_RenderServer_Governor
+// ====================================================================================================
 %group Group_CoreAnimation_RenderServer_Governor
 
 // [BỐC PUNCH HOÀN TOÀN] FBScene updateSettings fire mỗi frame layout → folder open bị lag
@@ -5796,9 +5789,17 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
+
+// ====================================================================================================
+// GROUP: Group_Thermal_CryoPacing_ZeroDrop
+// ====================================================================================================
 %group Group_Thermal_CryoPacing_ZeroDrop
 %end
 
+
+// ====================================================================================================
+// GROUP: Group_Deep_RAM_Compaction_Engine
+// ====================================================================================================
 %group Group_Deep_RAM_Compaction_Engine
 
 %hook UIApplication
@@ -5814,6 +5815,10 @@ static void Titanium_InstallPowerBypassC(void) {
 
 %end
 
+
+// ====================================================================================================
+// GROUP: Group_WebKit_RAM_Optimizer
+// ====================================================================================================
 %group Group_WebKit_RAM_Optimizer
 %end
 
@@ -5830,14 +5835,7 @@ static volatile uint32_t g_driftPunchCountTotal  = 0;
 // Forward decls
 // [SỬA BUILD] Định nghĩa tạm (stub) cho các hàm đã khai báo static nhưng thiếu thân hàm.
 // Thân hàm gốc không có trong file; cần khôi phục logic thật nếu muốn tính năng này hoạt động.
-static NSInteger Titanium_ReadKernelPanelHz(void);
 
-static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
-static void Titanium_ForcePanelModeDirect(NSInteger hz);
-static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force);
-static void Titanium_PushRateToDriverV4(NSInteger hz);
-static void Titanium_EnforceCAFrameRange(void);
-static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
 
 // ====================================================================================================
 // [THERMAL & PUNCH GATE] — MẠNH + MÁT + PIN TỤT
@@ -6327,28 +6325,12 @@ static BOOL Titanium_V57_TouchReady(void);
 static BOOL Titanium_V56_KeyboardBusy(void);
 
 // --- READ / VERIFY KERNEL REFRESH RATE ---
-static NSInteger Titanium_ReadKernelPanelHz(void);
-static NSInteger Titanium_ActualPanelHz(void);
-static NSInteger Titanium_ComputeFeasibleHz(NSInteger targetHz, uint32_t w, uint32_t h);
 
 // --- TẦNG HIỂN THỊ, SCENE & METAL ---
-static NSInteger Titanium_GetMasterRate(void);
-static void Titanium_ReapplyFrameRateToVisibleMetalLayers(void);
 
 // --- TẦNG DRIVER OVERRIDE & HARDWARE HACK ---
-static void Titanium_HardwareDriverOverride(NSInteger targetHz);
-static void Titanium_ForcePanelModeDirect(NSInteger hz);
-static void Titanium_Tier4WriteCadence(NSInteger hz);
-static void Titanium_Tier5WriteIORegistryTiming(NSInteger hz);
-static void Titanium_ExecuteUltimateHardwareHack(NSInteger targetHz);
-static void Titanium_Tier6RealtimeFrameConstraint(NSInteger hz);
-static void Titanium_Tier6JetsamImmunityReal(void);
-static void Titanium_OverdrivePipelineGo(NSInteger targetHz);
-static void Titanium_ExecuteRealPanelOverdrive(void);
-static void Titanium_BruteForceKernelSweep(NSInteger targetHz);
 
 // --- GIAO TIẾP IOKIT, DCP & FRAMEBUFFER ---
-static void Titanium_LoadIOMFBDirect(void);
 static void Tio_DCPResolveConnections(void);
 static void Tio_DCPResolveConnections_v2(void);
 static kern_return_t Tio_DisplayConnSetRefresh(NSInteger hz);
@@ -6357,18 +6339,8 @@ static void Tio_DisplayConnSetRefresh_compat(NSInteger hz);
 static kern_return_t Tio_IomfbRawSetMode(NSInteger hz);
 
 // --- NHÓM AF (AUTO-FRAME / BRUTE WRITE ENGINE) ---
-static NSInteger Titanium_AF_ClampTarget(NSInteger targetHz, uint32_t w, uint32_t h);
-static BOOL Titanium_AF_BruteWrite(NSInteger hz, uint32_t w, uint32_t h);
-static void Titanium_AF_ApplyTarget(NSInteger targetHz);
-static void Titanium_AF_StartWatchdog(NSInteger targetHz);
-static void Titanium_AF_StopWatchdog(void);
 
 // --- IPC, SHM & PROBE ---
-static void Titanium_V57_WriteSharedBestHz(NSInteger hz);
-static void Titanium_V57_ReloadIPCIfStale(void);
-static void Titanium_StartOverdriveProbe(void);
-static void Titanium_InstallPanicSuppress(void);
-static void Titanium_BypassDCPMethod(void);
 
 #import <notify.h>
 #include <signal.h>
@@ -7548,7 +7520,6 @@ static NSInteger Titanium_ComputeFeasibleHz(NSInteger targetHz, uint32_t w, uint
 // ====================================================================================================
 
 // Forward decl — dùng để gate hijack chỉ trên display connection, không đụng GPU/power khác
-static inline BOOL Titanium_IsDisplayConnection(mach_port_t conn);
 
 // ----------------------------------------------------------------------------------------------------
 // IORegistry read hijack — mọi key Hz/ProMotion/thermal trả target
@@ -8890,6 +8861,10 @@ static NSInteger Titanium_BeliefTargetHz(void) {
     return t;
 }
 
+
+// ====================================================================================================
+// GROUP: Group_Hardware_ProMotion_Overclock
+// ====================================================================================================
 %group Group_Hardware_ProMotion_Overclock
 
 // ----------------------------------------------------------------------------------------------------
@@ -9996,7 +9971,7 @@ static volatile NSInteger g_pushLastAppliedHz = 0;
 static os_unfair_lock g_pushLock = OS_UNFAIR_LOCK_INIT;
 static uint64_t g_pushLastTick = 0;
 
-static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force) {
+static void Titanium_PushRateToDriverV4_Force(NSInteger hz, BOOL force) {
     if (g_isRebooting) return;
     if (!Titanium_V55_PanelWritable()) return;
     if (hz < 15)  hz = 15;
@@ -10027,7 +10002,7 @@ static void Titanium_PushRateToDriverV4(NSInteger hz, BOOL force) {
 }
 
 static void Titanium_PushRateToDriverV4(NSInteger hz) { 
-    Titanium_PushRateToDriverV4(hz, NO); 
+    Titanium_PushRateToDriverV4_Force(hz, NO); 
 }
 // ====================================================================================================
 // [ULTIMATE HACK SWEEP V61] — BẺ SẠCH PANEL & GHI REGISTRY AN TOÀN
@@ -10523,6 +10498,10 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
     return YES;
 }
 
+
+// ====================================================================================================
+// GROUP: Group_Safari_And_Animation_Safety
+// ====================================================================================================
 %group Group_Safari_And_Animation_Safety
 %hook _UIMorphingPlatterView
 - (void)layoutSubviews {
@@ -10541,7 +10520,6 @@ static inline BOOL Titanium_ShouldApplyHardwareSpoof(void) {
 // ====================================================================================================
 // PHẦN B: constants + TARGETED SANDBOX OVERRIDE (bản sạch — bốc hết duplicate)
 // ====================================================================================================
-static inline BOOL Titanium_IsTargetProcess(void);
 
 #ifndef MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES
 #define MEMORYSTATUS_CMD_SET_PRIORITY_PROPERTIES 2
@@ -11747,6 +11725,10 @@ static void Titanium_InstallDaemonKillerHooks(void) {
     });
 }
 
+
+// ====================================================================================================
+// GROUP: Group_DaemonKiller
+// ====================================================================================================
 %group Group_DaemonKiller
 %end
 
