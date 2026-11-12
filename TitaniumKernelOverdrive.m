@@ -149,7 +149,7 @@ static void Titanium_OverclockThread(thread_port_t thread, NSInteger targetImpor
 static inline void Titanium_SetIOKitDiskPolicy(void);
 static inline void Titanium_ApplyQoSTier(void);
 static NSInteger Titanium_ReadThreadImportance(thread_port_t thread);
-static BOOL Titanium_KernelWriteThreadImportance(uint64_t threadPortAddr, int32_t targetImportance);
+bool Titanium_KernelWriteThreadImportance(uint64_t threadPortAddr, int32_t targetImportance);
 
 // ====================================================================================================
 // ICACHE + JIT
@@ -320,7 +320,7 @@ static void Titanium_OverclockThread(thread_port_t thread, NSInteger targetImpor
 // Requires: kwritebuf_phys from Dopamine libjailbreak (verified 0x104dbb00c)
 // Thread struct offset: FILL — varies per iOS version
 // ====================================================================================================
-static BOOL Titanium_KernelWriteThreadImportance(uint64_t threadPortAddr, int32_t targetImportance) {
+bool Titanium_KernelWriteThreadImportance(uint64_t threadPortAddr, int32_t targetImportance) {
     if (threadPortAddr == 0) return NO;
 
     // Resolve kwritebuf_phys from libjailbreak
