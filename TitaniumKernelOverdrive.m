@@ -234,6 +234,9 @@ bool Titanium_ForceKernelMemoryWrite(void *targetAddr, const void *patchBytes, s
     ODLog("write @%p size=%zu success=%d strategy=%d",
           targetAddr, size, success, strategyUsed);
 
+    // [FIX WERROR] ODLog no-op khi debug tắt → cast để compiler thấy đã dùng
+    (void)strategyUsed;
+
     free(backup);
     return success;
 }
@@ -444,13 +447,12 @@ void Titanium_KernelWriteAllThreadImportance(void) {
     kern_return_t kr = task_threads(mach_task_self(), &threadList, &threadCount);
     if (kr != KERN_SUCCESS || !threadList) return;
 
-    int success = 0, fail = 0;
+    int success = 0;
+    int fail = 0;
     for (mach_msg_type_number_t i = 0; i < threadCount; i++) {
-        // thread_port_t is mach_port_t — need kernel address of thread struct
-        // FILL: convert mach_port_t to kernel thread struct address
-        // Usually via kernel task port: read task->threads list
-        // Or via zmq port to kobject address
-        // PLACEHOLDER — supply your lookup here
+        // FILL: convert mach_port_t → kernel thread struct address
+        // Path: task->threads list hoặc zmq port table lookup
+        // PLACEHOLDER — supply your own lookup here
         uint64_t threadStructAddr = 0;  // FILL
 
         if (threadStructAddr != 0 &&
@@ -465,6 +467,10 @@ void Titanium_KernelWriteAllThreadImportance(void) {
                   threadCount * sizeof(thread_act_t));
 
     ODLog("kernel importance write: success=%d fail=%d", success, fail);
+
+    // [FIX WERROR] ODLog no-op khi debug tắt → cast chặn unused-but-set warning
+    (void)success;
+    (void)fail;
 }
 
 // ====================================================================================================
