@@ -94,6 +94,33 @@ bool Titanium_KernelWriteThreadImportance(uint64_t threadPortAddr, int32_t targe
 void Titanium_KernelWriteAllThreadImportance(void);
 
 // ====================================================================================================
+// [TARGET-90] PANEL OVERWRITE — quét kernel memory, ghi đè 60Hz thành 90Hz
+// ====================================================================================================
+
+/**
+ * @brief Quét kernel memory tìm struct timing panel, ghi đè giá trị tần số thành 90Hz.
+ *
+ * CƠ CHẾ:
+ *   - Resolve kreadbuf_phys + kwritebuf_phys từ libjailbreak
+ *   - Convert virtual base → physical base (mask 0x0000000FFFFFFFFF)
+ *   - Quét 112MB từ phys_base+16MB đến phys_base+128MB, step 4 byte
+ *   - Tìm pattern: value 60/120/240 kẹp giữa 1080/1242/1920/2208 (panel resolution)
+ *   - Ghi đè thành 90Hz tại mỗi candidate (tối đa 16 addresses để tránh panic)
+ *
+ * RỦI RO: Hit nhầm struct (nhiệt độ, power, clock) → kernel panic ngay lập tức.
+ * Backup device state trước khi gọi hàm này.
+ *
+ * LƯU Ý: panel iPhone 8 Plus là LCD 60Hz vật lý. Hàm này làm framework/OS tin
+ * panel là 90Hz (CADisplayLink chạy 90 tick/s, game render 90fps) nhưng silicon
+ * panel vẫn xuất 60 frame/s vật lý → drop frame. Không thay đổi được silicon.
+ *
+ * @param kernel_base Địa chỉ virtual kernel base. Lấy từ:
+ *   - Dopamine log: "kernel_base: 0xfffffff025a54000"
+ *   - Hoặc runtime: jbclient_get_kernel_base_fn() từ libjailbreak
+ */
+void Titanium_ForceKernelPanelHz(uint64_t kernel_base);
+
+// ====================================================================================================
 // JETSAM — memory limit bypass
 // ====================================================================================================
 
@@ -123,13 +150,17 @@ void Titanium_BreakJetsamMemoryLimits(void);
 void Titanium_WireAllMemory(void *addr, size_t size);
 
 /**
- * @brief Convenience — gọi Titanium_OverclockChipAndUnthrottle + Titanium_BreakJetsamMemoryLimits.
+ * @brief Convenience — apply toàn bộ overdrive stack:
+ *   1. Titanium_OverclockChipAndUnthrottle  (thread priority)
+ *   2. Titanium_BreakJetsamMemoryLimits     (memory limits)
+ *   3. Titanium_ForceKernelPanelHz          (panel 90Hz patch, hardcoded base)
  *
  * KHÔNG tự gọi Titanium_KernelWriteAllThreadImportance (cần FILL offset trước).
- * Nếu muốn full target-90 với kernel write, gọi tay 3 hàm theo thứ tự:
+ * Nếu muốn full target-90 với kernel write trên thread, gọi tay 4 hàm theo thứ tự:
  *   1. Titanium_OverclockChipAndUnthrottle()
  *   2. Titanium_KernelWriteAllThreadImportance()   // FILL offset
  *   3. Titanium_BreakJetsamMemoryLimits()
+ *   4. Titanium_ForceKernelPanelHz(kernel_base)
  */
 void Titanium_ApplyAllOverdrive(void);
 
