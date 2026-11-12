@@ -558,6 +558,7 @@ static inline void Titanium_UnleashAllHiddenSystemThreads(void);
 static void Titanium_DriftCheck(CFTimeInterval timestamp, CFTimeInterval targetTs, NSInteger targetHz);
 static void Titanium_InstallPanicSuppress(void);
 static inline BOOL Titanium_IsTargetProcess(void);
+static void Titanium_InstallFakeModeSafetyHooks(void);
 
 // KHAI BÁO @INTERFACE (BẢN HOÀN CHỈNH ĐỦ CLASS PRIVATE & KHÔNG TRÙNG LẶP)
 // ====================================================================================================
