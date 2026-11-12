@@ -11498,11 +11498,45 @@ static void Titanium_RestoreOnFirstFrame(void) {
     [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
-// ====================================================================================================
-// [FIX-BUILD] Forward decl — Titanium_ProbeKernelAPI dùng trong runCoreTweak (line ~11445)
-// Body phải được định nghĩa TRƯỚC runCoreTweak (khuyến nghị: ngay sau Titanium_InitUltimateKernelAPI)
-// ====================================================================================================
-static void Titanium_ProbeKernelAPI(void);
+// ==============================================================================
+// [FIX-BUILD] Titanium_ProbeKernelAPI — body, không phải decl
+// Line 11524 gọi hàm này → body phải định nghĩa ở đây (line 11505 trước khi xoá)
+// ==============================================================================
+static void Titanium_ProbeKernelAPI(void) {
+    @autoreleasepool {
+        @try {
+            Titanium_InitUltimateKernelAPI();
+
+            BOOL hasDopamine   = (jbclient_kwrite_fn != NULL && jbclient_kread_fn != NULL);
+            BOOL hasKernrw     = (libkernrw_write_fn != NULL);
+            BOOL hasKernelPort = MACH_PORT_VALID(Titanium_GetKernelTaskPort());
+
+            void *kw = (void *)jbclient_kwrite_fn;
+            void *kr = (void *)jbclient_kread_fn;
+            void *kb = (void *)jbclient_get_kernel_base_fn;
+            void *pw = (void *)libkernrw_write_fn;
+
+            Titanium_V60_Log([NSString stringWithFormat:
+                @"[PROBE] kwrite=%p kread=%p base=%p kernrw=%p tfp0=%d dopamine=%d kernrw_ok=%d",
+                kw, kr, kb, pw,
+                hasKernelPort ? 1 : 0,
+                hasDopamine   ? 1 : 0,
+                hasKernrw     ? 1 : 0]);
+
+            if (hasDopamine) {
+                Titanium_V60_Log(@"[PROBE] Dopamine API OK — V7 path active");
+            } else if (hasKernrw) {
+                Titanium_V60_Log(@"[PROBE] libkernrw OK — V7 fallback active");
+            } else if (hasKernelPort) {
+                Titanium_V60_Log(@"[PROBE] tfp0 only — V7 degraded, may panic on write");
+            } else {
+                Titanium_V60_Log(@"[PROBE] NO KERNEL API — V7 disabled");
+            }
+        } @catch (NSException *e) {
+            Titanium_V60_Log([NSString stringWithFormat:@"[PROBE] throw: %@", e.reason]);
+        }
+    }
+}
 
 // ====================================================================================================
 // CORE TWEAK RUNNER — ÉP TỐI ĐA KHÔNG GIỚI HẠN, BƠM ĐỒNG BỘ MỌI ENGINE
