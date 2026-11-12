@@ -447,39 +447,33 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
 
     // Quét dải rộng: từ base+16MB đến base+272MB (256MB window)
     uint64_t scan_start = phys_base + 0x1000000;
-    uint64_t scan_end   = phys_base + 0x11000000; 
-    
+    uint64_t scan_end   = phys_base + 0x11000000;
+
     int patched_count = 0;
     uint64_t last_hit_page = 0;
     uint32_t target_hz = 90;
 
     for (uint64_t addr = scan_start; addr < scan_end; addr += 4) {
-        // Skip nếu cùng page với hit gần nhất (tránh overwrite struct nhiều lần)
+        // Skip nếu cùng page với hit gần nhất
         if (addr - last_hit_page < 0x1000) continue;
 
         uint32_t val = 0;
         if (kread_fn(addr, &val, 4) != 0) continue;
 
-        // [FULL RANGE] Tìm mọi giá trị từ 15 đến 240
+        // [FULL RANGE] Tìm mọi giá trị Hz từ 15 đến 240
         if (val >= 15 && val <= 240) {
-            // Bỏ qua các giá trị phổ biến không liên quan (nhiệt độ, phần trăm)
-            // 15-30 có thể là nhiệt độ, 100 là % pin, 240 là màu
-            // Nhưng vì có kèm check độ phân giải bên dưới, cứ quét hết
-            
-            // Đọc vùng 64 byte xung quanh tìm độ phân giải panel
             bool has_resolution = false;
             uint32_t res_val = 0;
-            
+
             for (int i = -16; i <= 16; i++) {
                 if (i == 0) continue;
                 uint32_t neighbor = 0;
                 if (kread_fn(addr + (i * 4), &neighbor, 4) == 0) {
-                    // Resolution markers cho iPhone (8 Plus = 1920x1080, XS = 2436x1125...)
-                    if (neighbor == 1920 || neighbor == 1080 || 
-                        neighbor == 1242 || neighbor == 2208 || 
-                        neighbor == 750 || neighbor == 1334 ||
+                    if (neighbor == 1920 || neighbor == 1080 ||
+                        neighbor == 1242 || neighbor == 2208 ||
+                        neighbor == 750  || neighbor == 1334 ||
                         neighbor == 2436 || neighbor == 1125 ||
-                        neighbor == 2688 || neighbor == 1242) {
+                        neighbor == 2688) {
                         has_resolution = true;
                         res_val = neighbor;
                         break;
@@ -487,13 +481,10 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
                 }
             }
 
-            // Nếu có resolution marker → xác suất cao đây là struct display timing
+            // Có resolution marker → xác suất cao đây là struct display timing
             if (has_resolution) {
-                // Ghi đè giá trị Hz gốc thành target
                 if (kwrite_fn(addr, &target_hz, 4) == 0) {
                     ODLog("[PANEL-PATCH] ✅ 0x%llx: %uHz -> 90Hz (res=%u)", addr, val, res_val);
-                    
-                    // [FIX WERROR] ODLog no-op khi debug tắt → cast 2 biến này
                     (void)val;
                     (void)res_val;
 
@@ -505,25 +496,22 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
                         uint32_t nearby = 0;
                         if (kread_fn(addr + off, &nearby, 4) == 0) {
                             if (nearby >= 15 && nearby <= 240 && nearby != target_hz) {
-                                // Kiểm tra xem có phải giá trị nhiệt độ không
-                                // (trong khoảng 15-40 nhưng KHÔNG có res marker xung quanh)
                                 kwrite_fn(addr + off, &target_hz, 4);
                                 patched_count++;
                             }
                         }
                     }
                 }
-            }
 
-                // Giới hạn tối đa 12 hit để tránh ghi quá nhiều vào cùng một vùng
+                // Giới hạn tối đa 12 hit — đặt trong has_resolution, sau patch success
                 if (patched_count >= 12) {
-                    ODLog("[PANEL-PATCH] Reached max 12 patches. Stopping to prevent panic.");
+                    ODLog("[PANEL-PATCH] Reached max 12 patches. Stopping.");
                     break;
                 }
             }
         }
     }
-    
+
     ODLog("[PANEL-PATCH] Done. %d addresses overwritten to 90Hz.", patched_count);
 }
 
