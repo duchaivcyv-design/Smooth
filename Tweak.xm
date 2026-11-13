@@ -10936,6 +10936,7 @@ static int hooked_faccessat(int fd, const char *path, int amode, int flag) {
 }
 
 // --- 2. open & openat ---
+static int (*g_orig_open)(const char *, int, ...) = NULL;
 static int hooked_open(const char *path, int flags, ...) {
     if (!g_orig_open) return -1;
     va_list ap; va_start(ap, flags);
@@ -10953,23 +10954,23 @@ static int hooked_open(const char *path, int flags, ...) {
     return g_orig_open(path, flags, (mode_t)mode);
 }
 
-static int (*orig_openat)(int, const char *, int, ...) = NULL;
+static int (*g_orig_openat)(int, const char *, int, ...) = NULL;
 static int hooked_openat(int fd, const char *path, int flags, ...) {
-    if (!orig_openat) return -1;
+    if (!g_orig_openat) return -1;
 
     va_list ap; va_start(ap, flags);
     int mode = va_arg(ap, int); // [FIX] Đọc là int vì varargs tự promote mode_t (unsigned short) lên int
     va_end(ap);
 
     if (Titanium_IsTargetProcess() && path) {
-        int nfd = orig_openat(fd, path, flags, (mode_t)mode);
+        int nfd = g_orig_openat(fd, path, flags, (mode_t)mode);
         if (nfd >= 0) return nfd;
         if (flags & (O_WRONLY | O_RDWR)) {
-            nfd = orig_openat(fd, path, O_RDONLY);
+            nfd = g_orig_openat(fd, path, O_RDONLY);
         }
         return nfd;
     }
-    return orig_openat(fd, path, flags, (mode_t)mode);
+    return g_orig_openat(fd, path, flags, (mode_t)mode);
 }
 
 // --- 3. stat, lstat, fstatat (Ép fake struct nếu fail) ---
@@ -11075,8 +11076,8 @@ static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
                 
                 sym = dlsym(RTLD_DEFAULT, "access"); if (sym) MSHookFunction(sym, (void*)hooked_access, (void**)&orig_access);
                 sym = dlsym(RTLD_DEFAULT, "faccessat"); if (sym) MSHookFunction(sym, (void*)hooked_faccessat, (void**)&orig_faccessat);
-                sym = dlsym(RTLD_DEFAULT, "open"); if (sym) MSHookFunction(sym, (void*)hooked_open, (void**)&orig_open);
-                sym = dlsym(RTLD_DEFAULT, "openat"); if (sym) MSHookFunction(sym, (void*)hooked_openat, (void**)&orig_openat);
+                sym = dlsym(RTLD_DEFAULT, "open"); if (sym) MSHookFunction(sym, (void*)hooked_open, (void**)&g_orig_open);
+                sym = dlsym(RTLD_DEFAULT, "openat"); if (sym) MSHookFunction(sym, (void*)hooked_openat, (void**)&g_orig_openat);
                 sym = dlsym(RTLD_DEFAULT, "stat"); if (sym) MSHookFunction(sym, (void*)hooked_stat, (void**)&orig_stat);
                 sym = dlsym(RTLD_DEFAULT, "lstat"); if (sym) MSHookFunction(sym, (void*)hooked_lstat, (void**)&orig_lstat);
                 sym = dlsym(RTLD_DEFAULT, "fstatat"); if (sym) MSHookFunction(sym, (void*)hooked_fstatat, (void**)&orig_fstatat);
