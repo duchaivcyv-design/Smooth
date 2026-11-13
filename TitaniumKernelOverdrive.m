@@ -423,96 +423,100 @@ void Titanium_WireAllMemory(void *addr, size_t size) {
 // Ghi đè thành 90Hz, giới hạn 12 patch để tránh panic
 // ====================================================================================================
 void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
-    static kwritebuf_phys_t kwrite_fn = NULL;
-    static kreadbuf_phys_t kread_fn = NULL;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        void *lib = dlopen("/var/jb/basebin/libjailbreak.dylib", RTLD_LAZY);
-        if (!lib) lib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-        if (lib) {
-            kwrite_fn = (kwritebuf_phys_t)dlsym(lib, "_kwritebuf_phys");
-            kread_fn  = (kreadbuf_phys_t)dlsym(lib, "_kreadbuf_phys");
-        }
-    });
-
-    if (!kwrite_fn || !kread_fn) return;
-
-    // Chuyển virtual base thành physical
-    uint64_t phys_base = kernel_base & 0x0000000FFFFFFFFFULL;
-    if (phys_base < 0x800000000ULL) {
-        phys_base = 0x8025a54000ULL; // Fallback
+    // [FIX-WATCHDOG] Chặn spam, chỉ chạy mỗi 60 giây
+    static uint64_t s_lastScanTime = 0;
+    uint64_t now = mach_absolute_time();
+    if (s_lastScanTime != 0 && (now - s_lastScanTime) < 60000000000ULL) {
+        return;
     }
+    s_lastScanTime = now;
 
-    ODLog("[PANEL-PATCH] Base=0x%llx, scanning 256MB range 15-240Hz...", phys_base);
-
-    // Quét dải rộng: từ base+16MB đến base+272MB (256MB window)
-    uint64_t scan_start = phys_base + 0x1000000;
-    uint64_t scan_end   = phys_base + 0x11000000;
-
-    int patched_count = 0;
-    uint64_t last_hit_page = 0;
-    uint32_t target_hz = 90;
-
-    for (uint64_t addr = scan_start; addr < scan_end; addr += 4) {
-        // Skip nếu cùng page với hit gần nhất
-        if (addr - last_hit_page < 0x1000) continue;
-
-        uint32_t val = 0;
-        if (kread_fn(addr, &val, 4) != 0) continue;
-
-        // [FULL RANGE] Tìm mọi giá trị Hz từ 15 đến 240
-        if (val >= 15 && val <= 240) {
-            bool has_resolution = false;
-            uint32_t res_val = 0;
-
-            for (int i = -16; i <= 16; i++) {
-                if (i == 0) continue;
-                uint32_t neighbor = 0;
-                if (kread_fn(addr + (i * 4), &neighbor, 4) == 0) {
-                    if (neighbor == 1920 || neighbor == 1080 ||
-                        neighbor == 1242 || neighbor == 2208 ||
-                        neighbor == 750  || neighbor == 1334 ||
-                        neighbor == 2436 || neighbor == 1125 ||
-                        neighbor == 2688) {
-                        has_resolution = true;
-                        res_val = neighbor;
-                        break;
-                    }
+    // [FIX-WATCHDOG] Đẩy toàn bộ vòng lặp quét nặng vào Background Queue
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        @autoreleasepool {
+            static kwritebuf_phys_t kwrite_fn = NULL;
+            static kreadbuf_phys_t kread_fn = NULL;
+            static dispatch_once_t once;
+            dispatch_once(&once, ^{
+                void *lib = dlopen("/var/jb/basebin/libjailbreak.dylib", RTLD_LAZY);
+                if (!lib) lib = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+                if (lib) {
+                    kwrite_fn = (kwritebuf_phys_t)dlsym(lib, "_kwritebuf_phys");
+                    kread_fn  = (kreadbuf_phys_t)dlsym(lib, "_kreadbuf_phys");
                 }
+            });
+
+            if (!kwrite_fn || !kread_fn) return;
+
+            uint64_t phys_base = kernel_base & 0x0000000FFFFFFFFFULL;
+            if (phys_base < 0x800000000ULL) {
+                phys_base = 0x8025a54000ULL;
             }
 
-            // Có resolution marker → xác suất cao đây là struct display timing
-            if (has_resolution) {
-                if (kwrite_fn(addr, &target_hz, 4) == 0) {
-                    ODLog("[PANEL-PATCH] ✅ 0x%llx: %uHz -> 90Hz (res=%u)", addr, val, res_val);
-                    (void)val;
-                    (void)res_val;
+            ODLog("[PANEL-PATCH] Base=0x%llx, scanning 256MB range 15-240Hz...", phys_base);
 
-                    patched_count++;
-                    last_hit_page = addr;
+            uint64_t scan_start = phys_base + 0x1000000;
+            uint64_t scan_end   = phys_base + 0x11000000;
+            int patched_count = 0;
+            uint64_t last_hit_page = 0;
+            uint32_t target_hz = 90;
 
-                    // Càn quét: ghi đè các giá trị Hz khác trong cùng struct
-                    for (int off = 4; off <= 32; off += 4) {
-                        uint32_t nearby = 0;
-                        if (kread_fn(addr + off, &nearby, 4) == 0) {
-                            if (nearby >= 15 && nearby <= 240 && nearby != target_hz) {
-                                kwrite_fn(addr + off, &target_hz, 4);
-                                patched_count++;
+            for (uint64_t addr = scan_start; addr < scan_end; addr += 4) {
+                if (addr - last_hit_page < 0x1000) continue;
+
+                uint32_t val = 0;
+                if (kread_fn(addr, &val, 4) != 0) continue;
+
+                if (val >= 15 && val <= 240) {
+                    bool has_resolution = false;
+                    uint32_t res_val = 0;
+
+                    for (int i = -16; i <= 16; i++) {
+                        if (i == 0) continue;
+                        uint32_t neighbor = 0;
+                        if (kread_fn(addr + (i * 4), &neighbor, 4) == 0) {
+                            if (neighbor == 1920 || neighbor == 1080 ||
+                                neighbor == 1242 || neighbor == 2208 ||
+                                neighbor == 750  || neighbor == 1334 ||
+                                neighbor == 2436 || neighbor == 1125 ||
+                                neighbor == 2688) {
+                                has_resolution = true;
+                                res_val = neighbor;
+                                break;
                             }
                         }
                     }
-                }
 
-                // Giới hạn tối đa 12 hit — đặt trong has_resolution, sau patch success
-                if (patched_count >= 12) {
-                    ODLog("[PANEL-PATCH] Reached max 12 patches. Stopping.");
-                    break;
+                    if (has_resolution) {
+                        if (kwrite_fn(addr, &target_hz, 4) == 0) {
+                            ODLog("[PANEL-PATCH] ✅ 0x%llx: %uHz -> 90Hz (res=%u)", addr, val, res_val);
+                            (void)val;
+                            (void)res_val;
+
+                            patched_count++;
+                            last_hit_page = addr;
+
+                            for (int off = 4; off <= 32; off += 4) {
+                                uint32_t nearby = 0;
+                                if (kread_fn(addr + off, &nearby, 4) == 0) {
+                                    if (nearby >= 15 && nearby <= 240 && nearby != target_hz) {
+                                        kwrite_fn(addr + off, &target_hz, 4);
+                                        patched_count++;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (patched_count >= 12) {
+                            ODLog("[PANEL-PATCH] Reached max 12 patches. Stopping.");
+                            break;
+                        }
+                    }
                 }
             }
+            ODLog("[PANEL-PATCH] Done. %d addresses overwritten to 90Hz.", patched_count);
         }
-    }
-
-    ODLog("[PANEL-PATCH] Done. %d addresses overwritten to 90Hz.", patched_count);
+    });
 }
 
 // ====================================================================================================
