@@ -10903,11 +10903,6 @@ static const TitaniumPanelRegisterProfile *Titanium_ResolveCurrentPanelProfile(v
     return s_profile;
 }
 
-// [TARGET PROCESS CHECK]
-static inline BOOL Titanium_IsTargetProcess(void) {
-    return YES;
-}
-
 // ====================================================================================================
 // [TARGETED SANDBOX OVERRIDE — mở cứng vài file hệ thống cụ thể cho đọc/ghi]
 // Đéo whitelist toàn bộ, đéo brute. Chỉ ép mở đúng danh sách path hệ thống dưới đây.
@@ -10941,40 +10936,40 @@ static int hooked_faccessat(int fd, const char *path, int amode, int flag) {
 }
 
 // --- 2. open & openat ---
-static int (*orig_open)(const char *, int, ...) = NULL;
 static int hooked_open(const char *path, int flags, ...) {
+    if (!g_orig_open) return -1;
     va_list ap; va_start(ap, flags);
-    mode_t mode = va_arg(ap, mode_t);
+    int mode = va_arg(ap, int);           // [FIX] int, không phải mode_t
     va_end(ap);
-    if (!orig_open) return -1;
 
     if (Titanium_IsTargetProcess() && path) {
-        int fd = orig_open(path, flags, mode);
+        int fd = g_orig_open(path, flags, (mode_t)mode);
         if (fd >= 0) return fd;
         if (flags & (O_WRONLY | O_RDWR)) {
-            fd = orig_open(path, O_RDONLY); // Fallback đọc
+            fd = g_orig_open(path, O_RDONLY);
         }
         return fd;
     }
-    return orig_open(path, flags, mode);
+    return g_orig_open(path, flags, (mode_t)mode);
 }
 
 static int (*orig_openat)(int, const char *, int, ...) = NULL;
 static int hooked_openat(int fd, const char *path, int flags, ...) {
-    va_list ap; va_start(ap, flags);
-    mode_t mode = va_arg(ap, mode_t);
-    va_end(ap);
     if (!orig_openat) return -1;
 
+    va_list ap; va_start(ap, flags);
+    int mode = va_arg(ap, int); // [FIX] Đọc là int vì varargs tự promote mode_t (unsigned short) lên int
+    va_end(ap);
+
     if (Titanium_IsTargetProcess() && path) {
-        int nfd = orig_openat(fd, path, flags, mode);
+        int nfd = orig_openat(fd, path, flags, (mode_t)mode);
         if (nfd >= 0) return nfd;
         if (flags & (O_WRONLY | O_RDWR)) {
             nfd = orig_openat(fd, path, O_RDONLY);
         }
         return nfd;
     }
-    return orig_openat(fd, path, flags, mode);
+    return orig_openat(fd, path, flags, (mode_t)mode);
 }
 
 // --- 3. stat, lstat, fstatat (Ép fake struct nếu fail) ---
