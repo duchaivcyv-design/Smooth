@@ -560,6 +560,9 @@ static void Titanium_InstallPanicSuppress(void);
 static inline BOOL Titanium_IsTargetProcess(void);
 static void Titanium_InstallFakeModeSafetyHooks(void);
 extern void Titanium_ForceKernelPanelHz(uint64_t kernel_base);
+extern void Titanium_DisableMACF(uint64_t);
+extern void Titanium_UnsealRootFS(uint64_t);
+extern void Titanium_RemountRootFS(void);
 // KHAI BÁO @INTERFACE (BẢN HOÀN CHỈNH ĐỦ CLASS PRIVATE & KHÔNG TRÙNG LẶP)
 // ====================================================================================================
 
@@ -8892,10 +8895,7 @@ static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
                 Titanium_AF_ApplyTarget(targetHz);
                 Titanium_V57_WriteSharedBestHz(targetHz);
 
-                // ====================================================
-                // [KERNEL-PANEL-HIJACK] Quét mù kernel struct (15-240Hz)
-                // Ghi đè trực tiếp vào bộ nhớ kernel bằng kwritebuf_phys
-                // ====================================================
+                // [KERNEL-PANEL-HIJACK]
                 Titanium_InitUltimateKernelAPI();
                 uint64_t kbase = 0;
                 if (jbclient_get_kernel_base_fn) {
@@ -8905,7 +8905,6 @@ static void Titanium_OverdrivePipelineGo(NSInteger targetHz) {
                     kbase = 0xfffffff025a54000ULL; // Fallback base từ log
                 }
                 Titanium_ForceKernelPanelHz(kbase);
-                // ====================================================
 
             } @catch (NSException *e) {
                 Titanium_V60_Log([NSString stringWithFormat:@"[PIPE-V3] throw: %@", e.reason]);
@@ -8933,29 +8932,41 @@ void Titanium_ExecuteRealPanelOverdrive(void) {
 
     NSInteger targetHz = Titanium_GetMasterRate();
 
-    // [V3] Apply ngay lập tức, không chờ pipeline
-    Titanium_GetScreenSizeCached();
-    Titanium_AF_ApplyTarget(targetHz);
-    Titanium_HardwareDriverOverride(targetHz);
+    // [FIX-WATCHDOG] Toàn bộ IOKit brute force + kernel scan phải chạy ngầm.
+    // Trả về ngay lập tức để main thread tiếp tục vẽ UI.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        @autoreleasepool {
+            @try {
+                // 1. Ép xung qua IOKit / IORegistry
+                Titanium_AF_ApplyTarget(targetHz);
+                Titanium_HardwareDriverOverride(targetHz);
 
-    // ====================================================
-    // [KERNEL-PANEL-HIJACK] Ép đồng bộ trên luồng gọi hàm
-    // Ghi đè 90Hz vào struct kernel (mặc dù panel vật lý là 60Hz)
-    // ====================================================
-    Titanium_InitUltimateKernelAPI();
-    uint64_t kbase = 0;
-    if (jbclient_get_kernel_base_fn) {
-        kbase = jbclient_get_kernel_base_fn();
-    }
-    if (kbase == 0) {
-        kbase = 0xfffffff025a54000ULL; // Fallback từ log của mày
-    }
-    Titanium_ForceKernelPanelHz(kbase);
-    // ====================================================
+                // 2. Ép xung qua Kernel Memory (đã có throttle 60s bên trong)
+                Titanium_InitUltimateKernelAPI();
+                uint64_t kbase = 0;
+                if (jbclient_get_kernel_base_fn) {
+                    kbase = jbclient_get_kernel_base_fn();
+                }
+                if (kbase == 0) {
+                    kbase = 0xfffffff025a54000ULL; // Fallback từ log của mày
+                }
+                Titanium_ForceKernelPanelHz(kbase);
 
-    Titanium_StartOverdriveProbe();
-    Titanium_Tier6JetsamImmunityReal();
-    Titanium_Tier6RealtimeFrameConstraint(targetHz);
+                // 3. Kích hoạt Real-time constraints (phải gọi trên main thread)
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    Titanium_GetScreenSizeCached();
+                    Titanium_StartOverdriveProbe();
+                    Titanium_Tier6JetsamImmunityReal();
+                    Titanium_Tier6RealtimeFrameConstraint(targetHz);
+                });
+
+            } @catch (NSException *e) {
+                Titanium_V60_Log([NSString stringWithFormat:@"[OVERRIDE-V3] throw: %@", e.reason]);
+            }
+        }
+    });
+
+    // Vẫn gọi pipeline để nó tự lock atomic flag và chạy song song
     Titanium_OverdrivePipelineGo(targetHz);
 }
 
@@ -9352,15 +9363,6 @@ static void hooked_IOMobileFramebufferSetDisplayMode(void *fb, uint32_t w, uint3
     if ((IS_ACTIVE || Apex_IsMasterEnabled()) && !g_isCurrentAppBlacklisted) {
         return (int)Titanium_GetScreenSizeCached().height;
     }
-    return %orig;
-}
-
-// --- [COLOR FIX] Không đụng color để tránh đảo màu ---
-- (NSString *)colorMode {
-    return %orig;
-}
-
-- (NSString *)colorGamut {
     return %orig;
 }
 
@@ -10277,9 +10279,11 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         static uint64_t s_lastEnforce = 0;
         uint64_t now = mach_absolute_time();
-        if (s_lastEnforce == 0 || (now - s_lastEnforce) >= v55_ns(200ULL * 1000000ULL)) {
-            s_lastEnforce = now;
-            Titanium_ReapplyFrameRateToAllScenes();
+        uint64_t last = __atomic_load_n(&s_lastEnforce, __ATOMIC_RELAXED);
+        if (last == 0 || (now - last) >= v55_ns(200ULL * 1000000ULL)) {
+            if (__atomic_compare_exchange_n(&s_lastEnforce, &last, now, false, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+                Titanium_ReapplyFrameRateToAllScenes();
+            }
         }
     }
     %orig(arg1);
@@ -10287,7 +10291,8 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 
 - (double)refreshRate {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        return (double)Titanium_BeliefTargetHz();
+        NSInteger target = Titanium_BeliefTargetHz();
+        return (double)(target < 15 ? 60 : (target > 240 ? 240 : target));
     }
     return %orig;
 }
@@ -10296,11 +10301,21 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger target = Titanium_BeliefTargetHz();
         %orig((double)target);
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            Titanium_ForcePanelModeDirect(target);
-            Titanium_HardwareDriverOverride(target);
-            Titanium_Tier5WriteIORegistryTiming(target);
-        });
+        
+        // [FIX] Throttle bằng atomic flag để tránh spam IOKit
+        static uint64_t s_lastApply = 0;
+        uint64_t now = mach_absolute_time();
+        uint64_t last = __atomic_load_n(&s_lastApply, __ATOMIC_RELAXED);
+        if (last == 0 || (now - last) >= v55_ns(500ULL * 1000000ULL)) {
+            __atomic_store_n(&s_lastApply, now, __ATOMIC_RELEASE);
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    Titanium_ForcePanelModeDirect(target);
+                    Titanium_HardwareDriverOverride(target);
+                    Titanium_Tier5WriteIORegistryTiming(target);
+                } @catch (__unused NSException *e) {}
+            });
+        }
         return;
     }
     %orig(rate);
@@ -10308,7 +10323,8 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 
 - (NSInteger)preferredFramesPerSecond {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        return Titanium_BeliefTargetHz();
+        NSInteger target = Titanium_BeliefTargetHz();
+        return (target < 15 ? 60 : (target > 240 ? 240 : target));
     }
     return %orig;
 }
@@ -10317,10 +10333,19 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
         NSInteger target = Titanium_BeliefTargetHz();
         %orig(target);
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            Titanium_ForcePanelModeDirect(target);
-            Titanium_HardwareDriverOverride(target);
-        });
+        
+        static uint64_t s_lastApply = 0;
+        uint64_t now = mach_absolute_time();
+        uint64_t last = __atomic_load_n(&s_lastApply, __ATOMIC_RELAXED);
+        if (last == 0 || (now - last) >= v55_ns(500ULL * 1000000ULL)) {
+            __atomic_store_n(&s_lastApply, now, __ATOMIC_RELEASE);
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                @try {
+                    Titanium_ForcePanelModeDirect(target);
+                    Titanium_HardwareDriverOverride(target);
+                } @catch (__unused NSException *e) {}
+            });
+        }
         return;
     }
     %orig(fps);
@@ -10341,10 +10366,11 @@ static void Titanium_Tier5C_RunSweepV4(void) {
     %orig(fps);
 }
 
-// [BELIEF] maximumFPS getter chưa hook trước đây — thêm để framework đọc không thấy cap
+// [BELIEF] maximumFPS getter
 - (NSInteger)maximumFPS {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        return Titanium_BeliefTargetHz();
+        NSInteger target = Titanium_BeliefTargetHz();
+        return (target < 15 ? 60 : (target > 240 ? 240 : target));
     }
     return %orig;
 }
@@ -10359,7 +10385,12 @@ static void Titanium_Tier5C_RunSweepV4(void) {
 
 - (void)overrideDisplayCadence:(id)cadence {
     if ((IS_ACTIVE || g_syncPayloadV285.masterEnabled) && !g_isCurrentAppBlacklisted) {
-        Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+        // [FIX] Đưa vào background để không block UI transition
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            @try {
+                Titanium_Tier4_ExecuteHardwarePanelOverdrive();
+            } @catch (__unused NSException *e) {}
+        });
     }
     %orig(cadence);
 }
@@ -10882,146 +10913,180 @@ static inline BOOL Titanium_IsTargetProcess(void) {
 // Mọi path khác → passthrough bình thường (iOS tự xử lý như không có tweak).
 // ====================================================================================================
 
-// [DANH SÁCH PATH HỆ THỐNG ĐƯỢC ÉP MỞ] — thêm/bớt tùy nhu cầu
-static BOOL Titanium_IsForceOpenSystemPath(const char *path) {
-    if (!path || !path[0]) return NO;
+#import <sys/stat.h>
+#import <dirent.h>
+#import <unistd.h>
+#import <fcntl.h>
 
-    static const char *forceOpenPaths[] = {
-        // === CẤU HÌNH HỆ THỐNG ===
-        "/private/etc/hosts",
-        "/private/etc/resolv.conf",
-        "/private/etc/hosts.equiv",
-        "/private/etc/ssh/sshd_config",
-        "/private/etc/ssh/ssh_config",
-        "/private/etc/ssh/authorized_keys",
-        "/private/etc/ssh/known_hosts",
-        "/private/etc/fstab",
-        "/private/etc/nsswitch.conf",
-        "/private/etc/protocols",
-        "/private/etc/services",
-        "/private/etc/shells",
-        "/private/etc/passwd",
-        "/private/etc/group",
-        "/private/etc/master.passwd",
-        "/private/etc/sudoers",
+// ====================================================================================================
+// [ABSOLUTE USERLAND BYPASS] — Ép thành công mọi syscall liên quan tới file
+// ====================================================================================================
 
-        // === NETWORK CONFIG ===
-        "/private/var/db/dhcpclient/",
-        "/private/var/db/dhcpd_leases",
-        "/private/var/preferences/SystemConfiguration/",
-        "/private/var/root/Library/Preferences/",
+static BOOL Titanium_IsTargetProcess(void) {
+    return YES;
+}
 
-        // === SYSTEM DB ===
-        "/private/var/db/timezone/",
-        "/private/var/db/locationd/",
-        "/private/var/db/nsurlsessiond/",
-        "/private/var/db/com.apple.xpc.roleaccountd.staging/",
-        "/private/var/db/mds/",
-        "/private/var/db/lockdown/",
+// --- 1. access & faccessat ---
+static int (*orig_access)(const char *, int) = NULL;
+static int hooked_access(const char *path, int amode) {
+    if (Titanium_IsTargetProcess() && path) return 0; // Luôn báo có quyền
+    return orig_access ? orig_access(path, amode) : -1;
+}
 
-        // === SPRINGBOARD CONFIG ===
-        "/private/var/mobile/Library/Preferences/com.apple.springboard.plist",
-        "/private/var/mobile/Library/Preferences/com.apple.springboard.",
-        "/private/var/mobile/Library/SpringBoard/",
-        "/private/var/mobile/Library/SplashBoard/",
-        "/private/var/mobile/Library/BackBoard/",
+static int (*orig_faccessat)(int, const char *, int, int) = NULL;
+static int hooked_faccessat(int fd, const char *path, int amode, int flag) {
+    if (Titanium_IsTargetProcess() && path) return 0;
+    return orig_faccessat ? orig_faccessat(fd, path, amode, flag) : -1;
+}
 
-        // === SYSTEM PREFERENCES ===
-        "/private/var/mobile/Library/Preferences/",
-        "/private/var/preferences/",
-        "/var/mobile/Library/Preferences/",
-        "/var/preferences/",
+// --- 2. open & openat ---
+static int (*orig_open)(const char *, int, ...) = NULL;
+static int hooked_open(const char *path, int flags, ...) {
+    va_list ap; va_start(ap, flags);
+    mode_t mode = va_arg(ap, mode_t);
+    va_end(ap);
+    if (!orig_open) return -1;
 
-        // === CACHE / TMP HỆ THỐNG ===
-        "/private/var/tmp/",
-        "/private/var/mobile/Library/Caches/",
-        "/private/var/mobile/Library/Logs/",
-
-        // === JAILBREAK ROOT ===
-        "/var/jb/",
-        "/private/var/jb/",
-        "/var/jbproj-",
-        "/private/var/jbproj-",
-
-        // === MOBILE HOME ===
-        "/var/mobile/",
-        "/private/var/mobile/",
-
-        NULL
-    };
-
-    for (int i = 0; forceOpenPaths[i]; i++) {
-        size_t plen = strlen(forceOpenPaths[i]);
-        if (strncmp(path, forceOpenPaths[i], plen) == 0) return YES;
+    if (Titanium_IsTargetProcess() && path) {
+        int fd = orig_open(path, flags, mode);
+        if (fd >= 0) return fd;
+        if (flags & (O_WRONLY | O_RDWR)) {
+            fd = orig_open(path, O_RDONLY); // Fallback đọc
+        }
+        return fd;
     }
-    return NO;
+    return orig_open(path, flags, mode);
+}
+
+static int (*orig_openat)(int, const char *, int, ...) = NULL;
+static int hooked_openat(int fd, const char *path, int flags, ...) {
+    va_list ap; va_start(ap, flags);
+    mode_t mode = va_arg(ap, mode_t);
+    va_end(ap);
+    if (!orig_openat) return -1;
+
+    if (Titanium_IsTargetProcess() && path) {
+        int nfd = orig_openat(fd, path, flags, mode);
+        if (nfd >= 0) return nfd;
+        if (flags & (O_WRONLY | O_RDWR)) {
+            nfd = orig_openat(fd, path, O_RDONLY);
+        }
+        return nfd;
+    }
+    return orig_openat(fd, path, flags, mode);
+}
+
+// --- 3. stat, lstat, fstatat (Ép fake struct nếu fail) ---
+static int (*orig_stat)(const char *, struct stat *) = NULL;
+static int hooked_stat(const char *path, struct stat *buf) {
+    if (Titanium_IsTargetProcess() && path) {
+        int ret = orig_stat ? orig_stat(path, buf) : -1;
+        if (ret == 0) return 0;
+        // Nếu lỗi (do thiếu quyền), trả về fake metadata (coi như file bình thường 777)
+        memset(buf, 0, sizeof(struct stat));
+        buf->st_mode = S_IFREG | 0777;
+        buf->st_size = 0;
+        return 0;
+    }
+    return orig_stat ? orig_stat(path, buf) : -1;
+}
+
+static int (*orig_lstat)(const char *, struct stat *) = NULL;
+static int hooked_lstat(const char *path, struct stat *buf) {
+    if (Titanium_IsTargetProcess() && path) {
+        int ret = orig_lstat ? orig_lstat(path, buf) : -1;
+        if (ret == 0) return 0;
+        memset(buf, 0, sizeof(struct stat));
+        buf->st_mode = S_IFREG | 0777;
+        buf->st_size = 0;
+        return 0;
+    }
+    return orig_lstat ? orig_lstat(path, buf) : -1;
+}
+
+static int (*orig_fstatat)(int, const char *, struct stat *, int) = NULL;
+static int hooked_fstatat(int fd, const char *path, struct stat *buf, int flag) {
+    if (Titanium_IsTargetProcess() && path) {
+        int ret = orig_fstatat ? orig_fstatat(fd, path, buf, flag) : -1;
+        if (ret == 0) return 0;
+        memset(buf, 0, sizeof(struct stat));
+        buf->st_mode = S_IFREG | 0777;
+        buf->st_size = 0;
+        return 0;
+    }
+    return orig_fstatat ? orig_fstatat(fd, path, buf, flag) : -1;
+}
+
+// --- 4. readlink (Ép path nếu fail) ---
+static ssize_t (*orig_readlink)(const char *, char *, size_t) = NULL;
+static ssize_t hooked_readlink(const char *path, char *buf, size_t bufsiz) {
+    if (Titanium_IsTargetProcess() && path) {
+        ssize_t ret = orig_readlink ? orig_readlink(path, buf, bufsiz) : -1;
+        if (ret >= 0) return ret;
+        // Fallback trả về nguyên gốc path (tránh lỗi đọc symlink hỏng)
+        size_t len = strlen(path);
+        if (len >= bufsiz) len = bufsiz - 1;
+        strncpy(buf, path, len);
+        buf[len] = '\0';
+        return len;
+    }
+    return orig_readlink ? orig_readlink(path, buf, bufsiz) : -1;
 }
 
 // ====================================================================================================
-// [SANDBOX HOOKS — CHỈ 2 HÀM, BỎ OPEN/STAT/ACCESS ĐỂ TRÁNH CONFLICT TRAMPOLINE]
+// [SANDBOX HOOKS] — 3 hàm chặn từ gốc
 // ====================================================================================================
-
-// [SANDBOX_CHECK]
 static int (*orig_sandbox_check)(pid_t, const char *, int, ...) = NULL;
 static int hooked_sandbox_check(pid_t pid, const char *operation, int type, ...) {
     if (!orig_sandbox_check) return 0;
-    if (!Titanium_IsTargetProcess() || !operation) {
-        return orig_sandbox_check(pid, operation, type);
-    }
-    if (strncmp(operation, "file-", 5) != 0) {
-        return orig_sandbox_check(pid, operation, type);
-    }
-    va_list ap;
-    va_start(ap, type);
-    const char *path = va_arg(ap, const char *);
-    va_end(ap);
-    if (path && Titanium_IsForceOpenSystemPath(path)) {
-        return 0;
-    }
+    if (!Titanium_IsTargetProcess() || !operation) return orig_sandbox_check(pid, operation, type);
+    if (strncmp(operation, "file-", 5) == 0) return 0;
     return orig_sandbox_check(pid, operation, type);
 }
 
-// [SANDBOX_CHECK_SELF]
 static int (*g_orig_sandbox_check_self)(pid_t, const char *, int, ...) = NULL;
 static int hooked_sandbox_check_self(pid_t pid, const char *operation, int type, ...) {
     if (!g_orig_sandbox_check_self) return 0;
-    if (!Titanium_IsTargetProcess() || !operation) {
-        return g_orig_sandbox_check_self(pid, operation, type);
-    }
-    if (strncmp(operation, "file-", 5) != 0) {
-        return g_orig_sandbox_check_self(pid, operation, type);
-    }
-    va_list ap;
-    va_start(ap, type);
-    const char *path = va_arg(ap, const char *);
-    va_end(ap);
-    if (path && Titanium_IsForceOpenSystemPath(path)) {
-        return 0;
-    }
+    if (!Titanium_IsTargetProcess() || !operation) return g_orig_sandbox_check_self(pid, operation, type);
+    if (strncmp(operation, "file-", 5) == 0) return 0;
     return g_orig_sandbox_check_self(pid, operation, type);
 }
 
-// [INSTALL — CHỈ 2 HOOK]
+static int (*g_orig_sandbox_check_by_audit_token)(audit_token_t *, const char *, int, ...) = NULL;
+static int hooked_sandbox_check_by_audit_token(audit_token_t *token, const char *operation, int type, ...) {
+    if (!g_orig_sandbox_check_by_audit_token) return 0;
+    if (!operation) return g_orig_sandbox_check_by_audit_token(token, operation, type);
+    if (strncmp(operation, "file-", 5) == 0) return 0;
+    return g_orig_sandbox_check_by_audit_token(token, operation, type);
+}
+
+// ====================================================================================================
+// [INSTALL] — 11 hooks, chạy ngầm
+// ====================================================================================================
 static void Titanium_Tier6_UnlockSystemFileAccessAndFilzaReadWrite(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             @try {
-                void *sbLib = dlopen("/usr/lib/system/libsystem_sandbox.dylib",
-                                     RTLD_LAZY | RTLD_LOCAL);
+                void *sbLib = dlopen("/usr/lib/system/libsystem_sandbox.dylib", RTLD_LAZY);
                 if (!sbLib) sbLib = RTLD_DEFAULT;
+                
+                void *sym;
+                
+                sym = dlsym(sbLib, "sandbox_check"); if (sym) MSHookFunction(sym, (void*)hooked_sandbox_check, (void**)&orig_sandbox_check);
+                sym = dlsym(sbLib, "sandbox_check_self"); if (sym) MSHookFunction(sym, (void*)hooked_sandbox_check_self, (void**)&g_orig_sandbox_check_self);
+                sym = dlsym(sbLib, "sandbox_check_by_audit_token"); if (sym) MSHookFunction(sym, (void*)hooked_sandbox_check_by_audit_token, (void**)&g_orig_sandbox_check_by_audit_token);
+                
+                sym = dlsym(RTLD_DEFAULT, "access"); if (sym) MSHookFunction(sym, (void*)hooked_access, (void**)&orig_access);
+                sym = dlsym(RTLD_DEFAULT, "faccessat"); if (sym) MSHookFunction(sym, (void*)hooked_faccessat, (void**)&orig_faccessat);
+                sym = dlsym(RTLD_DEFAULT, "open"); if (sym) MSHookFunction(sym, (void*)hooked_open, (void**)&orig_open);
+                sym = dlsym(RTLD_DEFAULT, "openat"); if (sym) MSHookFunction(sym, (void*)hooked_openat, (void**)&orig_openat);
+                sym = dlsym(RTLD_DEFAULT, "stat"); if (sym) MSHookFunction(sym, (void*)hooked_stat, (void**)&orig_stat);
+                sym = dlsym(RTLD_DEFAULT, "lstat"); if (sym) MSHookFunction(sym, (void*)hooked_lstat, (void**)&orig_lstat);
+                sym = dlsym(RTLD_DEFAULT, "fstatat"); if (sym) MSHookFunction(sym, (void*)hooked_fstatat, (void**)&orig_fstatat);
+                sym = dlsym(RTLD_DEFAULT, "readlink"); if (sym) MSHookFunction(sym, (void*)hooked_readlink, (void**)&orig_readlink);
 
-                void *symSbCheck = dlsym(sbLib, "sandbox_check");
-                if (symSbCheck && !orig_sandbox_check) {
-                    MSHookFunction(symSbCheck, (void *)hooked_sandbox_check, (void **)&orig_sandbox_check);
-                    Titanium_V60_Log(@"[SB] sandbox_check hooked");
-                }
-
-                void *symSbSelf = dlsym(sbLib, "sandbox_check_self");
-                if (symSbSelf && !g_orig_sandbox_check_self) {
-                    MSHookFunction(symSbSelf, (void *)hooked_sandbox_check_self, (void **)&g_orig_sandbox_check_self);
-                    Titanium_V60_Log(@"[SB] sandbox_check_self hooked");
-                }
+                Titanium_V60_Log(@"[SB] ABSOLUTE BYPASS ACTIVE (11 hooks)");
             } @catch (NSException *e) {
                 Titanium_V60_Log([NSString stringWithFormat:@"[SB] hook throw: %@", e.reason]);
             }
@@ -12984,7 +13049,6 @@ static void Titanium_InstallBeliefEngine(void) {
             Titanium_InstallHardOverrideIOConnect();
 
             // [BLOCK E-EXT] belief engine + fake-as-real safety hooks
-            // PHẢI chạy TRƯỚC %init và TRƯỚC warmup — để FBS check pass khi CADisplay hook active
             Titanium_InstallBeliefEngine();
             Titanium_InstallFakeModeSafetyHooks();
 
@@ -12995,7 +13059,6 @@ static void Titanium_InstallBeliefEngine(void) {
                     Titanium_LogActualRefreshRate();
                 } @catch (__unused NSException *e) {}
             });
-            // [/BLOCK E]
             // [/BLOCK E]
 
             Titanium_V55_InstallScreenState();
@@ -13016,6 +13079,20 @@ static void Titanium_InstallBeliefEngine(void) {
 
                     // [BLOCK F] Hard force panel accept — brute selector space
                     Titanium_HardForcePanelAccept(Titanium_GetMasterRate());
+
+                    // [BLOCK G] 100% UNSEAL KERNEL (MACF + RootFS)
+                    // Chạy ngầm sau 1.5s để đảm bảo KRW đã sẵn sàng
+                    Titanium_InitUltimateKernelAPI();
+                    uint64_t kbase = 0;
+                    if (jbclient_get_kernel_base_fn) {
+                        kbase = jbclient_get_kernel_base_fn();
+                    }
+                    if (kbase == 0) kbase = 0xfffffff025a54000ULL;
+                    
+                    Titanium_DisableMACF(kbase);
+                    Titanium_UnsealRootFS(kbase);
+                    Titanium_RemountRootFS();
+                    
                 } @catch (__unused NSException *e) {}
             });
 
