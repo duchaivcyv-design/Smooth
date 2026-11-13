@@ -67,7 +67,6 @@
 #import <sys/mount.h>
 #import <sys/param.h>
 #import <sys/syscall.h>
-#import <sys/statfs.h>    // [THÊM] Cần cho getmntinfo() và struct statfs
 #import <dirent.h>        // [THÊM] Cần cho các thao tác duyệt thư mục (Filza bypass)
 
 // ==================== OBJC & SECURITY ====================
