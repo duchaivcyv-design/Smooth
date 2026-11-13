@@ -8704,8 +8704,8 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     body.numberOfLines = 0;
     body.font = [UIFont systemFontOfSize:10.5];
     body.textColor = [UIColor colorWithWhite:0.85 alpha:1];
-    body.text = TI_T(@"CẢNH BÁO NGUY HIỂM: Giá trị này kích hoạt quét mù Physical R/W vào 256MB bộ nhớ Kernel. Tweak ghi đè trực tiếp lên struct màn hình thông qua kwritebuf_phys, không thông qua bất kỳ cơ chế xác nhận nào của Driver. Ghi nhầm địa chỉ sẽ gây PANIC KERNEL (Sập nguồn ngay lập tức). Ép vượt giới hạn panel vật lý (vd: 90Hz trên màn 60Hz) sẽ gây rách hình (tearing), sọc màn, quá nhiệt và có thể hỏng phần cứng vĩnh viễn. Hệ thống chặn Watchdog/CrashReport chỉ bảo vệ Userland, không cứu được nếu Kernel Panic. TỰ CHỊU TRÁCH NHIỆM!",
-                     @"DANGER WARNING: This value triggers a blind Physical R/W scan across 256MB of Kernel memory. The tweak directly overwrites display structs via kwritebuf_phys, bypassing driver confirmation. Writing to the wrong address will cause a KERNEL PANIC (Instant Reboot). Exceeding physical hardware limits (e.g., 90Hz on a 60Hz panel) causes screen tearing, artifacts, overheating, and permanent hardware damage. Watchdog/CrashReporter suppression only protects Userland and cannot stop a Kernel Panic. USE AT YOUR OWN RISK!");
+    body.text = TI_T(@"LƯU Ý: Mức đã chọn là mục tiêu cấu hình gửi tới các đường áp dụng của tweak; không phải xác nhận kernel hoặc panel đã chấp nhận ghi. Driver và iOS có thể từ chối hoặc giới hạn mức này. Không đặt vượt thông số phần cứng; mức cao có thể làm máy nóng, hao pin và mất ổn định.",
+                     @"NOTE: The selected value is a configuration target sent to the tweak's apply paths; it does not prove that the kernel or display panel accepted a write. The driver and iOS may reject or clamp it. Do not exceed hardware specifications; higher targets may increase heat, battery use, and instability.");
     [box addSubview:body];
 
 
@@ -8728,226 +8728,83 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     CGFloat w = MAX(320.0, width), side = 14.0, cw = w - side * 2.0;
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 570.0)];
     root.backgroundColor = UIColor.clearColor;
-    
     UILabel *eyebrow = [[UILabel alloc] initWithFrame:CGRectMake(20, 10, w-40, 15)];
-    eyebrow.text = @"SMOOTHIOS PRO / DRIVER CHIP V10"; 
-    eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; 
-    eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; 
-    [root addSubview:eyebrow];
-    
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; 
-    title.text = @"Hz · FPS · Đồng bộ"; 
-    title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; 
-    title.textColor = UIColor.whiteColor; 
-    [root addSubview:title];
-    
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 300)]; 
-    panel.backgroundColor = [UIColor colorWithRed:.035 green:.045 blue:.105 alpha:.88]; 
-    panel.layer.cornerRadius = 27; 
-    panel.layer.cornerCurve = kCACornerCurveContinuous; 
-    panel.layer.borderWidth = 1.25; 
-    panel.layer.borderColor = [UIColor colorWithRed:.20 green:.78 blue:1 alpha:.88].CGColor; 
-    panel.layer.shadowColor = [UIColor colorWithRed:.38 green:.16 blue:1 alpha:1].CGColor; 
-    panel.layer.shadowOpacity = .22; 
-    panel.layer.shadowRadius = 18; 
-    panel.layer.shadowOffset = CGSizeMake(0, 8); 
-    [root addSubview:panel];
-    
+    eyebrow.text = @"SMOOTHIOS PRO / DRIVER CHIP V10"; eyebrow.font = [UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightBold]; eyebrow.textColor = [UIColor colorWithRed:.2 green:.88 blue:1 alpha:1]; [root addSubview:eyebrow];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 29, w-36, 30)]; title.text = @"Hz · FPS · Đồng bộ"; title.font = [UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; title.textColor = UIColor.whiteColor; [root addSubview:title];
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(side, 67, cw, 300)]; panel.backgroundColor = [UIColor colorWithRed:.035 green:.045 blue:.105 alpha:.88]; panel.layer.cornerRadius = 27; panel.layer.cornerCurve = kCACornerCurveContinuous; panel.layer.borderWidth = 1.25; panel.layer.borderColor = [UIColor colorWithRed:.20 green:.78 blue:1 alpha:.88].CGColor; panel.layer.shadowColor = [UIColor colorWithRed:.38 green:.16 blue:1 alpha:1].CGColor; panel.layer.shadowOpacity = .22; panel.layer.shadowRadius = 18; panel.layer.shadowOffset = CGSizeMake(0, 8); [root addSubview:panel];
     // Kẹp về dải 15–240: giá trị 0 hoặc thiếu (hiển thị "0") được đưa về 60.
     NSInteger hz = [self.settingsDict[@"TargetRefreshRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetRefreshRate"] integerValue] : 60;
     NSInteger fps = [self.settingsDict[@"TargetFPSRate"] respondsToSelector:@selector(integerValue)] ? [self.settingsDict[@"TargetFPSRate"] integerValue] : 60;
     if (hz < 15) hz = 60; if (hz > 240) hz = 240;
     if (fps < 15) fps = 60; if (fps > 240) fps = 240;
-    
     NSInteger mode = ([[NSUserDefaults standardUserDefaults] objectForKey:@"TIV12RateMode"] ? [[NSUserDefaults standardUserDefaults] integerForKey:@"TIV12RateMode"] : 1);
     CGFloat gap = 8, cardW = (cw - 28 - gap*2)/3.0;
     NSArray *names = @[@"Hz", @"MỞ RỘNG", @"FPS"];
     NSArray *values = @[[NSString stringWithFormat:@"%ld",(long)hz], [NSString stringWithFormat:@"%ld",(long)((hz==fps)?hz:MAX(hz,fps))], [NSString stringWithFormat:@"%ld",(long)fps]];
     NSArray *colors = @[[UIColor colorWithRed:.98 green:.28 blue:.48 alpha:1], [UIColor colorWithRed:.55 green:.35 blue:1 alpha:1], [UIColor colorWithRed:.12 green:.82 blue:1 alpha:1]];
-    
     for (NSInteger i=0;i<3;i++) {
         UIColor *modeColor = (UIColor *)colors[i];
         UIButton *card = [UIButton buttonWithType:UIButtonTypeSystem];
         card.frame = CGRectMake(14+i*(cardW+gap), 16, cardW, 94);
-        card.tag=99400+i; 
-        card.layer.cornerRadius=20; 
-        card.layer.cornerCurve=kCACornerCurveContinuous;
+        card.tag=99400+i; card.layer.cornerRadius=20; card.layer.cornerCurve=kCACornerCurveContinuous;
         card.layer.borderWidth=(mode==i?2.4:1.0);
         card.layer.borderColor=[[modeColor colorWithAlphaComponent:(mode==i?1.0:0.48)] CGColor];
         card.backgroundColor=[modeColor colorWithAlphaComponent:(mode==i?0.25:0.075)];
-        card.layer.shadowColor=[modeColor CGColor]; 
-        card.layer.shadowOpacity=(mode==i?0.22:0.08);
-        card.layer.shadowRadius=(mode==i?12:5); 
-        card.layer.shadowOffset=CGSizeMake(0,4); 
-        card.titleLabel.numberOfLines=1;
-        
-        UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(3,17,cardW-6,35)]; 
-        v.text=values[i]; 
-        v.textAlignment=NSTextAlignmentCenter; 
-        v.font=[UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; 
-        v.textColor=(mode==i?UIColor.whiteColor:[colors[i] colorWithAlphaComponent:.48]); 
-        v.tag=99410+i; 
-        [card addSubview:v];
-        
-        UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(2,56,cardW-4,20)]; 
-        n.text=names[i]; 
-        n.textAlignment=NSTextAlignmentCenter; 
-        n.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBold]; 
-        n.textColor=(mode==i?colors[i]:[UIColor colorWithWhite:.5 alpha:1]); 
-        n.tag=99420+i; 
-        [card addSubview:n];
-        
-        [card addTarget:self action:@selector(neonV12SelectMode:) forControlEvents:UIControlEventTouchUpInside]; 
-        [panel addSubview:card];
+        card.layer.shadowColor=[modeColor CGColor]; card.layer.shadowOpacity=(mode==i?0.22:0.08);
+        card.layer.shadowRadius=(mode==i?12:5); card.layer.shadowOffset=CGSizeMake(0,4); card.titleLabel.numberOfLines=1;
+        UILabel *v=[[UILabel alloc] initWithFrame:CGRectMake(3,17,cardW-6,35)]; v.text=values[i]; v.textAlignment=NSTextAlignmentCenter; v.font=[UIFont systemFontOfSize:25 weight:UIFontWeightBlack]; v.textColor=(mode==i?UIColor.whiteColor:[colors[i] colorWithAlphaComponent:.48]); v.tag=99410+i; [card addSubview:v];
+        UILabel *n=[[UILabel alloc] initWithFrame:CGRectMake(2,56,cardW-4,20)]; n.text=names[i]; n.textAlignment=NSTextAlignmentCenter; n.font=[UIFont systemFontOfSize:10 weight:UIFontWeightBold]; n.textColor=(mode==i?colors[i]:[UIColor colorWithWhite:.5 alpha:1]); n.tag=99420+i; [card addSubview:n];
+        [card addTarget:self action:@selector(neonV12SelectMode:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:card];
     }
-    
-    UILabel *selectedLabel=[[UILabel alloc] initWithFrame:CGRectMake(15,119,cw-30,18)]; 
-    selectedLabel.text=@"KÉO ĐỂ CHỌN MỨC 15–240"; 
-    selectedLabel.font=[UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightBold]; 
-    selectedLabel.textColor=[UIColor colorWithWhite:.78 alpha:1]; 
-    selectedLabel.textAlignment=NSTextAlignmentCenter; 
-    [panel addSubview:selectedLabel];
-    
-    UISlider *slider=[[UISlider alloc] initWithFrame:CGRectMake(20,143,cw-40,32)]; 
-    slider.tag=99430; 
-    slider.minimumValue=15; 
-    slider.maximumValue=240; 
-    slider.value=(mode==0?hz:(mode==2?fps:((hz==fps)?hz:MAX(hz,fps)))); 
-    slider.minimumTrackTintColor=[UIColor colorWithRed:.25 green:.82 blue:.48 alpha:1]; 
-    slider.maximumTrackTintColor=[UIColor colorWithWhite:.25 alpha:1]; 
-    slider.thumbTintColor=[UIColor colorWithRed:.15 green:.9 blue:1 alpha:1]; 
-    [slider addTarget:self action:@selector(neonV12SliderChanged:) forControlEvents:UIControlEventValueChanged]; 
-    [panel addSubview:slider];
-    
-    UILabel *range=[[UILabel alloc] initWithFrame:CGRectMake(20,174,cw-40,15)]; 
-    range.text=@"15                                      240"; 
-    range.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightMedium]; 
-    range.textColor=[UIColor colorWithWhite:.58 alpha:1]; 
-    [panel addSubview:range];
-    
+    UILabel *selectedLabel=[[UILabel alloc] initWithFrame:CGRectMake(15,119,cw-30,18)]; selectedLabel.text=@"KÉO ĐỂ CHỌN MỨC 15–240"; selectedLabel.font=[UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightBold]; selectedLabel.textColor=[UIColor colorWithWhite:.78 alpha:1]; selectedLabel.textAlignment=NSTextAlignmentCenter; [panel addSubview:selectedLabel];
+    UISlider *slider=[[UISlider alloc] initWithFrame:CGRectMake(20,143,cw-40,32)]; slider.tag=99430; slider.minimumValue=15; slider.maximumValue=240; slider.value=(mode==0?hz:(mode==2?fps:((hz==fps)?hz:MAX(hz,fps)))); slider.minimumTrackTintColor=[UIColor colorWithRed:.25 green:.82 blue:.48 alpha:1]; slider.maximumTrackTintColor=[UIColor colorWithWhite:.25 alpha:1]; slider.thumbTintColor=[UIColor colorWithRed:.15 green:.9 blue:1 alpha:1]; [slider addTarget:self action:@selector(neonV12SliderChanged:) forControlEvents:UIControlEventValueChanged]; [panel addSubview:slider];
+    UILabel *range=[[UILabel alloc] initWithFrame:CGRectMake(20,174,cw-40,15)]; range.text=@"15                                      240"; range.font=[UIFont monospacedSystemFontOfSize:9 weight:UIFontWeightMedium]; range.textColor=[UIColor colorWithWhite:.58 alpha:1]; [panel addSubview:range];
     // Three quick profiles requested by the user: performance 240, balanced 90, battery 60.
     NSArray<NSString *> *profileNames=@[@"HIỆU SUẤT · 240", @"CÂN BẰNG · 90", @"TIẾT KIỆM · 60"];
     CGFloat profileGap=6, profileW=(cw-28-profileGap*2)/3.0;
-    
     for(NSInteger pi=0;pi<3;pi++) {
         UIButton *profile=[UIButton buttonWithType:UIButtonTypeSystem];
         profile.frame=CGRectMake(14+pi*(profileW+profileGap),190,profileW,34);
-        profile.tag=99450+pi; 
-        profile.layer.cornerRadius=11; 
-        profile.layer.borderWidth=1;
+        profile.tag=99450+pi; profile.layer.cornerRadius=11; profile.layer.borderWidth=1;
         profile.layer.borderColor=[UIColor colorWithRed:.3 green:.75 blue:1 alpha:.65].CGColor;
         profile.backgroundColor=[UIColor colorWithRed:.1 green:.12 blue:.22 alpha:1];
         [profile setTitle:profileNames[pi] forState:UIControlStateNormal];
         [profile setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         profile.titleLabel.font=[UIFont systemFontOfSize:8 weight:UIFontWeightBlack];
-        profile.titleLabel.adjustsFontSizeToFitWidth=YES; 
-        profile.titleLabel.minimumScaleFactor=.65;
+        profile.titleLabel.adjustsFontSizeToFitWidth=YES; profile.titleLabel.minimumScaleFactor=.65;
         [profile addTarget:self action:@selector(v332ApplyPreset:) forControlEvents:UIControlEventTouchUpInside];
         [panel addSubview:profile];
     }
-    
     CGFloat actionGap=8, actionW=(cw-36-actionGap)/2.0;
-    UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; 
-    apply.frame=CGRectMake(18,236,actionW,42); 
-    apply.tag=99440; 
-    apply.layer.cornerRadius=15; 
-    apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; 
-    apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; 
-    apply.layer.shadowOpacity=.24; 
-    apply.layer.shadowRadius=9; 
-    [apply setTitle:@"ÁP DỤNG" forState:UIControlStateNormal]; 
-    [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; 
-    apply.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightBlack]; 
-    [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; 
-    [panel addSubview:apply];
-    
-    UIButton *respring=[UIButton buttonWithType:UIButtonTypeSystem]; 
-    respring.frame=CGRectMake(18+actionW+actionGap,236,actionW,42); 
-    respring.tag=99441; 
-    respring.layer.cornerRadius=15; 
-    respring.backgroundColor=[UIColor colorWithRed:.22 green:.18 blue:.42 alpha:1]; 
-    respring.layer.borderWidth=1; 
-    respring.layer.borderColor=[UIColor colorWithRed:.56 green:.42 blue:1 alpha:.9].CGColor; 
-    [respring setTitle:@"RESPRING" forState:UIControlStateNormal]; 
-    [respring setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; 
-    respring.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; 
-    [respring addTarget:self action:@selector(v332RequestRespring:) forControlEvents:UIControlEventTouchUpInside]; 
-    [panel addSubview:respring];
-    
-    UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,378,cw,49)]; 
-    status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; 
-    status.layer.cornerRadius=15; 
-    status.layer.borderWidth=1; 
-    status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; 
-    [root addSubview:status];
-    
-    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; 
-    note.text=@"Mức đã chọn được lưu vào cấu hình. FPS LIVE là số đo của giao diện, không phải FPS game."; 
-    note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; 
-    note.textColor=[UIColor colorWithWhite:.82 alpha:1]; 
-    note.numberOfLines=2; 
-    note.adjustsFontSizeToFitWidth=YES; 
-    [status addSubview:note];
-
-    // ====================================================
-    // DYNAMIC WARNING BOX
+    UIButton *apply=[UIButton buttonWithType:UIButtonTypeSystem]; apply.frame=CGRectMake(18,236,actionW,42); apply.tag=99440; apply.layer.cornerRadius=15; apply.backgroundColor=[UIColor colorWithRed:.13 green:.78 blue:.42 alpha:1]; apply.layer.shadowColor=[UIColor colorWithRed:.12 green:.9 blue:.4 alpha:1].CGColor; apply.layer.shadowOpacity=.24; apply.layer.shadowRadius=9; [apply setTitle:@"ÁP DỤNG" forState:UIControlStateNormal]; [apply setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; apply.titleLabel.font=[UIFont systemFontOfSize:13 weight:UIFontWeightBlack]; [apply addTarget:self action:@selector(neonV12Apply:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:apply];
+    UIButton *respring=[UIButton buttonWithType:UIButtonTypeSystem]; respring.frame=CGRectMake(18+actionW+actionGap,236,actionW,42); respring.tag=99441; respring.layer.cornerRadius=15; respring.backgroundColor=[UIColor colorWithRed:.22 green:.18 blue:.42 alpha:1]; respring.layer.borderWidth=1; respring.layer.borderColor=[UIColor colorWithRed:.56 green:.42 blue:1 alpha:.9].CGColor; [respring setTitle:@"RESPRING" forState:UIControlStateNormal]; [respring setTitleColor:UIColor.whiteColor forState:UIControlStateNormal]; respring.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightBlack]; [respring addTarget:self action:@selector(v332RequestRespring:) forControlEvents:UIControlEventTouchUpInside]; [panel addSubview:respring];
+    UIView *status=[[UIView alloc] initWithFrame:CGRectMake(side,378,cw,49)]; status.backgroundColor=[UIColor colorWithRed:.045 green:.035 blue:.105 alpha:1]; status.layer.cornerRadius=15; status.layer.borderWidth=1; status.layer.borderColor=[UIColor colorWithRed:.35 green:.22 blue:.66 alpha:.8].CGColor; [root addSubview:status];
+    UILabel *note=[[UILabel alloc] initWithFrame:CGRectMake(12,5,cw-24,39)]; note.text=@"Mức đã chọn được lưu vào cấu hình. FPS LIVE là số đo của giao diện, không phải FPS game."; note.font=[UIFont systemFontOfSize:10 weight:UIFontWeightMedium]; note.textColor=[UIColor colorWithWhite:.82 alpha:1]; note.numberOfLines=2; note.adjustsFontSizeToFitWidth=YES; [status addSubview:note];
     // Hiển thị cảnh báo ngay khi mở tab Hz/FPS, kể cả khi mục tiêu đang là 60.
-    // Chiều cao được tính tự động dựa trên độ dài văn bản để không bị cắt chữ.
-    // ====================================================
-    // ... (code phía trên)
     NSInteger warningRate = MAX(hz, fps);
     UIColor *warningTint = TI_RateWarningColor(warningRate);
-    
-    CGFloat padding = 12.0;
-    CGFloat titleH = 20.0;
-    CGFloat warnGap = 5.0; // [FIX] Đổi tên từ gap -> warnGap để tránh trùng
-    CGFloat textW = cw - (padding * 2);
-    CGFloat warningY = 436.0;
-
-    UILabel *warningBody = [[UILabel alloc] initWithFrame:CGRectZero];
-    warningBody.numberOfLines = 0;
-    warningBody.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightMedium];
-    warningBody.textColor = [UIColor colorWithWhite:0.84 alpha:1.0];
-    warningBody.adjustsFontSizeToFitWidth = YES;
-    warningBody.minimumScaleFactor = 0.82;
-    warningBody.text = @"⚠️ CẢNH BÁO : Đã nâng cấp lên KERNEL BLIND-SCAN (Quét mù Physical R/W). Tweak không còn fake UI nữa mà dùng kwritebuf_phys quét 256MB RAM để ghim thẳng 90Hz vào struct. Đã hook Mach Exception, chặn đứng Watchdog và ReportCrash. RỦI RO: Nếu quét nhầm vào struct Nhiệt độ/Nguồn -> KERNEL PANIC (Sập nguồn ngay). Ép vượt 60Hz (Panel vật lý) sẽ gây rách hình, sọc màn, nóng ran và tụt pin. Chặn crash chỉ có tác dụng userland, panic kernel là chết. TỰ CHỊU TRÁCH NHIỆM!";
-
-    CGSize maxSize = CGSizeMake(textW, CGFLOAT_MAX);
-    CGRect textRect = [warningBody.text boundingRectWithSize:maxSize
-                                                     options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
-                                                  attributes:@{NSFontAttributeName: warningBody.font}
-                                                     context:nil];
-    CGFloat bodyH = ceil(textRect.size.height);
-    
-    // [FIX] Sử dụng warnGap thay vì gap
-    CGFloat warningH = padding + titleH + warnGap + bodyH + padding;
-
-    UIView *warning = [[UIView alloc] initWithFrame:CGRectMake(side, warningY, cw, warningH)];
+    UIView *warning = [[UIView alloc] initWithFrame:CGRectMake(side, 436, cw, 122)];
     warning.backgroundColor = [warningTint colorWithAlphaComponent:0.075];
     warning.layer.cornerRadius = 14.0;
     warning.layer.borderWidth = 1.0;
     warning.layer.borderColor = [warningTint colorWithAlphaComponent:0.85].CGColor;
     [root addSubview:warning];
-
-    UILabel *warningTitle = [[UILabel alloc] initWithFrame:CGRectMake(padding, padding, textW, titleH)];
+    UILabel *warningTitle = [[UILabel alloc] initWithFrame:CGRectMake(12, 9, cw - 24, 20)];
     warningTitle.text = [NSString stringWithFormat:@"CẢNH BÁO ÁP DỤNG · %@", (warningRate > 60 ? @"MỨC CAO" : @"MỨC CƠ BẢN")];
     warningTitle.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightBlack];
     warningTitle.textColor = warningTint;
     [warning addSubview:warningTitle];
-
-    // [FIX] Sử dụng warnGap thay vì gap
-    warningBody.frame = CGRectMake(padding, padding + titleH + warnGap, textW, bodyH);
+    UILabel *warningBody = [[UILabel alloc] initWithFrame:CGRectMake(12, 34, cw - 24, 78)];
+    warningBody.numberOfLines = 0;
+    warningBody.font = [UIFont systemFontOfSize:10.0 weight:UIFontWeightMedium];
+    warningBody.textColor = [UIColor colorWithWhite:0.84 alpha:1.0];
+    warningBody.adjustsFontSizeToFitWidth = YES;
+    warningBody.minimumScaleFactor = 0.82;
+    warningBody.text = @"Hz/FPS là mục tiêu cấu hình, không phải số đo panel hoặc FPS game. Tweak có các đường hook/IOKit mức thấp nhưng không xác nhận kernel/driver đã chấp nhận ghi. iOS và phần cứng có thể từ chối hoặc giới hạn; mức vượt thông số hỗ trợ có thể gây nóng, hao pin và mất ổn định.";
     [warning addSubview:warningBody];
-
-    CGFloat newRootHeight = warningY + warningH + 12.0;
-    if (newRootHeight > root.frame.size.height) {
-        CGRect r = root.frame;
-        r.size.height = newRootHeight;
-        root.frame = r;
-    }
-
     return root;
 }
+
 - (void)neonV12SelectMode:(UIButton *)sender {
     NSInteger mode = sender.tag - 99400; if (mode < 0 || mode > 2) return;
     [[NSUserDefaults standardUserDefaults] setInteger:mode forKey:@"TIV12RateMode"];
