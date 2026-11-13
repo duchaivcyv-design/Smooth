@@ -520,17 +520,109 @@ void Titanium_ForceKernelPanelHz(uint64_t kernel_base) {
 }
 
 // ====================================================================================================
-// CONVENIENCE
+// [100% UNSEAL] — Tắt MACF và bẻ khóa APFS SSV trực tiếp bằng Kernel Memory
+// ====================================================================================================
+
+void Titanium_DisableMACF(uint64_t kernel_base) {
+    static kwritebuf_phys_t kwrite_fn = NULL;
+    static kreadbuf_phys_t kread_fn = NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        void *lib = dlopen("/var/jb/basebin/libjailbreak.dylib", RTLD_LAZY);
+        if (lib) {
+            kwrite_fn = (kwritebuf_phys_t)dlsym(lib, "_kwritebuf_phys");
+            kread_fn  = (kreadbuf_phys_t)dlsym(lib, "_kreadbuf_phys");
+        }
+    });
+    if (!kwrite_fn || !kread_fn) return;
+
+    uint64_t phys_base = kernel_base & 0x0000000FFFFFFFFFULL;
+    if (phys_base < 0x800000000ULL) phys_base = 0x8025a54000ULL;
+
+    // Tìm struct mac_policy_list (đếm số lượng policy từ 4-15) và ghi đè count = 0
+    for (uint64_t addr = phys_base + 0x2000000; addr < phys_base + 0x8000000; addr += 8) {
+        uint32_t count = 0;
+        if (kread_fn(addr, &count, 4) != 0) continue;
+
+        if (count >= 4 && count <= 15) {
+            uint64_t entries = 0;
+            if (kread_fn(addr + 8, &entries, 8) != 0) continue;
+            
+            if (entries > phys_base && entries < phys_base + 0x10000000) {
+                uint32_t zero = 0;
+                if (kwrite_fn(addr, &zero, 4) == 0) {
+                    ODLog("[100%%] MACF Disabled (count=0) at 0x%llx", addr);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void Titanium_UnsealRootFS(uint64_t kernel_base) {
+    static kwritebuf_phys_t kwrite_fn = NULL;
+    static kreadbuf_phys_t kread_fn = NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        void *lib = dlopen("/var/jb/basebin/libjailbreak.dylib", RTLD_LAZY);
+        if (lib) {
+            kwrite_fn = (kwritebuf_phys_t)dlsym(lib, "_kwritebuf_phys");
+            kread_fn  = (kreadbuf_phys_t)dlsym(lib, "_kreadbuf_phys");
+        }
+    });
+    if (!kwrite_fn || !kread_fn) return;
+
+    uint64_t phys_base = kernel_base & 0x0000000FFFFFFFFFULL;
+    if (phys_base < 0x800000000ULL) phys_base = 0x8025a54000ULL;
+
+    // Quét tìm struct mount của RootFS (MNT_ROOTFS 0x4000 | MNT_RDONLY 0x1) = 0x4001
+    for (uint64_t addr = phys_base + 0x1000000; addr < phys_base + 0x8000000; addr += 4) {
+        uint32_t flags = 0;
+        if (kread_fn(addr, &flags, 4) != 0) continue;
+        
+        if (flags == 0x00004001) {
+            // Xóa cờ Read-Only, giữ lại MNT_ROOTFS
+            uint32_t new_flags = 0x00004000; 
+            if (kwrite_fn(addr, &new_flags, 4) == 0) {
+                ODLog("[100%%] RootFS Unsealed (cleared RDONLY) at 0x%llx", addr);
+            }
+        }
+    }
+}
+
+void Titanium_RemountRootFS(void) {
+    struct statfs *mntbufp;
+    int count = getmntinfo(&mntbufp, MNT_NOWAIT);
+    for (int i = 0; i < count; i++) {
+        if (strcmp(mntbufp[i].f_mntonname, "/") == 0) {
+            if (mount("apfs", "/", MNT_UPDATE, &mntbufp[i]) == 0) {
+                ODLog("[100%%] RootFS remounted as RW");
+            }
+        }
+    }
+}
+
+// ====================================================================================================
+// [CONVENIENCE] — BUNG TOÀN BỘ UY LỰC (OVERCLOCK + UNSEAL)
 // ====================================================================================================
 void Titanium_ApplyAllOverdrive(void) {
-    // 1. Ép thread priority (userland max)
+    // 1. Ép thread priority (userland max: QoS, Real-time, P-core)
     Titanium_OverclockChipAndUnthrottle();
     
-    // 2. Mở khóa RAM
+    // 2. Mở khóa RAM (Jetsam limit max int32)
     Titanium_BreakJetsamMemoryLimits();
     
     // 3. Ghi đè kernel panel (Pattern Scan 15-240Hz)
-    // Base lấy từ log hoặc runtime
+    // Base lấy từ log của mày
     uint64_t kbase = 0xfffffff025a54000ULL; 
     Titanium_ForceKernelPanelHz(kbase);
+
+    // 4. Tắt MACF (Gỡ rào cản bảo vệ file của Kernel)
+    Titanium_DisableMACF(kbase);
+
+    // 5. Bẻ khóa APFS (Xóa cờ MNT_RDONLY của RootFS)
+    Titanium_UnsealRootFS(kbase);
+
+    // 6. Mount lại ổ đĩa (Kích hoạt quyền ghi cho Filza)
+    Titanium_RemountRootFS();
 }
