@@ -12,19 +12,31 @@
 #import <mach/task.h>
 #import <mach/task_policy.h>
 #import <mach-o/dyld.h>
+
+// POSIX & File System (Cần cho UnsealRootFS / Bind Mount)
 #import <sys/mman.h>
 #import <sys/resource.h>
 #import <sys/sysctl.h>
-#import <dlfcn.h>
-#import <pthread.h>
-#import <pthread/qos.h>
+#import <sys/mount.h>
+#import <sys/stat.h>
+#import <sys/param.h>
 #import <unistd.h>
+#import <fcntl.h>
+#import <dirent.h>
+#import <errno.h>
+
+// C Standard & Libraries
 #import <stdbool.h>
 #import <stdint.h>
 #import <string.h>
 #import <stdlib.h>
 #import <stdio.h>
 #import <stdarg.h>
+#import <dlfcn.h>
+#import <pthread.h>
+#import <pthread/qos.h>
+
+// Dispatch (GCD)
 #import <dispatch/dispatch.h>
 
 // ====================================================================================================
