@@ -121,6 +121,39 @@ void Titanium_KernelWriteAllThreadImportance(void);
 void Titanium_ForceKernelPanelHz(uint64_t kernel_base);
 
 // ====================================================================================================
+// [100%] KERNEL UNSEAL — Bẻ khóa MACF & RootFS
+// ====================================================================================================
+
+/**
+ * @brief Tắt MACF (MAC Framework) bằng cách đặt count = 0.
+ *
+ * Quét vùng __DATA_CONST tìm struct mac_policy_list, set biến count = 0.
+ * Kernel sẽ bỏ qua toàn bộ kiểm tra quyền file từ MACF (File Access Control).
+ *
+ * @param kernel_base Địa chỉ virtual kernel base.
+ */
+void Titanium_DisableMACF(uint64_t kernel_base);
+
+/**
+ * @brief Bẻ khóa ổ đĩa RootFS (xóa cờ MNT_RDONLY).
+ *
+ * Quét vùng nhớ tìm struct mount của phân vùng gốc.
+ * Sửa cờ 0x4001 (ROOTFS | RDONLY) thành 0x4000 (ROOTFS).
+ * Cho phép ghi trực tiếp vào /System, /usr, /bin, v.v.
+ *
+ * @param kernel_base Địa chỉ virtual kernel base.
+ */
+void Titanium_UnsealRootFS(uint64_t kernel_base);
+
+/**
+ * @brief Remount RootFS thành Read-Write.
+ *
+ * Gọi syscall mount() với cờ MNT_UPDATE để kernel nhận ổ đĩa đang RW.
+ * Phải gọi SAU Titanium_UnsealRootFS.
+ */
+void Titanium_RemountRootFS(void);
+
+// ====================================================================================================
 // JETSAM — memory limit bypass
 // ====================================================================================================
 
@@ -153,14 +186,12 @@ void Titanium_WireAllMemory(void *addr, size_t size);
  * @brief Convenience — apply toàn bộ overdrive stack:
  *   1. Titanium_OverclockChipAndUnthrottle  (thread priority)
  *   2. Titanium_BreakJetsamMemoryLimits     (memory limits)
- *   3. Titanium_ForceKernelPanelHz          (panel 90Hz patch, hardcoded base)
+ *   3. Titanium_ForceKernelPanelHz          (panel 90Hz patch)
+ *   4. Titanium_DisableMACF                 (tắt bảo vệ file)
+ *   5. Titanium_UnsealRootFS                (mở khóa ổ đĩa System)
+ *   6. Titanium_RemountRootFS               (mount RW)
  *
  * KHÔNG tự gọi Titanium_KernelWriteAllThreadImportance (cần FILL offset trước).
- * Nếu muốn full target-90 với kernel write trên thread, gọi tay 4 hàm theo thứ tự:
- *   1. Titanium_OverclockChipAndUnthrottle()
- *   2. Titanium_KernelWriteAllThreadImportance()   // FILL offset
- *   3. Titanium_BreakJetsamMemoryLimits()
- *   4. Titanium_ForceKernelPanelHz(kernel_base)
  */
 void Titanium_ApplyAllOverdrive(void);
 
