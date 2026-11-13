@@ -5341,8 +5341,8 @@ static NSString *const kTITourDoneKey = @"ti_tourDone_v1";
         [next.heightAnchor constraintEqualToConstant:50]
     ]];
 
-    NSArray<NSString *> *iosChoices = @[@"iOS 14+", @"iOS 15+", @"iOS 16+", @"iOS 17+", @"iOS 18+", @"iOS 26.0–26.0.1"];
-    NSArray<NSString *> *phoneChoices = @[@"iPhone 6s", @"iPhone 6s Plus", @"iPhone 7", @"iPhone 7 Plus", @"iPhone 8", @"iPhone 8 Plus", @"iPhone X", @"iPhone XR", @"iPhone XS / XS Max", @"iPhone 11 / 11 Pro / 11 Pro Max", @"iPhone 12 mini / 12 / 12 Pro / 12 Pro Max", @"iPhone 13 mini / 13 / 13 Pro / 13 Pro Max", @"iPhone 14 / 14 Plus / 14 Pro / 14 Pro Max", @"iPhone 15 / 15 Plus / 15 Pro / 15 Pro Max"];
+    NSArray<NSString *> *iosChoices = @[@"iOS 14+", @"iOS 15+", @"iOS 16+", @"iOS 17+", @"iOS 18.0"];
+    NSArray<NSString *> *phoneChoices = @[@"iPhone 6s", @"iPhone 6s Plus", @"iPhone 7", @"iPhone 7 Plus", @"iPhone 8", @"iPhone 8 Plus", @"iPhone X", @"iPhone XR", @"iPhone XS / XS Max", @"iPhone 11 / 11 Pro / 11 Pro Max", @"iPhone 12 mini / 12 / 12 Pro / 12 Pro Max"];
     __block NSInteger page = 0;
     __block NSString *selectedIOS = @"";
     __block NSString *selectedPhone = @"";
@@ -8704,10 +8704,9 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     body.numberOfLines = 0;
     body.font = [UIFont systemFontOfSize:10.5];
     body.textColor = [UIColor colorWithWhite:0.85 alpha:1];
-    body.text = TI_T(@"LƯU Ý: Mức đã chọn là mục tiêu cấu hình gửi tới các đường áp dụng của tweak; không phải xác nhận kernel hoặc panel đã chấp nhận ghi. Driver và iOS có thể từ chối hoặc giới hạn mức này. Không đặt vượt thông số phần cứng; mức cao có thể làm máy nóng, hao pin và mất ổn định.",
-                     @"NOTE: The selected value is a configuration target sent to the tweak's apply paths; it does not prove that the kernel or display panel accepted a write. The driver and iOS may reject or clamp it. Do not exceed hardware specifications; higher targets may increase heat, battery use, and instability.");
+    body.text = TI_T(@"CẢNH BÁO NGUY HIỂM: Giá trị này kích hoạt quét mù Physical R/W vào 256MB bộ nhớ Kernel. Tweak ghi đè trực tiếp lên struct màn hình thông qua kwritebuf_phys, không thông qua bất kỳ cơ chế xác nhận nào của Driver. Ghi nhầm địa chỉ sẽ gây PANIC KERNEL (Sập nguồn ngay lập tức). Ép vượt giới hạn panel vật lý (vd: 90Hz trên màn 60Hz) sẽ gây rách hình (tearing), sọc màn, quá nhiệt và có thể hỏng phần cứng vĩnh viễn. Hệ thống chặn Watchdog/CrashReport chỉ bảo vệ Userland, không cứu được nếu Kernel Panic. TỰ CHỊU TRÁCH NHIỆM!",
+                     @"DANGER WARNING: This value triggers a blind Physical R/W scan across 256MB of Kernel memory. The tweak directly overwrites display structs via kwritebuf_phys, bypassing driver confirmation. Writing to the wrong address will cause a KERNEL PANIC (Instant Reboot). Exceeding physical hardware limits (e.g., 90Hz on a 60Hz panel) causes screen tearing, artifacts, overheating, and permanent hardware damage. Watchdog/CrashReporter suppression only protects Userland and cannot stop a Kernel Panic. USE AT YOUR OWN RISK!");
     [box addSubview:body];
-
 
     // Mức 240: icon ⚠️ ở giữa, rung nhẹ
     if (rate >= 240) {
@@ -8800,7 +8799,7 @@ static UIColor *TI_RateWarningColor(NSInteger rate) {
     warningBody.textColor = [UIColor colorWithWhite:0.84 alpha:1.0];
     warningBody.adjustsFontSizeToFitWidth = YES;
     warningBody.minimumScaleFactor = 0.82;
-    warningBody.text = @"Hz/FPS là mục tiêu cấu hình, không phải số đo panel hoặc FPS game. Tweak có các đường hook/IOKit mức thấp nhưng không xác nhận kernel/driver đã chấp nhận ghi. iOS và phần cứng có thể từ chối hoặc giới hạn; mức vượt thông số hỗ trợ có thể gây nóng, hao pin và mất ổn định.";
+    warningBody.text = @"⚠️ CẢNH BÁO : Đã nâng cấp lên KERNEL BLIND-SCAN (Quét mù Physical R/W). Tweak không còn fake UI nữa mà dùng kwritebuf_phys quét 256MB RAM để ghim thẳng 90Hz vào struct. Đã hook Mach Exception, chặn đứng Watchdog và ReportCrash. RỦI RO: Nếu quét nhầm vào struct Nhiệt độ/Nguồn -> KERNEL PANIC (Sập nguồn ngay). Ép vượt 60Hz (Panel vật lý) sẽ gây rách hình, sọc màn, nóng ran và tụt pin. Chặn crash chỉ có tác dụng userland, panic kernel là chết. TỰ CHỊU TRÁCH NHIỆM!";
     [warning addSubview:warningBody];
     return root;
 }
